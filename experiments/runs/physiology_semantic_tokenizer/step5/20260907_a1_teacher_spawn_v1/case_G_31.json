@@ -1,0 +1,9 @@
+{
+  "axis": "G",
+  "replicate": 31,
+  "execution": "failed",
+  "error": "FloatingPointError: divide by zero encountered in scalar divide",
+  "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    row,arrays=teacher_case(cfg,axis,replicate,calibration_dir)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 527, in teacher_case\n    template=np.mean([generate(10+j)['observations'] for j in range(cfg['teacher']['task_template_training_trials'])],axis=0)\n                      ^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 524, in generate\n    if law=='matched_model_calibration':return localization.generate_matched(cfg,generator_axis,truth,seed)\n                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 171, in generate_matched\n    z[t] = independent_transition(z[t-1], raw, cfg) + rng.normal(size=6)*np.asarray(m[\"process_std\"])*np.sqrt(m[\"dt\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 151, in independent_transition\n    k3 = independent_rhs(z + h*k2/2, raw)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 136, in independent_rhs\n    extraction = -np.expm1(np.log1p(-raw[\"E0\"]) / f)\n                           ~~~~~~~~~~~~~~~~~~~~~^~~\nFloatingPointError: divide by zero encountered in scalar divide\n",
+  "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+  "seed": 20260917
+}

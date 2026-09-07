@@ -1,0 +1,1142 @@
+{
+  "stage": "b",
+  "execution": "completed",
+  "registered_heldout_trials": 108,
+  "successful_heldout_trials": 106,
+  "failed_heldout_trials": 2,
+  "case_failures": [
+    {
+      "subject": "subject_07",
+      "heldout_position": 3,
+      "identity": {
+        "dataset_id": "eeg_fnirs_single_trial",
+        "subject": "subject_07",
+        "session": "session_03",
+        "event_index": 19,
+        "ma_trial_position": 9,
+        "condition": "MA",
+        "heldout": true,
+        "native_start_samples": {
+          "eeg": 113883,
+          "fnirs": 6208
+        },
+        "eeg_time_ms": 574414.0,
+        "fnirs_time_ms": 625760.0,
+        "sample_id": "eeg_fnirs_single_trial|subject_07|session_03|event=19|offset=-5.0|duration=30.0"
+      },
+      "execution": "partial",
+      "candidates": {
+        "U0_FIXED": {
+          "execution": "failed",
+          "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+          "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1436, in measured_trial_case\n    result,values=measured_candidate_trial(base,spec,subject,position,detail,arrays,config,fit,candidate)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1401, in measured_candidate_trial\n    estimate=mixture_state(visible,config,'W',distribution)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 450, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 537, in _rk4_step_with_jacobian\n    k3_state = _balloon_rhs_unchecked(state_3, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n"
+        },
+        "U1_W": {
+          "execution": "failed",
+          "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+          "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1436, in measured_trial_case\n    result,values=measured_candidate_trial(base,spec,subject,position,detail,arrays,config,fit,candidate)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1401, in measured_candidate_trial\n    estimate=mixture_state(visible,config,'W',distribution)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 450, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 529, in _rk4_step_with_jacobian\n    k1_state = _balloon_rhs_unchecked(state, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n"
+        }
+      }
+    },
+    {
+      "subject": "subject_14",
+      "heldout_position": 0,
+      "identity": {
+        "dataset_id": "eeg_fnirs_single_trial",
+        "subject": "subject_14",
+        "session": "session_01",
+        "event_index": 9,
+        "ma_trial_position": 4,
+        "condition": "MA",
+        "heldout": true,
+        "native_start_samples": {
+          "eeg": 56711,
+          "fnirs": 3416
+        },
+        "eeg_time_ms": 288557.0,
+        "fnirs_time_ms": 346640.0,
+        "sample_id": "eeg_fnirs_single_trial|subject_14|session_01|event=9|offset=-5.0|duration=30.0"
+      },
+      "execution": "partial",
+      "candidates": {
+        "U0_FIXED": {
+          "execution": "failed",
+          "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+          "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1436, in measured_trial_case\n    result,values=measured_candidate_trial(base,spec,subject,position,detail,arrays,config,fit,candidate)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1401, in measured_candidate_trial\n    estimate=mixture_state(visible,config,'W',distribution)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 450, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 541, in _rk4_step_with_jacobian\n    k4_state = _balloon_rhs_unchecked(state_4, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n"
+        },
+        "U1_W": {
+          "execution": "failed",
+          "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+          "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1436, in measured_trial_case\n    result,values=measured_candidate_trial(base,spec,subject,position,detail,arrays,config,fit,candidate)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1401, in measured_candidate_trial\n    estimate=mixture_state(visible,config,'W',distribution)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 450, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 541, in _rk4_step_with_jacobian\n    k4_state = _balloon_rhs_unchecked(state_4, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n"
+        }
+      }
+    }
+  ],
+  "preparation_failures": {},
+  "complete_subjects": [
+    "subject_01",
+    "subject_02",
+    "subject_03",
+    "subject_04",
+    "subject_05",
+    "subject_06",
+    "subject_08",
+    "subject_09",
+    "subject_10",
+    "subject_11",
+    "subject_12",
+    "subject_13",
+    "subject_15",
+    "subject_16",
+    "subject_17",
+    "subject_18"
+  ],
+  "metadata_boundary": {
+    "metadata_only": true,
+    "selected_record_count": 54,
+    "selected_all_event_count": 1080,
+    "selected_target_trial_count": 540,
+    "subjects": 18,
+    "sessions": [
+      "session_01",
+      "session_03",
+      "session_05"
+    ],
+    "trials_per_subject_session": 10,
+    "alignment_reports_passed": 54,
+    "window_samples": {
+      "eeg_200hz": 6000,
+      "fnirs_10hz": 300
+    },
+    "minimum_next_event_margin_samples": {
+      "eeg_200hz": 491,
+      "fnirs_10hz": 24
+    },
+    "minimum_next_event_margin_s": {
+      "eeg": 2.455,
+      "fnirs": 2.4
+    },
+    "minimum_record_end_margin_s": {
+      "eeg": 5.0,
+      "fnirs": 66.3
+    },
+    "last_event_without_next_count": 24,
+    "event_duration_available": false,
+    "recovery_description": "15-second nominal post-task recovery envelope; exact rest end is not indexed",
+    "eeg_length_sidecar_role": "metadata-only record support; measured branch remains raw_with_ocular_artifact"
+  },
+  "candidates": {
+    "U0_FIXED": {
+      "masks": {
+        "center_EEG": {
+          "joint_score": {
+            "mean": -0.09661426050207587,
+            "ci95": [
+              -0.33893076871154143,
+              0.1378039186955881
+            ],
+            "independent_units": 16
+          },
+          "metrics": {
+            "EEG": {
+              "nrmse": {
+                "mean": 1.9290979479424268,
+                "ci95": [
+                  1.7661297959406799,
+                  2.0912541607788935
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.17776533020236576,
+                "ci95": [
+                  0.1594206558394403,
+                  0.1967926830986079
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.7532552083333333,
+                "ci95": [
+                  0.6881510416666666,
+                  0.8151204427083332
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.012533483404057232,
+                "ci95": [
+                  0.012513218926825049,
+                  0.012552482514862712
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 0.0018668167373905656,
+                "ci95": [
+                  0.0018465522601583842,
+                  0.0018858158481960452
+                ],
+                "independent_units": 16
+              }
+            }
+          },
+          "controls": {
+            "own_history": {
+              "mean": -0.9795171190651146,
+              "ci95": [
+                -1.1772535151297745,
+                -0.7714049900866677
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -1.0312646641573016
+            },
+            "own_history_and_task": {
+              "mean": -1.0114234272383564,
+              "ci95": [
+                -1.2275176700452297,
+                -0.7950673004779756
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -1.0580786728233087
+            },
+            "independent_pairing": {
+              "mean": 0.010287467976397797,
+              "ci95": [
+                -0.15756585658515956,
+                0.17097893115772503
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -0.03560030141744709
+            },
+            "circular_shift": {
+              "mean": -0.46683113162290657,
+              "ci95": [
+                -0.6471040873738091,
+                -0.2856575989358376
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -0.5082238938074668
+            }
+          }
+        },
+        "center_fNIRS": {
+          "joint_score": {
+            "mean": -1.2690731665637944,
+            "ci95": [
+              -2.106299077688113,
+              -0.3911641250347753
+            ],
+            "independent_units": 16
+          },
+          "metrics": {
+            "HbO": {
+              "nrmse": {
+                "mean": 1.4353571936699314,
+                "ci95": [
+                  1.2543162399945438,
+                  1.6018096748387427
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.139742102253392,
+                "ci95": [
+                  0.11510748215597051,
+                  0.16297200837625186
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.236328125,
+                "ci95": [
+                  0.13736979166666666,
+                  0.34962565104166643
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.0013673880906733616,
+                "ci95": [
+                  0.0013226484830630568,
+                  0.0014148288092263553
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 0.0003257214240066947,
+                "ci95": [
+                  0.0002809818163963898,
+                  0.0003731621425596885
+                ],
+                "independent_units": 16
+              }
+            },
+            "HbR": {
+              "nrmse": {
+                "mean": 2.377553744535703,
+                "ci95": [
+                  1.7123136449696483,
+                  3.0772539297181685
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.05666309141671205,
+                "ci95": [
+                  0.04291100502388961,
+                  0.07052632846667498
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.41145833333333337,
+                "ci95": [
+                  0.24479166666666666,
+                  0.5872558593749997
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.00040995620851815517,
+                "ci95": [
+                  0.00040479694242854516,
+                  0.00041528471857288997
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 3.495620851815524e-05,
+                "ci95": [
+                  2.9796942428545214e-05,
+                  4.028471857289006e-05
+                ],
+                "independent_units": 16
+              }
+            }
+          },
+          "controls": {
+            "own_history": {
+              "mean": 0.07150989802940892,
+              "ci95": [
+                -0.00280871083578399,
+                0.14965167626301829
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": 0.05043519103152936
+            },
+            "own_history_and_task": {
+              "mean": -2.9055868155567373,
+              "ci95": [
+                -3.7556092788953515,
+                -2.051251984783618
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -3.084134742558855
+            },
+            "independent_pairing": {
+              "mean": -0.003459659499364387,
+              "ci95": [
+                -0.046130151915905186,
+                0.05206835705867138
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -0.02398601367074518
+            },
+            "circular_shift": {
+              "mean": 0.022339860592253992,
+              "ci95": [
+                -0.061163370221701846,
+                0.10545920954927912
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -0.004077367029058835
+            }
+          }
+        },
+        "whole_EEG": {
+          "joint_score": {
+            "mean": 0.4671366381228197,
+            "ci95": [
+              0.36601870117597324,
+              0.5676758889526142
+            ],
+            "independent_units": 16
+          },
+          "metrics": {
+            "EEG": {
+              "nrmse": {
+                "mean": 1.5029930120308004,
+                "ci95": [
+                  1.4164429794779234,
+                  1.5893536722827077
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.13775900608082173,
+                "ci95": [
+                  0.12820770788968405,
+                  0.1472692896291686
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.8806423611111112,
+                "ci95": [
+                  0.8555533854166666,
+                  0.9058159722222222
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.012826705615482943,
+                "ci95": [
+                  0.012821194486490823,
+                  0.012831471725384064
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 0.0021600389488162773,
+                "ci95": [
+                  0.002154527819824157,
+                  0.0021648050587173995
+                ],
+                "independent_units": 16
+              }
+            }
+          },
+          "controls": {},
+          "all_missing_prior_increment": {
+            "mean": -0.4014770882843357,
+            "ci95": [
+              -0.49004213826443516,
+              -0.3105080655568682
+            ],
+            "independent_units": 16
+          }
+        },
+        "whole_fNIRS": {
+          "joint_score": {
+            "mean": -0.41817479018368175,
+            "ci95": [
+              -0.7245660424727977,
+              -0.09103121514533213
+            ],
+            "independent_units": 16
+          },
+          "metrics": {
+            "HbO": {
+              "nrmse": {
+                "mean": 1.8418618009694772,
+                "ci95": [
+                  1.6971160174035318,
+                  1.9818050735310901
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.17645358516434428,
+                "ci95": [
+                  0.1542293648509472,
+                  0.19722773502808572
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.3143229166666667,
+                "ci95": [
+                  0.25138671875,
+                  0.3875043402777778
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.0017090861166267068,
+                "ci95": [
+                  0.0016947101092074977,
+                  0.0017272460807589503
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 0.0006674194499600401,
+                "ci95": [
+                  0.0006530434425408309,
+                  0.0006855794140922835
+                ],
+                "independent_units": 16
+              }
+            },
+            "HbR": {
+              "nrmse": {
+                "mean": 1.2457418690569888,
+                "ci95": [
+                  1.0737589953051276,
+                  1.4137718697166055
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.031216711941400684,
+                "ci95": [
+                  0.02686828183779903,
+                  0.03555102566288357
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.7717881944444445,
+                "ci95": [
+                  0.7151866319444444,
+                  0.8316840277777777
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.0004425731960727012,
+                "ci95": [
+                  0.00044070069079082285,
+                  0.00044486424298896635
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 6.757319607270126e-05,
+                "ci95": [
+                  6.570069079082297e-05,
+                  6.986424298896645e-05
+                ],
+                "independent_units": 16
+              }
+            }
+          },
+          "controls": {},
+          "all_missing_prior_increment": {
+            "mean": -1.4620873128749148,
+            "ci95": [
+              -1.6223740163507672,
+              -1.2712569546559311
+            ],
+            "independent_units": 16
+          }
+        }
+      },
+      "checks": {
+        "complete_registered_subjects_and_trials": false,
+        "physical": false,
+        "shared_information": false,
+        "not_driven_by_one_subject": false,
+        "masked_observation_accuracy": false,
+        "synthetic_teacher_eligible": false
+      },
+      "successful_trials": 106,
+      "complete_subjects": [
+        "subject_01",
+        "subject_02",
+        "subject_03",
+        "subject_04",
+        "subject_05",
+        "subject_06",
+        "subject_08",
+        "subject_09",
+        "subject_10",
+        "subject_11",
+        "subject_12",
+        "subject_13",
+        "subject_15",
+        "subject_16",
+        "subject_17",
+        "subject_18"
+      ],
+      "failures": [
+        {
+          "subject": "subject_07",
+          "heldout_position": 3,
+          "detail": {
+            "execution": "failed",
+            "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+            "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1436, in measured_trial_case\n    result,values=measured_candidate_trial(base,spec,subject,position,detail,arrays,config,fit,candidate)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1401, in measured_candidate_trial\n    estimate=mixture_state(visible,config,'W',distribution)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 450, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 537, in _rk4_step_with_jacobian\n    k3_state = _balloon_rhs_unchecked(state_3, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n"
+          }
+        },
+        {
+          "subject": "subject_14",
+          "heldout_position": 0,
+          "detail": {
+            "execution": "failed",
+            "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+            "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1436, in measured_trial_case\n    result,values=measured_candidate_trial(base,spec,subject,position,detail,arrays,config,fit,candidate)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1401, in measured_candidate_trial\n    estimate=mixture_state(visible,config,'W',distribution)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 450, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 541, in _rk4_step_with_jacobian\n    k4_state = _balloon_rhs_unchecked(state_4, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n"
+          }
+        }
+      ],
+      "measured_core_teacher_qualified": false
+    },
+    "U1_W": {
+      "masks": {
+        "center_EEG": {
+          "joint_score": {
+            "mean": -0.10672441722799027,
+            "ci95": [
+              -0.3438254052212807,
+              0.13284856322624009
+            ],
+            "independent_units": 16
+          },
+          "metrics": {
+            "EEG": {
+              "nrmse": {
+                "mean": 1.9553699614649427,
+                "ci95": [
+                  1.7931043048924986,
+                  2.1107301570413832
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.18033573583817902,
+                "ci95": [
+                  0.16160838906374092,
+                  0.19915909657128253
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.7486979166666667,
+                "ci95": [
+                  0.6875,
+                  0.8111979166666666
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.013144213074178599,
+                "ci95": [
+                  0.013126916122947464,
+                  0.01315990335221433
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 0.0024775464075119324,
+                "ci95": [
+                  0.0024602494562807977,
+                  0.002493236685547664
+                ],
+                "independent_units": 16
+              }
+            }
+          },
+          "controls": {
+            "own_history": {
+              "mean": -0.9896272757910292,
+              "ci95": [
+                -1.1909851308865502,
+                -0.7814669201866912
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -1.0459593854684588
+            },
+            "own_history_and_task": {
+              "mean": -1.0215335839642707,
+              "ci95": [
+                -1.2386512646086487,
+                -0.8059502066668345
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -1.0727733941344657
+            },
+            "independent_pairing": {
+              "mean": 0.015133051269506707,
+              "ci95": [
+                -0.17062345725717193,
+                0.1937535597808652
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -0.028657694330202862
+            },
+            "circular_shift": {
+              "mean": -0.2302775180181872,
+              "ci95": [
+                -0.40544383836333686,
+                -0.05384253137269776
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -0.27736651568461623
+            }
+          }
+        },
+        "center_fNIRS": {
+          "joint_score": {
+            "mean": -1.1014240853462882,
+            "ci95": [
+              -1.8945853931526684,
+              -0.2647306177681306
+            ],
+            "independent_units": 16
+          },
+          "metrics": {
+            "HbO": {
+              "nrmse": {
+                "mean": 1.1928294692623438,
+                "ci95": [
+                  1.0568894794571522,
+                  1.324229248662278
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.11551471112607717,
+                "ci95": [
+                  0.09659070272446203,
+                  0.13401397073028984
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.26953125,
+                "ci95": [
+                  0.17057291666666666,
+                  0.38543294270833306
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.0012239028175123126,
+                "ci95": [
+                  0.0012031229692545853,
+                  0.0012448893222907942
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 0.00018223615084564572,
+                "ci95": [
+                  0.00016145630258791832,
+                  0.00020322265562412712
+                ],
+                "independent_units": 16
+              }
+            },
+            "HbR": {
+              "nrmse": {
+                "mean": 2.5521000206441986,
+                "ci95": [
+                  1.8341030850975315,
+                  3.2992331162514366
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.060778675906512855,
+                "ci95": [
+                  0.045927622362279194,
+                  0.07585769107586232
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.36458333333333337,
+                "ci95": [
+                  0.193994140625,
+                  0.544921875
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.00039755654499166136,
+                "ci95": [
+                  0.00039434797519391853,
+                  0.0004009697310024951
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 2.255654499166137e-05,
+                "ci95": [
+                  1.9347975193918493e-05,
+                  2.596973100249517e-05
+                ],
+                "independent_units": 16
+              }
+            }
+          },
+          "controls": {
+            "own_history": {
+              "mean": 0.06887111350036176,
+              "ci95": [
+                0.023503527226049047,
+                0.1125210693391115
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": 0.06009455517416757
+            },
+            "own_history_and_task": {
+              "mean": -2.586422466917038,
+              "ci95": [
+                -3.4106008037290696,
+                -1.769865064985804
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -2.7542658478270834
+            },
+            "independent_pairing": {
+              "mean": 0.0034536668574921036,
+              "ci95": [
+                -0.023720752021238842,
+                0.0348586989777437
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -0.007166584841086644
+            },
+            "circular_shift": {
+              "mean": 0.0006299373927238444,
+              "ci95": [
+                -0.039335050309911364,
+                0.04017212395668815
+              ],
+              "independent_units": 16,
+              "leave_one_subject_out_mean_min": -0.007232047107436037
+            }
+          }
+        },
+        "whole_EEG": {
+          "joint_score": {
+            "mean": 0.4465286762821303,
+            "ci95": [
+              0.347788476105567,
+              0.5488154830019037
+            ],
+            "independent_units": 16
+          },
+          "metrics": {
+            "EEG": {
+              "nrmse": {
+                "mean": 1.5440251273369467,
+                "ci95": [
+                  1.450427573018044,
+                  1.6380174330617103
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.14143125736520018,
+                "ci95": [
+                  0.13145163751063677,
+                  0.1510410366404769
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.8840277777777777,
+                "ci95": [
+                  0.8600672743055555,
+                  0.9078125
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.013650229922099992,
+                "ci95": [
+                  0.013642381607233758,
+                  0.013657569735496679
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 0.0029835632554333262,
+                "ci95": [
+                  0.002975714940567094,
+                  0.002990903068830012
+                ],
+                "independent_units": 16
+              }
+            }
+          },
+          "controls": {},
+          "all_missing_prior_increment": {
+            "mean": -0.4220850501250241,
+            "ci95": [
+              -0.5097348340073857,
+              -0.3293651483237035
+            ],
+            "independent_units": 16
+          }
+        },
+        "whole_fNIRS": {
+          "joint_score": {
+            "mean": -0.38462402500009873,
+            "ci95": [
+              -0.7040137779639004,
+              -0.04514470932095732
+            ],
+            "independent_units": 16
+          },
+          "metrics": {
+            "HbO": {
+              "nrmse": {
+                "mean": 1.8153483837901128,
+                "ci95": [
+                  1.6659280198732473,
+                  1.9590531079672424
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.17415497110585965,
+                "ci95": [
+                  0.15162954390850147,
+                  0.19542588627391597
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.3128472222222222,
+                "ci95": [
+                  0.24617838541666665,
+                  0.38993055555555556
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.0017235837722288454,
+                "ci95": [
+                  0.00171052760264477,
+                  0.0017395084365317227
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 0.0006819171055621786,
+                "ci95": [
+                  0.0006688609359781033,
+                  0.0006978417698650559
+                ],
+                "independent_units": 16
+              }
+            },
+            "HbR": {
+              "nrmse": {
+                "mean": 1.2139862257796983,
+                "ci95": [
+                  1.0309311162151946,
+                  1.3959233149204746
+                ],
+                "independent_units": 16
+              },
+              "rmse": {
+                "mean": 0.030412188210684178,
+                "ci95": [
+                  0.025823258885031376,
+                  0.03489950457564346
+                ],
+                "independent_units": 16
+              },
+              "observation_coverage95": {
+                "mean": 0.7888888888888889,
+                "ci95": [
+                  0.7296006944444444,
+                  0.852693142361111
+                ],
+                "independent_units": 16
+              },
+              "mean_predictive_variance": {
+                "mean": 0.00044913847009609776,
+                "ci95": [
+                  0.0004471205132201172,
+                  0.00045151241417324106
+                ],
+                "independent_units": 16
+              },
+              "mean_teacher_variance": {
+                "mean": 7.413847009609778e-05,
+                "ci95": [
+                  7.212051322011725e-05,
+                  7.651241417324114e-05
+                ],
+                "independent_units": 16
+              }
+            }
+          },
+          "controls": {},
+          "all_missing_prior_increment": {
+            "mean": -1.3719887454959274,
+            "ci95": [
+              -1.5219023721091374,
+              -1.190443867751898
+            ],
+            "independent_units": 16
+          }
+        }
+      },
+      "checks": {
+        "complete_registered_subjects_and_trials": false,
+        "physical": true,
+        "shared_information": false,
+        "not_driven_by_one_subject": false,
+        "masked_observation_accuracy": false,
+        "synthetic_teacher_eligible": true,
+        "training_posterior_resolution": true,
+        "parameter_mixture_resolution": false,
+        "boundary_insensitive_driver": false
+      },
+      "successful_trials": 106,
+      "complete_subjects": [
+        "subject_01",
+        "subject_02",
+        "subject_03",
+        "subject_04",
+        "subject_05",
+        "subject_06",
+        "subject_08",
+        "subject_09",
+        "subject_10",
+        "subject_11",
+        "subject_12",
+        "subject_13",
+        "subject_15",
+        "subject_16",
+        "subject_17",
+        "subject_18"
+      ],
+      "failures": [
+        {
+          "subject": "subject_07",
+          "heldout_position": 3,
+          "detail": {
+            "execution": "failed",
+            "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+            "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1436, in measured_trial_case\n    result,values=measured_candidate_trial(base,spec,subject,position,detail,arrays,config,fit,candidate)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1401, in measured_candidate_trial\n    estimate=mixture_state(visible,config,'W',distribution)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 450, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 529, in _rk4_step_with_jacobian\n    k1_state = _balloon_rhs_unchecked(state, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n"
+          }
+        },
+        {
+          "subject": "subject_14",
+          "heldout_position": 0,
+          "detail": {
+            "execution": "failed",
+            "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+            "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1436, in measured_trial_case\n    result,values=measured_candidate_trial(base,spec,subject,position,detail,arrays,config,fit,candidate)\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 1401, in measured_candidate_trial\n    estimate=mixture_state(visible,config,'W',distribution)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 450, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 541, in _rk4_step_with_jacobian\n    k4_state = _balloon_rhs_unchecked(state_4, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n"
+          }
+        }
+      ],
+      "numerical_sensitivity": {
+        "mixture_mean_difference_in_noise_units": [
+          1.7719529749743446e-06,
+          2.8236293884639774e-06,
+          2.7492210385830773e-06,
+          1.3681506128536414e-06,
+          4.806878461938169e-06,
+          2.9700138834409806e-06,
+          5.841010605744934e-07,
+          3.823956024051611e-06,
+          1.627121980988383e-06,
+          9.253835458328252e-07,
+          9.909287472173456e-07,
+          1.996187019674689e-06,
+          2.6129969639410167e-06,
+          3.3834099800490736e-06,
+          2.820412511872483e-06,
+          9.842221380777783e-07,
+          1.7559271436179413e-06
+        ],
+        "mixture_relative_variance_difference": [
+          1.1240788657209742e-06,
+          9.935088860962883e-07,
+          1.2090969142140226e-06,
+          1.5357762887286691e-06,
+          2.6124203362862504e-06,
+          1.8130654943759575e-06,
+          3.0046797468871804e-07,
+          1.9437667671925668e-06,
+          9.334226935426404e-07,
+          5.863912690031337e-07,
+          7.553277534998368e-07,
+          1.2569431572860474e-06,
+          2.1909900984494083e-06,
+          2.0219636752206113e-06,
+          2.0044088809678248e-06,
+          5.659640779875523e-07,
+          1.2110162224029705e-06
+        ],
+        "boundary_restricted_driver_correlation": [
+          0.9972989906131173,
+          0.9992624074655039,
+          0.9992230436886125,
+          0.998910404618663,
+          0.9979607862240518,
+          0.996426515364559,
+          0.9980451125619795,
+          0.9976142419604509,
+          0.9955640701883751,
+          0.9983715091637301,
+          0.999072491123301,
+          0.9976575962370364,
+          0.9983880848212261,
+          0.9982584997887378,
+          0.9979226718814502,
+          0.9990478675122016,
+          0.9975395263180259
+        ],
+        "boundary_restricted_driver_nrmse": [
+          0.18298719609786177,
+          0.059539490514794784,
+          0.09381985592894153,
+          0.08087968014329117,
+          0.13118602551178865,
+          0.1616291749895922,
+          0.07390799311745859,
+          0.16248865992365596,
+          0.1372353726240953,
+          0.07555053332608834,
+          0.07945471246449945,
+          0.15503258009561874,
+          0.1759273586387358,
+          0.11738530327948071,
+          0.14505583160342625,
+          0.08378925955300566,
+          0.2247102219679703
+        ]
+      },
+      "measured_core_teacher_qualified": false
+    }
+  },
+  "estimand": "new_trial_in_existing_subject_and_sessions",
+  "latent_ground_truth_available": false,
+  "interval_kind": "gaussian_moment_95",
+  "qualified_candidates": [],
+  "uq_stage_eligible": false,
+  "primary_minus_fixed_score": {
+    "center_EEG": {
+      "mean": -0.010110156725914424,
+      "ci95": [
+        -0.0478848829125398,
+        0.023120627296806463
+      ],
+      "independent_units": 16
+    },
+    "center_fNIRS": {
+      "mean": 0.16764908121750596,
+      "ci95": [
+        0.08380752746796642,
+        0.24791511411157963
+      ],
+      "independent_units": 16
+    },
+    "whole_EEG": {
+      "mean": -0.02060796184068935,
+      "ci95": [
+        -0.040411367154383586,
+        -0.002606683759070692
+      ],
+      "independent_units": 16
+    },
+    "whole_fNIRS": {
+      "mean": 0.03355076518358308,
+      "ci95": [
+        0.012792053864089197,
+        0.05951986425393055
+      ],
+      "independent_units": 16
+    }
+  }
+}

@@ -1,0 +1,94 @@
+schema: step5b_measured_v2
+base_config: experiments/configs/physiology_semantic_tokenizer/step5_v1.yaml
+base_config_sha256: 18bd6b1a8853e6e3531d20db092e81ef8da6f84dd13be40350835a078215079c
+metadata_config: experiments/configs/physiology_semantic_tokenizer/t3_multisession_loso_v1.yaml
+metadata_config_sha256: d843335902e16c7de19e7464c5acae3341b5e8913a12ee26adc08bea39a3532a
+seed: 20260927
+workers: 18
+candidates:
+- U0_FIXED
+- U1_W
+primary: U1_W
+fixed_role: diagnostic_baseline_without_teacher_qualification
+window_seconds: 30.0
+window_offset_seconds: -5.0
+baseline_seconds: 5.0
+sampling_hz: 4.0
+native_eeg_hz: 200.0
+native_fnirs_hz: 10.0
+preprocessing:
+  fnirs_array_key: native_input_fnirs
+  fnirs_entry_stage: raw_intensity
+  input_target_paths: separate_before_information_propagating_transforms
+  repair_masked: visible_only_linear_interpolation
+  eeg_band_hz:
+  - 1.0
+  - 45.0
+  eeg_filter_order: 4
+  eeg_feature: log_block_power
+  eeg_power_floor: 1.0e-12
+  eeg_projection: train_only_robust_feature_scaling_then_first_pca_component
+  eeg_sign: positive_sum_of_loadings
+  fnirs_pair_selection: maximum_train_HbO_HbR_mean_signal_to_first_difference_mad_ratio
+  fnirs_channels: one_native_pair_with_paired_HbO_HbR
+  fnirs_scaling: one_common_train_only_factor_for_HbO_and_HbR
+  amplitude_gauge: fixed_reference_prior_covariance_linearization_30_seconds
+  baseline_correction: visible_first_5_seconds_after_frozen_projection
+  teacher_fit_task_labels: false
+  fnirs_pair_validity: positive_finite_in_all_training_samples_then_check_selected_pair_on_heldout
+  invalid_heldout_selected_pair: retain_failure_no_channel_substitution
+noise:
+  estimator: centered_first_difference_mad_divided_by_exact_iid_Student_difference_mad
+  rule: maximum_of_train_estimate_and_frozen_synthetic_observation_scale
+  known_noise_check: retained_a0_observation_minus_known_clean
+  maximum_absolute_mean_relative_bias: 0.1
+  maximum_median_absolute_relative_error: 0.25
+  interpretation: initial_scale_rule_not_observation_or_latent_calibration
+posterior:
+  axis: W
+  trials: all_24_training_trials_independent_resets
+  grid_points: 65
+  maximum_grid_points: 257
+  maximum_cdf_difference: 0.02
+  mixture_points: 17
+  mixture_check_points: 33
+  mixture_check_heldout_position: 0
+  quadrature_check_subject_positions:
+  - 0
+  - 8
+  - 17
+  maximum_quadrature_cdf_difference: 0.01
+  boundary_band_fraction: 0.05
+  local_refinement:
+    method: retain_full_support_then_bisect_intervals_near_posterior_mass
+    log_density_drop: 30.0
+    maximum_rounds: 16
+    maximum_total_grid_points: 2049
+    maximum_cdf_difference: 0.02
+controls:
+  task_template: eight_training_trials_from_same_session
+  independent_pairing: same_session_training_trial_at_heldout_position_modulo_eight
+  circular_shift_fraction: 0.5
+scoring:
+  main: marginal_gaussian_state_student_t_noise_convolution
+  observation_interval: gaussian_moment_95
+  coverage_role: diagnostic_not_latent_state_coverage
+  cluster_unit: subject
+  nrmse_normalization: training_coordinate_standard_deviation
+  bootstrap_repetitions: 5000
+qualification:
+  complete_subjects: 18
+  complete_heldout_trials_per_subject: 6
+  require_all_primary_control_increment_ci95_lower_positive: true
+  require_all_leave_one_subject_out_mean_increments_positive: true
+  maximum_center_mask_observation_nrmse: 1.0
+  require_physical_and_numerical_checks: true
+  maximum_boundary_restricted_driver_nrmse: 0.2
+  minimum_boundary_restricted_driver_correlation: 0.95
+  maximum_mixture_mean_difference_in_noise_units: 0.02
+  maximum_mixture_relative_variance_difference: 0.05
+uq:
+  requires_measured_core_qualification: true
+  calibration: leave_one_training_trial_out_descriptive
+  uniform_weighting_default: true
+  latent_truth_available: false

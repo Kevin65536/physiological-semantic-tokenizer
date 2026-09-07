@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-08-26T17:42:03+08:00",
+  "updated_at": "2026-09-07",
   "tracks": [
     {
       "id": "main",
@@ -200,6 +200,36 @@
       "id": "e.experiment_plan",
       "label": "PST-DISCOVERY-v1 实验设计协议",
       "path": "docs/EXPERIMENT_PLAN.md",
+      "role": "protocol"
+    },
+    {
+      "id": "e.step5a_contract",
+      "path": "experiments/configs/physiology_semantic_tokenizer/step5a_inference_consistency_v1.yaml",
+      "role": "protocol",
+      "label": "Step5A 合成推断一致性合同"
+    },
+    {
+      "id": "e.step5a_results",
+      "path": "experiments/RESULTS_INDEX.md",
+      "role": "result_summary",
+      "label": "Step5 阶段结果与原始证据索引"
+    },
+    {
+      "id": "e.step5_full_contract",
+      "path": "experiments/configs/physiology_semantic_tokenizer/step5_v1.yaml",
+      "role": "protocol",
+      "label": "完整 Step5 分阶段数值合同"
+    },
+    {
+      "id": "e.step5b_contract",
+      "label": "Step5B 原始 trial 遮挡与最小 measured 检验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/step5b_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.step5b_refinement",
+      "label": "Step5B 同支持域加密与训练通道资格合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/step5b_v2.yaml",
       "role": "protocol"
     }
   ],
@@ -2030,6 +2060,347 @@
         "croce.synthetic"
       ],
       "headline": false
+    },
+    {
+      "state_id": "main.step5a@2026-09-07.localization-v1",
+      "entity": "main.step5a",
+      "label": "Step5A 生成模型—推断器一致性",
+      "track": "main",
+      "order": 1,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "小规模合成定位完成；前向/导数和精确 Kalman 对照通过，同数据 oracle 网格加密后全部满足分辨率阈值；G/Z 短参考显示评分与联合似然的参数分布有差异，W 参考精度不足；不授予校准或 teacher 资格。",
+      "evidence_ids": [
+        "e.step5a_contract",
+        "e.step5a_results"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-07",
+      "progress": {
+        "completed": 12,
+        "total": 12,
+        "unit": "independent localization cases"
+      },
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.program@2026-09-07.step5a-localization",
+      "entity": "main.program",
+      "label": "PST-DISCOVERY-v1 tokenizer 发现流程",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "Step 2–4 负结果保留；Step5A 已完成合成推断定位，确认前向参数化与线性状态算法一致，但现有评分尚不能作为经验证的参数联合似然；teacher 与 tokenizer 尚未晋级。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.data_contract",
+        "e.step5a_contract",
+        "e.step5a_results"
+      ],
+      "supersedes": [
+        "main.program@2026-08-26.p0-suite-ready"
+      ],
+      "updated_at": "2026-09-07",
+      "depends_on": [
+        "main.data_contract",
+        "main.step5a"
+      ],
+      "next_step": "以同模型联合似然为参照修正参数评分并解决 W 参考退化；冻结修正后再开展较大规模 synthetic calibration 与 Step5A1 状态/共享信息检验；本轮不进入 measured/protected。",
+      "headline": true
+    },
+    {
+      "state_id": "main.step5a0@2026-09-07.calibration-v1",
+      "entity": "main.step5a0",
+      "label": "Step5A0 联合推断与同模型校准",
+      "track": "main",
+      "order": 2,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "qualified",
+      "analysis_intent": "confirmatory",
+      "summary": "联合 Student-t 观测积分与矩匹配通过冻结数值检查；180 个独立案例中 G/W/Z 参数95%覆盖为93.33%/95%/95%，优于旧边际评分；仅支持限定合成校准结论，尚不授予 teacher 资格。",
+      "evidence_ids": [
+        "e.step5_full_contract",
+        "e.step5a_results"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-07",
+      "progress": {
+        "completed": 180,
+        "total": 180,
+        "unit": "independent calibration cases"
+      },
+      "depends_on": [
+        "main.step5a"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.step5@2026-09-07.a1-running",
+      "entity": "main.step5",
+      "label": "完整 Step5 分阶段实验",
+      "track": "main",
+      "order": 3,
+      "entity_kind": "aggregate",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "Step5A0 已完成；Step5A1 正在检验参数传播后的留出状态恢复、U0 敏感性及共享信息 null。后续 measured/UQ 依赖对应资格，不读取 subjects 19–29。",
+      "evidence_ids": [
+        "e.step5_full_contract",
+        "e.step5a_results"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-07",
+      "progress": {
+        "completed": 1,
+        "total": 4,
+        "unit": "stages"
+      },
+      "depends_on": [
+        "main.step5a0"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.program@2026-09-07.step5-continuation",
+      "entity": "main.program",
+      "label": "PST-DISCOVERY-v1 tokenizer 发现流程",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "Step5A0 联合似然推断通过限定合成校准；Step5A1 正在检验状态 teacher 与双向共享信息，tokenizer 尚未晋级。旧 Step 1–4 证据保留。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.data_contract",
+        "e.step5_full_contract",
+        "e.step5a_results"
+      ],
+      "supersedes": [
+        "main.program@2026-09-07.step5a-localization"
+      ],
+      "updated_at": "2026-09-07T10:03:00Z",
+      "depends_on": [
+        "main.data_contract",
+        "main.step5"
+      ],
+      "next_step": "完成 Step5A1；仅在对应状态资格成立后进入 subjects 01–18 的 Step5B 新 trial 检验及后续全面 UQ，protected 24–29 保持关闭。",
+      "headline": true
+    },
+    {
+      "state_id": "main.step5a1@2026-09-07.candidate-scope-review-v2",
+      "entity": "main.step5a1",
+      "label": "Step5A1 最小状态 teacher 资格",
+      "track": "main",
+      "order": 3,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "mixed",
+      "analysis_intent": "confirmatory",
+      "summary": "240 个案例已核算，231 完成、9 失败；W 的独立 60 案例全部完成并通过状态、参数传播和双向共享信息检查；G/Z 面板不完整，U0 敏感性失败，U3 仅诊断且网格未解析。",
+      "evidence_ids": [
+        "e.step5_full_contract",
+        "e.step5a_results"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-07T10:35:00Z",
+      "progress": {
+        "completed": 240,
+        "total": 240,
+        "unit": "registered case outcomes"
+      },
+      "outcome_counts": {
+        "qualified": 1,
+        "rejected": 3
+      },
+      "depends_on": [
+        "main.step5a0"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.step5@2026-09-07.b-preparing",
+      "entity": "main.step5",
+      "label": "完整 Step5 分阶段实验",
+      "track": "main",
+      "order": 4,
+      "entity_kind": "aggregate",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "Step5A0/A1 已完成；仅 U1_W 获得有限合成 teacher 资格。正在冻结和实现 subjects 01–18 的 Step5B 原始 trial 遮挡检验；protected 24–29 保持关闭。",
+      "evidence_ids": [
+        "e.step5_full_contract",
+        "e.step5b_contract",
+        "e.step5a_results"
+      ],
+      "supersedes": [
+        "main.step5@2026-09-07.a1-running"
+      ],
+      "updated_at": "2026-09-07T10:35:00Z",
+      "progress": {
+        "completed": 2,
+        "total": 4,
+        "unit": "experimental stages"
+      },
+      "depends_on": [
+        "main.step5a0",
+        "main.step5a1"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.program@2026-09-07.step5b-development",
+      "entity": "main.program",
+      "label": "PST-DISCOVERY-v1 tokenizer 发现流程",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "Step5A0 联合似然通过有限校准；Step5A1 仅 U1_W 通过自身完整面板的状态与双向共享信息检查。真实数据资格及 tokenizer 尚未晋级，旧 Step 1–4 负证据保留。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.data_contract",
+        "e.step5_full_contract",
+        "e.step5b_contract",
+        "e.step5a_results"
+      ],
+      "supersedes": [
+        "main.program@2026-09-07.step5-continuation"
+      ],
+      "updated_at": "2026-09-07T10:35:00Z",
+      "depends_on": [
+        "main.data_contract",
+        "main.step5"
+      ],
+      "next_step": "完成 subjects 01–18、sessions 01/03/05 的 Step5B 新 trial 遮挡与 null 检验；仅在 measured 核心 teacher 合格后开展全面 UQ，protected 24–29 保持关闭。",
+      "headline": true
+    },
+    {
+      "state_id": "main.step5b@2026-09-07.final-review",
+      "entity": "main.step5b",
+      "label": "Step5B 最小实测状态 teacher",
+      "track": "main",
+      "order": 4,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "exploratory",
+      "summary": "108 条留出均有结果或失败记录，U1_W 完成106条、2条物理域异常；18人参数网格已解析但后验近下边界，双向null、误差及去边界稳定性未通过，不授予实测teacher资格。",
+      "evidence_ids": [
+        "e.step5_full_contract",
+        "e.step5b_refinement",
+        "e.step5a_results"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-07T11:45:00Z",
+      "depends_on": [
+        "main.step5a1"
+      ],
+      "headline": false,
+      "progress": {
+        "completed": 108,
+        "total": 108,
+        "unit": "registered held-out case outcomes"
+      }
+    },
+    {
+      "state_id": "main.step5uq@2026-09-07.final-review",
+      "entity": "main.step5uq",
+      "label": "Step5 全面 UQ",
+      "track": "main",
+      "order": 5,
+      "entity_kind": "experiment",
+      "execution": "blocked",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "Step5B 没有合格核心teacher；全面跨模态/被试UQ、ICC、conformal、精度加权和训练导出未执行。A1/B方差结果仅作资格诊断。",
+      "evidence_ids": [
+        "e.step5_full_contract",
+        "e.step5b_refinement",
+        "e.step5a_results"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-07T11:45:00Z",
+      "depends_on": [
+        "main.step5b"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.step5@2026-09-07.measured-negative",
+      "entity": "main.step5",
+      "label": "完整 Step5 分阶段实验",
+      "track": "main",
+      "order": 6,
+      "entity_kind": "aggregate",
+      "execution": "blocked",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "A0/A1/B 三阶段已执行：有限合成校准与W状态面板通过，实测核心资格失败；第四阶段全面UQ未执行。旧失败、粗网格和恢复来源保留，protected 24–29保持关闭。",
+      "evidence_ids": [
+        "e.step5_full_contract",
+        "e.step5b_refinement",
+        "e.step5a_results"
+      ],
+      "supersedes": [
+        "main.step5@2026-09-07.b-preparing"
+      ],
+      "updated_at": "2026-09-07T11:45:00Z",
+      "progress": {
+        "completed": 3,
+        "total": 4,
+        "unit": "experimental stages"
+      },
+      "depends_on": [
+        "main.step5a0",
+        "main.step5a1",
+        "main.step5b",
+        "main.step5uq"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.program@2026-09-07.step5-measured-negative",
+      "entity": "main.program",
+      "label": "PST-DISCOVERY-v1 tokenizer 发现流程",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "Step5A0 联合似然通过有限校准、A1仅W合成teacher合格；Step5B实测未通过双向共享信息、误差与稳健性检查，全面UQ和tokenizer未晋级。Step 1–4负证据保留。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.data_contract",
+        "e.step5_full_contract",
+        "e.step5b_refinement",
+        "e.step5a_results"
+      ],
+      "supersedes": [
+        "main.program@2026-09-07.step5b-development"
+      ],
+      "updated_at": "2026-09-07T11:45:00Z",
+      "depends_on": [
+        "main.data_contract",
+        "main.step5"
+      ],
+      "next_step": "先在单一SSM内定位实测观测映射、时间/频带与过程/观测噪声失配，冻结新的最小诊断；不以扩参数支持域或改tokenizer目标绕过负结果，protected 24–29保持关闭。",
+      "headline": true
     }
   ]
 }

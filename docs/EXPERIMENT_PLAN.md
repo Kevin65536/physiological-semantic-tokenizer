@@ -7,7 +7,8 @@ physiology-semantic tokenizer generation. The plan is limited to physical-teache
 qualification, source/observation tokenization, and coupling-prior retention. It
 does not use downstream task performance as a training or selection endpoint.
 
-Six bounded SSM entry points are now registered. The synthetic P0 launcher
+The bounded SSM entry points are indexed in
+[`experiments/README.md`](../experiments/README.md). The synthetic P0 launcher
 remains the qualification path; a separate synthetic-only `T3c` composite
 `T-P2` screen tests the gain/time directions but is decision-ineligible. The
 measured reconstruction/null, fit-only identifiability, and fit-only
@@ -26,6 +27,200 @@ authorize tokenizer promotion. Any future measured confirmation or physical
 teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
+
+## Step5A0 inference consistency diagnostic
+
+[`step5a_inference_consistency_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5a_inference_consistency_v1.yaml)
+owns the small synthetic localization panel requested in `ssm_next.md`.
+[`evaluate_step5a_inference_consistency.py`](../experiments/evaluate_step5a_inference_consistency.py)
+implements it without modifying Step 1–4 code, configurations, evidence, or
+negative decisions. This is a diagnostic before Step5A1 teacher checks, not a
+new qualification gate or a measured-data campaign.
+
+The primary endpoints are forward/derivative equivalence and inference
+consistency. G and W have truncated-normal priors in relative log gain and
+log frequency; Z has a uniform prior in physical damping ratio. Other
+coordinates stay at the reference value. The runner integrates densities in
+these coordinates with trapezoidal weights and reports prior/posterior mode
+separation, normalized boundary distance, boundary mass, interval width, and
+quadrature refinement. W is the negative of Step 4's log-time coordinate.
+
+- `oracle_r_known` conditions on a deterministic, prescribed driver and rest
+  hemodynamic initial state, with zero state diffusion. Independent numerical
+  integration settings are compared, and the likelihood is the product of
+  conditional Student-t observation densities.
+- `matched_model_calibration` draws the parameter from its declared prior,
+  the transformed initial state from the configured zero-mean Gaussian, and
+  all six transition innovations independently. Its transition law is
+  `z[t+1] = RK4(z[t]) + epsilon`, with covariance
+  `dt * diag(process_std**2)`. This is the discrete model approximated by the
+  fitter; it does not assert exact continuous-time SDE simulation.
+- The production filter and smoother are checked in a linear Gaussian
+  specialization against exact Kalman filtering/RTS. A bootstrap particle
+  filter then estimates the joint likelihood for short matched prefixes.
+  Independent likelihood estimates are averaged on the likelihood scale.
+  Particle budgets, independent-run splits, grid refinement, effective sample
+  size, and surviving ancestors determine whether a reference comparison is
+  numerically resolved. An unresolved reference remains inconclusive.
+- `misspecification_stress_test` calls the retained Step 4 truth generator
+  with shorter records, preserving its pulse, external driver, deterministic
+  hemodynamics, and Student-t noise. It is not labelled SBC. The old failure
+  establishes that the old complete pipeline failed its registered gates;
+  it did not isolate identifiability, model mismatch, and inference error.
+
+The existing EKF marginal score is named `predictive_score` in this diagnostic
+and produces a **generalized posterior**. Only the direct oracle likelihood
+and joint particle likelihood use `parameter_log_likelihood`. Increasing grid
+resolution alone does not validate the former as a likelihood.
+
+Secondary diagnostics compare U0 fixed, true-parameter conditional inference,
+and the score-optimal one-parameter fit against true `r` and clean EEG/HbO/HbR.
+State-posterior variance excludes observation noise; noisy masked-observation
+intervals are reported separately. These are conditional Gaussian-moment
+intervals, without parameter-uncertainty propagation. Coverage is aggregated
+by independent replicate before descriptive bootstrap; the small panel cannot
+establish SBC or teacher qualification. The no-observation prior is a software
+negative control. Shared-information pairing nulls, parameter-integrated UQ,
+U3, and the registered larger calibration panel belong to later experiments.
+
+Masked fNIRS values are removed before estimation, including parameter refits.
+There is no normalization or data-derived noise estimation in this synthetic
+panel. Numerical failure stops the run and retains its failure record; seeds
+are not redrawn and thresholds are not relaxed after seeing results. Outputs
+use a fresh directory under the configured experiment root. No measured or
+protected data, tokenizer target, independent-modality ownership, or coupling
+contract changes are included. Current execution and next action remain in
+the research-state registry.
+
+## Full Step5 staged continuation
+
+The user-requested continuation is governed by
+[`step5_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5_v1.yaml)
+and [`evaluate_step5.py`](../experiments/evaluate_step5.py). Missing numerical
+details in `ssm_next.md` are frozen in that configuration before the relevant
+stage is evaluated. Stage results are reported separately, with numerical,
+parameter, state, and shared-information conclusions distinguished.
+
+**Step5A0** replaces IRLS observation curvature with joint Student-t
+Gauss-Hermite integration and Gaussian moment matching in a separate
+[`joint inference module`](../src/inference/t3a_balloon_joint_ssm.py). The
+immutable T3a dynamics and transition Jacobian remain the forward owner.
+The likelihood integrates the observation-active transformed coordinates;
+the other states are handled by Gaussian conditional regression. EKF dynamics
+and Gaussian closure remain approximations. The new matched calibration panel
+uses fresh independent parameter/noise draws and compares oracle, legacy
+marginal-score, and joint-likelihood parameter distributions. Numerical
+refinement changes grids, not observations or statistical thresholds.
+
+Particle likelihood precision and path ancestry are separate diagnostics.
+Likelihood-scale independent estimates, grid/budget checks, and log-likelihood
+Monte Carlo error govern the likelihood reference. Surviving ancestor fraction
+governs whether those same particles may support path smoothing. The prior
+combined check is also reported; a path failure is retained and cannot be
+described as a fully resolved particle smoother.
+
+**Step5A1** tests U0 and the minimal G/W/Z candidates. A parameter distribution
+is fitted to an independent synthetic training trial; the state targets and
+masked scores use newly generated held-out trials. For the stress branch,
+both training and held-out observations use the retained Step 4 generator.
+The parameter distribution is held fixed across correct-pair and null inputs;
+it cannot carry information about the held-out pair. This is a frozen-training
+parameter mixture of conditional state posteriors, not a claim that parameter
+weights have been updated to the full joint posterior using the held-out
+record. Its uncertainty must pass the declared state coverage checks.
+
+Variance separates the mean conditional state variance from variance across
+parameter means; only noisy-observation prediction adds Student-t noise.
+Posterior-CDF quadrature is refined for teacher mean/variance stability.
+U0 additionally receives the predeclared GWZ prior-quantile sensitivity panel.
+Cross-parameter driver stability and known-truth recovery are both reported.
+U3 uses a full-support tensor grid with explicit refinement, posterior
+correlation/ridge, and boundary-mass diagnostics; it is not eligible for
+selection. Parameter intervals are compared with configured material changes,
+not a point-identification or “any equivalent alternative fails” rule.
+
+Shared information requires paired improvement over own history, own history
+plus an independently trained task-time template, independent pairing, and
+circular-shift controls in both center-masked directions. Whole-modality
+missingness is reported as a separate diagnostic. Synthetic clusters are
+independent parameter/trial replicates; measured clusters are subjects. No
+timepoint-level binomial confidence claim is used for trajectory coverage.
+Every fixed case identity must receive either its complete result or a retained
+failure record. Generation, prior-support or inference exceptions are not
+redrawn, filtered out, or repaired by changing frozen clipping/step-size rules.
+Partial successful-case summaries are descriptive and cannot grant teacher
+qualification when the registered experiment is incomplete. Independent
+same-seed numerical diagnostics may explain a failure without reclassifying it.
+
+**Step5B** is restricted to the explicitly listed development subjects and
+sessions, with the configured eight training and two held-out trials per
+session. It targets a new trial in an existing subject/session. U0 and a
+synthetically qualified minimal one-parameter candidate are evaluated; if no
+free candidate qualifies, a qualified U0 may be evaluated alone. Every
+data-dependent transform and parameter fit uses the training inventory.
+Input masking precedes information-propagating transforms, using distinct
+input and target-scoring processing where required. Loader source facts and
+the concrete mask-processing implementation are checked before array access.
+Subjects 19–23 are not a new confirmation cohort and are not included in this
+version; protected subjects 24–29 remain closed.
+
+The measured implementation's additional numerical choices were first frozen in
+[`step5b_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5b_v1.yaml),
+which pins the synthetic base configuration and reuses the immutable
+three-session metadata validator for factual record/event/clock checks. That
+older diagnostic's authorization fields are not reused as authorization.
+The explicit Step5 request and the admitted candidate's own complete synthetic
+panel govern progression. A failed independent G/Z candidate does not
+invalidate a complete W panel; U0's registered cross-scenario sensitivity does
+require the full scenario inventory.
+
+[`step5b_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5b_v2.yaml)
+adds same-support local posterior refinement after the retained uniform-grid
+failure: old endpoints and tail nodes remain, intervals within the configured
+log-density drop are bisected, and the CDF threshold is unchanged. It also
+restricts fNIRS channel eligibility using training-only positive native
+intensities before channel selection. A selected held-out pair with invalid
+support still fails; held-out observations cannot select a replacement pair.
+Same-configuration output recovery can reuse prepared inputs, resolved curves
+and case outcomes with input digests and unchanged scientific functions. It
+adds no independent statistical replicates and preserves prior failure records.
+
+The new native-trial path consumes the cache's `native_input_fnirs` and the
+existing native EEG reader. It does not use the globally standardized or
+filtered canonical arrays to construct masked inputs. EEG log block power and
+trial-local OD/motion/filter/MBLL fNIRS transforms precede a frozen per-subject
+projection. Channel selection uses training signal/first-difference ratios;
+PCA and projection scales use no task labels. HbO and HbR share a single
+training scale, preserving their relative amplitudes. The amplitude gauge is
+defined by the fixed reference model covariance; P0/Q0 and the state structure
+are not added as free parameters. Event-relative output times and both native
+clock anchors remain in the trial inventory.
+
+The first-difference estimator uses the exact median absolute difference of
+two unit Student-t draws. Its software check uses retained, known synthetic
+noise. The measured scale is the larger of its training estimate and the
+frozen synthetic noise scale. This is an initial scale rule, not a calibration
+claim about colored measured noise. Center-mask scores compare the qualified
+candidate with same-modality visible context (including future context in the
+fixed-interval operator), a training task-time template, independent training
+pairing and circular shifts. Subject-cluster intervals and leave-one-subject-out
+means govern shared-information evidence. Noisy-observation Gaussian-moment
+coverage is diagnostic; measured data provide no latent-state coverage truth.
+
+**Comprehensive UQ** follows core teacher qualification. It reports modality
+and subject variation, conditional-state/parameter/noisy-observation variance,
+mask effects, and calibration with the known-subject new-trial unit explicitly
+stated. Leave-one-training-trial-out calibration is descriptive, not a claim
+of standard split-conformal finite-sample coverage. Precision weighting is
+tested only when the configured clustered risk-ranking criterion is met;
+uniform weighting is otherwise retained. Exports preserve the same-modality
+observation-space teacher mean, variance, and masks; `r` is a diagnostic
+export. No tokenizer training or target redesign is included.
+
+A failed numerical or scientific prerequisite is retained and prevents the
+dependent measured/UQ action. “Stage evaluated” does not imply qualification,
+and a skipped dependent stage is reported as not run, never as a successful
+experiment. Current execution remains solely in the research-state registry.
 
 ## Fixed question and decision target
 

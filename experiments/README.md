@@ -1,6 +1,6 @@
 # Experiment workspace
 
-_T3a synthetic P0, a synthetic-only T3c composite T-P2 screen, three
+_T3a synthetic P0, synthetic T3c composite T-P2 and Step5A consistency diagnostics, three
 nonprotected measured diagnostics, and one array-free T3c admission gate are
 executable; protected data remain closed_
 
@@ -8,7 +8,7 @@ executable; protected data remain closed_
 
 | Path | Role |
 | --- | --- |
-| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | T3a synthetic P0, synthetic T3c composite T-P2, three measured diagnostics, the array-free T3c admission gate, and retained stopped R-series contracts |
+| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | Synthetic P0, composite T-P2, Step5A consistency, measured diagnostics, the array-free T3c admission gate, and retained stopped R-series contracts |
 | `scripts/` | replay/evidence, state, and figure tools |
 | [`runs/`](runs/README.md) | retained generated evidence; future run root only after registration |
 | `archive/` | local superseded generations; Git-ignored and never default-discovered |
@@ -141,6 +141,62 @@ owns the human-readable interpretation.
   --run-dir experiments/runs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2/<fresh_run_id>
 ```
 
+The synthetic inference-localization entry is
+[`evaluate_step5a_inference_consistency.py`](evaluate_step5a_inference_consistency.py),
+with the versioned
+[`Step5A configuration`](configs/physiology_semantic_tokenizer/step5a_inference_consistency_v1.yaml).
+The [owning protocol](../docs/EXPERIMENT_PLAN.md#step5a0-inference-consistency-diagnostic)
+defines matched generation, known-driver likelihood, particle reference,
+separate mismatch stress tests, and conditional state-coverage diagnostics.
+Run the software checks and then the bounded panel in a fresh directory:
+
+```bash
+.venv/bin/python experiments/evaluate_step5a_inference_consistency.py --check-only
+.venv/bin/python experiments/evaluate_step5a_inference_consistency.py \
+  --run-dir experiments/runs/physiology_semantic_tokenizer/step5a_inference_consistency/<fresh_run_id> \
+  --workers 3
+```
+
+The entry writes resolved configuration, source identities, per-case scores and
+truth arrays, reference precision diagnostics, and JSON/Markdown summaries.
+It cannot confer teacher qualification or open measured/protected data.
+An explicit completed panel can receive a deterministic oracle grid check via
+`--oracle-refinement-of <original_run_dir> --run-dir <fresh_run_dir>`.
+It preserves the same cases and thresholds and adds no independent replicates.
+
+The full staged Step5 entry is
+[`evaluate_step5.py`](evaluate_step5.py), using
+[`step5_v1.yaml`](configs/physiology_semantic_tokenizer/step5_v1.yaml) and the
+[staged protocol](../docs/EXPERIMENT_PLAN.md#full-step5-staged-continuation).
+It separates joint parameter likelihood, held-out teacher qualification and
+subsequent measured/UQ prerequisites. Reference inputs are the explicitly
+retained localization run named in the configuration. Each experiment stage
+requires a fresh direct child of the configured Step5 artifact root:
+
+```bash
+.venv/bin/python experiments/evaluate_step5.py --stage reference --run-dir <fresh_reference_dir>
+.venv/bin/python experiments/evaluate_step5.py --stage a0 \
+  --reference-run <reference_dir> --run-dir <fresh_calibration_dir>
+.venv/bin/python experiments/evaluate_step5.py --stage a1 \
+  --calibration-run <calibration_dir> --run-dir <fresh_teacher_dir> --workers 48
+.venv/bin/python experiments/evaluate_step5.py --stage review \
+  --teacher-run <teacher_dir> --run-dir <fresh_candidate_scope_review_dir>
+.venv/bin/python experiments/evaluate_step5.py --stage b \
+  --teacher-run <candidate_scope_review_dir> --run-dir <fresh_measured_dir> \
+  --measured-config experiments/configs/physiology_semantic_tokenizer/step5b_v2.yaml
+.venv/bin/python experiments/evaluate_step5.py --stage report --run-dir <completed_unqualified_measured_dir>
+```
+
+The review command applies candidate-specific case completeness to existing
+A1 outcomes, without new inference. The B command checks that candidate's
+synthetic qualification before metadata or native-array access. Its optional
+`--reuse-run` accepts only the recorded v1-to-v2 refinement or an identical
+configuration with unchanged scientific functions and hashed retained outputs.
+The report command adds stage diagnostics and an explicit unexecuted UQ decision
+when measured core qualification fails; it reads saved results only. Case
+exceptions retain their identities and tracebacks. Successful subsets cannot
+replace a candidate's complete registered experiment.
+
 ## Frozen method boundary and implementation candidates
 
 The theory/architecture principles are retained in
@@ -150,7 +206,7 @@ recorded in the [design note](../docs/physiology_semantic_tokenizer/architecture
 and its [framework diagram](../docs/physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg).
 No YAML or measured-data run is authorized by those artifacts.
 
-Except for the six entries above, the existing physiology-semantic
+Except for the entries above, the existing physiology-semantic
 YAML/runtime surface is stopped historical and replay-only; do not clone or
 reinterpret it as a new contract. An implementation inside the frozen boundary must first
 pass synthetic software, target/teacher, tensor-shape, split, and null checks.

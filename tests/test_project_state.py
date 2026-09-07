@@ -49,8 +49,8 @@ def test_current_registry_is_lightweight_and_views_are_readable():
 
     readme = render_readme_block(registry)
     assert "### Next steps" in readme
-    assert "T3a-balloon-robust" in readme
-    assert "T-P0 至 T-P3" in readme
+    assert "Step5A" in readme
+    assert "联合似然" in readme
 
     snapshot = current_snapshot(registry)
     assert snapshot["status_axes"] == ["execution", "scientific_verdict"]
@@ -80,6 +80,8 @@ def test_execution_and_scientific_verdict_remain_independent():
 
     assert current["main.program"]["execution"] == "planned"
     assert current["main.program"]["scientific_verdict"] == "unreviewed"
+    assert current["main.step5a"]["execution"] == "completed"
+    assert current["main.step5a"]["scientific_verdict"] == "inconclusive"
     assert {
         entity for entity, record in current.items() if record.get("next_step")
     } == {"main.program"}
@@ -191,12 +193,12 @@ def test_current_record_can_be_updated_in_place_without_supersedes():
 def test_effective_snapshot_timestamp_follows_a_current_record_update():
     registry = copy.deepcopy(_registry())
     record = _current_by_entity(registry)["atlas.statistical"]
-    record["updated_at"] = "2026-09-01"
+    record["updated_at"] = "2099-09-01"
 
     validate_registry(registry, repo_root=PROJECT_ROOT)
-    assert current_snapshot(registry)["updated_at"] == "2026-09-01"
-    assert "updated_at=2026-09-01" in render_agent_summary(registry)
-    assert "_Registry snapshot: `2026-09-01`" in render_status_markdown(
+    assert current_snapshot(registry)["updated_at"] == "2099-09-01"
+    assert "updated_at=2099-09-01" in render_agent_summary(registry)
+    assert "_Registry snapshot: `2099-09-01`" in render_status_markdown(
         registry, repo_root=PROJECT_ROOT
     )
 

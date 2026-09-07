@@ -1,0 +1,93 @@
+{
+  "schema": "step5a_inference_consistency_v1",
+  "execution": "completed",
+  "scope": "synthetic_only_localization",
+  "started_at": "2026-09-07T08:19:24.391555+00:00",
+  "source_commit": "d9f9bfd7130d747dce65fd43163cd01d129ac189",
+  "source_sha256": {
+    "experiments/evaluate_step5a_inference_consistency.py": "fad10298f5a6febf2b5dfe90abe97d59186b855be6cda0a6701c53c178b9b7cc",
+    "src/inference/t3a_balloon_robust_ssm.py": "4221b4a53e9b2041d6db5e0274e4d5b509ab8108291e004c01ab67d9054326e4",
+    "experiments/evaluate_t3c_composite_synthetic_t2.py": "596fe24fd1925f950e69f79b14acf28ff7e19afbc313825b3990e2ef0344c55e"
+  },
+  "config_sha256": "bb128c6325af30350feb1cae1f1578870e171116dc2976036870e3f75ab90c09",
+  "resolved_reference_model": {
+    "fixed": {
+      "alpha": 0.32,
+      "E0": 0.32,
+      "gamma": 0.32,
+      "P0": 1.0,
+      "Q0": 0.35,
+      "driver_decay_per_s": 0.45,
+      "process_std": [
+        0.08,
+        0.01,
+        0.006,
+        0.004,
+        0.004,
+        0.004
+      ],
+      "observation_scale": [
+        0.08,
+        0.025,
+        0.015
+      ],
+      "student_nu": 5.0,
+      "eeg_loading": 1.0,
+      "eeg_offset": 0.0,
+      "neurovascular_gain": 1.0
+    },
+    "free": {
+      "kappa": 0.64,
+      "tau": 2.0
+    }
+  },
+  "resolved_filter_numerics": {
+    "dt": 0.25,
+    "rk4_substeps": 2,
+    "irls_iterations": 3,
+    "irls_weight_floor": 0.05,
+    "initial_state_std": [
+      0.08,
+      0.03,
+      0.015,
+      0.015,
+      0.015,
+      0.015
+    ],
+    "kappa_bounds": [
+      0.2,
+      1.5
+    ],
+    "tau_bounds": [
+      0.5,
+      5.0
+    ],
+    "optimizer_max_iterations": 60,
+    "optimizer_starts": [
+      [
+        0.35,
+        1.0
+      ],
+      [
+        0.65,
+        2.0
+      ],
+      [
+        1.1,
+        3.5
+      ]
+    ],
+    "kappa_prior_mean": 0.64,
+    "kappa_prior_sd": 0.2,
+    "tau_prior_mean": 2.0,
+    "tau_prior_sd": 0.75,
+    "hessian_step": 0.001
+  },
+  "python": "3.12.4",
+  "numpy": "2.4.1",
+  "scipy": "1.17.0",
+  "workers": 3,
+  "expected_cases": 12,
+  "completed_cases": 12,
+  "elapsed_seconds": 204.18239212036133
+}

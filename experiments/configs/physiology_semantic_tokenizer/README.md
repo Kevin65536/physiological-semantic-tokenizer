@@ -1,12 +1,12 @@
 # Physiology-semantic tokenizer configurations
 
-This directory contains the active synthetic T3a P0 contract, one synthetic
-T3c composite T-P2 screen, three bounded nonprotected measured diagnostics, one
+This directory contains the active synthetic T3a P0 contract, synthetic
+T3c composite T-P2 and Step5A consistency diagnostics, three bounded nonprotected measured diagnostics, one
 array-free T3c admission contract, and retained contracts from the stopped
 R-series. Generated variants, local tuning files, run outputs and abandoned
 preregistries are intentionally excluded from Git.
 
-> **Lifecycle (2026-09-03): one synthetic qualification contract, one
+> **Historical configuration snapshot (2026-09-03): one synthetic qualification contract, one
 > synthetic composite identifiability screen, three measured exploratory
 > diagnostics, and one array-free admission gate.**
 > `t3a_balloon_robust_p0.yaml` remains the
@@ -54,6 +54,9 @@ The version-controlled configuration surface is deliberately limited to:
 | `t3_multisession_loso_v1.yaml` | Fit-only three-session LOSO with a shared effective-κ center, zero-sum training-session deviations, and target-masked nominal recovery scoring | **Active measured development diagnostic**; subjects 01–18 and records 01/03/05 only, loads no subject 19–29 arrays, not qualification evidence |
 | `t3c_hierarchical_composite_admission_v1.yaml` | Array-free gain/time composite map, shrinkage smoke, and Step 2/3 prerequisite audit | **Active admission gate**; current result `BLOCKED_PREREQUISITE`, measured hierarchy not started |
 | `t3c_composite_synthetic_t2_v1.yaml` | Known-truth C1 gain/time SBC, profile, multistart, confounding, SVD, and held-out screen | **Complete synthetic negative**; both C1 directions failed, C2 not run, measured hierarchy remains blocked |
+| `step5a_inference_consistency_v1.yaml` | Matched discrete-model calibration diagnostics, known-driver likelihood, short particle reference, and mismatch stress | Synthetic localization only; [protocol](../../../docs/EXPERIMENT_PLAN.md#step5a0-inference-consistency-diagnostic), no teacher admission |
+| `step5_v1.yaml` | Joint-likelihood calibration, independent held-out minimal teachers, state uncertainty, sensitivity and cross-modal nulls | [Staged protocol](../../../docs/EXPERIMENT_PLAN.md#full-step5-staged-continuation); measured/UQ depend on core teacher qualification; no protected access |
+| `step5b_v1.yaml` / `step5b_v2.yaml` | Native trial masking, train-only projection and noise, W parameter mixture, subject-cluster nulls; v2 retains support while resolving boundary mass and training channel eligibility | Pins the synthetic contract; subjects 01–18 only, new trials within existing sessions; v1 failures remain historical evidence |
 | `r0p_raw_lag_baseline.yaml` | Preregistered raw EEG–fNIRS lag benchmark | **Stopped**; completed, primary result negative |
 | `r1p_population_frozen_teacher.yaml` | Fit on subjects 01–18 and pure-apply on 19–23 | **Stopped**; completed, structural audit passed |
 | `r1p_teacher_qualification_registry.json` | Frozen G1–G6 gate definitions | **Stopped**; formal-v3 did not qualify |
@@ -87,4 +90,4 @@ loss weights to zero.
 The consolidated methods, results, interpretation and stop decision are in
 [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](../../../docs/physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md).
 
-_Last updated: 2026-09-03_
+_Last updated: 2026-09-07_

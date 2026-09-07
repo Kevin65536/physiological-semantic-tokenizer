@@ -1,0 +1,3853 @@
+{
+  "stage": "a1",
+  "execution": "completed",
+  "independent_cases": 240,
+  "successful_cases": 231,
+  "failed_cases": 9,
+  "case_failures": [
+    {
+      "axis": "G",
+      "replicate": 3,
+      "execution": "failed",
+      "error": "FloatingPointError: divide by zero encountered in scalar divide",
+      "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    row,arrays=teacher_case(cfg,axis,replicate,calibration_dir)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 526, in teacher_case\n    generated=generate(1); y=generated['observations']; donor=generate(2)['observations']\n                                                              ^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 524, in generate\n    if law=='matched_model_calibration':return localization.generate_matched(cfg,generator_axis,truth,seed)\n                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 171, in generate_matched\n    z[t] = independent_transition(z[t-1], raw, cfg) + rng.normal(size=6)*np.asarray(m[\"process_std\"])*np.sqrt(m[\"dt\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 151, in independent_transition\n    k3 = independent_rhs(z + h*k2/2, raw)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 136, in independent_rhs\n    extraction = -np.expm1(np.log1p(-raw[\"E0\"]) / f)\n                           ~~~~~~~~~~~~~~~~~~~~~^~~\nFloatingPointError: divide by zero encountered in scalar divide\n",
+      "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+      "seed": 20260917
+    },
+    {
+      "axis": "G",
+      "replicate": 4,
+      "execution": "failed",
+      "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+      "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    row,arrays=teacher_case(cfg,axis,replicate,calibration_dir)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 569, in teacher_case\n    null=mixture_state(null_input,cfg,generator_axis,training_fit)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 428, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 533, in _rk4_step_with_jacobian\n    k2_state = _balloon_rhs_unchecked(state_2, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n",
+      "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+      "seed": 20260917
+    },
+    {
+      "axis": "G",
+      "replicate": 16,
+      "execution": "failed",
+      "error": "FloatingPointError: transformed Balloon state underflowed to a non-positive compartment",
+      "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    row,arrays=teacher_case(cfg,axis,replicate,calibration_dir)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 530, in teacher_case\n    grid,ll,_,grid_difference=refined_joint_grid(training['observations'],cfg,axis)\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 222, in refined_joint_grid\n    ll,states=joint_grid(y,cfg,axis,grid,smooth=smooth)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 74, in joint_grid\n    scores.append(joint.parameter_log_likelihood(y,p,config=c,quadrature_order=order))\n                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 156, in parameter_log_likelihood\n    return float(_filter(observations, parameters, config, spec, quadrature_order, False)[0])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 529, in _rk4_step_with_jacobian\n    k1_state = _balloon_rhs_unchecked(state, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 438, in _balloon_rhs_unchecked\n    r, s, f, v, p, q = _transformed_to_physical_unchecked(transformed_state)\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 382, in _transformed_to_physical_unchecked\n    raise FloatingPointError(\"transformed Balloon state underflowed to a non-positive compartment\")\nFloatingPointError: transformed Balloon state underflowed to a non-positive compartment\n",
+      "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+      "seed": 20260917
+    },
+    {
+      "axis": "G",
+      "replicate": 31,
+      "execution": "failed",
+      "error": "FloatingPointError: divide by zero encountered in scalar divide",
+      "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    row,arrays=teacher_case(cfg,axis,replicate,calibration_dir)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 527, in teacher_case\n    template=np.mean([generate(10+j)['observations'] for j in range(cfg['teacher']['task_template_training_trials'])],axis=0)\n                      ^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 524, in generate\n    if law=='matched_model_calibration':return localization.generate_matched(cfg,generator_axis,truth,seed)\n                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 171, in generate_matched\n    z[t] = independent_transition(z[t-1], raw, cfg) + rng.normal(size=6)*np.asarray(m[\"process_std\"])*np.sqrt(m[\"dt\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 151, in independent_transition\n    k3 = independent_rhs(z + h*k2/2, raw)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 136, in independent_rhs\n    extraction = -np.expm1(np.log1p(-raw[\"E0\"]) / f)\n                           ~~~~~~~~~~~~~~~~~~~~~^~~\nFloatingPointError: divide by zero encountered in scalar divide\n",
+      "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+      "seed": 20260917
+    },
+    {
+      "axis": "G",
+      "replicate": 52,
+      "execution": "failed",
+      "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+      "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    row,arrays=teacher_case(cfg,axis,replicate,calibration_dir)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 569, in teacher_case\n    null=mixture_state(null_input,cfg,generator_axis,training_fit)\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 428, in mixture_state\n    results.append(joint.smooth_balloon_joint(y,p,config=c,quadrature_order=cfg['inference']['quadrature_order']))\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 541, in _rk4_step_with_jacobian\n    k4_state = _balloon_rhs_unchecked(state_4, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n",
+      "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+      "seed": 20260917
+    },
+    {
+      "axis": "Z",
+      "replicate": 4,
+      "execution": "failed",
+      "error": "FloatingPointError: divide by zero encountered in scalar divide",
+      "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    \"\"\"Keep every registered failure instead of aborting/discarding its identity.\"\"\"\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 527, in teacher_case\n    return localization.step4_truth(localization.raw_parameters(cfg,generator_axis,truth),seed,localization.stress_contract(cfg))\n                  ^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 524, in generate\n    def generate(stream):\n                          \n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 171, in generate_matched\n    z[t] = independent_transition(z[t-1], raw, cfg) + rng.normal(size=6)*np.asarray(m[\"process_std\"])*np.sqrt(m[\"dt\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 149, in independent_transition\n    k1 = independent_rhs(z, raw)\n         ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 136, in independent_rhs\n    extraction = -np.expm1(np.log1p(-raw[\"E0\"]) / f)\n                           ~~~~~~~~~~~~~~~~~~~~~^~~\nFloatingPointError: divide by zero encountered in scalar divide\n",
+      "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+      "seed": 20260917
+    },
+    {
+      "axis": "Z",
+      "replicate": 7,
+      "execution": "failed",
+      "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+      "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    for mask,controls in v['laws']['matched_model_calibration']['shared_increments'].items():\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 569, in teacher_case\n    basevariance=np.column_stack((full['state_variance'][:,0],full['clean_variance']))[time_mask]\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 428, in mixture_state\n    grid=np.array(training_fit['grid']); likelihood=np.array(training_fit['parameter_log_likelihood'])\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 541, in _rk4_step_with_jacobian\n    k4_state = _balloon_rhs_unchecked(state_4, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n",
+      "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+      "seed": 20260917
+    },
+    {
+      "axis": "Z",
+      "replicate": 22,
+      "execution": "failed",
+      "error": "FloatingPointError: oxygen extraction left its strict physical domain",
+      "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    for mask,controls in v['laws']['matched_model_calibration']['shared_increments'].items():\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 569, in teacher_case\n    basevariance=np.column_stack((full['state_variance'][:,0],full['clean_variance']))[time_mask]\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 428, in mixture_state\n    grid=np.array(training_fit['grid']); likelihood=np.array(training_fit['parameter_log_likelihood'])\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 162, in smooth_balloon_joint\n    ll, score, fm, fc, pm, pc, a, mask = _filter(\n                                         ^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_joint_ssm.py\", line 135, in _filter\n    mean, a = core.rk4_transition_with_jacobian(mean, parameters, config)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 581, in rk4_transition_with_jacobian\n    state, tangent = _rk4_step_with_jacobian(state, parameters, step, tangent)\n                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 541, in _rk4_step_with_jacobian\n    k4_state = _balloon_rhs_unchecked(state_4, parameters)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 440, in _balloon_rhs_unchecked\n    E, dE_df, flow_extraction = _extraction(f, fixed.E0)\n                                ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/src/inference/t3a_balloon_robust_ssm.py\", line 407, in _extraction\n    raise FloatingPointError(\"oxygen extraction left its strict physical domain\")\nFloatingPointError: oxygen extraction left its strict physical domain\n",
+      "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+      "seed": 20260917
+    },
+    {
+      "axis": "Z",
+      "replicate": 52,
+      "execution": "failed",
+      "error": "FloatingPointError: divide by zero encountered in scalar divide",
+      "traceback": "Traceback (most recent call last):\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 739, in teacher_job\n    for mask,controls in v['laws']['matched_model_calibration']['shared_increments'].items():\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 527, in teacher_case\n    else:\n          \n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5.py\", line 524, in generate\n    def teacher_case(cfg,axis,replicate,calibration_dir):\n                                                          \n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 171, in generate_matched\n    z[t] = independent_transition(z[t-1], raw, cfg) + rng.normal(size=6)*np.asarray(m[\"process_std\"])*np.sqrt(m[\"dt\"])\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 149, in independent_transition\n    k1 = independent_rhs(z, raw)\n         ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/SSD_2/pid-mcm-implementation/experiments/evaluate_step5a_inference_consistency.py\", line 136, in independent_rhs\n    extraction = -np.expm1(np.log1p(-raw[\"E0\"]) / f)\n                           ~~~~~~~~~~~~~~~~~~~~~^~~\nFloatingPointError: divide by zero encountered in scalar divide\n",
+      "seed_rule": "case_seed(config, axis, replicate, stream); no redraw",
+      "seed": 20260917
+    }
+  ],
+  "candidates": {
+    "U0_FIXED": {
+      "independent_cases": 60,
+      "laws": {
+        "matched_model_calibration": {
+          "state": {
+            "r": {
+              "nrmse": {
+                "mean": 0.4546986806147826,
+                "ci95": [
+                  0.438585340112015,
+                  0.4720775257367122
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.8892671552144417,
+                "ci95": [
+                  0.8796234720916846,
+                  0.8979422558004311
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.8978125,
+                "ci95": [
+                  0.8902057291666666,
+                  0.9052083333333333
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9477083333333332,
+                "ci95": [
+                  0.9417708333333333,
+                  0.9533359375000001
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_EEG": {
+              "nrmse": {
+                "mean": 0.4546986806147826,
+                "ci95": [
+                  0.438585340112015,
+                  0.4720775257367122
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.8892671552144417,
+                "ci95": [
+                  0.8796234720916846,
+                  0.8979422558004311
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.8978125,
+                "ci95": [
+                  0.8902057291666666,
+                  0.9052083333333333
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9477083333333332,
+                "ci95": [
+                  0.9417708333333333,
+                  0.9533359375000001
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_HbO": {
+              "nrmse": {
+                "mean": 0.10497059921423774,
+                "ci95": [
+                  0.09679129415659243,
+                  0.11360053007803904
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.9945963212214403,
+                "ci95": [
+                  0.9935783979343539,
+                  0.9954970797593904
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9007291666666668,
+                "ci95": [
+                  0.8852083333333334,
+                  0.9146901041666666
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9494791666666668,
+                "ci95": [
+                  0.9392682291666666,
+                  0.9591666666666666
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_HbR": {
+              "nrmse": {
+                "mean": 0.11217113134188682,
+                "ci95": [
+                  0.10240565863076492,
+                  0.12310552801577354
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.9941228083594418,
+                "ci95": [
+                  0.9928722782152188,
+                  0.9952076800435463
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9091666666666668,
+                "ci95": [
+                  0.8919791666666667,
+                  0.9251041666666667
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9565624999999999,
+                "ci95": [
+                  0.9452083333333333,
+                  0.9671875
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "shared_increments": {
+            "center_EEG": {
+              "own_history": {
+                "mean": 0.17677003381876658,
+                "ci95": [
+                  0.12960254085643555,
+                  0.22627244268981409
+                ],
+                "independent_units": 60
+              },
+              "own_history_and_task": {
+                "mean": 0.22079495141292382,
+                "ci95": [
+                  0.17180460181681734,
+                  0.2707602086770981
+                ],
+                "independent_units": 60
+              },
+              "independent_pairing": {
+                "mean": 0.638931862517696,
+                "ci95": [
+                  0.4971415678272602,
+                  0.7903422198723958
+                ],
+                "independent_units": 60
+              },
+              "circular_shift": {
+                "mean": 0.570114454129835,
+                "ci95": [
+                  0.46514611582607,
+                  0.6792471272104232
+                ],
+                "independent_units": 60
+              }
+            },
+            "center_fNIRS": {
+              "own_history": {
+                "mean": 0.057533294379663626,
+                "ci95": [
+                  0.03259054771579123,
+                  0.08455096470105937
+                ],
+                "independent_units": 60
+              },
+              "own_history_and_task": {
+                "mean": 0.14933675757411463,
+                "ci95": [
+                  0.1130347441434971,
+                  0.18687620289953263
+                ],
+                "independent_units": 60
+              },
+              "independent_pairing": {
+                "mean": 0.27999764986264003,
+                "ci95": [
+                  0.177331439471038,
+                  0.41179536569594344
+                ],
+                "independent_units": 60
+              },
+              "circular_shift": {
+                "mean": 0.2759708924072738,
+                "ci95": [
+                  0.17176765073108377,
+                  0.39292829083005
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "masked_coverage95": {
+            "center_EEG": {
+              "r": {
+                "mean": 0.9520833333333333,
+                "ci95": [
+                  0.9343489583333333,
+                  0.96875
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9520833333333333,
+                "ci95": [
+                  0.9343489583333333,
+                  0.96875
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.928125,
+                "ci95": [
+                  0.8833333333333333,
+                  0.9666666666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9302083333333333,
+                "ci95": [
+                  0.8822916666666667,
+                  0.9677083333333333
+                ],
+                "independent_units": 60
+              }
+            },
+            "center_fNIRS": {
+              "r": {
+                "mean": 0.9739583333333334,
+                "ci95": [
+                  0.9635416666666666,
+                  0.9833593749999996
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9739583333333334,
+                "ci95": [
+                  0.9635416666666666,
+                  0.9833593749999996
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9552083333333333,
+                "ci95": [
+                  0.9104166666666667,
+                  0.9885416666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.940625,
+                "ci95": [
+                  0.9010416666666666,
+                  0.9729166666666667
+                ],
+                "independent_units": 60
+              }
+            },
+            "whole_EEG": {
+              "r": {
+                "mean": 0.9495833333333332,
+                "ci95": [
+                  0.9437500000000001,
+                  0.9553124999999998
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9495833333333332,
+                "ci95": [
+                  0.9437500000000001,
+                  0.9553124999999998
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9474999999999999,
+                "ci95": [
+                  0.9376015624999999,
+                  0.956875
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9558333333333332,
+                "ci95": [
+                  0.9441640624999998,
+                  0.9665624999999999
+                ],
+                "independent_units": 60
+              }
+            },
+            "whole_fNIRS": {
+              "r": {
+                "mean": 0.9484375,
+                "ci95": [
+                  0.9416666666666667,
+                  0.9546875
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9484375,
+                "ci95": [
+                  0.9416666666666667,
+                  0.9546875
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9501041666666666,
+                "ci95": [
+                  0.9351041666666667,
+                  0.9638567708333332
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9441666666666666,
+                "ci95": [
+                  0.9274973958333333,
+                  0.9596901041666667
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "stability": {
+            "driver_correlation_q05": {
+              "mean": 1.0,
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "independent_units": 60
+            },
+            "driver_nrmse_q95": {
+              "mean": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "independent_units": 60
+            }
+          },
+          "physical_pass": true,
+          "variance_decomposition": {
+            "EEG": {
+              "state": {
+                "mean": 0.0013960515259815128,
+                "ci95": [
+                  0.0013918552949217068,
+                  0.0014002359981371184
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.01066666666666667,
+                "ci95": [
+                  0.01066666666666667,
+                  0.01066666666666667
+                ],
+                "independent_units": 60
+              }
+            },
+            "HbO": {
+              "state": {
+                "mean": 6.362497272734434e-05,
+                "ci95": [
+                  6.323245059751252e-05,
+                  6.399201631935146e-05
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.0010416666666666669,
+                "ci95": [
+                  0.0010416666666666669,
+                  0.0010416666666666669
+                ],
+                "independent_units": 60
+              }
+            },
+            "HbR": {
+              "state": {
+                "mean": 7.525775720475613e-06,
+                "ci95": [
+                  7.429105210896312e-06,
+                  7.6272447099578036e-06
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.000375,
+                "ci95": [
+                  0.000375,
+                  0.000375
+                ],
+                "independent_units": 60
+              }
+            }
+          }
+        },
+        "misspecification_stress_test": {
+          "state": {
+            "r": {
+              "nrmse": {
+                "mean": 0.41821677320629863,
+                "ci95": [
+                  0.39876268567967255,
+                  0.43686418195245436
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.9061085393258833,
+                "ci95": [
+                  0.8970173444545559,
+                  0.9153120518694395
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9056249999999999,
+                "ci95": [
+                  0.8988541666666666,
+                  0.9121875
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.953125,
+                "ci95": [
+                  0.94875,
+                  0.9573958333333334
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_EEG": {
+              "nrmse": {
+                "mean": 0.41821677320629863,
+                "ci95": [
+                  0.39876268567967255,
+                  0.43686418195245436
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.9061085393258833,
+                "ci95": [
+                  0.8970173444545559,
+                  0.9153120518694395
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9056249999999999,
+                "ci95": [
+                  0.8988541666666666,
+                  0.9121875
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.953125,
+                "ci95": [
+                  0.94875,
+                  0.9573958333333334
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_HbO": {
+              "nrmse": {
+                "mean": 0.08898740403915377,
+                "ci95": [
+                  0.07857533307508446,
+                  0.10070508067115565
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.995802587584373,
+                "ci95": [
+                  0.9944324372492116,
+                  0.9969336485496835
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9298958333333334,
+                "ci95": [
+                  0.9184375,
+                  0.9408333333333334
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9667708333333334,
+                "ci95": [
+                  0.9585416666666667,
+                  0.9739583333333334
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_HbR": {
+              "nrmse": {
+                "mean": 0.08336528840601527,
+                "ci95": [
+                  0.07308178917552186,
+                  0.09488434938756199
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.9963780066369525,
+                "ci95": [
+                  0.9951339212189496,
+                  0.9974369130589201
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9577083333333334,
+                "ci95": [
+                  0.9465625000000001,
+                  0.9677083333333333
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9846874999999999,
+                "ci95": [
+                  0.9780208333333333,
+                  0.990625
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "shared_increments": {
+            "center_EEG": {
+              "own_history": {
+                "mean": 0.24562405845848767,
+                "ci95": [
+                  0.17597747114985365,
+                  0.3224065791800019
+                ],
+                "independent_units": 60
+              },
+              "own_history_and_task": {
+                "mean": 0.21199000434789872,
+                "ci95": [
+                  0.16715956641441324,
+                  0.2606331740668642
+                ],
+                "independent_units": 60
+              },
+              "independent_pairing": {
+                "mean": 0.47535976837155036,
+                "ci95": [
+                  0.3596053460820852,
+                  0.5976729760039408
+                ],
+                "independent_units": 60
+              },
+              "circular_shift": {
+                "mean": 1.056150808580581,
+                "ci95": [
+                  0.8289214247127449,
+                  1.295064608097703
+                ],
+                "independent_units": 60
+              }
+            },
+            "center_fNIRS": {
+              "own_history": {
+                "mean": 0.04854731626378684,
+                "ci95": [
+                  0.02555233803345818,
+                  0.07351271870742834
+                ],
+                "independent_units": 60
+              },
+              "own_history_and_task": {
+                "mean": 0.12550630016583997,
+                "ci95": [
+                  0.09361071307276385,
+                  0.15829474176005967
+                ],
+                "independent_units": 60
+              },
+              "independent_pairing": {
+                "mean": 0.3024334417061575,
+                "ci95": [
+                  0.18661614916708283,
+                  0.4409363532751644
+                ],
+                "independent_units": 60
+              },
+              "circular_shift": {
+                "mean": 0.2219975207758814,
+                "ci95": [
+                  0.13982578916908575,
+                  0.3205764712035088
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "masked_coverage95": {
+            "center_EEG": {
+              "r": {
+                "mean": 0.95625,
+                "ci95": [
+                  0.9375,
+                  0.9729166666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.95625,
+                "ci95": [
+                  0.9375,
+                  0.9729166666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.965625,
+                "ci95": [
+                  0.9385416666666667,
+                  0.9875
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9864583333333333,
+                "ci95": [
+                  0.966640625,
+                  1.0
+                ],
+                "independent_units": 60
+              }
+            },
+            "center_fNIRS": {
+              "r": {
+                "mean": 0.9541666666666667,
+                "ci95": [
+                  0.9364583333333333,
+                  0.96875
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9541666666666667,
+                "ci95": [
+                  0.9364583333333333,
+                  0.96875
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.95625,
+                "ci95": [
+                  0.9145572916666667,
+                  0.9885416666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9677083333333333,
+                "ci95": [
+                  0.9260416666666667,
+                  0.9989583333333333
+                ],
+                "independent_units": 60
+              }
+            },
+            "whole_EEG": {
+              "r": {
+                "mean": 0.9551041666666666,
+                "ci95": [
+                  0.9485416666666666,
+                  0.9612499999999998
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9551041666666666,
+                "ci95": [
+                  0.9485416666666666,
+                  0.9612499999999998
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9632291666666667,
+                "ci95": [
+                  0.9552083333333332,
+                  0.9707291666666668
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9810416666666665,
+                "ci95": [
+                  0.974375,
+                  0.9870833333333333
+                ],
+                "independent_units": 60
+              }
+            },
+            "whole_fNIRS": {
+              "r": {
+                "mean": 0.9523958333333334,
+                "ci95": [
+                  0.9473932291666666,
+                  0.9575
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9523958333333334,
+                "ci95": [
+                  0.9473932291666666,
+                  0.9575
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9485416666666667,
+                "ci95": [
+                  0.9313541666666667,
+                  0.9646901041666667
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9547916666666666,
+                "ci95": [
+                  0.9390625,
+                  0.9698958333333333
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "stability": {
+            "driver_correlation_q05": {
+              "mean": 1.0,
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "independent_units": 60
+            },
+            "driver_nrmse_q95": {
+              "mean": 0.0,
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "independent_units": 60
+            }
+          },
+          "physical_pass": true,
+          "variance_decomposition": {
+            "EEG": {
+              "state": {
+                "mean": 0.0014035648229854126,
+                "ci95": [
+                  0.0013986950150546792,
+                  0.0014082368515407773
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.01066666666666667,
+                "ci95": [
+                  0.01066666666666667,
+                  0.01066666666666667
+                ],
+                "independent_units": 60
+              }
+            },
+            "HbO": {
+              "state": {
+                "mean": 6.335259988456604e-05,
+                "ci95": [
+                  6.297856711695192e-05,
+                  6.372846595428409e-05
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.0010416666666666669,
+                "ci95": [
+                  0.0010416666666666669,
+                  0.0010416666666666669
+                ],
+                "independent_units": 60
+              }
+            },
+            "HbR": {
+              "state": {
+                "mean": 7.301740841886239e-06,
+                "ci95": [
+                  7.218975727647394e-06,
+                  7.3851891159964255e-06
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 0.0,
+                "ci95": [
+                  0.0,
+                  0.0
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.000375,
+                "ci95": [
+                  0.000375,
+                  0.000375
+                ],
+                "independent_units": 60
+              }
+            }
+          }
+        }
+      },
+      "checks": {
+        "complete_registered_cases": false,
+        "physical": true,
+        "matched_state_coverage": true,
+        "matched_state_accuracy": true,
+        "stress_state_accuracy": true,
+        "shared_information": true,
+        "cross_parameter_stability": true,
+        "fixed_parameter_sensitivity": false
+      },
+      "sensitivity": {
+        "minimum_driver_correlation": 0.9270870727122777,
+        "maximum_driver_nrmse": 0.568421666970901,
+        "mean_worst_clean_nrmse_increase": 0.1159653421284161
+      },
+      "teacher_qualified": false,
+      "parameter_physiology_claim": "NOT_GRANTED_BY_STATE_QUALIFICATION"
+    },
+    "U1_G": {
+      "independent_cases": 55,
+      "laws": {
+        "matched_model_calibration": {
+          "state": {
+            "r": {
+              "nrmse": {
+                "mean": 0.4606854652155112,
+                "ci95": [
+                  0.439565028467399,
+                  0.4824378638838785
+                ],
+                "independent_units": 55
+              },
+              "correlation": {
+                "mean": 0.8871969048431495,
+                "ci95": [
+                  0.8755618466701981,
+                  0.8977844505689091
+                ],
+                "independent_units": 55
+              },
+              "coverage90": {
+                "mean": 0.8976136363636363,
+                "ci95": [
+                  0.8882954545454544,
+                  0.9065937499999999
+                ],
+                "independent_units": 55
+              },
+              "coverage95": {
+                "mean": 0.9479545454545456,
+                "ci95": [
+                  0.9407954545454544,
+                  0.9547727272727272
+                ],
+                "independent_units": 55
+              }
+            },
+            "clean_EEG": {
+              "nrmse": {
+                "mean": 0.4606854652155112,
+                "ci95": [
+                  0.439565028467399,
+                  0.4824378638838785
+                ],
+                "independent_units": 55
+              },
+              "correlation": {
+                "mean": 0.8871969048431495,
+                "ci95": [
+                  0.8755618466701981,
+                  0.8977844505689091
+                ],
+                "independent_units": 55
+              },
+              "coverage90": {
+                "mean": 0.8976136363636363,
+                "ci95": [
+                  0.8882954545454544,
+                  0.9065937499999999
+                ],
+                "independent_units": 55
+              },
+              "coverage95": {
+                "mean": 0.9479545454545456,
+                "ci95": [
+                  0.9407954545454544,
+                  0.9547727272727272
+                ],
+                "independent_units": 55
+              }
+            },
+            "clean_HbO": {
+              "nrmse": {
+                "mean": 0.10724468412480832,
+                "ci95": [
+                  0.09853068714811385,
+                  0.11660992004843358
+                ],
+                "independent_units": 55
+              },
+              "correlation": {
+                "mean": 0.9945896510169416,
+                "ci95": [
+                  0.9936298747168215,
+                  0.995471304943417
+                ],
+                "independent_units": 55
+              },
+              "coverage90": {
+                "mean": 0.8870454545454547,
+                "ci95": [
+                  0.8682954545454544,
+                  0.9052272727272728
+                ],
+                "independent_units": 55
+              },
+              "coverage95": {
+                "mean": 0.9357954545454545,
+                "ci95": [
+                  0.9204545454545454,
+                  0.9497727272727272
+                ],
+                "independent_units": 55
+              }
+            },
+            "clean_HbR": {
+              "nrmse": {
+                "mean": 0.11663184987752069,
+                "ci95": [
+                  0.10589071522637691,
+                  0.12837922859531803
+                ],
+                "independent_units": 55
+              },
+              "correlation": {
+                "mean": 0.9936789724237233,
+                "ci95": [
+                  0.9922593810905651,
+                  0.9949280113005059
+                ],
+                "independent_units": 55
+              },
+              "coverage90": {
+                "mean": 0.8885227272727273,
+                "ci95": [
+                  0.8690880681818183,
+                  0.9065909090909091
+                ],
+                "independent_units": 55
+              },
+              "coverage95": {
+                "mean": 0.9369318181818179,
+                "ci95": [
+                  0.9228409090909092,
+                  0.9498863636363635
+                ],
+                "independent_units": 55
+              }
+            }
+          },
+          "shared_increments": {
+            "center_EEG": {
+              "own_history": {
+                "mean": 0.12429327238142157,
+                "ci95": [
+                  0.08207716230164769,
+                  0.1688540191272827
+                ],
+                "independent_units": 55
+              },
+              "own_history_and_task": {
+                "mean": 0.1977555391695343,
+                "ci95": [
+                  0.14519461984104898,
+                  0.25251750173719245
+                ],
+                "independent_units": 55
+              },
+              "independent_pairing": {
+                "mean": 0.6305305708751975,
+                "ci95": [
+                  0.4760597338582298,
+                  0.7993403209386513
+                ],
+                "independent_units": 55
+              },
+              "circular_shift": {
+                "mean": 0.4535957617217403,
+                "ci95": [
+                  0.3307958271505962,
+                  0.5876115718156142
+                ],
+                "independent_units": 55
+              }
+            },
+            "center_fNIRS": {
+              "own_history": {
+                "mean": 0.030875128814437526,
+                "ci95": [
+                  0.003866507882372963,
+                  0.05732632727353032
+                ],
+                "independent_units": 55
+              },
+              "own_history_and_task": {
+                "mean": 0.09615598378599509,
+                "ci95": [
+                  0.060729127865280175,
+                  0.12810601149202874
+                ],
+                "independent_units": 55
+              },
+              "independent_pairing": {
+                "mean": 0.23807441509910052,
+                "ci95": [
+                  0.14846826190196438,
+                  0.33839565831795587
+                ],
+                "independent_units": 55
+              },
+              "circular_shift": {
+                "mean": 0.16511290378611856,
+                "ci95": [
+                  0.10712736034560706,
+                  0.2261154030853554
+                ],
+                "independent_units": 55
+              }
+            }
+          },
+          "masked_coverage95": {
+            "center_EEG": {
+              "r": {
+                "mean": 0.9556818181818182,
+                "ci95": [
+                  0.9375,
+                  0.9715909090909091
+                ],
+                "independent_units": 55
+              },
+              "clean_EEG": {
+                "mean": 0.9556818181818182,
+                "ci95": [
+                  0.9375,
+                  0.9715909090909091
+                ],
+                "independent_units": 55
+              },
+              "clean_HbO": {
+                "mean": 0.9386363636363636,
+                "ci95": [
+                  0.9056818181818181,
+                  0.9670454545454545
+                ],
+                "independent_units": 55
+              },
+              "clean_HbR": {
+                "mean": 0.9477272727272728,
+                "ci95": [
+                  0.9113636363636364,
+                  0.9772727272727273
+                ],
+                "independent_units": 55
+              }
+            },
+            "center_fNIRS": {
+              "r": {
+                "mean": 0.9579545454545455,
+                "ci95": [
+                  0.9443181818181818,
+                  0.9715909090909091
+                ],
+                "independent_units": 55
+              },
+              "clean_EEG": {
+                "mean": 0.9579545454545455,
+                "ci95": [
+                  0.9443181818181818,
+                  0.9715909090909091
+                ],
+                "independent_units": 55
+              },
+              "clean_HbO": {
+                "mean": 0.9386363636363636,
+                "ci95": [
+                  0.8829545454545454,
+                  0.9840909090909091
+                ],
+                "independent_units": 55
+              },
+              "clean_HbR": {
+                "mean": 0.9647727272727272,
+                "ci95": [
+                  0.9204545454545454,
+                  0.9943181818181818
+                ],
+                "independent_units": 55
+              }
+            },
+            "whole_EEG": {
+              "r": {
+                "mean": 0.9503409090909091,
+                "ci95": [
+                  0.9430681818181817,
+                  0.9576164772727273
+                ],
+                "independent_units": 55
+              },
+              "clean_EEG": {
+                "mean": 0.9503409090909091,
+                "ci95": [
+                  0.9430681818181817,
+                  0.9576164772727273
+                ],
+                "independent_units": 55
+              },
+              "clean_HbO": {
+                "mean": 0.935568181818182,
+                "ci95": [
+                  0.9205653409090908,
+                  0.9490937500000003
+                ],
+                "independent_units": 55
+              },
+              "clean_HbR": {
+                "mean": 0.9363636363636364,
+                "ci95": [
+                  0.9214772727272729,
+                  0.9504545454545456
+                ],
+                "independent_units": 55
+              }
+            },
+            "whole_fNIRS": {
+              "r": {
+                "mean": 0.9453409090909093,
+                "ci95": [
+                  0.9394318181818181,
+                  0.9511392045454548
+                ],
+                "independent_units": 55
+              },
+              "clean_EEG": {
+                "mean": 0.9453409090909093,
+                "ci95": [
+                  0.9394318181818181,
+                  0.9511392045454548
+                ],
+                "independent_units": 55
+              },
+              "clean_HbO": {
+                "mean": 0.9387500000000002,
+                "ci95": [
+                  0.9204517045454546,
+                  0.95625
+                ],
+                "independent_units": 55
+              },
+              "clean_HbR": {
+                "mean": 0.9375,
+                "ci95": [
+                  0.9186363636363637,
+                  0.9551136363636363
+                ],
+                "independent_units": 55
+              }
+            }
+          },
+          "stability": {
+            "driver_correlation_q05": {
+              "mean": 0.9977293084048316,
+              "ci95": [
+                0.9974678089270548,
+                0.9979788701593422
+              ],
+              "independent_units": 55
+            },
+            "driver_nrmse_q95": {
+              "mean": 0.15483469546669568,
+              "ci95": [
+                0.1468824374669492,
+                0.16313989251979874
+              ],
+              "independent_units": 55
+            }
+          },
+          "physical_pass": true,
+          "variance_decomposition": {
+            "EEG": {
+              "state": {
+                "mean": 0.001403380714891786,
+                "ci95": [
+                  0.0013910560566930644,
+                  0.0014153818193457625
+                ],
+                "independent_units": 55
+              },
+              "parameter": {
+                "mean": 3.7652804421490266e-05,
+                "ci95": [
+                  3.248824785339733e-05,
+                  4.3374781351288204e-05
+                ],
+                "independent_units": 55
+              },
+              "observation": {
+                "mean": 0.010666666666666673,
+                "ci95": [
+                  0.010666666666666673,
+                  0.010666666666666673
+                ],
+                "independent_units": 55
+              }
+            },
+            "HbO": {
+              "state": {
+                "mean": 6.406644640320863e-05,
+                "ci95": [
+                  6.318411903548752e-05,
+                  6.494196177967749e-05
+                ],
+                "independent_units": 55
+              },
+              "parameter": {
+                "mean": 5.258821941474978e-07,
+                "ci95": [
+                  4.5112404196712324e-07,
+                  6.077708790280182e-07
+                ],
+                "independent_units": 55
+              },
+              "observation": {
+                "mean": 0.001041666666666667,
+                "ci95": [
+                  0.001041666666666667,
+                  0.001041666666666667
+                ],
+                "independent_units": 55
+              }
+            },
+            "HbR": {
+              "state": {
+                "mean": 7.552741958216957e-06,
+                "ci95": [
+                  7.422524277034158e-06,
+                  7.681388633418884e-06
+                ],
+                "independent_units": 55
+              },
+              "parameter": {
+                "mean": 4.409097721813116e-08,
+                "ci95": [
+                  3.739752019389704e-08,
+                  5.1107872763197433e-08
+                ],
+                "independent_units": 55
+              },
+              "observation": {
+                "mean": 0.000375,
+                "ci95": [
+                  0.000375,
+                  0.000375
+                ],
+                "independent_units": 55
+              }
+            }
+          }
+        },
+        "misspecification_stress_test": {
+          "state": {
+            "r": {
+              "nrmse": {
+                "mean": 0.4538617473649186,
+                "ci95": [
+                  0.43377961926987646,
+                  0.47351258083799097
+                ],
+                "independent_units": 55
+              },
+              "correlation": {
+                "mean": 0.890189635122914,
+                "ci95": [
+                  0.8798224558213997,
+                  0.9005502344392387
+                ],
+                "independent_units": 55
+              },
+              "coverage90": {
+                "mean": 0.8948863636363636,
+                "ci95": [
+                  0.8876136363636364,
+                  0.9020454545454544
+                ],
+                "independent_units": 55
+              },
+              "coverage95": {
+                "mean": 0.9453409090909091,
+                "ci95": [
+                  0.9393181818181818,
+                  0.9511363636363637
+                ],
+                "independent_units": 55
+              }
+            },
+            "clean_EEG": {
+              "nrmse": {
+                "mean": 0.4538617473649186,
+                "ci95": [
+                  0.43377961926987646,
+                  0.47351258083799097
+                ],
+                "independent_units": 55
+              },
+              "correlation": {
+                "mean": 0.890189635122914,
+                "ci95": [
+                  0.8798224558213997,
+                  0.9005502344392387
+                ],
+                "independent_units": 55
+              },
+              "coverage90": {
+                "mean": 0.8948863636363636,
+                "ci95": [
+                  0.8876136363636364,
+                  0.9020454545454544
+                ],
+                "independent_units": 55
+              },
+              "coverage95": {
+                "mean": 0.9453409090909091,
+                "ci95": [
+                  0.9393181818181818,
+                  0.9511363636363637
+                ],
+                "independent_units": 55
+              }
+            },
+            "clean_HbO": {
+              "nrmse": {
+                "mean": 0.09689541005695804,
+                "ci95": [
+                  0.0881164759834826,
+                  0.10598875273637406
+                ],
+                "independent_units": 55
+              },
+              "correlation": {
+                "mean": 0.9954035307720448,
+                "ci95": [
+                  0.9945358814607409,
+                  0.9962221509938695
+                ],
+                "independent_units": 55
+              },
+              "coverage90": {
+                "mean": 0.9195454545454546,
+                "ci95": [
+                  0.9054545454545454,
+                  0.9335227272727272
+                ],
+                "independent_units": 55
+              },
+              "coverage95": {
+                "mean": 0.9686363636363636,
+                "ci95": [
+                  0.9610227272727272,
+                  0.9760227272727272
+                ],
+                "independent_units": 55
+              }
+            },
+            "clean_HbR": {
+              "nrmse": {
+                "mean": 0.09211688362915757,
+                "ci95": [
+                  0.08325214522182091,
+                  0.10163479287615332
+                ],
+                "independent_units": 55
+              },
+              "correlation": {
+                "mean": 0.996135703202066,
+                "ci95": [
+                  0.99523516666013,
+                  0.9969080432532194
+                ],
+                "independent_units": 55
+              },
+              "coverage90": {
+                "mean": 0.9637500000000001,
+                "ci95": [
+                  0.9539772727272726,
+                  0.9732954545454546
+                ],
+                "independent_units": 55
+              },
+              "coverage95": {
+                "mean": 0.9868181818181818,
+                "ci95": [
+                  0.9807954545454546,
+                  0.9923863636363637
+                ],
+                "independent_units": 55
+              }
+            }
+          },
+          "shared_increments": {
+            "center_EEG": {
+              "own_history": {
+                "mean": 0.27563843288059403,
+                "ci95": [
+                  0.1810414791562422,
+                  0.37885099339352146
+                ],
+                "independent_units": 55
+              },
+              "own_history_and_task": {
+                "mean": 0.2115589620407481,
+                "ci95": [
+                  0.1553683979866661,
+                  0.2731633922904111
+                ],
+                "independent_units": 55
+              },
+              "independent_pairing": {
+                "mean": 0.6733263242464459,
+                "ci95": [
+                  0.54548552779078,
+                  0.812570833098444
+                ],
+                "independent_units": 55
+              },
+              "circular_shift": {
+                "mean": 0.8418536797069668,
+                "ci95": [
+                  0.6436936761407481,
+                  1.059208004125326
+                ],
+                "independent_units": 55
+              }
+            },
+            "center_fNIRS": {
+              "own_history": {
+                "mean": 0.056335429683646625,
+                "ci95": [
+                  0.022845341415477238,
+                  0.09696079552233881
+                ],
+                "independent_units": 55
+              },
+              "own_history_and_task": {
+                "mean": 0.1357560882921341,
+                "ci95": [
+                  0.09552439610874515,
+                  0.18559340265914814
+                ],
+                "independent_units": 55
+              },
+              "independent_pairing": {
+                "mean": 0.25610518769519075,
+                "ci95": [
+                  0.16361743712736007,
+                  0.36773247042183377
+                ],
+                "independent_units": 55
+              },
+              "circular_shift": {
+                "mean": 0.30376026048298826,
+                "ci95": [
+                  0.2048930325523218,
+                  0.4151974049587037
+                ],
+                "independent_units": 55
+              }
+            }
+          },
+          "masked_coverage95": {
+            "center_EEG": {
+              "r": {
+                "mean": 0.9420454545454545,
+                "ci95": [
+                  0.9159090909090909,
+                  0.9647727272727272
+                ],
+                "independent_units": 55
+              },
+              "clean_EEG": {
+                "mean": 0.9420454545454545,
+                "ci95": [
+                  0.9159090909090909,
+                  0.9647727272727272
+                ],
+                "independent_units": 55
+              },
+              "clean_HbO": {
+                "mean": 0.9659090909090909,
+                "ci95": [
+                  0.9397727272727273,
+                  0.9875
+                ],
+                "independent_units": 55
+              },
+              "clean_HbR": {
+                "mean": 0.9920454545454546,
+                "ci95": [
+                  0.9772727272727273,
+                  1.0
+                ],
+                "independent_units": 55
+              }
+            },
+            "center_fNIRS": {
+              "r": {
+                "mean": 0.9579545454545455,
+                "ci95": [
+                  0.9420454545454545,
+                  0.9727272727272728
+                ],
+                "independent_units": 55
+              },
+              "clean_EEG": {
+                "mean": 0.9579545454545455,
+                "ci95": [
+                  0.9420454545454545,
+                  0.9727272727272728
+                ],
+                "independent_units": 55
+              },
+              "clean_HbO": {
+                "mean": 0.9613636363636363,
+                "ci95": [
+                  0.9318181818181818,
+                  0.9863636363636363
+                ],
+                "independent_units": 55
+              },
+              "clean_HbR": {
+                "mean": 0.9534090909090909,
+                "ci95": [
+                  0.9079545454545455,
+                  0.990909090909091
+                ],
+                "independent_units": 55
+              }
+            },
+            "whole_EEG": {
+              "r": {
+                "mean": 0.945340909090909,
+                "ci95": [
+                  0.9393181818181816,
+                  0.9517045454545453
+                ],
+                "independent_units": 55
+              },
+              "clean_EEG": {
+                "mean": 0.945340909090909,
+                "ci95": [
+                  0.9393181818181816,
+                  0.9517045454545453
+                ],
+                "independent_units": 55
+              },
+              "clean_HbO": {
+                "mean": 0.9638636363636364,
+                "ci95": [
+                  0.9538636363636364,
+                  0.9734090909090908
+                ],
+                "independent_units": 55
+              },
+              "clean_HbR": {
+                "mean": 0.9839772727272729,
+                "ci95": [
+                  0.9769318181818182,
+                  0.9902272727272727
+                ],
+                "independent_units": 55
+              }
+            },
+            "whole_fNIRS": {
+              "r": {
+                "mean": 0.945340909090909,
+                "ci95": [
+                  0.938068181818182,
+                  0.9522727272727274
+                ],
+                "independent_units": 55
+              },
+              "clean_EEG": {
+                "mean": 0.945340909090909,
+                "ci95": [
+                  0.938068181818182,
+                  0.9522727272727274
+                ],
+                "independent_units": 55
+              },
+              "clean_HbO": {
+                "mean": 0.9718181818181816,
+                "ci95": [
+                  0.9592045454545455,
+                  0.9830681818181819
+                ],
+                "independent_units": 55
+              },
+              "clean_HbR": {
+                "mean": 0.9728409090909091,
+                "ci95": [
+                  0.9597727272727273,
+                  0.9847727272727271
+                ],
+                "independent_units": 55
+              }
+            }
+          },
+          "stability": {
+            "driver_correlation_q05": {
+              "mean": 0.9981863481027385,
+              "ci95": [
+                0.9980101585130527,
+                0.9983561683838408
+              ],
+              "independent_units": 55
+            },
+            "driver_nrmse_q95": {
+              "mean": 0.13739376858464186,
+              "ci95": [
+                0.13036082006183314,
+                0.14465454520141827
+              ],
+              "independent_units": 55
+            }
+          },
+          "physical_pass": true,
+          "variance_decomposition": {
+            "EEG": {
+              "state": {
+                "mean": 0.00139478620265591,
+                "ci95": [
+                  0.0013830634389574283,
+                  0.0014067222361305346
+                ],
+                "independent_units": 55
+              },
+              "parameter": {
+                "mean": 3.306062102339495e-05,
+                "ci95": [
+                  2.7525265260775156e-05,
+                  3.946318273212876e-05
+                ],
+                "independent_units": 55
+              },
+              "observation": {
+                "mean": 0.010666666666666673,
+                "ci95": [
+                  0.010666666666666673,
+                  0.010666666666666673
+                ],
+                "independent_units": 55
+              }
+            },
+            "HbO": {
+              "state": {
+                "mean": 6.43104703315715e-05,
+                "ci95": [
+                  6.342649117312844e-05,
+                  6.520865790609786e-05
+                ],
+                "independent_units": 55
+              },
+              "parameter": {
+                "mean": 4.266414977713068e-07,
+                "ci95": [
+                  3.72322056951512e-07,
+                  4.832369801750268e-07
+                ],
+                "independent_units": 55
+              },
+              "observation": {
+                "mean": 0.001041666666666667,
+                "ci95": [
+                  0.001041666666666667,
+                  0.001041666666666667
+                ],
+                "independent_units": 55
+              }
+            },
+            "HbR": {
+              "state": {
+                "mean": 7.2914319193816295e-06,
+                "ci95": [
+                  7.178172405217463e-06,
+                  7.4148157273691875e-06
+                ],
+                "independent_units": 55
+              },
+              "parameter": {
+                "mean": 4.5597047651010756e-08,
+                "ci95": [
+                  3.1303397193322e-08,
+                  6.581419208145548e-08
+                ],
+                "independent_units": 55
+              },
+              "observation": {
+                "mean": 0.000375,
+                "ci95": [
+                  0.000375,
+                  0.000375
+                ],
+                "independent_units": 55
+              }
+            }
+          }
+        }
+      },
+      "checks": {
+        "complete_registered_cases": false,
+        "physical": true,
+        "matched_state_coverage": true,
+        "matched_state_accuracy": true,
+        "stress_state_accuracy": true,
+        "shared_information": true,
+        "cross_parameter_stability": true,
+        "parameter_mixture_resolution": true
+      },
+      "maximum_mixture_mean_difference_in_noise_units": 0.00025559330012608905,
+      "maximum_mixture_relative_variance_difference": 0.002642186500490538,
+      "teacher_qualified": false,
+      "parameter_physiology_claim": "NOT_GRANTED_BY_STATE_QUALIFICATION"
+    },
+    "U1_W": {
+      "independent_cases": 60,
+      "laws": {
+        "matched_model_calibration": {
+          "state": {
+            "r": {
+              "nrmse": {
+                "mean": 0.4640413328490587,
+                "ci95": [
+                  0.4440439767779036,
+                  0.48492057532414934
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.8834933882014872,
+                "ci95": [
+                  0.871607521697795,
+                  0.8945670447812634
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.8966666666666665,
+                "ci95": [
+                  0.8890625000000001,
+                  0.9037526041666668
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9461458333333332,
+                "ci95": [
+                  0.9401041666666666,
+                  0.951875
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_EEG": {
+              "nrmse": {
+                "mean": 0.4640413328490587,
+                "ci95": [
+                  0.4440439767779036,
+                  0.48492057532414934
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.8834933882014872,
+                "ci95": [
+                  0.871607521697795,
+                  0.8945670447812634
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.8966666666666665,
+                "ci95": [
+                  0.8890625000000001,
+                  0.9037526041666668
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9461458333333332,
+                "ci95": [
+                  0.9401041666666666,
+                  0.951875
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_HbO": {
+              "nrmse": {
+                "mean": 0.10926951989822416,
+                "ci95": [
+                  0.0996499190988156,
+                  0.11920791250735557
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.9940329616332796,
+                "ci95": [
+                  0.9927966596096324,
+                  0.9951658754599098
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9048958333333331,
+                "ci95": [
+                  0.89125,
+                  0.9179166666666666
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9501041666666665,
+                "ci95": [
+                  0.9392708333333334,
+                  0.9601041666666664
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_HbR": {
+              "nrmse": {
+                "mean": 0.11798325280774376,
+                "ci95": [
+                  0.10651346576002804,
+                  0.13039661723629348
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.9931218005485315,
+                "ci95": [
+                  0.9913385195188382,
+                  0.9946568584840378
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.8905208333333333,
+                "ci95": [
+                  0.8746875000000001,
+                  0.9055208333333334
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9492708333333334,
+                "ci95": [
+                  0.9376041666666667,
+                  0.9596901041666668
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "shared_increments": {
+            "center_EEG": {
+              "own_history": {
+                "mean": 0.17138600919292976,
+                "ci95": [
+                  0.10862523808419358,
+                  0.24944442707521308
+                ],
+                "independent_units": 60
+              },
+              "own_history_and_task": {
+                "mean": 0.24182699810733246,
+                "ci95": [
+                  0.17108040194442697,
+                  0.317970683268972
+                ],
+                "independent_units": 60
+              },
+              "independent_pairing": {
+                "mean": 0.6634702487115351,
+                "ci95": [
+                  0.47535973680615823,
+                  0.8680951444444921
+                ],
+                "independent_units": 60
+              },
+              "circular_shift": {
+                "mean": 0.5060861960129749,
+                "ci95": [
+                  0.3860073207228066,
+                  0.6379013852189249
+                ],
+                "independent_units": 60
+              }
+            },
+            "center_fNIRS": {
+              "own_history": {
+                "mean": 0.03655095265963744,
+                "ci95": [
+                  0.012936734465588108,
+                  0.060925975187863336
+                ],
+                "independent_units": 60
+              },
+              "own_history_and_task": {
+                "mean": 0.11899125408577088,
+                "ci95": [
+                  0.08771542256567995,
+                  0.15264288153989225
+                ],
+                "independent_units": 60
+              },
+              "independent_pairing": {
+                "mean": 0.270355501267812,
+                "ci95": [
+                  0.18369395241173087,
+                  0.3701603851119953
+                ],
+                "independent_units": 60
+              },
+              "circular_shift": {
+                "mean": 0.2200335367699177,
+                "ci95": [
+                  0.1482011380774927,
+                  0.3013815828834964
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "masked_coverage95": {
+            "center_EEG": {
+              "r": {
+                "mean": 0.9458333333333333,
+                "ci95": [
+                  0.9291666666666667,
+                  0.9614583333333333
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9458333333333333,
+                "ci95": [
+                  0.9291666666666667,
+                  0.9614583333333333
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9697916666666667,
+                "ci95": [
+                  0.9458333333333333,
+                  0.9895833333333334
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9229166666666667,
+                "ci95": [
+                  0.884375,
+                  0.9583333333333334
+                ],
+                "independent_units": 60
+              }
+            },
+            "center_fNIRS": {
+              "r": {
+                "mean": 0.9395833333333333,
+                "ci95": [
+                  0.9208333333333333,
+                  0.9572916666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9395833333333333,
+                "ci95": [
+                  0.9208333333333333,
+                  0.9572916666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9385416666666667,
+                "ci95": [
+                  0.878125,
+                  0.9854166666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.925,
+                "ci95": [
+                  0.8666666666666667,
+                  0.971875
+                ],
+                "independent_units": 60
+              }
+            },
+            "whole_EEG": {
+              "r": {
+                "mean": 0.9515625000000001,
+                "ci95": [
+                  0.9448958333333333,
+                  0.9578125
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9515625000000001,
+                "ci95": [
+                  0.9448958333333333,
+                  0.9578125
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9534374999999999,
+                "ci95": [
+                  0.9428125,
+                  0.9630234375000001
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9498958333333334,
+                "ci95": [
+                  0.9371875000000001,
+                  0.9611458333333334
+                ],
+                "independent_units": 60
+              }
+            },
+            "whole_fNIRS": {
+              "r": {
+                "mean": 0.9455208333333333,
+                "ci95": [
+                  0.9398958333333333,
+                  0.9510442708333334
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9455208333333333,
+                "ci95": [
+                  0.9398958333333333,
+                  0.9510442708333334
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.94,
+                "ci95": [
+                  0.9213541666666667,
+                  0.9563567708333335
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9392708333333333,
+                "ci95": [
+                  0.9198932291666666,
+                  0.9562526041666667
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "stability": {
+            "driver_correlation_q05": {
+              "mean": 0.9892554255960928,
+              "ci95": [
+                0.9880337354443431,
+                0.9904485559115415
+              ],
+              "independent_units": 60
+            },
+            "driver_nrmse_q95": {
+              "mean": 0.14058627950898642,
+              "ci95": [
+                0.1329553326747393,
+                0.14842668264125883
+              ],
+              "independent_units": 60
+            }
+          },
+          "physical_pass": true,
+          "variance_decomposition": {
+            "EEG": {
+              "state": {
+                "mean": 0.0014048135123928946,
+                "ci95": [
+                  0.00138977407350398,
+                  0.0014195545723603867
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 3.210332237514315e-05,
+                "ci95": [
+                  2.750808351655674e-05,
+                  3.735877251640377e-05
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.01066666666666667,
+                "ci95": [
+                  0.01066666666666667,
+                  0.01066666666666667
+                ],
+                "independent_units": 60
+              }
+            },
+            "HbO": {
+              "state": {
+                "mean": 6.374409098487064e-05,
+                "ci95": [
+                  6.265620632406835e-05,
+                  6.482926340032529e-05
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 1.0279221812063582e-06,
+                "ci95": [
+                  8.481982604414659e-07,
+                  1.2367076100233502e-06
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.0010416666666666669,
+                "ci95": [
+                  0.0010416666666666669,
+                  0.0010416666666666669
+                ],
+                "independent_units": 60
+              }
+            },
+            "HbR": {
+              "state": {
+                "mean": 7.539457903055783e-06,
+                "ci95": [
+                  7.423186052929683e-06,
+                  7.65309487824433e-06
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 6.637044605675388e-08,
+                "ci95": [
+                  5.536431766463559e-08,
+                  7.924149424346311e-08
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.000375,
+                "ci95": [
+                  0.000375,
+                  0.000375
+                ],
+                "independent_units": 60
+              }
+            }
+          }
+        },
+        "misspecification_stress_test": {
+          "state": {
+            "r": {
+              "nrmse": {
+                "mean": 0.4402526738450483,
+                "ci95": [
+                  0.42090301949922954,
+                  0.46039300753887274
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.895600122058928,
+                "ci95": [
+                  0.8843063442254698,
+                  0.9058872326633408
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9021874999999999,
+                "ci95": [
+                  0.8954166666666666,
+                  0.9089583333333331
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9513541666666667,
+                "ci95": [
+                  0.9458333333333333,
+                  0.9564609375000002
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_EEG": {
+              "nrmse": {
+                "mean": 0.4402526738450483,
+                "ci95": [
+                  0.42090301949922954,
+                  0.46039300753887274
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.895600122058928,
+                "ci95": [
+                  0.8843063442254698,
+                  0.9058872326633408
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9021874999999999,
+                "ci95": [
+                  0.8954166666666666,
+                  0.9089583333333331
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9513541666666667,
+                "ci95": [
+                  0.9458333333333333,
+                  0.9564609375000002
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_HbO": {
+              "nrmse": {
+                "mean": 0.09785917728305137,
+                "ci95": [
+                  0.08753111890657578,
+                  0.11051715712192653
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.9950961535814876,
+                "ci95": [
+                  0.9931008279339401,
+                  0.996480982808221
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9198958333333334,
+                "ci95": [
+                  0.9045833333333333,
+                  0.9344791666666666
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.9672916666666668,
+                "ci95": [
+                  0.9570833333333334,
+                  0.9764609375000001
+                ],
+                "independent_units": 60
+              }
+            },
+            "clean_HbR": {
+              "nrmse": {
+                "mean": 0.09233910890345375,
+                "ci95": [
+                  0.08155132726786908,
+                  0.10628805972473047
+                ],
+                "independent_units": 60
+              },
+              "correlation": {
+                "mean": 0.9957274060114707,
+                "ci95": [
+                  0.9933566978891629,
+                  0.9971412798223593
+                ],
+                "independent_units": 60
+              },
+              "coverage90": {
+                "mean": 0.9578124999999998,
+                "ci95": [
+                  0.9446874999999999,
+                  0.9704166666666667
+                ],
+                "independent_units": 60
+              },
+              "coverage95": {
+                "mean": 0.98375,
+                "ci95": [
+                  0.9759375,
+                  0.9907291666666667
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "shared_increments": {
+            "center_EEG": {
+              "own_history": {
+                "mean": 0.2609367006786317,
+                "ci95": [
+                  0.18825697533549463,
+                  0.3444761938619502
+                ],
+                "independent_units": 60
+              },
+              "own_history_and_task": {
+                "mean": 0.20730236402745753,
+                "ci95": [
+                  0.15878245114463896,
+                  0.2573782332463252
+                ],
+                "independent_units": 60
+              },
+              "independent_pairing": {
+                "mean": 0.5694058005379861,
+                "ci95": [
+                  0.4152135384759377,
+                  0.7455180619174638
+                ],
+                "independent_units": 60
+              },
+              "circular_shift": {
+                "mean": 0.9000217293346886,
+                "ci95": [
+                  0.7307899871698328,
+                  1.0793833301037317
+                ],
+                "independent_units": 60
+              }
+            },
+            "center_fNIRS": {
+              "own_history": {
+                "mean": 0.06658549338149836,
+                "ci95": [
+                  0.03553440871387977,
+                  0.1001292395667315
+                ],
+                "independent_units": 60
+              },
+              "own_history_and_task": {
+                "mean": 0.14222693990415475,
+                "ci95": [
+                  0.09835363079463798,
+                  0.1915589384482942
+                ],
+                "independent_units": 60
+              },
+              "independent_pairing": {
+                "mean": 0.2630124515169344,
+                "ci95": [
+                  0.16806696297268167,
+                  0.3684086294987569
+                ],
+                "independent_units": 60
+              },
+              "circular_shift": {
+                "mean": 0.29046372936725245,
+                "ci95": [
+                  0.21912624585396062,
+                  0.3696683643131495
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "masked_coverage95": {
+            "center_EEG": {
+              "r": {
+                "mean": 0.9520833333333333,
+                "ci95": [
+                  0.9302083333333333,
+                  0.9697916666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9520833333333333,
+                "ci95": [
+                  0.9302083333333333,
+                  0.9697916666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9802083333333333,
+                "ci95": [
+                  0.9583333333333334,
+                  0.9958333333333333
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9979166666666667,
+                "ci95": [
+                  0.99375,
+                  1.0
+                ],
+                "independent_units": 60
+              }
+            },
+            "center_fNIRS": {
+              "r": {
+                "mean": 0.9489583333333333,
+                "ci95": [
+                  0.9312239583333334,
+                  0.965625
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9489583333333333,
+                "ci95": [
+                  0.9312239583333334,
+                  0.965625
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9552083333333333,
+                "ci95": [
+                  0.9041666666666667,
+                  0.99375
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9729166666666667,
+                "ci95": [
+                  0.9395833333333333,
+                  1.0
+                ],
+                "independent_units": 60
+              }
+            },
+            "whole_EEG": {
+              "r": {
+                "mean": 0.9520833333333333,
+                "ci95": [
+                  0.9456249999999999,
+                  0.9583333333333334
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9520833333333333,
+                "ci95": [
+                  0.9456249999999999,
+                  0.9583333333333334
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9646875,
+                "ci95": [
+                  0.9542708333333333,
+                  0.9742708333333333
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9840625000000001,
+                "ci95": [
+                  0.9766666666666667,
+                  0.9909374999999999
+                ],
+                "independent_units": 60
+              }
+            },
+            "whole_fNIRS": {
+              "r": {
+                "mean": 0.9457291666666666,
+                "ci95": [
+                  0.9390624999999999,
+                  0.9521901041666668
+                ],
+                "independent_units": 60
+              },
+              "clean_EEG": {
+                "mean": 0.9457291666666666,
+                "ci95": [
+                  0.9390624999999999,
+                  0.9521901041666668
+                ],
+                "independent_units": 60
+              },
+              "clean_HbO": {
+                "mean": 0.9560416666666666,
+                "ci95": [
+                  0.9405208333333335,
+                  0.9704166666666667
+                ],
+                "independent_units": 60
+              },
+              "clean_HbR": {
+                "mean": 0.9560416666666666,
+                "ci95": [
+                  0.940625,
+                  0.9707291666666666
+                ],
+                "independent_units": 60
+              }
+            }
+          },
+          "stability": {
+            "driver_correlation_q05": {
+              "mean": 0.9903685143753468,
+              "ci95": [
+                0.9892208418531945,
+                0.991473438498092
+              ],
+              "independent_units": 60
+            },
+            "driver_nrmse_q95": {
+              "mean": 0.13258121820585536,
+              "ci95": [
+                0.12497888562982552,
+                0.14012138671619118
+              ],
+              "independent_units": 60
+            }
+          },
+          "physical_pass": true,
+          "variance_decomposition": {
+            "EEG": {
+              "state": {
+                "mean": 0.001388401346520926,
+                "ci95": [
+                  0.0013742876502323331,
+                  0.0014028659518448383
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 3.291743700750518e-05,
+                "ci95": [
+                  2.8291245613864368e-05,
+                  3.783418413837306e-05
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.01066666666666667,
+                "ci95": [
+                  0.01066666666666667,
+                  0.01066666666666667
+                ],
+                "independent_units": 60
+              }
+            },
+            "HbO": {
+              "state": {
+                "mean": 6.521193119833991e-05,
+                "ci95": [
+                  6.407384712949647e-05,
+                  6.635274368936056e-05
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 1.0389221821191315e-06,
+                "ci95": [
+                  8.417725210586844e-07,
+                  1.2757336731403387e-06
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.0010416666666666669,
+                "ci95": [
+                  0.0010416666666666669,
+                  0.0010416666666666669
+                ],
+                "independent_units": 60
+              }
+            },
+            "HbR": {
+              "state": {
+                "mean": 7.271120631712857e-06,
+                "ci95": [
+                  7.1821558735746584e-06,
+                  7.366663859193307e-06
+                ],
+                "independent_units": 60
+              },
+              "parameter": {
+                "mean": 6.363953466428568e-08,
+                "ci95": [
+                  5.069916121537996e-08,
+                  7.929568274980435e-08
+                ],
+                "independent_units": 60
+              },
+              "observation": {
+                "mean": 0.000375,
+                "ci95": [
+                  0.000375,
+                  0.000375
+                ],
+                "independent_units": 60
+              }
+            }
+          }
+        }
+      },
+      "checks": {
+        "complete_registered_cases": false,
+        "physical": true,
+        "matched_state_coverage": true,
+        "matched_state_accuracy": true,
+        "stress_state_accuracy": true,
+        "shared_information": true,
+        "cross_parameter_stability": true,
+        "parameter_mixture_resolution": true
+      },
+      "maximum_mixture_mean_difference_in_noise_units": 0.0003433674931710949,
+      "maximum_mixture_relative_variance_difference": 0.0020236506064095616,
+      "teacher_qualified": false,
+      "parameter_physiology_claim": "NOT_GRANTED_BY_STATE_QUALIFICATION"
+    },
+    "U1_Z": {
+      "independent_cases": 56,
+      "laws": {
+        "matched_model_calibration": {
+          "state": {
+            "r": {
+              "nrmse": {
+                "mean": 0.4599069902674809,
+                "ci95": [
+                  0.43892983540925873,
+                  0.4817186884019428
+                ],
+                "independent_units": 56
+              },
+              "correlation": {
+                "mean": 0.8864936483751464,
+                "ci95": [
+                  0.8746585726850991,
+                  0.8973595341417702
+                ],
+                "independent_units": 56
+              },
+              "coverage90": {
+                "mean": 0.8972098214285715,
+                "ci95": [
+                  0.8896205357142859,
+                  0.9044670758928572
+                ],
+                "independent_units": 56
+              },
+              "coverage95": {
+                "mean": 0.9514508928571429,
+                "ci95": [
+                  0.9457589285714285,
+                  0.9572544642857144
+                ],
+                "independent_units": 56
+              }
+            },
+            "clean_EEG": {
+              "nrmse": {
+                "mean": 0.4599069902674809,
+                "ci95": [
+                  0.43892983540925873,
+                  0.4817186884019428
+                ],
+                "independent_units": 56
+              },
+              "correlation": {
+                "mean": 0.8864936483751464,
+                "ci95": [
+                  0.8746585726850991,
+                  0.8973595341417702
+                ],
+                "independent_units": 56
+              },
+              "coverage90": {
+                "mean": 0.8972098214285715,
+                "ci95": [
+                  0.8896205357142859,
+                  0.9044670758928572
+                ],
+                "independent_units": 56
+              },
+              "coverage95": {
+                "mean": 0.9514508928571429,
+                "ci95": [
+                  0.9457589285714285,
+                  0.9572544642857144
+                ],
+                "independent_units": 56
+              }
+            },
+            "clean_HbO": {
+              "nrmse": {
+                "mean": 0.10688562162943903,
+                "ci95": [
+                  0.09706885286285746,
+                  0.11786787548010312
+                ],
+                "independent_units": 56
+              },
+              "correlation": {
+                "mean": 0.9943847969749384,
+                "ci95": [
+                  0.9931160849431419,
+                  0.9954569054274319
+                ],
+                "independent_units": 56
+              },
+              "coverage90": {
+                "mean": 0.8989955357142857,
+                "ci95": [
+                  0.8821428571428572,
+                  0.9150669642857144
+                ],
+                "independent_units": 56
+              },
+              "coverage95": {
+                "mean": 0.9489955357142856,
+                "ci95": [
+                  0.9378348214285716,
+                  0.9595982142857142
+                ],
+                "independent_units": 56
+              }
+            },
+            "clean_HbR": {
+              "nrmse": {
+                "mean": 0.12030259796876362,
+                "ci95": [
+                  0.1089598086956468,
+                  0.13283616078857952
+                ],
+                "independent_units": 56
+              },
+              "correlation": {
+                "mean": 0.9931600990480314,
+                "ci95": [
+                  0.991593572874009,
+                  0.9945371344031821
+                ],
+                "independent_units": 56
+              },
+              "coverage90": {
+                "mean": 0.8955357142857144,
+                "ci95": [
+                  0.88001953125,
+                  0.91015625
+                ],
+                "independent_units": 56
+              },
+              "coverage95": {
+                "mean": 0.9475446428571429,
+                "ci95": [
+                  0.9370535714285715,
+                  0.9574776785714286
+                ],
+                "independent_units": 56
+              }
+            }
+          },
+          "shared_increments": {
+            "center_EEG": {
+              "own_history": {
+                "mean": 0.09914145983166345,
+                "ci95": [
+                  0.049349579146000744,
+                  0.15471036278636832
+                ],
+                "independent_units": 56
+              },
+              "own_history_and_task": {
+                "mean": 0.20698631657293312,
+                "ci95": [
+                  0.1383538491618833,
+                  0.28357191561767386
+                ],
+                "independent_units": 56
+              },
+              "independent_pairing": {
+                "mean": 0.6497117166201686,
+                "ci95": [
+                  0.47491990132557677,
+                  0.8460823643789703
+                ],
+                "independent_units": 56
+              },
+              "circular_shift": {
+                "mean": 0.34304649870860937,
+                "ci95": [
+                  0.2448843782608647,
+                  0.44863593218107245
+                ],
+                "independent_units": 56
+              }
+            },
+            "center_fNIRS": {
+              "own_history": {
+                "mean": 0.04272228400289414,
+                "ci95": [
+                  0.01656431116028536,
+                  0.06868367515844581
+                ],
+                "independent_units": 56
+              },
+              "own_history_and_task": {
+                "mean": 0.11827368541527197,
+                "ci95": [
+                  0.08306955859968633,
+                  0.15429447425034995
+                ],
+                "independent_units": 56
+              },
+              "independent_pairing": {
+                "mean": 0.2106865007579042,
+                "ci95": [
+                  0.12859656940364,
+                  0.31092483695782597
+                ],
+                "independent_units": 56
+              },
+              "circular_shift": {
+                "mean": 0.301593496474394,
+                "ci95": [
+                  0.2010548693245668,
+                  0.41470357270427705
+                ],
+                "independent_units": 56
+              }
+            }
+          },
+          "masked_coverage95": {
+            "center_EEG": {
+              "r": {
+                "mean": 0.9397321428571429,
+                "ci95": [
+                  0.9207589285714286,
+                  0.9564732142857143
+                ],
+                "independent_units": 56
+              },
+              "clean_EEG": {
+                "mean": 0.9397321428571429,
+                "ci95": [
+                  0.9207589285714286,
+                  0.9564732142857143
+                ],
+                "independent_units": 56
+              },
+              "clean_HbO": {
+                "mean": 0.9397321428571429,
+                "ci95": [
+                  0.9017857142857143,
+                  0.9720982142857143
+                ],
+                "independent_units": 56
+              },
+              "clean_HbR": {
+                "mean": 0.9419642857142857,
+                "ci95": [
+                  0.9017857142857143,
+                  0.9754464285714286
+                ],
+                "independent_units": 56
+              }
+            },
+            "center_fNIRS": {
+              "r": {
+                "mean": 0.9464285714285714,
+                "ci95": [
+                  0.9296595982142857,
+                  0.9620535714285714
+                ],
+                "independent_units": 56
+              },
+              "clean_EEG": {
+                "mean": 0.9464285714285714,
+                "ci95": [
+                  0.9296595982142857,
+                  0.9620535714285714
+                ],
+                "independent_units": 56
+              },
+              "clean_HbO": {
+                "mean": 0.9575892857142857,
+                "ci95": [
+                  0.921875,
+                  0.9854910714285714
+                ],
+                "independent_units": 56
+              },
+              "clean_HbR": {
+                "mean": 0.9587053571428571,
+                "ci95": [
+                  0.9252232142857143,
+                  0.9866071428571429
+                ],
+                "independent_units": 56
+              }
+            },
+            "whole_EEG": {
+              "r": {
+                "mean": 0.9542410714285714,
+                "ci95": [
+                  0.9478766741071428,
+                  0.9603794642857143
+                ],
+                "independent_units": 56
+              },
+              "clean_EEG": {
+                "mean": 0.9542410714285714,
+                "ci95": [
+                  0.9478766741071428,
+                  0.9603794642857143
+                ],
+                "independent_units": 56
+              },
+              "clean_HbO": {
+                "mean": 0.9541294642857141,
+                "ci95": [
+                  0.9444196428571429,
+                  0.96328125
+                ],
+                "independent_units": 56
+              },
+              "clean_HbR": {
+                "mean": 0.9455357142857144,
+                "ci95": [
+                  0.9349330357142858,
+                  0.9558063616071429
+                ],
+                "independent_units": 56
+              }
+            },
+            "whole_fNIRS": {
+              "r": {
+                "mean": 0.9484374999999999,
+                "ci95": [
+                  0.9424107142857142,
+                  0.9543526785714286
+                ],
+                "independent_units": 56
+              },
+              "clean_EEG": {
+                "mean": 0.9484374999999999,
+                "ci95": [
+                  0.9424107142857142,
+                  0.9543526785714286
+                ],
+                "independent_units": 56
+              },
+              "clean_HbO": {
+                "mean": 0.9303571428571429,
+                "ci95": [
+                  0.9083705357142857,
+                  0.9510044642857142
+                ],
+                "independent_units": 56
+              },
+              "clean_HbR": {
+                "mean": 0.9312500000000001,
+                "ci95": [
+                  0.90736328125,
+                  0.9532366071428571
+                ],
+                "independent_units": 56
+              }
+            }
+          },
+          "stability": {
+            "driver_correlation_q05": {
+              "mean": 0.9932241911935787,
+              "ci95": [
+                0.9921907716504199,
+                0.9941872449378996
+              ],
+              "independent_units": 56
+            },
+            "driver_nrmse_q95": {
+              "mean": 0.1306893968872988,
+              "ci95": [
+                0.11848390423195829,
+                0.143338256839225
+              ],
+              "independent_units": 56
+            }
+          },
+          "physical_pass": true,
+          "variance_decomposition": {
+            "EEG": {
+              "state": {
+                "mean": 0.0014055951069739654,
+                "ci95": [
+                  0.001396298078555092,
+                  0.001415625132688956
+                ],
+                "independent_units": 56
+              },
+              "parameter": {
+                "mean": 3.3333702352936906e-05,
+                "ci95": [
+                  2.5227184333532106e-05,
+                  4.325522057959287e-05
+                ],
+                "independent_units": 56
+              },
+              "observation": {
+                "mean": 0.010666666666666668,
+                "ci95": [
+                  0.010666666666666668,
+                  0.010666666666666668
+                ],
+                "independent_units": 56
+              }
+            },
+            "HbO": {
+              "state": {
+                "mean": 6.31589713569625e-05,
+                "ci95": [
+                  6.23080337061279e-05,
+                  6.402077900513834e-05
+                ],
+                "independent_units": 56
+              },
+              "parameter": {
+                "mean": 6.994171929477707e-07,
+                "ci95": [
+                  5.091869665540938e-07,
+                  9.507327350658568e-07
+                ],
+                "independent_units": 56
+              },
+              "observation": {
+                "mean": 0.0010416666666666667,
+                "ci95": [
+                  0.0010416666666666667,
+                  0.0010416666666666667
+                ],
+                "independent_units": 56
+              }
+            },
+            "HbR": {
+              "state": {
+                "mean": 7.476943543427967e-06,
+                "ci95": [
+                  7.361322531417051e-06,
+                  7.590597368300656e-06
+                ],
+                "independent_units": 56
+              },
+              "parameter": {
+                "mean": 5.582025477374958e-08,
+                "ci95": [
+                  4.194948402603141e-08,
+                  7.173178338321759e-08
+                ],
+                "independent_units": 56
+              },
+              "observation": {
+                "mean": 0.00037499999999999995,
+                "ci95": [
+                  0.00037499999999999995,
+                  0.00037499999999999995
+                ],
+                "independent_units": 56
+              }
+            }
+          }
+        },
+        "misspecification_stress_test": {
+          "state": {
+            "r": {
+              "nrmse": {
+                "mean": 0.4285211201428632,
+                "ci95": [
+                  0.4050165968940015,
+                  0.4546166232359258
+                ],
+                "independent_units": 56
+              },
+              "correlation": {
+                "mean": 0.8992320789233695,
+                "ci95": [
+                  0.8834407697969308,
+                  0.9121723591963659
+                ],
+                "independent_units": 56
+              },
+              "coverage90": {
+                "mean": 0.9029017857142857,
+                "ci95": [
+                  0.8963169642857143,
+                  0.9095982142857143
+                ],
+                "independent_units": 56
+              },
+              "coverage95": {
+                "mean": 0.9532366071428572,
+                "ci95": [
+                  0.9484347098214285,
+                  0.9578152901785715
+                ],
+                "independent_units": 56
+              }
+            },
+            "clean_EEG": {
+              "nrmse": {
+                "mean": 0.4285211201428632,
+                "ci95": [
+                  0.4050165968940015,
+                  0.4546166232359258
+                ],
+                "independent_units": 56
+              },
+              "correlation": {
+                "mean": 0.8992320789233695,
+                "ci95": [
+                  0.8834407697969308,
+                  0.9121723591963659
+                ],
+                "independent_units": 56
+              },
+              "coverage90": {
+                "mean": 0.9029017857142857,
+                "ci95": [
+                  0.8963169642857143,
+                  0.9095982142857143
+                ],
+                "independent_units": 56
+              },
+              "coverage95": {
+                "mean": 0.9532366071428572,
+                "ci95": [
+                  0.9484347098214285,
+                  0.9578152901785715
+                ],
+                "independent_units": 56
+              }
+            },
+            "clean_HbO": {
+              "nrmse": {
+                "mean": 0.09339572643990897,
+                "ci95": [
+                  0.08140382693418516,
+                  0.10733057592898147
+                ],
+                "independent_units": 56
+              },
+              "correlation": {
+                "mean": 0.9951192687297493,
+                "ci95": [
+                  0.9931465225332358,
+                  0.9966819853550114
+                ],
+                "independent_units": 56
+              },
+              "coverage90": {
+                "mean": 0.9184151785714284,
+                "ci95": [
+                  0.9036830357142858,
+                  0.9323688616071429
+                ],
+                "independent_units": 56
+              },
+              "coverage95": {
+                "mean": 0.9616071428571429,
+                "ci95": [
+                  0.9514508928571429,
+                  0.9706473214285715
+                ],
+                "independent_units": 56
+              }
+            },
+            "clean_HbR": {
+              "nrmse": {
+                "mean": 0.08541808934226533,
+                "ci95": [
+                  0.07422525058323962,
+                  0.0986206949103657
+                ],
+                "independent_units": 56
+              },
+              "correlation": {
+                "mean": 0.9959875274563672,
+                "ci95": [
+                  0.9942363077625997,
+                  0.9973300041360892
+                ],
+                "independent_units": 56
+              },
+              "coverage90": {
+                "mean": 0.9635044642857143,
+                "ci95": [
+                  0.9520061383928572,
+                  0.9739955357142857
+                ],
+                "independent_units": 56
+              },
+              "coverage95": {
+                "mean": 0.9890625000000001,
+                "ci95": [
+                  0.9820312500000001,
+                  0.9948660714285714
+                ],
+                "independent_units": 56
+              }
+            }
+          },
+          "shared_increments": {
+            "center_EEG": {
+              "own_history": {
+                "mean": 0.2594396340225707,
+                "ci95": [
+                  0.19443115981512052,
+                  0.32931929139564875
+                ],
+                "independent_units": 56
+              },
+              "own_history_and_task": {
+                "mean": 0.23251950737110885,
+                "ci95": [
+                  0.17396792412485268,
+                  0.292688557285353
+                ],
+                "independent_units": 56
+              },
+              "independent_pairing": {
+                "mean": 0.5618460149717669,
+                "ci95": [
+                  0.42910130648303263,
+                  0.6979616150284603
+                ],
+                "independent_units": 56
+              },
+              "circular_shift": {
+                "mean": 0.9956161733013248,
+                "ci95": [
+                  0.7782854738931639,
+                  1.2095321104455843
+                ],
+                "independent_units": 56
+              }
+            },
+            "center_fNIRS": {
+              "own_history": {
+                "mean": 0.056187505854834126,
+                "ci95": [
+                  0.032499845783988554,
+                  0.08040070600721504
+                ],
+                "independent_units": 56
+              },
+              "own_history_and_task": {
+                "mean": 0.13787749582238815,
+                "ci95": [
+                  0.10366568763972646,
+                  0.17331359800731175
+                ],
+                "independent_units": 56
+              },
+              "independent_pairing": {
+                "mean": 0.2981942935434915,
+                "ci95": [
+                  0.2104705733330784,
+                  0.391540070596906
+                ],
+                "independent_units": 56
+              },
+              "circular_shift": {
+                "mean": 0.19713635478388422,
+                "ci95": [
+                  0.13741785106274643,
+                  0.26574586373465503
+                ],
+                "independent_units": 56
+              }
+            }
+          },
+          "masked_coverage95": {
+            "center_EEG": {
+              "r": {
+                "mean": 0.9430803571428571,
+                "ci95": [
+                  0.9196428571428571,
+                  0.9631696428571429
+                ],
+                "independent_units": 56
+              },
+              "clean_EEG": {
+                "mean": 0.9430803571428571,
+                "ci95": [
+                  0.9196428571428571,
+                  0.9631696428571429
+                ],
+                "independent_units": 56
+              },
+              "clean_HbO": {
+                "mean": 0.9709821428571429,
+                "ci95": [
+                  0.9419642857142857,
+                  0.9944196428571429
+                ],
+                "independent_units": 56
+              },
+              "clean_HbR": {
+                "mean": 0.9910714285714286,
+                "ci95": [
+                  0.9776785714285714,
+                  1.0
+                ],
+                "independent_units": 56
+              }
+            },
+            "center_fNIRS": {
+              "r": {
+                "mean": 0.9575892857142857,
+                "ci95": [
+                  0.9430803571428571,
+                  0.9709821428571429
+                ],
+                "independent_units": 56
+              },
+              "clean_EEG": {
+                "mean": 0.9575892857142857,
+                "ci95": [
+                  0.9430803571428571,
+                  0.9709821428571429
+                ],
+                "independent_units": 56
+              },
+              "clean_HbO": {
+                "mean": 0.9520089285714286,
+                "ci95": [
+                  0.9162946428571429,
+                  0.9832589285714286
+                ],
+                "independent_units": 56
+              },
+              "clean_HbR": {
+                "mean": 0.9754464285714286,
+                "ci95": [
+                  0.9486607142857143,
+                  0.9966517857142857
+                ],
+                "independent_units": 56
+              }
+            },
+            "whole_EEG": {
+              "r": {
+                "mean": 0.9525669642857143,
+                "ci95": [
+                  0.9466489955357142,
+                  0.9581473214285714
+                ],
+                "independent_units": 56
+              },
+              "clean_EEG": {
+                "mean": 0.9525669642857143,
+                "ci95": [
+                  0.9466489955357142,
+                  0.9581473214285714
+                ],
+                "independent_units": 56
+              },
+              "clean_HbO": {
+                "mean": 0.9577008928571429,
+                "ci95": [
+                  0.9469866071428571,
+                  0.9676339285714286
+                ],
+                "independent_units": 56
+              },
+              "clean_HbR": {
+                "mean": 0.9835937499999999,
+                "ci95": [
+                  0.9771205357142857,
+                  0.9895089285714285
+                ],
+                "independent_units": 56
+              }
+            },
+            "whole_fNIRS": {
+              "r": {
+                "mean": 0.9501116071428571,
+                "ci95": [
+                  0.9444196428571429,
+                  0.95546875
+                ],
+                "independent_units": 56
+              },
+              "clean_EEG": {
+                "mean": 0.9501116071428571,
+                "ci95": [
+                  0.9444196428571429,
+                  0.95546875
+                ],
+                "independent_units": 56
+              },
+              "clean_HbO": {
+                "mean": 0.9694196428571429,
+                "ci95": [
+                  0.95703125,
+                  0.98046875
+                ],
+                "independent_units": 56
+              },
+              "clean_HbR": {
+                "mean": 0.9713169642857142,
+                "ci95": [
+                  0.9582589285714286,
+                  0.9829268973214286
+                ],
+                "independent_units": 56
+              }
+            }
+          },
+          "stability": {
+            "driver_correlation_q05": {
+              "mean": 0.9939196630878901,
+              "ci95": [
+                0.9930891635011968,
+                0.9947049714116545
+              ],
+              "independent_units": 56
+            },
+            "driver_nrmse_q95": {
+              "mean": 0.12713766285411207,
+              "ci95": [
+                0.11633929961687332,
+                0.13795320903692368
+              ],
+              "independent_units": 56
+            }
+          },
+          "physical_pass": true,
+          "variance_decomposition": {
+            "EEG": {
+              "state": {
+                "mean": 0.0014025826922670515,
+                "ci95": [
+                  0.0013939544655034739,
+                  0.001411551669857863
+                ],
+                "independent_units": 56
+              },
+              "parameter": {
+                "mean": 3.5994984134147515e-05,
+                "ci95": [
+                  2.965549445443177e-05,
+                  4.2955531662677884e-05
+                ],
+                "independent_units": 56
+              },
+              "observation": {
+                "mean": 0.010666666666666668,
+                "ci95": [
+                  0.010666666666666668,
+                  0.010666666666666668
+                ],
+                "independent_units": 56
+              }
+            },
+            "HbO": {
+              "state": {
+                "mean": 6.337362198105374e-05,
+                "ci95": [
+                  6.252002355185601e-05,
+                  6.419799833002689e-05
+                ],
+                "independent_units": 56
+              },
+              "parameter": {
+                "mean": 5.853745747000464e-07,
+                "ci95": [
+                  4.7187809682096544e-07,
+                  7.107674810072116e-07
+                ],
+                "independent_units": 56
+              },
+              "observation": {
+                "mean": 0.0010416666666666667,
+                "ci95": [
+                  0.0010416666666666667,
+                  0.0010416666666666667
+                ],
+                "independent_units": 56
+              }
+            },
+            "HbR": {
+              "state": {
+                "mean": 7.313099840394704e-06,
+                "ci95": [
+                  7.19064979087149e-06,
+                  7.441624756232986e-06
+                ],
+                "independent_units": 56
+              },
+              "parameter": {
+                "mean": 4.451681869670625e-08,
+                "ci95": [
+                  3.6335508804922966e-08,
+                  5.364302479920908e-08
+                ],
+                "independent_units": 56
+              },
+              "observation": {
+                "mean": 0.00037499999999999995,
+                "ci95": [
+                  0.00037499999999999995,
+                  0.00037499999999999995
+                ],
+                "independent_units": 56
+              }
+            }
+          }
+        }
+      },
+      "checks": {
+        "complete_registered_cases": false,
+        "physical": true,
+        "matched_state_coverage": true,
+        "matched_state_accuracy": true,
+        "stress_state_accuracy": true,
+        "shared_information": true,
+        "cross_parameter_stability": true,
+        "parameter_mixture_resolution": true
+      },
+      "maximum_mixture_mean_difference_in_noise_units": 0.0003561831998236814,
+      "maximum_mixture_relative_variance_difference": 0.0015613563354432065,
+      "teacher_qualified": false,
+      "parameter_physiology_claim": "NOT_GRANTED_BY_STATE_QUALIFICATION"
+    }
+  },
+  "u3_diagnostic": {
+    "G_00": {
+      "case": "G_00",
+      "truth_axis": "G",
+      "truth": 0.07849520581220493,
+      "marginal_grid_cdf_differences": [
+        0.03894098552411096,
+        0.05911266640401569,
+        0.019293018021970088
+      ],
+      "numerical_status": "INCONCLUSIVE_GRID_RESOLUTION",
+      "selection_eligible": false,
+      "posterior_correlation": [
+        [
+          1.0000000000000002,
+          -0.2890416920722108,
+          0.40279376952895596
+        ],
+        [
+          -0.28904169207221075,
+          1.0,
+          0.20425765200825052
+        ],
+        [
+          0.40279376952895596,
+          0.20425765200825052,
+          1.0
+        ]
+      ],
+      "boundary_mass": [
+        0.0011153765252931436,
+        5.723826493231332e-05,
+        0.15504764096287293
+      ]
+    },
+    "W_01": {
+      "case": "W_01",
+      "truth_axis": "W",
+      "truth": 0.14002689411241423,
+      "marginal_grid_cdf_differences": [
+        0.050550722034603895,
+        0.05106036178828055,
+        0.019664708781313378
+      ],
+      "numerical_status": "INCONCLUSIVE_GRID_RESOLUTION",
+      "selection_eligible": false,
+      "posterior_correlation": [
+        [
+          1.0000000000000002,
+          0.16285199668540964,
+          0.4898237767568957
+        ],
+        [
+          0.16285199668540964,
+          1.0,
+          0.4925508375844976
+        ],
+        [
+          0.4898237767568957,
+          0.4925508375844976,
+          1.0
+        ]
+      ],
+      "boundary_mass": [
+        0.00017052530346972627,
+        4.644322104641052e-05,
+        0.02955970102259242
+      ]
+    },
+    "Z_02": {
+      "case": "Z_02",
+      "truth_axis": "Z",
+      "truth": 0.5464212182928434,
+      "marginal_grid_cdf_differences": [
+        0.09395025980541574,
+        0.03869847276192662,
+        0.018804268101845656
+      ],
+      "numerical_status": "INCONCLUSIVE_GRID_RESOLUTION",
+      "selection_eligible": false,
+      "posterior_correlation": [
+        [
+          0.9999999999999998,
+          0.06091589834555203,
+          0.3305759301335854
+        ],
+        [
+          0.06091589834555203,
+          0.9999999999999999,
+          0.4380979651118245
+        ],
+        [
+          0.3305759301335854,
+          0.4380979651118245,
+          1.0
+        ]
+      ],
+      "boundary_mass": [
+        1.754488332394999e-09,
+        0.0005634154754061704,
+        0.07509237604838603
+      ]
+    }
+  },
+  "qualified_candidates": [],
+  "measured_stage_eligible": false
+}

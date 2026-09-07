@@ -1,0 +1,44 @@
+schema: step5a_inference_consistency_v1
+scope: synthetic_only_localization
+seed: 20260907
+replicates_per_axis: 4
+axes:
+  G: {bounds: [-0.6, 0.6], prior: truncated_normal, mean: 0.0, sd: 0.2}
+  W: {bounds: [-0.5, 0.5], prior: truncated_normal, mean: 0.0, sd: 0.15}
+  Z: {bounds: [0.2, 0.95], prior: uniform}
+model:
+  dt: 0.25
+  steps: 64
+  rk4_substeps: 2
+  # A bounded-time local diagnostic with a narrower declared Gaussian initial
+  # law than Step 4's defaults. Generation and inference BOTH use this law.
+  initial_state_std: [0.08, 0.03, 0.015, 0.015, 0.015, 0.015]
+  process_std: [0.08, 0.01, 0.006, 0.004, 0.004, 0.004]
+  observation_scale: [0.08, 0.025, 0.015]
+  student_nu: 5.0
+  reference: {beta: 1.0, gamma: 0.32, kappa: 0.64, tau: 2.0, alpha: 0.32, E0: 0.32}
+oracle:
+  steps: 160
+  integration_rtol: 1.0e-8
+  integration_atol: 1.0e-10
+inference:
+  grid_points: 65
+  boundary_band_fraction: 0.05
+  mask_center_steps: 16
+  bootstrap_repetitions: 2000
+reference:
+  steps: 24
+  replicate_index: 0
+  particles: [4096, 16384]
+  independent_runs: 4
+  grid_points: 33
+  max_log_likelihood_se: 0.2
+  max_cdf_difference: 0.04
+  minimum_ess_fraction: 0.001
+  minimum_unique_ancestor_fraction: 0.005
+checks:
+  transition_absolute_tolerance: 1.0e-10
+  derivative_absolute_tolerance: 2.0e-7
+  oracle_grid_cdf_tolerance: 0.02
+  linear_mean_covariance_tolerance: 1.0e-7
+output_root: experiments/runs/physiology_semantic_tokenizer/step5a_inference_consistency
