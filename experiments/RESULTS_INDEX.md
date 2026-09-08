@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-09-07; payload-pruning record retained from
+_Evidence surface updated 2026-09-08; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -22,6 +22,7 @@ use local payloads only when a report explicitly requires them.
 
 | Stage | Retained authority / artifact | Why it remains |
 | --- | --- | --- |
+| Step5 observation adaptation diagnostic | [`20260908_observation_diagnostic_v1/summary.md`](runs/physiology_semantic_tokenizer/step5/20260908_observation_diagnostic_v1/summary.md), [numerical review](runs/physiology_semantic_tokenizer/step5/20260908_observation_diagnostic_v1/diagnostic_review.json), [contract](configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml) | controlled preprocessing bridge, original-training-only modality curves/residuals, nested-CV lag control and retained saturation failures; exploratory, no teacher admission |
 | E0 final teacher revalidation (stopped) | [`20260723_adaptive_teacher_e0_v3_line_clean_v4_revalidation_v1`](runs/physiology_semantic_tokenizer/e0_teacher_validity/20260723_adaptive_teacher_e0_v3_line_clean_v4_revalidation_v1/summary.md) | retained development teacher surface and claim boundary |
 | E1 K128 health (stopped) | [`20260722_e1_health_coupling_visual_report_v1`](runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260722_e1_health_coupling_visual_report_v1/summary.json) and retained multi-seed summaries | software/occupancy reference |
 | E2 weight calibration (stopped) | [`20260723_e2_v4_training_gradient_weight_calibration_v1`](runs/physiology_semantic_tokenizer/e2_weight_calibration/20260723_e2_v4_training_gradient_weight_calibration_v1/analysis/summary.md) | explains frozen semantic-objective scale |

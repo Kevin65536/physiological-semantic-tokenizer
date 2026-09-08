@@ -28,6 +28,64 @@ teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
 
+## Step5 observation adaptation diagnostic
+
+The requested follow-up to the September 7 Step5 results is owned by
+[`step5_observation_diagnostic_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml)
+and [`evaluate_step5_observation_diagnostic.py`](../experiments/evaluate_step5_observation_diagnostic.py).
+It retains the six-state model, GWZ support and Step5B negative decision. The
+user's request is for this bounded observation diagnostic; no prior run status
+or historical authorization is used to open a new qualification campaign.
+
+The measured panel fixes subjects 01/09/18 (first/middle/last of the Step5
+development inventory) before its results. It uses only the original eight
+training MA trials in each of sessions 01/03/05. Original trial positions 4/9
+are excluded before slicing and processing. Native files contain full sessions;
+that storage fact does not make their other trials diagnostic inputs. The
+existing metadata validator verifies record/event/clock contracts before native
+access. Subjects 19–29 are outside the loader's scope. Old Step5 code, frozen
+configurations, completed runs and failures remain unchanged.
+
+The synthetic bridge uses 24 independent matched-model trials and 24 independent
+noise-estimation trials, with truth W=0. It compares original model coordinates,
+baseline subtraction, the fNIRS filter operator, a controlled 4→10→4 polyphase
+resampling round trip, a common HbO/HbR amplitude factor, training noise-scale
+estimation, and their combination. The filter uses the existing 0.01–0.2 Hz
+third-order implementation on the controlled 4 Hz coordinate. This isolates
+operators; it does not claim to simulate native raw EEG, optical motion/MBLL,
+or the full native 10 Hz filter distribution. Both W=0 and W=−0.5 are fixed
+diagnostic settings. No parameters are fitted. Known driver/model-clean truth
+and processed-clean truth are reported separately; nominal intervals retain
+the existing observation model, deliberately exposing operator mismatch.
+
+Training W curves cover the entire original support at 17 points, separately
+refitting EEG-only, fNIRS-only and joint filters. They are likelihood curves,
+not resolved parameter posteriors. Chronological joint-density increments are
+summed over baseline, task and nominal recovery without resetting at segment
+boundaries; marginal predictive scores do not replace the joint likelihood.
+Fixed-setting innovations report bias, within-trial autocorrelation and PSD.
+The first original training trial provides predeclared 13/17-order endpoint
+checks. EEG-only W invariance is also checked against the likelihood owner.
+
+The only alternative EEG coordinate is positive F3 8–13 Hz log block power,
+with a training-fitted scale in the same reference gauge. It is a prespecified
+left-frontal diagnostic, not validated anatomical correspondence to whichever
+fNIRS pair is selected. There is no post-result channel/band/sign search.
+
+The low-capacity control predicts a center-masked modality from visible own
+endpoints and a same-session training task template, then adds six fixed lags
+of the other modality. It uses four outer and three inner folds within the
+original training inventory; every inner/outer fit repeats pair selection,
+projection and scaling. Inner trial folds choose ridge strength. EEG→fNIRS
+uses preceding EEG; fNIRS→EEG uses later fNIRS and is explicitly offline.
+Independent-training-trial pairing and a half-trial circular shift change only
+the other modality at validation. Template construction excludes the example's
+own trial. Scores are negative MSE in outer-training variance units, with
+subject-cluster summaries. Three clusters support descriptive localization,
+not a new confirmation or teacher admission claim. Missing/failing registered
+cases are retained, never replaced. Comprehensive UQ and tokenizer promotion
+remain outside this diagnostic.
+
 ## Step5A0 inference consistency diagnostic
 
 [`step5a_inference_consistency_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5a_inference_consistency_v1.yaml)

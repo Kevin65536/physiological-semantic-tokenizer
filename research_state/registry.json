@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-07",
+  "updated_at": "2026-09-08T11:40:25+08:00",
   "tracks": [
     {
       "id": "main",
@@ -231,6 +231,18 @@
       "label": "Step5B 同支持域加密与训练通道资格合同",
       "path": "experiments/configs/physiology_semantic_tokenizer/step5b_v2.yaml",
       "role": "protocol"
+    },
+    {
+      "id": "e.step5_observation_contract",
+      "label": "Step5 观测适配诊断冻结合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.step5_observation_results",
+      "label": "Step5 观测适配诊断结果与失败定位",
+      "path": "experiments/runs/physiology_semantic_tokenizer/step5/20260908_observation_diagnostic_v1/summary.md",
+      "role": "result_summary"
     }
   ],
   "records": [
@@ -2400,6 +2412,65 @@
         "main.step5"
       ],
       "next_step": "先在单一SSM内定位实测观测映射、时间/频带与过程/观测噪声失配，冻结新的最小诊断；不以扩参数支持域或改tokenizer目标绕过负结果，protected 24–29保持关闭。",
+      "headline": true
+    },
+    {
+      "state_id": "main.step5_observation@2026-09-08.diagnostic-completed",
+      "entity": "main.step5_observation",
+      "label": "Step5 实测观测适配诊断",
+      "track": "main",
+      "order": 7,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "预处理桥接、3名预选被试原训练trial的W来源/残差诊断及嵌套CV滞后对照均已执行；桥接复现慢W偏好，实测联合曲线仍贴下界，未见稳定双向配对增量。fNIRS-only失败及浮点饱和定位保留，不授予teacher资格。",
+      "evidence_ids": [
+        "e.step5_observation_contract",
+        "e.step5_observation_results"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-08T11:40:25+08:00",
+      "depends_on": [
+        "main.step5b"
+      ],
+      "headline": false,
+      "progress": {
+        "completed": 3,
+        "total": 3,
+        "unit": "diagnostic components with retained failures"
+      }
+    },
+    {
+      "state_id": "main.program@2026-09-08.observation-diagnostic",
+      "entity": "main.program",
+      "label": "PST-DISCOVERY-v1 tokenizer 发现流程",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "Step5A0联合似然与A1有限合成正证据保留，Step5B实测teacher仍失败；观测适配诊断已复现预处理诱导的慢W偏好，并定位持续fNIRS残差及部分浮点饱和。局部EEG与低容量对照未给出稳定双向配对增量，全面UQ和tokenizer未晋级。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.data_contract",
+        "e.step5_full_contract",
+        "e.step5b_refinement",
+        "e.step5a_results",
+        "e.step5_observation_contract",
+        "e.step5_observation_results"
+      ],
+      "supersedes": [
+        "main.program@2026-09-07.step5-measured-negative"
+      ],
+      "updated_at": "2026-09-08T11:40:25+08:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.step5",
+        "main.step5_observation"
+      ],
+      "next_step": "先冻结与基线、滤波和相对幅度一致的观测前向算子/噪声合同并通过同真值桥接，再在原训练边界复核固定或单参数SSM的配对增量；不扩GWZ、不以区间膨胀或改tokenizer目标绕过负结果，protected 24–29保持关闭。",
       "headline": true
     }
   ]

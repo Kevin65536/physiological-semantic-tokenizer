@@ -5,13 +5,13 @@
 
 _Generated from `research_state/registry.json`; do not edit this block._
 
-- **主方法**（PST-DISCOVERY-v1 tokenizer 发现流程）— 未开始 / 尚未判定：Step5A0 联合似然通过有限校准、A1仅W合成teacher合格；Step5B实测未通过双向共享信息、误差与稳健性检查，全面UQ和tokenizer未晋级。Step 1–4负证据保留。
+- **主方法**（PST-DISCOVERY-v1 tokenizer 发现流程）— 未开始 / 尚未判定：Step5A0联合似然与A1有限合成正证据保留，Step5B实测teacher仍失败；观测适配诊断已复现预处理诱导的慢W偏好，并定位持续fNIRS残差及部分浮点饱和。局部EEG与低容量对照未给出稳定双向配对增量，全面UQ和tokenizer未晋级。
 - **Token Atlas**（Atlas Statistical tier）— 已废弃（未完成且不再开展） / 尚未判定：Statistical tier 尚未运行；本旧分析支路废弃，不再开展。
 - **对比实验**（六方法联合正式 campaign）— 已停止（此前已完成） / 混合结论：540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。
 - **Croce 验证**（新版 Synthetic Phase 1）— 已废弃（未完成且不再开展） / 尚未判定：新版 Synthetic Phase 1 尚未开始；本旧验证流废弃，不再开展。
 
 ### Next steps
-- **主方法** — 先在单一SSM内定位实测观测映射、时间/频带与过程/观测噪声失配，冻结新的最小诊断；不以扩参数支持域或改tokenizer目标绕过负结果，protected 24–29保持关闭。
+- **主方法** — 先冻结与基线、滤波和相对幅度一致的观测前向算子/噪声合同并通过同真值桥接，再在原训练边界复核固定或单参数SSM的配对增量；不扩GWZ、不以区间膨胀或改tokenizer目标绕过负结果，protected 24–29保持关闭。
 
 See the [generated project status](docs/PROJECT_STATUS.md) for lifecycle states and evidence links.
 <!-- project-state:end -->
