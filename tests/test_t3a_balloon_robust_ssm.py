@@ -126,6 +126,18 @@ def test_fixed_eeg_sign_gauge_rejects_nonpositive_loading():
         raise AssertionError("negative observation loading must violate the fixed sign gauge")
 
 
+def test_simulation_known_coordinate_transform_also_transforms_noise_realization():
+    parameters = _parameters()
+    spec = BalloonObservationSpec().resolved(parameters.fixed)
+    scale = np.array([2., -.5, 3.])
+    original = simulate_balloon(_driver(12), parameters, config=_config(), observation_spec=spec,
+                                rng=np.random.default_rng(39))
+    changed = simulate_balloon(_driver(12), parameters, config=_config(), observation_spec=spec.reexpress(scale),
+                               rng=np.random.default_rng(39))
+    np.testing.assert_array_equal(changed.states, original.states)
+    np.testing.assert_allclose(changed.observations, original.observations*scale, atol=1e-15)
+
+
 def test_transformed_gaussian_moments_use_exact_lognormal_formulae():
     transformed_mean = np.asarray((0.2, -0.1, np.log(1.1), np.log(0.9), np.log(1.2), np.log(0.8)))
     covariance = np.diag((0.04, 0.01, 0.09, 0.04, 0.16, 0.25))
@@ -154,6 +166,52 @@ def test_transformed_underflow_and_extraction_domain_fail_closed():
     tiny_f = physical_to_transformed((0.0, 0.0, 1.0e-320, 1.0, 1.0, 1.0))
     with pytest.raises(FloatingPointError):
         balloon_rhs(tiny_f, _parameters())
+
+
+@pytest.mark.parametrize('flow', [.003209156, .0001, .01, .2, 1., 3., 100., 1e12])
+def test_extraction_matches_high_precision_domain_and_derivatives(flow):
+    from decimal import Decimal, localcontext
+    from src.inference import t3a_balloon_robust_ssm as core
+    with localcontext() as ctx:
+        ctx.prec = 100
+        f, e0 = Decimal(str(flow)), Decimal('.32')
+        log_base = (1-e0).ln()
+        a = log_base/f
+        complement = a.exp()
+        extraction = 1-complement
+        derivative = complement*log_base/(f*f)
+        flux = f*extraction/e0
+        flux_derivative = f*(extraction+f*derivative)/e0
+        expected = list(map(float, (extraction, derivative, flux)))
+    actual = core._extraction(flow, .32)
+    np.testing.assert_allclose(actual, expected, rtol=5e-13, atol=0)
+    assert core.extraction_log_complement(flow, .32) == pytest.approx(float(a), rel=1e-14)
+    assert core._flow_extraction_log_derivative(flow, .32, *actual[:2]) == pytest.approx(
+        float(flux_derivative), rel=5e-12, abs=1e-300)
+    if flow == .003209156:
+        assert actual[0] == 1.0
+        assert float(complement) > 0
+        states = np.array([[0, 0, flow, 1, 1, 1.]])
+        checks = core.run_physical_checks(states, _parameters())
+        assert checks['oxygen_extraction_in_unit_interval']
+        assert checks['extraction_float_saturation_count'] == 1
+        assert checks['flow_below_0_01_count'] == 1
+
+
+@pytest.mark.parametrize('flow', [0., -1., np.nan, np.inf, -np.inf])
+def test_extraction_rejects_illegal_flow(flow):
+    from src.inference import t3a_balloon_robust_ssm as core
+    with pytest.raises(ValueError, match='extraction requires'):
+        core._extraction(flow, .32)
+
+
+def test_low_flow_rhs_jacobian_remains_correct_after_saturation():
+    point = physical_to_transformed((.02, -.001, .003209156, .2, .3, .4))
+    parameters = _parameters()
+    numeric = np.column_stack([
+        (balloon_rhs(point+delta, parameters)-balloon_rhs(point-delta, parameters))/2e-6
+        for delta in np.eye(6)*1e-6])
+    np.testing.assert_allclose(balloon_rhs_jacobian(point, parameters), numeric, rtol=1e-6, atol=1e-7)
 
 
 def test_simulation_preserves_positive_compartments_and_extraction_domain():

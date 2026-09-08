@@ -1,0 +1,225 @@
+{
+  "model": [
+    {
+      "input_units": "canonical model observation",
+      "output_units": "processed model observation",
+      "mask": "discard outputs depending on hidden pre-processing inputs"
+    }
+  ],
+  "baseline": [
+    {
+      "operation": "subtract_weighted_baseline",
+      "weights": [
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "channels": [
+        "EEG",
+        "HbO",
+        "HbR"
+      ]
+    },
+    {
+      "input_units": "canonical model observation",
+      "output_units": "processed model observation",
+      "mask": "discard outputs depending on hidden pre-processing inputs"
+    }
+  ],
+  "fnirs_filter": [
+    {
+      "operation": "bandpass_fnirs",
+      "hz": [
+        0.01,
+        0.2
+      ],
+      "order": 3,
+      "boundary": "existing bandpass_fnirs finite-window sosfiltfilt",
+      "channels": [
+        "HbO",
+        "HbR"
+      ]
+    },
+    {
+      "input_units": "canonical model observation",
+      "output_units": "processed model observation",
+      "mask": "discard outputs depending on hidden pre-processing inputs"
+    }
+  ],
+  "combined": [
+    {
+      "operation": "resample_poly_roundtrip",
+      "hz": [
+        4.0,
+        10.0,
+        4.0
+      ],
+      "boundary": "scipy default constant zero padding; crop original length",
+      "channels": [
+        "HbO",
+        "HbR"
+      ]
+    },
+    {
+      "operation": "bandpass_fnirs",
+      "hz": [
+        0.01,
+        0.2
+      ],
+      "order": 3,
+      "boundary": "existing bandpass_fnirs finite-window sosfiltfilt",
+      "channels": [
+        "HbO",
+        "HbR"
+      ]
+    },
+    {
+      "operation": "subtract_weighted_baseline",
+      "weights": [
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.05,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "channels": [
+        "EEG",
+        "HbO",
+        "HbR"
+      ]
+    },
+    {
+      "operation": "known_common_scale",
+      "factor": 0.5,
+      "channels": [
+        "HbO",
+        "HbR"
+      ]
+    },
+    {
+      "input_units": "canonical model observation",
+      "output_units": "processed model observation",
+      "mask": "discard outputs depending on hidden pre-processing inputs"
+    }
+  ]
+}

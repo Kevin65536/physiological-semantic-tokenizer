@@ -1,0 +1,70 @@
+schema: step5_observation_repair_v1
+scope: observation_contract_regression_training_only
+diagnostic_config: experiments/configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml
+previous_run: experiments/runs/physiology_semantic_tokenizer/step5/20260908_observation_diagnostic_v1
+workers: 6
+scale:
+  diagonal:
+  - 1.0
+  - 0.5
+  - 0.5
+  reused_replicates: 24
+  independent_replicates: 24
+  independent_seed_start: 20291908
+  grid_points: 17
+  likelihood_absolute_tolerance: 1.0e-07
+  posterior_absolute_tolerance: 1.0e-08
+trajectory:
+  steps: 64
+  replicates_per_law: 24
+  gaussian_seed_start: 20301908
+  laws:
+  - linearized_gaussian
+  - nonlinear_student_t
+  variants:
+  - model
+  - baseline
+  - fnirs_filter
+  - combined
+  combined_order:
+  - resample_roundtrip
+  - fnirs_filter
+  - baseline
+  - common_scale
+  baseline_samples: 20
+  fixed_w:
+  - 0.0
+  - -0.5
+  rank_rtol: 1.0e-10
+  rank_check_rtols:
+  - 1.0e-08
+  - 1.0e-12
+  rank_check_replicates:
+  - 0
+  - 1
+  noise: independent_gaussian_with_original_student_t_marginal_variance_before_processing
+  interpretation: short_window_linearized_gaussian_reference_not_transformed_student_t_likelihood
+replay:
+  coordinates:
+  - broadband_pca
+  - local_F3_alpha
+  modalities:
+  - EEG_only
+  - fNIRS_only
+  - joint
+  grid_points: 17
+  extreme_flow_threshold: 0.01
+  meaning: identical_inputs_numerical_continuation_no_new_independent_trials
+measured:
+  coordinate: broadband_pca
+  fixed_w: 0.0
+  measurement_gain_candidate: none
+  outer_folds: 4
+  score: negative_mse_normalized_by_outer_training_variance
+  controls:
+  - own_context
+  - linear_basic
+  - independent_pairing
+  - circular_shift
+  interpretation: fixed_SSM_versus_linear_on_identical_outer_folds_inputs_masks_and_scores
+teacher_qualification: none

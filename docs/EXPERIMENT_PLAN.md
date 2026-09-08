@@ -28,7 +28,82 @@ teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
 
-## Step5 observation adaptation diagnostic
+## Step5 observation contract repair and regression
+
+The September 8 review is implemented by
+[`step5_observation_repair_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5_observation_repair_v1.yaml)
+and [`evaluate_step5_observation_repair.py`](../experiments/evaluate_step5_observation_repair.py).
+This version changes the existing numerical/observation owners locally; the
+previous diagnostic configuration, snapshots, data identities and failed outcomes
+remain immutable. The six physiological states, GWZ support, driver gauge and
+tokenizer target are unchanged. Results cannot grant teacher qualification.
+
+P0 validates the oxygen-extraction domain with finite negative `log(1-E)`,
+including finite positive flows for which binary64 rounds E to one. The flux
+and derivatives retain stable evaluation, including a high-flow series where
+subtraction would cancel. Nonfinite/illegal inputs and genuine integration
+failure still raise; no clipping, redraw or default state is permitted. Replays
+record saturation separately from extreme flow (descriptive f<0.01). Counts of
+RK4 evaluations, curve tasks, and unique trials must not be interchanged.
+
+P1 defines a known invertible diagonal coordinate transform in the observation
+specification. Canonical means, Jacobians and noise transform together; the
+Student-t density includes the absolute scale normalization only for visible
+coordinates. Latent states and P0/Q0 retain canonical model units. This known
+transform is separate from both the old training-MAD gauge and an unknown
+measurement gain; the existing measured `fnirs_factor` is not multiplied into
+the model map again. The three branches are original, deliberately observation-
+only scaling, and synchronized scaling. Use the original 24 bridge seeds for
+regression, then 24 new independent seeds, with the unchanged 17-point W support.
+Check fixed-W and parameter-mixture state moments, canonical clean moments,
+posterior CDFs and density Jacobians. These are invariance checks, not evidence
+of parameter identifiability or measured gain recovery.
+
+P2 adds a **short-window reference**, not a production Student-t solver. Its
+explicit finite-window operator records processing order, baseline weights,
+filter/resampling boundaries, clocks, units and masks. Mean and full temporal
+noise covariance transform jointly. Missing inputs invalidate every output
+depending on them. The reference linearizes the six-state dynamics and
+observation at rest and uses independent Gaussian noise *before* processing,
+with the old Student-t marginal variance. Thus it is exact only for that new
+linearized Gaussian contract; applying it to nonlinear Student-t bridge data is
+an explicitly labeled moment approximation. It cannot inherit A0 calibration.
+
+Compare baseline-only and filter-only before the combined order (4→10→4
+resampling, filter, baseline, known scale), on 64-sample windows at 4 Hz. Each
+law has 24 trials, W=0 truth, and only fixed W=0/−0.5 evaluations. Retain canonical
+state/clean truth and processed-clean truth separately. SVD handles singular
+baseline covariance and ill-conditioned filter directions in the operator's
+observable subspace; report retained rank, discarded singular values, support
+residual and sensitivity to the declared rank tolerance. Information discarded
+by irreversible or numerically truncated processing is not recovered by a
+Jacobian correction. Gaussian-law coverage is separate from the nonlinear
+Student-t approximation discrepancy; neither is a new teacher admission.
+
+P3 uses the same subjects 01/09/18, sessions 01/03/05 and 72 original training
+trials as the preceding diagnostic. The existing training-only loader and
+metadata validator remain the sole native entry. Trial positions 4/9 are excluded
+before slicing and preprocessing; subjects 19–29 remain outside the scope.
+Numerical continuation reads the identical prepared training arrays, records
+input/identity hashes and retains per-trial failures. Identical fNIRS-only curves
+shared by the two EEG coordinates are computed once and explicitly aliased;
+EEG-only W is checked as an invariant and never reported as an estimate.
+
+The measured comparison fixes all dynamics at W=0, uses broadband PCA as already
+declared, and adds no measurement-gain candidate in this version. Fixed SSM and
+the existing nested ridge control share the same four outer folds, projections,
+raw-input masks, targets, normalizers and pairing/shift donors. Report normalized
+negative MSE and paired increments over own-context SSM, the training task-
+template/context linear baseline, independent pairing and half-trial shift.
+Noise estimates use outer-training inputs only. Missing cases remain failures;
+three-subject intervals are descriptive. The temporal reference is not installed
+into measured pointwise inference until its approximation is adequately
+validated. Continued measured bias or negative pairing increments therefore
+remain open observation/shared-information failures, regardless of numerical
+repair success. No wider campaign, comprehensive UQ or tokenizer promotion is
+included in this request.
+
+## Step5 observation adaptation diagnostic (retained v1 contract)
 
 The requested follow-up to the September 7 Step5 results is owned by
 [`step5_observation_diagnostic_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml)

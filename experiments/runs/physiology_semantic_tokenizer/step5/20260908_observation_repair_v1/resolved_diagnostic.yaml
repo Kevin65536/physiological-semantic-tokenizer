@@ -1,0 +1,102 @@
+schema: step5_observation_diagnostic_v1
+scope: training_only_observation_diagnostic
+measured_config: experiments/configs/physiology_semantic_tokenizer/step5b_v2.yaml
+seed: 20260908
+workers: 6
+subjects:
+- subject_01
+- subject_09
+- subject_18
+subject_selection: first_middle_last_of_step5_development_inventory_before_diagnostic_results
+coordinates:
+- broadband_pca
+- local_F3_alpha
+local_eeg:
+  channel: F3
+  band_hz:
+  - 8.0
+  - 13.0
+  filter_order: 4
+  sign: positive_log_power
+  meaning: fixed_left_frontal_alternative_not_validated_neurovascular_correspondence
+curve:
+  grid_points: 17
+  bounds:
+  - -0.5
+  - 0.5
+  modalities:
+  - EEG_only
+  - fNIRS_only
+  - joint
+  fixed_w:
+  - 0.0
+  - -0.5
+  quadrature_order: 13
+  quadrature_check_order: 17
+  quadrature_check_trial_positions:
+  - 0
+  segments_seconds:
+    baseline:
+    - -5.0
+    - 0.0
+    task:
+    - 0.0
+    - 10.0
+    recovery:
+    - 10.0
+    - 25.0
+  residual_acf_seconds: 5.0
+bridge:
+  replicates: 24
+  truth_w: 0.0
+  variants:
+  - model
+  - baseline
+  - fnirs_filter
+  - resample_roundtrip
+  - common_scale
+  - noise_estimate
+  - combined
+  common_fnirs_factor: 0.5
+  model_hz: 4.0
+  intermediate_hz: 10.0
+  baseline_samples: 20
+  filter_hz:
+  - 0.01
+  - 0.2
+  filter_order: 3
+  resampling_interpretation: controlled_4_to_10_to_4_polyphase_bridge_not_native_EEG_generation
+  metrics: known_driver_and_model_clean_truth_plus_processed_clean_truth
+  fitting: fixed_w_only_no_parameter_optimization
+linear:
+  outer_folds: 4
+  inner_folds: 3
+  fold_assignment: training_trial_ordinal_within_session_modulo_folds
+  lag_seconds:
+  - 0.0
+  - 2.0
+  - 4.0
+  - 6.0
+  - 8.0
+  - 10.0
+  lag_direction: EEG_past_for_fNIRS_and_fNIRS_future_for_EEG_offline
+  ridge_alphas:
+  - 0.1
+  - 1.0
+  - 10.0
+  - 100.0
+  ridge_objective: mean_squared_error_plus_alpha_times_squared_standardized_coefficients
+  own_context: visible_endpoint_linear_interpolation
+  task_template: same_session_training_mean
+  nulls:
+  - independent_pairing
+  - circular_shift
+  independent_pairing: same_session_training_trial_at_validation_ordinal_modulo_training_count
+  circular_shift_fraction: 0.5
+  score: negative_mse_normalized_by_outer_training_variance
+  uncertainty: subject_cluster_bootstrap_descriptive_three_subjects
+  bootstrap_repetitions: 5000
+interpretation:
+  teacher_qualification: none
+  original_step5_heldout_positions: excluded_before_trial_processing
+  comprehensive_uq: not_executed

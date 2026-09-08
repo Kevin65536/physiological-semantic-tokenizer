@@ -11,6 +11,25 @@ import pytest
 import experiments.evaluate_t3c_composite_synthetic_t2 as t2
 
 
+@pytest.fixture
+def source_fixture(tmp_path, monkeypatch):
+    """Non-evidence source contract for unit/smoke checks after forward repairs.
+
+    The registered September 3 experiment still rejects changed source bytes.
+    These temporary copies exercise the real hash validator without rewriting
+    that experiment's frozen hashes or disabling its validation function.
+    """
+    config = t2.load_config()
+    expected = {}
+    for name, (path, _) in t2.EXPECTED_SOURCES.items():
+        fixture = tmp_path / (name + '.source')
+        fixture.write_bytes((t2.REPO_ROOT / path).read_bytes())
+        expected[name] = (str(fixture), t2._sha256(fixture))
+        config['sources'][name] = dict(path=str(fixture), sha256=expected[name][1])
+    monkeypatch.setattr(t2, 'EXPECTED_SOURCES', expected)
+    return config
+
+
 def _tiny_config() -> dict:
     config = t2._effective_config(t2.load_config(), True)
     config["simulation"]["independent_replicates_per_direction"] = 1
@@ -22,8 +41,16 @@ def _tiny_config() -> dict:
     return config
 
 
-def test_config_and_composite_axes_preserve_the_fixed_gauge() -> None:
+def test_frozen_experiment_keeps_original_source_identity_and_rejects_repaired_core() -> None:
     config = t2.load_config()
+    for name, (path, digest) in t2.EXPECTED_SOURCES.items():
+        assert config['sources'][name] == dict(path=path, sha256=digest)
+    with pytest.raises(ValueError, match='registered source hash mismatch: src/inference/t3a_balloon_robust_ssm.py'):
+        t2.validate_config(config)
+
+
+def test_config_and_composite_axes_preserve_the_fixed_gauge(source_fixture) -> None:
+    config = source_fixture
     t2.validate_config(config)
     assert "evaluate_t3_measured_reconstruction_null" not in inspect.getsource(t2)
     for name, (path, digest) in t2.EXPECTED_SOURCES.items():
@@ -58,6 +85,14 @@ def test_config_and_composite_axes_preserve_the_fixed_gauge() -> None:
         mutate(drifted)
         with pytest.raises(ValueError):
             t2.validate_config(drifted)
+
+
+def test_temporary_source_contract_detects_byte_tampering(source_fixture) -> None:
+    from pathlib import Path
+    model = Path(source_fixture['sources']['model']['path'])
+    model.write_bytes(model.read_bytes()+b'\n# changed after binding\n')
+    with pytest.raises(ValueError, match='registered source hash mismatch'):
+        t2.validate_config(source_fixture)
 
 
 def test_truth_is_not_a_fitdataset_field_and_same_observations_fit_identically() -> None:
@@ -142,9 +177,10 @@ def test_heldout_score_masks_every_post_onset_fnirs_value(monkeypatch) -> None:
     assert not np.any(observed_masks[0][first_target:, 1:])
 
 
-def test_tiny_smoke_writes_complete_hash_bound_artifacts(tmp_path, monkeypatch) -> None:
-    config = t2.load_config()
+def test_tiny_smoke_writes_complete_hash_bound_artifacts(tmp_path, monkeypatch, source_fixture) -> None:
+    config = source_fixture
     effective = _tiny_config()
+    effective['sources'] = copy.deepcopy(config['sources'])
     monkeypatch.setattr(t2, "_effective_config", lambda _config, _smoke: copy.deepcopy(effective))
     run_dir = tmp_path / "run"
     summary = t2.run(config, run_dir, smoke=True)
@@ -163,9 +199,10 @@ def test_tiny_smoke_writes_complete_hash_bound_artifacts(tmp_path, monkeypatch) 
         t2.run(config, run_dir, smoke=True)
 
 
-def test_failure_manifest_is_fail_closed(tmp_path, monkeypatch) -> None:
-    config = t2.load_config()
+def test_failure_manifest_is_fail_closed(tmp_path, monkeypatch, source_fixture) -> None:
+    config = source_fixture
     effective = _tiny_config()
+    effective['sources'] = copy.deepcopy(config['sources'])
     monkeypatch.setattr(t2, "_effective_config", lambda _config, _smoke: copy.deepcopy(effective))
     monkeypatch.setattr(t2, "_fit_one", lambda _problem: (_ for _ in ()).throw(RuntimeError("injected")))
     run_dir = tmp_path / "failed"

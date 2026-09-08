@@ -1,0 +1,610 @@
+{
+  "source_summary_sha256": "068d6f445040724b34ddbb4ea79604f8e50a8e94fcbef9062e0a47ece12958ae",
+  "reviewer_sha256": "4643a82b50d1b61095edb9f9eac756c60b399ebf4b19ac474eefc884af7764a3",
+  "legacy_core_sha256": "4221b4a53e9b2041d6db5e0274e4d5b509ab8108291e004c01ab67d9054326e4",
+  "normal_range": {
+    "flow_range": [
+      0.03,
+      30.0
+    ],
+    "scalar_cases": 61,
+    "state_cases": 64,
+    "maximum_extraction_tuple_errors": [
+      0.0,
+      2.220446049250313e-16,
+      0.0
+    ],
+    "maximum_rhs_error": 0.0,
+    "maximum_jacobian_error": 1.8041124150158794e-16,
+    "maximum_transition_or_jacobian_error": 1.5612511283791264e-17
+  },
+  "high_precision_scalar": [
+    {
+      "flow": 0.003209156,
+      "expected": [
+        1.0,
+        -2.408764038066639e-48,
+        0.0100286125
+      ],
+      "actual": [
+        1.0,
+        -2.4087640380666378e-48,
+        0.010028612499999999
+      ],
+      "log_one_minus_E": -120.17567261048845,
+      "one_minus_E": 6.432333098230674e-53,
+      "flux_log_flow_derivative_reference": 0.0100286125,
+      "flux_log_flow_derivative": 0.010028612499999999
+    },
+    {
+      "flow": 0.01,
+      "expected": [
+        1.0,
+        -6.872245430586158e-14,
+        0.03125
+      ],
+      "actual": [
+        1.0,
+        -6.872245430586154e-14,
+        0.03125
+      ],
+      "log_one_minus_E": -38.56624808119847,
+      "one_minus_E": 1.7819325893763734e-17,
+      "flux_log_flow_derivative_reference": 0.03124999999999998,
+      "flux_log_flow_derivative": 0.03124999999999998
+    },
+    {
+      "flow": 0.2,
+      "expected": [
+        0.8546066432,
+        -1.401819066926751,
+        0.534129152
+      ],
+      "actual": [
+        0.8546066432,
+        -1.4018190669267507,
+        0.534129152
+      ],
+      "log_one_minus_E": -1.9283124040599233,
+      "one_minus_E": 0.1453933568,
+      "flux_log_flow_derivative_reference": 0.3589017686341561,
+      "flux_log_flow_derivative": 0.3589017686341561
+    },
+    {
+      "flow": 1.0,
+      "expected": [
+        0.32,
+        -0.2622504869521496,
+        1.0
+      ],
+      "actual": [
+        0.32,
+        -0.2622504869521496,
+        1.0
+      ],
+      "log_one_minus_E": -0.3856624808119847,
+      "one_minus_E": 0.68,
+      "flux_log_flow_derivative_reference": 0.18046722827453257,
+      "flux_log_flow_derivative": 0.18046722827453257
+    },
+    {
+      "flow": 3.0,
+      "expected": [
+        0.12063406556836415,
+        -0.03768204975716152,
+        1.1309443647034139
+      ],
+      "actual": [
+        0.12063406556836413,
+        -0.037682049757161516,
+        1.1309443647034136
+      ],
+      "log_one_minus_E": -0.12855416027066155,
+      "one_minus_E": 0.8793659344316359,
+      "flux_log_flow_derivative_reference": 0.07113671528324594,
+      "flux_log_flow_derivative": 0.07113671528324617
+    },
+    {
+      "flow": 100.0,
+      "expected": [
+        0.003849197581740848,
+        -3.84177989723475e-05,
+        1.202874244294015
+      ],
+      "actual": [
+        0.003849197581740848,
+        -3.841779897234743e-05,
+        1.202874244294015
+      ],
+      "log_one_minus_E": -0.0038566248081198466,
+      "one_minus_E": 0.9961508024182592,
+      "flux_log_flow_derivative_reference": 0.002318026408155688,
+      "flux_log_flow_derivative": 0.0023180264081578195
+    },
+    {
+      "flow": 1000000000000.0,
+      "expected": [
+        3.856624808119103e-13,
+        -3.8566248081183594e-25,
+        1.2051952525372196
+      ],
+      "actual": [
+        3.856624808119103e-13,
+        -3.8566248081183534e-25,
+        1.2051952525372196
+      ],
+      "log_one_minus_E": -3.8566248081198465e-13,
+      "one_minus_E": 0.9999999999996143,
+      "flux_log_flow_derivative_reference": 2.3239929547815034e-13,
+      "flux_log_flow_derivative": 2.3239929547815023e-13
+    }
+  ],
+  "refined_substep_replay": [
+    {
+      "subject": "subject_01",
+      "training_trial_index": 4,
+      "w": 0.0,
+      "result": {
+        "execution": "failed",
+        "substeps": 2,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 108,
+          "minimum_extraction_flow": 1.0770895450121277e-05,
+          "pretransition_transformed_state": [
+            -0.22675076802403443,
+            -0.07572673509915534,
+            -5.741747298655799,
+            -0.7154405874587865,
+            -0.7219825036238462,
+            -0.048435160291565485
+          ]
+        },
+        "event_relative_time_s": 22.0,
+        "last_pretransition_flow": 0.003209156019592031,
+        "last_pretransition_flow_velocity": -0.07572673509915534,
+        "local_linear_time_to_zero_s": 0.042378111447562275
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 4,
+      "w": 0.0,
+      "result": {
+        "execution": "failed",
+        "substeps": 8,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 108,
+          "minimum_extraction_flow": 3.0993968822475425e-59,
+          "pretransition_transformed_state": [
+            -0.2267503157202922,
+            -0.0757270707487804,
+            -5.742316704410364,
+            -0.7154420186044346,
+            -0.7219839085921408,
+            -0.048439136377306305
+          ]
+        },
+        "event_relative_time_s": 22.0,
+        "last_pretransition_flow": 0.003207329227829408,
+        "last_pretransition_flow_velocity": -0.0757270707487804,
+        "local_linear_time_to_zero_s": 0.042353800247595906
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 4,
+      "w": 0.0,
+      "result": {
+        "execution": "failed",
+        "substeps": 32,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 108,
+          "minimum_extraction_flow": 3.214564637731263e-291,
+          "pretransition_transformed_state": [
+            -0.22675031345474142,
+            -0.07572707155120705,
+            -5.742318516099788,
+            -0.7154420232670432,
+            -0.7219839131740156,
+            -0.04843914924592041
+          ]
+        },
+        "event_relative_time_s": 22.0,
+        "last_pretransition_flow": 0.0032073234171502295,
+        "last_pretransition_flow_velocity": -0.07572707155120705,
+        "local_linear_time_to_zero_s": 0.04235372306694074
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 4,
+      "w": -0.5,
+      "result": {
+        "execution": "failed",
+        "substeps": 2,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 112,
+          "minimum_extraction_flow": 1.5069562976329332e-06,
+          "pretransition_transformed_state": [
+            -0.17963801250634912,
+            -0.06444542319233935,
+            -13.405418638320416,
+            -0.7823856375031272,
+            -0.7894942419636888,
+            -0.061464937810325845
+          ]
+        },
+        "event_relative_time_s": 23.0,
+        "last_pretransition_flow": 1.5069562976329332e-06,
+        "last_pretransition_flow_velocity": -0.06444542319233935,
+        "local_linear_time_to_zero_s": 2.338344948306687e-05
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 4,
+      "w": -0.5,
+      "result": {
+        "execution": "failed",
+        "substeps": 8,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 112,
+          "minimum_extraction_flow": 3.303216287836716e-07,
+          "pretransition_transformed_state": [
+            -0.17971399747367428,
+            -0.06447409840860631,
+            -14.923199024454142,
+            -0.7824507307549384,
+            -0.789558751728688,
+            -0.06158237551402736
+          ]
+        },
+        "event_relative_time_s": 23.0,
+        "last_pretransition_flow": 3.303216287836716e-07,
+        "last_pretransition_flow_velocity": -0.06447409840860631,
+        "local_linear_time_to_zero_s": 5.1233229612649954e-06
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 4,
+      "w": -0.5,
+      "result": {
+        "execution": "failed",
+        "substeps": 32,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 112,
+          "minimum_extraction_flow": 3.168392189070643e-07,
+          "pretransition_transformed_state": [
+            -0.17971905949450734,
+            -0.0644762694660002,
+            -14.964871387613236,
+            -0.7824548416705382,
+            -0.7895628294738112,
+            -0.061589341572375826
+          ]
+        },
+        "event_relative_time_s": 23.0,
+        "last_pretransition_flow": 3.168392189070643e-07,
+        "last_pretransition_flow_velocity": -0.0644762694660002,
+        "local_linear_time_to_zero_s": 4.914043903767428e-06
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 7,
+      "w": 0.0,
+      "result": {
+        "execution": "failed",
+        "substeps": 2,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 54,
+          "minimum_extraction_flow": 4.106000414465976e-100,
+          "pretransition_transformed_state": [
+            -0.24457306863626796,
+            -0.11007070471902666,
+            -10.365916206514173,
+            -0.6941706846937208,
+            -0.7026314059087593,
+            -0.03515074992950095
+          ]
+        },
+        "event_relative_time_s": 8.5,
+        "last_pretransition_flow": 3.1487616811642756e-05,
+        "last_pretransition_flow_velocity": -0.11007070471902666,
+        "local_linear_time_to_zero_s": 0.00028606718646909736
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 7,
+      "w": 0.0,
+      "result": {
+        "execution": "failed",
+        "substeps": 8,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 54,
+          "minimum_extraction_flow": 3.097433472282831e-29,
+          "pretransition_transformed_state": [
+            -0.24460816337854657,
+            -0.11008985790791667,
+            -10.37751522892475,
+            -0.6942121367383179,
+            -0.7026728520372441,
+            -0.03521948899196964
+          ]
+        },
+        "event_relative_time_s": 8.5,
+        "last_pretransition_flow": 3.1124501202672866e-05,
+        "last_pretransition_flow_velocity": -0.11008985790791667,
+        "local_linear_time_to_zero_s": 0.0002827190605396782
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 7,
+      "w": 0.0,
+      "result": {
+        "execution": "failed",
+        "substeps": 32,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 54,
+          "minimum_extraction_flow": 3.106472654379719e-11,
+          "pretransition_transformed_state": [
+            -0.24460843224566056,
+            -0.1100900047472857,
+            -10.377562122460905,
+            -0.6942124394086505,
+            -0.7026731546573981,
+            -0.03521998902547768
+          ]
+        },
+        "event_relative_time_s": 8.5,
+        "last_pretransition_flow": 3.1123041698971336e-05,
+        "last_pretransition_flow_velocity": -0.1100900047472857,
+        "local_linear_time_to_zero_s": 0.00028270542607764475
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 7,
+      "w": -0.5,
+      "result": {
+        "execution": "failed",
+        "substeps": 2,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 58,
+          "minimum_extraction_flow": 6.31210554888675e-07,
+          "pretransition_transformed_state": [
+            -0.19847969731237772,
+            -0.07953313424045906,
+            -4.635360656226333,
+            -0.7175888917491733,
+            -0.7250938019263762,
+            -0.0011677424958232985
+          ]
+        },
+        "event_relative_time_s": 9.5,
+        "last_pretransition_flow": 0.009702607101587688,
+        "last_pretransition_flow_velocity": -0.07953313424045906,
+        "local_linear_time_to_zero_s": 0.12199452711435964
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 7,
+      "w": -0.5,
+      "result": {
+        "execution": "failed",
+        "substeps": 8,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 58,
+          "minimum_extraction_flow": 7.275919702798747e-28,
+          "pretransition_transformed_state": [
+            -0.19848006981003766,
+            -0.07953378015734272,
+            -4.6354025856192,
+            -0.7175897708590894,
+            -0.7250946904474707,
+            -0.00116903064750222
+          ]
+        },
+        "event_relative_time_s": 9.5,
+        "last_pretransition_flow": 0.009702200285691522,
+        "last_pretransition_flow_velocity": -0.07953378015734272,
+        "local_linear_time_to_zero_s": 0.12198842135376355
+      }
+    },
+    {
+      "subject": "subject_01",
+      "training_trial_index": 7,
+      "w": -0.5,
+      "result": {
+        "execution": "failed",
+        "substeps": 32,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 58,
+          "minimum_extraction_flow": 4.478300630409263e-08,
+          "pretransition_transformed_state": [
+            -0.198480070875325,
+            -0.07953378226702215,
+            -4.635402716463075,
+            -0.7175897736073868,
+            -0.7250946932297173,
+            -0.0011690346674582963
+          ]
+        },
+        "event_relative_time_s": 9.5,
+        "last_pretransition_flow": 0.00970219901621813,
+        "last_pretransition_flow_velocity": -0.07953378226702215,
+        "local_linear_time_to_zero_s": 0.12198840215651412
+      }
+    },
+    {
+      "subject": "subject_09",
+      "training_trial_index": 12,
+      "w": 0.0,
+      "result": {
+        "execution": "completed",
+        "substeps": 2,
+        "parameter_log_likelihood": -148.4355236882219,
+        "diagnostic": {
+          "transition_index": 119,
+          "minimum_extraction_flow": 0.03566566768500058,
+          "pretransition_transformed_state": [
+            -0.15977818803197127,
+            0.07087696425964002,
+            -2.3891762727725077,
+            -1.1070908704571645,
+            -1.070747319515674,
+            -0.05918858600753481
+          ]
+        },
+        "last_pretransition_flow": 0.09170519283808508,
+        "last_pretransition_flow_velocity": 0.07087696425964002,
+        "local_linear_time_to_zero_s": null
+      }
+    },
+    {
+      "subject": "subject_09",
+      "training_trial_index": 12,
+      "w": 0.0,
+      "result": {
+        "execution": "completed",
+        "substeps": 8,
+        "parameter_log_likelihood": -148.43745496946562,
+        "diagnostic": {
+          "transition_index": 119,
+          "minimum_extraction_flow": 0.03566564176165508,
+          "pretransition_transformed_state": [
+            -0.15977872918353697,
+            0.07087671979788791,
+            -2.3891703666942288,
+            -1.1070926448062968,
+            -1.0707495092105797,
+            -0.059188140659709704
+          ]
+        },
+        "last_pretransition_flow": 0.09170573445773197,
+        "last_pretransition_flow_velocity": 0.07087671979788791,
+        "local_linear_time_to_zero_s": null
+      }
+    },
+    {
+      "subject": "subject_09",
+      "training_trial_index": 12,
+      "w": 0.0,
+      "result": {
+        "execution": "completed",
+        "substeps": 32,
+        "parameter_log_likelihood": -148.4374608860415,
+        "diagnostic": {
+          "transition_index": 119,
+          "minimum_extraction_flow": 0.03566564200658142,
+          "pretransition_transformed_state": [
+            -0.15977873108663695,
+            0.07087671895648204,
+            -2.38917034477557,
+            -1.1070926498618698,
+            -1.0707495156165483,
+            -0.059188139053446796
+          ]
+        },
+        "last_pretransition_flow": 0.09170573646779871,
+        "last_pretransition_flow_velocity": 0.07087671895648204,
+        "local_linear_time_to_zero_s": null
+      }
+    },
+    {
+      "subject": "subject_09",
+      "training_trial_index": 12,
+      "w": -0.5,
+      "result": {
+        "execution": "failed",
+        "substeps": 2,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 34,
+          "minimum_extraction_flow": 1.7891869070460288e-06,
+          "pretransition_transformed_state": [
+            -0.15105431542237083,
+            -0.060431240454197226,
+            -6.046785294841834,
+            -0.6006531363946425,
+            -0.5987217370780749,
+            -0.10957698787761773
+          ]
+        },
+        "event_relative_time_s": 3.5,
+        "last_pretransition_flow": 0.0023654540341718055,
+        "last_pretransition_flow_velocity": -0.060431240454197226,
+        "local_linear_time_to_zero_s": 0.0391429005327908
+      }
+    },
+    {
+      "subject": "subject_09",
+      "training_trial_index": 12,
+      "w": -0.5,
+      "result": {
+        "execution": "failed",
+        "substeps": 8,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 34,
+          "minimum_extraction_flow": 2.5378041949697838e-08,
+          "pretransition_transformed_state": [
+            -0.15107153595931178,
+            -0.06043919042017113,
+            -6.052366275520509,
+            -0.6006663551709744,
+            -0.5987347478515418,
+            -0.1096038809569156
+          ]
+        },
+        "event_relative_time_s": 3.5,
+        "last_pretransition_flow": 0.002352289251280929,
+        "last_pretransition_flow_velocity": -0.06043919042017113,
+        "local_linear_time_to_zero_s": 0.03891993315807006
+      }
+    },
+    {
+      "subject": "subject_09",
+      "training_trial_index": 12,
+      "w": -0.5,
+      "result": {
+        "execution": "failed",
+        "substeps": 32,
+        "error": "FloatingPointError('transformed Balloon state underflowed to a non-positive compartment')",
+        "diagnostic": {
+          "transition_index": 34,
+          "minimum_extraction_flow": 2.6278074379633636e-56,
+          "pretransition_transformed_state": [
+            -0.15107175603474404,
+            -0.06043930023647173,
+            -6.052373358587605,
+            -0.6006665024554008,
+            -0.5987348928131995,
+            -0.10960416980565507
+          ]
+        },
+        "event_relative_time_s": 3.5,
+        "last_pretransition_flow": 0.0023522725899173384,
+        "last_pretransition_flow_velocity": -0.06043930023647173,
+        "local_linear_time_to_zero_s": 0.03891958677075936
+      }
+    }
+  ],
+  "interpretation": "Same-input post-result numerical checks only. A negative flow velocity near zero can still violate positive-flow dynamics after valid extraction saturation; the local linear zero time is descriptive, not an alternative integrator or clipping rule."
+}

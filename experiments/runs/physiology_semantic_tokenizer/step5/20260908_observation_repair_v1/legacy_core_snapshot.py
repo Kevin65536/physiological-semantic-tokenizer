@@ -24,7 +24,7 @@ discrete covariance used by the filter is ``Q = process_std**2 * dt``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -135,45 +135,13 @@ class BalloonParameters:
 
 @dataclass(frozen=True)
 class BalloonObservationSpec:
-    """Model-to-observation coordinate contract.
-
-    Loadings, offsets and Student-t ``observation_scale`` are in canonical
-    model coordinates. ``coordinate_scale`` is a known invertible diagonal
-    change of units applied once to both mean and noise. It is not an unknown
-    measurement gain, nor the measured projection's fitted MAD/gauge factor.
-    Returned trajectories and densities use the declared observation units;
-    latent states and physiological P0/Q0 always retain canonical units.
-    """
+    """Explicit EEG and HbO/HbR observation operator contract."""
 
     coordinate_names: tuple[str, ...] = OBSERVATION_NAMES
     eeg_loading: float | None = None
     eeg_offset: float | None = None
     observation_scale: tuple[float, ...] | None = None
     student_nu: float | None = None
-    coordinate_scale: tuple[float, ...] = (1.0, 1.0, 1.0)
-
-    @property
-    def effective_noise_scale(self) -> np.ndarray:
-        return np.abs(self.coordinate_scale) * np.asarray(self.observation_scale)
-
-    def reexpress(self, scale: Sequence[float]) -> "BalloonObservationSpec":
-        """Compose a known diagonal transform; transform input y by scale too."""
-        scale = np.asarray(scale, dtype=float)
-        if scale.shape != (_OBS_DIM,) or not np.isfinite(scale).all() or np.any(scale == 0):
-            raise ValueError("coordinate scale must contain three finite nonzero entries")
-        result = replace(self, coordinate_scale=tuple(np.asarray(self.coordinate_scale) * scale))
-        result.validate()
-        return result
-
-    def log_abs_det(self, mask: np.ndarray) -> float:
-        """Density correction: canonical log p = declared log p + this value.
-
-        Count only observed coordinates, including with time-varying masks.
-        """
-        mask = np.asarray(mask, dtype=bool)
-        if mask.ndim < 1 or mask.shape[-1] != _OBS_DIM:
-            raise ValueError("mask must end in the three observation coordinates")
-        return float(np.sum(mask * np.log(np.abs(self.coordinate_scale))))
 
     def resolved(self, fixed: BalloonFixedParameters) -> "BalloonObservationSpec":
         names = tuple(str(name) for name in self.coordinate_names)
@@ -191,7 +159,6 @@ class BalloonObservationSpec:
             eeg_offset=offset,
             observation_scale=tuple(float(value) for value in scales),
             student_nu=nu,
-            coordinate_scale=tuple(float(value) for value in self.coordinate_scale),
         )
         result.validate()
         return result
@@ -212,12 +179,6 @@ class BalloonObservationSpec:
             raise ValueError("observation_scale must contain three positive finite values")
         if not np.isfinite(self.student_nu) or self.student_nu <= 2.0:
             raise ValueError("student_nu must exceed two")
-        scale = np.asarray(self.coordinate_scale)
-        if scale.shape != (_OBS_DIM,) or not np.isfinite(scale).all() or np.any(scale == 0):
-            raise ValueError("coordinate_scale must contain three finite nonzero entries")
-        noise = self.effective_noise_scale
-        if not np.isfinite(noise).all() or np.any(noise <= 0):
-            raise ValueError("transformed noise scales must be finite and positive")
 
 
 @dataclass(frozen=True)
@@ -425,47 +386,26 @@ def _transformed_to_physical_unchecked(state: np.ndarray) -> np.ndarray:
     return output
 
 
-def extraction_log_complement(f: float, E0: float) -> float:
-    """Return log(1-E), which certifies the mathematical domain even if E=1.
-
-    Nonrepresentable exponents still fail explicitly; no flow clipping or
-    replacement state is used to hide numerical instability.
-    """
-    if not np.isfinite(f) or not np.isfinite(E0) or f <= 0.0 or not 0.0 < E0 < 1.0:
-        raise ValueError("extraction requires f>0 and 0<E0<1")
-    with np.errstate(over="raise", invalid="raise", divide="raise"):
-        exponent = float(np.log1p(-E0) / f)
-    if not np.isfinite(exponent) or exponent >= 0:
-        raise FloatingPointError("oxygen extraction log complement is not representable")
-    return exponent
-
-
 def _extraction(f: float, E0: float) -> tuple[float, float, float]:
-    """Return E, dE/df and fE/E0, allowing mathematically valid saturation."""
-    exponent = extraction_log_complement(f, E0)
+    """Return E(f), dE/df, and f*E/E0 with stable logarithms."""
+
+    if f <= 0.0 or not 0.0 < E0 < 1.0:
+        raise ValueError("extraction requires f>0 and 0<E0<1")
+    log_one_minus = np.log1p(-E0)
     with np.errstate(over="raise", invalid="raise", divide="raise"):
+        exponent = log_one_minus / f
+        one_minus_E = float(np.exp(exponent))
         E = float(-np.expm1(exponent))
-        # Avoid 0/0 at tiny f and overflow of f*f at large f.
-        dE_df = -float(np.exp(exponent + np.log(-np.log1p(-E0)) - 2*np.log(f)))
+        dE_df = float(one_minus_E * log_one_minus / (f * f))
         flow_extraction = float(f * E / E0)
     if (
         not np.isfinite(E)
         or not np.isfinite(dE_df)
         or not np.isfinite(flow_extraction)
-        or not 0.0 < E <= 1.0
+        or not 0.0 < E < 1.0
     ):
         raise FloatingPointError("oxygen extraction left its strict physical domain")
     return E, dE_df, flow_extraction
-
-
-def _flow_extraction_log_derivative(f: float, E0: float, E: float, dE_df: float) -> float:
-    """Stable derivative of fE/E0 with respect to log f, including high flow."""
-    a = extraction_log_complement(f, E0)
-    if abs(a) < 1e-3:
-        # -expm1(a)+a*exp(a) = a²/2+a³/3+a⁴/8+...; avoid cancellation.
-        polynomial = .5+a*(1/3+a*(1/8+a*(1/30+a/144)))
-        return float((f*E/E0) * a * (a/E) * polynomial)
-    return float(f * (E + f*dE_df) / E0)
 
 
 def balloon_rhs(
@@ -556,7 +496,7 @@ def _balloon_rhs_jacobian_unchecked(
     jacobian[4, 2] = f / (tau * p)
     jacobian[4, 3] = -(1.0 / alpha - 1.0) * v_ratio / tau
     jacobian[4, 4] = -f / (tau * p)
-    dflow_dlogf = _flow_extraction_log_derivative(f, fixed.E0, E, dE_df)
+    dflow_dlogf = f * (E + f * dE_df) / fixed.E0
     jacobian[5, 2] = dflow_dlogf / (tau * q)
     jacobian[5, 3] = -(1.0 / alpha - 1.0) * v_ratio / tau
     jacobian[5, 5] = -flow_extraction / (tau * q)
@@ -672,7 +612,6 @@ def _observation_map_unchecked(
         [float(spec.eeg_loading) * r + float(spec.eeg_offset), delta_hbo, delta_hbr],
         dtype=np.float64,
     )
-    output *= spec.coordinate_scale
     if not np.all(np.isfinite(output)):
         raise FloatingPointError("observation map produced non-finite values")
     return output
@@ -689,7 +628,7 @@ def _observation_physical_matrix(
     matrix[1, 4] = parameters.fixed.P0
     matrix[1, 5] = -parameters.fixed.Q0
     matrix[2, 5] = parameters.fixed.Q0
-    return np.asarray(observation_spec.coordinate_scale)[:, None] * matrix
+    return matrix
 
 
 def observation_jacobian(
@@ -719,7 +658,6 @@ def _observation_jacobian_unchecked(
     jacobian[1, 4] = parameters.fixed.P0 * p
     jacobian[1, 5] = -parameters.fixed.Q0 * q
     jacobian[2, 5] = parameters.fixed.Q0 * q
-    jacobian *= np.asarray(spec.coordinate_scale)[:, None]
     if not np.all(np.isfinite(jacobian)):
         raise FloatingPointError("observation Jacobian produced non-finite values")
     return jacobian
@@ -843,7 +781,7 @@ def _observation_update(
         return prior_mean.copy(), prior_cov.copy(), 0.0
     indices = np.flatnonzero(available)
     y = observed[indices]
-    scales = spec.effective_noise_scale[indices]
+    scales = np.asarray(spec.observation_scale, dtype=np.float64)[indices]
     nu = float(spec.student_nu)
     # Proper score used by fitting: evaluate the observation before it is
     # consumed by the smoother, with the prior latent covariance folded into
@@ -943,16 +881,11 @@ def _physical_checks(
         "minimum_q": float("nan"),
         "minimum_extraction": float("nan"),
         "maximum_extraction": float("nan"),
-        "extraction_float_saturation_count": 0,
-        "minimum_log_one_minus_extraction": float("nan"),
-        "flow_below_0_01_count": 0,
     }
     if values.ndim != 2 or values.shape[1] != _STATE_DIM or not checks["finite"]:
         return checks
     f, v, p, q = (values[:, index] for index in (2, 3, 4, 5))
     checks["minimum_f"] = float(np.min(f))
-    # Descriptive extreme-state diagnostic, not a physiological admission gate.
-    checks["flow_below_0_01_count"] = int(np.sum(f < .01))
     checks["minimum_v"] = float(np.min(v))
     checks["minimum_p"] = float(np.min(p))
     checks["minimum_q"] = float(np.min(q))
@@ -962,10 +895,7 @@ def _physical_checks(
         extraction = np.asarray([_extraction(float(value), parameters.fixed.E0)[0] for value in f])
         checks["minimum_extraction"] = float(np.min(extraction))
         checks["maximum_extraction"] = float(np.max(extraction))
-        log_complement = np.array([extraction_log_complement(float(value), parameters.fixed.E0) for value in f])
-        checks["oxygen_extraction_in_unit_interval"] = bool(np.all(np.isfinite(log_complement) & (log_complement < 0)))
-        checks["extraction_float_saturation_count"] = int(np.sum(extraction == 1.0))
-        checks["minimum_log_one_minus_extraction"] = float(np.min(log_complement))
+        checks["oxygen_extraction_in_unit_interval"] = bool(np.all((extraction > 0.0) & (extraction < 1.0)))
         hbt = parameters.fixed.P0 * p
         hbr = parameters.fixed.Q0 * q
         hbo = hbt - hbr
@@ -1018,7 +948,7 @@ def simulate_balloon(
         noise = generator.standard_t(
             df=float(spec.student_nu),
             size=clean.shape,
-        ) * (np.asarray(spec.observation_scale) * spec.coordinate_scale)[None, :]
+        ) * np.asarray(spec.observation_scale, dtype=np.float64)[None, :]
         observations = clean + noise
     else:
         observations = clean.copy()
@@ -1129,7 +1059,7 @@ def smooth_balloon(
             np.diag(observation_matrix @ state_covariance[index] @ observation_matrix.T),
             0.0,
         )
-    scales = spec.effective_noise_scale
+    scales = np.asarray(spec.observation_scale, dtype=np.float64)
     aleatoric_variance = np.broadcast_to(
         np.square(scales) * float(spec.student_nu) / (float(spec.student_nu) - 2.0),
         epistemic_variance.shape,

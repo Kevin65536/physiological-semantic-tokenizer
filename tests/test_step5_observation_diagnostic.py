@@ -156,11 +156,18 @@ def test_review_does_not_turn_flat_or_incomplete_curves_into_parameter_estimates
     assert all(r['likelihood_maximum_w'] is None for r in result.values())
 
 
-def test_numerical_replay_records_saturation_without_relaxing_the_core(monkeypatch):
+def test_historical_numerical_reviewer_still_records_legacy_saturation(monkeypatch):
     from experiments.scripts import review_step5_observation_diagnostic as review
     _, base, _, _ = diagnostic.load_config()
     core = diagnostic.step5.core
-    extraction = core._extraction
+    # Preserve this regression of the old reviewer with an explicit legacy
+    # failure fixture; production now accepts mathematically valid saturation.
+    def extraction(f, e0):
+        if -np.expm1(np.log1p(-e0)/f) == 1.:
+            raise FloatingPointError('oxygen extraction left its strict physical domain')
+        raise AssertionError('fixture only covers the retained saturation failure')
+
+    monkeypatch.setattr(core, '_extraction', extraction)
 
     def saturated_transition(*args):
         core._extraction(.003, .32)

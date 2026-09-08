@@ -92,3 +92,37 @@ def test_gaussian_driver_path_matches_dense_joint_conditioning_with_gaps():
     np.testing.assert_allclose(result.state_mean[:,0],mean,atol=1e-9)
     np.testing.assert_allclose(result.state_covariance[:,0,0],np.diag(covariance),atol=1e-9)
     assert result.parameter_log_likelihood==pytest.approx(multivariate_normal.logpdf(observed[available],cov=predicted),abs=1e-8)
+
+
+@pytest.mark.parametrize('scale', [(1., .5, .5), (2., -.3, 4.)])
+def test_known_coordinate_change_preserves_masked_parameter_and_state_posterior(scale):
+    from scipy.special import softmax
+    cfg=load_config(); cfg['model']['steps']=32
+    y=generate_matched(cfg,'W',0.,123)['observations']
+    y[4:9,0]=np.nan; y[15:20,1:]=np.nan; y[25]=np.nan
+    original_ll, changed_ll = [], []
+    for w in (-.5, 0., .5):
+        p,c=model(cfg,'W',w)
+        spec=core.BalloonObservationSpec(eeg_offset=.02).resolved(p.fixed)
+        transformed=spec.reexpress(scale)
+        assert transformed.resolved(p.fixed) == transformed  # Never apply D twice.
+        a=joint.smooth_balloon_joint(y,p,config=c,observation_spec=spec,quadrature_order=7)
+        b=joint.smooth_balloon_joint(y*scale,p,config=c,observation_spec=transformed,quadrature_order=7)
+        correction=transformed.log_abs_det(np.isfinite(y))
+        assert b.parameter_log_likelihood+correction == pytest.approx(a.parameter_log_likelihood, abs=2e-9)
+        assert b.predictive_score+correction == pytest.approx(a.predictive_score, abs=2e-9)
+        for field in ('transformed_mean','transformed_covariance','state_mean','state_covariance'):
+            np.testing.assert_allclose(getattr(b,field),getattr(a,field),rtol=1e-9,atol=1e-10)
+        np.testing.assert_allclose(b.trajectory_mean/scale,a.trajectory_mean,atol=1e-10)
+        np.testing.assert_allclose(b.total_observation_variance/np.square(scale),a.total_observation_variance,atol=1e-10)
+        np.testing.assert_allclose(core.observation_jacobian(np.zeros(6),p,transformed),
+                                   np.array(scale)[:,None]*core.observation_jacobian(np.zeros(6),p,spec))
+        original_ll.append(a.parameter_log_likelihood); changed_ll.append(b.parameter_log_likelihood)
+    prior=np.array([-2.,0.,-2.])
+    np.testing.assert_allclose(softmax(np.array(original_ll)+prior),softmax(np.array(changed_ll)+prior),atol=1e-10)
+
+
+@pytest.mark.parametrize('scale', [(0.,1.,1.), (np.nan,1.,1.), (np.inf,1.,1.), (1.,1.)])
+def test_coordinate_change_rejects_noninvertible_or_invalid_scales(scale):
+    with pytest.raises(ValueError, match='coordinate'):
+        core.BalloonObservationSpec(coordinate_scale=scale).resolved(core.BalloonFixedParameters())

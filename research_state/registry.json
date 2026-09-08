@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-08T11:40:25+08:00",
+  "updated_at": "2026-09-08T21:30:59+08:00",
   "tracks": [
     {
       "id": "main",
@@ -243,6 +243,24 @@
       "label": "Step5 观测适配诊断结果与失败定位",
       "path": "experiments/runs/physiology_semantic_tokenizer/step5/20260908_observation_diagnostic_v1/summary.md",
       "role": "result_summary"
+    },
+    {
+      "id": "e.step5_observation_repair_contract",
+      "label": "Step5 观测合同修复与回归合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/step5_observation_repair_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.step5_observation_repair_results",
+      "label": "Step5 修复回归、时序参考与同折实测结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/step5/20260908_observation_repair_v1/summary.md",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.step5_observation_repair_numerics",
+      "label": "正常范围兼容性与同输入细子步续跑",
+      "path": "experiments/runs/physiology_semantic_tokenizer/step5/20260908_observation_repair_v1/verification_review.json",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -2471,6 +2489,69 @@
         "main.step5_observation"
       ],
       "next_step": "先冻结与基线、滤波和相对幅度一致的观测前向算子/噪声合同并通过同真值桥接，再在原训练边界复核固定或单参数SSM的配对增量；不扩GWZ、不以区间膨胀或改tokenizer目标绕过负结果，protected 24–29保持关闭。",
+      "headline": true
+    },
+    {
+      "state_id": "main.step5_observation@2026-09-08.repair-regression-completed",
+      "entity": "main.step5_observation",
+      "label": "Step5 观测合同修复与回归验证",
+      "track": "main",
+      "order": 7,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "氧提取舍入域误判已修复，已知尺度变换在复用及独立合成输入上保持似然、参数后验和规范状态后验不变。基线/滤波短窗参考改善恢复，但非线性Student-t近似仍欠覆盖；原训练输入续跑暴露真实状态塌缩，同折固定SSM未取得双向共享信息优势。保留旧失败，不授予teacher资格。",
+      "evidence_ids": [
+        "e.step5_observation_repair_contract",
+        "e.step5_observation_repair_results",
+        "e.step5_observation_repair_numerics"
+      ],
+      "supersedes": [
+        "main.step5_observation@2026-09-08.diagnostic-completed"
+      ],
+      "updated_at": "2026-09-08T21:30:59+08:00",
+      "depends_on": [
+        "main.step5b"
+      ],
+      "headline": false,
+      "progress": {
+        "completed": 4,
+        "total": 4,
+        "unit": "bounded repair/regression work packages with retained failures"
+      }
+    },
+    {
+      "state_id": "main.program@2026-09-08.observation-repair",
+      "entity": "main.program",
+      "label": "PST-DISCOVERY-v1 tokenizer 发现流程",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "旧合同下Step5A0联合似然与A1的有限合成正证据保留；观测尺度合同与氧提取数值修复通过回归，短窗时序参考已有工程正证据。实测极端流量、持续HbR偏差及双向配对增量问题仍未解决，Step5B teacher负结论保留，全面UQ和tokenizer未晋级。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.data_contract",
+        "e.step5_full_contract",
+        "e.step5b_refinement",
+        "e.step5a_results",
+        "e.step5_observation_repair_contract",
+        "e.step5_observation_repair_results",
+        "e.step5_observation_repair_numerics"
+      ],
+      "supersedes": [
+        "main.program@2026-09-08.observation-diagnostic"
+      ],
+      "updated_at": "2026-09-08T21:30:59+08:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.step5",
+        "main.step5_observation"
+      ],
+      "next_step": "先验证保留时间相关误差的非线性Student-t观测参考或更靠近处理前的推断坐标，解决HbR欠覆盖和真实低流量塌缩；冻结后仍在原训练边界复核固定/至多一个测量增益候选与配对对照，不扩大GWZ、开发面板或teacher资格，protected 24–29保持关闭。",
       "headline": true
     }
   ]
