@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-08T21:30:59+08:00",
+  "updated_at": "2026-09-09T16:05:34+08:00",
   "tracks": [
     {
       "id": "main",
@@ -260,6 +260,24 @@
       "id": "e.step5_observation_repair_numerics",
       "label": "正常范围兼容性与同输入细子步续跑",
       "path": "experiments/runs/physiology_semantic_tokenizer/step5/20260908_observation_repair_v1/verification_review.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.step5_mask_repair_contract",
+      "label": "Step5 转移域与遮挡感知观测合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/step5_observation_repair_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.step5_mask_repair_results",
+      "label": "Step5 遮挡感知合成比较与转移域复核",
+      "path": "experiments/runs/physiology_semantic_tokenizer/step5/20260909_observation_repair_v2_verified/summary.md",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.step5_mask_repair_replay",
+      "label": "三条旧训练输入的漂移零点与观测更新来源",
+      "path": "experiments/runs/physiology_semantic_tokenizer/step5/20260909_observation_repair_v2_verified/replay.json",
       "role": "diagnostic"
     }
   ],
@@ -2552,6 +2570,69 @@
         "main.step5_observation"
       ],
       "next_step": "先验证保留时间相关误差的非线性Student-t观测参考或更靠近处理前的推断坐标，解决HbR欠覆盖和真实低流量塌缩；冻结后仍在原训练边界复核固定/至多一个测量增益候选与配对对照，不扩大GWZ、开发面板或teacher资格，protected 24–29保持关闭。",
+      "headline": true
+    },
+    {
+      "state_id": "main.step5_observation@2026-09-09.mask-domain-repair",
+      "entity": "main.step5_observation",
+      "label": "Step5 转移域与遮挡感知观测实验",
+      "track": "main",
+      "order": 7,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "转移前的矩阵指数检查将三条旧训练trial的5/6个固定W任务归为flow_domain_exit，保留前四次观测更新；原能完成的任务仍完成。遮挡感知线性算子保留中心外上下文，48条独立合成轨迹的1920次拟合完成；Gaussian参考改善覆盖与人为慢W压力，但非线性Student-t覆盖仍有不足，未取得非线性时序资格，也未执行新的同折实测比较。",
+      "evidence_ids": [
+        "e.step5_mask_repair_contract",
+        "e.step5_mask_repair_results",
+        "e.step5_mask_repair_replay"
+      ],
+      "supersedes": [
+        "main.step5_observation@2026-09-08.repair-regression-completed"
+      ],
+      "updated_at": "2026-09-09T16:05:34+08:00",
+      "depends_on": [
+        "main.step5b"
+      ],
+      "headline": false,
+      "progress": {
+        "completed": 2,
+        "total": 2,
+        "unit": "bounded flow-domain and mask-specific feature-bridge experiments"
+      }
+    },
+    {
+      "state_id": "main.program@2026-09-09.mask-domain-repair",
+      "entity": "main.program",
+      "label": "PST-DISCOVERY-v1 tokenizer 发现流程",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "旧Step5A0联合似然校准与A1有限合成正证据、Step5B实测teacher负结论保留。氧提取和已知尺度回归关闭；漂移越界已明确分类，遮挡感知算子已保留上下文并通过线性特征桥接检查。当前时序参考仍采用Gaussian近似，非线性Student-t时序推断及原训练边界的新同折实测比较尚未完成；全面UQ和tokenizer未晋级。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.data_contract",
+        "e.step5_full_contract",
+        "e.step5b_refinement",
+        "e.step5a_results",
+        "e.step5_mask_repair_contract",
+        "e.step5_mask_repair_results",
+        "e.step5_mask_repair_replay"
+      ],
+      "supersedes": [
+        "main.program@2026-09-08.observation-repair"
+      ],
+      "updated_at": "2026-09-09T16:05:34+08:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.step5",
+        "main.step5_observation"
+      ],
+      "next_step": "在遮挡感知观测合同下实现并校验非线性Student-t轨迹推断，覆盖完整、中心遮挡和整模态缺失；不得用静息点Gaussian参考或旧A0代替。满足该前提后，在原训练边界比较固定W=0/−0.5、同折线性基础/联合模型及配对/移位控制；不扩大GWZ或数据面板，protected 24–29保持关闭。",
       "headline": true
     }
   ]

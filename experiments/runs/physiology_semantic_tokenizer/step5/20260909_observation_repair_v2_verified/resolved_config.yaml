@@ -1,0 +1,79 @@
+schema: step5_observation_repair_v2
+scope: flow_domain_and_mask_specific_feature_bridge
+diagnostic_config: experiments/configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml
+previous_run: experiments/runs/physiology_semantic_tokenizer/step5/20260908_observation_diagnostic_v1
+workers: 6
+flow:
+  trials:
+  - - subject_01
+    - 4
+  - - subject_01
+    - 7
+  - - subject_09
+    - 12
+  coordinate: broadband_pca
+  modality: fNIRS_only
+  fixed_w:
+  - 0.0
+  - -0.5
+  quadrature_order: 13
+  update_history: 4
+  transition: unchanged_drift_before_discrete_innovation
+  failure_policy: retain_no_projection_no_redraw_no_substep_rescue
+trajectory:
+  steps: 64
+  context_check_steps:
+  - 64
+  - 120
+  center_steps: 16
+  replicates_per_law: 24
+  seed_start:
+    linearized_gaussian: 20311909
+    nonlinear_student_t: 20321909
+  laws:
+  - linearized_gaussian
+  - nonlinear_student_t
+  variants:
+  - model
+  - combined
+  masks:
+  - full
+  - center_EEG
+  - center_fNIRS
+  - whole_EEG
+  - whole_fNIRS
+  fixed_w:
+  - 0.0
+  - -0.5
+  branches:
+  - pointwise_student_t
+  - mask_specific_gaussian_reference
+  operator: select_output_after_processing_visible_only_linear_interpolation
+  interpolation_boundary: constant_endpoint_extension
+  output_selection: original_visible_samples_only
+  rank_rtol: 1.0e-10
+  rank_check_rtols:
+  - 1.0e-08
+  - 1.0e-12
+  rank_check_replicates:
+  - 0
+  - 1
+  coverage95_diagnostic_bounds:
+  - 0.9
+  - 0.995
+  scoring: canonical_clean_truth_all_times_and_hidden_times_separately
+  interpretation: controlled_linear_feature_bridge_not_native_power_optics_or_motion_validation
+measured:
+  comparison: not_executable_without_nonlinear_student_t_temporal_validation
+  replay_only: three_previously_recorded_training_trials
+  future_fixed_w:
+  - 0.0
+  - -0.5
+  future_controls:
+  - own_context
+  - linear_basic
+  - linear_joint
+  - independent_pairing
+  - circular_shift
+  future_boundary: original_training_subjects_01_09_18_sessions_01_03_05_exclude_positions_4_9
+teacher_qualification: none

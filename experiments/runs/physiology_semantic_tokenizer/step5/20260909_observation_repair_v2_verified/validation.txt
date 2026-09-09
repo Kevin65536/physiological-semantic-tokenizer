@@ -1,0 +1,19 @@
+Validation of the final v2 source and experiment
+
+Related suites:
+- test_step5_observation_repair.py + test_t3a_balloon_robust_ssm.py + test_step5_observation_diagnostic.py: 75 passed.
+- test_step5_observation_repair.py + test_t3a_balloon_joint_ssm.py + test_step5a_inference_consistency.py + test_step5.py: 75 passed.
+- Final targeted rerun after report correction, test_step5_observation_repair.py: 39 passed.
+- Repository collection: 557 selected / 568 collected, 11 sealed-evidence tests deselected by existing configuration.
+- v2 dry-run: 48 synthetic trials, precisely three original training trial identities, no new measured-comparison entry.
+
+Additional independent physical-ODE checks:
+- 24 forced underdamped/critical/overdamped drift cases agree with DOP853 dense-grid minima; maximum absolute discrepancy 5.146433013081264e-08.
+- All five replay exit times agree with independent DOP853 event roots; maximum error 1.5820678100908481e-15 seconds.
+- The five pretransition states exactly equal the retained September 8 substeps=2 states. The previously completed W=0 subject_09/trial_12 likelihood is unchanged.
+- All manifest source hashes match current executable source.
+- All 48 per-trial result files and replay.json are byte-identical to the initial local 20260909_observation_repair_v2 run. That immutable run is retained; the verified run corrects the summary of EEG-only W, whose floating-point differences are not parameter preferences. Repeated fits are not additional independent trials.
+- EEG-only maximum absolute W likelihood difference: 2.8421709430404007e-14.
+- 48 independent synthetic trials / 1,920 completed fits / zero synthetic fit failures. Three replayed original trials / six W tasks / five retained model-domain failures.
+- Rank-tolerance sensitivity: maximum change in the within-mask W log-likelihood contrast is 0.051706399545537352; this remains an explicitly truncated Gaussian reference.
+- Final project-state tests: 16 passed. Registry validation: 90 records / 39 current entities. Generated status views are current; git diff --check passed.

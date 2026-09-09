@@ -28,7 +28,62 @@ teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
 
-## Step5 observation contract repair and regression
+## Step5 flow-domain and mask-specific observation experiment
+
+The September 9 follow-up is owned by
+[`step5_observation_repair_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5_observation_repair_v2.yaml)
+and the existing [`evaluate_step5_observation_repair.py`](../experiments/evaluate_step5_observation_repair.py)
+entry. It closes oxygen-extraction investigation and retains known-scale
+invariance as regression only. It does not change the physiological drift,
+Student-t noise, state priors, measurement gain or W support.
+
+Before each deterministic transition, the dynamics owner checks whether flow
+remains positive throughout the interval. A sufficient matrix-exponential
+displacement bound handles ordinary states; otherwise analytic extrema
+isolation and bracketed matrix-exponential roots locate the minimum and first
+zero. This includes crossings followed by recovery before the next sample.
+The innovation remains after the deterministic transition. A `flow_domain_exit`
+retains the last four joint-filter observation updates: predicted and filtered
+means/covariances and modality visibility. No failed case is projected, removed,
+redrawn, or rescued by changing substeps. Only the previously recorded training
+indices subject_01:4/7 and subject_09:12 are replayed, in fNIRS-only coordinates
+at fixed W=0/−0.5 using the original prepared inputs and training noise scales.
+The existing training-identity validator owns access; native files and original
+held-out trials are not processed.
+
+The controlled feature bridge compiles `S_out P I_M S_in`: visible-input
+selection, linear interpolation on the input clock with constant endpoint
+extension, the existing processing sequence, then explicit output selection.
+Full missing modalities emit no observations; partially observed modalities
+need two visible inputs. Hidden center interpolants are not observations. The
+same compiled matrix transforms the model mean and complete noise covariance.
+The v1 conservative operator remains available for reproducibility. Regression
+must independently match the actual visible-interpolation pipeline, preserve
+context at 64/120 time points, and make hidden-value interventions irrelevant.
+This is a linear feature-coordinate result, not validation of native EEG power,
+optical conversion or motion suppression.
+
+Use 24 independent trials per generating law (linearized Gaussian and nonlinear
+Student-t), 64 time points at 4 Hz, full/center EEG/center fNIRS/whole EEG/whole
+fNIRS masks, unprocessed and combined processing, and fixed W=0/−0.5. The old
+pointwise Student-t filter and mask-specific Gaussian temporal reference receive
+identical processed observations. Report canonical all-time and hidden-time
+clean recovery, processed visible clean recovery, HbR bias, domain exits and W
+likelihood differences. Count independent trials separately from fits and masks;
+retain all failures and numerical rank sensitivity. Diagnostic coverage bounds
+are not new teacher admission criteria. In particular, a Gaussian path reference
+on Student-t data cannot inherit nonlinear A0 calibration.
+
+The new measured same-fold linear/pairing/shift comparison is conditional on
+validated nonlinear Student-t temporal inference under this mask contract. The
+current Gaussian reference cannot fulfill that prerequisite, regardless of
+synthetic coverage. This version therefore executes the bounded failure replay
+and synthetic comparison; its measured-comparison entry rejects before reading
+data. The later comparison retains the original subjects 01/09/18, sessions
+01/03/05, training-only outer folds, fixed W and same-fold controls. Protected
+24–29, all subjects 19–29, and original trial positions 4/9 remain closed.
+
+## Step5 observation contract repair and regression (retained v1)
 
 The September 8 review is implemented by
 [`step5_observation_repair_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5_observation_repair_v1.yaml)

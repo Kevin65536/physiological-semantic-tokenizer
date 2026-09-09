@@ -5,13 +5,13 @@
 
 _Generated from `research_state/registry.json`; do not edit this block._
 
-- **主方法**（PST-DISCOVERY-v1 tokenizer 发现流程）— 未开始 / 尚未判定：旧合同下Step5A0联合似然与A1的有限合成正证据保留；观测尺度合同与氧提取数值修复通过回归，短窗时序参考已有工程正证据。实测极端流量、持续HbR偏差及双向配对增量问题仍未解决，Step5B teacher负结论保留，全面UQ和tokenizer未晋级。
+- **主方法**（PST-DISCOVERY-v1 tokenizer 发现流程）— 未开始 / 尚未判定：旧Step5A0联合似然校准与A1有限合成正证据、Step5B实测teacher负结论保留。氧提取和已知尺度回归关闭；漂移越界已明确分类，遮挡感知算子已保留上下文并通过线性特征桥接检查。当前时序参考仍采用Gaussian近似，非线性Student-t时序推断及原训练边界的新同折实测比较尚未完成；全面UQ和tokenizer未晋级。
 - **Token Atlas**（Atlas Statistical tier）— 已废弃（未完成且不再开展） / 尚未判定：Statistical tier 尚未运行；本旧分析支路废弃，不再开展。
 - **对比实验**（六方法联合正式 campaign）— 已停止（此前已完成） / 混合结论：540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。
 - **Croce 验证**（新版 Synthetic Phase 1）— 已废弃（未完成且不再开展） / 尚未判定：新版 Synthetic Phase 1 尚未开始；本旧验证流废弃，不再开展。
 
 ### Next steps
-- **主方法** — 先验证保留时间相关误差的非线性Student-t观测参考或更靠近处理前的推断坐标，解决HbR欠覆盖和真实低流量塌缩；冻结后仍在原训练边界复核固定/至多一个测量增益候选与配对对照，不扩大GWZ、开发面板或teacher资格，protected 24–29保持关闭。
+- **主方法** — 在遮挡感知观测合同下实现并校验非线性Student-t轨迹推断，覆盖完整、中心遮挡和整模态缺失；不得用静息点Gaussian参考或旧A0代替。满足该前提后，在原训练边界比较固定W=0/−0.5、同折线性基础/联合模型及配对/移位控制；不扩大GWZ或数据面板，protected 24–29保持关闭。
 
 See the [generated project status](docs/PROJECT_STATUS.md) for lifecycle states and evidence links.
 <!-- project-state:end -->
