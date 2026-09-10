@@ -1,0 +1,70 @@
+schema: ssm_overnight_v1
+scope: bounded_training_only_exploratory_diagnostics
+plan: ssm_next.md
+baseline_commit: 6174f3092d7f52a8b89da35607b7bc0c03469a9d
+output_root: experiments/runs/physiology_semantic_tokenizer/ssm_overnight
+diagnostic_config: experiments/configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml
+subjects: [subject_01, subject_09, subject_18]
+sessions: [session_01, session_03, session_05]
+excluded_original_ma_positions: [4, 9]
+outer_folds: 4
+inner_folds: 3
+sampling_hz: 4.0
+center_steps: 16
+quadrature_order: 13
+fixed_w: [0.0, -0.5]
+seed: 20460909
+budget:
+  hours: 8.0
+  max_workers: 16
+  memory_fraction: 0.60
+  cell_timeout_seconds: 900
+  map_timeout_seconds: 1800
+  map_max_nfev: 200
+  core_solve_caps: {N1: 2500, N2: 3500, N3: 3500, N4: 4500, N5: 5000, N6: 3500}
+synthetic:
+  steps: 64
+  replicates_per_condition: 16
+  streams: {discovery: 20471000, assessment: 20481000}
+  conditions: [matched_student_t, combined, drift, correlated_hb, outliers, independent_pairing]
+  stress_scale: {drift_sd_multiplier: 0.5, hb_correlation: 0.7, outlier_sd_multiplier: 4.0, outlier_fraction: 0.03}
+N2:
+  laws: [linearized_gaussian, nonlinear_gaussian, nonlinear_student_t]
+  seed_start: {linearized_gaussian: 20491000, nonlinear_gaussian: 20501000, nonlinear_student_t: 20511000}
+  trials_per_law: 24
+  variants: [model, combined]
+  masks: [full, center_EEG, center_fNIRS]
+  whole_mask_trial_count: 8
+  rank_rtol: 1.0e-10
+  rank_check_rtols: [1.0e-8, 1.0e-12]
+  engineering_tolerances: {linear_mean: 1.0e-6, derivative: 1.0e-5, hidden_intervention: 1.0e-10, density_units: 1.0e-8}
+  mean_precheck: {maximum_nrmse: 0.65, minimum_r_correlation: 0.80}
+  measured_feature_boundary: not_exposed_by_current_native_helper
+N3:
+  noise_multipliers: [0.5, 1.0, 2.0, 4.0]
+N4:
+  candidates: [E0, E1, E2, E3, E4, E5]
+  # Frozen from native channel names before any response scores are computed.
+  excluded_frontal_channels: [AFp1, AFp2, AFF1h, AFF2h, AFF5h, AFF6h, F3, F4, F7, F8]
+  fallback_local_channel: F3
+  anatomical_mapping: nearest_three_eeg_in_native_montage_to_fixed_fnirs_pair
+  artifact_sd_multipliers: [0.5, 1.0]
+  artifact_spatial_weights: [frontal, posterior]
+N5:
+  gain_grid: [0.5, 0.75, 1.0, 1.5, 2.0]
+  w_points: 17
+  surface_w_points: 9
+  bootstrap_repetitions: 200
+  previous_run: experiments/runs/physiology_semantic_tokenizer/step5/20260908_observation_diagnostic_v1
+N6:
+  process_multipliers: [[1.0, 1.0], [0.25, 1.0], [2.0, 1.0], [1.0, 0.5], [1.0, 2.0]]
+  replay_training_indices: [[subject_01, 4], [subject_01, 7], [subject_09, 12]]
+selection:
+  minimum_relative_risk_improvement: 0.10
+  maximum_modality_nrmse_degradation: 0.05
+  minimum_subjects_improving: 2
+  # Null increments measured in the same training-SD-normalized squared error.
+  maximum_null_increment_degradation: 0.0
+  maximum_synthetic_nrmse_degradation: 0.0
+teacher_qualification: none
+tokenizer_training: false

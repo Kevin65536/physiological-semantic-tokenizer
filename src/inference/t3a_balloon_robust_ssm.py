@@ -154,6 +154,9 @@ class BalloonObservationSpec:
     observation_scale: tuple[float, ...] | None = None
     student_nu: float | None = None
     coordinate_scale: tuple[float, ...] = (1.0, 1.0, 1.0)
+    # Exploratory mean-only gain. Unlike a unit change it never scales noise,
+    # data, P0/Q0, or physiological state constraints.
+    fnirs_gain: float = 1.0
 
     @property
     def effective_noise_scale(self) -> np.ndarray:
@@ -195,6 +198,7 @@ class BalloonObservationSpec:
             observation_scale=tuple(float(value) for value in scales),
             student_nu=nu,
             coordinate_scale=tuple(float(value) for value in self.coordinate_scale),
+            fnirs_gain=float(self.fnirs_gain),
         )
         result.validate()
         return result
@@ -208,6 +212,8 @@ class BalloonObservationSpec:
             raise ValueError("EEG loading and offset must be finite")
         if self.eeg_loading <= 0.0:
             raise ValueError("EEG loading must be strictly positive for the fixed sign gauge")
+        if not np.isfinite(self.fnirs_gain) or self.fnirs_gain <= 0:
+            raise ValueError("fnirs_gain must be finite and positive")
         if self.observation_scale is None or self.student_nu is None:
             raise ValueError("observation spec must be resolved against fixed parameters")
         scales = np.asarray(self.observation_scale, dtype=np.float64)
@@ -789,6 +795,7 @@ def _observation_map_unchecked(
         [float(spec.eeg_loading) * r + float(spec.eeg_offset), delta_hbo, delta_hbr],
         dtype=np.float64,
     )
+    output[1:] *= spec.fnirs_gain
     output *= spec.coordinate_scale
     if not np.all(np.isfinite(output)):
         raise FloatingPointError("observation map produced non-finite values")
@@ -806,6 +813,7 @@ def _observation_physical_matrix(
     matrix[1, 4] = parameters.fixed.P0
     matrix[1, 5] = -parameters.fixed.Q0
     matrix[2, 5] = parameters.fixed.Q0
+    matrix[1:] *= observation_spec.fnirs_gain
     return np.asarray(observation_spec.coordinate_scale)[:, None] * matrix
 
 
@@ -836,6 +844,7 @@ def _observation_jacobian_unchecked(
     jacobian[1, 4] = parameters.fixed.P0 * p
     jacobian[1, 5] = -parameters.fixed.Q0 * q
     jacobian[2, 5] = parameters.fixed.Q0 * q
+    jacobian[1:] *= spec.fnirs_gain
     jacobian *= np.asarray(spec.coordinate_scale)[:, None]
     if not np.all(np.isfinite(jacobian)):
         raise FloatingPointError("observation Jacobian produced non-finite values")

@@ -37,6 +37,9 @@ class JointBalloonResult:
     predictive_score: float
     physical_checks: dict
     inference_method: str = 'joint Student-t quadrature / Gaussian moment matching / EKF-RTS'
+    predicted_transformed_mean: np.ndarray | None = None
+    predicted_transformed_covariance: np.ndarray | None = None
+    filtered_transformed_mean: np.ndarray | None = None
 
     @property
     def total_observation_variance(self):
@@ -60,7 +63,8 @@ def _batch_observation(z, parameters, spec):
         p, q = np.exp(z[:, 4]), np.exp(z[:, 5])
     hbr = parameters.fixed.Q0*(q-1)
     return np.column_stack((spec.eeg_loading*z[:, 0]+spec.eeg_offset,
-                            parameters.fixed.P0*(p-1)-hbr, hbr)) * spec.coordinate_scale
+                            spec.fnirs_gain*(parameters.fixed.P0*(p-1)-hbr),
+                            spec.fnirs_gain*hbr)) * spec.coordinate_scale
 
 
 def joint_observation_update(mean, covariance, observation, available, parameters,
@@ -187,7 +191,10 @@ def smooth_balloon_joint(observations, parameters, *, config=core.BalloonConfig(
     observation_var = np.square(spec.effective_noise_scale)*spec.student_nu/(spec.student_nu-2)
     return JointBalloonResult(mean,covariance,state_mean,state_cov,trajectory,clean_var,
                              observation_var,mask,float(ll),float(score),
-                             core._physical_checks(state_mean,parameters))
+                             core._physical_checks(state_mean,parameters),
+                             predicted_transformed_mean=pm,
+                             predicted_transformed_covariance=pc,
+                             filtered_transformed_mean=fm)
 
 
 @dataclass(frozen=True)
@@ -356,7 +363,8 @@ def smooth_balloon_trajectory_reference(processed_observations, parameters, *,
     prior = linearized_trajectory_prior(steps, parameters, config)
     canonical_spec = core.BalloonObservationSpec(
         eeg_loading=spec.eeg_loading, eeg_offset=spec.eeg_offset,
-        observation_scale=spec.observation_scale, student_nu=spec.student_nu).resolved(parameters.fixed)
+        observation_scale=spec.observation_scale, student_nu=spec.student_nu,
+        fnirs_gain=spec.fnirs_gain).resolved(parameters.fixed)
     canonical_h = np.kron(np.eye(steps), core.observation_jacobian(np.zeros(6), parameters, canonical_spec))
     canonical_offset = np.tile(core.observation_map(np.array([0., 0., 1., 1., 1., 1.]), parameters, canonical_spec), steps)
     scale = np.tile(spec.coordinate_scale, steps)

@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-09T16:05:34+08:00",
+  "updated_at": "2026-09-09T16:22:41.517948+00:00",
   "tracks": [
     {
       "id": "main",
@@ -278,6 +278,48 @@
       "id": "e.step5_mask_repair_replay",
       "label": "三条旧训练输入的漂移零点与观测更新来源",
       "path": "experiments/runs/physiology_semantic_tokenizer/step5/20260909_observation_repair_v2_verified/replay.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ssm_overnight_plan",
+      "label": "SSM 夜间诊断设计",
+      "path": "ssm_next.md",
+      "role": "protocol"
+    },
+    {
+      "id": "e.ssm_overnight_contract",
+      "label": "SSM 夜间诊断可执行合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.ssm_overnight_run",
+      "label": "SSM 夜间运行记录（运行状态以此为准）",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260909_overnight_v2_verified/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.ssm_overnight_checks",
+      "label": "SSM 夜间软件预检及逐族试跑",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260909_overnight_v2_verified/pilots.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ssm_overnight_n7_contract",
+      "label": "SSM 夜间 G–W 扩展可执行合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.ssm_overnight_n7_run",
+      "label": "SSM 含 N7 的夜间运行记录（执行状态以此为准）",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.ssm_overnight_n7_checks",
+      "label": "SSM 含 N7 的夜间软件检查与试跑",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/pilots.json",
       "role": "diagnostic"
     }
   ],
@@ -2634,6 +2676,56 @@
       ],
       "next_step": "在遮挡感知观测合同下实现并校验非线性Student-t轨迹推断，覆盖完整、中心遮挡和整模态缺失；不得用静息点Gaussian参考或旧A0代替。满足该前提后，在原训练边界比较固定W=0/−0.5、同折线性基础/联合模型及配对/移位控制；不扩大GWZ或数据面板，protected 24–29保持关闭。",
       "headline": true
+    },
+    {
+      "state_id": "main.ssm_overnight@2026-09-09.implementation",
+      "entity": "main.ssm_overnight",
+      "label": "SSM 六族夜间诊断套件实现",
+      "track": "main",
+      "order": 8,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "已实现训练限定的N1–N6诊断入口、独立Gaussian非线性MAP、折内EOG/空间特征、观测噪声/增益及过程噪声候选、固定队列和有界无人值守运行。软件检查及六族试跑完成，已知流量越界保留；实测O2因原生feature/noise分界未暴露而不执行。套件运行状态与科学结果由所链接的run记录及任务表持有。",
+      "evidence_ids": [
+        "e.ssm_overnight_plan",
+        "e.ssm_overnight_contract",
+        "e.ssm_overnight_run",
+        "e.ssm_overnight_checks"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-09T15:50:33.706169+00:00",
+      "depends_on": [
+        "main.step5_observation"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.ssm_overnight@2026-09-10.n7",
+      "entity": "main.ssm_overnight",
+      "label": "SSM 七族夜间诊断与 G–W 扩展实现",
+      "track": "main",
+      "order": 8,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "新增N7独立G/W拟合、同折W-only/G-only消融、独立观测增益对照与分离的合成真值扰动。映射/导数、固定量、遮挡、选择分母和单一有界调度检查已通过；新增同输入合成对照和训练折试跑保留。v1配置及旧准备记录保留，当前使用v2合同。执行状态、后台服务身份与科学结果仅由所链接的新run manifest、任务表和结果持有；不晋级teacher、UQ或tokenizer。",
+      "evidence_ids": [
+        "e.ssm_overnight_plan",
+        "e.ssm_overnight_n7_contract",
+        "e.ssm_overnight_n7_run",
+        "e.ssm_overnight_n7_checks"
+      ],
+      "supersedes": [
+        "main.ssm_overnight@2026-09-09.implementation"
+      ],
+      "updated_at": "2026-09-09T16:22:41.517948+00:00",
+      "depends_on": [
+        "main.step5_observation"
+      ],
+      "headline": false
     }
   ]
 }

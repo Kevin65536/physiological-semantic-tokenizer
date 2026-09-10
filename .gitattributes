@@ -1,2 +1,10 @@
 # Frozen configuration snapshots retain their original line endings and spacing.
 experiments/configs/archive/pre_physiology_semantic_20260701/** -whitespace
+# Matplotlib serializes SVG path commands with trailing spaces; retain the
+# generated vector figures byte-for-byte while checking authored text normally.
+experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/figures/*.svg -whitespace
+# csv.writer uses CRLF. Preserve frozen/derived CSV bytes and check actual
+# whitespace errors without treating the line-ending CR as trailing content.
+experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260909_overnight_v2_verified/candidate_table.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/candidate_table.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

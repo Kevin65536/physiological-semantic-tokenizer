@@ -120,7 +120,7 @@ def local_eeg_feature(eeg, names, cfg, mask_name=None):
     return power
 
 
-def load_training_subject(subject, cfg, base, measured, metadata):
+def load_training_subject(subject, cfg, base, measured, metadata, *, retain_native=False):
     """Single native entry for this diagnostic; scope checked before any reader.
 
     Native files store entire sessions. Only the original eight training windows
@@ -168,6 +168,14 @@ def load_training_subject(subject, cfg, base, measured, metadata):
                 views[mask or 'target'] = features
             trials.append(dict(views=views, eligible=np.all(fnirs > 0, axis=(0, 2)),
                                session=record.base_record_id, ordinal=ordinal))
+            if retain_native:
+                auxiliary = native.auxiliary_values
+                eog = (np.empty((len(eeg), 0)) if auxiliary is None else
+                       auxiliary[starts['eeg']:starts['eeg']+6000].copy())
+                if eog.shape[0] != len(eeg) or not np.isfinite(eog).all():
+                    raise ValueError('training EOG support invalid')
+                trials[-1]['native_eeg'] = eeg
+                trials[-1]['native_eog'] = eog
             identities.append(dict(subject=subject, session=record.base_record_id,
                 original_ma_trial_position=position, training_ordinal=ordinal,
                 event_index=int(event['event_index']), native_start_samples=starts,
@@ -177,6 +185,7 @@ def load_training_subject(subject, cfg, base, measured, metadata):
         raise ValueError('exact 24 original training trials required')
     detail = dict(subject=subject, trials=identities, source_sha256=sources,
                   eeg_channels=channel_identity[0], fnirs_pairs=channel_identity[1],
+                  eog_channels=list(native.auxiliary_channel_names),
                   original_heldout_trials_processed=0,
                   source_storage='whole native session files; only original training windows processed')
     return trials, detail

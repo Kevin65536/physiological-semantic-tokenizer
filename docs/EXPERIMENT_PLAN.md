@@ -28,6 +28,31 @@ teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
 
+## Bounded overnight SSM diagnostics
+
+The September 9 overnight implementation is a separate, decision-ineligible
+exploration under [`ssm_next.md`](../ssm_next.md), with executable contract
+[`ssm_overnight_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml)
+and entry [`evaluate_ssm_overnight_diagnostics.py`](../experiments/evaluate_ssm_overnight_diagnostics.py).
+It retains the preceding experiment's negative results and does not satisfy its
+nonlinear Student-t measured-comparison prerequisite. Its O2 branch explicitly
+uses correlated Gaussian noise and a nonlinear six-state batch MAP; the native
+measured O2 branch remains unavailable unless the native feature/noise boundary
+is exposed. Other families retain the existing pointwise inference as an
+exploratory baseline and run independently of O2. The v2 contract adds N7: independent G/W fitting with W-only and G-only inner-fold controls, while observation gain, Z, tau and the other physiological/noise settings remain fixed. The earlier v1 configuration and prepared run remain retained.
+
+The suite's training-only native entry is the existing observation-diagnostic
+loader, with optional retention of admitted EEG/EOG windows for fold-fitted
+artifact regression. Subject/session/trial checks precede slicing and
+preprocessing. The versioned contract owns its fixed candidate panels, nested
+folds, seeds, budgets and failure policy. `--prepare` performs software checks,
+scope verification, fit-fold preparation and family pilots before writing the
+single task table. `--freeze` captures source and input identities. `--run`
+requires that frozen source and uses one bounded worker pool. Each fit is saved
+atomically; final reporting joins the fixed task table, including unavailable,
+failed, timed-out and unstarted cells. No protected unlock or tokenizer stage is
+part of this suite.
+
 ## Step5 flow-domain and mask-specific observation experiment
 
 The September 9 follow-up is owned by

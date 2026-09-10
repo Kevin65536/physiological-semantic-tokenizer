@@ -32,6 +32,31 @@ or cache directories.
 
 ## Active SSM entries
 
+The bounded overnight N1–N7 diagnostic follows [`../ssm_next.md`](../ssm_next.md)
+and [`ssm_overnight_v2.yaml`](configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml).
+Its entry is [`evaluate_ssm_overnight_diagnostics.py`](evaluate_ssm_overnight_diagnostics.py).
+Use `--check-only`, then `--prepare --run-dir <fresh_run>`, then `--freeze` for
+the same run. Launch the saved `source_snapshot/experiments/` entry with `--run`
+under a persistent service, setting `SSM_PROJECT_ROOT` to this repository. The
+registered artifact root is `runs/physiology_semantic_tokenizer/ssm_overnight/`.
+The run manifest and fixed task/status tables own execution; its
+`OVERNIGHT_REPORT.md` summarizes all seven families without granting teacher
+qualification. The native measured O2 branch is explicitly unavailable while
+the existing helper does not expose its required pre-linear noise boundary.
+
+Render a separate Chinese report with complete candidate panels, embedded-image
+HTML, Markdown, a PDF report, PNG/SVG figures and a PDF figure atlas using
+[`scripts/render_ssm_overnight_report.py`](scripts/render_ssm_overnight_report.py):
+`--run-dir <completed_N1-N7_run> --previous-run-dir <retained_N1-N6_run>
+--output-dir <completed_N1-N7_run>/<report_version>`.
+This reads retained result tables and checks fixed identities; it does not rerun
+models or replace either run's frozen evidence or automatic report.
+The [retained visual report and publication scope](RESULTS_INDEX.md#overnight-evidence-snapshot--2026-09-10)
+provide the reader-facing evidence entry. Rebuilding figures requires the local
+per-task evidence, which is excluded from the published package.
+Install the Python dependencies in `../requirements.txt` and the system Noto
+CJK font (`fonts-noto-cjk` on Debian/Ubuntu) to reproduce the Chinese PDF figures.
+
 The synthetic qualification entry is
 [`t3a_balloon_robust_p0.yaml`](configs/physiology_semantic_tokenizer/t3a_balloon_robust_p0.yaml).
 It uses synthetic data only and exercises `T0-native`, `T1-self`,
