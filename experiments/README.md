@@ -1,15 +1,16 @@
 # Experiment workspace
 
-_T3a synthetic P0, synthetic T3c composite T-P2 and Step5A consistency diagnostics, three
-nonprotected measured diagnostics, and one array-free T3c admission gate are
-executable; protected data remain closed_
+Commands and configuration for SSM diagnostics, reporting, and retained replay.
+This page owns the entrypoint/config/test map. Execution and scientific verdicts
+come from the [project registry view](../docs/PROJECT_STATUS.md).
 
 ## Directory roles
 
 | Path | Role |
 | --- | --- |
-| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | Synthetic P0, composite T-P2, Step5A consistency, measured diagnostics, the array-free T3c admission gate, and retained stopped R-series contracts |
-| `scripts/` | replay/evidence, state, and figure tools |
+| Root `*.py` | existing diagnostic, audit, and cache-building commands at their recorded paths |
+| [`configs/physiology_semantic_tokenizer/`](configs/physiology_semantic_tokenizer/README.md) | reviewed diagnostic and retained replay contracts |
+| `scripts/` | all new executable entrypoints, plus existing replay, state, and figure tools |
 | [`runs/`](runs/README.md) | retained generated evidence; future run root only after registration |
 | `archive/` | local superseded generations; Git-ignored and never default-discovered |
 | [`RESULTS_INDEX.md`](RESULTS_INDEX.md) | retained-result map and pruning record |
@@ -17,6 +18,35 @@ executable; protected data remain closed_
 Comparison methods own their code, configs, runs, and caches below
 `comparative_methods/<method>/`. Croce validation owns
 `croce_validation/`. Do not create a second generic results root.
+
+Add new main-project commands in `scripts/`. Fix existing root-level commands in
+place; recorded paths and snapshots remain stable. Shared computations belong
+in the closest `src/` owner, with data and replay roots passed explicitly.
+
+## Entrypoint, config and test map
+
+Configs below are relative to `configs/physiology_semantic_tokenizer/`; tests
+are relative to `../tests/`. This table maps software surfaces, not execution
+state or permission to launch. Detailed usage follows in the linked sections.
+
+| Diagnostic / usage | Entry | Config | Targeted tests |
+| --- | --- | --- | --- |
+| [Overnight observation diagnostics](#overnight-observation-diagnostics) | [`evaluate_ssm_overnight_diagnostics.py`](evaluate_ssm_overnight_diagnostics.py) | [`ssm_overnight_v3.yaml`](configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml); retained [`v1`](configs/physiology_semantic_tokenizer/ssm_overnight_v1.yaml), [`v2`](configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml) | [`test_ssm_overnight_diagnostics.py`](../tests/test_ssm_overnight_diagnostics.py) |
+| [Synthetic P0](#synthetic-p0) | [`evaluate_t3a_balloon_robust_p0.py`](evaluate_t3a_balloon_robust_p0.py) | [`t3a_balloon_robust_p0.yaml`](configs/physiology_semantic_tokenizer/t3a_balloon_robust_p0.yaml) | [`test_t3a_balloon_robust_p0.py`](../tests/test_t3a_balloon_robust_p0.py), [`test_t3a_balloon_robust_ssm.py`](../tests/test_t3a_balloon_robust_ssm.py) |
+| [Measured reconstruction/null](#measured-reconstruction-and-null) | [`evaluate_t3_measured_reconstruction_null.py`](evaluate_t3_measured_reconstruction_null.py) | [`t3_measured_reconstruction_null_v1.yaml`](configs/physiology_semantic_tokenizer/t3_measured_reconstruction_null_v1.yaml) | [`test_t3_measured_reconstruction_null.py`](../tests/test_t3_measured_reconstruction_null.py) |
+| [Identifiability](#fit-only-identifiability) | [`evaluate_t3_identifiability.py`](evaluate_t3_identifiability.py) | [`t3_identifiability_v1.yaml`](configs/physiology_semantic_tokenizer/t3_identifiability_v1.yaml) | [`test_t3_identifiability.py`](../tests/test_t3_identifiability.py) |
+| [Multi-session LOSO](#fit-only-multi-session-loso) | [`evaluate_t3_multisession_loso.py`](evaluate_t3_multisession_loso.py) | [`t3_multisession_loso_v1.yaml`](configs/physiology_semantic_tokenizer/t3_multisession_loso_v1.yaml) | [`test_t3_multisession_loso.py`](../tests/test_t3_multisession_loso.py) |
+| [T3c admission](#t3c-admission) | [`evaluate_t3c_hierarchical_composite_admission.py`](evaluate_t3c_hierarchical_composite_admission.py) | [`t3c_hierarchical_composite_admission_v1.yaml`](configs/physiology_semantic_tokenizer/t3c_hierarchical_composite_admission_v1.yaml) | [`test_t3c_hierarchical_admission.py`](../tests/test_t3c_hierarchical_admission.py) |
+| [T3c synthetic composite](#t3c-synthetic-composite) | [`evaluate_t3c_composite_synthetic_t2.py`](evaluate_t3c_composite_synthetic_t2.py) | [`t3c_composite_synthetic_t2_v1.yaml`](configs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2_v1.yaml) | [`test_t3c_composite_synthetic_t2.py`](../tests/test_t3c_composite_synthetic_t2.py) |
+| [Step5A localization](#step5a-inference-localization) | [`evaluate_step5a_inference_consistency.py`](evaluate_step5a_inference_consistency.py) | [`step5a_inference_consistency_v1.yaml`](configs/physiology_semantic_tokenizer/step5a_inference_consistency_v1.yaml) | [`test_step5a_inference_consistency.py`](../tests/test_step5a_inference_consistency.py) |
+| [Step5 stages](#step5-stages) | [`evaluate_step5.py`](evaluate_step5.py) | [`step5_v1.yaml`](configs/physiology_semantic_tokenizer/step5_v1.yaml), [`step5b_v2.yaml`](configs/physiology_semantic_tokenizer/step5b_v2.yaml); retained [`step5b_v1.yaml`](configs/physiology_semantic_tokenizer/step5b_v1.yaml) | [`test_step5.py`](../tests/test_step5.py), [`test_t3a_balloon_joint_ssm.py`](../tests/test_t3a_balloon_joint_ssm.py) |
+| [Observation diagnostic](#step5-observation-diagnostic-and-repair) | [`evaluate_step5_observation_diagnostic.py`](evaluate_step5_observation_diagnostic.py) | [`step5_observation_diagnostic_v1.yaml`](configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml) | [`test_step5_observation_diagnostic.py`](../tests/test_step5_observation_diagnostic.py) |
+| [Observation repair](#step5-observation-diagnostic-and-repair) | [`evaluate_step5_observation_repair.py`](evaluate_step5_observation_repair.py) | [`step5_observation_repair_v1.yaml`](configs/physiology_semantic_tokenizer/step5_observation_repair_v1.yaml), [`v2`](configs/physiology_semantic_tokenizer/step5_observation_repair_v2.yaml) | [`test_step5_observation_repair.py`](../tests/test_step5_observation_repair.py) |
+| [Overnight report](#overnight-observation-diagnostics) | [`scripts/render_ssm_overnight_report.py`](scripts/render_ssm_overnight_report.py) | explicit completed run and fresh report directory | [`test_ssm_overnight_diagnostics.py`](../tests/test_ssm_overnight_diagnostics.py) |
+
+For data/cache utilities and retained R-series commands, use the
+[source map](../src/README.md), [test map](../tests/README.md) and
+[retained result index](RESULTS_INDEX.md). Their presence is not a new run queue.
 
 ## Recorded state
 
@@ -32,6 +62,8 @@ or cache directories.
 
 ## Active SSM entries
 
+### Overnight observation diagnostics
+
 The observation-contract diagnostic follows the [v3 plan](../docs/EXPERIMENT_PLAN.md)
 and [v3 configuration](configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml).
 Use the same overnight entry with `--config .../ssm_overnight_v3.yaml` for
@@ -45,7 +77,8 @@ For a completed v3 controller, the existing report renderer accepts
 run. It exports Chinese Markdown/HTML/PDF, figures, planned-fit failure
 attribution and missing-support metrics reconstructed from saved trajectories.
 
-The bounded overnight N1–N7 diagnostic follows [`../ssm_next.md`](../ssm_next.md)
+The bounded overnight N1–N7 diagnostic follows the
+[retained v2 protocol](../docs/EXPERIMENT_PLAN.md#bounded-overnight-ssm-diagnostics-retained-v2-contract)
 and [`ssm_overnight_v2.yaml`](configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml).
 Its entry is [`evaluate_ssm_overnight_diagnostics.py`](evaluate_ssm_overnight_diagnostics.py).
 Use `--check-only`, then `--prepare --run-dir <fresh_run>`, then `--freeze` for
@@ -70,6 +103,8 @@ per-task evidence, which is excluded from the published package.
 Install the Python dependencies in `../requirements.txt` and the system Noto
 CJK font (`fonts-noto-cjk` on Debian/Ubuntu) to reproduce the Chinese PDF figures.
 
+### Synthetic P0
+
 The synthetic qualification entry is
 [`t3a_balloon_robust_p0.yaml`](configs/physiology_semantic_tokenizer/t3a_balloon_robust_p0.yaml).
 It uses synthetic data only and exercises `T0-native`, `T1-self`,
@@ -84,6 +119,8 @@ small software diagnostic and render its Chinese figures with:
 `--smoke` can never qualify the model. A formal synthetic P0 uses the same
 entry without `--smoke` and a fresh run directory. The executable panel does
 not yet claim the `T2a-croce-pf` or `T4-dcm-lite` design references were tested.
+
+### Measured reconstruction and null
 
 The nonprotected measured-development diagnostic is
 [`t3_measured_reconstruction_null_v1.yaml`](configs/physiology_semantic_tokenizer/t3_measured_reconstruction_null_v1.yaml)
@@ -113,6 +150,8 @@ smoothing is retained only as a posterior-fit description. Null results report
 EEG-only pairing specificity separately from donor leakage into the T2b/T3a
 joint shared state.
 
+### Fit-only identifiability
+
 The second-step fit-only identifiability diagnostic is registered in
 [`t3_identifiability_v1.yaml`](configs/physiology_semantic_tokenizer/t3_identifiability_v1.yaml)
 with entrypoint
@@ -131,6 +170,8 @@ authorize tokenizer promotion.
   --run-dir experiments/runs/physiology_semantic_tokenizer/t3_identifiability/<fresh_run_id>
 ```
 
+### Fit-only multi-session LOSO
+
 The third-step fit-only multi-session diagnostic is registered in
 [`t3_multisession_loso_v1.yaml`](configs/physiology_semantic_tokenizer/t3_multisession_loso_v1.yaml)
 with entrypoint
@@ -148,7 +189,9 @@ is exploratory, decision-ineligible, and cannot open subjects 19--29.
   --run-dir experiments/runs/physiology_semantic_tokenizer/t3_multisession_loso/<fresh_run_id>
 ```
 
-The fourth-step `T3c` entry is currently an array-free admission gate, not a
+### T3c admission
+
+The fourth-step `T3c` entry is an array-free admission gate, not a
 measured hierarchy launcher. It checks frozen Step 2/3 evidence, the analytic
 gain/time coordinate, and the Normal–Normal shrinkage primitive. If any
 prerequisite is absent it records `BLOCKED_PREREQUISITE` before measured
@@ -159,6 +202,8 @@ metadata or arrays are read.
   --config experiments/configs/physiology_semantic_tokenizer/t3c_hierarchical_composite_admission_v1.yaml \
   --run-dir experiments/runs/physiology_semantic_tokenizer/t3c_hierarchical_composite_admission/<fresh_run_id>
 ```
+
+### T3c synthetic composite
 
 The fourth-step known-truth composite `T-P2` screen is registered separately in
 [`t3c_composite_synthetic_t2_v1.yaml`](configs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2_v1.yaml)
@@ -178,6 +223,8 @@ owns the human-readable interpretation.
   --config experiments/configs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2_v1.yaml \
   --run-dir experiments/runs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2/<fresh_run_id>
 ```
+
+### Step5A inference localization
 
 The synthetic inference-localization entry is
 [`evaluate_step5a_inference_consistency.py`](evaluate_step5a_inference_consistency.py),
@@ -201,6 +248,8 @@ It cannot confer teacher qualification or open measured/protected data.
 An explicit completed panel can receive a deterministic oracle grid check via
 `--oracle-refinement-of <original_run_dir> --run-dir <fresh_run_dir>`.
 It preserves the same cases and thresholds and adds no independent replicates.
+
+### Step5 stages
 
 The full staged Step5 entry is
 [`evaluate_step5.py`](evaluate_step5.py), using
@@ -234,6 +283,19 @@ The report command adds stage diagnostics and an explicit unexecuted UQ decision
 when measured core qualification fails; it reads saved results only. Case
 exceptions retain their identities and tracebacks. Successful subsets cannot
 replace a candidate's complete registered experiment.
+
+### Step5 observation diagnostic and repair
+
+The observation diagnostic uses
+[`evaluate_step5_observation_diagnostic.py`](evaluate_step5_observation_diagnostic.py);
+the repair and mask-bridge comparisons use
+[`evaluate_step5_observation_repair.py`](evaluate_step5_observation_repair.py).
+Choose the versioned config in the map above and consult the owning
+[diagnostic](../docs/EXPERIMENT_PLAN.md#step5-observation-adaptation-diagnostic-retained-v1-contract),
+[repair v1](../docs/EXPERIMENT_PLAN.md#step5-observation-contract-repair-and-regression-retained-v1),
+or [mask-bridge](../docs/EXPERIMENT_PLAN.md#step5-flow-domain-and-mask-specific-observation-experiment)
+section before using the CLI. Source and native/replay data roots remain separate
+when an overnight command runs from its frozen snapshot.
 
 ## Frozen method boundary and implementation candidates
 

@@ -3,6 +3,10 @@ import copy
 import numpy as np
 import pytest
 
+from src.inference.observation_baselines import (
+    bridge_transform, linear_features, ridge_fit, ridge_predict,
+)
+
 from experiments import evaluate_step5_observation_diagnostic as diagnostic
 
 
@@ -83,7 +87,7 @@ def test_local_feature_hides_raw_target_before_filter_and_power():
 
 def test_baseline_operator_introduces_shared_noise_covariance():
     cfg, _, _, _ = diagnostic.load_config()
-    operator = diagnostic.bridge_transform(np.eye(120, 3), 'baseline', cfg)
+    operator = bridge_transform(np.eye(120, 3), 'baseline', cfg)
     np.testing.assert_allclose(operator[:20].mean(axis=0), 0., atol=1e-16)
     rng = np.random.default_rng(45)
     noise = rng.normal(size=(20000, 120))
@@ -140,14 +144,14 @@ def test_linear_predictor_can_detect_fixed_lag_and_cannot_see_masked_target():
         y = np.column_stack((eeg, np.roll(eeg, 8), -.5*np.roll(eeg, 8)))
         masked = y.copy()
         masked[52:68, 1:] = np.nan
-        _, joint, hidden, cols = diagnostic.linear_features(masked, np.zeros_like(y), 'fNIRS', cfg)
+        _, joint, hidden, cols = linear_features(masked, np.zeros_like(y), 'fNIRS', cfg)
         x.append(joint)
         truth.append(y[hidden][:, cols])
-        _, null, _, _ = diagnostic.linear_features(masked, np.zeros_like(y), 'fNIRS', cfg, np.roll(y, 60, axis=0))
+        _, null, _, _ = linear_features(masked, np.zeros_like(y), 'fNIRS', cfg, np.roll(y, 60, axis=0))
         shuffled.append(null)
-    model = diagnostic.ridge_fit(np.concatenate(x[:30]), np.concatenate(truth[:30]), .1)
-    error = np.mean((diagnostic.ridge_predict(model, np.concatenate(x[30:]))-np.concatenate(truth[30:]))**2)
-    null_error = np.mean((diagnostic.ridge_predict(model, np.concatenate(shuffled[30:]))-np.concatenate(truth[30:]))**2)
+    model = ridge_fit(np.concatenate(x[:30]), np.concatenate(truth[:30]), .1)
+    error = np.mean((ridge_predict(model, np.concatenate(x[30:]))-np.concatenate(truth[30:]))**2)
+    null_error = np.mean((ridge_predict(model, np.concatenate(shuffled[30:]))-np.concatenate(truth[30:]))**2)
     assert error < .03
     assert null_error > .5
 

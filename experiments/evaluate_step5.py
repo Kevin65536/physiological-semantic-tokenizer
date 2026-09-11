@@ -30,6 +30,9 @@ if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 from experiments import evaluate_step5a_inference_consistency as localization
 from src.inference import t3a_balloon_joint_ssm as joint
 from src.inference import t3a_balloon_robust_ssm as core
+from src.inference.observation_baselines import (
+    first_difference_noise, robust_mad, student_difference_mad,
+)
 
 CONFIG=ROOT/'experiments/configs/physiology_semantic_tokenizer/step5_v1.yaml'
 MEASURED_CONFIG=ROOT/'experiments/configs/physiology_semantic_tokenizer/step5b_v2.yaml'
@@ -340,10 +343,12 @@ def start_stage(cfg,stage,run_dir):
     if run_dir.parent!=(ROOT/cfg['output_root']).resolve():raise ValueError('fresh direct child of Step5 root required')
     run_dir.mkdir(parents=True,exist_ok=False)
     (run_dir/'resolved_config.yaml').write_text(yaml.safe_dump(cfg,sort_keys=False))
-    sources=[Path(__file__),ROOT/'src/inference/t3a_balloon_joint_ssm.py',ROOT/'src/inference/t3a_balloon_robust_ssm.py',ROOT/'experiments/evaluate_step5a_inference_consistency.py']
+    sources=[Path(__file__),ROOT/'src/inference/t3a_balloon_joint_ssm.py',ROOT/'src/inference/t3a_balloon_robust_ssm.py',ROOT/'experiments/evaluate_step5a_inference_consistency.py',
+             ROOT/'src/inference/observation_baselines.py']
     source_hashes={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
     (run_dir/'runner_snapshot.py').write_bytes(Path(__file__).read_bytes())
     (run_dir/'inference_snapshot.py').write_bytes(sources[1].read_bytes())
+    (run_dir/'observation_baselines_snapshot.py').write_bytes(sources[-1].read_bytes())
     manifest=dict(schema=cfg['schema'],stage=stage,execution='running',started_at=datetime.now(timezone.utc).isoformat(),
                   config_sha256=hashlib.sha256((run_dir/'resolved_config.yaml').read_bytes()).hexdigest(),
                   source_sha256=source_hashes,numpy=np.__version__,scipy=scipy.__version__,measured_data_read=False)
@@ -956,7 +961,7 @@ def report_step5(run_dir):
         failed_primary_checks=[k for k,v in summary['candidates']['U1_W']['checks'].items() if not v])
     write_json(run_dir/'uq_stage_decision.json',decision)
     uq_lines=['# 第四阶段：全面 UQ 未执行','',
-        '**Step5B 未获得合格实测核心 teacher，因此按 ssm_next.md 的阶段顺序停止。全面 UQ 的统计结论未被检验。**','',
+        '**Step5B 未获得合格实测核心 teacher，因此按 docs/EXPERIMENT_PLAN.md 的阶段顺序停止。全面 UQ 的统计结论未被检验。**','',
         '前置失败：'+', '.join(decision['failed_primary_checks'])+'。详见 [Step5B 报告](summary.md)。',
         '没有用跨被试/跨模态森林图、ICC、conformal 或 precision weighting 绕过核心资格；这些分析未运行。','',
         'A1/B 已保存的状态方差、参数均值间方差、观测噪声与遮挡覆盖属于资格诊断。它们不是合格 teacher 的全面 UQ，也不证明真实潜在轨迹覆盖。',
@@ -1076,27 +1081,6 @@ def require_measured_teacher(teacher_dir,base,spec):
         if hashlib.sha256((ROOT/name).read_bytes()).hexdigest()!=manifest['source_sha256'][name]:
             raise ValueError('inference changed since synthetic qualification')
     return manifest,summary
-
-
-def robust_mad(values,axis=0):
-    values=np.asarray(values,dtype=float)
-    median=np.median(values,axis=axis,keepdims=True)
-    return 1.482602218505602*np.median(abs(values-median),axis=axis)
-
-
-def student_difference_mad(nu):
-    """Median absolute difference of two independent unit-scale Student draws."""
-    from scipy.integrate import quad
-    from scipy.optimize import brentq
-    def mass(q):
-        return quad(lambda x:student_t.pdf(x,nu)*(student_t.cdf(x+q,nu)-student_t.cdf(x-q,nu)),
-                    -np.inf,np.inf,epsabs=1e-10)[0]-.5
-    return float(brentq(mass,.01,10.))
-
-
-def first_difference_noise(trials,constant):
-    differences=np.concatenate([np.diff(y,axis=0) for y in trials],axis=0)
-    return robust_mad(differences)/1.482602218505602/constant
 
 
 def reference_observation_gauge(base,spec):

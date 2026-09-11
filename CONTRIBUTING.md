@@ -1,6 +1,6 @@
 # Development and experiment guide
 
-_Retained repository conventions, consolidated 2026-07-30; no active experiment sequence_
+_Development conventions; experiment design and registered state have separate owners._
 
 This is the operational guide for code, tests, experiment launches, results,
 and documentation. Registered execution and scientific verdicts are generated in
@@ -13,7 +13,8 @@ entry and lifecycle overlay live in [`docs/EXPERIMENT_PLAN.md`](docs/EXPERIMENT_
 src/                         reusable library code
 tests/                       unit, integration, contract, and evidence tests
 experiments/configs/         reviewed executable experiment contracts
-experiments/scripts/         launch, evaluation, and analysis entrypoints
+experiments/scripts/         all new launch, evaluation, analysis, and utility entrypoints
+experiments/*.py             existing commands retained at their recorded paths
 experiments/runs/            active generated results (ignored by Git)
 experiments/archive/         local superseded generations (ignored by Git)
 comparative_methods/         isolated comparison-method implementations
@@ -22,8 +23,21 @@ docs/                        active contracts, status, evidence, and history
 data/                        original datasets and derived caches (ignored)
 ```
 
-Reusable classes and functions belong in `src/`. Executable workflows belong
-under `experiments/` or the isolated comparison-method package that owns them.
+Reusable classes and functions belong in the closest existing `src/` package.
+Add new main-project executable workflows under `experiments/scripts/`; isolated
+comparison and Croce work keeps its existing owner. Existing `experiments/*.py`
+commands remain at their recorded paths and receive local fixes there. Do not add
+a second launcher or a forwarding wrapper to make an old command match the new
+placement rule. The [experiment map](experiments/README.md#entrypoint-config-and-test-map)
+links each diagnostic to its config and targeted tests.
+
+When multiple callers need the same computation, import it from its library
+owner rather than another runner's private functions. Shared SSM observation
+transforms, noise estimates and linear baselines live in
+`src/inference/observation_baselines.py`. Pass data/replay roots explicitly at
+read boundaries; importing a runner must not overwrite another module's roots.
+Historical R-series dependencies bound by a seal remain in place; changing
+those requires a versioned migration.
 Any future versioned physiology-semantic runs write below
 `experiments/runs/physiology_semantic_tokenizer/<suite>/<run>/`; comparison
 methods write only below their owning package. Archive discovery is always
@@ -84,10 +98,10 @@ software, tensor-shape, split, and null checks on synthetic data first. A
 protected measured run additionally requires its owning protocol and separate
 explicit user authorization.
 
-No forward physiology-semantic implementation or launcher is registered. Archived
-E0–E2 launchers are stopped/abandoned evidence and are not templates; a future
-launcher would require its own versioned implementation/config contract and
-synthetic checks.
+SSM diagnostic implementations and commands are indexed in `experiments/README.md`.
+The next tokenizer generation has no training launcher. Archived E0–E2 launchers
+are stopped/abandoned evidence; a future tokenizer launcher needs its own
+versioned implementation/config contract and synthetic checks.
 
 ## Evidence ladder
 

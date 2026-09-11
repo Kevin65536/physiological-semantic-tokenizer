@@ -5,10 +5,58 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+
+from src.metrics.trajectory_reliability import canonical_residual_fields
 import yaml
 
 from experiments import evaluate_ssm_overnight_diagnostics as suite
 from src.inference import balloon_trajectory_map as batch_map
+
+
+def test_import_keeps_source_roots_separate_from_external_data_root(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    data_root = tmp_path/'recordings'
+    code = '''
+import os
+import sys
+from pathlib import Path
+thread_settings = {name: os.environ.get(name) for name in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS')}
+from src.inference import observation_baselines
+assert not any(name.startswith('experiments') for name in sys.modules)
+assert 'matplotlib.pyplot' not in sys.modules
+assert thread_settings == {name: os.environ.get(name) for name in thread_settings}
+from experiments import evaluate_ssm_overnight_diagnostics as suite
+
+assert suite.ROOT == Path(os.environ['SSM_PROJECT_ROOT'])
+for module in (suite.step5, suite.diagnostic, suite.repair):
+    assert module.ROOT == suite.CODE_ROOT
+suite.load_config(suite.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml')
+suite.repair.load_config()
+'''
+    subprocess.run([sys.executable, '-c', code], cwd=suite.CODE_ROOT, check=True,
+                   env={**os.environ, 'SSM_PROJECT_ROOT': str(data_root)})
+
+
+def test_native_preparation_passes_data_root_at_loader_boundary(tmp_path, monkeypatch):
+    cfg, dc, base, measured, metadata = suite.load_config()
+    monkeypatch.setattr(suite, 'ROOT', tmp_path)
+
+    class LoaderReached(Exception):
+        pass
+
+    def load(subject, *args, data_root=None, **kwargs):
+        assert subject == cfg['subjects'][0]
+        assert data_root == tmp_path
+        assert kwargs['retain_native'] is True
+        raise LoaderReached
+
+    monkeypatch.setattr(suite.diagnostic, 'load_training_subject', load)
+    with pytest.raises(LoaderReached):
+        suite.prepare_subject(tmp_path/'run', cfg, dc, base, measured, metadata,
+                              cfg['subjects'][0], [])
 
 
 def inventory(cfg):
@@ -36,7 +84,7 @@ def test_retained_residual_fields_read_without_changing_evidence(tmp_path):
     before = path.read_bytes()
     assert suite.read_json(path) == renderer.read_json(path) == expected
     assert path.read_bytes() == before
-    assert suite.diagnostic.canonical_residual_fields(expected) == expected
+    assert canonical_residual_fields(expected) == expected
 
     path = tmp_path/'trial_metrics.csv'
     with path.open('w') as stream:
@@ -52,10 +100,10 @@ def test_retained_residual_fields_read_without_changing_evidence(tmp_path):
 def test_predictive_residual_schema_preserves_values_and_rejects_ambiguous_fields():
     saved = dict(rows=[dict(standardized_innovations={'EEG': {'rms': 2.5}})])
     expected = dict(rows=[dict(standardized_predictive_residuals={'EEG': {'rms': 2.5}})])
-    assert suite.diagnostic.canonical_residual_fields(saved) == expected
+    assert canonical_residual_fields(saved) == expected
     both = dict(standardized_innovations=[1.], standardized_predictive_residuals=[2.])
     with pytest.raises(ValueError, match='duplicate residual field'):
-        suite.diagnostic.canonical_residual_fields(both)
+        canonical_residual_fields(both)
 
 
 def test_explicit_rectangular_noise_matches_dense_gaussian_conditioning():
@@ -566,6 +614,12 @@ def test_montage_neighbors_are_selected_without_response_values(tmp_path, monkey
     assert report['status'] == 'native_montage_nearest_eeg'
 
 
+def _blocking_budget_worker(*args):
+    """Picklable spawn target: cannot finish inside the controller's budget."""
+    time.sleep(10.)
+    raise AssertionError('controller did not terminate the blocked test worker')
+
+
 def test_hard_budget_stops_worker_and_writes_complete_denominator_report(tmp_path, monkeypatch):
     import signal
     cfg, *_ = suite.load_config()
@@ -579,6 +633,7 @@ def test_hard_budget_stops_worker_and_writes_complete_denominator_report(tmp_pat
                 timeout_seconds=900, dependencies=[], reason='no native data in this test')
     suite.persist_tasks(tmp_path, [task])
     monkeypatch.setattr(suite, 'verify_snapshot', lambda path: None)
+    monkeypatch.setattr(suite, 'execute_cell', _blocking_budget_worker)
     before = {s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM)}
     try:
         suite.run_scheduler(tmp_path, cfg)
@@ -587,6 +642,7 @@ def test_hard_budget_stops_worker_and_writes_complete_denominator_report(tmp_pat
             signal.signal(sig, handler)
     result = suite.read_json(tmp_path/'manifest.json')
     assert result['execution'] == 'stopped_budget'
+    assert result['stop_reason'] == 'hard_time_budget'
     assert suite.cell_result(tmp_path, 'pending')['status'] in ('timeout', 'not_started_budget')
     assert (tmp_path/'OVERNIGHT_REPORT.md').exists()
     assert 'pending' in (tmp_path/'failure_attribution.csv').read_text()

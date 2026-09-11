@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from experiments import evaluate_step5_observation_diagnostic as diagnostic
+from src.metrics.trajectory_reliability import canonical_residual_fields
 
 import numpy as np
 import matplotlib
@@ -319,7 +320,7 @@ def main():
     for source, expected in manifest['source_sha256'].items():
         if diagnostic.digest(ROOT/source) != expected:
             raise ValueError(f'replay source differs from frozen run: {source}')
-    summary = diagnostic.canonical_residual_fields(json.loads((run_dir/'summary.json').read_text()))
+    summary = canonical_residual_fields(json.loads((run_dir/'summary.json').read_text()))
     review_path = run_dir/'diagnostic_review.json'
     if args.render_only:
         review = json.loads(review_path.read_text())

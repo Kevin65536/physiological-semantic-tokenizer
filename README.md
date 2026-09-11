@@ -41,16 +41,24 @@ Start with the [generated project status](docs/PROJECT_STATUS.md),
 ## Repository layout
 
 ```text
-src/                    active reusable library code
+src/                    reusable data, inference, teacher, and tokenizer modules
 tests/                  default software and shared-contract tests
-experiments/            stopped configs/workflows plus retained local evidence
+experiments/            SSM diagnostics, reviewed configs, tools, and retained evidence
 comparative_methods/    stopped method owners plus frozen comparison history
 croce_validation/       stopped physical-model validation and derived caches
 docs/                   authority map, concise contracts, and dated history
+research_state/         single registry for execution and scientific verdicts
 data/                   immutable measured inputs and owner-local derived caches
 ```
 
-Generated payloads are ignored by Git. Active tools do not recursively search
+Start code changes with the [source map](src/README.md) and the
+[entrypoint/config/test map](experiments/README.md#entrypoint-config-and-test-map).
+New executable workflows go in `experiments/scripts/`; existing root-level
+commands retain their paths. Local upstream references live in the ignored
+`reference_repository/` and method-local `upstream/` directories.
+
+Generated payloads are ignored except for explicitly retained evidence packages.
+Active tools do not recursively search
 archives, upstream mirrors, caches, checkpoints, or run trees, and comparison
 packages write only to their own run roots. Frozen paths stay in place when reports
 depend on them; directory cleanup is versioned rather than hidden behind
@@ -65,7 +73,8 @@ source .venv/bin/activate
 python -m pytest --collect-only -q
 ```
 
-There is no forward-method training launcher yet. A new implementation must own
+SSM synthetic and observation diagnostics are implemented; the next tokenizer
+generation has no training launcher yet. A new implementation must own
 its versioned config, synthetic checks, split contract, and output namespace rather
 than repurposing an E0–E2 entrypoint.
 

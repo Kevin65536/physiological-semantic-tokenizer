@@ -1,8 +1,8 @@
 # Software architecture
 
-_Retained software surfaces and package ownership. Registered execution and
-scientific verdicts are generated in [`PROJECT_STATUS.md`](PROJECT_STATUS.md); no
-forward runtime is active._
+_Software surfaces and package ownership. SSM diagnostics are implemented; the
+next tokenizer generation has no training runtime. Registered execution and
+scientific verdicts are generated in [`PROJECT_STATUS.md`](PROJECT_STATUS.md)._
 
 ## Repository layers
 
@@ -12,7 +12,7 @@ active. Use these three layers:
 
 | Layer | Paths | Default rule |
 | --- | --- | --- |
-| Active implementation | `src/`, active `tests/`, `experiments/scripts/` and reviewed configs, method-owned comparison code | read and change through the owning package |
+| Development code | `src/`, `tests/`, indexed `experiments/*.py`, `experiments/scripts/` and reviewed configs | read and change through the owning package; runnable code does not imply qualification |
 | Local/generated | `data/`, `runs/`, `cache/`, `checkpoints/`, `upstream/`, `.tmp/` | do not recursively discover; write only to an existing owner root |
 | Frozen/history | dated reports, the local ignored archive, completed comparison campaign files | explicit-path, read-only unless a versioned migration is the task |
 
@@ -22,19 +22,38 @@ over the old one.
 
 ## Runtime scope and version boundary
 
+The implemented SSM path is:
+
+```text
+src/data/                              registry, native loaders, masks and preprocessing
+src/inference/observation_baselines.py   shared transforms, noise and linear controls
+src/inference/t3a_balloon_robust_ssm.py   forward model and robust pointwise inference
+src/inference/t3a_balloon_joint_ssm.py    joint likelihood and temporal observation operators
+src/inference/balloon_trajectory_map.py  nonlinear trajectory MAP and Gaussian target prediction
+experiments/                           existing diagnostic entrypoints and reviewed configs
+experiments/scripts/                   reporting tools and all new executable entrypoints
+```
+
+Use the [source map](../src/README.md) for package responsibilities and the
+[entrypoint/config/test map](../experiments/README.md#entrypoint-config-and-test-map)
+for commands. Shared computations belong in `src/`; data/replay roots are passed
+at their read boundaries rather than assigned to another runner's globals.
+Recorded command paths and frozen source snapshots retain their identities.
+
 The only retained tokenizer runtime surface is the E2-compatible
 `PhysiologySemanticTokenizer` (v1). R0-P, R1-D/R1-P, D1B, and R2-D added
 diagnostic and qualification components around it. The v1 implementation,
 checkpoints, and negative screen are **stopped historical evidence** and are
-replay-only; no forward runtime generation is active. Their execution outcomes
+replay-only; no new tokenizer runtime generation is active. Their execution outcomes
 and scientific interpretation are recorded in the owning reports rather than
 inferred from file presence.
 
 The theory and architecture boundary is retained in
 [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md). It is not runnable code, an
 admission result, or permission to access measured/protected data. No concrete
-implementation is registered in the clean-slate flow; any future implementation
-would require a versioned software contract and synthetic checks, while an
+tokenizer implementation is registered in the clean-slate flow. SSM diagnostics
+implement bounded precursor questions under `EXPERIMENT_PLAN.md`; a future
+tokenizer implementation requires a versioned software contract and synthetic checks, while an
 independent evaluation would separately preregister its estimator and
 task-specific evidence settings.
 
@@ -180,6 +199,7 @@ flowchart LR
 | `src/tokenizers/ema_vector_quantizer.py` | corrected fixed-K128 VQ |
 | `src/tokenizers/shared_driver_semantic_vq.py` | R2 diagnostic model component; not promoted runtime |
 | `src/inference/adaptive_neurovascular_ssm.py` | Croce/Balloon-inspired adaptive five-state RTS joint candidate; E0 offline development supervision accepted, R1-P population-frozen qualification rejected; not a qualified future teacher |
+| `src/teachers/physical_state_teacher.py` | frozen teacher output adapter and consumer boundary |
 | `src/analysis/token_*` and `physiological_patch_features.py` | stopped Token Physiology Atlas |
 
 Executable training, qualification, evaluation, and rendering workflows live

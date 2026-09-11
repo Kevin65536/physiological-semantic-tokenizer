@@ -127,3 +127,29 @@ def trajectory_reliability_metrics(
 
 
 __all__ = ["trajectory_reliability_metrics"]
+
+
+_LEGACY_RESIDUAL_FIELDS = {
+    'innovations': 'predictive_residuals',
+    'standardized_innovations': 'standardized_predictive_residuals',
+    'segment_standardized_innovation_mean': 'segment_standardized_predictive_residual_mean',
+    'innovation_structure': 'predictive_residual_structure',
+    'process_innovation_rms': 'state_transition_residual_rms',
+    'standardized_process_innovation_rms': 'standardized_state_transition_residual_rms',
+    'process_innovation_status': 'state_transition_residual_status',
+}
+
+
+def canonical_residual_fields(value):
+    """Read retained diagnostic fields into the current schema in memory."""
+    if isinstance(value, dict):
+        result = {}
+        for key, item in value.items():
+            name = _LEGACY_RESIDUAL_FIELDS.get(key, key)
+            if name in result:
+                raise ValueError(f'duplicate residual field: {name}')
+            result[name] = canonical_residual_fields(item)
+        return result
+    if isinstance(value, list):
+        return [canonical_residual_fields(item) for item in value]
+    return value

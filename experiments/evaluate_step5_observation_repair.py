@@ -32,6 +32,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from experiments import evaluate_step5_observation_diagnostic as diagnostic
+from src.inference.observation_baselines import (
+    first_difference_noise, student_difference_mad, bridge_transform,
+)
 
 step5 = diagnostic.step5
 core, joint = step5.core, step5.joint
@@ -172,7 +175,7 @@ def trajectory_operator(steps, variant, dc):
     for channel in range(3):
         for t in range(steps):
             impulse = np.zeros((steps, 3)); impulse[t, channel] = 1.
-            operators[channel, :, t] = diagnostic.bridge_transform(impulse, variant, dc)[:, channel]
+            operators[channel, :, t] = bridge_transform(impulse, variant, dc)[:, channel]
     b = dc['bridge']
     processing = []
     if variant == 'combined':
@@ -314,11 +317,12 @@ def replay_curve_job(cfg, dc, config, observations, subject, coordinate, modalit
     return result
 
 
-def load_replay_inputs(cfg, dc, base, subject):
+def load_replay_inputs(cfg, dc, base, subject, *, data_root=None):
     """Scope and exact training identities precede opening prepared arrays."""
     if subject not in dc['subjects'] or subject not in base['measured']['subjects']:
         raise ValueError('replay subject outside training boundary')
-    previous = ROOT/cfg['previous_run']
+    data_root = ROOT if data_root is None else Path(data_root).resolve()
+    previous = data_root/cfg['previous_run']
     detail = json.loads((previous/f'prepared_{subject}.json').read_text())
     identities = detail['trials']
     expected = {(session, position) for session in base['measured']['sessions']
@@ -342,7 +346,7 @@ def paired_cv_job(cfg, dc, base, measured, trials, subject, modality, fold, nois
     targets = {i: diagnostic.project_trial(trials[i], projection, coordinate) for i in train+validation}
     config = copy.deepcopy(base)
     config['model']['observation_scale'] = np.maximum(
-        step5.first_difference_noise([targets[i] for i in train], noise_constant), base['model']['observation_scale']).tolist()
+        first_difference_noise([targets[i] for i in train], noise_constant), base['model']['observation_scale']).tolist()
     normalization = np.maximum(np.std(np.concatenate([targets[i] for i in train]), axis=0), 1e-8)
     p, c = step5.localization.model(config, 'W', cfg['measured']['fixed_w'])
     cols, source = ([0], [1, 2]) if modality == 'EEG' else ([1, 2], [0])
@@ -905,6 +909,7 @@ def run_mask_repair(args, cfg, dc, base, measured, metadata):
     for name, value in [('config', cfg), ('diagnostic', dc), ('base', base)]:
         (run_dir/f'resolved_{name}.yaml').write_text(yaml.safe_dump(value, sort_keys=False))
     for file in ('experiments/evaluate_step5_observation_repair.py',
+                 'src/inference/observation_baselines.py',
                  'src/inference/t3a_balloon_robust_ssm.py', 'src/inference/t3a_balloon_joint_ssm.py'):
         (run_dir/(Path(file).stem+'_snapshot.py')).write_bytes((ROOT/file).read_bytes())
     context = []
@@ -965,7 +970,7 @@ def main():
         (run_dir/f'resolved_{name}.yaml').write_text(yaml.safe_dump(value, sort_keys=False))
     (run_dir/'runner_snapshot.py').write_bytes(Path(__file__).read_bytes())
     # Preserve executable source identity, including the changed forward owner.
-    for name in ('t3a_balloon_robust_ssm', 't3a_balloon_joint_ssm'):
+    for name in ('t3a_balloon_robust_ssm', 't3a_balloon_joint_ssm', 'observation_baselines'):
         (run_dir/f'{name}_snapshot.py').write_bytes((ROOT/f'src/inference/{name}.py').read_bytes())
     jobs = []
     if args.stage in ('synthetic', 'all'):
@@ -1014,7 +1019,7 @@ def main():
         metadata_summary, inventory, hashes = _validate_metadata(metadata)
         step5.write_json(run_dir/'metadata_boundary.json', dict(summary=metadata_summary, hashes=hashes,
             selected_inventory=[r for r in inventory if r.get('subject_id', r.get('subject')) in dc['subjects']]))
-        constant = step5.student_difference_mad(base['model']['student_nu'])
+        constant = student_difference_mad(base['model']['student_nu'])
         for subject in dc['subjects']:
             trials, detail = diagnostic.load_training_subject(subject, dc, base, measured, metadata)
             # Verify native regeneration against the identical previous inputs.

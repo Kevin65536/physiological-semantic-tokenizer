@@ -1,8 +1,9 @@
 # Documentation map
 
 _Authority index. Registered execution and scientific verdicts are generated from the
-machine-readable research-state registry. The method-rationale and architecture
-documents are retained claim-boundary and implementation records. The planned
+machine-readable research-state registry. The method-rationale document owns
+claim boundaries; the architecture and source maps describe implemented modules
+and retained interfaces. The planned
 `PST-DISCOVERY-v1` sequence is owned by
 [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md); the 2026-08-22 [tracked design note](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json)
 remains an abandoned candidate snapshot. Paper-facing evidence routes are listed
@@ -19,6 +20,7 @@ in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 | What data, masks, joins, geometry, and splits are valid? | [`DATA_CONTRACT.md`](DATA_CONTRACT.md) |
 | What are the dataset-native facts and original sources? | [`DATASETS_DESCRIPTION.md`](DATASETS_DESCRIPTION.md) |
 | What code/runtime exists today? | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| Which entrypoint, config and tests cover a diagnostic? | [Experiment map](../experiments/README.md#entrypoint-config-and-test-map) |
 | What theory and architecture principles are frozen? | [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md#frozen-theory-and-architecture-contract-unimplemented) |
 | Where is the abandoned pre-freeze candidate snapshot? | [tracked design note](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json) · [candidate snapshot figure](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg) |
 | What did the 2026-08-21 v1 QC actually measure? | [`analysis/SSM_OBSERVATION_AND_COUPLING_QC_RESULTS_20260821.md`](analysis/SSM_OBSERVATION_AND_COUPLING_QC_RESULTS_20260821.md) |

@@ -28,6 +28,24 @@ teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
 
+## Reading guide
+
+This file owns experiment design. It contains bounded diagnostic protocols and
+the broader tokenizer design; section order is not an execution queue. Use the
+[registry view](PROJECT_STATUS.md) for state and next actions, and the
+[entrypoint/config/test map](../experiments/README.md#entrypoint-config-and-test-map)
+to navigate implemented commands. Short-term scratch plans are not dependencies.
+
+| Reading task | Sections |
+| --- | --- |
+| Observation-contract design | [Observation repair follow-up](#观测合同修复后的下一轮实验设计2026-09-10) |
+| Retained overnight and observation protocols | [Overnight v2](#bounded-overnight-ssm-diagnostics-retained-v2-contract), [flow/mask bridge](#step5-flow-domain-and-mask-specific-observation-experiment), [repair v1](#step5-observation-contract-repair-and-regression-retained-v1), [observation diagnostic](#step5-observation-adaptation-diagnostic-retained-v1-contract) |
+| Synthetic calibration and staged qualification | [Step5A0 localization](#step5a0-inference-consistency-diagnostic), [Step5 stages](#full-step5-staged-continuation) |
+| Overall research design | [Question](#fixed-question-and-decision-target), [flow](#experiment-flow), [estimand and statistics](#common-estimand-and-statistical-contract) |
+| Qualification and tokenizer design | [P0](#p0-software-and-synthetic-qualification), [teacher selection](#t-physical-teacher-selection), [tokenizer](#bq-source-and-observation-tokenizer), [coupling prior](#c-coupling-prior-return) |
+| Implementation and remaining design decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
+| Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
+
 ## 观测合同修复后的下一轮实验设计（2026-09-10）
 
 本节依据用户提供的 N1–N7 复核指引，以及提交
@@ -329,9 +347,12 @@ v3 的 `--prepare` 只做无信号身份清单、软件检查和分离种子的 
 ## Bounded overnight SSM diagnostics (retained v2 contract)
 
 The September 9 overnight implementation is a separate, decision-ineligible
-exploration under [`ssm_next.md`](../ssm_next.md), with executable contract
+exploration with executable contract
 [`ssm_overnight_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml)
 and entry [`evaluate_ssm_overnight_diagnostics.py`](../experiments/evaluate_ssm_overnight_diagnostics.py).
+The v1/v2 YAML `plan` field preserves the name of the removed short-term note;
+this section is the maintained reader entry. The frozen configurations and saved
+source snapshots retain their original identities.
 It retains the preceding experiment's negative results and does not satisfy its
 nonlinear Student-t measured-comparison prerequisite. Its O2 branch explicitly
 uses correlated Gaussian noise and a nonlinear six-state batch MAP; the native
@@ -542,7 +563,7 @@ remain outside this diagnostic.
 ## Step5A0 inference consistency diagnostic
 
 [`step5a_inference_consistency_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5a_inference_consistency_v1.yaml)
-owns the small synthetic localization panel requested in `ssm_next.md`.
+owns the small synthetic localization panel described in this section.
 [`evaluate_step5a_inference_consistency.py`](../experiments/evaluate_step5a_inference_consistency.py)
 implements it without modifying Step 1–4 code, configurations, evidence, or
 negative decisions. This is a diagnostic before Step5A1 teacher checks, not a
@@ -607,9 +628,9 @@ the research-state registry.
 
 The user-requested continuation is governed by
 [`step5_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/step5_v1.yaml)
-and [`evaluate_step5.py`](../experiments/evaluate_step5.py). Missing numerical
-details in `ssm_next.md` are frozen in that configuration before the relevant
-stage is evaluated. Stage results are reported separately, with numerical,
+and [`evaluate_step5.py`](../experiments/evaluate_step5.py). Numerical
+details are frozen in that configuration before the relevant stage is evaluated.
+Stage results are reported separately, with numerical,
 parameter, state, and shared-information conclusions distinguished.
 
 **Step5A0** replaces IRLS observation curvature with joint Student-t
@@ -1317,7 +1338,7 @@ existing owners:
 | modality-local source/observation tokenizer | `src/tokenizers/` |
 | reconstruction, semantic, VQ, and optional coupling objectives | `src/losses/` |
 | proper scores, calibration, retention, and codebook health | `src/metrics/` and `src/analysis/` |
-| one orchestration/analysis entry | `experiments/scripts/` |
+| new orchestration/analysis entry | `experiments/scripts/`; existing commands retain their recorded paths |
 | reviewed executable contract, when ready | `experiments/configs/physiology_semantic_tokenizer/` |
 
 Do not reactivate or rename an E0--E2/R-series YAML, archived source/observation

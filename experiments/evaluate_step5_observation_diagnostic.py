@@ -28,13 +28,16 @@ for _thread_var in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS'
 import numpy as np
 import scipy
 import yaml
-from scipy.signal import butter, periodogram, resample_poly, sosfiltfilt
+from scipy.signal import butter, periodogram, sosfiltfilt
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from experiments import evaluate_step5 as step5
-from src.data.homer2_preprocessing import bandpass_fnirs
+from src.inference.observation_baselines import (
+    bridge_transform, first_difference_noise, linear_features, ridge_fit,
+    ridge_predict, robust_mad, student_difference_mad,
+)
 
 DEFAULT_CONFIG = ROOT / 'experiments/configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml'
 COORDINATES = ('broadband_pca', 'local_F3_alpha')
@@ -48,6 +51,8 @@ SOURCE_FILES = (
     'src/inference/t3a_balloon_joint_ssm.py',
     'src/inference/t3a_balloon_robust_ssm.py',
     'src/data/homer2_preprocessing.py',
+    'src/inference/observation_baselines.py',
+    'src/metrics/trajectory_reliability.py',
     'src/data/unified_physiology.py',
     'src/data/clean_physiology_cache.py',
     'experiments/build_clean_eeg_fnirs_cache.py',
@@ -56,32 +61,6 @@ SOURCE_FILES = (
     'experiments/configs/physiology_semantic_tokenizer/step5b_v2.yaml',
     'experiments/configs/physiology_semantic_tokenizer/t3_multisession_loso_v1.yaml',
 )
-
-
-_LEGACY_RESIDUAL_FIELDS = {
-    'innovations': 'predictive_residuals',
-    'standardized_innovations': 'standardized_predictive_residuals',
-    'segment_standardized_innovation_mean': 'segment_standardized_predictive_residual_mean',
-    'innovation_structure': 'predictive_residual_structure',
-    'process_innovation_rms': 'state_transition_residual_rms',
-    'standardized_process_innovation_rms': 'standardized_state_transition_residual_rms',
-    'process_innovation_status': 'state_transition_residual_status',
-}
-
-
-def canonical_residual_fields(value):
-    """Read retained diagnostic fields into the current schema in memory."""
-    if isinstance(value, dict):
-        result = {}
-        for key, item in value.items():
-            name = _LEGACY_RESIDUAL_FIELDS.get(key, key)
-            if name in result:
-                raise ValueError(f'duplicate residual field: {name}')
-            result[name] = canonical_residual_fields(item)
-        return result
-    if isinstance(value, list):
-        return [canonical_residual_fields(item) for item in value]
-    return value
 
 
 def digest(path):
@@ -226,7 +205,7 @@ def fit_projection(trials, indices, base, measured):
     eligible = np.logical_and.reduce([trials[i]['eligible'] for i in indices])
     projection = step5.fit_measured_projection(features, base, measured, eligible)
     local = np.concatenate([f['local_eeg']-f['local_eeg'][:20].mean() for f in features])
-    projection['local_factor'] = projection['gauge']['eeg']/max(float(step5.robust_mad(local)), 1e-8)
+    projection['local_factor'] = projection['gauge']['eeg']/max(float(robust_mad(local)), 1e-8)
     return projection
 
 
@@ -320,23 +299,6 @@ def curve_job(config, observations, modality, w, cfg, order=None):
     return result
 
 
-def bridge_transform(values, variant, cfg):
-    y = np.array(values, copy=True)
-    b = cfg['bridge']
-    if variant in ('resample_roundtrip', 'combined'):
-        y[:, 1:] = resample_poly(resample_poly(y[:, 1:], 5, 2, axis=0), 2, 5, axis=0)[:len(y)]
-    if variant in ('fnirs_filter', 'combined'):
-        y[:, 1:], info = bandpass_fnirs(y[:, 1:], sample_rate_hz=4.,
-            low_hz=b['filter_hz'][0], high_hz=b['filter_hz'][1], order=b['filter_order'])
-        if info['status'] != 'applied':
-            raise ValueError('bridge filter was skipped')
-    if variant in ('baseline', 'combined'):
-        y -= y[:b['baseline_samples']].mean(axis=0)
-    if variant in ('common_scale', 'combined'):
-        y[:, 1:] *= b['common_fnirs_factor']
-    return y
-
-
 def bridge_job(cfg, base, replicate, noise_constant):
     generated = step5.localization.generate_matched(base, 'W', cfg['bridge']['truth_w'], cfg['seed']+1000+replicate)
     training = step5.localization.generate_matched(base, 'W', cfg['bridge']['truth_w'], cfg['seed']+2000+replicate)
@@ -345,7 +307,7 @@ def bridge_job(cfg, base, replicate, noise_constant):
         config = copy.deepcopy(base)
         y = bridge_transform(generated['observations'], variant, cfg)
         clean = bridge_transform(generated['clean'], variant, cfg)
-        estimated = step5.first_difference_noise([bridge_transform(training['observations'], variant, cfg)], noise_constant)
+        estimated = first_difference_noise([bridge_transform(training['observations'], variant, cfg)], noise_constant)
         if variant in ('noise_estimate', 'combined'):
             config['model']['observation_scale'] = np.maximum(estimated, base['model']['observation_scale']).tolist()
         for w in cfg['curve']['fixed_w']:
@@ -364,35 +326,6 @@ def bridge_job(cfg, base, replicate, noise_constant):
             except Exception as exc:
                 rows.append(dict(replicate=replicate, variant=variant, w=w, execution='failed', error=repr(exc), traceback=traceback.format_exc()))
     return dict(replicate=replicate, rows=rows, seeds=[cfg['seed']+1000+replicate, cfg['seed']+2000+replicate])
-
-
-def ridge_fit(x, y, alpha):
-    center, scale = x.mean(axis=0), np.maximum(x.std(axis=0), 1e-8)
-    z = (x-center)/scale
-    target_center = y.mean(axis=0)
-    coefficients = np.linalg.solve(z.T@z/len(z)+alpha*np.eye(z.shape[1]), z.T@(y-target_center)/len(z))
-    return dict(center=center, scale=scale, target_center=target_center, coefficients=coefficients)
-
-
-def ridge_predict(model, x):
-    return (x-model['center'])/model['scale']@model['coefficients']+model['target_center']
-
-
-def linear_features(masked, template, modality, cfg, other=None):
-    columns, source = ([0], [1, 2]) if modality == 'EEG' else ([1, 2], [0])
-    hidden = np.isnan(masked[:, columns[0]])
-    t = np.flatnonzero(hidden)
-    visible = np.flatnonzero(~hidden)
-    own = np.column_stack([np.interp(t, visible, masked[visible, col]) for col in columns])
-    basic = np.column_stack((own, template[t][:, columns]))
-    other = masked if other is None else other
-    # Positive lag: preceding EEG for fNIRS; future fNIRS for offline EEG reconstruction.
-    sign = 1 if modality == 'EEG' else -1
-    lagged = []
-    for lag in cfg['linear']['lag_seconds']:
-        indices = np.clip(t+sign*round(lag*4), 0, len(masked)-1)
-        lagged.append(other[indices][:, source])
-    return basic, np.column_stack((basic, *lagged)), hidden, columns
 
 
 def fold_examples(trials, train, validation, coordinate, modality, cfg, base, measured):
@@ -584,7 +517,9 @@ def main():
     for name, value in [('resolved_config.yaml', cfg), ('resolved_base.yaml', base), ('resolved_measured.yaml', measured)]:
         (run_dir/name).write_text(yaml.safe_dump(value, sort_keys=False))
     (run_dir/'runner_snapshot.py').write_bytes(Path(__file__).read_bytes())
-    constant = step5.student_difference_mad(base['model']['student_nu'])
+    for source in ('src/inference/observation_baselines.py', 'src/metrics/trajectory_reliability.py'):
+        (run_dir/(Path(source).stem+'_snapshot.py')).write_bytes((ROOT/source).read_bytes())
+    constant = student_difference_mad(base['model']['student_nu'])
     bridge = execute_jobs([(f'bridge_{i:02d}', 'bridge', (cfg, base, i, constant))
                            for i in range(cfg['bridge']['replicates'])], run_dir, cfg['workers'])
     measured_results, preparation = {}, {}
@@ -609,7 +544,7 @@ def main():
                     observations = np.array([project_trial(t, projection, coordinate) for t in trials])
                     arrays[coordinate] = observations
                     config = copy.deepcopy(base)
-                    config['model']['observation_scale'] = np.maximum(step5.first_difference_noise(observations, constant), base['model']['observation_scale']).tolist()
+                    config['model']['observation_scale'] = np.maximum(first_difference_noise(observations, constant), base['model']['observation_scale']).tolist()
                     preparation[subject][coordinate+'_noise_scale'] = config['model']['observation_scale']
                     for modality in cfg['curve']['modalities']:
                         for i, w in enumerate(grid):

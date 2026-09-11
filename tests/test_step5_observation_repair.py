@@ -3,6 +3,10 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+
+from src.inference.observation_baselines import (
+    bridge_transform,
+)
 from scipy.linalg import null_space
 from scipy.integrate import solve_ivp
 from scipy.stats import multivariate_normal
@@ -75,7 +79,7 @@ def test_temporal_operator_matches_actual_pipeline_and_keeps_mixed_noise(variant
     rng = np.random.default_rng(95)
     values = rng.normal(size=(32, 3))
     operator = repair.trajectory_operator(32, variant, dc)
-    np.testing.assert_allclose(operator.apply(values), repair.diagnostic.bridge_transform(values, variant, dc), atol=2e-12)
+    np.testing.assert_allclose(operator.apply(values), bridge_transform(values, variant, dc), atol=2e-12)
     matrix, _ = operator.matrix()
     transformed_covariance = matrix@np.diag(np.tile([.3, .2, .1], 32))@matrix.T
     assert np.max(abs(transformed_covariance-np.diag(np.diag(transformed_covariance)))) > .001
@@ -122,6 +126,30 @@ def test_replay_boundary_rejects_out_of_scope_before_file_access(monkeypatch):
     for subject in ('subject_02', 'subject_19', 'subject_24'):
         with pytest.raises(ValueError, match='boundary'):
             repair.load_replay_inputs(cfg, dc, base, subject)
+
+
+def test_replay_reads_explicit_root_without_changing_module_root(tmp_path):
+    import json
+
+    cfg, dc, base, _, _ = repair.load_config()
+    cfg['previous_run'] = 'retained'
+    subject = dc['subjects'][0]
+    identities = [dict(subject=subject, session=session, original_ma_trial_position=p)
+                  for session in base['measured']['sessions'] for p in range(10)
+                  if p not in base['measured']['heldout_trial_positions']]
+    source_root = repair.ROOT
+    for name, value in [('first', 1.), ('second', 2.)]:
+        root = tmp_path/name
+        previous = root/cfg['previous_run']
+        previous.mkdir(parents=True)
+        (previous/f'prepared_{subject}.json').write_text(json.dumps(dict(trials=identities)))
+        np.savez(previous/f'prepared_{subject}.npz', **{
+            coordinate: np.full((24, 120, 3), value) for coordinate in dc['coordinates']})
+        arrays, detail = repair.load_replay_inputs(cfg, dc, base, subject, data_root=root)
+        for array in arrays.values():
+            np.testing.assert_array_equal(array, np.full((24, 120, 3), value))
+        assert detail['trials'] == identities
+        assert repair.ROOT == source_root
 
 
 def test_replay_continues_after_a_trial_failure_and_marks_curve_incomplete(monkeypatch):
@@ -253,7 +281,7 @@ def test_mask_specific_operator_matches_visible_interpolation_pipeline(count, va
         visible = np.flatnonzero(mask[:, channel])
         if len(visible):
             expected[:, channel] = np.interp(np.arange(count), visible, values[visible, channel])
-    expected = repair.diagnostic.bridge_transform(expected, variant, dc)
+    expected = bridge_transform(expected, variant, dc)
     expected[~mask] = np.nan
     changed = values.copy(); changed[~mask] = np.inf
     np.testing.assert_allclose(operator.apply(values, mask), expected, atol=3e-12)

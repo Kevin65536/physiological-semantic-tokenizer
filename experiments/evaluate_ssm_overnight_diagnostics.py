@@ -49,11 +49,14 @@ from experiments import evaluate_step5_observation_repair as repair
 from src.inference import t3a_balloon_robust_ssm as core
 from src.inference import t3a_balloon_joint_ssm as joint
 from src.inference import balloon_trajectory_map as batch_map
+from src.metrics.trajectory_reliability import canonical_residual_fields
+from src.inference.observation_baselines import (
+    bridge_transform, first_difference_noise, linear_features, ridge_fit,
+    ridge_predict, robust_mad, student_difference_mad,
+)
 
-# Frozen source may live below the run directory. Native paths still resolve
-# through the single existing training-only loader, against the original repo.
-step5.ROOT = diagnostic.ROOT = CODE_ROOT
-repair.ROOT = ROOT
+# Configurations resolve beside the code (including frozen source); data and
+# retained replay paths receive ROOT explicitly at their owning read boundary.
 DEFAULT_CONFIG = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml'
 FAMILIES = ('N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7')
 MODALITIES = ('EEG', 'HbO', 'HbR')
@@ -63,7 +66,7 @@ OUTER_MASKS = ('full', 'EEG_only', 'fNIRS_only', 'all_missing',
     'center_fNIRS', 'center_fNIRS_own', 'center_fNIRS_template', 'center_fNIRS_pairing', 'center_fNIRS_shift')
 STATUSES = {'completed', 'data_unavailable', 'not_implemented', 'failed_domain',
             'failed_numerical', 'failed_contract', 'timeout', 'not_started_budget', 'not_started_prerequisite'}
-difference_noise_constant = lru_cache(maxsize=4)(step5.student_difference_mad)
+difference_noise_constant = lru_cache(maxsize=4)(student_difference_mad)
 
 
 def serial(value):
@@ -107,7 +110,7 @@ def write_csv(path, rows, fields=None):
 
 
 def read_json(path):
-    return diagnostic.canonical_residual_fields(json.loads(Path(path).read_text()))
+    return canonical_residual_fields(json.loads(Path(path).read_text()))
 
 
 def load_config(path=DEFAULT_CONFIG):
@@ -266,7 +269,7 @@ def cleaned_eeg(raw, eog, center, coefficients, hidden=False):
 
 
 def prepare_subject(run_dir, cfg, dc, base, measured, metadata, subject, expected):
-    trials, detail = diagnostic.load_training_subject(subject, dc, base, measured, metadata, retain_native=True)
+    trials, detail = diagnostic.load_training_subject(subject, dc, base, measured, metadata, retain_native=True, data_root=ROOT)
     validate_identities(detail['trials'], cfg, subject)
     if [t['sample_id'] for t in detail['trials']] != [t['sample_id'] for t in expected]:
         raise ValueError('native preparation disagrees with frozen scope inventory')
@@ -385,7 +388,7 @@ def prepare_projection(run_dir, cfg, base, measured, subject, outer, inner=None,
             np.testing.assert_array_equal(targets[view][:, :, 1:], baseline_data[view][:, :, 1:])
     normalizer = np.maximum(np.std(np.concatenate(targets['target'][train]), axis=0), 1e-12)
     constant = difference_noise_constant(base['model']['student_nu'])
-    noise = np.maximum(step5.first_difference_noise(targets['target'][train], constant), base['model']['observation_scale'])
+    noise = np.maximum(first_difference_noise(targets['target'][train], constant), base['model']['observation_scale'])
     if baseline_data is not None:
         normalizer[1:] = baseline_data['normalizer'][1:]
         noise[1:] = baseline_data['noise'][1:]
@@ -855,15 +858,15 @@ def linear_cell(run_dir, cfg, dc, task):
                 peers = [j for j in info['train'] if j != i and identities[j]['session'] == identities[i]['session']]
                 template = arrays['target'][peers].mean(axis=0)
                 y = arrays['center_'+modality][i]
-                basic, full, hidden, cols = diagnostic.linear_features(y, template, modality, dc)
+                basic, full, hidden, cols = linear_features(y, template, modality, dc)
                 donor = arrays['target'][peers[identities[i]['training_ordinal'] % len(peers)]]
-                _, pairing, _, _ = diagnostic.linear_features(y, template, modality, dc, donor)
+                _, pairing, _, _ = linear_features(y, template, modality, dc, donor)
                 shifted = np.roll(y, len(y)//2, axis=0)
                 if cfg['schema'] == 'ssm_overnight_v3':
                     donor = v3_view(cfg, arrays, info, identities, i, 'center_'+modality+'_pairing', with_noise=False)
                     shifted = v3_view(cfg, arrays, info, identities, i, 'center_'+modality+'_shift', with_noise=False)
-                    _, pairing, _, _ = diagnostic.linear_features(y, template, modality, dc, donor)
-                _, shift, _, _ = diagnostic.linear_features(y, template, modality, dc, shifted)
+                    _, pairing, _, _ = linear_features(y, template, modality, dc, donor)
+                _, shift, _, _ = linear_features(y, template, modality, dc, shifted)
                 rows.append(dict(trial=i, basic=basic, joint=full, pairing=pairing, shift=shift,
                                  target=arrays['target'][i][hidden][:, cols], sd=arrays['normalizer'][cols]))
             groups[role] = rows
@@ -877,16 +880,16 @@ def linear_cell(run_dir, cfg, dc, task):
         for kind in losses:
             x = np.concatenate([r[kind] for r in groups['train']])
             for a, alpha in enumerate(alphas):
-                fit = diagnostic.ridge_fit(x, y, alpha)
-                losses[kind][a] += np.mean([np.mean(((diagnostic.ridge_predict(fit, r[kind])-r['target'])/r['sd'])**2)
+                fit = ridge_fit(x, y, alpha)
+                losses[kind][a] += np.mean([np.mean(((ridge_predict(fit, r[kind])-r['target'])/r['sd'])**2)
                                            for r in groups['validation']])
     groups = examples(None)
     selected = {kind: alphas[int(np.argmin(loss))] for kind, loss in losses.items()}
-    models = {kind: diagnostic.ridge_fit(np.concatenate([r[kind] for r in groups['train']]),
+    models = {kind: ridge_fit(np.concatenate([r[kind] for r in groups['train']]),
         np.concatenate([r['target'] for r in groups['train']]), alpha) for kind, alpha in selected.items()}
     rows = []
     for item in groups['validation']:
-        scores = {kind: float(np.mean(((diagnostic.ridge_predict(models['basic' if kind == 'basic' else 'joint'], item[kind])-
+        scores = {kind: float(np.mean(((ridge_predict(models['basic' if kind == 'basic' else 'joint'], item[kind])-
                  item['target'])/item['sd'])**2)) for kind in ('basic', 'joint', 'pairing', 'shift')}
         rows.append(dict(trial=item['trial'], subject=subject, session=identities[item['trial']]['session'],
                          sample_id=identities[item['trial']]['sample_id'], status='completed', nmse=scores,
@@ -1059,8 +1062,8 @@ def synthetic_cell(run_dir, cfg, dc, base, task):
     sd = np.maximum(np.std(clean, axis=0), 1e-12)
     stress = cfg['synthetic']['stress_scale']
     if condition == 'combined':
-        y = diagnostic.bridge_transform(y, 'combined', dc)
-        clean = diagnostic.bridge_transform(clean, 'combined', dc)
+        y = bridge_transform(y, 'combined', dc)
+        clean = bridge_transform(clean, 'combined', dc)
     elif condition == 'drift':
         y += np.sin(np.linspace(0, np.pi*1.5, len(y)))[:, None]*sd*stress['drift_sd_multiplier']
     elif condition == 'correlated_hb':
@@ -1294,7 +1297,7 @@ def replay_cell(run_dir, cfg, base, task):
 
 def trace_cell(run_dir, cfg, dc, base, task):
     replay_cfg = dict(previous_run=cfg['N5']['previous_run'])
-    arrays, identity = repair.load_replay_inputs(replay_cfg, dc, base, task['subject'])
+    arrays, identity = repair.load_replay_inputs(replay_cfg, dc, base, task['subject'], data_root=ROOT)
     old = read_json(ROOT/cfg['N5']['previous_run']/'summary.json')
     noise = old['preparation'][task['subject']]['broadband_pca_noise_scale']
     p, c, spec = model(base, dict(BASE, w=task['w']), noise)
@@ -1411,10 +1414,10 @@ def noise_diagnostic(run_dir, cfg, base, task):
             trial = rng.integers(len(y))
             starts = rng.integers(0, difference.shape[1]-block_length+1, blocks_per_trial)
             samples.append(np.concatenate([difference[trial, start:start+block_length] for start in starts])[:difference.shape[1]])
-        estimates.append(step5.robust_mad(np.concatenate(samples))/1.482602218505602/constant)
+        estimates.append(robust_mad(np.concatenate(samples))/1.482602218505602/constant)
     structures = [noise_structure(row) for row in difference]
     row = dict(status='completed', subject=task['subject'], outer=task['outer'], train=info['train'],
-        first_difference_scale=step5.first_difference_noise(y, constant), effective_noise_scale=arrays['noise'],
+        first_difference_scale=first_difference_noise(y, constant), effective_noise_scale=arrays['noise'],
         trial_difference_structure=structures, bootstrap_scale_quantiles=np.quantile(estimates, [.025, .5, .975], axis=0),
         bootstrap_repetitions=200, block_length_steps=8, independent_units='training trials, not time points')
     return dict(status='completed', rows=[row], actual_solves=0)
@@ -1658,6 +1661,7 @@ def freeze_sources(run_dir, cfg):
     tracked = subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0')
     extra = ['experiments/evaluate_ssm_overnight_diagnostics.py',
              'src/inference/balloon_trajectory_map.py',
+             'src/inference/observation_baselines.py',
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v1.yaml',
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml',
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml',
@@ -1672,7 +1676,7 @@ def freeze_sources(run_dir, cfg):
             # src/data is source code, not a measured-data directory.
             if not (parts[0] == 'src' and parts[1] == 'data'):
                 continue
-        if not (rel.startswith(('src/', 'experiments/', 'research_state/')) or rel in ('ssm_next.md', 'requirements.txt', 'pytest.ini', 'docs/EXPERIMENT_PLAN.md')):
+        if not (rel.startswith(('src/', 'experiments/', 'research_state/')) or rel in ('requirements.txt', 'pytest.ini', 'docs/EXPERIMENT_PLAN.md')):
             continue
         if Path(rel).suffix not in ('.py', '.yaml', '.yml', '.json', '.md', '.txt', '.ini'):
             continue
@@ -2456,10 +2460,10 @@ def v3_noise_estimate(base, eeg, od, train, fnirs_factor):
     p, _, _ = model(base, BASE)
     marginal = np.asarray(p.fixed.observation_scale)*np.sqrt(p.fixed.student_nu/(p.fixed.student_nu-2))
     mbll = v3_native_operators(eeg.shape[1])['mbll']
-    eeg_sd = max(float(step5.first_difference_noise([eeg[i, :, None] for i in train],
+    eeg_sd = max(float(first_difference_noise([eeg[i, :, None] for i in train],
                                                    normal_difference_mad)[0]), marginal[0])
     floor = min(marginal[1:])/(max(np.linalg.norm(mbll, axis=1))*fnirs_factor)
-    od_sd = np.maximum(step5.first_difference_noise([od[i] for i in train], normal_difference_mad), floor)
+    od_sd = np.maximum(first_difference_noise([od[i] for i in train], normal_difference_mad), floor)
     mixing = fnirs_factor*mbll@np.diag(od_sd)
     return dict(eeg_sd=eeg_sd, od_sd=od_sd, fnirs_mixing=mixing, fnirs_factor=fnirs_factor,
         estimator='Gaussian first-difference MAD on training feature inputs',

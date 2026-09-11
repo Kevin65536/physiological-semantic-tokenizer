@@ -1,6 +1,10 @@
 import copy
 import numpy as np
 import pytest
+
+from src.inference.observation_baselines import (
+    first_difference_noise, student_difference_mad,
+)
 from scipy.integrate import quad
 from scipy.stats import norm,t
 from experiments import evaluate_step5 as step5
@@ -162,9 +166,9 @@ def test_measured_boundary_fails_before_any_array_or_noise_evidence_read(monkeyp
 
 def test_student_difference_noise_scale_and_reference_gauge():
     base,spec,_=step5.load_measured_config()
-    constant=step5.student_difference_mad(5.)
+    constant=student_difference_mad(5.)
     noise=np.random.default_rng(44).standard_t(5,size=(50000,3))*[.08,.025,.015]
-    estimate=step5.first_difference_noise([noise],constant)
+    estimate=first_difference_noise([noise],constant)
     np.testing.assert_allclose(estimate,[.08,.025,.015],rtol=.015)
     gauge=step5.reference_observation_gauge(base,spec)
     assert gauge['eeg']>0 and gauge['fnirs_common']>0

@@ -33,7 +33,7 @@ import markdown
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from experiments.evaluate_step5_observation_diagnostic import canonical_residual_fields
+from src.metrics.trajectory_reliability import canonical_residual_fields
 
 FAMILIES = [f'N{i}' for i in range(1, 8)]
 MODS = ['EEG', 'HbO', 'HbR']
@@ -1032,7 +1032,7 @@ def write_report(out,run,previous,figs,audit,summaries,rules,data,traces,scored)
     ratio=100*(1-gw['common_success_only_risk']/gw['common_success_only_baseline_risk'])
     report=f'''# SSM 夜间 N1–N7 实验报告
 
-报告日期：2026-09-10（北京时间）。本报告覆盖 `ssm_next.md` 本轮七族诊断及其公共准备、合成对照、失败追踪；不将更早的项目实验算作本轮新证据。
+报告日期：2026-09-10（北京时间）。本报告覆盖已冻结的 N1–N7 诊断合同及其公共准备、合成对照、失败追踪；不将更早的项目实验算作本轮新证据。
 
 ## 主要结论
 
