@@ -32,6 +32,19 @@ or cache directories.
 
 ## Active SSM entries
 
+The observation-contract diagnostic follows the [v3 plan](../docs/EXPERIMENT_PLAN.md)
+and [v3 configuration](configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml).
+Use the same overnight entry with `--config .../ssm_overnight_v3.yaml` for
+`--check-only` and `--prepare`. V3 preparation uses synthetic pilots and a
+signal-free identity inventory; native preparation is a queued stage after the
+Gaussian mean precheck. Freeze and launch the snapshot as described below.
+The run's automatic report includes stage gates, fixed failure denominators,
+feature-missing comparisons and independent adaptation panels.
+For a completed v3 controller, the existing report renderer accepts
+`--run-dir <v3_run> --output-dir <v3_run>/<new_report_version>` without a previous
+run. It exports Chinese Markdown/HTML/PDF, figures, planned-fit failure
+attribution and missing-support metrics reconstructed from saved trajectories.
+
 The bounded overnight N1–N7 diagnostic follows [`../ssm_next.md`](../ssm_next.md)
 and [`ssm_overnight_v2.yaml`](configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml).
 Its entry is [`evaluate_ssm_overnight_diagnostics.py`](evaluate_ssm_overnight_diagnostics.py).

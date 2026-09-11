@@ -130,6 +130,8 @@ class Homer2PreprocessResult:
     values: np.ndarray
     state: Homer2AlignmentState
     quality: Mapping[str, Any]
+    pre_linear_values: np.ndarray | None = None
+    pre_linear_optical_density: np.ndarray | None = None
 
 
 def get_homer2_dataset_compatibility(dataset_id: str) -> Homer2DatasetCompatibility:
@@ -309,6 +311,7 @@ def apply_homer2_aligned_contract(
     motion_correction: bool = True,
     source_detector_distance_cm: float = 3.0,
     partial_pathlength_factor: float = 6.0,
+    retain_feature_boundary: bool = False,
 ) -> Homer2PreprocessResult:
     """Apply the best available HOMER2-aligned branch for one fNIRS record."""
     compatibility = get_homer2_dataset_compatibility(dataset_id)
@@ -338,6 +341,10 @@ def apply_homer2_aligned_contract(
     else:
         skipped.append("robust_derivative_motion_suppression")
 
+    # Opt-in diagnostic view after all data-dependent nonlinear processing.
+    # The established output path/order and its float32 boundary stay intact.
+    pre_linear = np.array(working, dtype=float, copy=True) if retain_feature_boundary else None
+    pre_od = pre_linear.copy() if retain_feature_boundary and entry_stage == "raw_intensity" else None
     working, filter_quality = bandpass_fnirs(
         working,
         sample_rate_hz=sample_rate_hz,
@@ -358,6 +365,12 @@ def apply_homer2_aligned_contract(
             partial_pathlength_factor=partial_pathlength_factor,
         )
         working = concentration.reshape(concentration.shape[0], -1)
+        if retain_feature_boundary:
+            pre_linear, _ = modified_beer_lambert(
+                pre_linear, wavelengths_nm=wavelengths_nm,
+                source_detector_distance_cm=source_detector_distance_cm,
+                partial_pathlength_factor=partial_pathlength_factor,
+            )
         applied.append("modified_beer_lambert")
         quality["modified_beer_lambert"] = mbll_quality
     else:
@@ -388,4 +401,6 @@ def apply_homer2_aligned_contract(
         input_shape=tuple(int(item) for item in array.shape),
         output_shape=tuple(int(item) for item in output.shape),
     )
-    return Homer2PreprocessResult(values=output, state=state, quality=quality)
+    return Homer2PreprocessResult(values=output, state=state, quality=quality,
+                                 pre_linear_values=pre_linear,
+                                 pre_linear_optical_density=pre_od)

@@ -331,9 +331,43 @@ def linearized_trajectory_prior(steps, parameters, config):
     return covariance.reshape(6*steps, 6*steps)
 
 
+def whiten_trajectory_observations(values, operator, available, noise_factor, rank_rtol):
+    """Whiten an explicit feature-noise factor without squaring its condition.
+
+    Factor rows use flattened output-time/coordinate order; its columns name
+    independent feature-noise innovations, possibly on different native clocks.
+    Mean and noise need not share an input clock or column count. The supplied
+    factor is already expressed in the observed units.
+    """
+    values = np.asarray(values, dtype=float)
+    operator = np.asarray(operator, dtype=float)
+    available = np.asarray(available, dtype=bool) & np.isfinite(values)
+    factor = np.asarray(noise_factor, dtype=float)
+    if (not 0 < rank_rtol < 1 or values.ndim != 2 or values.shape[1] != 3
+            or np.isinf(values).any() or operator.shape[0] != values.size
+            or factor.ndim != 2 or factor.shape[0] != values.size
+            or not np.isfinite(operator).all() or not np.isfinite(factor).all()):
+        raise ValueError('invalid explicit feature-noise observation system')
+    selected = operator[available.ravel()]
+    selected_factor = factor[available.ravel()]
+    u, singular, _ = np.linalg.svd(selected_factor, full_matrices=False)
+    keep = singular > rank_rtol*singular[0] if len(singular) else np.zeros(0, dtype=bool)
+    if available.any() and not keep.any():
+        raise ValueError('visible observation has no stochastic feature-noise support')
+    raw_target = values[available]
+    support_error = float(np.linalg.norm(raw_target-u[:, keep]@(u[:, keep].T@raw_target)))
+    if support_error > 100*rank_rtol*max(1., float(np.linalg.norm(raw_target))):
+        raise ValueError('processed observations outside retained feature-noise support')
+    whitener = u[:, keep].T/singular[keep, None]
+    return dict(design=whitener@selected, target=whitener@raw_target, whitener=whitener,
+        available=available, rank=int(keep.sum()), singular_values=singular,
+        discarded_singular_values=singular[~keep], support_residual_norm=support_error,
+        normalization=float(keep.sum()*np.log(2*np.pi)/2+np.log(singular[keep]).sum()))
+
+
 def smooth_balloon_trajectory_reference(processed_observations, parameters, *,
         config, trajectory_spec, noise_variance, observation_spec=None,
-        input_mask=None, rank_rtol=1e-10):
+        input_mask=None, rank_rtol=1e-10, noise_factor=None):
     """Batch reference with linearized physiology and explicitly Gaussian noise.
 
     ``noise_variance`` is the *pre-processing*, canonical independent Gaussian
@@ -350,8 +384,10 @@ def smooth_balloon_trajectory_reference(processed_observations, parameters, *,
     if not 0 < rank_rtol < 1:
         raise ValueError('rank_rtol must be strictly between zero and one')
     spec = (observation_spec or core.BalloonObservationSpec()).resolved(parameters.fixed)
-    variance = np.asarray(noise_variance, dtype=float)
-    if variance.shape != (3,) or not np.isfinite(variance).all() or np.any(variance <= 0):
+    variance = np.asarray(noise_variance, dtype=float) if noise_factor is None else None
+    if noise_factor is not None and noise_variance is not None:
+        raise ValueError('use one noise owner: noise_variance or explicit noise_factor')
+    if noise_factor is None and (variance.shape != (3,) or not np.isfinite(variance).all() or np.any(variance <= 0)):
         raise ValueError('canonical Gaussian noise_variance must be three finite positive values')
     operator, available = trajectory_spec.matrix(input_mask)
     values = np.asarray(processed_observations, dtype=float)
@@ -370,14 +406,28 @@ def smooth_balloon_trajectory_reference(processed_observations, parameters, *,
     scale = np.tile(spec.coordinate_scale, steps)
     h = scale[:, None] * canonical_h
     offset = scale * canonical_offset
-    r = np.tile(variance, steps)*scale**2
+    r = np.tile(variance, steps)*scale**2 if noise_factor is None else None
     mean = np.zeros(steps*6)
     covariance = prior.copy()
     log_likelihood = 0.
     singular_values = np.array([])
     rank = 0
     support_error = 0.
-    if len(selected):
+    if noise_factor is not None:
+        system = whiten_trajectory_observations(values, operator, available, noise_factor, rank_rtol)
+        singular_values, rank = system['singular_values'], system['rank']
+        support_error = system['support_residual_norm']
+        design = system['design']@h
+        target = system['target']-system['design']@offset
+        if rank:
+            cross = prior@design.T
+            factor = cho_factor(design@cross+np.eye(rank), lower=True)
+            solved = cho_solve(factor, target)
+            mean = cross@solved
+            covariance -= cross@cho_solve(factor, cross.T)
+            covariance = (covariance+covariance.T)/2
+            log_likelihood = float(-.5*(2*np.log(np.diag(factor[0])).sum()+target@solved)-system['normalization'])
+    elif len(selected):
         u, singular_values, vt = np.linalg.svd(selected, full_matrices=False)
         keep = singular_values > rank_rtol * singular_values[0]
         rank = int(keep.sum())
@@ -411,7 +461,8 @@ def smooth_balloon_trajectory_reference(processed_observations, parameters, *,
         canonical_clean_covariance=canonical_covariance,
         processed_clean_mean=(operator @ (scale*canonical_mean)).reshape(values.shape),
         processed_clean_covariance=processed_h @ covariance @ processed_h.T,
-        processed_noise_covariance=(operator*r) @ operator.T,
+        processed_noise_covariance=((operator*r) @ operator.T if noise_factor is None
+                                    else np.asarray(noise_factor)@np.asarray(noise_factor).T),
         observation_mask=available, parameter_log_likelihood=log_likelihood,
         retained_rank=rank, observed_coordinates=int(available.sum()),
         operator_singular_values=singular_values, rank_rtol=rank_rtol,

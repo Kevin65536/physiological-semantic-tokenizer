@@ -1,0 +1,173 @@
+schema: ssm_overnight_v3
+scope: bounded_training_only_observation_contract_diagnostics
+plan: docs/EXPERIMENT_PLAN.md
+baseline_commit: fa972804f0fc453a47933a7db6305a7d8196462f
+output_root: experiments/runs/physiology_semantic_tokenizer/ssm_overnight
+diagnostic_config: experiments/configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml
+subjects:
+- subject_01
+- subject_09
+- subject_18
+sessions:
+- session_01
+- session_03
+- session_05
+excluded_original_ma_positions:
+- 4
+- 9
+outer_folds: 4
+inner_folds: 3
+sampling_hz: 4.0
+steps: 120
+center_steps: 16
+quadrature_order: 13
+fixed_w:
+- 0.0
+budget:
+  hours: 8.0
+  max_workers: 16
+  memory_fraction: 0.6
+  cell_timeout_seconds: 900
+  map_timeout_seconds: 1800
+  map_max_nfev: 200
+  stage_estimate_safety_factor: 1.5
+  preparation_seconds_per_subject: 120
+observation:
+  schema: native_feature_missing_v1
+  mask_layer: after_nonlinear_features_before_linear_time_processing
+  eeg_feature_hz: 4.0
+  fnirs_feature_hz: 10.0
+  baseline_steps: 20
+  fnirs_filter_hz:
+  - 0.01
+  - 0.2
+  fnirs_filter_order: 3
+  fnirs_resampling: polyphase_10_to_4
+  mean_on_native_clock: linear_interpolation_of_4hz_clean_observation_constant_endpoints
+  noise_layer: independent_gaussian_eeg_power_and_motion_processed_optical_density
+  native_noise_qualification: feature_level_approximation_not_raw_noise_calibration
+  noise_estimator: training_only_gaussian_first_difference_mad
+  optical_noise_map: fixed_mbll_transform
+  score_O0: processed_clean_map
+  score_O1: conditional_gaussian_noisy_target
+  score_O2: conditional_noisy_target_given_map_path
+  shift_layer: feature_layer_before_time_processing
+  template_noise: independent_training_average
+  low_training_sd: 1.0e-08
+  rank_rtol: 1.0e-10
+  rank_check_rtols:
+  - 1.0e-08
+  - 1.0e-12
+  engineering_tolerances:
+    linear_mean: 1.0e-06
+    derivative: 1.0e-05
+    hidden_intervention: 1.0e-10
+    density_units: 1.0e-08
+    native_recomposition: 1.0e-06
+synthetic:
+  development_seed: 20600000
+  stage1_seed_start:
+    linearized_gaussian: 20661000
+    nonlinear_gaussian: 20671000
+    nonlinear_student_t: 20681000
+  trials_per_law: 24
+  variants:
+  - model
+  - combined
+  masks:
+  - full
+  - center_EEG
+  - center_fNIRS
+  - whole_EEG
+  - whole_fNIRS
+  solvers:
+  - O0
+  - O1
+  - O2
+  - O2_pointwise
+  - O2_mean_only
+  mean_precheck:
+    maximum_nrmse: 0.65
+    minimum_r_correlation: 0.8
+adaptation:
+  panels_per_condition: 4
+  panel_outer_fold: 0
+  seed_namespace: ssm_observation_v3_20260910
+  gain_grid:
+  - 0.5
+  - 0.75
+  - 1.0
+  - 1.5
+  - 2.0
+  process_grid:
+  - 0.5
+  - 1.0
+  - 2.0
+  gain_truth:
+  - id: matched
+    law: nonlinear_gaussian
+  - id: gain_low
+    law: nonlinear_gaussian
+    gain: 0.75
+  - id: gain_high
+    law: nonlinear_gaussian
+    gain: 1.5
+  - id: g_low
+    law: nonlinear_gaussian
+    g: -0.3
+  - id: g_high
+    law: nonlinear_gaussian
+    g: 0.3
+  - id: w_low
+    law: nonlinear_gaussian
+    w: -0.25
+  - id: w_high
+    law: nonlinear_gaussian
+    w: 0.25
+  - id: gw_low
+    law: nonlinear_gaussian
+    g: -0.3
+    w: -0.25
+  - id: gw_high
+    law: nonlinear_gaussian
+    g: 0.3
+    w: 0.25
+  - id: student_t
+    law: nonlinear_student_t
+  - id: independent_pairing
+    law: nonlinear_gaussian
+    independent_pairing: true
+  process_truth:
+  - id: q_low
+    law: nonlinear_gaussian
+    sigma_h: 0.5
+  - id: matched
+    law: nonlinear_gaussian
+  - id: q_high
+    law: nonlinear_gaussian
+    sigma_h: 2.0
+  - id: student_t
+    law: nonlinear_student_t
+  - id: independent_pairing
+    law: nonlinear_gaussian
+    independent_pairing: true
+  truth_primary_mode: full
+  truth_secondary_modes:
+  - center_EEG
+  - center_fNIRS
+  - EEG_only
+  - fNIRS_only
+  process_solvers:
+  - O0
+  - O2
+selection:
+  minimum_relative_risk_improvement: 0.1
+  maximum_modality_nrmse_degradation: 0.05
+  minimum_subjects_improving: 2
+  maximum_null_increment_degradation: 0.0
+  maximum_synthetic_nrmse_degradation: 0.02
+  synthetic_sensitivity_margin: 0.0
+  synthetic_interval: one_sided_95_percent_paired_t_four_panels_df3
+  baseline_inner_failure: undefined_selection_no_fallback
+teacher_qualification: none
+tokenizer_training: false

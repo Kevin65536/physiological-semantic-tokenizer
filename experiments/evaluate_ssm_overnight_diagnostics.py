@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded overnight N1--N7 diagnostics; ssm_next.md owns the experiment design.
+"""Bounded SSM diagnostics; the versioned configuration names its design owner.
 
 One frozen task table, one process pool, per-cell alarm, memory tokens, and an
 eight-hour termination budget. Result denominators come from registered cells,
@@ -16,6 +16,7 @@ import json
 import os
 import platform
 import resource
+import shutil
 import signal
 import subprocess
 import sys
@@ -61,7 +62,7 @@ OUTER_MASKS = ('full', 'EEG_only', 'fNIRS_only', 'all_missing',
     'center_EEG', 'center_EEG_own', 'center_EEG_template', 'center_EEG_pairing', 'center_EEG_shift',
     'center_fNIRS', 'center_fNIRS_own', 'center_fNIRS_template', 'center_fNIRS_pairing', 'center_fNIRS_shift')
 STATUSES = {'completed', 'data_unavailable', 'not_implemented', 'failed_domain',
-            'failed_numerical', 'failed_contract', 'timeout', 'not_started_budget'}
+            'failed_numerical', 'failed_contract', 'timeout', 'not_started_budget', 'not_started_prerequisite'}
 difference_noise_constant = lru_cache(maxsize=4)(step5.student_difference_mad)
 
 
@@ -111,6 +112,8 @@ def read_json(path):
 
 def load_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if cfg.get('schema') == 'ssm_overnight_v3':
+        return v3_load_config(cfg)
     if (cfg['schema'] not in ('ssm_overnight_v1', 'ssm_overnight_v2') or cfg['scope'] != 'bounded_training_only_exploratory_diagnostics' or
         cfg['subjects'] != ['subject_01', 'subject_09', 'subject_18'] or
         cfg['sessions'] != ['session_01', 'session_03', 'session_05'] or
@@ -590,6 +593,8 @@ def task_id(*parts):
 
 
 def make_tasks(cfg, inventory):
+    if cfg['schema'] == 'ssm_overnight_v3':
+        return v3_make_tasks(cfg, inventory)
     tasks = []
     families = FAMILIES if 'N7' in cfg else FAMILIES[:-1]
 
@@ -743,6 +748,8 @@ def persist_tasks(run_dir, tasks):
 
 
 def read_tasks(run_dir):
+    # A stage gate can depend on thousands of predeclared fit identities.
+    csv.field_size_limit(max(csv.field_size_limit(), 8*1024*1024))
     with (Path(run_dir)/'task_table.csv').open() as stream:
         return [json.loads(r['payload']) for r in csv.DictReader(stream)]
 
@@ -851,7 +858,12 @@ def linear_cell(run_dir, cfg, dc, task):
                 basic, full, hidden, cols = diagnostic.linear_features(y, template, modality, dc)
                 donor = arrays['target'][peers[identities[i]['training_ordinal'] % len(peers)]]
                 _, pairing, _, _ = diagnostic.linear_features(y, template, modality, dc, donor)
-                _, shift, _, _ = diagnostic.linear_features(y, template, modality, dc, np.roll(y, len(y)//2, axis=0))
+                shifted = np.roll(y, len(y)//2, axis=0)
+                if cfg['schema'] == 'ssm_overnight_v3':
+                    donor = v3_view(cfg, arrays, info, identities, i, 'center_'+modality+'_pairing', with_noise=False)
+                    shifted = v3_view(cfg, arrays, info, identities, i, 'center_'+modality+'_shift', with_noise=False)
+                    _, pairing, _, _ = diagnostic.linear_features(y, template, modality, dc, donor)
+                _, shift, _, _ = diagnostic.linear_features(y, template, modality, dc, shifted)
                 rows.append(dict(trial=i, basic=basic, joint=full, pairing=pairing, shift=shift,
                                  target=arrays['target'][i][hidden][:, cols], sd=arrays['normalizer'][cols]))
             groups[role] = rows
@@ -1200,10 +1212,36 @@ def session_summary(run_dir, cfg, task):
                 interpretation='three-session within-subject diagnostic; not population ICC or clinical traits')
 
 
-def driver_replay(z, p, c):
-    """Independent five-state integration under piecewise-linear frozen r(t)."""
+def driver_replay(z, p, c, *, driver_law='linear'):
+    """Independent integration with a declared interpolation of saved r(t).
+
+    Linear is the retained campaign rule. Model drift is an explicit numerical
+    audit: neural innovations enter only at saved sample times, matching the
+    RK4-plus-endpoint-innovation transition without adding hemodynamic noise.
+    """
     clock = np.arange(len(z))*c.dt
     driver = z[:, 0]
+    if driver_law == 'model_drift':
+        hemo = np.empty((len(z), 5))
+        hemo[0] = z[0, 1:]
+        nfev = 0
+        for t in range(1, len(z)):
+            def drift_rhs(delta, state):
+                r = driver[t-1]*np.exp(-p.fixed.driver_decay_per_s*delta)
+                return core.balloon_rhs(np.r_[r, state], p, dt=c.dt)[1:]
+            interval = solve_ivp(drift_rhs, (0., c.dt), hemo[t-1], method='DOP853',
+                t_eval=[c.dt], rtol=1e-8, atol=1e-10, max_step=c.dt/2)
+            if not interval.success or interval.y.shape != (5, 1):
+                raise FloatingPointError('r-driven interval integration failed: '+interval.message)
+            hemo[t] = interval.y[:, -1]
+            nfev += interval.nfev
+        transformed = np.column_stack((driver, hemo))
+        physical = np.array([core.transformed_to_physical(row) for row in transformed])
+        return transformed, physical, dict(nfev=nfev, method='DOP853',
+            driver='fixed model drift within each interval; saved r innovation at the endpoint',
+            initial_hemodynamics='same fitted initial state, carried continuously thereafter')
+    if driver_law != 'linear':
+        raise ValueError('unregistered replay driver law')
 
     def rhs(t, hemo):
         state = np.r_[np.interp(t, clock, driver), hemo]
@@ -1499,7 +1537,9 @@ def execute_cell(run_dir, cfg, task):
     try:
         _, dc, base, measured, metadata = load_config(Path(run_dir)/'resolved_config.yaml')
         kind = task['kind']
-        if kind in ('inner', 'outer'):
+        if cfg['schema'] == 'ssm_overnight_v3':
+            result = v3_dispatch(run_dir, cfg, dc, base, measured, metadata, task)
+        elif kind in ('inner', 'outer'):
             result = measured_cell(run_dir, cfg, base, task)
         elif kind == 'select':
             result = select_candidate(run_dir, cfg, task)
@@ -1557,7 +1597,7 @@ def execute_cell(run_dir, cfg, task):
 def partial_rows(run_dir, task):
     """Recover only predeclared row names, including failures; never glob successes."""
     kind = task['kind']
-    names = []
+    names = task.get('row_ids', [])
     if kind in ('outer', 'selected_outer'):
         names = [task_id(task['trial'], mode) for mode in OUTER_MASKS]
     elif kind == 'inner':
@@ -1619,7 +1659,9 @@ def freeze_sources(run_dir, cfg):
     extra = ['experiments/evaluate_ssm_overnight_diagnostics.py',
              'src/inference/balloon_trajectory_map.py',
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v1.yaml',
-             'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml']
+             'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml',
+             'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml',
+             'docs/EXPERIMENT_PLAN.md']
     paths = sorted(set(tracked+extra))
     hashes = {}
     for rel in paths:
@@ -1630,7 +1672,7 @@ def freeze_sources(run_dir, cfg):
             # src/data is source code, not a measured-data directory.
             if not (parts[0] == 'src' and parts[1] == 'data'):
                 continue
-        if not (rel.startswith(('src/', 'experiments/', 'research_state/')) or rel in ('ssm_next.md', 'requirements.txt', 'pytest.ini')):
+        if not (rel.startswith(('src/', 'experiments/', 'research_state/')) or rel in ('ssm_next.md', 'requirements.txt', 'pytest.ini', 'docs/EXPERIMENT_PLAN.md')):
             continue
         if Path(rel).suffix not in ('.py', '.yaml', '.yml', '.json', '.md', '.txt', '.ini'):
             continue
@@ -1896,6 +1938,8 @@ def influence_rows(run_dir, tasks, results):
 
 
 def summarize_run(run_dir, cfg, *, final=False):
+    if cfg['schema'] == 'ssm_overnight_v3':
+        return v3_summarize(run_dir, cfg, final=final)
     tasks = read_tasks(run_dir)
     results = {t['id']: cell_result(run_dir, t['id']) for t in tasks}
     family_summary, failures, scores = {}, [], defaultdict(list)
@@ -2059,6 +2103,8 @@ def summarize_run(run_dir, cfg, *, final=False):
 
 
 def prepare_run(run_dir, cfg, dc, base, measured, metadata):
+    if cfg['schema'] == 'ssm_overnight_v3':
+        return v3_prepare_run(run_dir, cfg, dc, base, metadata)
     expected_root = (ROOT/cfg['output_root']).resolve()
     run_dir = Path(run_dir).resolve()
     if run_dir.parent != expected_root or run_dir.exists():
@@ -2141,8 +2187,10 @@ def freeze_run(run_dir, cfg):
     freeze_sources(run_dir, cfg)
     # Bind the task contract and all fit-fold coordinates before evaluation.
     paths = ['task_table.csv', 'resolved_config.yaml', 'scope_inventory.json', 'fold_inventory.json', 'preflight.json']
+    if (run_dir/'continuation.json').exists():
+        paths.append('continuation.json')
     inventory = read_json(run_dir/'scope_inventory.json')
-    for subject in inventory:
+    for subject in inventory if cfg['schema'] != 'ssm_overnight_v3' else ():
         for outer in (None, 0, 1, 2, 3):
             for inner in (None,) if outer is None else (None, 0, 1, 2):
                 for eeg in ('E0',) if outer is None else cfg['N4']['candidates']:
@@ -2172,9 +2220,12 @@ def run_scheduler(run_dir, cfg):
     manifest = read_json(run_dir/'manifest.json')
     if manifest['execution'] not in ('ready', 'running'):
         raise ValueError('run is not ready/running; completed evidence is immutable')
+    if (run_dir/'continuation.json').exists():
+        if manifest['budget_started_at'] != read_json(run_dir/'continuation.json')['budget_started_at']:
+            raise ValueError('continuation changed the original campaign budget clock')
     pilots = read_json(run_dir/'pilots.json')
     resources = resource_budget(cfg, pilots['pilots']+pilots['preparations'])
-    previous_start = manifest.get('started_at')
+    previous_start = manifest.get('budget_started_at', manifest.get('started_at'))
     started_at = datetime.fromisoformat(previous_start) if previous_start else datetime.now(timezone.utc)
     elapsed = (datetime.now(timezone.utc)-started_at).total_seconds()
     deadline = time.monotonic()+max(0., cfg['budget']['hours']*3600-elapsed)
@@ -2212,12 +2263,33 @@ def run_scheduler(run_dir, cfg):
                 break
             available_tokens = resources['memory_tokens_bytes']-sum(v[1] for v in running.values())
             attempts = len(remaining)
-            active_layer = min([t['layer'] for t in remaining]+[v[0]['layer'] for v in running.values()], default=3)
+            layer_key = lambda t: (t.get('stage', 0), t['layer'])
+            active_layer = min([layer_key(t) for t in remaining]+[layer_key(v[0]) for v in running.values()], default=(0, 3))
+            if cfg['schema'] == 'ssm_overnight_v3' and not running:
+                stage = active_layer[0]
+                stage_key = str(stage)
+                if stage_key not in manifest.setdefault('stage_budget', {}):
+                    estimate = v3_stage_estimate(cfg, [t for t in remaining if t['stage'] == stage], pilots['pilots'], resources['workers'])
+                    estimate['remaining_seconds'] = max(0., deadline-time.monotonic())
+                    estimate['started'] = estimate['estimated_seconds'] <= estimate['remaining_seconds']
+                    manifest['stage_budget'][stage_key] = estimate
+                    atomic_json(run_dir/'manifest.json', manifest)
+                    if not estimate['started']:
+                        skipped = [t for t in remaining if t['stage'] == stage]
+                        remaining = deque(t for t in remaining if t['stage'] != stage)
+                        for task in skipped:
+                            result = dict(task_id=task['id'], family=task['family'], kind=task['kind'],
+                                status='not_started_budget', reason='whole stage estimate exceeds remaining budget', rows=[], actual_solves=0)
+                            atomic_json(run_dir/'cells'/task['id']/'result.json', result)
+                            append_status(run_dir, {k: v for k, v in result.items() if k != 'rows'})
+                            terminal.add(task['id'])
+                        print(f'Stage {stage} not started: {json.dumps(estimate)}', flush=True)
+                        continue
             while remaining and len(running) < resources['workers'] and attempts:
                 task = remaining.popleft()
                 attempts -= 1
-                cost = resources['map_job_bytes'] if task.get('solver') == 'O2' else resources['regular_job_bytes']
-                if (task['layer'] != active_layer or not set(task['dependencies']).issubset(terminal) or cost > available_tokens):
+                cost = resources['map_job_bytes'] if task.get('solver', '').startswith('O2') else resources['regular_job_bytes']
+                if (layer_key(task) != active_layer or not set(task['dependencies']).issubset(terminal) or cost > available_tokens):
                     remaining.append(task)
                     continue
                 future = pool.submit(execute_cell, run_dir, cfg, task)
@@ -2236,6 +2308,9 @@ def run_scheduler(run_dir, cfg):
                     atomic_json(run_dir/'cells'/task['id']/'result.json', dict(result, rows=partial_rows(run_dir, task)))
                 append_status(run_dir, result)
                 terminal.add(task['id'])
+                if cfg['schema'] == 'ssm_overnight_v3' and task['kind'] == 'v3_gate':
+                    print(json.dumps(serial(dict(gate=task['id'], result=cell_result(run_dir, task['id'])))), flush=True)
+                    summarize_run(run_dir, cfg)
             if time.monotonic()-last_update >= 60 or (done and len(terminal) <= 12):
                 elapsed_hours = (datetime.now(timezone.utc)-started_at).total_seconds()/3600
                 print(f"Progress {len(terminal)}/{len(tasks)} cells; running={len(running)}; elapsed={elapsed_hours:.3f}h", flush=True)
@@ -2276,7 +2351,8 @@ def run_scheduler(run_dir, cfg):
             if task['kind'] == 'session_summary' and cell_result(run_dir, task['id'])['status'] == 'not_started_budget':
                 execute_cell(run_dir, cfg, task)
         manifest.update(execution='completed' if not stopping else 'stopped_budget' if stop_reason == 'hard_time_budget' else 'stopped',
-            stop_reason=stop_reason, finished_at=datetime.now(timezone.utc).isoformat())
+            stop_reason=stop_reason, finished_at=datetime.now(timezone.utc).isoformat(),
+            completed_cells=sum((run_dir/'cells'/task['id']/'result.json').is_file() for task in tasks))
         atomic_json(run_dir/'manifest.json', manifest)
         summary = summarize_run(run_dir, cfg, final=True)
         print(json.dumps(serial(dict(execution=manifest['execution'], stop_reason=stop_reason,
@@ -2285,24 +2361,1250 @@ def run_scheduler(run_dir, cfg):
         lock.close()
 
 
+def v3_load_config(cfg):
+    """The v3 contract is independent of the retained v1/v2 candidate grids."""
+    fixed = dict(scope='bounded_training_only_observation_contract_diagnostics',
+        subjects=['subject_01', 'subject_09', 'subject_18'],
+        sessions=['session_01', 'session_03', 'session_05'],
+        excluded_original_ma_positions=[4, 9], outer_folds=4, inner_folds=3,
+        sampling_hz=4., steps=120, center_steps=16, fixed_w=[0.],
+        output_root='experiments/runs/physiology_semantic_tokenizer/ssm_overnight',
+        plan='docs/EXPERIMENT_PLAN.md', teacher_qualification='none', tokenizer_training=False)
+    if any(cfg.get(k) != v for k, v in fixed.items()):
+        raise ValueError('v3 scope, fold, model or interpretation contract drift')
+    obs, syn, adapt, budget = (cfg[k] for k in ('observation', 'synthetic', 'adaptation', 'budget'))
+    if (obs['mask_layer'] != 'after_nonlinear_features_before_linear_time_processing'
+            or obs['eeg_feature_hz'] != 4 or obs['fnirs_feature_hz'] != 10
+            or obs['baseline_steps'] != 20 or obs['fnirs_filter_hz'] != [.01, .2]
+            or obs['fnirs_filter_order'] != 3 or obs['low_training_sd'] != 1e-8
+            or syn['trials_per_law'] != 24 or syn['variants'] != ['model', 'combined']
+            or syn['masks'] != ['full', 'center_EEG', 'center_fNIRS', 'whole_EEG', 'whole_fNIRS']
+            or syn['solvers'] != ['O0', 'O1', 'O2', 'O2_pointwise', 'O2_mean_only']
+            or adapt['panels_per_condition'] != 4 or adapt['panel_outer_fold'] != 0
+            or adapt['gain_grid'] != [.5, .75, 1., 1.5, 2.]
+            or adapt['process_grid'] != [.5, 1., 2.]
+            or len(adapt['gain_truth']) != 11 or len(adapt['process_truth']) != 5
+            or adapt['process_solvers'] != ['O0', 'O2']):
+        raise ValueError('v3 observation or independent-panel contract drift')
+    if not (0 < budget['hours'] <= 8 and 1 <= budget['max_workers'] <= 16
+            and 0 < budget['memory_fraction'] <= .6
+            and 0 < budget['cell_timeout_seconds'] <= 900
+            and 0 < budget['map_timeout_seconds'] <= 1800
+            and 1 <= budget['map_max_nfev'] <= 200):
+        raise ValueError('v3 budget exceeds the planned bounds')
+    dc, base, measured, metadata = diagnostic.load_config(CODE_ROOT/cfg['diagnostic_config'])
+    if base['measured']['heldout_trial_positions'] != [4, 9] or base['measured']['sessions'] != cfg['sessions']:
+        raise ValueError('v3 differs from the owning original-training boundary')
+    base['model']['steps'] = cfg['steps']
+    return cfg, dc, base, measured, metadata
+
+
+@lru_cache(maxsize=8)
+def v3_native_operators(steps=120):
+    from scipy.signal import resample_poly
+    from src.data.homer2_preprocessing import bandpass_fnirs, modified_beer_lambert
+    if steps <= 20 or (steps*5) % 2:
+        raise ValueError('feature time window must support the five-second baseline')
+    native_steps = steps*5//2
+    baseline = np.eye(steps)
+    baseline[:, :20] -= 1/20
+    filtered, quality = bandpass_fnirs(np.eye(native_steps), sample_rate_hz=10.)
+    if quality['status'] != 'applied':
+        raise ValueError('native feature filter unavailable at the declared support')
+    fnirs = baseline@resample_poly(filtered, 2, 5, axis=0)
+    model_clock, native_clock = np.arange(steps)/4., np.arange(native_steps)/10.
+    interpolation = np.column_stack([np.interp(native_clock, model_clock, col)
+                                     for col in np.eye(steps)])
+    optical_basis = np.zeros((16, 1, 2))
+    optical_basis[:2, 0] = np.eye(2)
+    converted, _ = modified_beer_lambert(optical_basis, wavelengths_nm=(760., 850.))
+    mbll = converted[:2, 0, :].T
+    return dict(eeg=baseline, fnirs=fnirs, native_interpolation=interpolation,
+                model_time=model_clock, fnirs_time=native_clock, mbll=mbll)
+
+
+@lru_cache(maxsize=96)
+def v3_visible_interpolation(length, hidden_left, hidden_right):
+    mask = np.ones(length, dtype=bool)
+    mask[hidden_left:hidden_right] = False
+    selected = np.flatnonzero(mask)
+    if not len(selected):
+        return np.zeros((length, length))
+    if len(selected) < 2:
+        raise ValueError('partly visible feature needs two real input samples')
+    result = np.zeros((length, length))
+    result[:, selected] = np.column_stack(
+        [np.interp(np.arange(length), selected, col) for col in np.eye(len(selected))])
+    return result
+
+
+def v3_inventory(cfg, subject):
+    return [dict(subject=subject, session=session, training_ordinal=i,
+        original_ma_trial_position=p, event_index=p, sample_id=f'{subject}/{session}/{p}')
+        for session in cfg['sessions'] for i, p in enumerate([0, 1, 2, 3, 5, 6, 7, 8])]
+
+
+def v3_seed(cfg, *identity):
+    payload = json.dumps([cfg['adaptation']['seed_namespace'], *identity], separators=(',', ':'))
+    return int.from_bytes(hashlib.sha256(payload.encode()).digest()[:8], 'little')
+
+
+def v3_noise_estimate(base, eeg, od, train, fnirs_factor):
+    """Training-only feature noise; fixed MBLL retains HbO/HbR cross covariance."""
+    from scipy.special import ndtri
+    normal_difference_mad = np.sqrt(2)*ndtri(.75)
+    p, _, _ = model(base, BASE)
+    marginal = np.asarray(p.fixed.observation_scale)*np.sqrt(p.fixed.student_nu/(p.fixed.student_nu-2))
+    mbll = v3_native_operators(eeg.shape[1])['mbll']
+    eeg_sd = max(float(step5.first_difference_noise([eeg[i, :, None] for i in train],
+                                                   normal_difference_mad)[0]), marginal[0])
+    floor = min(marginal[1:])/(max(np.linalg.norm(mbll, axis=1))*fnirs_factor)
+    od_sd = np.maximum(step5.first_difference_noise([od[i] for i in train], normal_difference_mad), floor)
+    mixing = fnirs_factor*mbll@np.diag(od_sd)
+    return dict(eeg_sd=eeg_sd, od_sd=od_sd, fnirs_mixing=mixing, fnirs_factor=fnirs_factor,
+        estimator='Gaussian first-difference MAD on training feature inputs',
+        assumption='independent EEG-feature / motion-processed wavelength innovations; not raw-noise calibration',
+        training_trials=list(train))
+
+
+def v3_view(cfg, arrays, info, identities, trial, mode, *, with_noise=True):
+    """Compile a feature-missing view and its same-source target noise map."""
+    e = arrays['feature_eeg'][trial].copy()
+    hb = arrays['feature_fnirs'][trial].copy()
+    n, nh = len(e), len(hb)
+    op = v3_native_operators(n)
+    available = np.ones((n, 3), dtype=bool)
+    left, right = (n-cfg['center_steps'])//2, (n+cfg['center_steps'])//2
+    e_hidden = (0, 0)
+    h_hidden = (0, 0)
+    other = None
+    suffix = ''
+    if mode in ('EEG_only', 'fNIRS_only', 'all_missing'):
+        if mode in ('fNIRS_only', 'all_missing'):
+            available[:, 0] = False
+            e_hidden = (0, n)
+        if mode in ('EEG_only', 'all_missing'):
+            available[:, 1:] = False
+            h_hidden = (0, nh)
+    elif mode.startswith('center_'):
+        modality = 'EEG' if mode.startswith('center_EEG') else 'fNIRS'
+        other = 'fnirs' if modality == 'EEG' else 'eeg'
+        suffix = mode.removeprefix('center_'+modality)
+        if modality == 'EEG':
+            available[left:right, 0] = False
+            e_hidden = (left, right)
+        else:
+            available[left:right, 1:] = False
+            h_hidden = (int(left*2.5), int(right*2.5))
+        if suffix == '_own':
+            available[:, [1, 2] if other == 'fnirs' else [0]] = False
+            if other == 'eeg':
+                e_hidden = (0, n)
+            else:
+                h_hidden = (0, nh)
+    elif mode != 'full':
+        raise ValueError('unregistered feature view')
+    independent = suffix in ('_pairing', '_template')
+    divisor, donor = 1., None
+    if independent:
+        peers = [i for i in info['train'] if i != trial and identities[i]['session'] == identities[trial]['session']]
+        if not peers:
+            raise ValueError('no training-only feature donor')
+        donor = peers[identities[trial]['training_ordinal'] % len(peers)]
+        if suffix == '_template':
+            divisor = np.sqrt(len(peers))
+            source = arrays['feature_fnirs' if other == 'fnirs' else 'feature_eeg'][peers].mean(axis=0)
+        else:
+            source = arrays['feature_fnirs' if other == 'fnirs' else 'feature_eeg'][donor].copy()
+        if other == 'fnirs':
+            hb = source
+        else:
+            e = source
+    elif suffix == '_shift':
+        if other == 'fnirs':
+            hb = np.roll(hb, nh//2, axis=0)
+        else:
+            e = np.roll(e, n//2)
+    pe = op['eeg']@v3_visible_interpolation(n, *e_hidden)
+    ph = op['fnirs']@v3_visible_interpolation(nh, *h_hidden)
+    pe[~available[:, 0]] = 0
+    ph[~available[:, 1]] = 0
+    e[e_hidden[0]:e_hidden[1]] = 0
+    hb[h_hidden[0]:h_hidden[1]] = 0
+    y = np.column_stack((pe@e, ph@hb))
+    y[~available] = np.nan
+    if not with_noise:
+        return y
+    mean = np.stack((pe, ph@op['native_interpolation'], ph@op['native_interpolation']))
+    target_mean = np.stack((op['eeg'], op['fnirs']@op['native_interpolation'],
+                            op['fnirs']@op['native_interpolation']))
+    spec = joint.TrajectoryObservationSpec(mean, op['model_time'], op['model_time'],
+        (dict(contract=cfg['observation']['schema'], mode=mode,
+              mean_native_clock='linear interpolation of canonical clean observations; constant endpoints'),),
+        output_mask=available)
+    target_spec = joint.TrajectoryObservationSpec(target_mean, op['model_time'], op['model_time'], ())
+    width = n+2*nh
+    factor = np.zeros((3*n, width*(2 if independent else 1)))
+    target_factor = np.zeros_like(factor)
+    noise = info['feature_noise']
+    sigma, mixing = float(noise['eeg_sd']), np.asarray(noise['fnirs_mixing'])
+    ebase = width if independent and other == 'eeg' else 0
+    hbase = width if independent and other == 'fnirs' else 0
+    en = np.roll(pe, -n//2, axis=1) if suffix == '_shift' and other == 'eeg' else pe
+    hn = np.roll(ph, -nh//2, axis=1) if suffix == '_shift' and other == 'fnirs' else ph
+    factor[0::3, ebase:ebase+n] = en*sigma/(divisor if independent and other == 'eeg' else 1.)
+    target_factor[0::3, :n] = op['eeg']*sigma
+    for channel in range(2):
+        for wavelength in range(2):
+            cols = slice(hbase+n+wavelength*nh, hbase+n+(wavelength+1)*nh)
+            factor[1+channel::3, cols] = hn*mixing[channel, wavelength]/(divisor if independent and other == 'fnirs' else 1.)
+            target_factor[1+channel::3, n+wavelength*nh:n+(wavelength+1)*nh] = op['fnirs']*mixing[channel, wavelength]
+    return dict(input=y, operator=spec, noise_factor=factor, target=arrays['target'][trial],
+        target_operator=target_spec, target_noise_factor=target_factor,
+        normalizer=arrays['normalizer'], donor=donor, template_count=int(round(divisor**2)) if suffix == '_template' else None,
+        mask_layer=cfg['observation']['mask_layer'])
+
+
+def v3_residual_metrics(target, prediction, sd, mask=None):
+    good = np.isfinite(sd) & (np.asarray(sd) > 1e-8)
+    metrics = residual_metrics(target, prediction, np.where(good, sd, 1.), mask)
+    for i, name in enumerate(MODALITIES):
+        if not good[i]:
+            metrics[name] = None
+    return metrics
+
+
+def v3_fit_row(run_dir, cfg, base, task, row_id, view, candidate, *, mode, identity=None, truth=None):
+    row = dict(row_id=row_id, mode=mode, solver=task['solver'], candidate=candidate,
+               **(identity or {}), input_contract=view.get('mask_layer', 'controlled_linear_feature_bridge'))
+    try:
+        y, op = view['input'], view['operator']
+        noise_factor = view['noise_factor']
+        p, c, spec = model(base, candidate)
+        solver = task['solver']
+        marginal_variance = np.sum(noise_factor**2, axis=1).reshape(y.shape)
+        covariance = None
+        if solver == 'O0':
+            scale = np.array([np.sqrt(np.mean(marginal_variance[np.isfinite(y[:, j]), j]))
+                if np.isfinite(y[:, j]).any() else p.fixed.observation_scale[j]
+                for j in range(3)])*np.sqrt((p.fixed.student_nu-2)/p.fixed.student_nu)
+            p, c, spec = model(base, candidate, noise=scale)
+            fit = joint.smooth_balloon_joint(y, p, config=c, observation_spec=spec,
+                                            quadrature_order=cfg['quadrature_order'])
+            z, canonical, state = fit.transformed_mean, fit.trajectory_mean, fit.state_mean
+            covariance = np.column_stack((fit.state_covariance[:, 0, 0], fit.state_posterior_variance))
+            details = dict(parameter_log_likelihood=fit.parameter_log_likelihood,
+                           physical_checks=fit.physical_checks, pointwise_scale=scale)
+        else:
+            if solver in ('O2_pointwise', 'O2_mean_only'):
+                noise_factor = np.diag(np.sqrt(marginal_variance.ravel()))
+                if solver == 'O2_pointwise':
+                    n = len(y)
+                    op = joint.TrajectoryObservationSpec(np.tile(np.eye(n), (3, 1, 1)),
+                        op.input_time, op.output_time, (), output_mask=np.isfinite(y))
+            if solver == 'O1':
+                fit = joint.smooth_balloon_trajectory_reference(y, p, config=c, trajectory_spec=op,
+                    noise_variance=None, noise_factor=noise_factor, observation_spec=spec,
+                    rank_rtol=cfg['observation']['rank_rtol'])
+                z, canonical = fit['transformed_mean'], fit['canonical_clean_mean']
+                state = np.array([core.transformed_to_physical(a) for a in z])
+                covariance = np.column_stack((np.diag(fit['transformed_covariance'])[::6],
+                    np.diag(fit['canonical_clean_covariance']).reshape(len(y), 3)))
+                details = {k: fit[k] for k in ('parameter_log_likelihood', 'retained_rank',
+                    'discarded_singular_values', 'support_residual_norm', 'approximation')}
+                details['physical_checks'] = core.run_physical_checks(state, p)
+            else:
+                fit = batch_map.smooth_balloon_trajectory_map(y, p, config=c, trajectory_spec=op,
+                    noise_variance=None, noise_factor=noise_factor, observation_spec=spec,
+                    rank_rtol=cfg['observation']['rank_rtol'], max_nfev=cfg['budget']['map_max_nfev'])
+                details = {k: v for k, v in fit.items() if not isinstance(v, np.ndarray)}
+                if fit['status'] != 'completed':
+                    row.update(details)
+                    save_fit(run_dir, task['id'], row_id, None, row)
+                    return row
+                z, canonical, state = fit['transformed_mean'], fit['canonical_clean_mean'], fit['state_mean']
+        target_matrix = view['target_operator'].matrix()[0]
+        clean_prediction = (target_matrix@canonical.ravel()).reshape(y.shape)
+        prediction = clean_prediction.copy()
+        if solver in ('O1', 'O2'):
+            matrix, available = op.matrix()
+            system = joint.whiten_trajectory_observations(y, matrix, available, noise_factor, cfg['observation']['rank_rtol'])
+            cross = view['target_noise_factor']@noise_factor[system['available'].ravel()].T@system['whitener'].T
+            residual = system['target']-system['design']@canonical.ravel()
+            prediction += (cross@residual).reshape(y.shape)
+            details['whitened_residual_norm'] = float(np.linalg.norm(residual))
+        hidden = np.zeros(len(y), dtype=bool)
+        hidden[(len(y)-cfg['center_steps'])//2:(len(y)+cfg['center_steps'])//2] = True
+        row.update(details, status='completed',
+            metrics=v3_residual_metrics(view['target'], prediction, view['normalizer']),
+            center_metrics=v3_residual_metrics(view['target'], prediction, view['normalizer'], hidden),
+            clean_map_residual=v3_residual_metrics(view['target'], clean_prediction, view['normalizer']),
+            score_prediction_kind=cfg['observation'].get('score_'+solver, 'processed_clean_map_diagnostic'),
+            noisy_interval_status='NOT_ESTIMATED', parameter_interval='NOT_ESTIMATED',
+            low_training_variance=(~(np.isfinite(view['normalizer']) & (view['normalizer'] > 1e-8))).tolist())
+        if not physical_valid(details['physical_checks']):
+            row.update(status='failed_domain', solver_completed=True,
+                       failure_stage='posterior_mean_physical_check' if solver == 'O0' else
+                           'linear_reference_mean_physical_check' if solver == 'O1' else 'MAP_path_physical_check')
+        arrays = dict(r=state[:, 0], transformed_mean=z, state_mean=state, canonical_clean_mean=canonical,
+            clean_mean=clean_prediction, prediction=prediction, input=y, observation_mask=np.isfinite(y),
+            target=view['target'], normalization_sd=view['normalizer'])
+        if covariance is not None:
+            arrays['canonical_variance'] = covariance
+        if truth is not None:
+            estimate = np.column_stack((state[:, 0], canonical))
+            row['truth'] = clean_metrics(truth, estimate, covariance)
+            row['hidden_truth'] = clean_metrics(truth[hidden], estimate[hidden],
+                                                None if covariance is None else covariance[hidden])
+            arrays['truth'] = truth
+        if mode == 'full':
+            try:
+                innovation = np.array([z[t]-core.rk4_transition(z[t-1], p, c) for t in range(1, len(z))])
+                row['process_innovation_rms'] = np.sqrt(np.mean(innovation**2, axis=0))
+                row['standardized_process_innovation_rms'] = row['process_innovation_rms']/(np.asarray(p.fixed.process_std)*np.sqrt(c.dt))
+                row['process_innovation_status'] = 'completed'
+            except (ValueError, FloatingPointError) as exc:
+                row['process_innovation_status'] = dict(**failure(exc), role='mean-path diagnostic; not a failed observation fit')
+            row['clean_map_residual_structure'] = noise_structure((view['target']-clean_prediction)/view['normalizer'])
+            row['hbt_rmse_coordinate'] = float(np.sqrt(np.mean(np.sum(clean_prediction[:, 1:]-view['target'][:, 1:], axis=1)**2)))
+            if task.get('axis') == 'process' or (task.get('role') == 'fixed' and solver in ('O0', 'O2')):
+                try:
+                    replay_z, replay_physical, replay_detail = driver_replay(z, p, c)
+                    replay_clean = np.array([core.observation_map(a, p, spec) for a in replay_physical])
+                    row['replay'] = dict(status='completed',
+                        path_kind='MAP' if solver == 'O2' else 'posterior_mean',
+                        initial_state='same fitted initial five-state vector',
+                        gap_rmse_coordinate=np.sqrt(np.mean((replay_clean-canonical)**2, axis=0)),
+                        gap_nrmse_training_sd=np.sqrt(np.mean((replay_clean-canonical)**2, axis=0))/view['normalizer'],
+                        **{k: v for k, v in replay_detail.items() if k != 'driver'})
+                    arrays['replay_transformed'], arrays['replay_clean'] = replay_z, replay_clean
+                except (ValueError, FloatingPointError) as exc:
+                    row['replay'] = failure(exc)
+        save_fit(run_dir, task['id'], row_id, arrays, row)
+    except Exception as exc:
+        if isinstance(exc, TimeoutError):
+            raise
+        row.update(failure(exc))
+        save_fit(run_dir, task['id'], row_id, None, row)
+    return row
+
+
+def v3_save_npz(path, **arrays):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.tmp.npz')
+    np.savez_compressed(temporary, **arrays)
+    os.replace(temporary, path)
+
+
+def v3_bridge_view(cfg, dc, base, generated, variant, mode):
+    n = len(generated['clean'])
+    full = repair.trajectory_operator(n, variant, dc)
+    mask = repair.bridge_mask(n, mode, cfg['center_steps'])
+    op = full.with_visible_interpolation(mask, mask)
+    matrix, _ = op.matrix()
+    target_matrix, _ = full.matrix()
+    p, _, _ = model(base, BASE)
+    sd = np.tile(np.asarray(p.fixed.observation_scale)*np.sqrt(p.fixed.student_nu/(p.fixed.student_nu-2)), n)
+    return dict(input=op.apply(generated['observations']), operator=op,
+        noise_factor=matrix*sd, target=full.apply(generated['observations']),
+        target_operator=full, target_noise_factor=target_matrix*sd,
+        normalizer=np.std(full.apply(generated['observations']), axis=0),
+        mask_layer='controlled_linear_feature_bridge')
+
+
+def v3_temporal_cell(run_dir, cfg, dc, base, task):
+    g = generated_trial(base, task['law'], task['seed'], cfg['steps'])
+    view = v3_bridge_view(cfg, dc, base, g, task['variant'], task['mode'])
+    row = v3_fit_row(run_dir, cfg, base, task, 'fit', view, BASE, mode=task['mode'],
+                    truth=np.column_stack((g['states'][:, 0], g['clean'])))
+    row.update(law=task['law'], variant=task['variant'], seed=task['seed'], replicate=task['replicate'])
+    save_fit(run_dir, task['id'], 'fit', None, row)
+    return dict(status=row['status'], rows=[row], actual_solves=1)
+
+
+def v3_synthetic_features(cfg, base, condition, seed):
+    altered = copy.deepcopy(base)
+    process = np.array(altered['model']['process_std'])
+    process[1:] *= condition.get('sigma_h', 1.)
+    altered['model']['process_std'] = process.tolist()
+    law = condition['law']
+    g = generated_trial(altered, law, seed, cfg['steps'], truth_g=condition.get('g', 0.),
+                        truth_w=condition.get('w', 0.), truth_gain=condition.get('gain', 1.))
+    if condition.get('independent_pairing'):
+        donor = generated_trial(altered, law, v3_seed(cfg, 'donor', seed), cfg['steps'])
+        g['clean'][:, 1:] = donor['clean'][:, 1:]
+    op = v3_native_operators(cfg['steps'])
+    p, _, _ = model(base, BASE)
+    marginal = np.asarray(p.fixed.observation_scale)*np.sqrt(p.fixed.student_nu/(p.fixed.student_nu-2))
+    od_sd = float(np.sqrt(np.mean(marginal[1:]**2)/np.mean(np.sum(op['mbll']**2, axis=1))))
+    rng = np.random.default_rng(v3_seed(cfg, 'feature_noise', seed))
+    def noise(shape, sd):
+        if law == 'nonlinear_student_t':
+            return rng.standard_t(p.fixed.student_nu, shape)*sd*np.sqrt((p.fixed.student_nu-2)/p.fixed.student_nu)
+        return rng.normal(size=shape)*sd
+    e = g['clean'][:, 0]+noise((cfg['steps'],), marginal[0])
+    clean_od = (op['native_interpolation']@g['clean'][:, 1:])@np.linalg.inv(op['mbll']).T
+    od = clean_od+noise(clean_od.shape, od_sd)
+    return dict(feature_eeg=e, feature_od=od, feature_fnirs=od@op['mbll'].T,
+                truth=np.column_stack((g['states'][:, 0], g['clean'])))
+
+
+def v3_generate_panel(run_dir, cfg, base, task):
+    subject = task['subject']
+    identities = v3_inventory(cfg, subject)
+    values, rows = [], []
+    for trial, identity in enumerate(identities):
+        seed = v3_seed(cfg, task['axis'], task['condition']['id'], task['panel'], trial)
+        try:
+            value = v3_synthetic_features(cfg, base, task['condition'], seed)
+            rows.append(dict(trial=trial, seed=seed, status='completed', **identity))
+        except Exception as exc:
+            if isinstance(exc, TimeoutError):
+                raise
+            value = dict(feature_eeg=np.full(cfg['steps'], np.nan),
+                feature_fnirs=np.full((cfg['steps']*5//2, 2), np.nan),
+                feature_od=np.full((cfg['steps']*5//2, 2), np.nan),
+                truth=np.full((cfg['steps'], 4), np.nan))
+            rows.append(dict(trial=trial, seed=seed, **identity, **failure(exc)))
+        values.append(value)
+    arrays = {key: np.array([v[key] for v in values]) for key in values[0]}
+    v3_save_npz(Path(run_dir)/'prepared'/f'{subject}.npz', **arrays)
+    atomic_json(Path(run_dir)/'prepared'/f'{subject}.json', dict(
+        subject=subject, trials=identities, synthetic=True, condition=task['condition'],
+        generation_rows=rows, coordinate_use='canonical feature gauge; native nonlinear extraction is not simulated',
+        split=folds(identities, cfg['adaptation']['panel_outer_fold'])))
+    return dict(status='completed', rows=rows, generated_trials=sum(r['status'] == 'completed' for r in rows))
+
+
+def v3_prepare_subject(run_dir, cfg, dc, base, measured, metadata, task):
+    trials, detail = diagnostic.load_training_subject(task['subject'], dc, base, measured, metadata,
+                                                      retain_feature_boundary=True, data_root=ROOT)
+    validate_identities(detail['trials'], cfg, task['subject'])
+    expected = read_json(Path(run_dir)/'scope_inventory.json')[task['subject']]
+    if [r['sample_id'] for r in expected] != [r['sample_id'] for r in detail['trials']]:
+        raise ValueError('native feature preparation differs from frozen scope')
+    arrays = dict(eligible=np.array([t['eligible'] for t in trials]))
+    for name in ('eeg_log_power', 'fnirs'):
+        arrays['target_'+name] = np.array([t['views']['target'][name] for t in trials])
+    for source, target in [('eeg_log_power', 'feature_eeg_log_power'),
+                           ('fnirs', 'feature_fnirs'), ('optical_density', 'feature_od')]:
+        arrays[target] = np.array([t['views']['target']['feature_boundary'][source] for t in trials])
+    # Native masks are a separate retained coordinate contract, not new inputs.
+    for mode in ('center_EEG', 'center_fNIRS'):
+        for name in ('eeg_log_power', 'fnirs'):
+            arrays['native_'+mode+'_'+name] = np.array([t['views'][mode][name] for t in trials])
+    detail.update(synthetic=False, observation_contract=cfg['observation']['schema'],
+                  feature_mask_interpretation='missing features; not missing raw sensor samples')
+    v3_save_npz(Path(run_dir)/'prepared'/f"{task['subject']}.npz", **arrays)
+    atomic_json(Path(run_dir)/'prepared'/f"{task['subject']}.json", detail)
+    return dict(status='completed', rows=[], prepared_trials=24, original_heldout_trials_processed=0)
+
+
+def v3_prepare_projection(run_dir, cfg, base, measured, task):
+    subject, outer, inner = task['subject'], task['outer'], task.get('inner')
+    detail = read_json(Path(run_dir)/'prepared'/f'{subject}.json')
+    identities = detail['trials']
+    split = folds(identities, outer)
+    if inner is not None:
+        split = split['inner'][inner]
+    train, val = split['train'], split['validation']
+    with np.load(Path(run_dir)/'prepared'/f'{subject}.npz', allow_pickle=False) as data:
+        raw = {key: data[key] for key in data.files}
+    synthetic = detail.get('synthetic', False)
+    legacy = None
+    if synthetic:
+        eeg, hb, od = raw['feature_eeg'], raw['feature_fnirs'], raw['feature_od']
+        projection = dict(kind='identity in admitted synthetic feature coordinate', fnirs_factor=1.)
+    else:
+        features = [dict(eeg_log_power=e, fnirs=h) for e, h in zip(raw['target_eeg_log_power'], raw['target_fnirs'])]
+        eligible = np.logical_and.reduce(raw['eligible'][train])
+        projection = step5.fit_measured_projection([features[i] for i in train], base, measured, eligible)
+        eeg = (((raw['feature_eeg_log_power']-projection['eeg_center'])/
+            projection['eeg_feature_scale']-projection['pca_center'])@projection['loading'])*projection['eeg_factor']
+        hb = raw['feature_fnirs'][:, :, projection['fnirs_pair']]*projection['fnirs_factor']
+        od = raw['feature_od'][:, :, projection['fnirs_pair']]
+        legacy = np.array([step5.apply_measured_projection(v, projection) for v in features])
+    if not all(np.isfinite(v[train]).all() for v in (eeg, hb, od)):
+        raise ValueError('incomplete generation or nonfinite training feature identity set')
+    op = v3_native_operators(cfg['steps'])
+    target = np.array([np.column_stack((op['eeg']@e, op['fnirs']@h)) for e, h in zip(eeg, hb)])
+    normalizer = np.std(np.concatenate(target[train]), axis=0)
+    noise = v3_noise_estimate(base, eeg, od, train, projection['fnirs_factor'])
+    info = dict(subject=subject, outer=outer, inner=inner, train=train, validation=val,
+        projection=projection, feature_noise=noise, synthetic=synthetic,
+        coordinate_use='fold_training_only_feature_missing_v1',
+        source_preparation_sha256=diagnostic.digest(Path(run_dir)/'prepared'/f'{subject}.npz'),
+        normalization_sd=normalizer, feature_times=dict(eeg_hz=4., optical_hz=10., evaluation_hz=4.))
+    arrays = dict(feature_eeg=eeg, feature_fnirs=hb, target=target, normalizer=normalizer)
+    if synthetic:
+        arrays['truth'] = raw['truth']
+    else:
+        error = float(np.max(np.abs(target-legacy)/np.maximum(normalizer, 1e-8)))
+        info['legacy_full_recomposition_max_error_training_sd'] = error
+        if error > cfg['observation']['engineering_tolerances']['native_recomposition']:
+            raise ValueError('native feature recomposition differs from legacy target: '+str(error))
+        arrays['legacy_target'] = legacy
+        for mode in ('center_EEG', 'center_fNIRS'):
+            arrays['legacy_'+mode] = np.array([step5.apply_measured_projection(
+                dict(eeg_log_power=e, fnirs=h), projection) for e, h in zip(
+                    raw['native_'+mode+'_eeg_log_power'], raw['native_'+mode+'_fnirs'])])
+    for mode in ('center_EEG', 'center_fNIRS'):
+        arrays[mode] = np.array([v3_view(cfg, arrays, info, identities, i, mode, with_noise=False) for i in range(24)])
+    prefix = projection_path(run_dir, subject, outer, inner, 'E0')
+    v3_save_npz(prefix.with_suffix('.npz'), **arrays)
+    info['array_sha256'] = diagnostic.digest(prefix.with_suffix('.npz'))
+    atomic_json(prefix.with_suffix('.json'), info)
+    return dict(status='completed', rows=[], subject=subject, outer=outer, inner=inner,
+        full_recomposition_max_error_training_sd=info.get('legacy_full_recomposition_max_error_training_sd'))
+
+
+def v3_candidates(cfg, axis):
+    field = 'gain' if axis == 'gain' else 'sigma_h'
+    grid = cfg['adaptation'][axis+'_grid']
+    return [dict(BASE, **{field: value}, id='baseline' if value == 1 else f'{axis}_{value:g}')
+            for value in sorted(grid, key=lambda v: (v != 1., abs(np.log(v)), v))]
+
+
+def v3_selection_risk(rows, expected):
+    found = {(r.get('sample_id'), r.get('mode')) for r in rows}
+    if len(rows) != len(expected) or found != set(expected) or any(r['status'] != 'completed' for r in rows):
+        return None
+    by_id = defaultdict(dict)
+    for row in rows:
+        by_id[row['sample_id']][row['mode']] = row
+    scored = []
+    for sample_id, modes in by_id.items():
+        eeg, hb = modes['center_EEG'], modes['center_fNIRS']
+        metrics = [eeg['center_metrics']['EEG'], hb['center_metrics']['HbO'], hb['center_metrics']['HbR']]
+        if any(m is None or m['nmse'] is None or not np.isfinite(m['nmse']) for m in metrics):
+            return None
+        nmse = np.array([m['nmse'] for m in metrics])
+        scored.append(dict(sample_id=sample_id, subject=eeg['subject'], session=eeg['session'],
+                           nmse=nmse, B=float(nmse@[.5, .25, .25])))
+    nmse, _ = equal_subject_mean(scored, 'nmse')
+    risk, _ = equal_subject_mean(scored, 'B')
+    return dict(nmse=nmse, nrmse=np.sqrt(nmse), B=float(risk))
+
+
+def v3_select(run_dir, cfg, task):
+    identities = read_json(Path(run_dir)/'prepared'/f"{task['subject']}.json")['trials']
+    train = folds(identities, task['outer'])['train']
+    expected = [(identities[i]['sample_id'], mode) for i in train for mode in ('center_EEG', 'center_fNIRS')]
+    results = {}
+    for candidate in task['candidate_panel']:
+        blocks = [cell_result(run_dir, identifier) for identifier in task['inner_cells'][candidate['id']]]
+        rows = [r for b in blocks for r in b.get('rows', [])]
+        risk = v3_selection_risk(rows, expected) if all(b['status'] == 'completed' for b in blocks) else None
+        results[candidate['id']] = dict(risk=risk, expected_fits=len(expected),
+                                        completed_fits=sum(r['status'] == 'completed' for r in rows))
+    reference = results['baseline']['risk']
+    if reference is None:
+        return dict(status='failed_contract', failure_stage='baseline_inner_incomplete',
+                    candidates=results, rows=[], error='own solver baseline inner panel incomplete; no fallback')
+    acceptable = [c for c in task['candidate_panel'] if results[c['id']]['risk'] is not None and
+        np.all(np.asarray(results[c['id']]['risk']['nrmse']) <=
+               np.asarray(reference['nrmse'])+cfg['selection']['maximum_modality_nrmse_degradation'])]
+    order = {c['id']: i for i, c in enumerate(task['candidate_panel'])}
+    selected = min(acceptable, key=lambda c: (results[c['id']]['risk']['B'], order[c['id']]))
+    return dict(status='completed', selected=selected, candidates=results, rows=[],
+                selection_source='training-only inner folds; no assessment truth or targets')
+
+
+def v3_fits_cell(run_dir, cfg, base, task):
+    candidate = task.get('candidate', BASE)
+    if task.get('selection'):
+        selection = cell_result(run_dir, task['selection'])
+        if selection['status'] != 'completed':
+            return dict(status='not_started_prerequisite', reason='own inner selection undefined', rows=[], actual_solves=0)
+        candidate = selection['selected']
+    if task.get('reference_task') and all(candidate[k] == BASE[k] for k in BASE if k != 'id'):
+        reference = cell_result(run_dir, task['reference_task'])
+        rows = copy.deepcopy(reference.get('rows', []))
+        for row in rows:
+            row['reuse_source_task'] = task['reference_task']
+        return dict(status=reference['status'], rows=rows, selected_candidate=candidate, actual_solves=0,
+                    reused_task=task['reference_task'], fit_context=reference.get('fit_context'))
+    subject, outer, inner = task['subject'], task['outer'], task.get('inner')
+    info, arrays = load_projection(str(run_dir), subject, outer, inner, 'E0')
+    if diagnostic.digest(projection_path(run_dir, subject, outer, inner, 'E0').with_suffix('.npz')) != info['array_sha256']:
+        raise ValueError('frozen fold feature arrays changed')
+    detail = read_json(Path(run_dir)/'prepared'/f'{subject}.json')
+    if task['trials'] != info['validation'] and not (len(task['trials']) == 1 and task['trials'][0] in info['validation']):
+        raise ValueError('requested fit identities differ from frozen fold validation')
+    rows = []
+    for trial in task['trials']:
+        identity = dict(detail['trials'][trial], trial=trial)
+        for mode in task['modes']:
+            view = v3_view(cfg, arrays, info, detail['trials'], trial, mode)
+            row = v3_fit_row(run_dir, cfg, base, task, task_id(trial, mode), view, candidate,
+                mode=mode, identity=identity, truth=arrays['truth'][trial] if 'truth' in arrays else None)
+            rows.append(row)
+    return dict(status='completed', rows=rows, selected_candidate=candidate, actual_solves=len(rows),
+        fit_context=dict(subject=subject, outer=outer, inner=inner, trials=task['trials'],
+                         array_sha256=info['array_sha256']))
+
+
+def v3_make_tasks(cfg, inventory):
+    """One prospective queue; no task identities are selected from fit results."""
+    tasks = []
+    def add(identifier, family, layer, kind, stage, *, dependencies=(), prerequisites=(), planned_solves=0, **payload):
+        task = dict(id=identifier, family=family, layer=layer, kind=kind, stage=stage,
+            dependencies=list(dict.fromkeys([*dependencies, *prerequisites])), prerequisites=list(prerequisites),
+            planned_solves=planned_solves, **payload)
+        task['timeout_seconds'] = cfg['budget']['map_timeout_seconds'] if task.get('solver', '').startswith('O2') else cfg['budget']['cell_timeout_seconds']
+        if kind == 'v3_fits':
+            task['row_ids'] = [task_id(i, mode) for i in task['trials'] for mode in task['modes']]
+        elif kind == 'v3_temporal':
+            task['row_ids'] = ['fit']
+        else:
+            task['row_ids'] = []
+        tasks.append(task)
+        return identifier
+    temporal = []
+    for law, seed_start in cfg['synthetic']['stage1_seed_start'].items():
+        for replicate in range(cfg['synthetic']['trials_per_law']):
+            for variant in cfg['synthetic']['variants']:
+                for mode in cfg['synthetic']['masks']:
+                    for solver in cfg['synthetic']['solvers']:
+                        temporal.append(add(task_id('v3', 'S1', law, replicate, variant, mode, solver),
+                            'S1', 0, 'v3_temporal', 1, planned_solves=1,
+                            law=law, replicate=replicate, seed=seed_start+replicate,
+                            variant=variant, mode=mode, solver=solver))
+    temporal_gate = add('v3_S1_gate', 'S1', 1, 'v3_gate', 1, gate='temporal', dependencies=temporal)
+    projection_ids = {}
+    def projections(subject, ids, outer_values, family, stage, layer, dependency):
+        for outer in outer_values:
+            for inner in (None, 0, 1, 2):
+                key = task_id('v3_projection', subject, outer, inner)
+                projection_ids[(subject, outer, inner)] = add(key, family, layer, 'v3_projection', stage,
+                    subject=subject, outer=outer, inner=inner, dependencies=[dependency], prerequisites=[temporal_gate])
+    for subject, ids in inventory.items():
+        prepare = add(task_id('v3_native', subject), 'S2', 2, 'v3_native', 2,
+                      subject=subject, prerequisites=[temporal_gate])
+        projections(subject, ids, range(4), 'S2', 2, 3, prepare)
+    fixed_references = {}
+    for subject, ids in inventory.items():
+        for outer in range(4):
+            for solver in ('O0', 'O1', 'O2'):
+                for trial in folds(ids, outer)['validation']:
+                    identifier = add(task_id('v3_S2', subject, outer, trial, solver), 'S2', 4, 'v3_fits', 2,
+                        subject=subject, outer=outer, solver=solver, candidate=BASE, role='fixed',
+                        trials=[trial], modes=list(OUTER_MASKS), planned_solves=len(OUTER_MASKS),
+                        dependencies=[projection_ids[(subject, outer, None)]], prerequisites=[temporal_gate])
+                    fixed_references[(subject, outer, trial, solver)] = identifier
+            for modality in ('EEG', 'fNIRS'):
+                add(task_id('v3_linear', subject, outer, modality), 'S2', 4, 'v3_linear', 2,
+                    subject=subject, outer=outer, modality=modality,
+                    dependencies=[projection_ids[(subject, outer, inner)] for inner in (None, 0, 1, 2)],
+                    prerequisites=[temporal_gate])
+    add('v3_S2_report', 'S2', 5, 'v3_phase_report', 2, report_stage=2,
+        dependencies=[t['id'] for t in tasks if t['family'] == 'S2'])
+    for axis, stage, first_layer in [('gain', 3, 6), ('process', 4, 17)]:
+        family = f'S{stage}_synthetic'
+        solvers = ['O2'] if axis == 'gain' else cfg['adaptation']['process_solvers']
+        panel = v3_candidates(cfg, axis)
+        synthetic_contexts = []
+        for condition in cfg['adaptation'][axis+'_truth']:
+            for repetition in range(cfg['adaptation']['panels_per_condition']):
+                subject = task_id('synthetic', axis, condition['id'], repetition)
+                ids = v3_inventory(cfg, subject)
+                generate = add(task_id('v3_generate', subject), family, first_layer, 'v3_generate', stage,
+                    subject=subject, axis=axis, condition=condition, panel=repetition,
+                    prerequisites=[temporal_gate])
+                projections(subject, ids, [0], family, stage, first_layer+1, generate)
+                synthetic_contexts.append((subject, ids, 0, condition, repetition))
+        def selections_and_outer(contexts, family, inner_layer, stage, prerequisites, synthetic):
+            outer_ids = []
+            for subject, ids, outer, condition, repetition in contexts:
+                for solver in solvers:
+                    inner_cells = {}
+                    for candidate in panel:
+                        inner_cells[candidate['id']] = []
+                        for inner, split in enumerate(folds(ids, outer)['inner']):
+                            identifier = add(task_id('v3_inner', family, subject, outer, solver, candidate['id'], inner),
+                                family, inner_layer, 'v3_fits', stage, subject=subject, outer=outer, inner=inner,
+                                solver=solver, candidate=candidate, role='inner', axis=axis,
+                                trials=split['validation'], modes=['center_EEG', 'center_fNIRS'],
+                                planned_solves=2*len(split['validation']),
+                                dependencies=[projection_ids[(subject, outer, inner)]], prerequisites=prerequisites)
+                            inner_cells[candidate['id']].append(identifier)
+                    select = add(task_id('v3_select', family, subject, outer, solver), family, inner_layer+1, 'v3_select', stage,
+                        subject=subject, outer=outer, solver=solver, axis=axis,
+                        candidate_panel=panel, inner_cells=inner_cells,
+                        dependencies=[i for values in inner_cells.values() for i in values], prerequisites=prerequisites)
+                    for trial in folds(ids, outer)['validation']:
+                        if synthetic:
+                            baseline = add(task_id('v3_assessment', family, subject, solver, trial, 'baseline'),
+                                family, inner_layer+2, 'v3_fits', stage, subject=subject, outer=outer, solver=solver,
+                                trials=[trial], modes=list(OUTER_MASKS), candidate=BASE, role='baseline',
+                                axis=axis, condition=condition, panel=repetition, planned_solves=len(OUTER_MASKS),
+                                dependencies=[projection_ids[(subject, outer, None)]], prerequisites=prerequisites)
+                            truth_field = 'gain' if axis == 'gain' else 'sigma_h'
+                            oracle = dict(BASE, **{truth_field: condition.get(truth_field, 1.)}, id='oracle')
+                            outer_ids.append(add(task_id('v3_assessment', family, subject, solver, trial, 'oracle'),
+                                family, inner_layer+3, 'v3_fits', stage, subject=subject, outer=outer, solver=solver,
+                                trials=[trial], modes=list(OUTER_MASKS), candidate=oracle, role='oracle',
+                                reference_task=baseline, axis=axis, condition=condition, panel=repetition,
+                                planned_solves=len(OUTER_MASKS), dependencies=[baseline], prerequisites=prerequisites))
+                            outer_ids.append(baseline)
+                        else:
+                            baseline = fixed_references[(subject, outer, trial, solver)]
+                        outer_ids.append(add(task_id('v3_selected', family, subject, outer, solver, trial),
+                            family, inner_layer+3, 'v3_fits', stage, subject=subject, outer=outer, solver=solver,
+                            trials=[trial], modes=list(OUTER_MASKS), selection=select, role='selected',
+                            reference_task=baseline, axis=axis, condition=condition, panel=repetition,
+                            planned_solves=len(OUTER_MASKS), dependencies=[select, baseline], prerequisites=prerequisites))
+            return outer_ids
+        assessment = selections_and_outer(synthetic_contexts, family, first_layer+2, stage, [temporal_gate], True)
+        screen = add(f'v3_{axis}_screen', family, first_layer+6, 'v3_gate', stage, gate='adaptation', axis=axis,
+                     dependencies=assessment, prerequisites=[temporal_gate])
+        measured_contexts = [(subject, ids, outer, None, None) for subject, ids in inventory.items() for outer in range(4)]
+        measured_family = f'S{stage}_measured'
+        measured_outer = selections_and_outer(measured_contexts, measured_family, first_layer+7, stage,
+                                              [temporal_gate, screen], False)
+        add(f'v3_S{stage}_report', measured_family, first_layer+11, 'v3_phase_report', stage, report_stage=stage,
+            dependencies=measured_outer)
+    # Disjoint stages, not worker count, define when the next contract may run.
+    tasks.sort(key=lambda t: (t['stage'], t['layer']))
+    for i, task in enumerate(tasks):
+        task['queue_position'] = i
+    index = {t['id']: t for t in tasks}
+    if len(index) != len(tasks):
+        raise ValueError('duplicate prospective task identity')
+    for task in tasks:
+        if any(d not in index or (index[d]['stage'], index[d]['layer']) >= (task['stage'], task['layer'])
+               for d in task['dependencies']):
+            raise ValueError('noncausal task dependency: '+task['id'])
+    return tasks
+
+
+def v3_temporal_gate(run_dir, cfg, tasks):
+    selected = [t for t in tasks if t['kind'] == 'v3_temporal' and t['solver'] == 'O2'
+        and t['law'] == 'nonlinear_gaussian' and t['variant'] == 'model' and t['mode'] == 'full']
+    rows = [r for t in selected for r in cell_result(run_dir, t['id']).get('rows', []) if r['status'] == 'completed']
+    keys = ('r', 'clean_EEG', 'clean_HbO', 'clean_HbR')
+    means = {key: float(np.mean([r['truth'][key]['nrmse'] for r in rows])) for key in keys} if rows else None
+    corr = float(np.mean([r['truth']['r']['correlation'] for r in rows])) if rows else None
+    preflight = read_json(Path(run_dir)/'preflight.json')
+    engineering = all(c['passed'] for c in preflight.values())
+    thresholds = cfg['synthetic']['mean_precheck']
+    passed = bool(engineering and len(selected) == len(rows) == 24 and
+                  max(means.values()) <= thresholds['maximum_nrmse'] and corr >= thresholds['minimum_r_correlation'])
+    return dict(status='completed', passed=passed, completed=len(rows), expected=24,
+        mean_nrmse=means, mean_r_correlation=corr, engineering_passed=engineering,
+        interpretation='Gaussian mean precheck for bounded feature-missing diagnostics; no Student-t or teacher qualification',
+        rows=[])
+
+
+def v3_truth_vector(row):
+    """A completed solver path is insufficient when generation truth is absent."""
+    if row is None or row.get('status') != 'completed':
+        return None
+    value = np.array([(row.get('truth') or {}).get(key, {}).get('nrmse')
+        for key in ('r', 'clean_EEG', 'clean_HbO', 'clean_HbR')], dtype=float)
+    return value if np.isfinite(value).all() else None
+
+
+def v3_adaptation_screen(run_dir, cfg, tasks, axis):
+    from scipy.stats import t as student_t
+    stage = 3 if axis == 'gain' else 4
+    chosen = [t for t in tasks if t['family'] == f'S{stage}_synthetic'
+              and t.get('role') == 'selected' and t.get('solver') == 'O2']
+    by_panel = defaultdict(list)
+    keys = ('r', 'clean_EEG', 'clean_HbO', 'clean_HbR')
+    for task in chosen:
+        candidate = cell_result(run_dir, task['id'])
+        reference = cell_result(run_dir, task['reference_task'])
+        left = next((r for r in candidate.get('rows', []) if r['mode'] == 'full' and r['status'] == 'completed'), None)
+        right = next((r for r in reference.get('rows', []) if r['mode'] == 'full' and r['status'] == 'completed'), None)
+        left_vector, right_vector = v3_truth_vector(left), v3_truth_vector(right)
+        if left_vector is not None and right_vector is not None:
+            by_panel[(task['condition']['id'], task['panel'])].append(left_vector-right_vector)
+    conditions = []
+    margin = cfg['selection']['maximum_synthetic_nrmse_degradation']
+    critical = float(student_t.ppf(.95, 3))
+    for condition in cfg['adaptation'][axis+'_truth']:
+        panel_values = []
+        complete = True
+        counts = []
+        for panel in range(4):
+            values = by_panel[(condition['id'], panel)]
+            counts.append(len(values))
+            if len(values) == 6:
+                panel_values.append(np.mean(values, axis=0))
+            else:
+                complete = False
+        record = dict(condition=condition['id'], complete=complete, paired_assessment_counts=counts,
+                      expected_per_panel=6, panel_differences=panel_values)
+        if complete:
+            values = np.array(panel_values)
+            mean = values.mean(axis=0)
+            error = values.std(axis=0, ddof=1)/2
+            lower, upper = mean-critical*error, mean+critical*error
+            verdict = ('clear_degradation' if np.any(lower > margin) else
+                       'no_material_degradation_detected' if np.all(upper <= margin) else 'inconclusive')
+            record.update(mean_nrmse_change=mean, monte_carlo_se=error,
+                lower_one_sided95=lower, upper_one_sided95=upper, verdict=verdict,
+                strict_zero_sensitivity=bool(np.all(upper <= cfg['selection']['synthetic_sensitivity_margin'])))
+        else:
+            record['verdict'] = 'incomplete'
+        conditions.append(record)
+    clear_degradation = any(r['verdict'] == 'clear_degradation' for r in conditions)
+    matched_complete = next(r['complete'] for r in conditions if r['condition'] == 'matched')
+    all_complete = all(r['complete'] for r in conditions)
+    passed = bool(all_complete and matched_complete and not clear_degradation)
+    return dict(status='completed', passed=passed, axis=axis, conditions=conditions,
+        verdict='clear_degradation' if clear_degradation else 'incomplete' if not all_complete else
+                'inconclusive' if any(r['verdict'] == 'inconclusive' for r in conditions) else 'no_material_degradation_detected',
+        true_nrmse_order=keys, margin=margin, independent_panels_per_condition=4,
+        uncertainty='approximate one-sided paired t bounds, df=3; diagnostic with four displayed panel points',
+        continuation='incomplete panels block measured adaptation; inconclusive complete panels permit only a mechanism diagnostic',
+        teacher_qualification='none', rows=[])
+
+
+def v3_dispatch(run_dir, cfg, dc, base, measured, metadata, task):
+    for prerequisite in task.get('prerequisites', []):
+        gate = cell_result(run_dir, prerequisite)
+        if gate.get('status') != 'completed' or not gate.get('passed', False):
+            return dict(status='not_started_prerequisite', reason=prerequisite, rows=[], actual_solves=0)
+    kind = task['kind']
+    if kind == 'v3_temporal':
+        return v3_temporal_cell(run_dir, cfg, dc, base, task)
+    if kind == 'v3_native':
+        return v3_prepare_subject(run_dir, cfg, dc, base, measured, metadata, task)
+    if kind == 'v3_generate':
+        return v3_generate_panel(run_dir, cfg, base, task)
+    if kind == 'v3_projection':
+        return v3_prepare_projection(run_dir, cfg, base, measured, task)
+    if kind == 'v3_fits':
+        return v3_fits_cell(run_dir, cfg, base, task)
+    if kind == 'v3_select':
+        return v3_select(run_dir, cfg, task)
+    if kind == 'v3_linear':
+        return linear_cell(run_dir, cfg, dc, task)
+    if kind == 'v3_gate':
+        tasks = read_tasks(run_dir)
+        return v3_temporal_gate(run_dir, cfg, tasks) if task['gate'] == 'temporal' else v3_adaptation_screen(run_dir, cfg, tasks, task['axis'])
+    if kind == 'v3_phase_report':
+        summary = v3_summarize(run_dir, cfg)
+        print(json.dumps(serial(dict(stage=task['report_stage'], stage_summary=summary['families'])), ensure_ascii=False), flush=True)
+        return dict(status='completed', rows=[], report='OVERNIGHT_REPORT.md')
+    raise ValueError('unknown v3 cell kind')
+
+
+def v3_engineering_checks(cfg, dc, base):
+    legacy = dict(cfg, N2=dict(engineering_tolerances=cfg['observation']['engineering_tolerances']))
+    checks = engineering_checks(legacy, dc, base)
+    checks['O2'].pop('measured_branch', None)
+    rng = np.random.default_rng(cfg['synthetic']['development_seed'])
+    op = v3_native_operators(cfg['steps'])
+    identities = v3_inventory(cfg, 'fixture')
+    e = rng.normal(size=(24, 120))*.01
+    od = rng.normal(size=(24, 300, 2))*.00001
+    hb = od@op['mbll'].T
+    arrays = dict(feature_eeg=e, feature_fnirs=hb,
+        target=np.array([np.column_stack((op['eeg']@a, op['fnirs']@b)) for a, b in zip(e, hb)]),
+        normalizer=np.ones(3))
+    train = folds(identities, 0)['train']
+    info = dict(train=train, feature_noise=v3_noise_estimate(base, e, od, train, 1.))
+    ranks, errors, sensitivity = {}, [], {}
+    p, c, spec = model(base, BASE)
+    for mode in OUTER_MASKS:
+        view = v3_view(cfg, arrays, info, identities, 0, mode)
+        changed = {k: v.copy() for k, v in arrays.items()}
+        if mode.startswith('center_EEG'):
+            changed['feature_eeg'][0, 52:68] = 1e80
+        elif mode.startswith('center_fNIRS'):
+            changed['feature_fnirs'][0, 130:170] = -1e80
+        elif mode in ('EEG_only', 'all_missing'):
+            changed['feature_fnirs'][0] = 1e80
+        elif mode == 'fNIRS_only':
+            changed['feature_eeg'][0] = 1e80
+        other = v3_view(cfg, changed, info, identities, 0, mode)
+        np.testing.assert_array_equal(view['input'], other['input'])
+        np.testing.assert_array_equal(view['noise_factor'], other['noise_factor'])
+        matrix, mask = view['operator'].matrix()
+        systems = [joint.whiten_trajectory_observations(view['input'], matrix, mask, view['noise_factor'], tol)
+                   for tol in [1e-10, *cfg['observation']['rank_check_rtols']]]
+        ranks[mode] = systems[0]['rank']
+        sensitivity[mode] = [s['rank'] for s in systems]
+        for system in systems:
+            factor = view['noise_factor'][system['available'].ravel()]
+            cross = view['target_noise_factor']@factor.T@system['whitener'].T
+            estimate = (cross@system['target']).reshape(120, 3)
+            if mode == 'full':
+                errors.append(float(np.max(abs(estimate-view['target']))))
+    checks['feature_masks_and_noise'] = dict(passed=max(errors) < 1e-10 and ranks['all_missing'] == 0,
+        modes=len(ranks), hidden_intervention_max_error=0., full_same_noise_conditioning_error=max(errors),
+        retained_ranks=ranks, rank_sensitivity=sensitivity)
+    # The native branch removes raw hidden samples before nonlinear extraction.
+    eeg = rng.normal(size=(6000, 3))
+    intensity = np.exp(rng.normal(size=(300, 2, 2))*.02)
+    original = step5.preprocess_native_trial(eeg, intensity)
+    exposed = step5.preprocess_native_trial(eeg, intensity, retain_feature_boundary=True)
+    from scipy.signal import resample_poly
+    from src.data.homer2_preprocessing import bandpass_fnirs
+    filtered, _ = bandpass_fnirs(exposed['feature_boundary']['fnirs'], sample_rate_hz=10.)
+    recomposed = resample_poly(filtered, 2, 5, axis=0)
+    np.testing.assert_array_equal(original['fnirs'], exposed['fnirs'])
+    np.testing.assert_array_equal(original['eeg_log_power'], exposed['eeg_log_power'])
+    error = float(np.max(abs(recomposed-original['fnirs'])))
+    for mode in ('center_EEG', 'center_fNIRS'):
+        changed_eeg, changed_hb = eeg.copy(), intensity.copy()
+        if mode == 'center_EEG':
+            changed_eeg[2600:3400] = 1e50
+        else:
+            changed_hb[130:170] = 1e50
+        left = step5.preprocess_native_trial(eeg, intensity, mask_name=mode)
+        right = step5.preprocess_native_trial(changed_eeg, changed_hb, mask_name=mode)
+        for key in ('eeg_log_power', 'fnirs'):
+            np.testing.assert_array_equal(left[key], right[key])
+    checks['native_boundary'] = dict(passed=error < 1e-8, recomposition_absolute_error=error,
+        existing_output_bit_identical=True, raw_hidden_intervention_error=0.)
+    changed_od, changed_e = od.copy(), e.copy()
+    val = folds(identities, 0)['validation']
+    changed_od[val], changed_e[val] = 1e30, -1e30
+    unchanged = v3_noise_estimate(base, changed_e, changed_od, train, 1.)
+    assert serial(unchanged) == serial(info['feature_noise'])
+    z = np.zeros((120, 6))
+    z[0, 1:] = [.001, .002, .001, -.001, .001]
+    for t in range(1, len(z)):
+        z[t] = core.rk4_transition(z[t-1], p, c)
+    replay, _, _ = driver_replay(z, p, c)
+    replay_error = float(np.max(abs(replay-z)))
+    checks['training_isolation_and_replay'] = dict(passed=replay_error < 1e-5,
+        evaluation_noise_fit_intervention_error=0., zero_process_innovation_replay_error=replay_error)
+    weighted, _ = equal_subject_mean([dict(subject='a', session='x', v=1.)]*3+
+        [dict(subject='a', session='y', v=9.), dict(subject='b', session='x', v=3.)], 'v')
+    checks['unequal_denominators'] = dict(passed=abs(weighted-4.) < 1e-12, expected=4., actual=weighted)
+    return checks
+
+
+def v3_stage_estimate(cfg, tasks, pilots, workers):
+    by_solver = defaultdict(list)
+    for pilot in pilots:
+        by_solver[pilot['solver']].append(pilot['elapsed_seconds'])
+    rates = {s: max(v) for s, v in by_solver.items()}
+    seconds = sum(t['planned_solves']*rates.get(t.get('solver'), max(rates.values(), default=1800.)) for t in tasks)
+    preparations = sum(t['kind'] in ('v3_native', 'v3_generate', 'v3_projection', 'v3_linear') for t in tasks)
+    # Preparation is estimated separately; all costs remain inside the same cap.
+    seconds += preparations*cfg['budget']['preparation_seconds_per_subject']
+    return dict(estimated_seconds=seconds/max(workers, 1)*cfg['budget']['stage_estimate_safety_factor'],
+                planned_solves=sum(t['planned_solves'] for t in tasks), pilot_seconds_per_solver=rates,
+                workers=workers, safety_factor=cfg['budget']['stage_estimate_safety_factor'])
+
+
+def v3_prepare_run(run_dir, cfg, dc, base, metadata):
+    run_dir = Path(run_dir).resolve()
+    if run_dir.parent != (ROOT/cfg['output_root']).resolve() or run_dir.exists():
+        raise ValueError('v3 prepare requires a fresh child of the registered artifact root')
+    budget_start = datetime.now(timezone.utc).isoformat()
+    checks = v3_engineering_checks(cfg, dc, base)
+    if not all(r['passed'] for r in checks.values()):
+        raise ValueError('v3 engineering checks failed: '+json.dumps(serial(checks)))
+    inventory = scope_inventory(cfg, base, metadata)
+    tasks = v3_make_tasks(cfg, inventory)
+    run_dir.mkdir(parents=True)
+    (run_dir/'resolved_config.yaml').write_text(yaml.safe_dump(cfg, sort_keys=False))
+    atomic_json(run_dir/'scope_inventory.json', inventory)
+    atomic_json(run_dir/'fold_inventory.json', {s: [folds(rows, outer) for outer in range(4)] for s, rows in inventory.items()})
+    atomic_json(run_dir/'preflight.json', checks)
+    persist_tasks(run_dir, tasks)
+    manifest = dict(schema=cfg['schema'], execution='preparing', created_at=budget_start,
+        budget_started_at=budget_start, run_dir=run_dir, project_root=ROOT,
+        task_count=len(tasks), planned_solves=sum(t['planned_solves'] for t in tasks),
+        teacher_qualification='none', task_table='task_table.csv', status_ledger='case_status.jsonl',
+        software=dict(python=sys.version, numpy=np.__version__, scipy=scipy.__version__),
+        preparation_scope='synthetic pilots and signal-free identity inventory; native signals only after S1 precheck')
+    atomic_json(run_dir/'manifest.json', manifest)
+    pilots = []
+    for solver in cfg['synthetic']['solvers']:
+        for variant in cfg['synthetic']['variants']:
+            task = dict(id=task_id('pilot', solver, variant), family='P0', kind='v3_temporal',
+                law='nonlinear_gaussian', seed=cfg['synthetic']['development_seed'], replicate=0,
+                variant=variant, mode='center_fNIRS', solver=solver, row_ids=['fit'],
+                timeout_seconds=cfg['budget']['map_timeout_seconds'] if solver.startswith('O2') else cfg['budget']['cell_timeout_seconds'])
+            result = execute_cell(run_dir, cfg, task)
+            result.update(solver=solver, variant=variant)
+            pilots.append(result)
+            append_status(run_dir, result)
+            print(f"Pilot {solver}/{variant}: {result['status']} {result['elapsed_seconds']:.2f}s", flush=True)
+    atomic_json(run_dir/'pilots.json', dict(pilots=pilots, preparations=[]))
+    resources = resource_budget(cfg, pilots)
+    manifest.update(execution='prepared', resources=resources, prepared_at=datetime.now(timezone.utc).isoformat())
+    atomic_json(run_dir/'manifest.json', manifest)
+    summarize_run(run_dir, cfg)
+    print(json.dumps(serial(dict(run_dir=run_dir, resources=resources,
+        stage_estimates={s: v3_stage_estimate(cfg, [t for t in tasks if t['stage'] == s], pilots, resources['workers']) for s in range(1, 5)}))), flush=True)
+
+
+def v3_prepare_continuation(run_dir, source, cfg):
+    """Continue a technical interruption without replacing existing evidence."""
+    import fcntl
+    run_dir, source = Path(run_dir).resolve(), Path(source).resolve()
+    root = (ROOT/cfg['output_root']).resolve()
+    if cfg['schema'] != 'ssm_overnight_v3' or source.parent != root or run_dir.parent != root or run_dir.exists():
+        raise ValueError('continuation requires a fresh sibling in the registered v3 root')
+    with (source/'controller.lock').open('r') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        previous = read_json(source/'manifest.json')
+        if previous['execution'] != 'stopped' or not previous.get('stop_reason', '').startswith('controller_exception:'):
+            raise ValueError('only a technical controller interruption can be continued by this path')
+        started = previous['budget_started_at']
+        if (datetime.now(timezone.utc)-datetime.fromisoformat(started)).total_seconds() >= cfg['budget']['hours']*3600:
+            raise ValueError('original campaign time budget is exhausted')
+        for path, digest in read_json(source/'frozen_input_identity.json').items():
+            if diagnostic.digest(source/path) != digest:
+                raise ValueError('source frozen input changed: '+path)
+        tasks = read_tasks(source)
+        retained, pending = [], []
+        for task in tasks:
+            result = cell_result(source, task['id'])
+            technical_stop = result.get('reason') == previous['stop_reason'] and result['status'] == 'not_started_budget'
+            (pending if technical_stop else retained).append(task['id'])
+            if result['status'] == 'timeout' and result.get('reason') == previous['stop_reason']:
+                raise ValueError('interrupted in-progress fit needs explicit partial-row handling')
+        if not pending:
+            raise ValueError('no technically unstarted cells to continue')
+        run_dir.mkdir(parents=True)
+        for name in ('resolved_config.yaml', 'task_table.csv', 'scope_inventory.json', 'fold_inventory.json', 'preflight.json', 'pilots.json'):
+            shutil.copy2(source/name, run_dir/name)
+        if (source/'prepared').exists():
+            shutil.copytree(source/'prepared', run_dir/'prepared')
+        audit_identities = {}
+        for name in ('precision_audit_v1.json', 'deterministic_replay_nonzero_driver_v1.json',
+                     'deterministic_replay_model_drift_audit_v1.json',
+                     'rank_sensitivity_development_v1/summary.json'):
+            if (source/name).exists():
+                (run_dir/name).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source/name, run_dir/name)
+                audit_identities[name] = diagnostic.digest(source/name)
+        identities = {}
+        for i, identifier in enumerate(retained):
+            shutil.copytree(source/'cells'/identifier, run_dir/'cells'/identifier)
+            identities[identifier] = diagnostic.digest(source/'cells'/identifier/'result.json')
+            if diagnostic.digest(run_dir/'cells'/identifier/'result.json') != identities[identifier]:
+                raise ValueError('retained result copy differs')
+            if (i+1) % 1000 == 0:
+                print(f'Preserved {i+1}/{len(retained)} terminal cells', flush=True)
+        retained_ids = set(retained)
+        for line in (source/'case_status.jsonl').read_text().splitlines():
+            row = json.loads(line)
+            if row['task_id'] in retained_ids or row['family'] == 'P0':
+                append_status(run_dir, dict(row, retained_from_run=str(source)))
+        atomic_json(run_dir/'continuation.json', dict(source_run=source,
+            source_snapshot_identity_sha256=diagnostic.digest(source/'source_snapshot_identity.json'),
+            source_stop_reason=previous['stop_reason'], budget_started_at=started,
+            retained_result_sha256=identities, retained_audit_sha256=audit_identities, unstarted_task_ids=pending,
+            scientific_scope='same task identities, seeds, candidates, inputs and original eight-hour clock; no repeated completed fits'))
+        now = datetime.now(timezone.utc).isoformat()
+        manifest = {k:v for k,v in previous.items() if k not in ('controller_traceback','stop_reason','finished_at',
+            'controller_pid','controller_ppid','controller_session','service','execution_source','snapshot_entrypoint','frozen_at',
+            'completed_cells','heartbeat_at')}
+        manifest.update(execution='prepared', created_at=now, prepared_at=now, run_dir=run_dir,
+            continued_from=str(source), retained_cells=len(retained), remaining_cells=len(pending))
+        atomic_json(run_dir/'manifest.json', manifest)
+    v3_summarize(run_dir, cfg)
+    print(f'Continuation prepared: {len(retained)} retained, {len(pending)} unstarted; original budget starts {started}', flush=True)
+
+
+def v3_summarize(run_dir, cfg, *, final=False):
+    run_dir = Path(run_dir)
+    tasks = read_tasks(run_dir)
+    results = {t['id']: cell_result(run_dir, t['id']) for t in tasks}
+    families, failures, fit_rows = {}, [], []
+    for family in dict.fromkeys(t['family'] for t in tasks):
+        panel = [t for t in tasks if t['family'] == family]
+        rows = []
+        for task in panel:
+            result = results[task['id']]
+            if result['status'] != 'completed':
+                failures.append(dict(task_id=task['id'], family=family, row_id=None,
+                    status=result['status'], reason=result.get('error', result.get('reason')), expected_fits=task['planned_solves']))
+            for row in result.get('rows', []):
+                enriched = dict(task_id=task['id'], family=family, role=task.get('role'),
+                    condition=task.get('condition'), panel=task.get('panel'), **row)
+                rows.append(enriched)
+                if row.get('status') != 'completed':
+                    failures.append(dict(task_id=task['id'], family=family, row_id=row.get('row_id'),
+                        status=row.get('status'), reason=row.get('error'), expected_fits=1,
+                        failure_stage=row.get('failure_stage'), sample_id=row.get('sample_id')))
+        fit_rows.extend(rows)
+        families[family] = dict(expected_cells=len(panel), status_counts=dict(Counter(results[t['id']]['status'] for t in panel)),
+            planned_model_solves=sum(t['planned_solves'] for t in panel),
+            actual_model_solves=sum(results[t['id']].get('actual_solves', 0) for t in panel),
+            completed_trajectory_rows=sum(r.get('status') == 'completed' and 'trajectory_path' in r for r in rows))
+        write_csv(run_dir/family/'trial_metrics.csv', rows)
+        atomic_json(run_dir/family/'summary.json', families[family])
+    temporal = []
+    for law in cfg['synthetic']['stage1_seed_start']:
+        for variant in cfg['synthetic']['variants']:
+            for mode in cfg['synthetic']['masks']:
+                for solver in cfg['synthetic']['solvers']:
+                    rows = [r for r in fit_rows if r['family'] == 'S1' and r.get('law') == law and
+                        r.get('variant') == variant and r.get('mode') == mode and r.get('solver') == solver and r['status'] == 'completed']
+                    record = dict(law=law, variant=variant, mode=mode, solver=solver, completed=len(rows), expected=24)
+                    for key in ('r', 'clean_EEG', 'clean_HbO', 'clean_HbR'):
+                        for metric in ('nrmse', 'correlation', 'coverage95', 'mean_interval_width'):
+                            values = [r['truth'][key][metric] for r in rows if r.get('truth', {}).get(key, {}).get(metric) is not None]
+                            record[key+'_'+metric] = float(np.mean(values)) if values else None
+                    temporal.append(record)
+    write_csv(run_dir/'S1'/'solver_comparison.csv', temporal)
+    groups, single_modes = {}, []
+    for family, solver, role in [('S2', s, 'fixed') for s in ('O0', 'O1', 'O2')]+[
+        ('S3_measured', 'O2', 'selected'), ('S4_measured', 'O0', 'selected'), ('S4_measured', 'O2', 'selected')]:
+        panel = [t for t in tasks if t['family'] == family and t.get('solver') == solver and t.get('role') == role]
+        complete = []
+        for task in panel:
+            result = results[task['id']]
+            # Same fixed 14-mode denominator; low-variance scores remain undefined.
+            try:
+                score = score_outer_task(dict(task, trial=task['trials'][0]), result)
+            except (TypeError, KeyError, ValueError):
+                score = None
+            if score is not None:
+                score.update({f'increment_{k}': v for k, v in score['increments'].items()})
+                complete.append(score)
+        selections = [results[t['id']] for t in tasks if t['family'] == family and t['kind'] == 'v3_select' and t.get('solver') == solver]
+        selection_count = sum(s['status'] == 'completed' for s in selections)
+        whole = len(complete) == 72 and (role == 'fixed' or selection_count == 12)
+        B, subject_B = equal_subject_mean(complete, 'B')
+        nmse, _ = equal_subject_mean(complete, 'nmse')
+        key = family+'/'+solver
+        groups[key] = dict(expected_trials=72, all_14_modes_complete=len(complete),
+            selection_folds_completed=selection_count if role != 'fixed' else None,
+            selection_folds_expected=12 if role != 'fixed' else None,
+            full_panel_B=B if whole else None, completed_subset_B=B,
+            completed_subset_nrmse=None if nmse is None else np.sqrt(nmse), subject_B=subject_B,
+            selections=dict(Counter(s['selected']['id'] for s in selections if s['status'] == 'completed')),
+            complete_scores=complete,
+            increments={k: equal_subject_mean(complete, 'increment_'+k)[0] for k in ('own', 'template', 'pairing', 'shift')})
+        for mode in OUTER_MASKS:
+            rows = [r for t in panel for r in results[t['id']].get('rows', []) if r.get('mode') == mode]
+            single_modes.append(dict(rule=key, mode=mode, expected=72,
+                completed=sum(r['status'] == 'completed' for r in rows),
+                status_counts=dict(Counter(r['status'] for r in rows)), missing_rows=72-len(rows)))
+    comparisons = []
+    for key, value in groups.items():
+        solver = key.split('/')[1]
+        reference_key = 'S2/O0' if key.startswith('S2/') else 'S2/'+solver
+        reference = {r['sample_id']: r for r in groups[reference_key]['complete_scores']}
+        common = [r for r in value['complete_scores'] if r['sample_id'] in reference]
+        paired = [dict(subject=r['subject'], session=r['session'], B=r['B'], baseline_B=reference[r['sample_id']]['B'],
+            nmse=r['nmse'], baseline_nmse=reference[r['sample_id']]['nmse'],
+            **{'null_change_'+k: r['increment_'+k]-reference[r['sample_id']]['increment_'+k] for k in ('own', 'template', 'pairing', 'shift')}) for r in common]
+        score, subjects = equal_subject_mean(paired, 'B')
+        baseline_score, baseline_subjects = equal_subject_mean(paired, 'baseline_B')
+        nmse, _ = equal_subject_mean(paired, 'nmse')
+        baseline_nmse, _ = equal_subject_mean(paired, 'baseline_nmse')
+        changes = {k: equal_subject_mean(paired, 'null_change_'+k)[0] for k in ('own', 'template', 'pairing', 'shift')}
+        improvement = None if baseline_score is None or baseline_score <= 0 else 1-score/baseline_score
+        degradation = None if nmse is None else np.sqrt(nmse)-np.sqrt(baseline_nmse)
+        improved_subjects = sum(subjects[s] < baseline_subjects[s] for s in subjects)
+        full = value['full_panel_B'] is not None and groups[reference_key]['full_panel_B'] is not None
+        passed = bool(full and improvement is not None and improvement >= .1 and np.all(degradation <= .05)
+            and improved_subjects >= 2 and all(v is not None and np.all(v >= 0) for v in changes.values()))
+        comparisons.append(dict(rule=key, reference=reference_key, complete_common_trials=len(common), expected_trials=72,
+            candidate_B=score, baseline_B=baseline_score, relative_improvement=improvement,
+            nrmse_change=degradation, null_increment_change=changes, improved_subjects=improved_subjects,
+            full_denominators=full, measured_priority_screen_passed=passed,
+            interpretation='exploratory only; synthetic qualification separately required'))
+    for value in groups.values():
+        value.pop('complete_scores')
+    gates = {t['id']: results[t['id']] for t in tasks if t['kind'] == 'v3_gate'}
+    summary = dict(schema=cfg['schema'], families=families, gates=gates, measured=groups, comparisons=comparisons,
+        final=final, teacher_qualification='none', map_intervals='NOT_ESTIMATED',
+        scoring='trial -> session equal -> subject equal; conditional noisy-target predictions O1/O2; clean-map residual separately',
+        input_contract=cfg['observation']['schema'], temporal=temporal)
+    write_csv(run_dir/'candidate_table.csv', comparisons)
+    write_csv(run_dir/'mode_status.csv', single_modes)
+    write_csv(run_dir/'failure_attribution.csv', failures)
+    write_csv(run_dir/'full_fit_residuals.csv', [r for r in fit_rows if r.get('mode') == 'full'])
+    write_csv(run_dir/'process_replay.csv', [r for r in fit_rows if 'replay' in r])
+    adaptation = []
+    for axis, stage in [('gain', 3), ('process', 4)]:
+        for condition in cfg['adaptation'][axis+'_truth']:
+            for panel in range(4):
+                for solver in (['O2'] if axis == 'gain' else ['O0', 'O2']):
+                    roles = {}
+                    for role in ('baseline', 'selected', 'oracle'):
+                        rows = [r for r in fit_rows if r['family'] == f'S{stage}_synthetic' and
+                            (r.get('condition') or {}).get('id') == condition['id'] and r.get('panel') == panel and
+                            r.get('solver') == solver and r.get('role') == role and r.get('mode') == 'full' and v3_truth_vector(r) is not None]
+                        roles[role] = rows
+                    keys = ('r', 'clean_EEG', 'clean_HbO', 'clean_HbR')
+                    means = {role: [float(np.mean([r['truth'][k]['nrmse'] for r in rows])) for k in keys]
+                             if rows else None for role, rows in roles.items()}
+                    adaptation.append(dict(axis=axis, condition=condition['id'], panel=panel, solver=solver,
+                        expected_assessment_trials=6, completed={k: len(v) for k, v in roles.items()}, mean_nrmse=means,
+                        selected_candidate_counts=dict(Counter(r['candidate']['id'] for r in roles['selected'])),
+                        truth_order=keys))
+    write_csv(run_dir/'synthetic_adaptation.csv', adaptation)
+    atomic_json(run_dir/'summary.json', summary)
+    lines = ['# Observation-contract diagnostic v3', '',
+        'Feature-layer missingness; original 72 training identities only. O2 is Gaussian MAP. Teacher qualification: none. MAP intervals: NOT_ESTIMATED.', '',
+        'Per-cell result.json and trajectory files own the evidence. Tables below retain the complete planned denominators.', '',
+        '| Stage | Completed cells / planned | Actual / planned fits | Status counts |', '|---|---:|---:|---|']
+    for name, value in families.items():
+        lines.append(f"| {name} | {value['status_counts'].get('completed', 0)} / {value['expected_cells']} | {value['actual_model_solves']} / {value['planned_model_solves']} | {json.dumps(value['status_counts'])} |")
+    lines += ['', '## Gates', '', '```json', json.dumps(serial(gates), indent=2), '```', '',
+        '## Measured comparisons', '', 'Only complete 72-trial and (where applicable) 12-selection-fold panels define full risk. Common-subset values are descriptive.', '',
+        '| Rule | Reference | Complete common / 72 | Candidate B | Baseline B | Relative improvement |', '|---|---|---:|---:|---:|---:|']
+    for row in comparisons:
+        fmt = lambda v: 'undefined' if v is None else f'{v:.6g}'
+        lines.append(f"| {row['rule']} | {row['reference']} | {row['complete_common_trials']} | {fmt(row['candidate_B'])} | {fmt(row['baseline_B'])} | {fmt(row['relative_improvement'])} |")
+    lines += ['', 'Detailed evidence: [solver/truth comparison](S1/solver_comparison.csv), [per-mode denominators](mode_status.csv), [failures](failure_attribution.csv), [full residuals](full_fit_residuals.csv), [process replay](process_replay.csv).', '',
+        '[Independent synthetic baseline / selected / oracle panels](synthetic_adaptation.csv).', '',
+        'Original native-mask results have a different input contract and cannot be used as a direct effect-size baseline. Four-panel synthetic intervals are approximate; incomplete or inconclusive screens do not establish harmless adaptation.', '']
+    if any(r['completed'] for r in temporal):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        figure, axes = plt.subplots(1, 3, figsize=(13, 4), constrained_layout=True)
+        for ax, law in zip(axes, cfg['synthetic']['stage1_seed_start']):
+            for solver in cfg['synthetic']['solvers']:
+                rows = [r for r in temporal if r['law'] == law and r['variant'] == 'combined' and r['solver'] == solver]
+                ax.plot(range(5), [r['r_nrmse'] if r['r_nrmse'] is not None else np.nan for r in rows], marker='o', label=solver)
+            ax.set_xticks(range(5), ['Full', 'Center E', 'Center F', 'Whole E', 'Whole F'], rotation=35)
+            ax.set_title(law.replace('_', ' '), fontsize=10)
+            ax.set_ylabel('Mean clean driver r NRMSE')
+            ax.grid(alpha=.25)
+        axes[-1].legend(fontsize=7)
+        figure.savefig(run_dir/'S1'/'driver_recovery.png', dpi=160)
+        plt.close(figure)
+        lines += ['![Combined-processing driver recovery](S1/driver_recovery.png)', '']
+    temporary = run_dir/'OVERNIGHT_REPORT.md.tmp'
+    temporary.write_text('\n'.join(lines))
+    os.replace(temporary, run_dir/'OVERNIGHT_REPORT.md')
+    return summary
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
     parser.add_argument('--run-dir', type=Path)
+    parser.add_argument('--continue-from', type=Path, help='with --prepare: preserve a technically interrupted v3 run and its original budget')
     actions = parser.add_mutually_exclusive_group(required=True)
     for flag in ('check-only', 'prepare', 'freeze', 'run', 'report'):
         actions.add_argument('--'+flag, action='store_true')
     args = parser.parse_args()
+    if args.continue_from is not None and not args.prepare:
+        parser.error('--continue-from is only valid with --prepare')
     if args.check_only:
         cfg, dc, base, _, _ = load_config(args.config)
-        result = engineering_checks(cfg, dc, base)
+        result = v3_engineering_checks(cfg, dc, base) if cfg['schema'] == 'ssm_overnight_v3' else engineering_checks(cfg, dc, base)
         print(json.dumps(serial(result), ensure_ascii=False, indent=2))
         return 0 if all(r['passed'] for r in result.values()) else 1
     if args.run_dir is None:
         parser.error('--run-dir is required')
     if args.prepare:
-        cfg, dc, base, measured, metadata = load_config(args.config)
-        prepare_run(args.run_dir, cfg, dc, base, measured, metadata)
+        if args.continue_from is not None:
+            cfg, *_ = load_config(args.continue_from/'resolved_config.yaml')
+            v3_prepare_continuation(args.run_dir, args.continue_from, cfg)
+        else:
+            cfg, dc, base, measured, metadata = load_config(args.config)
+            prepare_run(args.run_dir, cfg, dc, base, measured, metadata)
     else:
         cfg, _, _, _, _ = load_config(args.run_dir/'resolved_config.yaml')
         if args.freeze:

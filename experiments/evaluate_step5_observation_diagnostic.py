@@ -120,7 +120,8 @@ def local_eeg_feature(eeg, names, cfg, mask_name=None):
     return power
 
 
-def load_training_subject(subject, cfg, base, measured, metadata, *, retain_native=False):
+def load_training_subject(subject, cfg, base, measured, metadata, *, retain_native=False,
+                          retain_feature_boundary=False, data_root=None):
     """Single native entry for this diagnostic; scope checked before any reader.
 
     Native files store entire sessions. Only the original eight training windows
@@ -131,7 +132,8 @@ def load_training_subject(subject, cfg, base, measured, metadata, *, retain_nati
     from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
     from src.data.unified_physiology import load_native_eeg_record
     from experiments.build_clean_eeg_fnirs_cache import _pair_single_trial_wavelengths
-    index = CleanPhysiologyCacheIndex(ROOT / metadata['data']['cache_root'])
+    data_root = ROOT if data_root is None else Path(data_root).resolve()
+    index = CleanPhysiologyCacheIndex(data_root / metadata['data']['cache_root'])
     records = sorted((r for r in index.records if r.dataset_id == base['measured']['dataset_id']
                       and r.canonical_subject_id == subject and r.base_record_id in base['measured']['sessions']),
                      key=lambda r: r.base_record_id)
@@ -141,7 +143,7 @@ def load_training_subject(subject, cfg, base, measured, metadata, *, retain_nati
     channel_identity = None
     for record in records:
         events = training_events(index.events_by_join_key[record.join_key], base)
-        native = load_native_eeg_record(ROOT, record)
+        native = load_native_eeg_record(data_root, record)
         with np.load(record.npz_path, allow_pickle=False) as arrays:
             paired, pairs = _pair_single_trial_wavelengths(arrays['native_input_fnirs'], arrays['native_channel_names'])
         identity = (tuple(native.channel_names), tuple(pairs))
@@ -151,7 +153,7 @@ def load_training_subject(subject, cfg, base, measured, metadata, *, retain_nati
         if native.sample_rate_hz != 200. or record.sample_rate_hz != 10.:
             raise ValueError('native clock drift')
         for path in (native.source_path, record.npz_path):
-            sources[str(path.relative_to(ROOT))] = digest(path)
+            sources[str(path.relative_to(data_root))] = digest(path)
         for ordinal, (position, event) in enumerate(events):
             starts = {m: round((event[f'{m}_time_ms']/1000 - 5.)*hz)
                       for m, hz in [('eeg', 200.), ('fnirs', 10.)]}
@@ -163,7 +165,9 @@ def load_training_subject(subject, cfg, base, measured, metadata, *, retain_nati
                 raise ValueError('training native support invalid')
             views = {}
             for mask in (None, 'center_EEG', 'center_fNIRS'):
-                features = step5.preprocess_native_trial(eeg, fnirs, mask_name=mask)
+                features = step5.preprocess_native_trial(
+                    eeg, fnirs, mask_name=mask,
+                    retain_feature_boundary=retain_feature_boundary and mask is None)
                 features['local_eeg'] = local_eeg_feature(eeg, native.channel_names, cfg, mask)
                 views[mask or 'target'] = features
             trials.append(dict(views=views, eligible=np.all(fnirs > 0, axis=(0, 2)),

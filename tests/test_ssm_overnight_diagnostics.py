@@ -18,6 +18,250 @@ def inventory(cfg):
         for subject in cfg['subjects']}
 
 
+def test_explicit_rectangular_noise_matches_dense_gaussian_conditioning():
+    """The mean clock and feature-noise clock have different dimensions."""
+    _, dc, base, _, _ = suite.load_config()
+    p, c, _ = suite.model(base, suite.BASE)
+    n = 8
+    op = suite.repair.trajectory_operator(n, 'model', dc)
+    rng = np.random.default_rng(167)
+    factor = rng.normal(size=(3*n, 5*n))*.01
+    y = rng.normal(size=(n, 3))*.01
+    ref = suite.joint.smooth_balloon_trajectory_reference(
+        y, p, config=c, trajectory_spec=op, noise_variance=None, noise_factor=factor)
+    prior = suite.joint.linearized_trajectory_prior(n, p, c)
+    h = np.kron(np.eye(n), suite.core.observation_jacobian(np.zeros(6), p))
+    offset = np.tile(suite.core.observation_map(np.array([0., 0., 1., 1., 1., 1.]), p), n)
+    cross = prior@h.T
+    expected = cross@np.linalg.solve(h@cross+factor@factor.T, y.ravel()-offset)
+    np.testing.assert_allclose(ref['transformed_mean'].ravel(), expected, atol=1e-11)
+    fitted = batch_map.smooth_balloon_trajectory_map(
+        y, p, config=c, trajectory_spec=op, noise_variance=None, noise_factor=factor, linear=True)
+    assert fitted['status'] == 'completed'
+    np.testing.assert_allclose(fitted['transformed_mean'].ravel(), expected, atol=1e-8)
+    with pytest.raises(ValueError, match='one noise owner'):
+        batch_map.TrajectoryObjective(y, p, c, op, [.01]*3, noise_factor=factor)
+    _, _, observation = suite.model(base, suite.BASE)
+    scaled = observation.reexpress([1.3, .7, 1.8])
+    changed = suite.joint.smooth_balloon_trajectory_reference(
+        y*scaled.coordinate_scale, p, config=c, trajectory_spec=op, noise_variance=None,
+        noise_factor=factor*np.tile(scaled.coordinate_scale, n)[:, None], observation_spec=scaled)
+    np.testing.assert_allclose(changed['transformed_mean'], ref['transformed_mean'], atol=1e-10)
+    assert changed['parameter_log_likelihood']-ref['parameter_log_likelihood'] == pytest.approx(
+        -n*np.log(scaled.coordinate_scale).sum(), abs=1e-8)
+
+
+def test_native_feature_boundary_recomposes_and_preserves_existing_output():
+    from scipy.signal import resample_poly
+    from src.data.homer2_preprocessing import bandpass_fnirs
+    rng = np.random.default_rng(178)
+    eeg = rng.normal(size=(6000, 3))
+    intensity = np.exp(rng.normal(size=(300, 2, 2))*.02)
+    original = suite.step5.preprocess_native_trial(eeg, intensity)
+    exposed = suite.step5.preprocess_native_trial(eeg, intensity, retain_feature_boundary=True)
+    np.testing.assert_array_equal(exposed['fnirs'], original['fnirs'])
+    np.testing.assert_array_equal(exposed['eeg_log_power'], original['eeg_log_power'])
+    boundary = exposed['feature_boundary']
+    filtered, _ = bandpass_fnirs(boundary['fnirs'], sample_rate_hz=10.)
+    replay = resample_poly(filtered, 2, 5, axis=0)
+    np.testing.assert_allclose(replay, original['fnirs'], rtol=1e-6, atol=1e-10)
+    assert boundary['eeg_time'].shape == (120,) and boundary['fnirs_time'].shape == (300,)
+    with pytest.raises(ValueError, match='before feature masking'):
+        suite.step5.preprocess_native_trial(eeg, intensity, mask_name='center_EEG', retain_feature_boundary=True)
+
+
+def v3_config():
+    return suite.load_config(suite.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml')
+
+
+def test_v3_prerequisite_prevents_native_access(tmp_path, monkeypatch):
+    cfg, dc, base, measured, metadata = v3_config()
+    def forbidden(*args, **kwargs):
+        raise AssertionError('native loader crossed an unmet synthetic prerequisite')
+    monkeypatch.setattr(suite.diagnostic, 'load_training_subject', forbidden)
+    task = dict(kind='v3_native', subject='subject_01', prerequisites=['v3_S1_gate'])
+    result = suite.v3_dispatch(tmp_path, cfg, dc, base, measured, metadata, task)
+    assert result['status'] == 'not_started_prerequisite'
+    suite.atomic_json(tmp_path/'cells/v3_S1_gate/result.json', dict(status='completed', passed=False))
+    assert suite.v3_dispatch(tmp_path, cfg, dc, base, measured, metadata, task)['status'] == 'not_started_prerequisite'
+
+
+def test_v3_queue_and_whole_stage_budget_are_prospective():
+    cfg, *_ = v3_config()
+    tasks = suite.make_tasks(cfg, inventory(cfg))
+    index = {t['id']: t for t in tasks}
+    assert len(index) == len(tasks) == 7481
+    assert sum(t['planned_solves'] for t in tasks) == 47808
+    for task in tasks:
+        assert all((index[d]['stage'], index[d]['layer']) < (task['stage'], task['layer']) for d in task['dependencies'])
+    pilots = [dict(solver=s, elapsed_seconds=2.) for s in cfg['synthetic']['solvers']]
+    estimate = suite.v3_stage_estimate(cfg, [t for t in tasks if t['stage'] == 1], pilots, 16)
+    assert estimate['planned_solves'] == 3600
+    assert estimate['estimated_seconds'] == pytest.approx(675.)
+
+
+def test_v3_own_baseline_failure_keeps_selection_undefined(tmp_path):
+    cfg, *_ = v3_config()
+    ids = suite.v3_inventory(cfg, 'fixture')
+    suite.atomic_json(tmp_path/'prepared/fixture.json', dict(trials=ids))
+    panel = suite.v3_candidates(cfg, 'gain')
+    cells = {}
+    for candidate in panel:
+        cells[candidate['id']] = []
+        for inner, split in enumerate(suite.folds(ids, 0)['inner']):
+            key = candidate['id']+str(inner)
+            cells[candidate['id']].append(key)
+            rows = [dict(ids[i], mode=mode, status='completed',
+                center_metrics={m: dict(nmse=1.) for m in suite.MODALITIES})
+                for i in split['validation'] for mode in ('center_EEG', 'center_fNIRS')]
+            if candidate['id'] == 'baseline' and inner == 0:
+                rows[0]['status'] = 'failed_domain'
+            suite.atomic_json(tmp_path/f'cells/{key}/result.json', dict(status='completed', rows=rows))
+    result = suite.v3_select(tmp_path, cfg, dict(subject='fixture', outer=0, candidate_panel=panel, inner_cells=cells))
+    assert result['status'] == 'failed_contract' and 'selected' not in result
+    assert result['candidates']['baseline']['completed_fits'] == 35
+
+
+def test_v3_null_failure_preserves_joint_status_with_fixed_denominator(tmp_path):
+    cfg, *_ = v3_config()
+    task = dict(id='one', family='S2', kind='v3_fits', stage=2, layer=4, solver='O2', role='fixed',
+        trials=[0], subject='subject_01', outer=0, dependencies=[], queue_position=0, planned_solves=14, timeout_seconds=900)
+    suite.persist_tasks(tmp_path, [task])
+    rows = [dict(mode=mode, status='completed', subject='subject_01', session='session_01', sample_id='one',
+        center_metrics={m: dict(nmse=1.) for m in suite.MODALITIES}) for mode in suite.OUTER_MASKS]
+    rows[-1]['status'] = 'failed_domain'
+    suite.atomic_json(tmp_path/'cells/one/result.json', dict(status='completed', rows=rows, actual_solves=14))
+    summary = suite.v3_summarize(tmp_path, cfg)
+    assert summary['measured']['S2/O2']['full_panel_B'] is None
+    assert summary['measured']['S2/O2']['all_14_modes_complete'] == 0
+    import csv
+    counts = list(csv.DictReader((tmp_path/'mode_status.csv').open()))
+    joint = next(r for r in counts if r['rule'] == 'S2/O2' and r['mode'] == 'center_fNIRS')
+    assert joint['completed'] == '1' and joint['expected'] == '72'
+
+
+def test_v3_feature_checks_and_native_clock_noise_support():
+    cfg, dc, base, *_ = v3_config()
+    checks = suite.v3_engineering_checks(cfg, dc, base)
+    assert all(c['passed'] for c in checks.values())
+    assert checks['feature_masks_and_noise']['retained_ranks']['all_missing'] == 0
+    assert checks['native_boundary']['existing_output_bit_identical']
+
+
+def test_v3_report_missing_support_distinguishes_center_whole_and_unmasked_targets():
+    from experiments.scripts import render_ssm_overnight_report as renderer
+    truth = np.tile(np.sin(np.arange(120)[:, None]/8), (1, 4))
+    estimate = truth+.05
+    observed = np.ones((120, 3), dtype=bool)
+    observed[52:68, 1:] = False
+    result = renderer.v3_hidden_support_metrics(truth, estimate, observed, np.full((120, 4), .01))
+    assert result['r']['hidden_samples'] == result['clean_HbR']['hidden_samples'] == 16
+    assert result['clean_EEG']['hidden_samples'] == 0 and 'nrmse' not in result['clean_EEG']
+    assert result['clean_HbR']['nrmse'] == pytest.approx(.05/np.std(truth[:, 3]))
+    assert result['clean_HbR']['coverage95'] == 1.
+    observed[:] = True
+    observed[:, 0] = False
+    result = renderer.v3_hidden_support_metrics(truth, estimate, observed)
+    assert result['r']['hidden_samples'] == result['clean_EEG']['hidden_samples'] == 120
+    assert result['clean_HbR']['hidden_samples'] == 0
+    assert 'coverage95' not in result['r']
+
+
+def test_v3_report_distinguishes_physical_failure_from_an_unused_start_budget():
+    from experiments.scripts import render_ssm_overnight_report as renderer
+    row = dict(status='failed_domain', failure_stage='MAP_path_physical_check',
+               starts=[dict(convergence_reason='evaluation_budget')])
+    assert renderer.v3_failure_reason({}, {}, row, {}) == 'MAP_path_physical_check'
+    assert renderer.v3_failure_reason(dict(dependencies=['projection']), dict(status='data_unavailable'), None,
+        {'projection': dict(status='failed_contract')}) == 'dependency_failure'
+
+
+def test_v3_adaptation_missing_truth_keeps_the_paired_panel_incomplete(tmp_path):
+    cfg, *_ = v3_config()
+    tasks = []
+    for panel in range(4):
+        for trial in range(6):
+            baseline, selected = f'b{panel}_{trial}', f's{panel}_{trial}'
+            truth = {k: dict(nrmse=.5) for k in ('r','clean_EEG','clean_HbO','clean_HbR')}
+            row = dict(status='completed', mode='full', truth=truth)
+            suite.atomic_json(tmp_path/f'cells/{baseline}/result.json', dict(status='completed', rows=[row]))
+            if panel == trial == 0:
+                row = copy.deepcopy(row)
+                row['truth']['r']['nrmse'] = None
+            suite.atomic_json(tmp_path/f'cells/{selected}/result.json', dict(status='completed', rows=[row]))
+            tasks.append(dict(id=selected, reference_task=baseline, family='S3_synthetic', role='selected',
+                solver='O2', condition=dict(id='matched'), panel=panel))
+    result = suite.v3_adaptation_screen(tmp_path, cfg, tasks, 'gain')
+    matched = next(r for r in result['conditions'] if r['condition'] == 'matched')
+    assert matched['paired_assessment_counts'] == [5,6,6,6]
+    assert matched['verdict'] == 'incomplete' and not result['passed']
+
+
+def test_model_drift_replay_closes_with_neural_innovations_and_zero_hemodynamic_innovations():
+    _, _, base, *_ = v3_config()
+    p, c, _ = suite.model(base, suite.BASE)
+    rng = np.random.default_rng(6819)
+    z = np.zeros((64, 6))
+    z[0, 0] = .02
+    for t in range(1, len(z)):
+        z[t] = suite.core.rk4_transition(z[t-1], p, c)
+        z[t, 0] += rng.normal()*.01
+    replay, _, _ = suite.driver_replay(z, p, c, driver_law='model_drift')
+    legacy, _, _ = suite.driver_replay(z, p, c)
+    np.testing.assert_allclose(replay, z, atol=1e-5, rtol=0)
+    assert np.max(abs(legacy-z)) > 1e-5
+
+
+def test_v3_continuation_preserves_scientific_failures_and_original_budget(tmp_path, monkeypatch):
+    from datetime import datetime, timezone, timedelta
+    cfg, *_ = v3_config()
+    monkeypatch.setattr(suite, 'ROOT', tmp_path)
+    monkeypatch.setattr(suite, 'v3_summarize', lambda *args, **kwargs: None)
+    root = tmp_path/cfg['output_root']; source = root/'stopped'; target = root/'continued'
+    source.mkdir(parents=True)
+    (source/'controller.lock').touch()
+    started = (datetime.now(timezone.utc)-timedelta(minutes=3)).isoformat()
+    reason = 'controller_exception: report fixture'
+    suite.atomic_json(source/'manifest.json', dict(execution='stopped', stop_reason=reason,
+        budget_started_at=started, schema=cfg['schema']))
+    (source/'resolved_config.yaml').write_text(yaml.safe_dump(cfg))
+    for name in ('scope_inventory','fold_inventory','preflight','pilots','source_snapshot_identity','frozen_input_identity'):
+        suite.atomic_json(source/(name+'.json'), {})
+    tasks=[]
+    for i, status in enumerate(('completed','failed_contract','not_started_budget')):
+        task=dict(id=str(i), family='S1', kind='v3_temporal', layer=i, queue_position=i, planned_solves=1, timeout_seconds=900)
+        tasks.append(task)
+        row=dict(task_id=str(i), family='S1', kind='v3_temporal', status=status, rows=[],
+                 reason=reason if i==2 else 'retained scientific outcome')
+        suite.atomic_json(source/f'cells/{i}/result.json', row)
+        suite.append_status(source, row)
+    suite.persist_tasks(source, tasks)
+    original=(source/'cells/1/result.json').read_bytes()
+    suite.v3_prepare_continuation(target, source, cfg)
+    assert (target/'cells/1/result.json').read_bytes()==original
+    assert (source/'cells/1/result.json').read_bytes()==original
+    assert not (target/'cells/2/result.json').exists()
+    assert suite.read_json(target/'manifest.json')['budget_started_at']==started
+    assert suite.read_json(source/'manifest.json')['execution']=='stopped'
+    manifest=suite.read_json(source/'manifest.json')
+    manifest['budget_started_at']=(datetime.now(timezone.utc)-timedelta(hours=9)).isoformat()
+    suite.atomic_json(source/'manifest.json',manifest)
+    with pytest.raises(ValueError,match='time budget is exhausted'):
+        suite.v3_prepare_continuation(root/'expired',source,cfg)
+    assert not (root/'expired').exists()
+
+
+def test_v3_summary_accepts_inner_rows_without_truth_condition(tmp_path):
+    cfg, *_ = v3_config()
+    task=dict(id='inner',family='S3_synthetic',kind='v3_fits',stage=3,layer=8,solver='O2',role='inner',
+        trials=[1],subject='fixture',outer=0,dependencies=[],queue_position=0,planned_solves=1,timeout_seconds=900)
+    suite.persist_tasks(tmp_path,[task])
+    suite.atomic_json(tmp_path/'cells/inner/result.json',dict(status='completed',rows=[dict(
+        row_id='1__center_EEG',mode='center_EEG',status='completed',solver='O2')]))
+    result=suite.v3_summarize(tmp_path,cfg)
+    assert result['families']['S3_synthetic']['expected_cells']==1
+
+
 def test_fixed_scope_and_fold_inventory_excludes_original_positions_not_ordinal():
     cfg, *_ = suite.load_config()
     ids = inventory(cfg)

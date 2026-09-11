@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-09-10; payload-pruning record retained from
+_Evidence surface updated 2026-09-11; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -22,6 +22,7 @@ use local payloads only when a report explicitly requires them.
 
 | Stage | Retained authority / artifact | Why it remains |
 | --- | --- | --- |
+| SSM observation-contract v3 diagnostics | [Chinese visual report](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.md), [PDF](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.pdf), [self-contained HTML](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.html), [summary](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/summary.json), [continuation identity](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/continuation.json), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml) | Temporal mean/covariance ablations, independent gain/Q panels, measured failures and technical continuation; synthetic recovery evidence does not establish measured teacher qualification |
 | SSM overnight N1–N7 diagnostics | [Chinese visual report](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.md), [full PDF](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.pdf), [self-contained HTML](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.html), [vector figure atlas](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/FIGURES.pdf), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml) | Complete task denominators, failure evidence, synthetic/measurement boundaries and G/W ablations; exploratory evidence without teacher qualification |
 | SSM overnight N1–N6 predecessor | [retained automatic report](runs/physiology_semantic_tokenizer/ssm_overnight/20260909_overnight_v2_verified/OVERNIGHT_REPORT.md), [manifest](runs/physiology_semantic_tokenizer/ssm_overnight/20260909_overnight_v2_verified/manifest.json), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v1.yaml) | Original evidence and numerical comparison source for the N7 extension; repeated inputs/seeds are not independent replications |
 | Step5 flow-domain and mask-specific observation repair | [`20260909_observation_repair_v2_verified/summary.md`](runs/physiology_semantic_tokenizer/step5/20260909_observation_repair_v2_verified/summary.md), [update histories and drift roots](runs/physiology_semantic_tokenizer/step5/20260909_observation_repair_v2_verified/replay.json), [contract](configs/physiology_semantic_tokenizer/step5_observation_repair_v2.yaml) | matrix-exponential drift-domain classification and visible-only interpolation operators; synthetic full/center/whole-modality comparison; nonlinear temporal qualification remains a prerequisite to a new measured comparison |
@@ -45,6 +46,13 @@ use local payloads only when a report explicitly requires them.
 | T3c Step 4 composite synthetic T-P2 (complete negative) | [`detailed report`](../docs/analysis/20260903_T3C_COMPOSITE_SYNTHETIC_TP2_REPORT.md) and local [`v1 summary`](runs/physiology_semantic_tokenizer/t3c_composite_synthetic_t2/20260903_step4_composite_t2_v1/summary.md) | both C1 gain/time directions failed; C2 not run; synthetic identifiability evidence only, measured hierarchy remains blocked |
 | Step5A0 inference consistency (complete localization) | Local [`panel report`](runs/physiology_semantic_tokenizer/step5a_inference_consistency/20260907_step5a_localization_v1/summary.md), [`same-data oracle refinement`](runs/physiology_semantic_tokenizer/step5a_inference_consistency/20260907_step5a_oracle_quadrature_refinement_v1/summary.json), and [`reference CDF figure`](runs/physiology_semantic_tokenizer/step5a_inference_consistency/20260907_step5a_localization_v1/reference_cdf.pdf) | parameterization/Kalman checks passed; resolved G/Z short references reveal score/posterior differences; W reference unresolved; no calibration or teacher admission claim |
 | Step5 staged continuation | Local [`detailed stage review`](runs/physiology_semantic_tokenizer/step5/20260907_b_measured_output_recovery_v3/stage_review.md), [`measured report`](runs/physiology_semantic_tokenizer/step5/20260907_b_measured_output_recovery_v3/summary.md), and [`UQ prerequisite decision`](runs/physiology_semantic_tokenizer/step5/20260907_b_measured_output_recovery_v3/uq_stage_report.md) | A0 limited calibration passed; A1 admitted W only; B did not qualify a measured teacher; comprehensive UQ was not executed |
+
+The v3 package also retains its fixed task table, terminal ledger, split identities,
+numerical audits, report metric tables and renderer identity. Per-trial trajectories,
+prepared arrays, frozen source directories and detailed controller residual/replay
+tables remain local under the named run. The interrupted predecessor's evidence is
+retained separately; the continuation binding records inherited results without
+replacing their original identities.
 
 ### Overnight evidence snapshot — 2026-09-10
 

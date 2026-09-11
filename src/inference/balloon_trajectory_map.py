@@ -17,7 +17,7 @@ from . import t3a_balloon_joint_ssm as joint
 class TrajectoryObjective:
     def __init__(self, observations, parameters, config, trajectory_spec,
                  noise_variance, *, input_mask=None, observation_spec=None,
-                 rank_rtol=1e-10, linear=False):
+                 rank_rtol=1e-10, linear=False, noise_factor=None):
         parameters.validate()
         config.validate()
         if not 0 < rank_rtol < 1:
@@ -27,34 +27,44 @@ class TrajectoryObjective:
         self.steps = len(trajectory_spec.input_time)
         self.matrix, self.available = trajectory_spec.matrix(input_mask)
         y = np.asarray(observations, dtype=float)
-        variance = np.asarray(noise_variance, dtype=float)
+        variance = np.asarray(noise_variance, dtype=float) if noise_factor is None else None
+        if noise_factor is not None and noise_variance is not None:
+            raise ValueError('use one noise owner: noise_variance or explicit noise_factor')
         if (y.shape != self.available.shape or np.isinf(y).any() or
-                variance.shape != (3,) or not np.isfinite(variance).all() or np.any(variance <= 0)):
+                (noise_factor is None and (variance.shape != (3,) or
+                 not np.isfinite(variance).all() or np.any(variance <= 0)))):
             raise ValueError('invalid processed observations or pre-processing noise variance')
         self.available &= np.isfinite(y)
-        selected = self.matrix[self.available.ravel()]
-        u, singular, vt = np.linalg.svd(selected, full_matrices=False)
-        keep = singular > rank_rtol*singular[0] if len(singular) else np.zeros(0, bool)
-        self.rank = int(keep.sum())
-        self.discarded = singular[~keep]
-        self.singular = singular
         self.rank_rtol = rank_rtol
-        target = y[self.available]
-        self.support_error = float(np.linalg.norm(target-u[:, keep]@(u[:, keep].T@target)))
-        if self.support_error > 100*rank_rtol*max(1., np.linalg.norm(target)):
-            raise ValueError('processed observations outside retained operator support')
-        r = np.tile(variance*np.square(self.spec.coordinate_scale), self.steps)
-        basis = vt[keep]
-        if self.rank:
-            chol = np.linalg.cholesky((basis*r)@basis.T)
-            self.observation_design = solve_triangular(chol, basis, lower=True)
-            self.target = solve_triangular(chol, (u[:, keep].T@target)/singular[keep], lower=True)
-            self.observation_normalization = float(
-                self.rank*np.log(2*np.pi)/2 + np.log(np.diag(chol)).sum() + np.log(singular[keep]).sum())
+        if noise_factor is not None:
+            system = joint.whiten_trajectory_observations(y, self.matrix, self.available, noise_factor, rank_rtol)
+            self.rank, self.discarded = system['rank'], system['discarded_singular_values']
+            self.singular, self.support_error = system['singular_values'], system['support_residual_norm']
+            self.observation_design, self.target = system['design'], system['target']
+            self.observation_normalization = system['normalization']
         else:
-            self.observation_design = np.empty((0, 3*self.steps))
-            self.target = np.empty(0)
-            self.observation_normalization = 0.
+            selected = self.matrix[self.available.ravel()]
+            u, singular, vt = np.linalg.svd(selected, full_matrices=False)
+            keep = singular > rank_rtol*singular[0] if len(singular) else np.zeros(0, bool)
+            self.rank = int(keep.sum())
+            self.discarded = singular[~keep]
+            self.singular = singular
+            target = y[self.available]
+            self.support_error = float(np.linalg.norm(target-u[:, keep]@(u[:, keep].T@target)))
+            if self.support_error > 100*rank_rtol*max(1., np.linalg.norm(target)):
+                raise ValueError('processed observations outside retained operator support')
+            r = np.tile(variance*np.square(self.spec.coordinate_scale), self.steps)
+            basis = vt[keep]
+            if self.rank:
+                chol = np.linalg.cholesky((basis*r)@basis.T)
+                self.observation_design = solve_triangular(chol, basis, lower=True)
+                self.target = solve_triangular(chol, (u[:, keep].T@target)/singular[keep], lower=True)
+                self.observation_normalization = float(
+                    self.rank*np.log(2*np.pi)/2 + np.log(np.diag(chol)).sum() + np.log(singular[keep]).sum())
+            else:
+                self.observation_design = np.empty((0, 3*self.steps))
+                self.target = np.empty(0)
+                self.observation_normalization = 0.
         self.initial_sd = np.asarray(config.initial_state_std)
         self.process_sd = np.asarray(parameters.fixed.process_std)*np.sqrt(config.dt)
         if np.any(self.process_sd <= 0):
@@ -169,18 +179,19 @@ def _optimize(objective, initial, max_nfev):
 
 def smooth_balloon_trajectory_map(observations, parameters, *, config,
         trajectory_spec, noise_variance, observation_spec=None, input_mask=None,
-        rank_rtol=1e-10, max_nfev=200, linear=False):
+        rank_rtol=1e-10, max_nfev=200, linear=False, noise_factor=None):
     if not 1 <= max_nfev <= 200:
         raise ValueError('max_nfev must be in [1,200] per fixed start')
     objective = TrajectoryObjective(observations, parameters, config, trajectory_spec,
         noise_variance, observation_spec=observation_spec, input_mask=input_mask,
-        rank_rtol=rank_rtol, linear=linear)
+        rank_rtol=rank_rtol, linear=linear, noise_factor=noise_factor)
     starts = [('rest', np.zeros((objective.steps, 6)))]
     initial_failure = None
     try:
         reference = joint.smooth_balloon_trajectory_reference(observations, parameters,
             config=config, trajectory_spec=trajectory_spec, noise_variance=noise_variance,
-            observation_spec=observation_spec, input_mask=input_mask, rank_rtol=rank_rtol)
+            observation_spec=observation_spec, input_mask=input_mask, rank_rtol=rank_rtol,
+            noise_factor=noise_factor)
         starts.append(('linear_reference', reference['transformed_mean']))
     except (ValueError, FloatingPointError, np.linalg.LinAlgError) as exc:
         initial_failure = dict(start='linear_reference', status='infeasible_initial',

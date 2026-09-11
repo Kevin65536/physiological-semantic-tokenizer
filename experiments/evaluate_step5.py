@@ -836,7 +836,8 @@ def run_teacher(cfg,run_dir,calibration_dir,workers):
 
 
 def preprocess_native_trial(eeg, intensity_pairs, *, eeg_hz=200., fnirs_hz=10.,
-                            target_hz=4., mask_name=None, gap_seconds=4.):
+                            target_hz=4., mask_name=None, gap_seconds=4.,
+                            retain_feature_boundary=False):
     """Trial-local Step5B features with the target hidden before every transform.
 
     Inputs are native EEG and positive intensity [time, pair, wavelength].
@@ -858,6 +859,8 @@ def preprocess_native_trial(eeg, intensity_pairs, *, eeg_hz=200., fnirs_hz=10.,
         raise ValueError('native trial clocks have different durations')
     if mask_name not in (None,'center_EEG','center_fNIRS','whole_EEG','whole_fNIRS'):
         raise ValueError('unsupported trial mask')
+    if retain_feature_boundary and mask_name is not None:
+        raise ValueError('feature boundary is extracted before feature masking, from a full admitted trial')
     if not 0<gap_seconds<duration:
         raise ValueError('mask gap must fit within the trial')
     count=int(round(duration*target_hz)); output_mask=np.ones((count,3),dtype=bool)
@@ -894,12 +897,22 @@ def preprocess_native_trial(eeg, intensity_pairs, *, eeg_hz=200., fnirs_hz=10.,
         fnirs_features=np.full((count,intensity_pairs.shape[1],2),np.nan)
     else:
         transformed=apply_homer2_aligned_contract(input_fnirs,dataset_id='eeg_fnirs_single_trial',
-                         sample_rate_hz=fnirs_hz,entry_stage='raw_intensity',wavelengths_nm=(760.,850.))
+                         sample_rate_hz=fnirs_hz,entry_stage='raw_intensity',wavelengths_nm=(760.,850.),
+                         retain_feature_boundary=retain_feature_boundary)
         ratio=Fraction(target_hz/fnirs_hz).limit_denominator(1000)
         fnirs_features=resample_poly(transformed.values,ratio.numerator,ratio.denominator,axis=0)
         fnirs_features=fnirs_features.reshape(count,intensity_pairs.shape[1],2)
         fnirs_features[~output_mask[:,1]]=np.nan
-    return dict(eeg_log_power=eeg_features,fnirs=fnirs_features,observation_mask=output_mask)
+    result=dict(eeg_log_power=eeg_features,fnirs=fnirs_features,observation_mask=output_mask)
+    if retain_feature_boundary:
+        result['feature_boundary']=dict(
+            eeg_log_power=eeg_features.copy(), fnirs=transformed.pre_linear_values,
+            optical_density=transformed.pre_linear_optical_density,
+            eeg_time=np.arange(count)/target_hz, fnirs_time=np.arange(len(input_fnirs))/fnirs_hz,
+            timestamp_convention='left edge relative to admitted window start',
+            noise_layer='EEG log power at 4 Hz and motion-processed OD at 10 Hz; Gaussian approximation',
+            fnirs_linear_order='fixed MBLL, 10 Hz bandpass, 10-to-4 Hz resampling; fold baseline follows')
+    return result
 
 
 def report_step5(run_dir):

@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-09T16:22:41.517948+00:00",
+  "updated_at": "2026-09-10T16:50:18.244597+00:00",
   "tracks": [
     {
       "id": "main",
@@ -320,6 +320,36 @@
       "id": "e.ssm_overnight_n7_checks",
       "label": "SSM 含 N7 的夜间软件检查与试跑",
       "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/pilots.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ssm_observation_v3_contract",
+      "label": "SSM 观测合同 v3",
+      "path": "experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.ssm_observation_v3_run",
+      "label": "SSM 观测合同运行记录（执行状态以此为准）",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_observation_contract_v3_v1/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.ssm_observation_v3_checks",
+      "label": "SSM 观测合同软件检查和合成试跑",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_observation_contract_v3_v1/preflight.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ssm_observation_v3_continuation_run",
+      "label": "SSM 观测合同技术中断续跑（执行状态以此为准）",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.ssm_observation_v3_continuation_identity",
+      "label": "原任务、结果及预算起点的续跑绑定",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/continuation.json",
       "role": "diagnostic"
     }
   ],
@@ -2722,6 +2752,60 @@
         "main.ssm_overnight@2026-09-09.implementation"
       ],
       "updated_at": "2026-09-09T16:22:41.517948+00:00",
+      "depends_on": [
+        "main.step5_observation"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.ssm_overnight@2026-09-10.observation_v3",
+      "entity": "main.ssm_overnight",
+      "label": "SSM 特征观测合同与独立适配诊断实现",
+      "track": "main",
+      "order": 8,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "新增预线性特征边界、原生时钟噪声因子与同源目标条件点预测；固定六状态与G/W参考，按独立合成资格依赖推进固定参数、增益及Q单因素诊断。软件检查、分离种子试跑与固定任务表保留；唯一有界调度器使用冻结源码，执行与科学结果由所链接run持有。Gaussian MAP不替代既有Student-t资格，不晋级teacher、UQ或tokenizer。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.ssm_observation_v3_contract",
+        "e.ssm_observation_v3_run",
+        "e.ssm_observation_v3_checks"
+      ],
+      "supersedes": [
+        "main.ssm_overnight@2026-09-10.n7"
+      ],
+      "updated_at": "2026-09-10T15:35:20.240477+00:00",
+      "depends_on": [
+        "main.step5_observation"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.ssm_overnight@2026-09-11.observation_v3_continuation",
+      "entity": "main.ssm_overnight",
+      "label": "SSM 观测合同诊断技术续跑",
+      "track": "main",
+      "order": 8,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "修复派生报告对无合成条件行的空值处理后，以新冻结源码续跑同一任务表。保留原运行全部已完成结果、科学失败、筛查结论和原八小时预算；续跑绑定记录为结果继承依据，执行状态与科学结果由所链接run持有。不重做已完成拟合，不扩大数据范围，不晋级teacher、UQ或tokenizer。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.ssm_observation_v3_contract",
+        "e.ssm_observation_v3_checks",
+        "e.ssm_observation_v3_run",
+        "e.ssm_observation_v3_continuation_run",
+        "e.ssm_observation_v3_continuation_identity"
+      ],
+      "supersedes": [
+        "main.ssm_overnight@2026-09-10.observation_v3"
+      ],
+      "updated_at": "2026-09-10T16:50:18.244597+00:00",
       "depends_on": [
         "main.step5_observation"
       ],
