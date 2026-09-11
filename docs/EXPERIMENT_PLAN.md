@@ -45,7 +45,7 @@ N1–N7 的冻结配置、逐 trial 证据和旧判定保留。
 [候选表](../experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/candidate_table.csv)
 和[阅读版分析](../experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.md)。
 N2 支持优先检查时间处理；N5 的共同有效子集风险改善约 26.30%，支持保留一个
-观测增益假说；N6 的约 12.99% 改善需检验是否来自过程创新补偿。
+观测增益假说；N6 的约 12.99% 改善需检验是否来自状态转移残差补偿。
 这些历史比例只用于提出假说，不能作为新实验的预期效应或跨候选排名。
 
 固定六个状态及其生理方程，主比较固定 `G=W=0`，Z 保持参考阻尼比
@@ -195,7 +195,7 @@ Student-t 压力失败限制适用范围，不使 Gaussian 结果继承 Student-
 共 11 个条件；每条件先固定 4 个独立合成 panel，每 panel 模拟一个被试的
 三 session，每 session 6 个训练、2 个 assessment trial，即 18/6，内折仍为
 12/6。一个 panel 对应一次独立外折实验，不循环使用 assessment 进行开发。
-训练/assessment 的完整潜在路径、初态、过程创新及观测噪声独立；条件间可共用
+训练/assessment 的完整潜在路径、初态、过程噪声增量及观测噪声独立；条件间可共用
 随机数作配对，但不增加独立样本数。4 panel × 24 trial = 每条件 96 个唯一
 trial；不把候选、mask、重采样或选择频率计作独立重复。
 开发用种子与这些 panel 分离，启动前在配置中固定种子映射。
@@ -217,7 +217,7 @@ trial；不把候选、mask、重采样或选择频率计作独立重复。
 重复选到 2 不触发扩大上界。合成结论不确定时，实测结果也只能定位机制，
 不能把它列为已验证的共享 teacher 改进。
 
-### 阶段 4：检查过程创新与合法路径，增益不与过程噪声联合搜索
+### 阶段 4：检查状态转移残差与合法路径，增益不与过程噪声联合搜索
 
 沿用阶段 2 的修复合同、固定 a=1。只比较血流相关五状态过程噪声**标准差**
 倍率 `{0.5,1,2}`，`r` 过程噪声和初态先验固定；方差倍率为 `{0.25,1,4}`。
@@ -236,9 +236,9 @@ gain × Q 的网格。该阶段以自身 q=1 基线为参照，不能跨阶段�
 旧四次基线内折失败及保留的五个越界案例依 owner 表按身份定位，不按新排名
 重新挑选“典型案例”。
 
-比较修复前后所需的 Q 倍率、各状态创新的绝对大小及按各自 Q 标准化的大小，
-防止仅因分母增大就声称创新减小。复用 `driver_replay`，对实测和匹配/失配
-合成都计算同样的回放差、失败率和初态处理；先用无过程创新的确定性合成检查
+比较修复前后所需的 Q 倍率、各状态转移残差的绝对大小及按各自 Q 标准化的大小，
+防止仅因分母增大就声称状态转移残差减小。复用 `driver_replay`，对实测和匹配/失配
+合成都计算同样的回放差、失败率和初态处理；先用无过程噪声的确定性合成检查
 回放闭合。MAP 路径与后验均值驱动回放分列，后者包含非线性均值效应。
 回放差只与相应合成分布比较，不解释成私有信息比例。
 
@@ -323,7 +323,7 @@ v3 的 `--prepare` 只做无信号身份清单、软件检查和分离种子的 
 
 每阶段产物沿用 run 内 resolved config、固定 task/status 表和逐 trial 结果。
 报告从这些表派生，至少包括风险/失败分母、残差尾部、配对增量、增益选择与
-合成 oracle 差、过程创新及回放图。每完成一组实验，都在对话中主动报告关键
+合成 oracle 差、状态转移残差及回放图。每完成一组实验，都在对话中主动报告关键
 数值、基线比较、结论、失败/不确定性和下一步；日志或文件链接不替代该汇报。
 
 ## Bounded overnight SSM diagnostics (retained v2 contract)
@@ -365,7 +365,7 @@ remains positive throughout the interval. A sufficient matrix-exponential
 displacement bound handles ordinary states; otherwise analytic extrema
 isolation and bracketed matrix-exponential roots locate the minimum and first
 zero. This includes crossings followed by recovery before the next sample.
-The innovation remains after the deterministic transition. A `flow_domain_exit`
+The process-noise increment remains after the deterministic transition. A `flow_domain_exit`
 retains the last four joint-filter observation updates: predicted and filtered
 means/covariances and modality visibility. No failed case is projected, removed,
 redrawn, or rescued by changing substeps. Only the previously recorded training
@@ -516,7 +516,7 @@ refitting EEG-only, fNIRS-only and joint filters. They are likelihood curves,
 not resolved parameter posteriors. Chronological joint-density increments are
 summed over baseline, task and nominal recovery without resetting at segment
 boundaries; marginal predictive scores do not replace the joint likelihood.
-Fixed-setting innovations report bias, within-trial autocorrelation and PSD.
+Fixed-setting one-step predictive residuals report bias, within-trial autocorrelation and PSD.
 The first original training trial provides predeclared 13/17-order endpoint
 checks. EEG-only W invariance is also checked against the likelihood owner.
 
@@ -562,7 +562,7 @@ quadrature refinement. W is the negative of Step 4's log-time coordinate.
   conditional Student-t observation densities.
 - `matched_model_calibration` draws the parameter from its declared prior,
   the transformed initial state from the configured zero-mean Gaussian, and
-  all six transition innovations independently. Its transition law is
+  all six process-noise increments independently. Its transition law is
   `z[t+1] = RK4(z[t]) + epsilon`, with covariance
   `dt * diag(process_std**2)`. This is the discrete model approximated by the
   fitter; it does not assert exact continuous-time SDE simulation.
@@ -1090,6 +1090,8 @@ parameter_posterior_summary
 parameter_identifiability_status
 physical_check_status
 ```
+
+Residual and noise names follow the [data contract](DATA_CONTRACT.md#residual-and-noise-quantities).
 
 `shared_driver_mean` is the operational `r(t)` estimate.
 `physiological_state_mean` contains only states actually present and identified

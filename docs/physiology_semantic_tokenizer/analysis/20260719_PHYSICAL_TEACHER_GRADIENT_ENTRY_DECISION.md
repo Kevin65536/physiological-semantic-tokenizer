@@ -14,7 +14,7 @@ through every tokenizer loss. Admission is now defined per gradient entrance:
 | Prototype-signature head | `r_mean`, `r_slope` | HbO/HbR mean and slope | Required |
 | Patch-local/prototype extension | `s_mean`, `s_slope` | None | Optional ablation |
 | Intra-modal causal context | Registered future state/transition targets | Registered future state/transition targets | Development ablation |
-| Cross-modal coupling preservation | EEG-token history as predictor | Future `delta_f` innovation plus aligned HbO/HbR innovations as detached targets | Development ablation |
+| Cross-modal coupling preservation | EEG-token history as predictor | Future `delta_f` predictive residual plus aligned HbO/HbR predictive residuals as detached targets | Development ablation |
 | Inverse-uncertainty weighting | None | None | Blocked pending calibration |
 | Fitted SSM parameters | Diagnostics only | Diagnostics only | Never a token target by default |
 
@@ -39,10 +39,10 @@ context-only. Its validation evidence was:
 
 The four-coordinate EEG vocabulary passed only narrowly: global R² `0.733`
 versus random q95 `0.727`. This supports testing `s`, not making it a blocking
-coordinate. The same run found that future flow innovation carries the
+coordinate. The same run found that future flow predictive residual carries the
 strongest conditional bridge: adding EEG teacher-state history to fNIRS
-history increased flow-innovation R² by `0.550`, compared with `0.053` for HbO
-and `-0.013` for HbR; joint innovation information was `0.595` nats versus a
+history increased flow predictive-residual R² by `0.550`, compared with `0.053` for HbO
+and `-0.013` for HbR; joint predictive residual information was `0.595` nats versus a
 shuffled q95 of `0.021`. Because both predictor and target came from the fused
 teacher, this is an upper-bound routing diagnostic rather than independent
 coupling evidence.
@@ -84,11 +84,11 @@ q_0(Y^F_{t+h}\mid H_t^F, C_t),\qquad
 q_1(Y^F_{t+h}\mid H_t^F, K^E_{t-L:t}, C_t),
 \]
 
-where the target `Y^F` is a registered future innovation target, `H_t^F` is
+where the target `Y^F` is a registered future predictive residual target, `H_t^F` is
 frozen fNIRS history, and `C_t` contains declared nuisance controls. Gradients
 from this preservation loss reach only the EEG tokenizer. The fNIRS target,
 fNIRS tokenizer, history baseline, and physical teacher are detached. The
-primary development target is `delta_f` innovation, with HbO/HbR innovations
+primary development target is `delta_f` predictive residual, with HbO/HbR predictive residuals
 retained as observation-aligned safeguards and separately reported horizons.
 
 The shaper is deliberately low capacity, causal, multi-horizon, and discarded

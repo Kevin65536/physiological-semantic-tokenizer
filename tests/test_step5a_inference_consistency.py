@@ -54,15 +54,15 @@ def test_matched_generator_has_declared_initial_and_six_state_noise_law():
     cfg = tiny_config()
     cfg['model']['steps'] = 2
     cfg['model']['process_std'] = [.08, .01, .006, .004, .004, .004]
-    initial, innovations = [], []
+    initial, process_noise_increments = [], []
     raw = step5.raw_parameters(cfg, 'W', .1)
     for seed in range(800):
         trial = step5.generate_matched(cfg, 'W', .1, seed)
         z = trial['transformed_states']
         initial.append(z[0])
-        innovations.append(z[1]-step5.independent_transition(z[0], raw, cfg))
+        process_noise_increments.append(z[1]-step5.independent_transition(z[0], raw, cfg))
     np.testing.assert_allclose(np.std(initial, axis=0), cfg['model']['initial_state_std'], rtol=.12)
-    np.testing.assert_allclose(np.std(innovations, axis=0), np.array(cfg['model']['process_std'])*np.sqrt(cfg['model']['dt']), rtol=.12)
+    np.testing.assert_allclose(np.std(process_noise_increments, axis=0), np.array(cfg['model']['process_std'])*np.sqrt(cfg['model']['dt']), rtol=.12)
     np.testing.assert_array_equal(step5.generate_matched(cfg,'W',.1,10)['observations'], step5.generate_matched(cfg,'W',.1,10)['observations'])
 
 

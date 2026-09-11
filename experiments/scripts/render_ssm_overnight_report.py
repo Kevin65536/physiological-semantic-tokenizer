@@ -30,6 +30,11 @@ import numpy as np
 import pandas as pd
 import markdown
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from experiments.evaluate_step5_observation_diagnostic import canonical_residual_fields
+
 FAMILIES = [f'N{i}' for i in range(1, 8)]
 MODS = ['EEG', 'HbO', 'HbR']
 TARGETS = ['r', 'clean_EEG', 'clean_HbO', 'clean_HbR']
@@ -52,7 +57,7 @@ CORE_FIGURES = ['01_completion', '05_n1_null_linear', '08_n1_tails',
                 'n7_synthetic_ablation']
 KEEP = {'task_id', 'kind', 'rule', 'candidate', 'row_id', 'mode', 'status', 'metrics', 'center_metrics',
         'parameter_log_likelihood', 'physical_checks', 'physical_checks_at_transformed_mean', 'trajectory_path',
-        'trial', 'subject', 'session', 'sample_id', 'outer', 'innovation_structure', 'smoothing_residual_structure',
+        'trial', 'subject', 'session', 'sample_id', 'outer', 'predictive_residual_structure', 'smoothing_residual_structure',
         'truth', 'reference_truth', 'r_driver_replay', 'hidden_truth', 'noisy_prediction', 'starts',
         'retained_rank', 'observed_coordinates', 'support_residual_norm', 'converged_start_max_path_difference',
         'rank_sensitivity', 'spatial', 'strength_training_sd', 'r_change_rms', 'teacher_change_nrmse',
@@ -74,14 +79,18 @@ def decode(value):
 
 
 def read_json(path):
-    return json.loads(path.read_text())
+    return canonical_residual_fields(json.loads(path.read_text()))
 
 
 def read_csv(path, keep=None):
     csv.field_size_limit(20_000_000)
     with path.open() as stream:
-        return [{k: decode(v) for k, v in row.items() if keep is None or k in keep}
-                for row in csv.DictReader(stream)]
+        rows = []
+        for row in csv.DictReader(stream):
+            fields = canonical_residual_fields(row)
+            rows.append(canonical_residual_fields({k: decode(v) for k, v in fields.items()
+                                                   if keep is None or k in keep}))
+        return rows
 
 
 def nested(obj, *keys):
@@ -197,7 +206,7 @@ def describe_figure(name, title, original, fig):
         '04_n1_masks': '增加联合输入没有在所有目标、所有遮挡方式下稳定占优；不同成功分母限制直接比较。',
         '05_n1_null_linear': 'EEG的正确联合预测平均逊于自身上下文；现有联合状态尚无稳定的跨模态预测优势。',
         '06_n1_compromise': '联合输入明显改变r，却没有相应稳定的遮挡预测增益，状态改变本身不足以证明共享信息。',
-        '07_n1_acf': '创新与平滑残差含有时间相关结构，逐点独立误差近似未消除时间处理失配。',
+        '07_n1_acf': '一步预测残差与平滑残差含有时间相关结构，逐点独立误差近似未消除时间处理失配。',
         '08_n1_tails': '残差尾部明显高于中位数；单个平均误差无法概括不同模态的极端偏差。',
         '09_n1_influence': 'r变化较大时仍可出现零增益或负增益；对另一模态敏感不等于预测获益。',
         '10_n1_hbt': 'HbO/HbR相加后仍存在session相关偏差；代数关系正确不能替代观测恢复检查。',
@@ -215,7 +224,7 @@ def describe_figure(name, title, original, fig):
         'n5_surfaces': '只有3/9个二维曲面完整；一维W边界现象不能用来宣称观测增益与生理时间已被分离。',
         'n7_surfaces': '4/9个完整曲面均最大于G=0.6、W=-0.5的双边界，其余5个不完整；未得到内部稳定最优点。',
         'n6_replay': '64个成功回放的EEG/HbO/HbR平均闭合差为0/0.181/0.461；Hb回放不能完全复现联合均值。',
-        'n6_transition': '联合均值与确定性r驱动回放存在闭合差；过程创新可参与拟合，但这里不能量化私有信息比例。',
+        'n6_transition': '联合均值与确定性r驱动回放存在闭合差；状态转移残差可参与拟合，但这里不能量化私有信息比例。',
         'n6_failure_traces': '5/6案例复现越界；跳过最后更新仅修复其中2例的下一步，最后一条观测不是唯一原因。',
         'rules_comparison': 'N5/N6较大的实测子集收益伴随合成代价；N7/GW对W-only仅改善1.51%，全部规则仍未合格。',
         'rules_modality_costs': '综合风险下降并未保证各模态及配对增量同时改善；N5/N6的收益不能视为无代价改进。',
@@ -243,7 +252,7 @@ def describe_figure(name, title, original, fig):
     elif name == 'n6_failure_traces':
         reading = '横轴为事件相对时间；两条曲线比较观测更新前后未来一个步长内的最小流量，跌破红色零线表示流量越界。'
     elif name == '07_n1_acf':
-        reading = '横轴为滞后秒数，纵轴为ACF，颜色区分被试；上排为一步创新，下排为平滑残差，远离零线表示剩余时间相关。'
+        reading = '横轴为滞后秒数，纵轴为ACF，颜色区分被试；上排为一步预测残差，下排为平滑残差，远离零线表示剩余时间相关。'
     elif name == '03_n1_residuals':
         reading = '行是被试/session，列是模态；上下两排分别为W=0/−0.5，三列面板依次为RMSE、带符号bias、MAE。误差越低越好，bias越接近0越好。'
     elif name == '04_n1_masks':
@@ -263,7 +272,7 @@ def describe_figure(name, title, original, fig):
     elif name == 'n4_artifact':
         reading = '行是六个EEG分支，列是额部/后部注入及强度，三面板是恢复目标；数值越大表示人工伪迹引起的teacher改变越大，不能把小改变量直接解释为更准确。'
     elif name == 'n6_transition':
-        reading = '左侧按被试比较不同状态组的转移创新；右侧按六种assessment条件比较EEG/HbO/HbR回放差。两侧归一化分母不同，只在各面板内比较大小。'
+        reading = '左侧按被试比较不同状态组的状态转移残差；右侧按六种assessment条件比较EEG/HbO/HbR回放差。两侧归一化分母不同，只在各面板内比较大小。'
     elif name == 'synthetic_references':
         reading = '上下排是独立discovery/assessment种子流，列面板区分恢复目标；每格按六种失配条件比较原带噪、自身平滑和联合基线，NRMSE越低越好。'
     elif name == 'n2_solver_checks':
@@ -540,15 +549,15 @@ def plot_n1(out, figs, run, data, scored):
     def acf_draw(fig):
         axes=fig.subplots(2,3)
         panel=[r for r in rows if r['_task']['candidate']['w']==0 and r['mode']=='full' and r['status']=='completed']
-        for i,field in enumerate(['innovation_structure','smoothing_residual_structure']):
+        for i,field in enumerate(['predictive_residual_structure','smoothing_residual_structure']):
             for j,m in enumerate(MODS):
                 for k,s in enumerate(SUBJECTS):
                     rs=[r for r in panel if r['subject']==s]
                     arrays=[r[field][m]['acf'] for r in rs if isinstance(r.get(field),dict) and m in r[field]]
                     if arrays:
                         axes[i,j].plot(np.arange(len(arrays[0]))/4,np.mean(arrays,axis=0),color=COLORS[k],label=short_subject(s))
-                axes[i,j].axhline(0,color='#AEB7C0',lw=.7);axes[i,j].set(title=m+(' · 一步创新' if i==0 else ' · 平滑残差'),xlabel='滞后（秒）',ylabel='ACF',ylim=(-.4,1.05));axes[i,j].legend(fontsize=8)
-    figure(out,figs,'07_n1_acf','N1｜创新和残差的时间相关结构',
+                axes[i,j].axhline(0,color='#AEB7C0',lw=.7);axes[i,j].set(title=m+(' · 一步预测残差' if i==0 else ' · 平滑残差'),xlabel='滞后（秒）',ylabel='ACF',ylim=(-.4,1.05));axes[i,j].legend(fontsize=8)
+    figure(out,figs,'07_n1_acf','N1｜预测残差和平滑残差的时间相关结构',
            'W=0、完整输入有效 trial；各被试内作描述性均值。不能把这些相关时间点当作独立重复，亦不能由低残差直接推出正确的概率模型。',acf_draw,(14,8))
     def quantile_draw(fig):
         axes=fig.subplots(1,3)
@@ -751,14 +760,14 @@ def plot_replay_trace(out,figs,data,traces):
         axes=fig.subplots(1,2)
         keys=sorted({k for r in replay for k in (r.get('grouped_transition_rms') or {})})
         values=[[np.mean([r['grouped_transition_rms'][k] for r in replay if r['subject']==s and r.get('grouped_transition_rms') and k in r['grouped_transition_rms']]) for k in keys] for s in SUBJECTS]
-        heat(axes[0],values,[short_subject(s) for s in SUBJECTS],keys,'分组转移创新 RMS / 固定过程尺度')
+        heat(axes[0],values,[short_subject(s) for s in SUBJECTS],keys,'分组状态转移残差 RMS / 固定过程尺度')
         synthetic=[r for r in data['N1'] if r['kind']=='synthetic' and r['mode']=='full' and r['_task']['candidate']['id']=='baseline' and r['_task']['stream']=='assessment']
         vals=[]
         for condition in CONDITIONS:
             rs=[r for r in synthetic if r['_task']['condition']==condition and (r.get('r_driver_replay') or {}).get('status')=='completed']
             vals.append([np.mean([r['r_driver_replay']['gap_nrmse'][j] for r in rs]) if rs else np.nan for j in range(3)])
         heat(axes[1],vals,CONDITION_NAMES,MODS,'合成基线回放差 / 生成器原clean SD')
-    figure(out,figs,'n6_transition','N6｜过程创新和合成回放参照',
+    figure(out,figs,'n6_transition','N6｜状态转移残差和合成回放参照',
            '左：有效实测回放的分组转移诊断；右：独立 assessment 六条件，每条件最多 16 trial。实测和合成的归一化分母不同，不能直接把数值相除解释为比例。',transition_draw,(15,6))
     def trace_draw(fig):
         axes=fig.subplots(2,3)
@@ -1065,7 +1074,7 @@ def write_report(out,run,previous,figs,audit,summaries,rules,data,traces,scored)
     report+=many(['n4_inner','n4_artifact'])
     report+='\n## 6. N5：观测增益补偿和 session\n\n增益选择为 a_N=2 七次、1.5 一次、基线一次；外折53/72，共同基线子集51/72。描述性 B 从5.952917降到4.387177（26.30%），但独立匹配合成 r/EEG/HbO/HbR NRMSE 分别恶化0.102884/0.102884/0.026386/0.014590，且部分配对增量下降。因此不能只凭实测子集改善采用该规则。8/9条完整W曲线均触W=-0.5边界；只有3/9个完整W–增益曲面。\n'
     report+=many(['n5_inner','n5_w_curves','n5_surfaces'])
-    report+='\n## 7. N6：过程创新、回放和流量越界\n\n9 个有效选择折中8次选择血流相关过程噪声×2，1次选择r过程噪声×0.5；外折53/72，共同子集风险下降12.99%，但匹配合成r/EEG/HbO误差增加，HbR小幅降低，仍未通过规则筛选。确定性r回放64/72完成；它是闭合诊断，不能当作共享/私有信息占比。\n'
+    report+='\n## 7. N6：状态转移残差、回放和流量越界\n\n9 个有效选择折中8次选择血流相关过程噪声×2，1次选择r过程噪声×0.5；外折53/72，共同子集风险下降12.99%，但匹配合成r/EEG/HbO误差增加，HbR小幅降低，仍未通过规则筛选。确定性r回放64/72完成；它是闭合诊断，不能当作共享/私有信息占比。\n'
     report+=many(['n6_inner','n6_replay','n6_transition','n6_failure_traces'])
     report+='\n'+table(['被试/旧训练索引','W','复现状态','首次f=0事件时间(s)','跳过最后更新后下一步正流量'],[
         [f"{t['subject']}/{t['trial']}",t['w'],r['status'],finite_number(r.get('first_zero_event_time_s'),6),
@@ -1297,7 +1306,7 @@ def render_v3(run, out, previous=None):
     for task in tasks:
         path = run/'cells'/task['id']/'result.json'
         payload = path.read_bytes()
-        results[task['id']] = json.loads(payload)
+        results[task['id']] = canonical_residual_fields(json.loads(payload))
         hashes[str(path.relative_to(run))] = hashlib.sha256(payload).hexdigest()
     ledger = [json.loads(line) for line in (run/'case_status.jsonl').read_text().splitlines() if line.strip()]
     registered = [r for r in ledger if r['task_id'] in by_id]
@@ -1698,13 +1707,13 @@ def render_v3(run, out, previous=None):
     replay_rows = [r for r in fit_rows if r.get('mode') == 'full' and isinstance(r.get('replay'), dict)]
     save_table(out, 'replay_summary', [dict(task_id=r['_task']['id'], subject=r.get('subject'), solver=r['solver'],
         role=r['_task'].get('role'), condition=r['_task'].get('condition'), replay=r['replay'],
-        absolute_innovations=r.get('process_innovation_rms'), standardized_innovations=r.get('standardized_process_innovation_rms')) for r in replay_rows])
+        absolute_state_transition_residuals=r.get('state_transition_residual_rms'), standardized_state_transition_residuals=r.get('standardized_state_transition_residual_rms')) for r in replay_rows])
     def draw_replay(f):
         groups = [('实测固定O0', 'S2', 'O0', None), ('实测固定O2', 'S2', 'O2', None),
             ('合成匹配O0', 'S4_synthetic', 'O0', 'matched'), ('合成匹配O2', 'S4_synthetic', 'O2', 'matched'),
             ('合成错配O2', 'S4_synthetic', 'O2', 'independent_pairing')]
-        for ax, metric, title in zip(f.subplots(1, 3), ['process_innovation_rms', 'standardized_process_innovation_rms', 'replay'],
-                ['六状态创新绝对RMS', '六状态创新 / 各自Q标准差', '回放HbR差 / 训练SD']):
+        for ax, metric, title in zip(f.subplots(1, 3), ['state_transition_residual_rms', 'standardized_state_transition_residual_rms', 'replay'],
+                ['六状态转移残差绝对RMS', '六状态转移残差 / 各自Q标准差', '回放HbR差 / 训练SD']):
             vv, counts = [], []
             for label, family, solver, condition in groups:
                 rr = [r for r in replay_rows if r['_task']['family'] == family and r['solver'] == solver and
@@ -1723,9 +1732,9 @@ def render_v3(run, out, previous=None):
                 ax.set_title(title, fontsize=9)
             else:
                 heat(ax, vv, [label+f' ({n})' for (label,*_),n in zip(groups,counts)], ['r','s','log f','log v','log p','log q'], title=title, fmt='.2g')
-    emit('v3_process_replay', '过程创新与独立r驱动回放',
-        '固定自身Q=1的完成子集；初态取同一拟合初态，回放不再加入过程创新。数字是有效行数。',
-        '依次比较绝对创新、按各自Q归一化的创新和回放HbR差；O0为后验均值，O2为MAP。',
+    emit('v3_process_replay', '状态转移残差与独立r驱动回放',
+        '固定自身Q=1的完成子集；初态取同一拟合初态，回放不再加入过程噪声。数字是有效行数。',
+        '依次比较绝对状态转移残差、按各自Q归一化的状态转移残差和回放HbR差；O0为后验均值，O2为MAP。',
         '回放差含有初态、动力学与非线性均值效应；不能解释为私有信息比例。', draw_replay, size=(12, 4))
     precision_path = run/'precision_audit_v1.json'
     if precision_path.exists():
@@ -1751,9 +1760,9 @@ def render_v3(run, out, previous=None):
             ax.set_xticks(range(4), [str(r['initial_r']) for r in replay_audits[0]])
             ax.set_xlabel('非零初始driver');ax.set_ylabel('120点最大变换状态误差');ax.legend(fontsize=8)
         emit('v3_replay_closure_audit', '非零driver下的确定性回放闭合',
-            '同一零过程创新轨迹，以独立DOP853核对不同采样间driver处理。',
+            '同一零过程噪声轨迹，以独立DOP853核对不同采样间driver处理。',
             '按同一初始driver比较误差与1e-5阈值；修正审计不改变本轮冻结Q选择及回放结果。',
-            '零driver通过不能外推到动态driver；原回放包含插值误差，需要与生理/过程创新分开。', draw_replay_audit, size=(10, 4))
+            '零driver通过不能外推到动态driver；原回放包含插值误差，需要与生理/状态转移残差分开。', draw_replay_audit, size=(10, 4))
     for i, info in enumerate(figures.values(), 1):
         info['label'] = f'图 {i}'
     qualifying_rules = [r['rule'] for r in summary['comparisons'] if r['measured_priority_screen_passed']]

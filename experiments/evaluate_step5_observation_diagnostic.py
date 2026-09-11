@@ -58,6 +58,32 @@ SOURCE_FILES = (
 )
 
 
+_LEGACY_RESIDUAL_FIELDS = {
+    'innovations': 'predictive_residuals',
+    'standardized_innovations': 'standardized_predictive_residuals',
+    'segment_standardized_innovation_mean': 'segment_standardized_predictive_residual_mean',
+    'innovation_structure': 'predictive_residual_structure',
+    'process_innovation_rms': 'state_transition_residual_rms',
+    'standardized_process_innovation_rms': 'standardized_state_transition_residual_rms',
+    'process_innovation_status': 'state_transition_residual_status',
+}
+
+
+def canonical_residual_fields(value):
+    """Read retained diagnostic fields into the current schema in memory."""
+    if isinstance(value, dict):
+        result = {}
+        for key, item in value.items():
+            name = _LEGACY_RESIDUAL_FIELDS.get(key, key)
+            if name in result:
+                raise ValueError(f'duplicate residual field: {name}')
+            result[name] = canonical_residual_fields(item)
+        return result
+    if isinstance(value, list):
+        return [canonical_residual_fields(item) for item in value]
+    return value
+
+
 def digest(path):
     h = hashlib.sha256()
     with Path(path).open('rb') as stream:
@@ -224,7 +250,7 @@ def filter_trace(y, config, w, order, residuals=False):
     mean = np.zeros(6)
     covariance = np.diag(np.square(c.initial_state_std))
     q = np.diag(np.square(p.fixed.process_std))*c.dt
-    increments, innovations, standardized = [], [], []
+    increments, predictive_residuals, standardized = [], [], []
     h = step5.core._observation_physical_matrix(p, spec)
     for t, observation in enumerate(y):
         if t:
@@ -234,13 +260,13 @@ def filter_trace(y, config, w, order, residuals=False):
             physical_mean, physical_cov = step5.core.transformed_gaussian_moments(mean, covariance)
             predicted = step5.core._observation_map_unchecked(physical_mean, p, spec)
             variance = np.diag(h@physical_cov@h.T)+np.square(spec.observation_scale)*spec.student_nu/(spec.student_nu-2)
-            innovations.append(observation-predicted)
+            predictive_residuals.append(observation-predicted)
             standardized.append((observation-predicted)/np.sqrt(variance))
         mean, covariance, ll, _ = step5.joint.joint_observation_update(
             mean, covariance, observation, np.isfinite(observation), p, spec, order, False)
         increments.append(ll)
-    return dict(increments=np.array(increments), innovations=np.array(innovations),
-                standardized_innovations=np.array(standardized))
+    return dict(increments=np.array(increments), predictive_residuals=np.array(predictive_residuals),
+                standardized_predictive_residuals=np.array(standardized))
 
 
 def residual_summary(traces, hz=4., max_seconds=5.):
@@ -283,10 +309,10 @@ def curve_job(config, observations, modality, w, cfg, order=None):
     result = dict(w=w, modality=modality, parameter_log_likelihood=float(increments.sum()),
                   chronological_segment_log_likelihood=segments, trial_log_likelihood=increments.sum(axis=1))
     if fixed:
-        result['standardized_innovations'] = residual_summary(
-            [t['standardized_innovations'] for t in traces], max_seconds=cfg['curve']['residual_acf_seconds'])
-        errors = np.array([t['standardized_innovations'] for t in traces])
-        result['segment_standardized_innovation_mean'] = {
+        result['standardized_predictive_residuals'] = residual_summary(
+            [t['standardized_predictive_residuals'] for t in traces], max_seconds=cfg['curve']['residual_acf_seconds'])
+        errors = np.array([t['standardized_predictive_residuals'] for t in traces])
+        result['segment_standardized_predictive_residual_mean'] = {
             name: {label: float(np.nanmean(errors[:, (clock >= b[0]) & (clock < b[1]), col]))
                    for col, label in enumerate(('EEG', 'HbO', 'HbR'))
                    if np.isfinite(errors[:, (clock >= b[0]) & (clock < b[1]), col]).any()}

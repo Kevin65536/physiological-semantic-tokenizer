@@ -62,7 +62,7 @@ E2 没有检验：
 - 100% target-covered cohort；
 - joint \(r^J\) 相对 EEG-only、shuffled-joint 和 smooth pseudo-target 的特异性；
 - 冻结双向 token 的离线时延条件关联；
-- 满足严格 receptive-field cutoff 后，对窗外未来原始 fNIRS innovation 的增量信息。
+- 满足严格 receptive-field cutoff 后，对窗外未来原始 fNIRS predictive residual 的增量信息。
 
 所以 E2 的合适结论是：
 

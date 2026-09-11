@@ -237,7 +237,8 @@ def coupling(run_dir: Path) -> list[str]:
     data = _load(run_dir / "figure_data" / "continuous_coupling_upper_bound.json")
     rows = [row for row in data["rows"] if row["coordinate"] != "joint_logdet"]
     fig, axes = plt.subplots(2, 1, figsize=(12.5, 8.5), constrained_layout=True)
-    labels = [f"{row['target'].replace('fnirs_', '')}:{row['coordinate']}" for row in rows]
+    target_labels = {"fnirs_innovation": "predictive residual"}
+    labels = [f"{target_labels.get(row['target'], row['target'].replace('fnirs_', ''))}:{row['coordinate']}" for row in rows]
     values = [row["incremental_r2"] for row in rows]
     axes[0].bar(np.arange(len(rows)), values, color=[COLORS[0] if value >= 0 else COLORS[4] for value in values])
     axes[0].axhline(0, color="black", linewidth=0.8)
@@ -253,7 +254,7 @@ def coupling(run_dir: Path) -> list[str]:
     lower = float(min(target[:, 0].min(), baseline[:, 0].min(), full[:, 0].min()))
     upper = float(max(target[:, 0].max(), baseline[:, 0].max(), full[:, 0].max()))
     axes[1].plot([lower, upper], [lower, upper], color="#555555", linestyle="--", linewidth=1)
-    axes[1].set_xlabel("Teacher delta_f innovation")
+    axes[1].set_xlabel("Teacher delta_f predictive residual")
     axes[1].set_ylabel("Held-out prediction")
     axes[1].set_title("Conditional prediction with and without EEG history")
     axes[1].legend(frameon=False, ncol=2)

@@ -28,7 +28,7 @@ future held-out coupling claim          ->  unavailable until implementation is
 ```
 
 Partial information decomposition (PID) is only a replaceable direction for
-later pretraining development. It is **not** the core innovation, method
+later pretraining development. It is **not** the core contribution, method
 identity, architecture invariant, or a frozen objective, and a future method
 may omit it entirely. If a PID-style probe is eventually selected, only that
 concrete estimator, objective, and evaluation protocol may be versioned for the

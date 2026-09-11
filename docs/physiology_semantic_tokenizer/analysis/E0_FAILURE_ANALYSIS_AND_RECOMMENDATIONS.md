@@ -98,7 +98,7 @@ The decisive result: when axes are forced to be genuinely cross-modally shared (
 
 **Conclusion:** The data do not support a five-dimensional, same-patch, linear shared representation that generalizes across subjects. This is a data-level constraint, not a Croce-solver issue.
 
-### 2.4 E0-D2 (2026-07-06): Cross-dataset delayed-innovation
+### 2.4 E0-D2 (2026-07-06): Cross-dataset delayed predictive residual
 
 Four datasets (Single-Trial, REFED, Simultaneous, Visual), two subjects each, 5-second EEG-leading lag, with self-history/trial-phase/condition removed:
 
@@ -109,7 +109,7 @@ Four datasets (Single-Trial, REFED, Simultaneous, Visual), two subjects each, 5-
 | Simultaneous | **0%** | **0%** | 1.23% |
 | Visual | **0%** | **0%** | 2.56% |
 
-No dataset produced a positive cross-inferable shared fraction. The joint ceiling (which can see the target modality) reaches only 0.6-4% of innovation variance. This means that even with both modalities, the shared structure is very small.
+No dataset produced a positive cross-inferable shared fraction. The joint ceiling (which can see the target modality) reaches only 0.6-4% of predictive residual variance. This means that even with both modalities, the shared structure is very small.
 
 ### 2.5 E0-D3/D4/D5 (2026-07-08): Lin 2024 inspired diagnostics
 
@@ -164,7 +164,7 @@ Across all diagnostics, fNIRS self-persistence reaches R²≈0.997. Five private
 
 ### 3.5 Secondary: Timescale mismatch is not adequately modeled
 
-EEG responds at millisecond scale; fNIRS at seconds. The cross-dataset diagnostic found 0% cross-inferable shared fraction at same-time patches, but the continuous coupling upper bound found positive delayed information (0.17 nats). This means the useful bridge is delayed EEG history → fNIRS innovation, not same-patch shared state.
+EEG responds at millisecond scale; fNIRS at seconds. The cross-dataset diagnostic found 0% cross-inferable shared fraction at same-time patches, but the continuous coupling upper bound found positive delayed information (0.17 nats). This means the useful bridge is delayed EEG history → fNIRS predictive residual, not same-patch shared state.
 
 ### 3.6 Tertiary: Teacher misspecification propagates through multiple loss entry points
 

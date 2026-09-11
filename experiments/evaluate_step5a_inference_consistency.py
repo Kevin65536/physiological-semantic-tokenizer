@@ -294,11 +294,11 @@ def linear_gaussian_check(cfg):
             mu, cov = a@mu, a@cov@a.T+q
         pm.append(mu.copy()); pc.append(cov.copy())
         ht, rt = h[mask[t]], r[np.ix_(mask[t], mask[t])]
-        innovation = row[mask[t]]-ht@mu
+        predictive_residual = row[mask[t]]-ht@mu
         pred = ht@cov@ht.T+rt
-        exact_ll += multivariate_normal.logpdf(innovation, cov=pred)
+        exact_ll += multivariate_normal.logpdf(predictive_residual, cov=pred)
         gain = np.linalg.solve(pred, ht@cov).T
-        mu, cov = mu+gain@innovation, cov-gain@ht@cov
+        mu, cov = mu+gain@predictive_residual, cov-gain@ht@cov
         fm.append(mu.copy()); fc.append(cov.copy())
     sm, sc = np.array(fm), np.array(fc)
     for t in range(len(y)-2, -1, -1):
@@ -587,7 +587,7 @@ def summarize(cfg, rows, checks):
 def report_markdown(summary):
     lines = ["# Step5A_inference_consistency — synthetic localization", "",
              "这是 Step5A0 小样本定位实验，不是 60 次 SBC，也不授予参数解释或 teacher 资格。",
-             "matched 是显式离散 RK4 + Gaussian innovation 模型；stress 原样调用 Step 4 生成函数，缩短记录并保留脉冲/确定性血流失配。",
+             "matched 是显式离散 RK4 + Gaussian 过程噪声模型；stress 原样调用 Step 4 生成函数，缩短记录并保留脉冲/确定性血流失配。",
              "oracle 先验定义在 g/w/物理 zeta 上；网格使用梯形积分。EKF 曲线仅称 predictive_score，参数分布为 generalized posterior。",
              "状态区间为条件于参数的 Gaussian moment 近似；clean 区间不加入观测噪声。coverage 先按独立 replicate 汇总，bootstrap 仅作描述。", "",
              "| Check | Result |", "|---|---|",

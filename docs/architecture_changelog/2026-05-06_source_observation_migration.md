@@ -6,7 +6,7 @@
 
 ## Motivation
 
-The old shared/private branch semantics used a purely engineering-driven definition: shared = temporally smoothed, private = residual. This had no physiological basis and weakened the project's innovation narrative. The redesign replaces these with source (neurovascular coupling state) and observation (modality-specific encoding debt) — grounded in a generative model of neural activity → measurement.
+The old shared/private branch semantics used a purely engineering-driven definition: shared = temporally smoothed, private = residual. This had no physiological basis and weakened the project's scientific contribution narrative. The redesign replaces these with source (neurovascular coupling state) and observation (modality-specific encoding debt) — grounded in a generative model of neural activity → measurement.
 
 ## Architecture Delta
 

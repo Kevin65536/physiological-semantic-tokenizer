@@ -653,7 +653,7 @@ def flow_drift_diagnostic(transformed_state, parameters, dt):
     exponentials (overdamped). Its analytic zeros partition F into monotone
     intervals; bracketed roots then locate s=0 and finally f=0. There is no
     sampling-grid or RK4-substep approximation in this domain diagnostic.
-    Random innovations in the existing discrete model occur after the drift.
+    Random process-noise increments in the existing discrete model occur after the drift.
     """
     parameters.validate()
     if not np.isfinite(dt) or dt <= 0:

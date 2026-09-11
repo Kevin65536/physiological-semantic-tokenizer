@@ -1126,7 +1126,7 @@ def noise_estimator_preflight(base,spec,calibration_dir):
                 np.max(median_error)<=spec['noise']['maximum_median_absolute_relative_error'])
     return dict(known_noise_cases=len(estimates),difference_mad_constant=constant,mean_relative_bias=mean_bias,
                 median_absolute_relative_error=median_error,passed=passed,
-                interpretation='Checks known iid observation innovations only; filtered measured first differences remain an initial scale estimate.')
+                interpretation='Checks known iid observation-noise draws only; filtered measured first differences remain an initial scale estimate.')
 
 
 def fit_measured_projection(features,base,spec,pair_eligible=None):
@@ -1572,7 +1572,7 @@ def run_measured(config_path,run_dir,teacher_dir,workers=None,reuse_dir=None):
     base,spec,metadata=load_measured_config(config_path);workers=workers or spec['workers']
     teacher_dir=Path(teacher_dir).resolve();teacher_manifest,_=require_measured_teacher(teacher_dir,base,spec)
     calibration_dir=ROOT/teacher_manifest['calibration_run']
-    # This check uses retained synthetic innovations and precedes metadata/arrays.
+    # This check uses retained synthetic noise draws and precedes metadata/arrays.
     noise_check=noise_estimator_preflight(base,spec,calibration_dir)
     if not noise_check['passed']:raise ValueError('known-noise estimator preflight failed; no measured arrays opened')
     reuse_manifest=None;reuse_summary=None;exact_reuse=False

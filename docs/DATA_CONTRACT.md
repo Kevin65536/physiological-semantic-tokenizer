@@ -96,6 +96,26 @@ Each modality m publishes one record with these fields:
 | teacher_mode | enum | native_baseline, self, or privileged_joint; native_baseline records the identity comparison arm and is not a dynamic-teacher claim |
 | fit provenance | manifest object | fit fold, parameter/config identity, target/code version, source identity, and label-use=false |
 
+### Residual and noise quantities
+
+Code, serialized outputs, and figure labels use the following names according
+to the quantity being computed:
+
+| Name | Definition and interpretation |
+| --- | --- |
+| `observation_residual` / 观测残差 | `observation_values - trajectory_mean`, in the same observation coordinates; the observed signal minus its estimated clean trajectory |
+| `predictive_residual` / 一步预测残差 | Observation minus the one-step prediction before assimilating that observation |
+| `state_transition_residual` / 状态转移残差 | `z[t] - F(z[t-1])`, in the declared state coordinates, where `F` is the deterministic transition |
+| `process_noise_increment` / 过程噪声增量 | A random increment drawn from the declared process-noise law during generation |
+
+Observation residuals may represent measurement noise or artifacts to the extent
+supported by teacher validation. A fitted state transition residual measures
+departure from the dynamics; its coordinate space and interpretation stay
+distinct from observation residuals. Standardized fields identify their scale,
+including whether it is predictive SD, training SD, or process-noise SD.
+
+### Observation coordinates
+
 EEG observation construction is defined at the continuous coordinate level:
 
 $$

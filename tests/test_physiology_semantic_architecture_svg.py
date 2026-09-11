@@ -108,7 +108,8 @@ def test_discovery_plan_svg_is_current_and_preserves_the_gate_path():
     assert "P0 SUITE READY" in rendered
     assert "measured/protected 数据保持关闭" in rendered
     assert "fNIRS observation residual" in rendered
-    assert "fNIRS innovation" not in rendered
+    coupling = root.find(".//*[@id='node-c0']")
+    assert "fNIRS observation residual" in " ".join(coupling.itertext())
     assert 'class="banner-box" fill="#FFF4E5"' in rendered
     for phrase in (
         "可辨识 r + s/f/v/p/q",
@@ -257,7 +258,14 @@ def test_drawio_owned_svgs_embed_current_source(drawio_path, svg_path):
     assert "PID-MCM" not in values
     assert "planned target" not in values.lower()
     assert "private" not in values.lower()
-    assert "innovation path" not in values.lower()
+    if drawio_path == RUNTIME_OVERVIEW_DRAWIO_PATH:
+        assert "semantic + residual reconstructions" in values
+    elif drawio_path == EXPLORATION_DRAWIO_PATH:
+        assert "EEG observation path" in values
+        assert "fNIRS observation path" in values
+    else:
+        assert "EEG observation reconstruction" in values
+        assert "fNIRS observation reconstruction" in values
     if drawio_path == DRAWIO_PATH:
         assert "Optional contribution probe" in values
         assert "architecture remains revisable" in values

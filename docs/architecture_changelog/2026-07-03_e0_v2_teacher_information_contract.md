@@ -45,7 +45,7 @@ flowchart LR
 - Local state/prototype loss uses the cache-valid mask; masked-state loss uses the context-valid mask plus tokenizer history availability.
 - Corrected wavelength-space cache generation calls the canonical observation equation before selecting the anchor channel.
 - A reversible fNIRS measurement adapter records original semantics/unit, full-record baseline rule, train-only shared pair scale, channel mapping, and inverse transform.
-- E0-v2 partitions targets by information entrance: local means/slopes, context levels/innovations, physical observation, calibrated uncertainty, and finite-vocabulary geometry.
+- E0-v2 partitions targets by information entrance: local means/slopes, context levels/predictive residuals, physical observation, calibrated uncertainty, and finite-vocabulary geometry.
 - Every registered metric layer emits source data, SVG, 300 dpi PNG, hashes, and an explicit visual-review decision.
 
 ## Validation result

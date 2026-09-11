@@ -80,9 +80,9 @@ def test_gaussian_driver_path_matches_dense_joint_conditioning_with_gaps():
     y=np.full((count,3),np.nan);y[:,0]=observed;y[5:9,0]=np.nan
     available=np.isfinite(y[:,0])
     _,transition=core.rk4_transition_with_jacobian(np.zeros(6),p,c)
-    rho=transition[0,0];innovation=p.fixed.process_std[0]**2*c.dt
+    rho=transition[0,0];process_variance_increment=p.fixed.process_std[0]**2*c.dt
     variances=[c.initial_state_std[0]**2]
-    for _ in range(1,count):variances.append(rho**2*variances[-1]+innovation)
+    for _ in range(1,count):variances.append(rho**2*variances[-1]+process_variance_increment)
     prior=np.array([[rho**abs(i-j)*variances[min(i,j)] for j in range(count)] for i in range(count)])
     predicted=prior[np.ix_(available,available)]+np.eye(available.sum())*p.fixed.observation_scale[0]**2
     cross=prior[:,available]

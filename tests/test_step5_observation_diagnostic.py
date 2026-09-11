@@ -43,6 +43,15 @@ def test_trace_matches_joint_filter_and_segments_sum_without_resets():
     p, c = diagnostic.step5.localization.model(base, 'W', -.5)
     expected = diagnostic.step5.joint.parameter_log_likelihood(y, p, config=c, quadrature_order=7)
     trace = diagnostic.filter_trace(y, base, -.5, 7, True)
+    assert set(trace) == {'increments', 'predictive_residuals', 'standardized_predictive_residuals'}
+    fit = diagnostic.step5.joint.smooth_balloon_joint(y, p, config=c, quadrature_order=7)
+    prediction = np.array([
+        diagnostic.step5.core._observation_map_unchecked(
+            diagnostic.step5.core.transformed_gaussian_moments(mean, cov)[0], p,
+            diagnostic.step5.core.BalloonObservationSpec().resolved(p.fixed))
+        for mean, cov in zip(fit.predicted_transformed_mean, fit.predicted_transformed_covariance)
+    ])
+    np.testing.assert_allclose(trace['predictive_residuals'], y-prediction, equal_nan=True)
     assert trace['increments'].sum() == pytest.approx(expected, abs=1e-10)
     row = diagnostic.curve_job(base, y[None], 'joint', -.5, cfg, 7)
     assert sum(row['chronological_segment_log_likelihood'].values()) == pytest.approx(expected, abs=1e-10)

@@ -39,7 +39,7 @@ independent evaluation would separately preregister its estimator and
 task-specific evidence settings.
 
 Specifically, partial information decomposition (PID) is at most a replaceable
-probe during later pretraining development. It is not core innovation, a runtime
+probe during later pretraining development. It is not a core contribution, a runtime
 requirement, or an item frozen by this candidate map.
 
 The software consequences of the owning freeze are:

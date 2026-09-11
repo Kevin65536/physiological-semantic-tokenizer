@@ -308,8 +308,8 @@ def replay_curve_job(cfg, dc, config, observations, subject, coordinate, modalit
             parameter_log_likelihood=float(t['trace']['increments'].sum()) if t['execution'] == 'completed' else None)
             for i, t in enumerate(trials)])
     if completed and w in (0., -.5):
-        result['standardized_innovations'] = diagnostic.residual_summary(
-            [t['trace']['standardized_innovations'] for t in completed])
+        result['standardized_predictive_residuals'] = diagnostic.residual_summary(
+            [t['trace']['standardized_predictive_residuals'] for t in completed])
         result['residual_summary_complete'] = complete
     return result
 
@@ -497,7 +497,7 @@ def summarize(cfg, dc, results, old_summary=None):
             interpretation='incomplete_curve' if not complete else ('flat_no_W_information' if eeg_only else 'complete_diagnostic_curve'),
             likelihood_maximum_w=max(good, key=lambda r: r['parameter_log_likelihood'])['w'] if complete and not eeg_only else None,
             boundary_minus_zero_ll=endpoints[-.5]['parameter_log_likelihood']-endpoints[0.]['parameter_log_likelihood'] if len(endpoints) == 2 else None,
-            endpoints={str(w): r.get('standardized_innovations', {}) for w, r in endpoints.items()},
+            endpoints={str(w): r.get('standardized_predictive_residuals', {}) for w, r in endpoints.items()},
             points=[dict(w=r['w'], execution=r['curve_execution'], log_likelihood=r['parameter_log_likelihood'],
                          completed_trials=r['completed_trials']) for r in rows])
     restored = []

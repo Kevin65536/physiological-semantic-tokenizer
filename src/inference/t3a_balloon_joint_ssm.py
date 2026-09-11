@@ -335,7 +335,7 @@ def whiten_trajectory_observations(values, operator, available, noise_factor, ra
     """Whiten an explicit feature-noise factor without squaring its condition.
 
     Factor rows use flattened output-time/coordinate order; its columns name
-    independent feature-noise innovations, possibly on different native clocks.
+    independent feature-noise draws, possibly on different native clocks.
     Mean and noise need not share an input clock or column count. The supplied
     factor is already expressed in the observed units.
     """

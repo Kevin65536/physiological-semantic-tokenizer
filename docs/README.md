@@ -76,7 +76,7 @@ Other evidence layers (historical unless their owning contract says otherwise):
 Accordingly, PID or partial-information-decomposition language in notes,
 references, archives, or local manuscript drafts is background or historical
 material. The retained claim boundary treats PID only as a replaceable later
-pretraining exploration—not as core innovation, method identity, or a frozen
+pretraining exploration—not as a core contribution, method identity, or a frozen
 component.
 
 ## Lightweight lifecycle

@@ -34,7 +34,7 @@ def test_baseline_batch_matches_independent_dense_gaussian_conditioning():
     variance = np.square(p.fixed.observation_scale)*p.fixed.student_nu/(p.fixed.student_nu-2)
     result = repair.joint.smooth_balloon_trajectory_reference(y, p, config=c,
         trajectory_spec=operator, noise_variance=variance)
-    # Independent block covariance construction from innovations, then condition
+    # Independent block covariance construction from independent process-noise increments, then condition
     # on orthonormal output support. No pseudo-inverse from the implementation.
     _, a = repair.core.rk4_transition_with_jacobian(np.zeros(6), p, c)
     factor = np.zeros((6*count, 6*count))

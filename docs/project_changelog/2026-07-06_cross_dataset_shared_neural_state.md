@@ -12,7 +12,7 @@ The formal run emits reciprocal cross-subject folds, trial/video block bootstrap
 
 ## Result boundary
 
-The primary five-second cross-inferable fraction was non-positive in both directions for every dataset and is conservatively reported as `0%`. Joint-input state ceilings are reported separately and range from `0.62%` to `3.97%` of balanced innovation. These are standardized feature-space reconstruction fractions, not population estimates, waveform information fractions, or E0 evidence.
+The primary five-second cross-inferable fraction was non-positive in both directions for every dataset and is conservatively reported as `0%`. Joint-input state ceilings are reported separately and range from `0.62%` to `3.97%` of balanced predictive residual. These are standardized feature-space reconstruction fractions, not population estimates, waveform information fractions, or E0 evidence.
 
 ## Artifacts
 

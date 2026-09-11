@@ -100,8 +100,8 @@ with 92 active codes and perplexity `73.2`. Coordinate R² values are
 accepted physical-teacher target geometry.
 
 The coupling upper bound remains numerically positive: joint conditional
-information is `0.5552` nats for levels and `0.5950` nats for innovations,
-above their shuffled controls. However, the innovation incremental R² is
+information is `0.5552` nats for levels and `0.5950` nats for predictive residuals,
+above their shuffled controls. However, the predictive residual incremental R² is
 `0.5499` for flow, only `0.0532` for HbO, and `-0.0133` for HbR. Because flow
 is a context-only raw latent coordinate inferred by a joint EEG/fNIRS smoother,
 this layer cannot be promoted to independent EEG-to-fNIRS discovery evidence.

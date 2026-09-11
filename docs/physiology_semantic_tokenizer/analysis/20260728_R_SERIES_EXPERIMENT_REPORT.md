@@ -66,7 +66,7 @@ D1B train-only 使用 subjects 01–18 的 nested leave-one-subject-out 选择 s
 
 ## 结果带来的启发
 
-第一，弱且不复现的 raw lag baseline 说明同 trial 的宽泛时滞相关不是可靠语义目标。后续工作如果恢复，应该优先预测相对于任务相位、fNIRS 自身历史和系统性协变量的 held-out innovation，而不是优化 token 共现曲线。
+第一，弱且不复现的 raw lag baseline 说明同 trial 的宽泛时滞相关不是可靠语义目标。后续工作如果恢复，应该优先预测相对于任务相位、fNIRS 自身历史和系统性协变量的 held-out predictive residual，而不是优化 token 共现曲线。
 
 第二，R1-P 同时出现 G3–G6 通过与 G2 失败，清楚地区分了“数学上非退化且可解码的共享坐标”和“跨被试物理上合格的 teacher”。可观测性是必要条件，但不是构念效度的充分条件。
 

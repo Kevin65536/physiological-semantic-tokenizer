@@ -107,7 +107,7 @@ def write_csv(path, rows, fields=None):
 
 
 def read_json(path):
-    return json.loads(Path(path).read_text())
+    return diagnostic.canonical_residual_fields(json.loads(Path(path).read_text()))
 
 
 def load_config(path=DEFAULT_CONFIG):
@@ -551,7 +551,7 @@ def infer_row(run_dir, task, row_id, y, target, sd, p, c, spec, *, mode='full', 
         row.update(status='completed', metrics=residual_metrics(target, fit.trajectory_mean, sd),
             center_metrics=residual_metrics(target, fit.trajectory_mean, sd, hidden),
             parameter_log_likelihood=fit.parameter_log_likelihood, physical_checks=fit.physical_checks,
-            residual_sign='prediction_minus_target; one-step innovations use input_minus_prediction',
+            residual_sign='prediction_minus_target; one-step predictive residuals use input_minus_prediction',
             native_residual_status='NOT_SUPPORTED: EEG voltage / optical intensity cannot be recovered through power/PCA/optics/motion processing',
             clean_interval_status='approximate_pointwise_solver_coordinate',
             noisy_interval_status='NOT_ESTIMATED: processed target shares native noise; no independent-noise shortcut',
@@ -571,11 +571,11 @@ def infer_row(run_dir, task, row_id, y, target, sd, p, c, spec, *, mode='full', 
                 mean = core._observation_map_unchecked(physical_mean, p, spec)
                 variance = np.diag(h@physical_cov@h.T)+fit.observation_variance
                 predicted.append((y[len(predicted)]-mean)/np.sqrt(variance))
-            row['innovation_structure'] = noise_structure(np.asarray(predicted))
+            row['predictive_residual_structure'] = noise_structure(np.asarray(predicted))
             row['smoothing_residual_structure'] = noise_structure((target-fit.trajectory_mean)/sd)
             row['hbt'] = dict(bias_coordinate=float(np.mean(np.sum(fit.trajectory_mean[:, 1:]-target[:, 1:], axis=1))),
                              rmse_coordinate=float(np.sqrt(np.mean(np.sum(fit.trajectory_mean[:, 1:]-target[:, 1:], axis=1)**2))))
-            data['standardized_innovations'] = np.asarray(predicted)
+            data['standardized_predictive_residuals'] = np.asarray(predicted)
         if truth is not None:
             row['truth'] = clean_metrics(truth, np.column_stack((fit.state_mean[:, 0], fit.trajectory_mean)),
                 np.column_stack((fit.state_covariance[:, 0, 0], fit.state_posterior_variance)))
@@ -1066,8 +1066,8 @@ def synthetic_cell(run_dir, cfg, dc, base, task):
     elif condition == 'correlated_hb':
         common = rng.normal(size=len(y))
         rho = stress['hb_correlation']
-        innovation = np.sqrt(rho)*common[:, None]+np.sqrt(1-rho)*rng.normal(size=(len(y), 2))
-        y[:, 1:] += innovation*np.asarray(base['model']['observation_scale'])[1:]
+        observation_noise = np.sqrt(rho)*common[:, None]+np.sqrt(1-rho)*rng.normal(size=(len(y), 2))
+        y[:, 1:] += observation_noise*np.asarray(base['model']['observation_scale'])[1:]
     elif condition == 'outliers':
         injected = rng.random(y.shape) < stress['outlier_fraction']
         y += injected*rng.choice([-1., 1.], y.shape)*sd*stress['outlier_sd_multiplier']
@@ -1216,8 +1216,8 @@ def driver_replay(z, p, c, *, driver_law='linear'):
     """Independent integration with a declared interpolation of saved r(t).
 
     Linear is the retained campaign rule. Model drift is an explicit numerical
-    audit: neural innovations enter only at saved sample times, matching the
-    RK4-plus-endpoint-innovation transition without adding hemodynamic noise.
+    audit: neural process-noise increments enter only at saved sample times, matching the
+    RK4 transition with endpoint process noise without adding hemodynamic noise.
     """
     clock = np.arange(len(z))*c.dt
     driver = z[:, 0]
@@ -1238,7 +1238,7 @@ def driver_replay(z, p, c, *, driver_law='linear'):
         transformed = np.column_stack((driver, hemo))
         physical = np.array([core.transformed_to_physical(row) for row in transformed])
         return transformed, physical, dict(nfev=nfev, method='DOP853',
-            driver='fixed model drift within each interval; saved r innovation at the endpoint',
+            driver='fixed model drift within each interval; saved r process-noise increment at the endpoint',
             initial_hemodynamics='same fitted initial state, carried continuously thereafter')
     if driver_law != 'linear':
         raise ValueError('unregistered replay driver law')
@@ -1268,14 +1268,14 @@ def replay_cell(run_dir, cfg, base, task):
     p, c, spec = model(base, BASE, prepared['noise'])
     replay_z, physical, integration = driver_replay(z, p, c)
     prediction = np.array([core._observation_map_unchecked(row, p, spec) for row in physical])
-    innovations, departures = [], []
+    state_transition_residuals, departures = [], []
     for t in range(len(z)-1):
         try:
-            innovations.append((z[t+1]-core.rk4_transition(z[t], p, c))/(np.asarray(p.fixed.process_std)*np.sqrt(c.dt)))
+            state_transition_residuals.append((z[t+1]-core.rk4_transition(z[t], p, c))/(np.asarray(p.fixed.process_std)*np.sqrt(c.dt)))
         except core.FlowDomainExit as exc:
             departures.append(dict(time_index=t, diagnostic=exc.diagnostic))
-            innovations.append(np.full(6, np.nan))
-    increments = np.array(innovations)
+            state_transition_residuals.append(np.full(6, np.nan))
+    increments = np.array(state_transition_residuals)
     complete = np.isfinite(increments).all()
     row = dict(status='completed', sample_id=full['sample_id'], subject=task['subject'], session=full['session'],
         replay_gap_nrmse=np.sqrt(np.mean(((prediction-clean)/sd)**2, axis=0)),
@@ -1979,8 +1979,8 @@ def summarize_run(run_dir, cfg, *, final=False):
     write_csv(Path(run_dir)/'N1'/'compromise_by_subject_session.csv', compromises)
     write_csv(Path(run_dir)/'N1'/'full_fit_residuals.csv', [r for r in scores['N1'] if r.get('mode') == 'full'])
     write_csv(Path(run_dir)/'N1'/'masked_control_scores.csv', [r for r in scores['N1'] if str(r.get('mode', '')).startswith('center_')])
-    write_csv(Path(run_dir)/'N1'/'innovation_structure.csv', [dict(task_id=r['task_id'],
-        standardized_innovations=r.get('innovation_structure'), smoother_residuals=r.get('smoothing_residual_structure'))
+    write_csv(Path(run_dir)/'N1'/'predictive_residual_structure.csv', [dict(task_id=r['task_id'],
+        standardized_predictive_residuals=r.get('predictive_residual_structure'), smoother_residuals=r.get('smoothing_residual_structure'))
         for r in scores['N1'] if r.get('mode') == 'full'])
     write_csv(Path(run_dir)/'N1'/'modality_influence.csv', influence_rows(run_dir, tasks, results))
     temporal = temporal_summary(tasks, results)
@@ -2025,7 +2025,7 @@ def summarize_run(run_dir, cfg, *, final=False):
     hypotheses = dict(N1='quantify modality compromise and compare own/template/pairing controls',
         N2='separate temporal observation operator from nonlinear inference', N3='relative modality confidence',
         N4='native EEG artifact/space/band/sign definition', N5='observation amplitude and W compensation',
-        N6='downstream process innovations and flow-domain update origin',
+        N6='downstream state transition residuals and flow-domain update origin',
         N7='independent G-W physiological gain/time adaptation versus W-only, G-only and measurement gain')
     for family in families:
         candidate = candidate_map.get(family)
@@ -2463,7 +2463,7 @@ def v3_noise_estimate(base, eeg, od, train, fnirs_factor):
     mixing = fnirs_factor*mbll@np.diag(od_sd)
     return dict(eeg_sd=eeg_sd, od_sd=od_sd, fnirs_mixing=mixing, fnirs_factor=fnirs_factor,
         estimator='Gaussian first-difference MAD on training feature inputs',
-        assumption='independent EEG-feature / motion-processed wavelength innovations; not raw-noise calibration',
+        assumption='independent EEG-feature / motion-processed wavelength noise draws; not raw-noise calibration',
         training_trials=list(train))
 
 
@@ -2659,12 +2659,12 @@ def v3_fit_row(run_dir, cfg, base, task, row_id, view, candidate, *, mode, ident
             arrays['truth'] = truth
         if mode == 'full':
             try:
-                innovation = np.array([z[t]-core.rk4_transition(z[t-1], p, c) for t in range(1, len(z))])
-                row['process_innovation_rms'] = np.sqrt(np.mean(innovation**2, axis=0))
-                row['standardized_process_innovation_rms'] = row['process_innovation_rms']/(np.asarray(p.fixed.process_std)*np.sqrt(c.dt))
-                row['process_innovation_status'] = 'completed'
+                state_transition_residuals = np.array([z[t]-core.rk4_transition(z[t-1], p, c) for t in range(1, len(z))])
+                row['state_transition_residual_rms'] = np.sqrt(np.mean(state_transition_residuals**2, axis=0))
+                row['standardized_state_transition_residual_rms'] = row['state_transition_residual_rms']/(np.asarray(p.fixed.process_std)*np.sqrt(c.dt))
+                row['state_transition_residual_status'] = 'completed'
             except (ValueError, FloatingPointError) as exc:
-                row['process_innovation_status'] = dict(**failure(exc), role='mean-path diagnostic; not a failed observation fit')
+                row['state_transition_residual_status'] = dict(**failure(exc), role='mean-path diagnostic; not a failed observation fit')
             row['clean_map_residual_structure'] = noise_structure((view['target']-clean_prediction)/view['normalizer'])
             row['hbt_rmse_coordinate'] = float(np.sqrt(np.mean(np.sum(clean_prediction[:, 1:]-view['target'][:, 1:], axis=1)**2)))
             if task.get('axis') == 'process' or (task.get('role') == 'fixed' and solver in ('O0', 'O2')):
@@ -3274,7 +3274,7 @@ def v3_engineering_checks(cfg, dc, base):
     replay, _, _ = driver_replay(z, p, c)
     replay_error = float(np.max(abs(replay-z)))
     checks['training_isolation_and_replay'] = dict(passed=replay_error < 1e-5,
-        evaluation_noise_fit_intervention_error=0., zero_process_innovation_replay_error=replay_error)
+        evaluation_noise_fit_intervention_error=0., zero_process_noise_replay_error=replay_error)
     weighted, _ = equal_subject_mean([dict(subject='a', session='x', v=1.)]*3+
         [dict(subject='a', session='y', v=9.), dict(subject='b', session='x', v=3.)], 'v')
     checks['unequal_denominators'] = dict(passed=abs(weighted-4.) < 1e-12, expected=4., actual=weighted)

@@ -18,6 +18,46 @@ def inventory(cfg):
         for subject in cfg['subjects']}
 
 
+def test_retained_residual_fields_read_without_changing_evidence(tmp_path):
+    import csv
+    import json
+    from experiments.scripts import render_ssm_overnight_report as renderer
+
+    saved = dict(status='completed', rows=[dict(
+        task_id='fixture', innovation_structure={'EEG': {'acf': [1., .25]}},
+        process_innovation_rms=[.01]*6, standardized_process_innovation_rms=[.1]*6,
+        process_innovation_status='completed')])
+    expected = dict(status='completed', rows=[dict(
+        task_id='fixture', predictive_residual_structure={'EEG': {'acf': [1., .25]}},
+        state_transition_residual_rms=[.01]*6, standardized_state_transition_residual_rms=[.1]*6,
+        state_transition_residual_status='completed')])
+    path = tmp_path/'result.json'
+    path.write_text(json.dumps(saved))
+    before = path.read_bytes()
+    assert suite.read_json(path) == renderer.read_json(path) == expected
+    assert path.read_bytes() == before
+    assert suite.diagnostic.canonical_residual_fields(expected) == expected
+
+    path = tmp_path/'trial_metrics.csv'
+    with path.open('w') as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(saved['rows'][0]))
+        writer.writeheader()
+        writer.writerow({key: json.dumps(value) for key, value in saved['rows'][0].items()})
+    before = path.read_bytes()
+    assert renderer.read_csv(path, renderer.KEEP) == [{
+        'task_id': 'fixture', 'predictive_residual_structure': {'EEG': {'acf': [1., .25]}}}]
+    assert path.read_bytes() == before
+
+
+def test_predictive_residual_schema_preserves_values_and_rejects_ambiguous_fields():
+    saved = dict(rows=[dict(standardized_innovations={'EEG': {'rms': 2.5}})])
+    expected = dict(rows=[dict(standardized_predictive_residuals={'EEG': {'rms': 2.5}})])
+    assert suite.diagnostic.canonical_residual_fields(saved) == expected
+    both = dict(standardized_innovations=[1.], standardized_predictive_residuals=[2.])
+    with pytest.raises(ValueError, match='duplicate residual field'):
+        suite.diagnostic.canonical_residual_fields(both)
+
+
 def test_explicit_rectangular_noise_matches_dense_gaussian_conditioning():
     """The mean clock and feature-noise clock have different dimensions."""
     _, dc, base, _, _ = suite.load_config()
@@ -197,7 +237,7 @@ def test_v3_adaptation_missing_truth_keeps_the_paired_panel_incomplete(tmp_path)
     assert matched['verdict'] == 'incomplete' and not result['passed']
 
 
-def test_model_drift_replay_closes_with_neural_innovations_and_zero_hemodynamic_innovations():
+def test_model_drift_replay_closes_with_neural_process_noise_and_zero_hemodynamic_noise():
     _, _, base, *_ = v3_config()
     p, c, _ = suite.model(base, suite.BASE)
     rng = np.random.default_rng(6819)

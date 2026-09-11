@@ -187,16 +187,16 @@ def render_figures(run_dir, cfg, summary, review):
     fig, axes = plt.subplots(2, 3, figsize=(14, 8), constrained_layout=True)
     for j, subject in enumerate(cfg['subjects']):
         row = next(r for r in summary['curves'][subject]['broadband_pca']['joint']['rows'] if r['w'] == -.5)
-        for label, v in row['standardized_innovations'].items():
+        for label, v in row['standardized_predictive_residuals'].items():
             axes[0, j].plot(v['lag_seconds'], v['acf'], label=label)
             freq, psd = np.array(v['frequency_hz']), np.array(v['mean_psd'])
             axes[1, j].semilogy(freq[1:], psd[1:], label=label)
         axes[0, j].axhline(0, color='gray', lw=1)
-        axes[0, j].set(title=f'{subject}: within-trial innovation ACF', xlabel='Lag (seconds)', ylim=(-.4, 1.05))
-        axes[1, j].set(title='Standardized innovation spectrum', xlabel='Frequency (Hz)', ylabel='Mean PSD')
+        axes[0, j].set(title=f'{subject}: within-trial predictive residual ACF', xlabel='Lag (seconds)', ylim=(-.4, 1.05))
+        axes[1, j].set(title='Standardized predictive residual spectrum', xlabel='Frequency (Hz)', ylabel='Mean PSD')
         axes[0, j].legend(fontsize=8)
     fig.suptitle('Broadband joint filter at W=-0.5 · one-step predictive residuals · trial resets respected', fontsize=14)
-    save_figure(fig, run_dir, 'innovation_diagnostic')
+    save_figure(fig, run_dir, 'predictive_residual_diagnostic')
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), constrained_layout=True)
     for j, modality in enumerate(('EEG', 'fNIRS')):
@@ -266,16 +266,16 @@ def report(run_dir, cfg, summary, review):
     lines += ['', '慢W收益主要来自任务和恢复段，基线段贡献均为负。局部F3 alpha坐标降低了部分似然差，但没有改变偏好方向；不能宣称它已经建立神经血管对应关系。训练选择的fNIRS对分别是AF3Fp1、C5CP5、AF7Fp1，F3与全部这些局部观测的解剖对应尚未验证。', '',
         'fNIRS-only：subject_01的17个点全部遇到至少一个trial失败；subject_09的最低4个W点失败，其余13点完成；subject_18的17点全部完成，独立fNIRS也偏好−0.5（Δlog L=+93.861）。因此**fNIRS自身可以推动慢响应，但当前失败曲线使我们无法把所有人的边界偏好唯一分解为单模态来源或联合冲突**。不能把subject_09剩余曲线的−0.25称为完整支持域的最优点。', '',
         f"预先指定第一训练trial上的36组13/17阶积分比较全部完成，最大绝对log-likelihood差为{review['quadrature']['max_absolute_log_likelihood_difference']:.6f}。这支持这些短例的积分稳定，不验证所有trial、完整W后验分辨率或高斯闭合近似。", '',
-        '![W曲线](w_likelihood_curves.png)', '', '## 3. 创新残差揭示持续偏差与时间相关', '',
+        '![W曲线](w_likelihood_curves.png)', '', '## 3. 一步预测残差揭示持续偏差与时间相关', '',
         '以下是宽频PCA、联合滤波、W=−0.5的一步预测标准化残差。ACF在trial内去均值计算，不跨独立重置拼接。低频比例为非零频率至0.2 Hz的PSD占比。', '',
         '| 被试 | 通道 | 均值 | RMS | 0.25s ACF | 低频功率比例 |',
         '| --- | --- | ---: | ---: | ---: | ---: |']
     for subject in cfg['subjects']:
         r = next(r for r in summary['curves'][subject]['broadband_pca']['joint']['rows'] if r['w'] == -.5)
-        for label, value in r['standardized_innovations'].items():
+        for label, value in r['standardized_predictive_residuals'].items():
             lines.append(f"| {subject} | {label} | {value['mean']:+.3f} | {value['rms']:.3f} | {value['acf'][1]:.3f} | {value['low_frequency_power_fraction']:.1%} |")
     lines += ['', 'HbR出现明显负偏差、较大标准化误差和近乎连续的低频残差；换成F3 alpha或固定W=0并未消除。这支持优先检查符号/幅度、基线算子和有色误差合同。残差结构本身不能在这些机制之间给出唯一因果归因，放大独立噪声也不能自动恢复配对特异信息。', '',
-        '![创新残差](innovation_diagnostic.png)', '', '## 4. 低容量跨模态滞后对照', '',
+        '![一步预测残差](predictive_residual_diagnostic.png)', '', '## 4. 低容量跨模态滞后对照', '',
         '每个坐标和方向均有72个原训练trial的外折预测，四外折/三内折按session内训练trial序号固定分配；PCA、fNIRS通道、尺度和岭强度都在相应训练折拟合。基础模型含目标自身可见端点与独立训练任务模板；联合模型再加六个固定滞后。配对和移位null只在外折改变另一模态。EEG重建可用未来fNIRS，所以是离线遮挡重建。', '',
         '数值为联合相对各对照的负MSE增量，按外折训练方差归一化；正值有利。区间以三个被试为cluster，仅作描述性提示，与旧Step5B的log-score数值不可直接比较。本对照没有在同一外折上重评SSM，不能视为两个模型的直接性能排名。', '',
         '| 坐标 | 目标 | 对照 | 增量均值 [95% CI] |', '| --- | --- | --- | --- |']
@@ -319,7 +319,7 @@ def main():
     for source, expected in manifest['source_sha256'].items():
         if diagnostic.digest(ROOT/source) != expected:
             raise ValueError(f'replay source differs from frozen run: {source}')
-    summary = json.loads((run_dir/'summary.json').read_text())
+    summary = diagnostic.canonical_residual_fields(json.loads((run_dir/'summary.json').read_text()))
     review_path = run_dir/'diagnostic_review.json'
     if args.render_only:
         review = json.loads(review_path.read_text())
