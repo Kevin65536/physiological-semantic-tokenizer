@@ -29,6 +29,13 @@ geometry metadata in this migration package before deleting those directories.
 The v3 SSM native cache and historical teacher sidecars remain retained inputs.
 This is a data preparation migration, not a new model result or protected evaluation.
 
+The subsequent [public-subject extension](runs/physiology_semantic_tokenizer/data_quality_audit/20260917_all_subject_cache_v4/manifest.json)
+records retirement of the inherited subject embargo and the independently supervised
+cache expansion. Its [validation and 30-second inventory](runs/physiology_semantic_tokenizer/data_quality_audit/20260917_all_subject_cache_v4/validation.json)
+verify new signal/event/geometry coverage and unchanged existing arrays/events.
+Compressed pre-extension indices and manifests preserve the earlier cache inventory;
+the 2026-09-16 migration evidence remains unchanged.
+
 ## Main-method evidence
 
 | Stage | Retained authority / artifact | Why it remains |

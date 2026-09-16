@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-16T15:55:03.766992+00:00",
+  "updated_at": "2026-09-16T16:12:27.642735+00:00",
   "tracks": [
     {
       "id": "main",
@@ -386,6 +386,18 @@
       "id": "e.measurement_cache_v4_validation",
       "label": "完整 EEG/fNIRS 缓存与默认加载接口核验",
       "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260916_measurement_cache_migration_v4/cache_validation.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.all_subject_cache_v4",
+      "label": "公开被试缓存扩展与资源记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260917_all_subject_cache_v4/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.all_subject_cache_v4_validation",
+      "label": "全被试缓存核验及30秒窗口清单",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260917_all_subject_cache_v4/validation.json",
       "role": "result_summary"
     }
   ],
@@ -2734,13 +2746,13 @@
       "supersedes": [
         "main.program@2026-09-08.observation-repair"
       ],
-      "updated_at": "2026-09-09T16:05:34+08:00",
+      "updated_at": "2026-09-16T16:12:27.642735+00:00",
       "depends_on": [
         "main.data_contract",
         "main.step5",
         "main.step5_observation"
       ],
-      "next_step": "在遮挡感知观测合同下实现并校验非线性Student-t轨迹推断，覆盖完整、中心遮挡和整模态缺失；不得用静息点Gaussian参考或旧A0代替。满足该前提后，在原训练边界比较固定W=0/−0.5、同折线性基础/联合模型及配对/移位控制；不扩大GWZ或数据面板，protected 24–29保持关闭。",
+      "next_step": "在遮挡感知观测合同下实现并校验非线性Student-t轨迹推断，覆盖完整、中心遮挡和整模态缺失；不得用静息点Gaussian参考或旧A0代替。满足该前提后，在原训练边界比较固定W=0/−0.5、同折线性基础/联合模型及配对/移位控制；该复现实验不扩大GWZ或既定数据面板；公共数据流程已取消固定被试封锁，新实验按当前数据合同独立确定划分。",
       "headline": true
     },
     {
@@ -2896,6 +2908,29 @@
         "main.data_contract@2026-07-30"
       ],
       "updated_at": "2026-09-16T15:55:03.766992+00:00",
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "main.data_contract@2026-09-17.all_public_subjects",
+      "entity": "main.data_contract",
+      "label": "统一数据合同",
+      "track": "main",
+      "order": 10,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "按用户要求取消公共数据流程继承的固定被试封锁；Single-Trial 全部发布被试已纳入 float64 测量缓存，新增事件、几何和30秒窗口加载核验通过，原数组及事件不变。未来实验自行定义数据划分；旧实验仅保留原身份供复现。",
+      "evidence_ids": [
+        "e.data_contract",
+        "e.all_subject_cache_v4",
+        "e.all_subject_cache_v4_validation"
+      ],
+      "supersedes": [
+        "main.data_contract@2026-09-16.measurement_cache_v4"
+      ],
+      "updated_at": "2026-09-16T16:12:27.642735+00:00",
       "depends_on": [],
       "headline": false
     }

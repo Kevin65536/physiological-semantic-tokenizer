@@ -11,7 +11,7 @@ _Generated from `research_state/registry.json`; do not edit this block._
 - **Croce 验证**（新版 Synthetic Phase 1）— 已废弃（未完成且不再开展） / 尚未判定：新版 Synthetic Phase 1 尚未开始；本旧验证流废弃，不再开展。
 
 ### Next steps
-- **主方法** — 在遮挡感知观测合同下实现并校验非线性Student-t轨迹推断，覆盖完整、中心遮挡和整模态缺失；不得用静息点Gaussian参考或旧A0代替。满足该前提后，在原训练边界比较固定W=0/−0.5、同折线性基础/联合模型及配对/移位控制；不扩大GWZ或数据面板，protected 24–29保持关闭。
+- **主方法** — 在遮挡感知观测合同下实现并校验非线性Student-t轨迹推断，覆盖完整、中心遮挡和整模态缺失；不得用静息点Gaussian参考或旧A0代替。满足该前提后，在原训练边界比较固定W=0/−0.5、同折线性基础/联合模型及配对/移位控制；该复现实验不扩大GWZ或既定数据面板；公共数据流程已取消固定被试封锁，新实验按当前数据合同独立确定划分。
 
 See the [generated project status](docs/PROJECT_STATUS.md) for lifecycle states and evidence links.
 <!-- project-state:end -->
