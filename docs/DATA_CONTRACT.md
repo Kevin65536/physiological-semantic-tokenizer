@@ -289,7 +289,8 @@ admission rules. The v2 changes are:
   phase recorded as assumptions. This repair cannot recover absent triggers.
 
 The earlier counts below describe the retained **v1** inventory, not a v2
-inventory. No measured v2 cache has been built as part of this repair.
+inventory. The subsequent v4 cache migration below builds the repaired timing
+index; its measured inventory is retained in the migration evidence.
 
 - Window timestamps are expressed in a common record-relative coordinate with
   the dataset-native anchor preserved.
@@ -358,8 +359,8 @@ arrays.
 The cache schema owner is `src/data/clean_physiology_cache.py`.
 `clean_eeg_fnirs_cache_v1`, including the retained
 `data/cache/physiology_semantic_clean_v1/` and its v1 event index, is
-**deprecated for current consumption**. Its files remain unchanged as
-historical evidence. The current reader rejects v1/missing schemas before
+**deprecated for current consumption**. Its metadata is retained as historical evidence; superseded rebuildable arrays
+are covered by the explicit v4 cleanup below. The current reader rejects v1/missing schemas before
 reading event payloads or signal arrays; there is no automatic rebuild or
 silent fallback to the old cache. Historical sealed replay must use its
 retained historical implementation, not reinterpret old arrays as v2.
@@ -368,7 +369,8 @@ New producers use `clean_eeg_fnirs_cache_v2` and
 `physiology_event_alignment_v2`; the window and REFED sequence contracts are
 `unified_physiology_window_v2` and `refed_continuous_va_sequence_v2`.
 The timing-repair namespace is `data/cache/physiology_semantic_clean_v2/`;
-the new measurement signal producer defaults to `data/cache/physiology_semantic_clean_v3/`.
+the initial measurement producer used `data/cache/physiology_semantic_clean_v3/`;
+the current complete measurement producer defaults to `data/cache/physiology_semantic_clean_v4/`.
 Its event-index output must explicitly use that same cache root.
 `--overwrite` cannot upgrade an existing v1 cache/index in place. Existing
 configured v1 paths now fail explicitly until a separately requested versioned
@@ -458,7 +460,7 @@ atomic at the signal manifest; readers reject an incomplete build or missing
 v2 event index. Retired general v1 cache arrays may be removed under this
 explicit cleanup, retaining their manifests/index/geometry and removal inventory
 in the migration evidence linked from `experiments/RESULTS_INDEX.md`. This
-supersedes the earlier blanket v1 file-retention wording below for rebuildable
+supersedes the earlier blanket v1 file-retention wording for rebuildable
 arrays only. Frozen SSM native inputs and completed campaign evidence stay in place.
 
 ## 测量坐标实现边界（2026-09-16）

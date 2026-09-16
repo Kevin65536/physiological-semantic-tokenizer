@@ -81,7 +81,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-refed-absorbance", action="store_true")
     parser.add_argument("--output-dir", default=DEFAULT_CLEAN_CACHE_ROOT)
     parser.add_argument("--storage", choices=[MEASUREMENT_CACHE_STORAGE, "legacy_npz"], default=MEASUREMENT_CACHE_STORAGE)
-    parser.add_argument("--workers", type=int, default=4, help="Bounded independent record producers; use 1 for serial replay.")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="Independent record producers; size to measured CPU/memory/IO capacity. Use 1 for serial replay.")
     parser.add_argument("--processing-schema", default=MEASUREMENT_ALIGNMENT_SCHEMA,
                         choices=[MEASUREMENT_ALIGNMENT_SCHEMA, HOMER2_ALIGNMENT_SCHEMA])
     parser.add_argument("--overwrite", action="store_true")
@@ -552,8 +553,8 @@ def _build_record_job(record, output_dir, overwrite, processing_schema, storage)
 def build_records(records, output_dir, *, overwrite=False, processing_schema=MEASUREMENT_ALIGNMENT_SCHEMA,
                   storage=MEASUREMENT_CACHE_STORAGE, workers=4):
     """Keep at most two records per worker in flight, including source arrays."""
-    if workers < 1 or workers > 16:
-        raise ValueError('workers must be between 1 and 16')
+    if workers < 1:
+        raise ValueError('workers must be positive')
     if workers == 1:
         for record in records:
             yield _build_record_job(record, output_dir, overwrite, processing_schema, storage)
@@ -615,6 +616,7 @@ def main() -> None:
             "signal_branch": "separates multiple signal exports for the same canonical record",
         },
         "parameters": {
+            "workers": args.workers,
             "datasets": args.datasets,
             "subjects_per_dataset": args.subjects_per_dataset,
             "records_per_subject": args.records_per_subject,

@@ -122,8 +122,19 @@ The active signal/event/geometry builders share `data/cache/physiology_semantic_
 ```bash
 .venv/bin/python experiments/build_clean_event_index.py
 .venv/bin/python experiments/build_clean_channel_geometry.py
-.venv/bin/python experiments/build_clean_eeg_fnirs_cache.py
+# Full signal builds run under a durable supervisor; choose workers after a
+# CPU/memory/IO check, and use a fresh unit name for each build attempt.
+systemd-run --user --unit=physiology-cache-v4 --property=Type=exec \
+  --property=WorkingDirectory="$PWD" --property=RemainAfterExit=yes \
+  --setenv=OPENBLAS_NUM_THREADS=1 --setenv=OMP_NUM_THREADS=1 --setenv=MKL_NUM_THREADS=1 \
+  "$PWD/.venv/bin/python" -u "$PWD/experiments/build_clean_eeg_fnirs_cache.py" --workers 16
 ```
+
+Verify `loginctl show-user "$USER" -p Linger` reports `Linger=yes` before using
+the user service for disconnect-safe work. Monitor it with `systemctl --user
+status physiology-cache-v4` and `journalctl --user -u physiology-cache-v4`.
+The worker count is an example, not a resource limit; constrain it by measured
+throughput and memory, and retain launch/resource details with the owning run.
 
 The signal builder persists float64 EEG and HbO/HbR as memory-mapped record arrays;
 Single-Trial subjects 24–29 are excluded before reads. Use explicit subject/record

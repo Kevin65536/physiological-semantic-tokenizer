@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-16T11:02:57.374350+00:00",
+  "updated_at": "2026-09-16T15:55:03.766992+00:00",
   "tracks": [
     {
       "id": "main",
@@ -375,6 +375,18 @@
       "label": "折内精度及冻结评分坐标对照",
       "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260916_measurement_alignment_v3/measurement_preparation_audit.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.measurement_cache_v4_migration",
+      "label": "测量坐标缓存迁移与磁盘清理记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260916_measurement_cache_migration_v4/migration.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.measurement_cache_v4_validation",
+      "label": "完整 EEG/fNIRS 缓存与默认加载接口核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260916_measurement_cache_migration_v4/cache_validation.json",
+      "role": "result_summary"
     }
   ],
   "records": [
@@ -2845,7 +2857,7 @@
       "execution": "completed",
       "scientific_verdict": "not_applicable",
       "analysis_intent": "engineering",
-      "summary": "首轮测量修订的独立合成及固定实测任务均已完成；输入精度/算子重组失败消除，合成对照保持一致。实测仍有物理域和评估预算失败，完整面板风险未定义；共同身份含 O2 成功回退，故不支持“实测求解完全无回退”或整体改进结论。新测量与 local-view 接口保留为显式候选，不切换默认全量数据、不扩大 gain/Q、跨数据集 SSM 或 tokenizer 训练。数值、身份和失败对照由所链接 run 持有。",
+      "summary": "首轮测量修订的独立合成及固定实测任务均已完成；输入精度/算子重组失败消除，合成对照保持一致。实测仍有物理域和评估预算失败，完整面板风险未定义；共同身份含 O2 成功回退，故不支持“实测求解完全无回退”或整体改进结论。该轮验收将新测量与 local-view 接口保留为显式候选，未切换默认全量数据、未扩大 gain/Q、未启动跨数据集 SSM 或 tokenizer 训练；后续默认接口迁移由统一数据合同条目记录。数值、身份和失败对照由所链接 run 持有。",
       "evidence_ids": [
         "e.data_contract",
         "e.experiment_plan",
@@ -2862,6 +2874,29 @@
       "depends_on": [
         "main.step5_observation"
       ],
+      "headline": false
+    },
+    {
+      "state_id": "main.data_contract@2026-09-16.measurement_cache_v4",
+      "entity": "main.data_contract",
+      "label": "统一数据合同",
+      "track": "main",
+      "order": 10,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "默认接口切换为 float64 测量坐标，不做跨数据集幅度归一；完整 EEG/fNIRS mmap 缓存已独立托管构建并核验，清理旧可重建数组并保留元数据；受保护边界和冻结实验身份不变。",
+      "evidence_ids": [
+        "e.data_contract",
+        "e.measurement_cache_v4_migration",
+        "e.measurement_cache_v4_validation"
+      ],
+      "supersedes": [
+        "main.data_contract@2026-07-30"
+      ],
+      "updated_at": "2026-09-16T15:55:03.766992+00:00",
+      "depends_on": [],
       "headline": false
     }
   ]

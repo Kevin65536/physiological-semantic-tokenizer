@@ -328,8 +328,8 @@ Simultaneous EEG&NIRS/
   未单独论证的 EEG 重处理；
 - DSR 的 fNIRS marker 只提供 block-level clock anchor。Go/No-go label 来自 EEG，
   fNIRS 仅作为同步血流动力学上下文；没有对齐 anchor 的 block 不生成样本；
-- 默认 alignment gate 接纳 25 人/8,980 个 DSR events，VP005 因 continuous
-  drift 保持隔离。
+- 保留的 v1 alignment inventory 为 25 人/8,980 个 DSR events，VP005 因 continuous
+  drift 保持隔离。当前 v4 缓存由 v2 时钟规则重新裁定窗口，不能沿用这一历史计数。
 
 ---
 

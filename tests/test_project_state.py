@@ -183,6 +183,13 @@ def test_evidence_entries_use_path_only():
 def test_current_record_can_be_updated_in_place_without_supersedes():
     registry = copy.deepcopy(_registry())
     record = _current_by_entity(registry)["main.data_contract"]
+    # Optional supersedes applies to a single-version entity. The live data
+    # contract now has history; removing that link alone creates two current
+    # states, which the validator must reject.
+    registry["records"] = [
+        row for row in registry["records"]
+        if row["entity"] != record["entity"] or row is record
+    ]
     record["summary"] = "状态摘要可在当前记录中直接更新。"
     record.pop("supersedes", None)
     record.pop("depends_on", None)
