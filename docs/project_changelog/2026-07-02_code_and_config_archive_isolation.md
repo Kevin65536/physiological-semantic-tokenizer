@@ -4,7 +4,7 @@ _Project operations record; not a model architecture change._
 
 _Date: 2026-07-02 · Phase: Phase 3 preparation · Git: `0ad233a..HEAD` · Status: Merged_
 
-_Links: [source authority map](../../src/README.md) · [current contributor and storage rules](../../CONTRIBUTING.md)_
+_Links: [source authority map](../../src/README.md) · [repository layout](../../README.md#repository-layout)_
 
 ---
 

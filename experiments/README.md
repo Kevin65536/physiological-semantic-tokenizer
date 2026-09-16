@@ -333,5 +333,5 @@ evidence indexes may be force-tracked intentionally. Historical
 analysis always names an exact archive path; active tools never recurse through
 archives.
 
-Launch and evidence conventions are in [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
-The owning plan is [`../docs/EXPERIMENT_PLAN.md`](../docs/EXPERIMENT_PLAN.md).
+Launch boundaries are in [`../docs/EXPERIMENT_PLAN.md`](../docs/EXPERIMENT_PLAN.md);
+test conventions are in [`../tests/README.md`](../tests/README.md).

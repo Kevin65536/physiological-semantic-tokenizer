@@ -36,7 +36,6 @@ Start with the [generated project status](docs/PROJECT_STATUS.md),
 | What contract governed the stopped comparisons? | [Comparison protocol](docs/comparisons/PROTOCOL.md) |
 | Which comparison sources and weights are prepared? | [Comparison asset status](comparative_methods/ASSET_STATUS.md) |
 | Where is the stopped Token Atlas evidence? | [Token Physiology Atlas](docs/analysis/TOKEN_PHYSIOLOGY_ATLAS.md) |
-| How should code and experiments be changed? | [Contributor guide](CONTRIBUTING.md) |
 
 ## Repository layout
 

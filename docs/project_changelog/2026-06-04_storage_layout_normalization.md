@@ -4,7 +4,7 @@ _Project operations record; not a model architecture change._
 
 > **Date**: 2026-06-04 | **Phase**: Phase 2C | **Git**: `dd51f57..HEAD`
 > **Status**: Merged
-> **Links**: [ARCHITECTURE.md](../ARCHITECTURE.md) | [current contributor and storage rules](../../CONTRIBUTING.md)
+> **Links**: [ARCHITECTURE.md](../ARCHITECTURE.md) | [repository layout](../../README.md#repository-layout)
 
 ## Motivation
 
@@ -65,7 +65,7 @@ data:
 
 ## Linked Artifacts
 
-- **Current storage rules**: `CONTRIBUTING.md`
+- **Current repository layout**: [repository layout](../../README.md#repository-layout)
 - **Current live run**: `experiments/runs/s2_croce_local_highwl_base_20260604_153549/`
 - **Future run namespace**: `experiments/runs/source_observation/croce_local/highwl_v1/<run_name>/`
 - **Retired Phase2/2A archive**: `experiments/runs/archive/pre_croce_local_highwl_20260604/`

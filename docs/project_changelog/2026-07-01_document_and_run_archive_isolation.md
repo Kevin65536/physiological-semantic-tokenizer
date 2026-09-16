@@ -4,7 +4,7 @@ _Project operations record; not a model architecture change._
 
 _Date: 2026-07-01 · Phase: Phase 3 preparation · Git: `b81c31b..HEAD` · Status: Merged_
 
-_Links: [documentation index](../README.md) · [current contributor and storage rules](../../CONTRIBUTING.md) · [target experiment program](../physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md)_
+_Links: [documentation index](../README.md) · [repository layout](../../README.md#repository-layout) · [target experiment program](../physiology_semantic_tokenizer/05_EXPERIMENT_DESIGN.md)_
 
 ---
 
