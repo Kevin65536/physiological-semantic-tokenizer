@@ -339,13 +339,30 @@ not allowed in the primary shared benchmark.
 
 ## Splits and protected data
 
+### Current public-subject policy — 2026-09-17
+
+The user explicitly retired the project-wide Single-Trial subject 24–29
+read restriction and requested that these subjects be added to the general
+cache. All published subjects 01–29 are ordinary public inputs for the current
+signal, event, geometry, and unified loading interfaces. No fixed subject-number
+blacklist, masking, or separate unblind permission applies to this general data
+flow. Future SSM/tokenizer experiments define their own train/validation/test
+partitions; they do not inherit the retired R-series subject embargo.
+
+This policy supersedes earlier blanket statements that subjects 24–29 remain
+closed. Frozen historical experiment configurations, split identities, controllers,
+and dated results retain their original semantics for replay only; they are not
+the access policy for the current public-data interface. This does not relabel
+old results as having used all subjects or authorize a new model evaluation.
+
 - Fit normalizers, adapters, target scalers, hyperparameters, and model
   selection only on the partition authorized by the owning protocol.
 - Group by subject and by any record/trial/video dependency that could cross a
   split.
 - Keep sample-random, within-subject, and strict cross-subject protocols
   separately labeled.
-- R-series subjects 24–29 remain closed.
+- The retained R-series replay keeps its original subject split; it does not
+  restrict current public data preparation.
 - Each comparison protocol controls its own protected boundary. Completed
   STA-Net and historical EFRM v1 evaluations do not authorize EFRM LODO v2;
   the v2 protected folds remain closed until its explicit unlock path passes.
@@ -451,8 +468,9 @@ interfaces; frozen experiment configurations and result identities are not migra
 The user authorized this cache migration, cleanup of superseded rebuildable
 caches, and offline full-record two-sided filtering on 2026-09-16. This accepts
 its temporal-context limitation for this data preparation, not a causal claim or
-an evaluation unlock. Single-Trial subjects 24–29 remain unread; its public
-cache inventory covers 01–23. Other datasets use their published records.
+an evaluation unlock. That initial migration left Single-Trial subjects 24–29
+unread and covered 01–23. The current public-subject policy above supersedes
+that inventory limit. Other datasets use their published records.
 No SSM fit or tokenizer training is launched by this migration.
 
 Signal, event and geometry builders share the v4 root. Build completion is

@@ -158,13 +158,11 @@ def _pair_single_trial_wavelengths(values: np.ndarray, labels: Sequence[str]) ->
 def iter_single_trial(root: Path, subject_limit: int, record_limit: int, max_samples: int,
                       *, subject_ids: Sequence[int] | None = None, session_ids: Sequence[int] | None = None) -> Iterator[CleanInputRecord]:
     contract = DATASET_FNIRS_CONTRACTS["eeg_fnirs_single_trial"]["wavelength_pair"]
-    if subject_ids is not None and any(s not in range(1,24) for s in subject_ids):
-        raise ValueError('Single-Trial protected subject boundary before file access')
+    if subject_ids is not None and any(s not in range(1,30) for s in subject_ids):
+        raise ValueError('Single-Trial subject IDs must be between 1 and 29')
     subjects = ([root/'NIRS_01-29'/f'subject {s:02d}' for s in subject_ids] if subject_ids is not None
                 else [p for p in sorted((root / "NIRS_01-29").glob("subject *"))
-                      if int(p.name.split()[-1]) < 24][:subject_limit])
-    if any(int(s.name.split()[-1]) >= 24 for s in subjects):
-        raise ValueError('Single-Trial protected subject boundary before file access')
+                      if int(p.name.split()[-1]) in range(1,30)][:subject_limit])
     for subject in subjects:
         path = subject / "cnt.mat"
         sessions = np.atleast_1d(_mat_payload(path, "cnt"))

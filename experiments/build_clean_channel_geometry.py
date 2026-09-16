@@ -135,7 +135,7 @@ def _subject_id_from_name(name: str) -> int:
 
 def iter_single_trial(root: Path) -> Iterable[ChannelGeometryRecord]:
     for subject_dir in sorted((root / "NIRS_01-29").glob("subject *"), key=lambda item: _subject_id_from_name(item.name)):
-        if _subject_id_from_name(subject_dir.name) >= 24:
+        if _subject_id_from_name(subject_dir.name) not in range(1,30):
             continue
         mnt = subject_dir / "mnt.mat"
         if mnt.exists():
@@ -149,7 +149,7 @@ def iter_single_trial(root: Path) -> Iterable[ChannelGeometryRecord]:
                 source_file=_rel(mnt),
             )
     for subject_dir in sorted((root / "EEG_01-29").glob("subject *"), key=lambda item: _subject_id_from_name(item.name)):
-        if _subject_id_from_name(subject_dir.name) >= 24:
+        if _subject_id_from_name(subject_dir.name) not in range(1,30):
             continue
         for name in ("mnt.mat", "mnt_artifact.mat"):
             mnt = subject_dir / name

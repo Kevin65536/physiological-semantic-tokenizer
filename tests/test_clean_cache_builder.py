@@ -1,7 +1,49 @@
 import numpy as np
 import json
+import pytest
 
 from experiments.build_clean_eeg_fnirs_cache import _pair_single_trial_wavelengths
+
+
+def test_public_subjects_have_matching_signal_event_geometry_coverage(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from experiments import build_clean_eeg_fnirs_cache as signal
+    from experiments import build_clean_event_index as event
+    from experiments import build_clean_channel_geometry as geometry
+
+    for modality in ('EEG', 'NIRS'):
+        for subject in (1, 23, 24, 29):
+            folder = tmp_path / f'{modality}_01-29' / f'subject {subject:02d}'
+            folder.mkdir(parents=True)
+            (folder / 'mnt.mat').touch()
+    session = SimpleNamespace(x=np.ones((100, 2)), fs=10.,
+                              clab=['CH1lowWL', 'CH1highWL'], yUnit='V')
+    monkeypatch.setattr(signal, '_mat_payload', lambda *args: np.array([session], dtype=object))
+    marker_reads = []
+    def empty_markers(path, key):
+        marker_reads.append(path)
+        return np.array([], dtype=object)
+    monkeypatch.setattr(event, '_mat_payload', empty_markers)
+    monkeypatch.setattr(geometry, '_rel', str)
+    monkeypatch.setattr(geometry, 'records_from_mnt',
+                        lambda path, **kwargs: [(kwargs['subject'], kwargs['modality'])])
+
+    signals = list(signal.iter_single_trial(tmp_path, 29, 6, 0))
+    event.iter_single_trial(tmp_path, 29, 6)
+    positions = list(geometry.iter_single_trial(tmp_path))
+    expected = {'subject 01', 'subject 23', 'subject 24', 'subject 29'}
+    assert {row.subject for row in signals} == expected
+    assert {path.parent.name for path in marker_reads} == expected
+    assert set(positions) == {(subject, modality) for subject in expected for modality in ('eeg', 'fnirs')}
+    assert len(list(signal.iter_single_trial(tmp_path, 29, 6, 0, subject_ids=[29]))) == 1
+    marker_reads.clear()
+    event.iter_single_trial(tmp_path, 29, 6, subject_ids=[29])
+    assert {path.parent.name for path in marker_reads} == {'subject 29'}
+    for subjects in ([0], [30]):
+        with pytest.raises(ValueError, match='between 1 and 29'):
+            list(signal.iter_single_trial(tmp_path, 29, 6, 0, subject_ids=subjects))
+        with pytest.raises(ValueError, match='between 1 and 29'):
+            event.iter_single_trial(tmp_path, 29, 6, subject_ids=subjects)
 
 
 def test_single_trial_homer2_pair_labels_drop_wavelength_suffixes():

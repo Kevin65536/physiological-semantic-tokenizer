@@ -166,7 +166,7 @@ def _class_names(value: Any) -> list[str]:
 
 def _single_trial_subjects(root: Path, limit: int) -> list[int]:
     subjects = [p for p in sorted((root / "EEG_01-29").glob("subject *"))
-                if int(p.name.split()[-1]) < 24][:limit]
+                if int(p.name.split()[-1]) in range(1,30)][:limit]
     return [int(subject.name.split()[-1]) for subject in subjects]
 
 
@@ -175,8 +175,8 @@ def iter_single_trial(root: Path, subject_limit: int, record_limit: int, *,
     events: list[CanonicalEvent] = []
     reports: list[EventAlignmentReport] = []
     subjects = list(subject_ids) if subject_ids is not None else _single_trial_subjects(root, subject_limit)
-    if any(s not in range(1,24) for s in subjects):
-        raise ValueError('Single-Trial protected subject boundary before file access')
+    if any(s not in range(1,30) for s in subjects):
+        raise ValueError('Single-Trial subject IDs must be between 1 and 29')
     for subject_id in subjects:
         eeg_dir = root / "EEG_01-29" / f"subject {subject_id:02d}" / "with occular artifact"
         if not eeg_dir.exists():

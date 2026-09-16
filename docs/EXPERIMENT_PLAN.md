@@ -17,10 +17,15 @@ their own executable contracts. An array-free `T3c` admission gate checks
 whether hierarchical composite fitting may start. Reconstruction fits on
 subjects 01--18 and applies frozen objects to subjects 19--23.
 Identifiability and LOSO use only subjects 01--18 and load no 19--23 arrays;
-all three measured diagnostics keep subjects 24--29 closed. Their outputs are
+these retained diagnostic contracts excluded subjects 24--29. Their outputs are
 exploratory; they are not clean truth, teacher qualification, or a
 physical-teacher claim.
-Protected data and every other protected surface remain closed.
+For current and future public-data preparation, the
+[2026-09-17 public-subject policy](DATA_CONTRACT.md#current-public-subject-policy--2026-09-17)
+retires the inherited Single-Trial subject embargo. References below to closed
+subjects describe the bounded retained experiment contracts, not a project-wide
+restriction on public cache construction or future experiment split selection.
+Separate comparison protocols retain their own declared evaluation boundaries.
 
 The measured diagnostic does not replace the synthetic qualification gates or
 authorize tokenizer promotion. Any future measured confirmation or physical

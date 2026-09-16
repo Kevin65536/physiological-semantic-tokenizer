@@ -137,7 +137,8 @@ The worker count is an example, not a resource limit; constrain it by measured
 throughput and memory, and retain launch/resource details with the owning run.
 
 The signal builder persists float64 EEG and HbO/HbR as memory-mapped record arrays;
-Single-Trial subjects 24–29 are excluded before reads. Use explicit subject/record
+all 29 published Single-Trial subjects are eligible under the current data contract.
+Use explicit subject/record
 limits for a smoke build. These commands prepare data, not models or evaluations.
 The local-view factory defaults to float64 measurement inputs without cross-dataset
 amplitude normalization. Each SSM/tokenizer consumer owns its training-fitted
