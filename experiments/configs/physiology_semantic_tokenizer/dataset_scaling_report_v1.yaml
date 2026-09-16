@@ -1,0 +1,60 @@
+schema: dataset_scaling_report_v1
+scope: public_measurement_audit_and_bounded_scaling_diagnostic
+output_root: experiments/runs/physiology_semantic_tokenizer/data_quality_audit
+run_id: 20260915_dataset_scaling_report_v1
+cache_root: data/cache/physiology_semantic_clean_v1
+data_contract: docs/DATA_CONTRACT.md
+experiment_plan: docs/EXPERIMENT_PLAN.md
+datasets:
+  eeg_fnirs_single_trial:
+    subjects: [subject_01, subject_09, subject_18]
+    records: [session_01, session_03, session_05]
+    events: original_ma_training_positions
+    excluded_original_positions: [4, 9]
+  simultaneous_eeg_nirs:
+    subjects: [VP001, VP002, VP003]
+    records: [cnt_dsr, cnt_nback, cnt_wg]
+    events: first_eight_nonoverlapping_admitted
+  visual_cognitive_motivation:
+    subjects: [S01, S02, S03]
+    records: [S01_Part1_Probe1, S01_Part2_Probe1, S02_Probe1, S03_Probe1]
+    events: first_eight_nonoverlapping_admitted
+  refed:
+    subjects: ['1', '2', '3']
+    records: [video_1, video_2]
+    events: three_nonoverlapping_video_windows
+window_seconds: 30
+event_offset_seconds: -5
+max_windows_per_record: 8
+candidate_scale_fit: first_two_listed_subjects_only_per_dataset
+candidate_baseline: first_five_seconds_as_reference_not_necessarily_rest
+current_eeg_branch: single_trial_eeg_artifact_clean_v4
+measured_scope_note: >-
+  Descriptive subset, not a population census. Current generic loader retains its
+  existing full-record preprocessing context; statistics and figures use only listed
+  windows. Single-Trial original MA positions 4/9 never enter audit statistics or SSM
+  fits; subjects 24-29 and protected comparison artifacts are not opened.
+ssm:
+  retained_run: experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1
+  synthetic_seed_train: 20691500
+  synthetic_seed_evaluate: 20692500
+  synthetic_training_trials: 24
+  synthetic_evaluation_trials: 24
+  steps: 120
+  quadrature_order: 7
+  modes: [full, center_fNIRS]
+  measured_subjects: [subject_01, subject_09, subject_18]
+  measured_projection: o1_E0
+  measured_indices: [1, 5, 9, 13, 17, 21]
+  arms: [baseline, shared_data_only, shared_synchronized, separate_data_only, separate_synchronized, shared_data_noise_only]
+  shared_multiplier: 0.5
+  primary: synthetic_clean_HbO_HbR_and_neural_state_recovery
+  secondary: measured_hidden_HbO_HbR_prediction_on_fixed_training_sd
+  diagnostic: synchronized_coordinate_invariance_and_physical_failures
+  null: data_only_scaling_negative_control_not_claimed_as_current_ssm_implementation
+  fixed_physiology: current_W0_reference_no_grid_search
+  stopping: exactly_listed_trials_modes_arms_no_retry_or_scope_expansion
+  workers: 4
+  maximum_seconds: 1800
+teacher_qualification: none
+tokenizer_training: false
