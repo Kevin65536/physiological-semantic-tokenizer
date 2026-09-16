@@ -491,10 +491,6 @@ def build_measurement_record(record, homer2, directory, manifest_path, processin
         temporary = directory / f'{key}.partial.npy'
         np.save(temporary, value, allow_pickle=False)
         os.replace(temporary, directory / f'{key}.npy')
-    # The reference is descriptive record centering, not a resting-state claim.
-    for modality, values, state in (('eeg', eeg, eeg_state), ('fnirs', fnirs, fnirs_state)):
-        state['record_baseline'] = np.median(values, axis=0).tolist()
-        state['baseline_role'] = 'full_record_median_reference_not_rest'
     manifest = dict(row, schema=CLEAN_CACHE_SCHEMA, storage=MEASUREMENT_CACHE_STORAGE,
         processing_schema=processing_schema, record_npz=str(directory.resolve()),
         arrays={key:f'{key}.npy' for key in arrays}, array_shapes={k:list(v.shape) for k,v in arrays.items()},
