@@ -1,9 +1,13 @@
 import numpy as np
+import pytest
 
 from src.data.physiology_measurement_adapter import (
     ADAPTER_SCHEMA,
     MeasurementAdapterSpec,
     PhysiologyMeasurementAdapter,
+    measurement_unit_conversion,
+    PAIRED_ADAPTER_SCHEMA,
+    measurement_baseline,
 )
 
 
@@ -62,3 +66,61 @@ def test_relative_change_handles_zero_baseline_without_nonfinite_values():
     canonical = adapter.transform(record)
 
     assert np.all(np.isfinite(canonical))
+
+
+def test_unit_evidence_and_quantity_are_required_for_conversion():
+    resolve = measurement_unit_conversion
+    volts = resolve("V", quantity="electric_potential", evidence="header", group="device")
+    np.testing.assert_allclose(np.array([1e-6, -2e-6]) * volts["factor"], [1, -2])
+    hb = resolve("mmol/L", quantity="concentration_change", evidence="yUnit", group="device")
+    assert hb["factor"] == 1000 and hb["output_unit"] == "uM"
+    for unit, evidence in [("V", ""), ("unknown", "paper reviewed"), ("mM mm", "header")]:
+        quantity = "electric_potential" if unit == "V" else "concentration_change"
+        state = resolve(unit, quantity=quantity, evidence=evidence, group="device")
+        assert state["unit_status"] == "unknown" and state["factor"] == 1
+    detector = resolve("V", quantity="detector_voltage", evidence="yUnit", group="device")
+    assert detector["factor"] == 1 and detector["output_unit"] == "V"
+
+
+def test_paired_fit_freezes_scale_and_preserves_hbt_and_missing_support():
+    t = np.arange(100)/10
+    clean = np.column_stack([4*np.sin(t), -np.sin(t)])
+    damaged = clean.copy()
+    damaged[30:40] = 1e8
+    mask = np.ones_like(clean,dtype=bool)
+    mask[30:40] = False
+    kwargs = dict(dataset='device',modality='fnirs',original_semantics='published_Hb',
+                  original_unit='relative',canonical_semantics='paired_Hb',transform='center',
+                  channel_names=['CH1_HbO','CH1_HbR'],fit_subjects=['train'],
+                  baselines=[np.zeros(2)],valid_masks=[mask],fit_record_ids=['train/record'])
+    first = PhysiologyMeasurementAdapter.fit([clean],**kwargs)
+    second = PhysiologyMeasurementAdapter.fit([damaged],**kwargs)
+    assert first.spec == second.spec
+    assert first.spec.schema == PAIRED_ADAPTER_SCHEMA
+    baseline = np.array([.5,.2])
+    y = first.transform(clean,baseline=baseline)
+    np.testing.assert_allclose(y.sum(axis=1), (clean.sum(axis=1)-baseline.sum())/first.spec.shared_scale)
+    np.testing.assert_allclose(np.std(y[:,0])/np.std(y[:,1]),4.)
+    np.testing.assert_allclose(first.inverse_transform(y,baseline=baseline),clean,atol=1e-15)
+    frozen = first.spec.shared_scale
+    first.transform(clean*1e5,baseline=baseline)
+    assert first.spec.shared_scale == frozen
+    with pytest.raises(ValueError,match='explicit declared baseline'):
+        first.transform(clean)
+
+
+def test_declared_baseline_uses_common_real_support_and_retains_noise_rank():
+    t = np.arange(24)/4-2
+    x = np.column_stack([np.sin(t),-.3*np.sin(t)])
+    mask = np.ones_like(x,dtype=bool);mask[2,1] = False
+    b,w,state = measurement_baseline(x,t,mask,interval_s=(-2,0),
+                                    role='pre_event',evidence='fixture event clock',minimum_samples=6)
+    assert state['sample_count'] == 7 and w[2] == 0
+    c = np.eye(len(t))-np.ones((len(t),1))*w
+    np.testing.assert_allclose(c@x,x-b,atol=1e-15)
+    covariance = c@c.T
+    assert np.linalg.matrix_rank(covariance) == len(t)-1
+    assert abs(covariance[12,13]) > .01
+    missing,_,state = measurement_baseline(x,t,mask,interval_s=(-5,-3),
+                                          role='pre_event',evidence='fixture')
+    assert missing is None and state['status']=='insufficient_support'

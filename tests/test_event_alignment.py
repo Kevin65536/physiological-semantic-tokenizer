@@ -263,7 +263,8 @@ def test_visual_future_cache_resamples_native_clock_before_filtering(tmp_path, m
     observed = []
     def process(values, **kwargs):
         observed.append(values.copy())
-        return SimpleNamespace(values=values, state=SimpleNamespace(to_dict=lambda: {}), quality={})
+        return SimpleNamespace(values=values, state=SimpleNamespace(to_dict=lambda: {}), quality={},
+                               processed_valid_mask=np.ones_like(values,dtype=bool))
     monkeypatch.setattr(builder, "standardize_fnirs_record", process)
     monkeypatch.setattr(builder, "apply_homer2_aligned_contract", process)
     manifest = builder.build_record(record, tmp_path / "new_cache", False)

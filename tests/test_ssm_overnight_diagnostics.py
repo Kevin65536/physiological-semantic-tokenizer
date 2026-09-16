@@ -66,6 +66,16 @@ def inventory(cfg):
         for subject in cfg['subjects']}
 
 
+def test_measurement_revision_keeps_fixed_denominators_without_adaptation():
+    cfg, _, _, _, metadata = suite.load_config(
+        suite.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml')
+    tasks = suite.v3_make_tasks(cfg, inventory(cfg))
+    assert {t['stage'] for t in tasks} == {1, 2}
+    assert sum(t['planned_solves'] for t in tasks if t['stage'] == 1) == 3600
+    assert sum(t['planned_solves'] for t in tasks if t['stage'] == 2) == 72*14*3
+    assert metadata['data']['cache_root'] == cfg['measurement_revision']['cache_root']
+
+
 def test_retained_residual_fields_read_without_changing_evidence(tmp_path):
     import csv
     import json

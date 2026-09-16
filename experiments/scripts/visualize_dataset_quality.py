@@ -90,7 +90,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--cache-root',
-        default=str(PROJECT_ROOT / 'data/cache/physiology_semantic_clean_v1'),
+        default=str(PROJECT_ROOT / 'data/cache/physiology_semantic_clean_v4'),
         help='Canonical clean-cache root containing signal, event, and geometry sidecars.',
     )
     parser.add_argument(

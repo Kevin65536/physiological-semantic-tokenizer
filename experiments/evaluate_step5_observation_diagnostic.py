@@ -96,14 +96,23 @@ def load_config(path=DEFAULT_CONFIG):
     return cfg, base, measured, metadata
 
 
-def training_events(events, base):
+def training_events(events, base, *, alignment_reports=None):
     """Filter by trial identity before slicing, validity checks or transforms."""
     events = sorted((e for e in events if e['label'] == base['measured']['condition']),
                     key=lambda e: int(e['event_index']))
     if len(events) != 10:
         raise ValueError('exact ten MA event identities per session required')
-    return [(i, e) for i, e in enumerate(events)
-            if i not in base['measured']['heldout_trial_positions']]
+    selected = [(i, e) for i, e in enumerate(events)
+                if i not in base['measured']['heldout_trial_positions']]
+    if alignment_reports is not None:
+        from src.data.event_alignment import ADMISSIBLE_ALIGNMENT_CASES, window_within_alignment_support
+        if not alignment_reports or any(
+                r.get('alignment_case') not in ADMISSIBLE_ALIGNMENT_CASES or
+                not r.get('label_sequence_match') for r in alignment_reports):
+            raise ValueError('training record has no admissible event alignment')
+        if not all(window_within_alignment_support(e, -5., 30.) for _, e in selected):
+            raise ValueError('training window crosses verified alignment support')
+    return selected
 
 
 def local_eeg_feature(eeg, names, cfg, mask_name=None):
@@ -126,7 +135,8 @@ def local_eeg_feature(eeg, names, cfg, mask_name=None):
 
 
 def load_training_subject(subject, cfg, base, measured, metadata, *, retain_native=False,
-                          retain_feature_boundary=False, data_root=None):
+                          retain_feature_boundary=False, data_root=None,
+                          processing_schema='homer2_alignment_contract_v1'):
     """Single native entry for this diagnostic; scope checked before any reader.
 
     Native files store entire sessions. Only the original eight training windows
@@ -147,7 +157,10 @@ def load_training_subject(subject, cfg, base, measured, metadata, *, retain_nati
     trials, identities, sources = [], [], {}
     channel_identity = None
     for record in records:
-        events = training_events(index.events_by_join_key[record.join_key], base)
+        reports = (index.reports_by_join_key.get(record.join_key, [])
+                   if processing_schema == 'physiology_measurement_alignment_v3' else None)
+        events = training_events(index.events_by_join_key[record.join_key], base,
+                                 alignment_reports=reports)
         native = load_native_eeg_record(data_root, record)
         with np.load(record.npz_path, allow_pickle=False) as arrays:
             paired, pairs = _pair_single_trial_wavelengths(arrays['native_input_fnirs'], arrays['native_channel_names'])
@@ -172,8 +185,12 @@ def load_training_subject(subject, cfg, base, measured, metadata, *, retain_nati
             for mask in (None, 'center_EEG', 'center_fNIRS'):
                 features = step5.preprocess_native_trial(
                     eeg, fnirs, mask_name=mask,
-                    retain_feature_boundary=retain_feature_boundary and mask is None)
-                features['local_eeg'] = local_eeg_feature(eeg, native.channel_names, cfg, mask)
+                    retain_feature_boundary=retain_feature_boundary and mask is None,
+                    processing_schema=processing_schema,eeg_unit=native.native_unit,
+                    eeg_unit_evidence=native.unit_evidence)
+                unit_factor = (features['eeg_feature_contract']['unit_conversion']['factor']
+                               if processing_schema == 'physiology_measurement_alignment_v3' else 1.)
+                features['local_eeg'] = local_eeg_feature(eeg * unit_factor, native.channel_names, cfg, mask)
                 views[mask or 'target'] = features
             trials.append(dict(views=views, eligible=np.all(fnirs > 0, axis=(0, 2)),
                                session=record.base_record_id, ordinal=ordinal))
@@ -189,11 +206,15 @@ def load_training_subject(subject, cfg, base, measured, metadata, *, retain_nati
                 original_ma_trial_position=position, training_ordinal=ordinal,
                 event_index=int(event['event_index']), native_start_samples=starts,
                 eeg_time_ms=event['eeg_time_ms'], fnirs_time_ms=event['fnirs_time_ms'],
+                feature_contract=views['target'].get('eeg_feature_contract'),
                 sample_id=f"{record.join_key}|event={event['event_index']}|offset=-5.0|duration=30.0"))
     if len(trials) != 24:
         raise ValueError('exact 24 original training trials required')
     detail = dict(subject=subject, trials=identities, source_sha256=sources,
                   eeg_channels=channel_identity[0], fnirs_pairs=channel_identity[1],
+                  eeg_reference=native.reference, eeg_native_unit=native.native_unit,
+                  eeg_unit_evidence=native.unit_evidence,
+                  spatial_interpretation='fixed trained PCA and optical pair; no anatomical co-registration claim',
                   eog_channels=list(native.auxiliary_channel_names),
                   original_heldout_trials_processed=0,
                   source_storage='whole native session files; only original training windows processed')

@@ -16,6 +16,7 @@ from scipy.signal import butter, sosfiltfilt
 
 
 HOMER2_ALIGNMENT_SCHEMA = "homer2_alignment_contract_v1"
+MEASUREMENT_ALIGNMENT_SCHEMA = "physiology_measurement_alignment_v3"
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,8 @@ class Homer2PreprocessResult:
     quality: Mapping[str, Any]
     pre_linear_values: np.ndarray | None = None
     pre_linear_optical_density: np.ndarray | None = None
+    recorded_mask: np.ndarray | None = None
+    processed_valid_mask: np.ndarray | None = None
 
 
 def get_homer2_dataset_compatibility(dataset_id: str) -> Homer2DatasetCompatibility:
@@ -273,6 +276,11 @@ def modified_beer_lambert(
     wavelengths_nm: Sequence[float],
     source_detector_distance_cm: float = 3.0,
     partial_pathlength_factor: float = 6.0,
+    extinction_coefficients: np.ndarray | None = None,
+    extinction_unit: str | None = None,
+    od_log_base: str = "e",
+    coefficient_log_base: str = "e",
+    coefficient_source: str = "",
 ) -> tuple[np.ndarray, dict[str, Any]]:
     """Convert OD pairs to relative HbO/HbR estimates via an explicit MBLL assumption."""
     od = _as_float_array(optical_density)
@@ -281,19 +289,47 @@ def modified_beer_lambert(
     wavelengths = tuple(float(item) for item in wavelengths_nm)
     if len(wavelengths) != od.shape[2] or len(wavelengths) < 2:
         raise ValueError("wavelength count must match the OD wavelength axis and include at least two wavelengths")
-    coefficients = []
-    for wavelength in wavelengths[:2]:
-        nearest = min(DEFAULT_EXTINCTION_COEFFICIENTS, key=lambda key: abs(key - wavelength))
-        coefficients.append(DEFAULT_EXTINCTION_COEFFICIENTS[nearest])
-    extinction = np.asarray(coefficients, dtype=np.float64)
+    if len(wavelengths) != 2 or len(set(wavelengths)) != 2:
+        raise ValueError("this MBLL contract requires exactly two distinct wavelengths")
+    if not (np.isfinite(source_detector_distance_cm) and source_detector_distance_cm > 0
+            and np.isfinite(partial_pathlength_factor) and partial_pathlength_factor > 0):
+        raise ValueError("MBLL distance and pathlength factor must be positive and finite")
+    if od_log_base not in ("e", "10") or coefficient_log_base not in ("e", "10"):
+        raise ValueError("explicit natural or base-10 OD/coefficient convention required")
+    if extinction_coefficients is None:
+        if any(w not in DEFAULT_EXTINCTION_COEFFICIENTS for w in wavelengths):
+            raise ValueError("unknown wavelength: no silent nearest-wavelength substitution")
+        extinction = np.array([DEFAULT_EXTINCTION_COEFFICIENTS[w] for w in wavelengths])
+        output_unit = "relative_Hb_repo_approximation"
+        source = "repo_approximate_table_for_alignment_audit_not_subject_calibrated"
+    else:
+        extinction = np.asarray(extinction_coefficients, dtype=np.float64)
+        if extinction_unit != "1/(M cm)" or not coefficient_source:
+            raise ValueError("physical MBLL requires coefficient units 1/(M cm) and a source")
+        if extinction.shape != (2, 2) or not np.isfinite(extinction).all():
+            raise ValueError("extinction coefficients must be finite [wavelength, HbO/HbR]")
+        output_unit, source = "uM", coefficient_source
+    if np.linalg.matrix_rank(extinction) != 2:
+        raise ValueError("rank deficient extinction matrix")
+    log_factor = (np.log(10.) if od_log_base == "10" else 1.) / (
+        np.log(10.) if coefficient_log_base == "10" else 1.)
     pathlength = float(source_detector_distance_cm) * float(partial_pathlength_factor)
-    transform = np.linalg.pinv(extinction * pathlength)
+    transform = np.linalg.pinv(extinction * pathlength) * log_factor
+    if output_unit == "uM":
+        transform *= 1e6
     concentration = od[:, :, :2] @ transform.T
     quality = {
         "wavelengths_nm": list(wavelengths[:2]),
         "source_detector_distance_cm": float(source_detector_distance_cm),
         "partial_pathlength_factor": float(partial_pathlength_factor),
-        "extinction_coefficients_source": "repo_approximate_table_for_alignment_audit_not_subject_calibrated",
+        "extinction_coefficients_source": source,
+        "extinction_coefficients": extinction.tolist(),
+        "extinction_unit": extinction_unit or "unverified_relative_table",
+        "od_log_base": od_log_base,
+        "coefficient_log_base": coefficient_log_base,
+        "output_unit": output_unit,
+        "transform": transform.tolist(),
+        "absolute_baseline_concentration_known": False,
         "condition_number": float(np.linalg.cond(extinction * pathlength)),
     }
     return concentration, quality
@@ -312,9 +348,19 @@ def apply_homer2_aligned_contract(
     source_detector_distance_cm: float = 3.0,
     partial_pathlength_factor: float = 6.0,
     retain_feature_boundary: bool = False,
+    processing_schema: str = HOMER2_ALIGNMENT_SCHEMA,
+    native_unit: str = "unknown",
+    unit_evidence: str = "",
+    valid_mask: np.ndarray | None = None,
 ) -> Homer2PreprocessResult:
     """Apply the best available HOMER2-aligned branch for one fNIRS record."""
     compatibility = get_homer2_dataset_compatibility(dataset_id)
+    if processing_schema not in (HOMER2_ALIGNMENT_SCHEMA, MEASUREMENT_ALIGNMENT_SCHEMA):
+        raise ValueError("unsupported measurement alignment schema")
+    if entry_stage not in ("raw_intensity", "optical_density", "chromophore", "absorbance"):
+        raise ValueError("explicit intensity, OD, chromophore or absorbance entry required")
+    if entry_stage == "raw_intensity" and dataset_id != "eeg_fnirs_single_trial":
+        raise ValueError("released chromophores cannot re-enter intensity/MBLL processing")
     array = _as_float_array(values)
     applied: list[str] = []
     skipped: list[str] = []
@@ -324,9 +370,28 @@ def apply_homer2_aligned_contract(
         "compatibility": compatibility.to_dict(),
     }
     working = array
+    recorded = np.isfinite(array)
+    if valid_mask is not None:
+        supplied = np.asarray(valid_mask,dtype=bool)
+        if supplied.ndim == 1:
+            supplied = supplied.reshape((-1,)+(1,)*(array.ndim-1))
+        recorded &= np.broadcast_to(supplied,array.shape)
+    if entry_stage == 'raw_intensity':
+        recorded &= array > 0
+    if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA:
+        working = np.where(recorded,array,np.nan)
+        quality['recorded_fraction'] = float(recorded.mean())
+        quality['missing_policy'] = 'mask_before_nonlinear_processing; visible_only_interpolation; no_new_measurements'
+    if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA and entry_stage == "chromophore":
+        from .physiology_measurement_adapter import measurement_unit_conversion
+        conversion = measurement_unit_conversion(native_unit, quantity="concentration_change",
+                                                  evidence=unit_evidence, group=dataset_id)
+        working = working * conversion['factor']
+        quality['unit_conversion'] = conversion
 
     if entry_stage == "raw_intensity":
-        od, od_quality = intensity_to_optical_density(working)
+        od, od_quality = intensity_to_optical_density(
+            working,epsilon=np.finfo(float).tiny if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA else 1e-9)
         working = od
         applied.append("intensity_to_optical_density")
         quality["intensity_to_optical_density"] = od_quality
@@ -341,10 +406,24 @@ def apply_homer2_aligned_contract(
     else:
         skipped.append("robust_derivative_motion_suppression")
 
-    # Opt-in diagnostic view after all data-dependent nonlinear processing.
-    # The established output path/order and its float32 boundary stay intact.
+    # Keep the old branch's rounding/order for retained replay. New measurement
+    # coordinates apply MBLL before linear filtering and remain float64.
     pre_linear = np.array(working, dtype=float, copy=True) if retain_feature_boundary else None
-    pre_od = pre_linear.copy() if retain_feature_boundary and entry_stage == "raw_intensity" else None
+    pre_od = pre_linear.copy() if retain_feature_boundary and entry_stage in ("raw_intensity", "optical_density") else None
+    optical = entry_stage in ("raw_intensity", "optical_density")
+    new_measurement = processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA
+    if optical and (array.ndim != 3 or array.shape[-1] != 2):
+        raise ValueError("intensity/OD requires [time, pair, two wavelengths]")
+    if optical and new_measurement:
+        working, mbll_quality = modified_beer_lambert(
+            working, wavelengths_nm=wavelengths_nm,
+            source_detector_distance_cm=source_detector_distance_cm,
+            partial_pathlength_factor=partial_pathlength_factor)
+        if retain_feature_boundary:
+            pre_linear = working.copy()
+        working = working.reshape(len(working), -1)
+        quality['modified_beer_lambert'] = mbll_quality
+        applied.append('modified_beer_lambert')
     working, filter_quality = bandpass_fnirs(
         working,
         sample_rate_hz=sample_rate_hz,
@@ -357,7 +436,7 @@ def apply_homer2_aligned_contract(
         skipped.append("bandpass")
     quality["bandpass"] = filter_quality
 
-    if entry_stage == "raw_intensity" and working.ndim == 3:
+    if optical and not new_measurement:
         concentration, mbll_quality = modified_beer_lambert(
             working,
             wavelengths_nm=wavelengths_nm,
@@ -373,14 +452,14 @@ def apply_homer2_aligned_contract(
             )
         applied.append("modified_beer_lambert")
         quality["modified_beer_lambert"] = mbll_quality
-    else:
+    elif not (optical and new_measurement):
         skipped.append("modified_beer_lambert")
         if entry_stage != "raw_intensity":
             missing.append("pre_conversion_optical_density")
         elif working.ndim != 3:
             missing.append("wavelength_axis")
 
-    output = np.asarray(working, dtype=np.float32)
+    output = np.asarray(working, dtype=np.float64 if new_measurement else np.float32)
     quality["output_finite_fraction"] = float(np.isfinite(output).mean())
     quality["output_channel_std_median"] = float(np.median(np.nanstd(output.reshape(output.shape[0], -1), axis=0)))
     state = Homer2AlignmentState(
@@ -397,10 +476,29 @@ def apply_homer2_aligned_contract(
             "wavelengths_nm": [float(item) for item in wavelengths_nm],
             "source_detector_distance_cm": float(source_detector_distance_cm),
             "partial_pathlength_factor": float(partial_pathlength_factor),
+            "input_dtype": str(np.asarray(values).dtype),
+            "feature_dtype": "float64",
+            "output_dtype": str(output.dtype),
+            "native_unit": native_unit,
+            "unit_evidence": unit_evidence,
+            "linear_order": "MBLL_then_filter" if new_measurement and optical else "filter_then_MBLL_or_published_Hb",
+            "time_support_seconds": len(array)/float(sample_rate_hz),
+            "low_frequency_cycles_in_support": len(array)/float(sample_rate_hz)*float(low_hz),
+            "causal": False,
+            "filter_edge_policy": "scipy_sosfiltfilt_odd_padding_within_declared_input_support",
         },
         input_shape=tuple(int(item) for item in array.shape),
         output_shape=tuple(int(item) for item in output.shape),
+        schema=processing_schema,
     )
+    # A two-sided IIR output depends on the whole admitted input interval. Any
+    # imputed value therefore invalidates strict processed support for that
+    # channel, while the original sample support remains available separately.
+    supported = recorded.all(axis=0)
+    if optical:
+        supported = np.repeat(supported.all(axis=-1),2)
+    supported = np.broadcast_to(supported.reshape(-1),output.shape).copy()
     return Homer2PreprocessResult(values=output, state=state, quality=quality,
                                  pre_linear_values=pre_linear,
-                                 pre_linear_optical_density=pre_od)
+                                 pre_linear_optical_density=pre_od,
+                                 recorded_mask=recorded,processed_valid_mask=supported)

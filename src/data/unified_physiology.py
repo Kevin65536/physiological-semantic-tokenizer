@@ -28,7 +28,8 @@ import numpy as np
 from scipy.io import loadmat
 from scipy.signal import butter, resample_poly, sosfiltfilt
 
-from .clean_physiology_cache import CleanCacheRecord, CleanPhysiologyCacheIndex
+from .clean_physiology_cache import (CleanCacheRecord, CleanPhysiologyCacheIndex,
+                                    DEFAULT_CLEAN_CACHE_ROOT, MEASUREMENT_CACHE_STORAGE)
 from .event_alignment import ADMISSIBLE_ALIGNMENT_CASES, window_within_alignment_support
 from .eeg_artifact_preprocessing import (
     EEGArtifactCleaningConfig,
@@ -48,6 +49,7 @@ RAW_DATASET_IDS: tuple[str, ...] = (
 )
 
 UNIFIED_PHYSIOLOGY_SCHEMA = "unified_physiology_window_v2"
+MEASUREMENT_WINDOW_SCHEMA = "unified_physiology_measurement_window_v3"
 EEG_ARTIFACT_MASK_POLICY = "disabled_all_false_no_invalid_authority_v1"
 REFED_CONTINUOUS_SEQUENCE_SCHEMA = "refed_continuous_va_sequence_v2"
 REFED_CONTINUOUS_TARGET_NAMES = ("valence", "arousal")
@@ -155,6 +157,9 @@ class NativeEEGRecord:
     source_path: Path
     auxiliary_values: np.ndarray | None = None
     auxiliary_channel_names: tuple[str, ...] = ()
+    unit_evidence: str = ""
+    channel_units: tuple[str, ...] = ()
+    reference: str = "unreported"
 
 
 @dataclass(frozen=True)
@@ -165,7 +170,8 @@ class UnifiedWindowRef:
 
 
 def _first_mat_value(path: Path, key: str | None = None) -> Any:
-    payload = loadmat(path, squeeze_me=True, struct_as_record=False)
+    payload = loadmat(path, squeeze_me=True, struct_as_record=False,
+                      variable_names=[key] if key is not None else None)
     if key is None:
         key = next(name for name in payload if not name.startswith("__"))
     value = payload[key]
@@ -285,9 +291,25 @@ def preprocess_eeg_record_with_quality(
     signal_branch: str = "raw_with_ocular_artifact",
     artifact_config: EEGArtifactCleaningConfig | None = None,
     channel_positions: np.ndarray | None = None,
+    output_coordinate: str = "legacy_robust",
 ) -> tuple[np.ndarray, dict[str, Any], dict[str, np.ndarray]]:
     if signal_branch not in SUPPORTED_EEG_SIGNAL_BRANCHES:
         raise ValueError(f"unsupported EEG signal branch: {signal_branch!r}")
+    if output_coordinate not in ('legacy_robust','measurement'):
+        raise ValueError('unknown EEG output coordinate')
+    conversions = []
+    original_support = np.isfinite(record.values)
+    if output_coordinate == 'measurement':
+        from .physiology_measurement_adapter import measurement_unit_conversion
+        units = record.channel_units or (record.native_unit,)*record.values.shape[1]
+        if len(units) != record.values.shape[1]:
+            raise ValueError('per-channel unit count does not match EEG channels')
+        conversions = [measurement_unit_conversion(u,quantity='electric_potential',
+                       evidence=record.unit_evidence,group=record.native_unit) for u in units]
+        factors = np.array([s['factor'] for s in conversions])
+        record = replace(record,values=record.values*factors,
+                         auxiliary_values=(record.auxiliary_values*factors[0]
+                                           if record.auxiliary_values is not None else None))
     finite, repaired = _interpolate_nonfinite(record.values)
     artifact_mask = np.zeros(len(finite), dtype=bool)
     bad_channel_mask = np.zeros(finite.shape[1], dtype=bool)
@@ -303,6 +325,10 @@ def preprocess_eeg_record_with_quality(
     }:
         if record.auxiliary_values is None or not record.auxiliary_channel_names:
             raise ValueError("EEG artifact-clean branches require retained EOG auxiliary channels")
+        if output_coordinate == 'measurement' and not np.isfinite(record.auxiliary_values).all():
+            # EOG regression couples its fitted nuisance support to every EEG
+            # output; repaired auxiliary values are not new measurements.
+            original_support[:] = False
         resolved_config = artifact_config or EEGArtifactCleaningConfig()
         if signal_branch == SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1:
             resolved_config = simultaneous_eeg_eog_cleaning_config(resolved_config)
@@ -338,6 +364,7 @@ def preprocess_eeg_record_with_quality(
             eog_channel_names=record.auxiliary_channel_names,
             channel_positions=channel_positions,
             config=resolved_config,
+            output_dtype='float64' if output_coordinate == 'measurement' else 'float32',
         )
         filtered = np.asarray(cleaned.cleaned_values, dtype=np.float64)
         bad_channel_mask = cleaned.bad_channel_mask
@@ -377,12 +404,22 @@ def preprocess_eeg_record_with_quality(
     else:
         filtered = _bandpass(finite, record.sample_rate_hz, CANONICAL_EEG_BAND_HZ)
     resampled = _resample(filtered, record.sample_rate_hz, CANONICAL_EEG_SAMPLE_RATE_HZ)
-    canonical, state = _robust_standardize(resampled)
+    if output_coordinate == 'measurement':
+        canonical = np.asarray(resampled,dtype=np.float64)
+        state = dict(canonical_unit=conversions[0]['output_unit'] if len({s['output_unit'] for s in conversions}) == 1
+                     else 'per_channel_measurement_units',unit_conversions=conversions,
+                     scaling='none; consumer fits training-only scale',output_dtype='float64')
+    else:
+        canonical, state = _robust_standardize(resampled)
     canonical_artifact_mask = _resample_boolean_mask(
         artifact_mask, record.sample_rate_hz, CANONICAL_EEG_SAMPLE_RATE_HZ
     )
     state.update({
         "native_unit": record.native_unit,
+        "unit_evidence": record.unit_evidence,
+        "channel_units": list(record.channel_units),
+        "reference": record.reference,
+        "auxiliary_channel_names": list(record.auxiliary_channel_names),
         "native_sample_rate_hz": float(record.sample_rate_hz),
         "canonical_sample_rate_hz": CANONICAL_EEG_SAMPLE_RATE_HZ,
         "filter_band_hz": list(CANONICAL_EEG_BAND_HZ),
@@ -395,6 +432,7 @@ def preprocess_eeg_record_with_quality(
     return canonical, state, {
         "artifact_mask": canonical_artifact_mask,
         "bad_channel_mask": bad_channel_mask.astype(bool),
+        "processed_valid_mask": np.broadcast_to(original_support.all(axis=0),canonical.shape).copy(),
     }
 
 
@@ -409,11 +447,19 @@ def preprocess_fnirs_record(
     *,
     sample_rate_hz: float,
     native_contract: Mapping[str, Any],
+    output_coordinate: str = "legacy_robust",
 ) -> tuple[np.ndarray, dict[str, Any]]:
     # The clean-cache branch has already applied the best available common
     # 0.01-0.2 Hz/motion/HbO-HbR path.  Re-filtering would double-filter it.
     resampled = _resample(_as_time_channels(values), sample_rate_hz, CANONICAL_FNIRS_SAMPLE_RATE_HZ)
-    canonical, state = _robust_standardize(resampled)
+    if output_coordinate == 'measurement':
+        canonical = np.asarray(resampled,dtype=np.float64)
+        state = dict(canonical_unit=native_contract.get('output_unit','relative_unknown'),
+                     scaling='none; consumer fits frozen paired training scale',output_dtype='float64')
+    elif output_coordinate == 'legacy_robust':
+        canonical, state = _robust_standardize(resampled)
+    else:
+        raise ValueError('unknown fNIRS output coordinate')
     state.update({
         "native_contract": dict(native_contract),
         "native_sample_rate_hz": float(sample_rate_hz),
@@ -441,8 +487,10 @@ def _single_trial_eeg(project_root: Path, record: CleanCacheRecord) -> NativeEEG
         values=values[:, eeg_keep],
         sample_rate_hz=float(session.fs),
         channel_names=tuple(canonical_channel_name(name) for name, selected in zip(names, eeg_keep) if selected),
-        native_unit=str(getattr(session, "yUnit", "uV") or "uV"),
+        native_unit=str(getattr(session, "yUnit", "") or "unknown"),
         source_path=path,
+        unit_evidence="MAT cnt.yUnit" if getattr(session, "yUnit", "") else "",
+        reference="linked_mastoids; original dataset documentation",
         auxiliary_values=values[:, eog_keep],
         auxiliary_channel_names=tuple(canonical_channel_name(name) for name, selected in zip(names, eog_keep) if selected),
     )
@@ -462,8 +510,10 @@ def _simultaneous_eeg(project_root: Path, record: CleanCacheRecord) -> NativeEEG
         channel_names=tuple(
             canonical_channel_name(name) for name, selected in zip(names, ~auxiliary) if selected
         ),
-        native_unit=str(getattr(payload, "yUnit", "uV") or "uV"),
+        native_unit=str(getattr(payload, "yUnit", "") or "unknown"),
         source_path=path,
+        unit_evidence="MAT cnt.yUnit" if getattr(payload, "yUnit", "") else "",
+        reference="TP9; Dataset description_MATLAB.pdf",
         auxiliary_values=values[:, auxiliary],
         auxiliary_channel_names=tuple(
             canonical_channel_name(name) for name, selected in zip(names, auxiliary) if selected
@@ -487,8 +537,9 @@ def _refed_eeg(project_root: Path, record: CleanCacheRecord) -> NativeEEGRecord:
         values=_as_time_channels(values),
         sample_rate_hz=1000.0,
         channel_names=_refed_eeg_names(project_root, values.shape[1]),
-        native_unit="V",
+        native_unit="unknown_REFED_EEG_export",
         source_path=path,
+        reference="AFz; REFED original paper section 3.2",
     )
 
 
@@ -524,7 +575,10 @@ def _read_edf(path: Path) -> tuple[np.ndarray, float, list[str], list[str]]:
     channels = []
     for index in candidates:
         digital = np.asarray(raw[:, offsets[index] : offsets[index + 1]], dtype=np.float64).reshape(-1)
-        denominator = max(digital_max[index] - digital_min[index], 1.0)
+        denominator = digital_max[index] - digital_min[index]
+        if (not np.isfinite([denominator,physical_min[index],physical_max[index]]).all()
+                or denominator <= 0 or physical_max[index] <= physical_min[index]):
+            raise ValueError(f"invalid EDF physical/digital calibration: {path}, {labels[index]}")
         physical = (digital - digital_min[index]) * (physical_max[index] - physical_min[index]) / denominator + physical_min[index]
         channel_rate = samples_per_record[index] / duration
         physical = _resample(physical[:, None], channel_rate, sample_rate)[:, 0]
@@ -573,6 +627,8 @@ def _visual_eeg(project_root: Path, record: CleanCacheRecord) -> NativeEEGRecord
         channel_names=canonical_names,
         native_unit=unique_units[0] if len(unique_units) == 1 else "/".join(unique_units),
         source_path=candidates[0],
+        unit_evidence="EDF physical_dimension; per-channel physical/digital extrema",
+        channel_units=tuple(units),
     )
 
 
@@ -614,7 +670,7 @@ def _slice_window(values: np.ndarray, onset_ms: float, duration_s: float, sample
     length = max(1, int(round(float(duration_s) * float(sample_rate_hz))))
     start = int(round(float(onset_ms) / 1000.0 * float(sample_rate_hz)))
     stop = start + length
-    output = np.zeros((length, values.shape[1]), dtype=np.float32)
+    output = np.zeros((length, values.shape[1]), dtype=values.dtype)
     mask = np.zeros(length, dtype=bool)
     src_start = max(start, 0)
     src_stop = min(stop, values.shape[0])
@@ -695,7 +751,7 @@ class ChannelGeometryIndex:
                 "coordinate_units": row.get("coordinate_units", "unavailable"),
                 "source_index": row.get("source_index"),
                 "detector_index": row.get("detector_index"),
-                "position_available": any(row.get(axis) is not None for axis in ("x", "y", "z")),
+                "position_available": all(row.get(axis) is not None and np.isfinite(row[axis]) for axis in ("x", "y", "z")),
                 "coordinate_status": metadata.get(
                     "coordinate_status",
                     "source_geometry" if row else "unavailable",
@@ -847,7 +903,7 @@ class UnifiedPhysiologyWindowDataset:
 
     def __init__(
         self,
-        cache_root: str | Path = "data/cache/physiology_semantic_clean_v1",
+        cache_root: str | Path = DEFAULT_CLEAN_CACHE_ROOT,
         *,
         dataset_ids: Sequence[str] = RAW_DATASET_IDS,
         window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
@@ -860,12 +916,16 @@ class UnifiedPhysiologyWindowDataset:
         require_paired_timestamps: bool = True,
         include_event_types: set[str] | None = None,
         admissible_alignment_cases: set[str] | frozenset[str] | None = DEFAULT_ADMISSIBLE_ALIGNMENT_CASES,
+        output_coordinate: str = "measurement",
     ) -> None:
         requested = tuple(str(value) for value in dataset_ids)
         invalid = sorted(set(requested) - set(RAW_DATASET_IDS))
         if invalid:
             raise ValueError(f"only the four original datasets are supported; invalid={invalid}")
         self.cache_root = Path(cache_root)
+        if output_coordinate not in ('legacy_robust','measurement'):
+            raise ValueError('unknown unified output coordinate')
+        self.output_coordinate = output_coordinate
         self.project_root = Path(__file__).resolve().parents[2]
         self.index = CleanPhysiologyCacheIndex(self.cache_root)
         self.geometry_index = ChannelGeometryIndex(self.cache_root)
@@ -966,10 +1026,44 @@ class UnifiedPhysiologyWindowDataset:
         cached = self._record_cache.get(record.join_key)
         if cached is not None:
             return cached
-        self._assert_required_single_trial_artifact_cache(record)
-        arrays = self.index.load_record_arrays(record)
+        if record.manifest.get("storage") == MEASUREMENT_CACHE_STORAGE:
+            if self.output_coordinate != "measurement":
+                raise ValueError("Current measurement caches cannot be reinterpreted as legacy robust inputs")
+            from .homer2_preprocessing import MEASUREMENT_ALIGNMENT_SCHEMA
+            if record.manifest.get("processing_schema") != MEASUREMENT_ALIGNMENT_SCHEMA:
+                raise ValueError("Unsupported measurement producer")
+            meta = record.manifest["measurement"]
+            expected_branch = (self.eeg_signal_branch if record.dataset_id == "eeg_fnirs_single_trial"
+                               else SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1 if record.dataset_id == "simultaneous_eeg_nirs"
+                               else "raw_with_ocular_artifact")
+            if meta["eeg_preprocessing_state"]["signal_branch"] != expected_branch or self.eeg_artifact_config is not None:
+                raise ValueError("Requested EEG processing differs from the frozen measurement cache")
+            arrays = self.index.load_record_arrays(record)
+            eeg, fnirs = arrays["eeg"], arrays["fnirs"]
+            if eeg.dtype != np.float64 or fnirs.dtype != np.float64:
+                raise ValueError("Measurement cache requires native float64 production")
+            payload = dict(meta, eeg=eeg, fnirs=fnirs,
+                eeg_quality={"processed_valid_mask": np.broadcast_to(arrays["eeg_supported_channels"], eeg.shape),
+                             "bad_channel_mask": arrays["eeg_bad_channel_mask"]},
+                fnirs_processed_valid_mask=np.broadcast_to(arrays["fnirs_supported_channels"], fnirs.shape),
+                eeg_geometry=self.geometry_index.for_channels(record=record, modality="eeg", channel_names=meta["eeg_channel_names"]))
+            if len(self._record_cache) >= 2:
+                self._record_cache.pop(next(iter(self._record_cache)))
+            self._record_cache[record.join_key] = payload
+            return payload
+        coordinate = getattr(self,'output_coordinate','legacy_robust')
+        if coordinate == 'measurement':
+            from .homer2_preprocessing import MEASUREMENT_ALIGNMENT_SCHEMA
+            if record.manifest.get('processing_schema') != MEASUREMENT_ALIGNMENT_SCHEMA:
+                raise ValueError('measurement coordinates require a fresh float64 v3 producer; no legacy inverse')
+        else:
+            self._assert_required_single_trial_artifact_cache(record)
+        arrays = self.index.load_record_arrays(record, ("homer2_aligned_fnirs", "homer2_channel_names", "processed_valid_mask"))
         if "homer2_aligned_fnirs" not in arrays:
             raise KeyError(f"missing homer2_aligned_fnirs: {record.npz_path}")
+        if coordinate == 'measurement' and (
+                arrays['homer2_aligned_fnirs'].dtype != np.float64 or 'processed_valid_mask' not in arrays):
+            raise ValueError('measurement cache requires float64 output and explicit processed support')
         fnirs_names = canonical_fnirs_channel_names(
             [str(value) for value in arrays.get("homer2_channel_names", record.manifest.get("homer2_channel_names", []))]
         )
@@ -979,7 +1073,10 @@ class UnifiedPhysiologyWindowDataset:
         fnirs, fnirs_state = preprocess_fnirs_record(
             arrays["homer2_aligned_fnirs"],
             sample_rate_hz=record.sample_rate_hz,
-            native_contract=record.manifest.get("native_contract", {}),
+            native_contract=(record.manifest['homer2_aligned_contract']['quality'].get('unit_conversion',
+                record.manifest['homer2_aligned_contract']['quality'].get('modified_beer_lambert',{}))
+                if coordinate == 'measurement' else record.manifest.get("native_contract", {})),
+            output_coordinate=coordinate,
         )
         if record.dataset_id == "eeg_fnirs_single_trial":
             eeg_branch = self.eeg_signal_branch
@@ -987,8 +1084,8 @@ class UnifiedPhysiologyWindowDataset:
             eeg_branch = SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1
         else:
             eeg_branch = "raw_with_ocular_artifact"
-        cached_eeg = self._load_cached_single_trial_eeg(record, eeg_branch)
-        if cached_eeg is None:
+        cached_eeg = self._load_cached_single_trial_eeg(record, eeg_branch) if coordinate == 'legacy_robust' else None
+        if cached_eeg is None and coordinate == 'legacy_robust':
             cached_eeg = self._load_cached_simultaneous_eeg(record, eeg_branch)
         if cached_eeg is not None:
             eeg, eeg_names, eeg_state, eeg_quality = cached_eeg
@@ -996,7 +1093,8 @@ class UnifiedPhysiologyWindowDataset:
                 self._eeg_artifact_cache_record_keys.add(record.join_key)
         else:
             if (
-                self.require_eeg_artifact_cache
+                coordinate == 'legacy_robust'
+                and self.require_eeg_artifact_cache
                 and record.dataset_id == "eeg_fnirs_single_trial"
                 and eeg_branch
                 in {
@@ -1023,6 +1121,7 @@ class UnifiedPhysiologyWindowDataset:
                 signal_branch=eeg_branch,
                 artifact_config=self.eeg_artifact_config,
                 channel_positions=eeg_positions,
+                output_coordinate=coordinate,
             )
         eeg_geometry = self.geometry_index.for_channels(
             record=record, modality="eeg", channel_names=eeg_names
@@ -1037,6 +1136,9 @@ class UnifiedPhysiologyWindowDataset:
             "fnirs_preprocessing_state": fnirs_state,
             "eeg_quality": eeg_quality,
             "eeg_geometry": eeg_geometry,
+            "fnirs_processed_valid_mask":np.broadcast_to(
+                np.asarray(arrays.get('processed_valid_mask',np.ones_like(arrays['homer2_aligned_fnirs'],dtype=bool))).all(axis=0),
+                fnirs.shape).copy(),
         }
         # Keep memory bounded while allowing repeated events from one record.
         if len(self._record_cache) >= 2:
@@ -1367,8 +1469,15 @@ class UnifiedPhysiologyWindowDataset:
         # and have no authority over measurement validity.
         eeg_artifact_mask = np.zeros_like(eeg_mask)
         label = canonical_label(ref.event, ref.record.dataset_id)
+        measurement = getattr(self,'output_coordinate','legacy_robust') == 'measurement'
+        channel_support = {}
+        if measurement:
+            for modality,signal,anchor,rate,support in (
+                ('eeg',eeg,eeg_time_ms,CANONICAL_EEG_SAMPLE_RATE_HZ,record_data['eeg_quality']['processed_valid_mask']),
+                ('fnirs',fnirs,fnirs_time_ms,CANONICAL_FNIRS_SAMPLE_RATE_HZ,record_data['fnirs_processed_valid_mask'])):
+                channel_support[modality] = _slice_window(support,anchor,self.window_duration_s,rate)[0].astype(bool)
         return {
-            "schema": UNIFIED_PHYSIOLOGY_SCHEMA,
+            "schema": MEASUREMENT_WINDOW_SCHEMA if measurement else UNIFIED_PHYSIOLOGY_SCHEMA,
             "eeg": eeg,
             "fnirs": fnirs,
             "valid_mask": {"eeg": eeg_mask, "fnirs": fnirs_mask},
@@ -1384,7 +1493,11 @@ class UnifiedPhysiologyWindowDataset:
                 "eeg": CANONICAL_EEG_SAMPLE_RATE_HZ,
                 "fnirs": CANONICAL_FNIRS_SAMPLE_RATE_HZ,
             },
-            "unit": {"eeg": CANONICAL_UNIT, "fnirs": CANONICAL_UNIT},
+            "unit": {m:record_data[m+'_preprocessing_state']['canonical_unit'] if measurement else CANONICAL_UNIT
+                     for m in ('eeg','fnirs')},
+            "channel_valid_mask":channel_support,
+            "coordinate_layer":"cleaned_measurement" if measurement else 'record_robust_model',
+            "teacher_target_status":"not_generated_no_qualification",
             "channel_names": {
                 "eeg": list(record_data["eeg_channel_names"]),
                 "fnirs": list(record_data["fnirs_channel_names"]),
@@ -1426,7 +1539,12 @@ class UnifiedPhysiologyWindowDataset:
                     )
                 },
             },
-            "preprocessing_contract": CANONICAL_PREPROCESSING.to_dict(),
+            "preprocessing_contract": (dict(schema=MEASUREMENT_WINDOW_SCHEMA,
+                coordinate='cleaned measurement in verified units or separate relative groups',
+                scaling='identity; fit paired consumer scale on declared training support only',
+                dtype='float64',channel_support='channel_valid_mask',
+                support_scope='continuous admitted record; not causal or time-split safe')
+                if measurement else CANONICAL_PREPROCESSING.to_dict()),
             "preprocessing_state": {
                 "eeg": record_data["eeg_preprocessing_state"],
                 "fnirs": record_data["fnirs_preprocessing_state"],
@@ -1434,11 +1552,12 @@ class UnifiedPhysiologyWindowDataset:
         }
 
     def contract_summary(self) -> dict[str, Any]:
+        measurement = self.output_coordinate == 'measurement'
         counts = {dataset_id: 0 for dataset_id in self.dataset_ids}
         for window in self.windows:
             counts[window.record.dataset_id] += 1
         return {
-            "schema": UNIFIED_PHYSIOLOGY_SCHEMA,
+            "schema": MEASUREMENT_WINDOW_SCHEMA if measurement else UNIFIED_PHYSIOLOGY_SCHEMA,
             "dataset_ids": list(self.dataset_ids),
             "derived_targets_excluded": ["croce_local_cache"],
             "forbidden_task_policy": FORBIDDEN_TASK_POLICY,
@@ -1467,7 +1586,9 @@ class UnifiedPhysiologyWindowDataset:
                 self._eeg_native_fallback_record_keys
             ),
             "eeg_artifact_mask_policy": EEG_ARTIFACT_MASK_POLICY,
-            "preprocessing": CANONICAL_PREPROCESSING.to_dict(),
+            "preprocessing": ({'coordinate': 'cleaned_measurement', 'scaling': 'none',
+                               'channel_support': 'channel_valid_mask', 'dtype': 'float64'}
+                              if measurement else CANONICAL_PREPROCESSING.to_dict()),
             "fnirs_components": list(CANONICAL_FNIRS_COMPONENTS),
             "label_schema": "canonical_task_label_v1",
             "geometry_schema": "canonical_channel_geometry_v1",
@@ -1487,7 +1608,7 @@ class REFEDContinuousSequenceDataset(UnifiedPhysiologyWindowDataset):
 
     def __init__(
         self,
-        cache_root: str | Path = "data/cache/physiology_semantic_clean_v1",
+        cache_root: str | Path = DEFAULT_CLEAN_CACHE_ROOT,
         *,
         window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
         window_stride_s: float | None = None,
@@ -1498,6 +1619,7 @@ class REFEDContinuousSequenceDataset(UnifiedPhysiologyWindowDataset):
         eeg_artifact_cache_root: str | Path | None = None,
         require_paired_timestamps: bool = True,
         admissible_alignment_cases: set[str] | frozenset[str] | None = DEFAULT_ADMISSIBLE_ALIGNMENT_CASES,
+        output_coordinate: str = "measurement",
     ) -> None:
         self.window_stride_s = float(window_duration_s if window_stride_s is None else window_stride_s)
         self.target_sample_rate_hz = float(target_sample_rate_hz)
@@ -1524,6 +1646,7 @@ class REFEDContinuousSequenceDataset(UnifiedPhysiologyWindowDataset):
             require_paired_timestamps=require_paired_timestamps,
             include_event_types={"video_segment_with_continuous_labels"},
             admissible_alignment_cases=admissible_alignment_cases,
+            output_coordinate=output_coordinate,
         )
         source_events = tuple(self.windows)
         self.source_event_count = len(source_events)
@@ -1550,6 +1673,8 @@ class REFEDContinuousSequenceDataset(UnifiedPhysiologyWindowDataset):
         paired_window_mask = np.ones(relative_target_time_s.shape, dtype=bool)
         for modality in ("eeg", "fnirs"):
             modality_mask = np.asarray(sample["valid_mask"][modality], dtype=bool)
+            if sample.get('channel_valid_mask', {}).get(modality) is not None:
+                modality_mask = modality_mask & sample['channel_valid_mask'][modality].all(axis=0)
             modality_indices = np.floor(
                 relative_target_time_s * float(sample["sample_rate_hz"][modality]) + 1e-9
             ).astype(np.int64)
@@ -1573,7 +1698,7 @@ class REFEDContinuousSequenceDataset(UnifiedPhysiologyWindowDataset):
         sample.update(
             {
                 "schema": REFED_CONTINUOUS_SEQUENCE_SCHEMA,
-                "source_window_schema": UNIFIED_PHYSIOLOGY_SCHEMA,
+                "source_window_schema": sample['schema'],
                 "sample_id": f"{ref.record.join_key}|event={event_index}|start_ms={start_ms}",
                 "label": {
                     "schema": REFED_CONTINUOUS_SEQUENCE_SCHEMA,

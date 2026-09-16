@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import json
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -16,6 +17,7 @@ import torch
 from torch.utils.data import Dataset
 
 from .unified_physiology import UnifiedPhysiologyWindowDataset, canonical_label
+from .clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from .physiology_semantic_targets import (
     PhysiologySemanticTargetSidecar,
     target_sample_key,
@@ -23,6 +25,7 @@ from .physiology_semantic_targets import (
 
 
 LOCAL_VIEW_SCHEMA = "physiology_semantic_measurement_local_v1"
+LOCAL_MEASUREMENT_VIEW_SCHEMA = "physiology_semantic_measurement_local_v2"
 
 
 @dataclass(frozen=True)
@@ -51,7 +54,7 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
 
     def __init__(
         self,
-        cache_root: str = "data/cache/physiology_semantic_clean_v1",
+        cache_root: str = DEFAULT_CLEAN_CACHE_ROOT,
         *,
         dataset_ids: Sequence[str] = ("eeg_fnirs_single_trial",),
         subject_keys: Iterable[str] | None = None,
@@ -62,6 +65,7 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         allow_cross_coordinate_systems: bool = False,
         window_offset_s: float = 0.0,
         eeg_signal_branch: str = "single_trial_eeg_artifact_clean_v4",
+        output_coordinate: str = "measurement",
         auxiliary_target_root: str | None = None,
         auxiliary_target_family: str | None = None,
         auxiliary_target_version: str | None = None,
@@ -74,12 +78,16 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
             window_duration_s=window_duration_s,
             window_offset_s=window_offset_s,
             eeg_signal_branch=eeg_signal_branch,
+            output_coordinate=output_coordinate,
         )
         self.local_eeg_channels = int(local_eeg_channels)
         if self.local_eeg_channels != 6:
             raise ValueError("The current local tokenizer contract requires six EEG channels")
         self.allow_cross_coordinate_systems = bool(allow_cross_coordinate_systems)
         self.require_auxiliary_target = bool(require_auxiliary_target)
+        if (getattr(self.base, 'output_coordinate', output_coordinate) == 'measurement'
+                and auxiliary_target_root is not None):
+            raise ValueError('measurement coordinates have no qualified compatible teacher sidecar')
         self.auxiliary_targets = (
             None
             if auxiliary_target_root is None
@@ -133,6 +141,9 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         roles = list(sample["component_roles"]["fnirs"])
         rows = list(sample["channel_geometry"]["fnirs"])
         bad = np.asarray(sample["bad_channel_mask"]["fnirs"], dtype=bool)
+        support = sample.get('channel_valid_mask', {}).get('fnirs')
+        if support is not None:
+            bad = bad | ~np.asarray(support, dtype=bool).any(axis=1)
         hbr_by_base = {
             str(row.get("base_channel_name")): index
             for index, (row, role) in enumerate(zip(rows, roles))
@@ -169,6 +180,9 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
             )
         finite = np.all(np.isfinite(eeg_positions), axis=1) & np.isfinite(anchor).all()
         bad = np.asarray(sample["bad_channel_mask"]["eeg"], dtype=bool)
+        support = sample.get('channel_valid_mask', {}).get('eeg')
+        if support is not None:
+            bad = bad | ~np.asarray(support, dtype=bool).any(axis=1)
         eligible = finite & ~bad
         distances = np.linalg.norm(eeg_positions - anchor[None, :], axis=1)
         distances[~eligible] = np.inf
@@ -203,6 +217,9 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
     def __getitem__(self, index: int) -> dict[str, Any]:
         entry = self.entries[index]
         sample = self.base[entry.base_index]
+        measurement = sample.get('coordinate_layer') == 'cleaned_measurement'
+        if measurement and self.auxiliary_targets is not None:
+            raise ValueError('measurement coordinates have no qualified compatible teacher sidecar')
         event_index = int(sample["event"].get("event_index", entry.base_index))
         target_key = target_sample_key(
             str(sample["dataset_id"]),
@@ -257,15 +274,22 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         # silently remove measured samples or entire tokenizer patches.
         eeg_valid = np.asarray(sample["valid_mask"]["eeg"], dtype=bool)
         fnirs_valid = np.asarray(sample["valid_mask"]["fnirs"], dtype=bool)
-        eeg = np.asarray(sample["eeg"], dtype=np.float32)[eeg_indices].copy()
-        fnirs = np.asarray(sample["fnirs"], dtype=np.float32)[[hbo_index, hbr_index]].copy()
-        eeg[:, ~eeg_valid] = 0.0
-        fnirs[:, ~fnirs_valid] = 0.0
+        dtype = np.float64 if measurement else np.float32
+        eeg = np.asarray(sample["eeg"], dtype=dtype)[eeg_indices].copy()
+        fnirs = np.asarray(sample["fnirs"], dtype=dtype)[[hbo_index, hbr_index]].copy()
+        eeg_support = np.broadcast_to(eeg_valid, eeg.shape).copy()
+        fnirs_support = np.broadcast_to(fnirs_valid, fnirs.shape).copy()
+        if measurement:
+            eeg_support &= np.asarray(sample['channel_valid_mask']['eeg'], dtype=bool)[eeg_indices]
+            fnirs_support &= np.asarray(sample['channel_valid_mask']['fnirs'], dtype=bool)[[hbo_index, hbr_index]]
+        eeg[~eeg_support] = 0.0
+        fnirs[~fnirs_support] = 0.0
+        eeg_valid, fnirs_valid = eeg_support.all(axis=0), fnirs_support.all(axis=0)
         label = sample["label"]
         anchor_name = str(sample["channel_geometry"]["fnirs"][hbo_index].get("base_channel_name"))
         sample_id = f"{target_key}|anchor={anchor_name}"
         output = {
-            "schema": LOCAL_VIEW_SCHEMA,
+            "schema": LOCAL_MEASUREMENT_VIEW_SCHEMA if measurement else LOCAL_VIEW_SCHEMA,
             "eeg": torch.from_numpy(np.ascontiguousarray(eeg)),
             "fnirs": torch.from_numpy(np.ascontiguousarray(fnirs)),
             "token_valid_mask": {
@@ -286,6 +310,18 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
             "has_auxiliary_target": torch.tensor(target is not None, dtype=torch.bool),
             "auxiliary_target_rejection_reason": target_rejection_reason,
         }
+        if measurement:
+            output.update(unit=dict(sample['unit']), coordinate_layer='cleaned_measurement',
+                          teacher_target_status='not_generated_no_qualification',
+                          channel_valid_mask={'eeg': torch.from_numpy(eeg_support),
+                                              'fnirs': torch.from_numpy(fnirs_support)},
+                          selected_fnirs_channels=[sample['channel_names']['fnirs'][i]
+                                                   for i in (hbo_index, hbr_index)],
+                          measurement_metadata_json=json.dumps({
+                              'preprocessing_state': sample['preprocessing_state'],
+                              'channel_geometry': {
+                                  'eeg': [sample['channel_geometry']['eeg'][int(i)] for i in eeg_indices],
+                                  'fnirs': [sample['channel_geometry']['fnirs'][i] for i in (hbo_index, hbr_index)]}}))
         if self.auxiliary_targets is not None:
             if target is None:
                 output["teacher"] = self.auxiliary_targets.empty_target(
@@ -302,6 +338,7 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
 
 __all__ = [
     "LOCAL_VIEW_SCHEMA",
+    "LOCAL_MEASUREMENT_VIEW_SCHEMA",
     "LocalWindowEntry",
     "UnifiedPhysiologyLocalViewDataset",
 ]

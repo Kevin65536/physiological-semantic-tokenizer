@@ -38,6 +38,21 @@ def test_original_heldout_events_never_enter_training_windows():
     assert [i for i, _ in first] == [0, 1, 2, 3, 5, 6, 7, 8]
 
 
+def test_measurement_alignment_is_checked_after_heldout_identity_exclusion():
+    _, base, _, _ = diagnostic.load_config()
+    reports = [dict(alignment_case='stable_fixed_offset', label_sequence_match=True)]
+    events = [dict(label='MA', event_index=i, eeg_time_ms=10000, fnirs_time_ms=10000,
+                   metadata={'alignment_support_ms': {'eeg': [0, 50000], 'fnirs': [0, 50000]}})
+              for i in range(10)]
+    events[4]['eeg_time_ms'] = -1e9
+    assert len(diagnostic.training_events(events, base, alignment_reports=reports)) == 8
+    events[0]['metadata']['alignment_support_ms']['fnirs'][1] = 20000
+    with pytest.raises(ValueError, match='crosses verified'):
+        diagnostic.training_events(events, base, alignment_reports=reports)
+    with pytest.raises(ValueError, match='no admissible'):
+        diagnostic.training_events(events, base, alignment_reports=[])
+
+
 def test_trace_matches_joint_filter_and_segments_sum_without_resets():
     cfg, base, _, _ = diagnostic.load_config()
     generated = diagnostic.step5.localization.generate_matched(base, 'W', 0., 29)

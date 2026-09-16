@@ -352,6 +352,10 @@ def read_visual_fnirs_csv(path: str | Path, *, load_signals: bool = False) -> di
     """Read one ETG export without compressing dropped rows or its native clock."""
     lines = Path(path).read_text(encoding="utf-8-sig").splitlines()
     data_line = lines.index("Data")
+    retained_fields = {'Exception Ch', 'Analog Gain', 'Digital Gain', 'Wave[nm]', 'Wave Length',
+                       'HPF[Hz]', 'LPF[Hz]', 'Moving Average[s]', 'Analysis Mode'}
+    device_metadata = {row[0]: row[1:] for row in csv.reader(lines[:data_line])
+                       if row and row[0] in retained_fields}
     period = float(next(csv.reader([next(
         line for line in lines[:data_line] if line.startswith("Sampling Period[s]")
     )]))[1])
@@ -362,7 +366,7 @@ def read_visual_fnirs_csv(path: str | Path, *, load_signals: bool = False) -> di
     channel_indices = [i for i, name in enumerate(header) if re.fullmatch(r"CH\d+", name.strip())]
     if not rows or not channel_indices:
         raise ValueError(f"Empty ETG recording: {path}")
-    times, marks, values = [], [], []
+    times, marks, values, quality_annotations = [], [], [], []
     day = 0.0
     previous = None
     for index, row in enumerate(rows):
@@ -389,6 +393,10 @@ def read_visual_fnirs_csv(path: str | Path, *, load_signals: bool = False) -> di
             marks.append({"sample_index": index, "mark": mark, "clock_time": row[time_index],
                           "body_movement": row[header.index("BodyMovement")] if "BodyMovement" in header else "",
                           "removal_mark": row[header.index("RemovalMark")] if "RemovalMark" in header else ""})
+        annotations = {field:row[header.index(field)] for field in ('BodyMovement','RemovalMark')
+                       if field in header and row[header.index(field)].strip() not in ('','0','0.0')}
+        if annotations:
+            quality_annotations.append(dict(sample_index=index,**annotations))
     clock = np.asarray(times, dtype=np.float64)
     if not np.isfinite(clock).all() or np.any(np.diff(clock) <= 0):
         raise ValueError(f"Non-monotonic ETG clock: {path}")
@@ -398,7 +406,9 @@ def read_visual_fnirs_csv(path: str | Path, *, load_signals: bool = False) -> di
     for mark in marks:
         mark["onset_ms"] = float(relative[mark["sample_index"]] * 1000.0)
     return {"time_s": relative, "clock_s": clock, "sample_rate_hz": 1.0 / period,
-            "marks": marks, "values": np.asarray(values, dtype=np.float64) if load_signals else None}
+            "marks": marks, "values": np.asarray(values, dtype=np.float64) if load_signals else None,
+            "device_metadata":device_metadata,"quality_annotations":quality_annotations,
+            "quality_policy":"annotation_only_not_signal_validity"}
 
 def read_xlsx_rows(path: str) -> list[dict[str, str]]:
     """Read the first worksheet of a small xlsx file using only stdlib."""

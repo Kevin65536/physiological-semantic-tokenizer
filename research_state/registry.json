@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-10T16:50:18.244597+00:00",
+  "updated_at": "2026-09-16T11:02:57.374350+00:00",
   "tracks": [
     {
       "id": "main",
@@ -344,6 +344,36 @@
       "id": "e.ssm_observation_v3_continuation_identity",
       "label": "原任务、结果及预算起点的续跑绑定",
       "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/continuation.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.measurement_alignment_v3_contract",
+      "label": "测量精度与单位修订首轮合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.measurement_alignment_v3_run",
+      "label": "测量修订首轮诊断执行记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260916_measurement_alignment_v3/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.measurement_alignment_v3_checks",
+      "label": "测量修订软件与合成工程检查",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260916_measurement_alignment_v3/preflight.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.measurement_alignment_v3_comparison",
+      "label": "新旧实测共同身份的完整失败对照",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260916_measurement_alignment_v3/measurement_comparison.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.measurement_alignment_v3_preparation",
+      "label": "折内精度及冻结评分坐标对照",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260916_measurement_alignment_v3/measurement_preparation_audit.json",
       "role": "diagnostic"
     }
   ],
@@ -2800,6 +2830,35 @@
         "main.ssm_overnight@2026-09-10.observation_v3"
       ],
       "updated_at": "2026-09-10T16:50:18.244597+00:00",
+      "depends_on": [
+        "main.step5_observation"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "main.ssm_overnight@2026-09-16.measurement_alignment_v3",
+      "entity": "main.ssm_overnight",
+      "label": "数据测量坐标修订与固定面板验收",
+      "track": "main",
+      "order": 8,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "首轮测量修订的独立合成及固定实测任务均已完成；输入精度/算子重组失败消除，合成对照保持一致。实测仍有物理域和评估预算失败，完整面板风险未定义；共同身份含 O2 成功回退，故不支持“实测求解完全无回退”或整体改进结论。新测量与 local-view 接口保留为显式候选，不切换默认全量数据、不扩大 gain/Q、跨数据集 SSM 或 tokenizer 训练。数值、身份和失败对照由所链接 run 持有。",
+      "evidence_ids": [
+        "e.data_contract",
+        "e.experiment_plan",
+        "e.measurement_alignment_v3_contract",
+        "e.measurement_alignment_v3_run",
+        "e.measurement_alignment_v3_checks",
+        "e.measurement_alignment_v3_comparison",
+        "e.measurement_alignment_v3_preparation"
+      ],
+      "supersedes": [
+        "main.ssm_overnight@2026-09-11.observation_v3_continuation"
+      ],
+      "updated_at": "2026-09-16T11:02:57.374350+00:00",
       "depends_on": [
         "main.step5_observation"
       ],

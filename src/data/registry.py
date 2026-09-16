@@ -155,7 +155,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'Task EEG is released with ocular artifacts; single_trial_eeg_artifact_clean_v4 is the default with 50 Hz removal and no dataset-specific bad-channel mask.',
         ),
         primary_loader='UnifiedPhysiologyWindowDataset',
-        loader_contract='unified_physiology_window_v2',
+        loader_contract='unified_physiology_measurement_window_v3',
         loader_interfaces=('unified_physiology', 'legacy_multimodal', 'continuous_visualization'),
         default_eeg_signal_branch='single_trial_eeg_artifact_clean_v4',
         eeg_artifact_status='artifact_clean_v4_line_clean_no_bad_mask',
@@ -191,7 +191,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'fNIRS includes direct optical-domain Abs 780/805/830 channels in addition to HbO/HbR/HbT.',
         ),
         primary_loader='UnifiedPhysiologyWindowDataset',
-        loader_contract='unified_physiology_window_v2',
+        loader_contract='unified_physiology_measurement_window_v3',
         loader_interfaces=('unified_physiology',),
     ),
     'visual_cognitive_motivation': DatasetRegistration(
@@ -229,7 +229,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'The checked CSV exports do not include direct optical-domain channels, but preserve ETG-7100 695/830 nm metadata in their headers.',
         ),
         primary_loader='UnifiedPhysiologyWindowDataset',
-        loader_contract='unified_physiology_window_v2',
+        loader_contract='unified_physiology_measurement_window_v3',
         loader_interfaces=('unified_physiology',),
     ),
     'simultaneous_eeg_nirs': DatasetRegistration(
@@ -275,7 +275,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
             'DSR uses EEG-native Go/No-go labels projected from paired block anchors; unstable alignment is excluded.',
         ),
         primary_loader='UnifiedPhysiologyWindowDataset',
-        loader_contract='unified_physiology_window_v2',
+        loader_contract='unified_physiology_measurement_window_v3',
         loader_interfaces=('unified_physiology', 'legacy_multimodal', 'continuous_visualization'),
     ),
 }

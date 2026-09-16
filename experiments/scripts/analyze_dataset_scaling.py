@@ -420,6 +420,84 @@ def append_bitmap_figure(doc, png_path):
     return page, height
 
 
+def export_report_document(report, out, captions, *, title, date, compact=False):
+    """Export selectable report text and complete bitmap figure pages."""
+    import fitz
+    import markdown
+
+    (out/'REPORT.md').write_text(report,encoding='utf-8')
+    body=markdown.markdown(report,extensions=['tables','fenced_code','toc'])
+    # MuPDF's fallback font lacks several Unicode superscripts. HTML superscript
+    # retains the exponent and selectable text instead of embedding null glyphs.
+    superscripts=str.maketrans('⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺ᵀ','0123456789-+T')
+    body=re.sub('[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺ᵀ]+',lambda m:'<sup>'+m[0].translate(superscripts)+'</sup>',body)
+    css='''body{font-family:sans-serif;color:#20303f;font-size:11pt;line-height:1.6} h1{font-size:26pt;color:#163f59} h2{font-size:18pt;color:#1d526c;margin-top:30px} h3{font-size:13pt;color:#277da8} table{border-collapse:collapse;width:100%;font-size:8.5pt;margin:12px 0} th,td{border:1px solid #c9d5de;padding:5px;vertical-align:top} th{background:#eaf1f5} img{max-width:100%;height:auto} code{font-size:9pt;color:#5a456d} a{color:#236484} p{margin:8px 0}'''
+    if compact:css=css.replace('font-size:11pt;line-height:1.6','font-size:10.5pt;line-height:1.5')
+    embedded=body
+    for name in captions:
+        data=base64.b64encode((out/'figures'/f'{name}.png').read_bytes()).decode()
+        embedded=embedded.replace(f'src="figures/{name}.png"',f'src="data:image/png;base64,{data}"')
+    (out/'REPORT.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>'+title+'</title><style>'+css+'body{max-width:1180px;margin:40px auto;padding:0 30px}</style><body>'+embedded+'</body></html>',encoding='utf-8')
+    # Story can repeat a split table's header background behind unrelated text
+    # on later pages. Borders and bold header text remain searchable and clear.
+    css=css.replace('th{background:#eaf1f5}', 'th{}')
+    # Give every scientific figure a bitmap page instead of letting HTML
+    # shrink it to the space remaining at the bottom of a text page.
+    doc=fitz.open()
+    parts=re.split(r'(<p><img[^>]+></p>)',body)
+    skip_caption='';pending_heading=''
+    for part_index,part in enumerate(parts):
+        if part.startswith('<p><img'):
+            name=re.search(r'figures/([^"/]+)\.png',part).group(1)
+            title,caption=captions[name]
+            page,height=append_bitmap_figure(doc,out/'figures'/f'{name}.png')
+            if pending_heading:
+                heading=re.sub(r'</?h[23][^>]*>', '', pending_heading)
+                spare,_=page.insert_htmlbox(fitz.Rect(42,8,553,41),heading,
+                    css='body{font-family:sans-serif;font-size:11pt;color:#277da8}',scale_low=.85)
+                if spare<0:raise RuntimeError('figure section heading did not fit')
+                pending_heading=''
+            caption_html=f'<p><b>图 {int(name[:2])}｜{title}。</b> {caption}</p>'
+            spare,scale=page.insert_htmlbox(fitz.Rect(42,60+height,553,800),caption_html,css=css,scale_low=.85)
+            if spare<0:raise RuntimeError('figure caption did not fit')
+            skip_caption=f'<p><strong>图 {int(name[:2])}'
+        else:
+            if skip_caption and part.lstrip().startswith(skip_caption):
+                part=re.sub(r'^\s*<p>.*?</p>','',part,count=1,flags=re.S);skip_caption=''
+            if part_index+1<len(parts) and parts[part_index+1].startswith('<p><img'):
+                heading=re.search(r'(<h[23][^>]*>[^<]+</h[23]>)\s*$',part)
+                if heading:
+                    pending_heading=heading[1];part=part[:heading.start()]
+            if not re.sub('<[^>]+>','',part).strip():continue
+            buffer=io.BytesIO();writer=fitz.DocumentWriter(buffer)
+            story=fitz.Story('<html><body>'+part+'</body></html>',user_css=css,archive=fitz.Archive(str(out)))
+            story.write(writer,lambda n,filled:(fitz.Rect(0,0,595,842),fitz.Rect(42,42,553,800),None));writer.close()
+            textpdf=fitz.open(stream=buffer.getvalue(),filetype='pdf');doc.insert_pdf(textpdf);textpdf.close()
+    page_count=len(doc)
+    for i,page in enumerate(doc):
+        page.insert_text((42,820),f'EEG-fNIRS | {date} | {i+1} / {page_count}',fontsize=8,color=(.4,.45,.5))
+    doc.save(out/'REPORT.pdf',garbage=4,deflate=True,use_objstms=1)
+    pdf_text=''.join(p.get_text() for p in doc)
+    if '最终结论' not in pdf_text or len(pdf_text)<8000 or '\x00' in pdf_text:
+        raise RuntimeError('PDF content missing, truncated or contains unavailable glyphs')
+    doc.close()
+    fitz.TOOLS.mupdf_warnings(reset=True)
+    with fitz.open(out/'REPORT.pdf') as saved:
+        for page in saved:page.get_pixmap(matrix=fitz.Matrix(.5,.5))
+        report_images=sum(len(page.get_images()) for page in saved)
+    with fitz.open(out/'FIGURES.pdf') as saved:
+        atlas_images=sum(len(page.get_images()) for page in saved)
+    if report_images!=len(captions) or atlas_images!=len(captions):
+        raise RuntimeError('PDF bitmap figure count mismatch')
+    render_warnings=fitz.TOOLS.mupdf_warnings(reset=True)
+    if render_warnings:raise RuntimeError('PDF render warnings: '+render_warnings[:500])
+    return dict(pdf_pages=page_count,pdf_text_characters=len(pdf_text),
+                figures_embedded_in_html=embedded.count('data:image/png;base64,')==len(captions),
+                pdf_image_count=report_images,atlas_image_count=atlas_images,
+                pdf_bytes=(out/'REPORT.pdf').stat().st_size,wps_checked=False,
+                pdf_all_pages_rendered=True,pdf_render_warnings=0)
+
+
 def render_report(c,out):
     if any((out/name).exists() for name in ['REPORT.pdf', 'FIGURES.pdf', 'report_completion.json']):
         raise RuntimeError('retained report is immutable; use a new versioned export directory')
@@ -867,70 +945,589 @@ LaBraM/CBraMod 的固定物理尺度思路可以借鉴，BIOT 的逐通道分位
 
 **最终结论：过去逐通道处理的幅度关系损失已经在实测中确认；不一致缩放的状态恢复损害已经在受控合成中确认。但共同缩放本身并不必然损害 HbO/HbR 拟合，实测误差降低也不保证状态正确。下一版应以可追溯测量、成对幅度、同步观测/噪声合同和完整验证为核心，并先解决共同尺度暴露的极端尾部。**
 '''
-    (out/'REPORT.md').write_text(report,encoding='utf-8')
-    body=markdown.markdown(report,extensions=['tables','fenced_code','toc'])
-    css='''body{font-family:sans-serif;color:#20303f;font-size:11pt;line-height:1.6} h1{font-size:26pt;color:#163f59} h2{font-size:18pt;color:#1d526c;margin-top:30px} h3{font-size:13pt;color:#277da8} table{border-collapse:collapse;width:100%;font-size:8.5pt;margin:12px 0} th,td{border:1px solid #c9d5de;padding:5px;vertical-align:top} th{background:#eaf1f5} img{max-width:100%;height:auto} code{font-size:9pt;color:#5a456d} a{color:#236484} p{margin:8px 0}'''
-    embedded=body
-    for name in captions:
-        data=base64.b64encode((out/'figures'/f'{name}.png').read_bytes()).decode()
-        embedded=embedded.replace(f'src="figures/{name}.png"',f'src="data:image/png;base64,{data}"')
-    (out/'REPORT.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>EEG-fNIRS 数据统一化诊断</title><style>'+css+'body{max-width:1180px;margin:40px auto;padding:0 30px}</style><body>'+embedded+'</body></html>',encoding='utf-8')
-    # Give every scientific figure a bitmap page instead of letting HTML
-    # shrink it to the space remaining at the bottom of a text page.
-    doc=fitz.open()
-    parts=re.split(r'(<p><img[^>]+></p>)',body)
-    skip_caption=''
-    for part in parts:
-        if part.startswith('<p><img'):
-            name=re.search(r'figures/([^"/]+)\.png',part).group(1)
-            title,caption=captions[name]
-            page,height=append_bitmap_figure(doc,out/'figures'/f'{name}.png')
-            caption_html=f'<p><b>图 {int(name[:2])}｜{title}。</b> {caption}</p>'
-            spare,scale=page.insert_htmlbox(fitz.Rect(42,60+height,553,800),caption_html,css=css,scale_low=.85)
-            if spare<0:raise RuntimeError('figure caption did not fit')
-            skip_caption=f'<p><strong>图 {int(name[:2])}'
-        else:
-            if skip_caption and part.lstrip().startswith(skip_caption):
-                part=re.sub(r'^\s*<p>.*?</p>','',part,count=1,flags=re.S);skip_caption=''
-            if not re.sub('<[^>]+>','',part).strip():continue
-            buffer=io.BytesIO();writer=fitz.DocumentWriter(buffer)
-            story=fitz.Story('<html><body>'+part+'</body></html>',user_css=css,archive=fitz.Archive(str(out)))
-            story.write(writer,lambda n,filled:(fitz.Rect(0,0,595,842),fitz.Rect(42,42,553,800),None));writer.close()
-            textpdf=fitz.open(stream=buffer.getvalue(),filetype='pdf');doc.insert_pdf(textpdf);textpdf.close()
-    page_count=len(doc)
-    for i,page in enumerate(doc):
-        page.insert_text((42,820),f'EEG-fNIRS | 2026-09-15 | {i+1} / {page_count}',fontsize=8,color=(.4,.45,.5))
-    doc.save(out/'REPORT.pdf',garbage=4,deflate=True,use_objstms=1)
-    pdf_text=''.join(p.get_text() for p in doc)
-    if '最终结论' not in pdf_text or len(pdf_text)<8000:raise RuntimeError('PDF content missing or truncated')
-    doc.close()
-    fitz.TOOLS.mupdf_warnings(reset=True)
-    with fitz.open(out/'REPORT.pdf') as saved:
-        for page in saved:page.get_pixmap(matrix=fitz.Matrix(.5,.5))
-        report_images=sum(len(page.get_images()) for page in saved)
-    with fitz.open(out/'FIGURES.pdf') as saved:
-        atlas_images=sum(len(page.get_images()) for page in saved)
-    if report_images!=len(captions) or atlas_images!=len(captions):
-        raise RuntimeError('PDF bitmap figure count mismatch')
-    render_warnings=fitz.TOOLS.mupdf_warnings(reset=True)
-    if render_warnings:raise RuntimeError('PDF render warnings: '+render_warnings[:500])
-    validation=dict(figures=len(captions),pdf_pages=page_count,pdf_text_characters=len(pdf_text),
+    exported=export_report_document(report,out,captions,title='EEG-fNIRS 数据统一化诊断',date='2026-09-15')
+    validation=dict(exported,figures=len(captions),
         raw_windows=len(windows),statistics_rows=len(stats),synthetic_rows=len(syn),measured_rows=len(mea),
-        figures_embedded_in_html=embedded.count('data:image/png;base64,')==len(captions),
         expected_counts_pass=len(windows)==194 and len(syn)==288 and len(mea)==216,
         all_figures_exist=all((out/'figures'/f'{n}.png').exists() for n in captions),
-        pdf_figures='separate PNG figure pages',pdf_bytes=(out/'REPORT.pdf').stat().st_size,
-        pdf_image_count=report_images,atlas_image_count=atlas_images,wps_checked=False,
-        pdf_all_pages_rendered=True,pdf_render_warnings=0,
+        pdf_figures='separate PNG figure pages',
         unique_subject_record_count=int(counts['records'].sum()))
     write_json(out/'report_validation.json',validation)
     write_json(out/'figure_captions.json',captions)
     return validation
 
 
+def alignment_fit_comparison(candidate, reference):
+    """Compare retained fits by identity, including every failed trajectory."""
+    keys = ['sample_id', 'mode', 'solver']
+    candidate = candidate[candidate.solver.isin(['O0', 'O1', 'O2'])].copy()
+    reference = reference[reference.solver.isin(['O0', 'O1', 'O2'])].copy()
+    for frame in (candidate, reference):
+        if frame[keys].isna().any().any() or frame.duplicated(keys).any():
+            raise ValueError('missing or duplicate fit identity')
+        if not frame.status.isin(['completed', 'failed_domain', 'failed_numerical']).all():
+            raise ValueError('unrecognized fit outcome')
+    common = reference[keys + ['status']].merge(
+        candidate[keys + ['status']], on=keys, how='left',
+        suffixes=('_reference', '_candidate'), validate='one_to_one')
+    if common.status_candidate.isna().any():
+        raise ValueError('candidate is missing a retained reference fit')
+    transitions = common.groupby(['solver', 'status_reference', 'status_candidate']).size().rename('count').reset_index()
+    return candidate, reference, common, transitions
+
+
+def render_alignment_report(out):
+    """Dated, read-only synthesis of the alignment repair and retained S1/S2 run."""
+    import os
+    import shutil
+    import fitz
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from matplotlib import font_manager
+
+    root = ROOT / 'experiments/runs/physiology_semantic_tokenizer'
+    out = Path(out).resolve()
+    if not out.is_relative_to(root / 'data_quality_audit'):
+        raise ValueError('alignment report must use the existing data_quality_audit artifact root')
+    if out.exists() and any(out.iterdir()):
+        raise RuntimeError('retained export is immutable; choose an empty new versioned directory')
+    run = root / 'ssm_overnight/20260916_measurement_alignment_v3'
+    old = root / 'ssm_overnight/20260911_observation_contract_v3_continuation_v1'
+    audit = root / 'data_quality_audit/20260916_dataset_alignment_v3'
+    previous = root / 'data_quality_audit/20260915_dataset_scaling_report_v1'
+    sources = set()
+
+    def read_json(path):
+        sources.add(path)
+        return json.loads(path.read_text())
+
+    def read_csv(path):
+        sources.add(path)
+        return pd.read_csv(path)
+
+    def arrays(path):
+        sources.add(path)
+        with np.load(path, allow_pickle=False) as f:
+            return {k: f[k].copy() for k in f.files}
+
+    summary = read_json(run / 'summary.json')
+    manifest = read_json(run / 'manifest.json')
+    if manifest['execution'] != 'completed' or not summary['final']:
+        raise ValueError('report requires a completed retained run')
+    comparison = read_json(run / 'measurement_comparison.json')
+    prep = read_json(run / 'measurement_preparation_audit.json')['rows']
+    engineering = read_json(audit / 'engineering_checks.json')
+    mbll = read_json(audit / 'mbll_independent_check.json')
+    smoke = read_json(audit / 'public_loader_smoke.json')
+    qc = read_json(audit / 'visual_ch6_quality.json')
+    scope = read_json(run / 'scope_inventory.json')
+    candidate, reference, common, transitions = alignment_fit_comparison(
+        read_csv(run / 'S2/trial_metrics.csv'), read_csv(old / 'S2/trial_metrics.csv'))
+    if len(candidate) != 3024 or len(reference) != 2268 or len(common) != comparison['common_fits']:
+        raise ValueError('unexpected fixed fit denominator')
+    expected_ids = {r['sample_id'] for rows in scope.values() for r in rows}
+    if len(expected_ids) != 72 or set(candidate.sample_id) != expected_ids:
+        raise ValueError('retained fit identities disagree with scope inventory')
+    if not (candidate.groupby(['sample_id', 'solver']).size() == 14).all():
+        raise ValueError('incomplete 14-mode identity panel')
+    if candidate.status.value_counts().to_dict() != comparison['candidate_statuses']:
+        raise ValueError('retained fit outcomes disagree with comparison')
+    if reference.status.value_counts().to_dict() != comparison['reference_statuses']:
+        raise ValueError('retained reference outcomes disagree with comparison')
+    retained_transitions=pd.DataFrame(comparison['transitions']).rename(columns={
+        'reference_status':'status_reference','candidate_status':'status_candidate'})
+    transition_keys=['solver','status_reference','status_candidate']
+    pd.testing.assert_frame_equal(transitions.set_index(transition_keys).sort_index(),
+                                  retained_transitions.set_index(transition_keys).sort_index())
+    synthetic = read_csv(run / 'S1/solver_comparison.csv')
+    synthetic_old = read_csv(old / 'S1/solver_comparison.csv')
+    skeys = ['law', 'variant', 'mode', 'solver']
+    snew = synthetic.set_index(skeys).sort_index()
+    sold = synthetic_old.set_index(skeys).sort_index()
+    pd.testing.assert_frame_equal(snew, sold, check_exact=True)
+    if len(synthetic) != 150 or synthetic.completed.sum() != 3600:
+        raise ValueError('incomplete synthetic panel')
+    projections = [read_json(run / 'prepared' / (r['projection'] + '.json')) for r in prep]
+    if len(projections) != 48:
+        raise ValueError('unexpected projection denominator')
+    errors = np.array([r['recomposition_error_training_sd'] for r in prep])
+    sd_changes = [r['max_relative_scoring_sd_change'] for r in prep if 'reference_projection' in r]
+    noise_eeg = np.array([p['feature_noise']['evidence']['eeg']['estimate_before_floor'] for p in projections])
+    final_eeg = np.array([p['feature_noise']['eeg_sd'] for p in projections])
+    noise_od = np.array([p['feature_noise']['evidence']['optical_density']['estimate_before_floor'] for p in projections])
+    od_triggers = int(sum(sum(p['feature_noise']['evidence']['optical_density']['triggered']) for p in projections))
+    p0 = read_json(run / 'prepared/subject_01_o0_E0.json')
+    prepared = arrays(run / 'prepared/subject_01_o0_E0.npz')
+    example = candidate[(candidate.subject == 'subject_01') & (candidate.trial == 0) & (candidate['mode'] == 'full')]
+    example_arrays = {row.solver: arrays(run / row.trajectory_path) for row in example.itertuples()
+                      if isinstance(row.trajectory_path, str)}
+    ex0 = read_json(run / 'cells/v3_S2__subject_01__0__0__O0/0__full.json')
+    ex1 = read_json(run / 'cells/v3_S2__subject_01__0__0__O1/0__full.json')
+    np.testing.assert_array_equal(prepared['target'][0],example_arrays['O0']['target'])
+    modes = read_csv(run / 'mode_status.csv')
+    modes = modes[modes.rule.isin(['S2/O0', 'S2/O1', 'S2/O2'])].copy()
+    for row in modes.itertuples():
+        fits=candidate[(candidate.solver==row.rule.split('/')[1]) & (candidate['mode']==row.mode)]
+        if len(fits)!=row.expected or int((fits.status=='completed').sum())!=row.completed:
+            raise ValueError('retained mode summary disagrees with trajectory rows')
+    out.mkdir(parents=True, exist_ok=True)
+    (out / 'figures').mkdir()
+    transitions.to_csv(out / 'paired_status_transitions.csv', index=False)
+    counts = candidate.groupby(['solver', 'status']).size().unstack(fill_value=0)
+    counts.to_csv(out / 'fit_status_counts.csv')
+    modes.to_csv(out / 'mode_status.csv', index=False)
+    synthetic.to_csv(out / 'synthetic_comparison.csv', index=False)
+    pd.DataFrame(prep).to_csv(out / 'preparation_audit.csv', index=False)
+    font = '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
+    font_manager.fontManager.addfont(font)
+    plt.rcParams.update({'font.family': font_manager.FontProperties(fname=font).get_name(),
+                         'font.size': 11, 'axes.titlesize': 12, 'legend.fontsize': 9,
+                         'axes.unicode_minus': False, 'axes.spines.top': False, 'axes.spines.right': False})
+    captions = {}
+    atlas = fitz.open()
+    colors = ['#237f75', '#d58a34', '#bb5361', '#a8b1bb']
+
+    def save(fig, name, title, caption):
+        fig.suptitle(title, fontsize=16, fontweight='bold', y=.995)
+        fig.tight_layout(rect=[0, .01, 1, .955])
+        png = out / 'figures' / f'{name}.png'
+        fig.savefig(png, dpi=250, bbox_inches='tight')
+        plt.close(fig)
+        captions[name] = (title, caption)
+
+    fig, ax = plt.subplots(figsize=(12, 7.1)); ax.set(xlim=(0, 12), ylim=(0, 7)); ax.axis('off')
+    rows = [
+        (5.7, '原始记录', '已证实 EEG 电位 / 光电强度 / 已发布 Hb\n原单位、时钟、通道、参考、事件身份保留', '#e8eef2'),
+        (3.6, '通用测量 loader', '连续记录处理；200 Hz EEG + 10 Hz Hb\nfloat64；不做逐通道 MAD；未知单位独立分组', '#e0f1ed'),
+        (1.4, 'tokenizer 测量接口', '6 EEG × 4000 + 2 Hb × 200；10 个 2 s patch\n位置 / 单位 / mask 保留；尚未训练', '#e0f1ed')]
+    for y, title, body, color in rows:
+        ax.text(3, y, title + '\n' + body, ha='center', va='center', fontsize=11,
+                bbox=dict(boxstyle='round,pad=.8', fc=color, ec='#8096a2'))
+    ax.text(9.2, 3.6, '本轮 SSM 独立有界入口\n先裁 72 个训练窗口，再做特征\n4 Hz；120 × 3；fold 内拟合投影\n原生缺失和特征缺失分开', ha='center', va='center',
+            bbox=dict(boxstyle='round,pad=.8', fc='#fff0d9', ec='#bda17b'))
+    ax.text(9.2, 1.4, 'SSM S1 / S2 已运行\n均值与噪声同步；仍有物理 / 数值失败\n未建立 teacher 资格', ha='center', va='center',
+            bbox=dict(boxstyle='round,pad=.8', fc='#fae6e8', ec='#c18d94'))
+    for start, end in [((3, 5.0), (3, 4.4)), ((3, 2.8), (3, 2.15)),
+                       ((6.0, 5.7), (9.2, 4.55)), ((9.2, 2.6), (9.2, 2.1))]:
+        ax.annotate('', xy=end, xytext=start, arrowprops=dict(arrowstyle='->', lw=1.8, color='#526f81'))
+    save(fig, '01_routes', '统一的是数据合同，消费者使用的张量仍各不相同',
+         '绿色路径为当前可选 measurement loader 和本地 tokenizer 接口；橙色路径为本轮实际 SSM 输入。SSM 未经过通用逐通道 MAD 输出，也没有部署新的成对 adapter 作为统计候选。箭头表示处理顺序，不表示已完成 tokenizer 训练。')
+
+    fig, axs = plt.subplots(2, 1, figsize=(11, 6.6))
+    for ax in axs: ax.set_xlim(-5, 25); ax.set_xlabel('相对 MA 事件的时间 / s'); ax.axvline(0, color='#566e80', ls='--')
+    axs[0].broken_barh([(-5, 30)], (.7, .32), facecolors='#dce7ef')
+    axs[0].broken_barh([(-5, 5)], (.7, .32), facecolors=colors[0])
+    axs[0].text(10, 1.25, '原生窗口先裁剪：EEG 6000 × 30；光强 300 × 36 × 2', ha='center')
+    axs[0].text(-2.5, .86, '参考基线', ha='center', color='white')
+    axs[0].text(12, .86, '基线不是已知潜在静息态', ha='center')
+    axs[0].set(ylim=(.35, 1.65), yticks=[])
+    axs[1].plot(np.arange(120)/4-5, prepared['target'][0,:,1], color=colors[0], label='实际 SSM HbO 坐标（固定首例）')
+    axs[1].axvspan(-5, 0, color=colors[0], alpha=.12)
+    axs[1].set_ylabel('模型观测坐标'); axs[1].legend(loc='upper left')
+    save(fig, '02_time_support', '原始时钟、事件前基线与 SSM 输出时钟',
+         '示例固定为 subject_01 / session_01 / event 1。30 s 原生窗口经过处理后输出 120 个 4 Hz 点；EEG 功率块和 fNIRS 的 10 Hz 特征先保留各自时钟。基线使用事件前 5 s 的 20 个输出点；双向滤波与全窗推断仍是离线处理。')
+
+    fig, axs = plt.subplots(1, 2, figsize=(11, 4.8))
+    axs[0].semilogy(np.arange(1,49), errors, '.', color=colors[0], ms=7, label='48 份新投影')
+    axs[0].axhline(1e-6, color=colors[2], ls='--', label='合同容差 1e-6')
+    axs[0].set(xlabel='冻结投影编号', ylabel='最大重组误差 / 训练 SD', title='精度修复：全部低于容差')
+    axs[0].legend()
+    axs[1].plot(np.arange(1,49), noise_eeg, '.', color=colors[0], label='训练差分 MAD 估计')
+    axs[1].plot(np.arange(1,49), final_eeg, '-', color=colors[2], label='最终值：合成模型噪声下限')
+    axs[1].set(xlabel='冻结投影编号', ylabel='EEG 特征噪声 SD', title='噪声假设：48/48 仍被下限支配')
+    axs[1].legend(loc='center right')
+    save(fig, '03_precision_noise', '输入重组已修复，噪声标定问题仍独立存在',
+         f'48/48 输入重组通过，最大误差 {errors.max():.4g} 个训练 SD。EEG 下限前估计范围 {noise_eeg.min():.5f}–{noise_eeg.max():.5f}，最终均为 {final_eeg[0]:.5f}；光学特征 {od_triggers}/96 个波长估计触发下限。本轮为隔离工程变化保留了原噪声规则。')
+
+    fig, axs = plt.subplots(1, 3, figsize=(12, 4.8))
+    laws = ['linearized_gaussian', 'nonlinear_gaussian', 'nonlinear_student_t']
+    solvers = ['O0', 'O1', 'O2', 'O2_pointwise', 'O2_mean_only']
+    palette = ['#a0acb8', '#399c94', '#315d99', '#c28557', '#b76276']
+    for ax, metric, title in zip(axs, ['r_nrmse','clean_HbO_nrmse','clean_HbR_nrmse'], ['潜状态 r','干净 HbO','干净 HbR']):
+        for i, solver in enumerate(solvers):
+            frame = synthetic[(synthetic.variant=='combined') & (synthetic['mode']=='full') & (synthetic.solver==solver)].set_index('law')
+            ax.bar(np.arange(3)+(i-2)*.15, frame.loc[laws,metric], .145, label=solver, color=palette[i])
+        ax.set(xticks=np.arange(3), xticklabels=['线性高斯','非线性高斯','非线性 t'], ylabel='NRMSE', title=title, ylim=(0,1.08))
+        ax.tick_params(axis='x', labelsize=9)
+    axs[1].legend(ncol=3, loc='upper center', bbox_to_anchor=(.5,1.28), fontsize=8)
+    save(fig, '04_synthetic', '受控合成：完整时间观测与噪声算子仍有效',
+         '图示 combined/full 子面板，每个柱为 24 seeds 的均值；完整实验为 150 条条件汇总、3600 次拟合。O2_pointwise 忽略时间处理；O2_mean_only 只同步均值。新旧 150 条汇总数值完全相同，因此这些优势是保留的既有证据，不能归功于此次 loader 修复。O2 没有后验区间或边际似然。')
+
+    fig, axs = plt.subplots(1, 2, figsize=(11, 5.3))
+    status_order = ['completed','failed_domain','failed_numerical','unattempted']
+    for ax, frame, title in zip(axs, [reference,candidate], ['历史 v3（计划分母）','本轮 measurement v3（计划分母）']):
+        bottom = np.zeros(3)
+        for status, color, label in zip(status_order, colors, ['通过检查','生理域失败','数值失败','输入依赖未执行']):
+            values = [int(((frame.solver==s)&(frame.status==status)).sum()) if status!='unattempted'
+                      else 1008-int((frame.solver==s).sum()) for s in ['O0','O1','O2']]
+            ax.bar(['O0','O1','O2'], values, bottom=bottom, color=color, label=label)
+            for j,v in enumerate(values):
+                if v: ax.text(j,bottom[j]+v/2,str(v),ha='center',va='center',fontsize=10,color='white' if status!='unattempted' else '#263c4c')
+            bottom += values
+        ax.set(ylabel='拟合次数；每求解器计划 1008 次',title=title,ylim=(0,1060))
+    axs[0].legend(ncol=2,loc='upper center',bbox_to_anchor=(1.08,1.23),fontsize=9)
+    save(fig, '05_outcomes', '实测完整分母：输入可执行性改善，SSM 成功率未获全面改善',
+         '每个求解器分母为 72 身份 × 14 模式 = 1008。旧实验各有 252 次因输入依赖未执行；本轮全部执行。通过检查仍只表示求解与生理路径检查通过，不表示重建误差低、参数正确或获得 teacher 资格。')
+
+    order = modes[modes.rule=='S2/O0']['mode'].tolist()
+    matrix = np.array([modes[modes.rule==f'S2/{s}'].set_index('mode').loc[order,'completed'].to_numpy() for s in ['O0','O1','O2']])
+    fig, ax = plt.subplots(figsize=(12,5.2)); im=ax.imshow(matrix, vmin=0,vmax=72,cmap='YlGnBu',aspect='auto')
+    for i in range(3):
+        for j in range(14): ax.text(j,i,str(matrix[i,j]),ha='center',va='center',color='white' if matrix[i,j]>42 else '#263c4c')
+    ax.set(xticks=np.arange(14),xticklabels=order,yticks=[0,1,2],yticklabels=['O0','O1','O2'])
+    plt.setp(ax.get_xticklabels(),rotation=50,ha='right',fontsize=9)
+    fig.colorbar(im,ax=ax,label='通过次数 / 72')
+    save(fig, '06_modes', '14 模式逐项检查：O2 的联合 full 输入仍为 0/72',
+         '每格分母固定为 72。center 指中心特征段隐藏；own/template/pairing/shift 是相应的自身模态、模板、错配、错时对照。all_missing 只检验无观测先验路径。O2 的 EEG_only、all_missing、center_EEG_own 各 72 次成功，合计 216 次，不构成联合血氧拟合成功。')
+
+    fig, axs = plt.subplots(3, 1, figsize=(11, 8), sharex=True)
+    target = example_arrays['O0']['target']; t=np.arange(120)/4-5
+    for k,(ax,label) in enumerate(zip(axs,['EEG 投影','HbO','HbR'])):
+        sd=example_arrays['O0']['normalization_sd'][k]
+        ax.plot(t,target[:,k]/sd,color='#203647',lw=1.6,label='实际测量目标 / 冻结训练 SD')
+        ax.plot(t,example_arrays['O0']['prediction'][:,k]/sd,color=colors[0],label='O0：通过路径检查')
+        ax.plot(t,example_arrays['O1']['clean_mean'][:,k]/sd,color=colors[2],ls='--',label='O1 clean map：生理检查失败，仅示意')
+        ax.axvspan(-5,0,color='#b6c6d5',alpha=.2);ax.axvline(0,color='#a6b6c2',ls=':')
+        ax.set_ylabel(label+' / SD'); ax.grid(alpha=.15)
+    axs[0].legend(ncol=1,loc='upper left',fontsize=9)
+    axs[-1].set_xlabel('相对事件时间 / s')
+    save(fig, '08_fixed_example', '固定首个实测身份：曲线可计算不等于生理拟合合格',
+         'subject_01 / session_01 / event 1 / full，预先按身份顺序选取，没有挑选最佳拟合。O0 的 EEG/HbO/HbR NRMSE 分别为 0.9784/0.7673/4.3480。O1 虚线是失败的 clean map，不能作为有效预测；其正式评分使用条件 noisy-target 预测。O2 数值失败，无有效曲线，未画零线代替。')
+
+    fig, ax = plt.subplots(figsize=(8.5,5.5))
+    o2=transitions[transitions.solver=='O2']; states=status_order[:3]
+    mat=np.zeros((3,3),int)
+    for row in o2.itertuples():mat[states.index(row.status_reference),states.index(row.status_candidate)]=row.count
+    im=ax.imshow(mat,cmap='Blues',vmin=0,vmax=534)
+    for i in range(3):
+        for j in range(3):ax.text(j,i,str(mat[i,j]),ha='center',va='center',fontsize=17,color='white' if mat[i,j]>200 else '#263c4c')
+    labels=['通过检查','生理域失败','数值失败'];ax.set(xticks=range(3),xticklabels=labels,yticks=range(3),yticklabels=labels,xlabel='本轮',ylabel='历史共同身份')
+    save(fig, '07_paired_changes', '共同身份上的 O2：2 次恢复、1 次退化',
+         'O2 共同分母为 756；另两个求解器各 756 条的状态完全不变。新增可执行身份与共同身份分开汇报，避免把输入恢复带来的分母增加误写成算法成功率改善。状态翻转都出现在 center_EEG_shift。')
+    for name, (title, caption) in sorted(captions.items()):
+        png=out/'figures'/f'{name}.png'
+        page, height = append_bitmap_figure(atlas, png)
+        spare, _ = page.insert_htmlbox(fitz.Rect(42, 60 + height, 553, 800),
+                                      f'<p><b>图 {int(name[:2])}｜{title}。</b> {caption}</p>',
+                                      css='body{font-family:sans-serif;font-size:10pt;line-height:1.5}', scale_low=.85)
+        if spare < 0:
+            raise RuntimeError('atlas caption does not fit')
+
+    atlas.save(out/'FIGURES.pdf', garbage=4, deflate=True, use_objstms=1);atlas.close()
+
+    def figure(name):
+        title, caption = captions[name]
+        return f'![{title}](figures/{name}.png)\n\n**图 {int(name[:2])}｜{title}。** {caption}'
+
+    def link(path, label):
+        return f'[{label}]({os.path.relpath(path, out)})'
+
+    def table(headers, rows):
+        return '\n'.join(['| '+' | '.join(headers)+' |','| '+' | '.join(['---']*len(headers))+' |']+
+                         ['| '+' | '.join(str(v) for v in row)+' |' for row in rows])
+
+    status_table=table(['求解器','通过检查','生理域失败','数值失败','通过比例','14 模式全通过身份'],[
+        [s,counts.loc[s,'completed'],counts.loc[s,'failed_domain'],counts.loc[s,'failed_numerical'],
+         f"{counts.loc[s,'completed']/1008:.2%}",f"{summary['measured'][f'S2/{s}']['all_14_modes_complete']}/72"] for s in ['O0','O1','O2']])
+    synth_table=table(['生成律（combined/full）','求解器','r NRMSE','HbO NRMSE','HbR NRMSE'],[
+        [row.law,row.solver,f'{row.r_nrmse:.4f}',f'{row.clean_HbO_nrmse:.4f}',f'{row.clean_HbR_nrmse:.4f}']
+        for row in synthetic[(synthetic.variant=='combined') & (synthetic['mode']=='full') & synthetic.solver.isin(['O0','O1','O2'])].itertuples()])
+    smoke_table=table(['数据 / 记录','EEG 张量 / 单位','Hb 张量 / 单位','实测 support','参考'],[
+        [r['join_key'].replace('|',' / '),str(r['shape']['eeg'])+' / '+r['unit']['eeg'],str(r['shape']['fnirs'])+' / '+r['unit']['fnirs'],
+         'EEG 100%；Hb 100%',r['eeg_reference']] for r in smoke['rows']])
+    report = f'''# 数据集对齐修复后的统一载入、模型输入与 SSM 拟合报告
+
+版本：{out.name}；证据截止：2026-09-16；基于当前工作树的接口实现与已经结束的 measurement alignment v3 运行。
+
+## 1. 主要结论与阅读范围
+
+**本轮完成的是测量合同与输入工程修复；尚未证明真实 EEG–fNIRS 的 SSM 能稳定、合格地恢复生理状态，也没有新的 tokenizer 训练结果。** 已明确单位证据、光学输入阶段、float64 边界、事件和真实支持、成对幅度及噪声变换。SSM 的 48 份训练投影现在全部可重组，历史为 39/48；同一合成面板保持 3600/3600 完成且汇总数值不变。实测 3024 次均已执行，但只有 1552 次通过求解与生理路径检查；744 次生理域失败、728 次数值失败。三个求解器的完整 72 身份主指标仍不可定义。
+
+“一致性”在这里有四层含义：数组里的量与单位对应；相同样本身份和时钟正确相连；均值、噪声、mask 和评分使用同一数学变换；训练统计不读取评价支持。它不等于所有数据被压成相同分布，也不等于跨设备物理标定已经完成。
+
+本文承接 {link(previous/'REPORT.md','2026-09-15 数据缩放报告')} 的修改清单，但不重写它的历史证据。原报告的 18-trial、216-fit 点式缩放诊断与本轮 72-trial、14-mode、三求解器时间观测实验不同，二者成功率不能直接横比。本报告的新旧实测对照使用同一 v3 主协议的历史续跑，所有比较均显式保留分母。
+
+### 1.1 三条数据路径必须分开理解
+
+{figure('01_routes')}
+
+| 路径 | 真正输出 | 已经验证到哪一步 |
+| --- | --- | --- |
+| 通用 loader 的 legacy_robust 分支 | 连续记录清理后逐通道 median/MAD；float32；数值单位为 robust SD | 保留为历史接口；默认参数尚未统一切换。旧 v1 缓存由当前 reader 显式拒绝，不会自动升级 |
+| 通用 loader 的 measurement 分支 | EEG 200 Hz、Hb 10 Hz；有证据的 µV/µM 或分开的相对组；float64；不做逐通道 MAD | 三个公开数据记录的真实加载 smoke；接口与单位/mask 合同测试；不是全数据重建 |
+| 本轮实际 SSM | 单独的有界原生窗口入口；30 s → 120 × 3，4 Hz；宽带 EEG 功率投影 + 单对 HbO/HbR | 固定 Single-Trial 72 身份的 S1/S2 已执行；保留完整失败记录 |
+| tokenizer 测量接口 | 在 measurement 窗口上取 6 EEG + 一对 Hb，保留单位、位置、mask 和 float64 | 已接入现有 factory/local view 并做针对性测试；没有训练运行、准确率或 teacher 目标 |
+
+不能把“新增 measurement 参数”写成“所有旧配置已经迁移”，也不能把 generic loader 的全记录清理写成本轮 SSM 的裁窗处理。当前接口实现和冻结 SSM 源码可能有不同提交时点；SSM 的数值结果以该 run 的 source_snapshot 为准。
+
+## 2. 原始数据是什么，统一 loader 实际改了什么
+
+### 2.1 单位证据：已知的转换，未知的显式保留
+
+| 数据集 | 发布数组的 EEG | 发布数组的 fNIRS | 修复后的测量坐标及证据边界 |
+| --- | --- | --- | --- |
+| Single-Trial | MATLAB 分析视图 200 Hz、30 scalp 通道；读取 yUnit；当前证据为 µV；linked-mastoid reference | 10 Hz、36 对 760/850 nm，yUnit=V；它是光电探测电压 | EEG µV；光强 → 自然对数 OD → 近似 MBLL 相对 Hb。光电 V 不作为 EEG V 转换；真实数据仍不是经验证的绝对 µM |
+| Simultaneous | MATLAB 200 Hz、28 scalp + EOG 辅助通道；yUnit 为 µV；TP9 reference | 已发布 36 对 oxy/deoxy，10 Hz，yUnit=mmol/L | EEG µV；Hb 数值 ×1000 转 µM；已是色团，不再执行 intensity→OD→MBLL |
+| Visual | EDF 500 Hz；逐通道 physical/digital extrema 与单位字段决定校准；当前记录为 µV；采集参考尚不明 | ETG-7100 10 Hz Oxy/Deoxy CSV；已是色团语义，未找到发布数值单位证据 | EEG 解码为 µV 后重采样；Hb 保留 relative:visual_cognitive_motivation，保留 Part/Probe 与 CSV Time |
+| REFED | MAT 64 通道、1000 Hz；AFz reference；原说明及作者代码未证实数组电位单位 | LABNIRS 47.62 Hz；HbO/HbR/HbT/Abs780/Abs805/Abs830 六种类型 | 去掉硬编码 V，不擅自 ×10⁶；EEG 保留 unknown_REFED_EEG_export 相对组；Hb 保留 relative:refed；当前共同分支只选 HbO/HbR |
+
+此前缺单位证据的 **REFED EEG、REFED Hb、Visual Hb 三项仍未解决**，已标记 unknown/relative。原论文的设备型号、concentration/raw 措辞或典型幅值不能证明具体发布数组的单位；浓度×光程也不能擅自当浓度。Single-Trial 和 Simultaneous 的单位证据来自数组头字段，字段缺失时已取消默认 µV；Visual 保留每通道 EDF 解码来源。原始采集率和发布分析率分开：不能把 Single-Trial/Simultaneous 的采集 1000 Hz EEG 说成当前 reader 读取 1000 Hz。
+
+此次报告引用 {link(ROOT/'docs/DATASETS_DESCRIPTION.md','单位证据复核 owner')} 中已经执行的原说明、原论文和作者读取代码核查；没有把新的无证据推断补成已知单位。
+
+### 2.2 输入阶段、精度和光学转换
+
+统一入口显式区分 intensity、OD、已发布色团和吸光度波段。Single-Trial 需要从强度比形成 OD；Simultaneous、Visual 和 REFED 的 HbO/HbR 分支不能再次 MBLL。REFED 的原生 HbT 是另一个导出量，只有同单位、同基线、同处理条件成立时，才有资格比较其与 HbO+HbR 的关系。
+
+通用测量路径沿用有身份的清理分支：EEG 经过对应分支的 EOG/伪迹处理、1–45 Hz 带通并统一到 200 Hz；Hb 保留导数稳健处理与 0.01–0.2 Hz 带通，统一到 10 Hz。REFED 的 47.62→10 Hz 和 EEG 的 1000→200 Hz、Visual EEG 的 500→200 Hz 都是显式重采样。发布色团此前的作者处理不能被逆转或当成未处理原始光强；本轮新增清理步骤与上游来源分别记录。measurement 分支跳过旧逐通道 median/MAD，但没有跳过滤波、时钟核查和支持处理。
+
+新 producer 以 float64 保留原生/测量值和处理输出，并记录 processing_schema。reader 在进入 measurement 分支前核查新生产版本、float64 和 processed support；它不会把已舍入的旧 float32 缓存转成 float64 后宣称恢复了精度。缓存结构版本、事件版本和处理版本是不同层：当前结构为 clean_eeg_fnirs_cache_v2，事件为 physiology_event_alignment_v2，新处理为 physiology_measurement_alignment_v3，测量窗口为 unified_physiology_measurement_window_v3。
+
+独立 MBLL 正例使用 MNE {mbll['mne_version']} 的 Prahl 系数、760/850 nm、3 cm、PPF=6 和明确的自然对数系数约定。与独立 MNE 输出最大差 {mbll['maximum_error_uM']:.4g} µM，与已知合成浓度最大差 {mbll['maximum_truth_error_uM']:.4g} µM；同时记录 MNE 的 2.303 舍入因子与 ln(10) 的差别。**这证明指定参数下的变换闭合，不证明 Single-Trial 实际光程和系数已经被该正例标定。** 真实 SSM 仍沿用明确标记的近似相对 Hb 坐标，以隔离工程修复影响。
+
+### 2.3 时间、身份、参考与空间位置
+
+1. 事件配对依据原始身份和标签，不依赖数组顺序。单个漏标记只有在匹配唯一时修复；多重不匹配、非单调时间、标签冲突或歧义直接拒绝，不静默截短。
+2. 时钟漂移在 offset segment 内以真实毫秒拟合；跨拼接跳变的全局斜率只作诊断。无法证实的拼接边界邻域不作为有效窗口支持。
+3. 输出同时保留请求的事件锚点、实际网格起点、取样索引、舍入误差和模态各自时钟。仪器时间偏移不等于脑血流生理滞后；修正前者不能任意消除后者。
+4. Visual 的 Oxy/Deoxy 时间与 marker 必须一致，先按 CSV Time 规则化再滤波；不删除坏行后挤压时轴。REFED 保留真实发布的 1 Hz 连续情绪标注，不把它拉伸到四舍五入后的 Hb 时长；硬件 offset/jitter 未知仍是未知。
+5. EEG 参考、EOG 辅助信号和 Hb 配对名可追溯。模板坐标可用于邻近选择，不能作为个体精确共定位证据；没有通过通道镜像或复制填补位置缺失。
+
+三条公开 smoke 的时间差例子说明为什么不能只按同一数组下标切片：Simultaneous 首事件 EEG 30107 ms、Hb 43403 ms，相差 13296 ms；实际 200/10 Hz 网格起点为 30105/43400 ms，分别有 −2/−3 ms 舍入。Visual 对应 2032/24500 ms，实际为 2030/24500 ms。REFED 的共同零点是发布方共享起点假设，不能据返回 offset=0 推断真实硬件零延迟。
+
+### 2.4 缺失、补值、伪迹与幅度尾部
+
+measurement 分支同时记录原生有限值支持和处理后真实支持。用于保持算子可计算的插值/零填充不变成新观测。双向 IIR 有整段依赖，只要补值影响处理通道，就保守地不把其输出当真实支持；EOG 回归耦合到多个 EEG 通道，辅助 EOG 缺失也会影响对应有效性。这是严格支持规则，可能减少可用数据；本次三个 smoke 所取窗口均为完整有限支持，没有由此被剔除。
+
+伪迹注记、bad-channel 判定、真实缺失和 padding 各有语义。缓存 artifact mask 默认只是审计信息，不会自动把全部伪迹标记点改成无效测量。后续损失必须使用与其张量对应的 mask。原生缺失须在功率/OD 等非线性之前施加；本轮 14 模式的 feature-missing 是另一项干预，不能声称已经模拟全部原生传感器缺失。
+
+Visual S02/Probe1 的既有异常窗口另作定位：299.2–329.2 s 的 CH6_HbO 有 300 个真实样本，SD={qc['channel_6']['sd']:.4f}，其余通道 SD 中位数={qc['median_other_channel_sd']:.4f}，相差 {qc['channel_6']['sd']/qc['median_other_channel_sd']:.2f} 倍；最大幅值 {qc['channel_6']['max_abs']:.4f} 出现在约 321.297 s。设备 ExceptionCh6=1，DigitalGain 为 163/163，BodyMovement 有标记，但这些注记本身不证明全部变化都是可删除伪迹。最大的 1% 样本只贡献约 4.01% 的中心化平方和，不能把这段幅度问题简化为几个尖峰。当前保留并注记，没有任意 clip、强制剔除或通过逐通道 MAD 隐藏它；独立稳健损失候选尚未完成实测比较。
+
+### 2.5 本轮真实重处理范围
+
+{smoke_table}
+
+表中是各公开数据一个原始记录、各取一个 20 s 窗口的加载结果，两个模态均为 float64。索引在这些记录下分别列出 300、125、1 个事件窗口，不代表这些窗口都逐个完成 smoke。公开 cache 为 physiology_semantic_clean_v3_public_smoke_v2；第一次 record_limit smoke 曾暴露信号与事件 builder 的任务排序不一致，已统一排序并保留首次失败证据。
+
+Single-Trial 的新 native-only cache 为 physiology_semantic_clean_v3_ssm_native，保存 3 被试 × 3 session 的 9 个原生记录与 180 条事件元数据；实际 SSM 只在已限定的 72 个 MA 窗口内做预处理。原始 MA 位置 4、9 未进入拟合/预处理，subjects 24–29 仍关闭。缓存保存会话数组不能被解释为对整个会话做了清理或对所有事件做了评分。没有执行四个数据集所有被试的全量缓存重建。
+
+## 3. 原始数据到本轮 SSM：每一步改变了什么
+
+### 3.1 实际张量与变换次序
+
+| 层 | EEG | fNIRS | 保留 / 改变的语义 |
+| --- | --- | --- | --- |
+| 原生窗口 | 30 s × 200 Hz × 30 scalp，即 6000 × 30；单位有证据为 µV | 30 s × 10 Hz × 36 对 × 2 波长，即 300 × 36 × 2；探测电压 V | 先按精确允许身份裁窗，再做统计与非线性；原始文件保持不变 |
+| 非线性特征 | 1–45 Hz 后每 250 ms 计算功率；log(max(P,10⁻¹² µV²)/(1 µV²))；120 × 30 | ln(I_ref/I)，TDDR-like 导数稳健处理，保留 300 × 36 × 2 的处理后 OD | EEG 不再是电位，也不是瞬时频带相位；OD 是相对于参考的光强变化 |
+| 线性时间处理 | 功率时钟 4 Hz；fold 中拟合 EEG 中心、尺度、PCA 方向 | 固定近似 MBLL → 10 Hz 上 0.01–0.2 Hz 带通 → 10→4 Hz 重采样 | 顺序与有效观测算子完全一致；不可把 MBLL 与 filter 的不同舍入边界混用 |
+| 选择与基线 | 30 维宽带 log-power 投到一维；事件前 20 输出点去均值 | 36 对中按训练 smoothness 指标选一对；HbO/HbR 使用共同尺度；相同基线区间 | 不是六通道局部 tokenizer 视图；PCA 与所选 Hb 对未证明对应同一个脑源 |
+| SSM 观测 | EEG 投影为第 1 列 | HbO/HbR 为第 2/3 列 | y 为 float64 [120,3]，4 Hz；单位是冻结的模型观测坐标，不是 µV/绝对 µM |
+
+SSM 的 EEG 功率下限在统一电位单位后定义：同一信号用 V 或 µV 表达时，变换结果最大差约 8.74×10⁻¹⁴；不再把相同字面 floor 错用于 V² 和 µV²。原生 EEG 的相位、逐通道高频细节和幅度单位在 log-power/PCA 后已经被有意改变，必须通过特征定义和变换来源解释，不能称“原始 EEG 无损送入 SSM”。
+
+{figure('02_time_support')}
+
+### 3.2 训练尺度与模型幅度桥：已分开记录，但桥还在
+
+实际投影先在 fold 训练数据中估计 EEG 每通道 median/MAD 和 PCA；PCA 符号约定为 loading 总和为正，该约定不建立神经驱动的生理正负方向。Hb 配对选择依据训练的信号 MAD / 一阶差分 MAD，趋向平滑、变化稳定的测量位置，不能解释为已定位脑皮层源。
+
+投影输出可写成：EEG_model = C(PCA(log-power)) × g_E / s_E；Hb_model = C(Hb_selected) × g_H / s_H。C 是事件前基线去均值算子；s_E、s_H 为训练数据拟合的数值尺度；g_E、g_H 来自被冻结的 reference_observation_gauge。代码现在分别序列化 computational_scale、measurement_scale、observation_loading 和逆变换，而不是只留下一个不透明因子。
+
+固定 subject_01 / outer fold 0 的实际例子：s_E={p0['projection']['measurement_scale']['eeg']:.6f}、g_E={p0['projection']['observation_loading']['eeg']:.6f}，EEG 最终乘数为 {p0['projection']['eeg_factor']:.6f}；s_H={p0['projection']['measurement_scale']['fnirs_common']:.8f}、g_H={p0['projection']['observation_loading']['fnirs_common']:.6f}，成对 Hb 共同乘数为 {p0['projection']['fnirs_factor']:.6f}。该 fold 的三个评分 SD 为 {p0['normalization_sd'][0]:.6f}、{p0['normalization_sd'][1]:.6f}、{p0['normalization_sd'][2]:.6f}；这是训练评分对象，不是对 HbO/HbR 各自再做输入缩放。逆因子只恢复所选特征的尺度，不能逆转 PCA 降维、滤波或功率非线性。
+
+**本轮仍保留先验参考幅度桥 g，并未证明已经消除模型增益与潜状态尺度的混淆。** 同一训练投影对象被后续候选复用，不随 Q/参数候选重新缩放数据。HbO/HbR 共用一个正数，不单独把两种色团各自压成单位方差。独立的 paired adapter v2 也已实现：要求训练记录身份、显式 baseline、有效支持和共同 pooled MAD，可序列化与逆变换；但本轮 SSM 没有用它替换旧统计候选。
+
+共同正尺度保持相同基线后的 HbO/HbR 幅度比例和 HbO+HbR 的线性加和关系；它不能把未知单位变成已知单位，也不能恢复已经被滤波、基线去除或通道选择丢弃的信息。成对关系的“保留”有这些明确前提，不等于所有原始生理信息无损。
+
+### 3.3 baseline、有效观测与协方差
+
+本轮 30 s 窗从 MA 事件前 5 s 开始，baseline 标记为 pre_event_reference_not_latent_rest；20 个输出点共享真实支持。基线是参考区间，不是已知静息潜状态。通用 measurement_baseline 函数要求调用方提供区间、作用和证据；支持不足则返回 insufficient_support，不自动把任意记录开头 5 s 当静息。
+
+可将基线算子写为 C = I − 1wᵀ，其中 w 在参考区间权重和为 1。对线性处理 L，数据、预测均值和雅可比同步左乘 L；噪声必须传播为 L R Lᵀ。若 L 包括基线、滤波、重采样，协方差一般不再逐点独立。EEG 特征原生时钟为 4 Hz，光学特征为 10 Hz；有效算子将其映射到相同 4 Hz 输出时钟，并携带 mask 的观测/目标交叉协方差。
+
+完整观测的 120×3=360 个坐标在当前 rank_rtol=10⁻¹⁰ 下保留 357 维，符合三个基线线性约束。工程审计同时保留阈值敏感性：更宽的 10⁻⁸ 阈值下 full rank 为 346，10⁻¹² 时为 357；不能把数值秩绝对不变当成已通过结论。固定阈值内的单位密度校正、雅可比和条件噪声一致性已通过；O2 仍没有区间估计或边际似然。
+
+30 s × 0.01 Hz = 0.3 个周期，短窗低频滤波受边界影响，不能据此声称可靠测出了 0.01 Hz 周期。双向滤波和全窗平滑使用未来点；本报告所有此类结果都是离线诊断，不作为因果或实时前瞻预测。
+
+### 3.4 噪声的证据与工程复核
+
+{figure('03_precision_noise')}
+
+48 份投影全部满足 10⁻⁶ 个训练 SD 的重组容差，最大误差为 {errors.max():.6g}；旧版只有 39 份可用。39 份旧新均有记录的投影保留同一 Hb 对，冻结评分 SD 最大相对变化为 {max(sd_changes):.6g}（{max(sd_changes)*100:.6f}%）。评分 SD 在各自 fold/candidate 比较内冻结，但新旧不是逐位相同对象，不能直接宣称跨 run 风险计算完全同坐标。
+
+独立工程检查：观测 gain 雅可比最大绝对误差约 3.91×10⁻¹¹；O2 线性均值误差 8.92×10⁻¹³、导数误差 6.64×10⁻¹²、密度单位误差 1.42×10⁻¹⁴；14 模式隐藏值干预误差为 0；同噪声条件预测一致性误差约 6.11×10⁻¹³。新的 float64 特征重组正例误差为 0。旧 float32 边界的 4.31×10⁻⁹ 绝对误差另行保留，未被新结果覆盖。
+
+噪声清单现在同时记录下限前估计、下限来源、最终值和触发标记。合成 Student-t 的 scale=[0.08,0.025,0.015]、ν=5，其边际 SD 为 scale×sqrt(5/3)=[0.10328,0.03227,0.01936]，两者不再混称。同一噪声量的单位和所在特征层也显式保存。EEG 的 48/48 最终值都由合成下限控制；光学特征 91/96 触发下限，下限前 OD 估计范围 {noise_od.min():.6f}–{noise_od.max():.6f}。这些训练差分 MAD 仍是特征噪声近似，不能当成原始硬件噪声标定；本轮没有重新调低下限来制造更好的拟合曲线。
+
+## 4. tokenizer 现在能够收到什么
+
+### 4.1 已接入的实际输入接口
+
+factory 的 data.output_coordinate="measurement" 已传入现有 UnifiedPhysiologyLocalViewDataset。对常见 20 s 窗，先从统一测量窗口中选一对有效 HbO/HbR，再按可比较的几何选 6 个邻近 EEG；Hb 对由稳定身份哈希确定，不按当前样本的拟合好坏选择。它不同于 SSM 的宽带 PCA 与训练 smoothness 选 Hb 对。
+
+| 字段 / 张量 | 当前 measurement local view |
+| --- | --- |
+| eeg | float64 [6,4000]，200 Hz；是清理后的电位或未知单位相对测量，不是本轮 SSM 的一维 log-power |
+| fnirs | float64 [2,200]，10 Hz，顺序固定 HbO/HbR；µM 或所属相对组 |
+| patch 网格 | 每 2 s：EEG 400 点，Hb 20 点；20 s 共 10 个 token 位置 |
+| token_valid_mask | 所选通道与时间点真实支持合取；填零不当成有效数据；任一必要点缺失时该 patch 不能冒充完整支持 |
+| channel_valid_mask | 保留所选 EEG/Hb 的逐点真实支持，与 token 级汇总分开 |
+| unit / selected channels | 保留单位组、六个 EEG 名、HbO/HbR 名、anchor 和稳定 sample_id/dependency_group_id |
+| measurement_metadata_json | 序列化预处理状态、参考与几何证据；支持默认 batch collate，不依赖 None/变长字典被错误拼接 |
+| teacher_target_status | not_generated_no_qualification；measurement 坐标拒绝旧 teacher sidecar 连接 |
+
+该接口保留 float64 到消费者边界，消费者若为神经网络选择 float32，需要把数值变换与计算 dtype 作为明确的训练配置决定。接口不会暗中 fit 成对 adapter，也不会在每个 crop 上重新估计尺度。paired adapter 的 fit/apply/inverse 已有显式训练身份与 baseline 合同，实际部署比较仍需单独定义。当前没有新的训练 launcher，也没有训练 loss、分类准确率、跨数据集泛化或 token 生理解释的实测增益。
+
+### 4.2 哪些语义仍在，哪些已经改变
+
+| 信息 | loader 测量层 | 实际 SSM | tokenizer local view |
+| --- | --- | --- | --- |
+| 物理单位与源头 | 已证实的单位换算可逆，未知独立保留 | 通过 manifest/投影可追溯；观测本身是模型坐标 | 单位与处理状态跟随张量 |
+| HbO/HbR 相对幅度 | 没有新增逐色团 MAD 抹平幅度 | 相同 baseline 区间和共同正尺度保留已选对的关系 | 保留选定 Hb 对原测量关系；后续训练尺度尚未自动部署 |
+| 绝对 DC / 静息浓度 | 已发布 Hb 本来就是变化量，滤波进一步移除慢趋势 | baseline 明确去除均值；不能恢复绝对浓度或静息潜态 | 承接测量预处理，不创造被移除的 DC |
+| EEG 相位与局部空间 | 滤波/清理有明确带宽与分支 | 功率/PCA 压缩丢失相位和逐通道信息 | 保留六通道时序，但只选局部覆盖 |
+| 时间/缺失/任务 | 锚点、真实 support、标注范式可追溯 | 4 Hz 特征时钟；feature-missing 单独定义 | 200/10 Hz 后 patch 化；patch mask 保留真实支持 |
+| 精确脑源与跨设备标定 | 参考、模板与未知项保留 | 未证明 EEG PCA 和所选 Hb 对是同一脑源 | 邻近模板不等于个体共定位；没有物理 teacher 资格 |
+
+因此，“不丢失生理语义”的可执行含义是保留类型、单位、时空身份、变换与支持的解释，不把不同量混成同一个名字；它不是承诺滤波和特征压缩完全无损。原始数据和历史缓存仍保留，重要压缩/不可逆步骤在表中明确。
+
+## 5. 目前 SSM 拟合结果
+
+### 5.1 实验范围、求解器和指标
+
+本轮只运行 S1 与 S2。S1 为 3 种生成律 × 2 种时间处理 variant × 5 种 mask × 5 个求解器 × 24 seeds，共 3600 次；S2 为 subject_01/09/18、session_01/03/05、每 session 8 个允许 MA，共 72 个身份 × 14 模式 × O0/O1/O2，共 3024 次。训练/评价 fold、原始位置排除、噪声规则与求解预算均由冻结配置约束。S3 gain 和 S4 Q 网格未在本轮执行；通用 summary 中的 S3/S4 空模板不是本轮漏跑结果。
+
+O0 是原点式 Student-t 参考；O1 是含完整时间观测/噪声的线性 Gaussian 参考；O2 是非线性 MAP，使用相同有效观测合同但可能在有限预算下失败。O1/O2 正式缺失恢复评分使用 conditional noisy-target prediction，clean-map residual 另算；两者不混称同一预测。合成 NRMSE 有已知干净状态/观测真值，真实数据 NRMSE 则是对观测目标的恢复误差，不能作为潜状态真值误差。
+
+实测每个 trial 先评分，然后 session 等权，再 subject 等权。中心隐藏段为 16 个 4 Hz 点（4 s）。每个 trial 的 B = 0.5×NMSE_EEG + 0.25×NMSE_HbO + 0.25×NMSE_HbR，其中 EEG 项来自 center_EEG 的隐藏段，Hb 项来自 center_fNIRS 的隐藏段，NMSE = MSE / 冻结训练 SD²。B 不是潜状态真值误差；完整主指标需要所有要求模式和身份都有有效结果。controller cell completed 只表示任务已结束并写出结果，不能替代每一条 trajectory 的 completed 状态。
+
+### 5.2 合成结果：通过工程预检，但没有新的精度增益
+
+{figure('04_synthetic')}
+
+{synth_table}
+
+3600/3600 全部完成；新旧 150 条条件汇总按 law/variant/mode/solver 对齐后逐值完全相同。冻结 Gaussian mean precheck 的 24/24 例通过，r 和 clean EEG NRMSE=0.48429，HbO=0.14862，HbR=0.16291，r correlation=0.87098；门槛为 NRMSE≤0.65、correlation≥0.8。这个预检是均值/工程检查，不是 Student-t 校准或真实数据 teacher 资格。
+
+图中完整时间算子相对点式/仅均值近似的优势仍存在，说明工程修复没有破坏已有合成结果。它不能解决真实数据的观测增益、参考方式、空间对应、残余伪迹和动力学失配。O2 未估计可信区间；不得把点估计成功写成后验不确定性已校准。
+
+### 5.3 实测完整分母与失败分布
+
+{figure('05_outcomes')}
+
+{status_table}
+
+总计 1552/3024（51.32%）通过求解及路径检查，744/3024（24.60%）生理域失败，728/3024（24.07%）数值失败。三个 solver 都未达到完整 72/72 的 14 模式支持，因此 full_panel_B 全部为空。O0 在 27 个全模式成功身份上的 subset B=5.2268，O1 仅在 2 个身份上的 subset B=0.8311，O2 无此子集；这些数字不能横比成“哪个方法总体更好”。旧 O0 子集为 21 个，B=3.6479；新旧样本组成变化，也不能据 5.2268 对 3.6479 宣称性能恶化。
+
+{figure('06_modes')}
+
+full 联合模式 O0=71/72、O1=8/72、O2=0/72。O2 全部 237 次通过中，216 次来自 EEG_only、all_missing、center_EEG_own；其余为 center_EEG_template 的 1 次和 center_EEG_shift 的 20 次。O0 的主要失败集中在 center_EEG_shift（仅 28/72 通过），说明固定错时对照会触发生理路径问题；不能删除该模式后重新宣称完整面板合格。
+
+### 5.4 同一身份的新旧比较
+
+{figure('07_paired_changes')}
+
+历史主协议 3024 次计划中只有 2268 次真正执行，756 次因输入依赖未执行；本轮把这些依赖补齐。新增 756 次包含 380 次通过、183 次生理域失败、193 次数值失败。这是新增可审计证据，不能与旧 run 的缺失行直接配对。
+
+共同 2268 次中，O0 的 721 次通过和 35 次生理域失败完全保持；O1 的 273 次通过和 483 次生理域失败完全保持；O2 从 177/43/536（通过/生理域/数值失败）变为 178/43/535。两个恢复与一个退化均为 center_EEG_shift：subject_09/session_01/event14、subject_18/session_01/event1 恢复；subject_09/session_05/event4 退化。没有删除这一例退化或把它按较低目标函数值改记成功。
+
+该退化例历史 rest 初始化在 168 次 evaluation 收敛，而本轮用满 200 次预算仍未达停止规则；新目标函数约 26464，历史约 55748，较低的目标值也不自动意味着收敛或合格。恢复例分别从历史 200 次预算耗尽变为 176/184 次收敛。微小数值变化能改变有限预算优化路径，本轮证据是“合成不变、实测共同身份多数不变且有双向翻转”，不是“已保证任何后续 SSM 都不受影响”。
+
+### 5.5 固定实例与失败原因
+
+{figure('08_fixed_example')}
+
+固定首例 O0 虽通过路径检查，但 HbR NRMSE=4.3480，HbR 平均偏差为 +3.7881 个训练 SD；成功状态不保证好拟合。同一身份 O1 的状态数值有限、f/v/p/q 为正，仍因 absolute_hb_nonnegative 和 hbr_not_above_hbt 两项为 false 被判为生理域失败。O2 数值失败，没有有效曲线。这里保留失败曲线的明确标签，用来解释失败，不作为合格的恢复结果。
+
+失败分为输入依赖、物理路径和求解预算/数值三个层次。本轮输入重组问题已解除；O1 的线性近似均值可能越出生理域，O2 的非线性路径优化仍受条件数、初始化、预算和模型失配影响。现有结果不支持将所有失败单因归结为共同 Hb 缩放，更不支持放宽生理边界、扩大 Q/gain 网格来遮盖负结果。
+
+## 6. 与原报告设计清单逐项对照
+
+| 原修改点 | 当前已经落地与核验 | 尚不能宣称完成的部分 |
+| --- | --- | --- |
+| P0 单位证据 | 证据字段、无证据默认值移除、已知 µV/µM 等价性 | REFED EEG/Hb、Visual Hb 仍未知；Single-Trial 仍相对 Hb |
+| P0 输入阶段 | intensity/OD/已发布 Hb/Abs 分流；独立 MBLL 已知浓度正例 | 没有实际个体光程的物理标定 |
+| P0 精度 | 新原生/特征 float64；算子次序一致；48/48 重组 | 旧缓存历史精度不能恢复；未全量迁移旧配置 |
+| P0 EEG floor | µV² 与参考功率明确；V/µV 等价检查 | 未知单位 EEG 不能套用已标定物理阈值 |
+| P0 观测同步 | 均值/雅可比/R/基线/密度与评分合同检查 | O2 后验区间和边际似然仍未估计 |
+| P0 噪声证据 | floor 前后值、触发率、Student scale/SD 区分 | 原始传感器噪声未独立标定；floor 仍占主导 |
+| P1 成对幅度 | 共同正尺度、显式 baseline/训练身份/逆变换接口 | 新 paired adapter 未作为实测统计候选部署验证 |
+| P1 baseline | 有来源的事件前区间、真实共同支持、算子传播 | 不等于已知静息潜态；未知范式无自动静息推断 |
+| P1 时间处理 | 漂移分段、原始 marker 身份、真实网格、完整时间协方差 | 短窗慢周期与因果解释不成立；全记录路径仍离线 |
+| P1 质量尾部 | 缺失与注记分离；CH6 位置、幅值、设备注记已核查 | 未完成独立稳健损失比较；未擅自剪裁 |
+| P1 空间参考 | 名称/参考/几何来源保留，坏通道与坐标兼容检查 | PCA 与 Hb 配对同源未证明，模板非个体共定位 |
+| P1 幅度桥 | 数值尺度与 reference loading 分开记录并冻结 | 先验参考桥仍在，不能宣称完成绝对增益辨识 |
+| P1 缺失 | 非线性前原生隐藏检查；14-mode 特征隐藏独立声明 | 特征缺失结果不等于全部原生缺失/未来预测资格 |
+| P2 求解动态 | 失败分类、固定预算、driver replay 与导数检查 | 728 次数值失败与 744 次生理域失败未解决；未扩 Q/gain |
+| P2 tokenizer | measurement local v2 与 factory 接通；mask/单位/float64/teacher 拒绝 | 没有新训练、合格 teacher 或准确率结果 |
+| P2 验收 | S1/S2 固定身份全执行、完整分母、旧新配对 | 完整实测主指标不可定义；不作跨数据集/默认流程推广 |
+
+已实现、已运行、统计候选通过和可默认推广是不同状态。当前宜先在既有开发支持上独立定位噪声下限、观测映射/空间对应和 O2 收敛条件，再按完整面板验证；跨数据集 SSM 与 tokenizer 训练需要各自的具体配置和结果，不能由此次工程通过自动推导。
+
+## 7. 证据、复现与交付检查
+
+### 7.1 唯一事实来源与可追溯文件
+
+- 数据原始事实与原论文入口：{link(ROOT/'docs/DATASETS_DESCRIPTION.md','DATASETS_DESCRIPTION.md')}；运行边界与字段合同：{link(ROOT/'docs/DATA_CONTRACT.md','DATA_CONTRACT.md')}。
+- 当前 loader 与 consumer：{link(ROOT/'src/data/unified_physiology.py','unified_physiology.py')}、{link(ROOT/'src/data/physiology_measurement_adapter.py','physiology_measurement_adapter.py')}、{link(ROOT/'src/data/physiology_semantic_local.py','physiology_semantic_local.py')} 与 {link(ROOT/'src/data/factory.py','factory.py')}；本报告保存读取时的源码快照。
+- 实测/合成正式结论：{link(run/'summary.json','本轮 summary')}、{link(run/'resolved_config.yaml','冻结配置')}、{link(run/'source_snapshot_identity.json','运行源码身份')}、{link(run/'scope_inventory.json','精确样本身份')}、{link(run/'S2/trial_metrics.csv','逐拟合实测表')}、{link(run/'S1/solver_comparison.csv','合成条件表')}。本报告只是解释和绘图，不替代它们的事实源地位。
+- 历史比较：{link(old/'summary.json','历史 v3 summary')}、{link(run/'measurement_comparison.json','同身份状态比较')}、{link(run/'measurement_preparation_audit.json','48 份投影精度审计')}。
+- 工程与公开记录：{link(audit/'engineering_checks.json','工程数值检查')}、{link(audit/'mbll_independent_check.json','独立 MBLL')}、{link(audit/'visual_ch6_quality.json','CH6 质量定位')}、{link(audit/'public_loader_smoke.json','公开 loader smoke')}、{link(audit/'public_loader_smoke_failed_v1.json','保留的首次失败 smoke')}。
+- 本导出附带 preparation_audit.csv、fit_status_counts.csv、paired_status_transitions.csv、mode_status.csv 与 synthetic_comparison.csv；均由上述 owner 派生，source_identity.json 给出读取来源，report_summary.json 为此报告的派生校验结果。
+
+### 7.2 复现及检查边界
+
+沿用既有 analyze_dataset_scaling.py 入口，新增 --stage alignment-report，并要求 --output-dir 指向 data_quality_audit 下新的空版本目录。该 stage 仅读取已保留证据，生成图表与报告；不执行原始数据加载、重建缓存、SSM 拟合或受保护评价，也不触发旧报告初始化。已有导出非空时拒绝覆盖。
+
+本轮修复的留存测试记录包括 measurement 78 passed、integration 67 passed，另有针对性组检查；这些测试组有重叠，不能相加成独立测试总数。默认 collection 是 635 tests collected、11 deselected，表示收集检查，不表示全部 635 个测试都执行通过。报告生成器另做身份/分母校验、表格与 owner 一致性检查以及位图 PDF 输出测试。
+
+REPORT.md、内嵌 PNG 的自包含 REPORT.html、REPORT.pdf 和 FIGURES.pdf 同时交付。图像统一为 250 dpi PNG，PDF 只栅格化整幅图，正文、表格和图注保持可选择/检索；源图不以 SVG 或矢量 PDF 页面嵌入。导出后逐页渲染检查、核对图像对象数，并检查页面标签与裁切；WPS 在本环境未检查。
+
+**最终结论：数据单位、阶段、时间、支持和变换来源比修复前更明确；输入重组的工程障碍已解除，受控合成结果保持不变。但实测 SSM 联合拟合仍未通过完整验收，未知物理单位、模型幅度桥、噪声下限和空间对应等限制仍在。tokenizer 已具备可追溯测量输入接口，尚无训练与生理 teacher 资格结果。**
+'''
+    validation=export_report_document(report,out,captions,title='数据集对齐修复、模型输入与 SSM 拟合',date='2026-09-16',compact=True)
+    validation.update(figures=len(captions),fit_denominators_checked=True,synthetic_exact_replay=True,
+                      raw_array_reads=0,new_model_solves=0,protected_reads=0)
+    write_json(out/'figure_captions.json',captions)
+    live_paths = [Path(__file__),ROOT/'src/data/unified_physiology.py',ROOT/'src/data/physiology_measurement_adapter.py',
+                  ROOT/'src/data/physiology_semantic_local.py',ROOT/'src/data/factory.py',ROOT/'src/data/event_alignment.py',
+                  ROOT/'src/data/homer2_preprocessing.py',ROOT/'src/inference/observation_baselines.py',
+                  ROOT/'experiments/evaluate_step5.py',ROOT/'experiments/evaluate_step5_observation_diagnostic.py',
+                  ROOT/'experiments/evaluate_ssm_overnight_diagnostics.py',
+                  ROOT/'docs/DATASETS_DESCRIPTION.md',ROOT/'docs/DATA_CONTRACT.md']
+    for path in live_paths:
+        dest=out/'source_snapshot'/path.relative_to(ROOT);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(path,dest)
+    sources.update(live_paths)
+    sources.update([previous/'REPORT.md',run/'resolved_config.yaml',run/'source_snapshot_identity.json'])
+    write_json(out/'source_identity.json',dict(schema='dataset_alignment_report_v1',
+        input_run=str(run.relative_to(ROOT)),reference_run=str(old.relative_to(ROOT)),
+        note='live interface snapshot differs in time from frozen SSM source; retained runs are read-only',
+        files=[dict(path=str(p.relative_to(ROOT)),sha256=sha(p)) for p in sorted(sources)]))
+    write_json(out/'report_summary.json',dict(source_run=str(run.relative_to(ROOT)),
+        fit_status=counts.to_dict('index'),common_fits=len(common),transitions=transitions.to_dict('records'),
+        fixed_example=dict(sample_id=ex0['sample_id'],O0_metrics=ex0['metrics'],
+                           O1_physical_checks=ex1['physical_checks']),
+        projections=len(prep),maximum_recomposition_training_sd=float(errors.max()),
+        comparable_projections=len(sd_changes),maximum_scoring_sd_relative_change=max(sd_changes),
+        synthetic_fits=3600,synthetic_summary_exactly_unchanged=True,
+        all_modes_complete={s:summary['measured'][f'S2/{s}']['all_14_modes_complete'] for s in ['O0','O1','O2']},
+        teacher_qualified=False,tokenizer_trained=False,default_promoted=False))
+    write_json(out/'report_validation.json',validation)
+    write_json(out/'report_completion.json',dict(stage='alignment-report',result=validation,source_sha256=sha(Path(__file__))))
+    return validation
+
+
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--stage',choices=['dry-run','synthetic','measurements','measured-ssm','report'],required=True)
-    args=parser.parse_args();c=config();out=init_run(c)
+    parser=argparse.ArgumentParser();parser.add_argument('--stage',choices=['dry-run','synthetic','measurements','measured-ssm','report','alignment-report'],required=True)
+    parser.add_argument('--output-dir',type=Path,help='new versioned alignment-report export directory')
+    args=parser.parse_args()
+    if args.stage=='alignment-report':
+        if args.output_dir is None:parser.error('alignment-report requires --output-dir')
+        print(json.dumps(jsonable(render_alignment_report(args.output_dir)),ensure_ascii=False),flush=True)
+        return
+    if args.output_dir is not None:parser.error('--output-dir applies only to alignment-report')
+    c=config();out=init_run(c)
     if args.stage=='dry-run':dry_run(c,out);return
     if not (out/'inventory.json').exists():raise RuntimeError('dry-run required before execution')
     marker=out/(args.stage+'_completion.json')

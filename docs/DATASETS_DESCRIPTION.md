@@ -4,6 +4,47 @@
 [`DATA_CONTRACT.md`](DATA_CONTRACT.md)。该合同保留各数据集的原始测量语义，
 不把电压、吸光度和浓度伪装成同一物理单位。
 
+### 采集方式与单位证据复核（2026-09-15）
+
+本节记录原始说明文件、原作者论文和当前 loader 源码的来源复核。
+随后进行的有界实测统计见
+[数据统一化诊断报告](../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260915_dataset_scaling_report_v1/REPORT.md)；
+下文原有的代表性幅值仍是历史检查记录，不能用于推定单位。
+统一化建议与实现差距统一放在
+[`DATA_CONTRACT.md`](DATA_CONTRACT.md#跨数据集训练前一致性复核2026-09-15)。
+
+| 数据集 | EEG 采集、参考与文件单位 | fNIRS 采集与测量语义 | 对训练前处理的直接影响 |
+| --- | --- | --- | --- |
+| Single-Trial | BrainAmp，30 scalp channels，linked-mastoid reference；采集 1000 Hz，项目使用 200 Hz MATLAB 导出。loader 读取 `yUnit`，缺失时默认 `uV`；默认值不是单位证据 | NIRScout，采集 12.5 Hz、发布分析视图 10 Hz；36 对 760/850 nm 通道，已记录 `yUnit=V`。这里的 V 是光电探测电压，与 EEG 电位不是同一测量量 | 从光强比构造 OD，再按明确的 MBLL 假设得到相对 HbO/HbR；保留原 EOG 辅助测量与事件同步信息 |
+| REFED | ESI Neuroscan，64 channels，10–10 布局、AFz reference，采集与本地 README 均为 1000 Hz。当前 `_refed_eeg` 硬编码 `native_unit="V"`，已核查原始说明未给出对应 MAT 数值单位，故仍需单位证据 | Shimadzu LABNIRS，780/805/830 nm，51 channels，名义源探距 30 mm，47.62 Hz；六种导出量并存，HbO/HbR 与 Abs 必须分开，浓度导出的物理单位仍未核定 | 选 HbO/HbR 作为当前共同成分；保留 baseline/video 区别和动态标签时间轴；不能用 loader 的 V 常量证明单位已经核实 |
+| Visual | Nihon Kohden Neurofax EEG-1100，论文描述 32 electrodes、500 Hz；当前 loader 读取连续 EDF 并按每通道 physical/digital extrema 解码，单位取 EDF header。采集参考方式尚未由本次资料核定 | Hitachi ETG-7100，10 Hz；Oxy/Deoxy CSV，设备头为 695/830 nm，当前文件未明确物理浓度单位；两侧 Probe 具有不同位置 | 当前路径使用连续原始 EDF；发布的去眼跳 MAT epochs 是另一条处理支路。设备标为 raw export 不等于 CSV 存的是光强 |
+| Simultaneous | BrainAmp，采集 1000 Hz，TP9 reference、TP10 ground；MATLAB 分析视图 200 Hz、28 scalp channels + HEOG/VEOG。loader 读取 `yUnit`，缺失时默认 `uV` | NIRScout，采集 10.4 Hz、MATLAB 视图 10 Hz，36 channels、30 mm；`oxy/deoxy` 为浓度变化，既有字段检查为 `mmol/L`。原始格式说明另记载 `.wl1/.wl2=760/850 nm` | 当前 MATLAB 分支已完成色团转换，不能重复做 MBLL；原厂格式文档描述的光强文件不等于当前分支已经加载了这些文件 |
+
+证据入口：Single-Trial 的 [原始 HTML](<../data/EEG+NIRS Single-Trial/Open access dataset for simultaneous EEG and NIRS Brain-Computer Interfaces (BCIs).html>)；
+REFED [原始 README](../data/REFED-dataset/README.md) 与
+[原作者论文 §3.2](https://papers.neurips.cc/paper_files/paper/2025/file/2bf0ed7c35d9d84128e7f7c72ab76402-Paper-Datasets_and_Benchmarks_Track.pdf)；
+Visual [原始说明](<../data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/readme.txt>) 与
+[原作者论文 §4.3–4.5](https://pmc.ncbi.nlm.nih.gov/articles/PMC10964074/)；
+Simultaneous [MATLAB 说明](<../data/Simultaneous EEG&NIRS/Dataset description_MATLAB.pdf>)、
+[原厂格式说明](<../data/Simultaneous EEG&NIRS/Dataset description_BrainVision and NIRx.pdf>)。
+REFED 论文附录概览出现 EEG 200 Hz，与 §3.2 和发布 README 的 1000 Hz 不一致；
+本项目当前导入路径按后两者使用 1000 Hz，不能混写采集率与分析率。
+
+#### 单位证据执行复核（2026-09-16）
+
+对上述缺口再次检查原始说明、REFED 原论文全文及
+[作者数据读取代码](https://github.com/REFED-dataset/REFED-codes/blob/main/load_REFED.py)、
+Visual 原论文 §3.2/§4.3–4.5（[全文 XML](https://www.ebi.ac.uk/europepmc/webservices/rest/PMC10964074/fullTextXML)）。
+**REFED EEG、REFED Hb 和 Visual Hb 均仍未找到足以证明发布数组物理单位的声明**。
+设备型号、典型幅值、论文称 concentration 或 raw 均不替代数组单位证据；也不把
+设备可能使用的浓度×光程单位擅自当成 µM。
+
+reader 已去除 REFED 的硬编码 V 声明及 MATLAB EEG 缺失 `yUnit` 时的 µV 默认值。
+每条记录保留原单位与证据字段；Visual 保留每通道 EDF 单位及增益解码来源。
+有头字段证据的 EEG 可转 µV，有 `yUnit=mmol/L` 证据的发布 Hb 可乘 1000 转 µM；
+缺字段或未知单位保持各自相对组。Single-Trial 光电 V 独立于电位 V，近似 MBLL
+仍为相对 Hb。这里的“未知”是核查结果，不能记成已完成物理标定。
+
 > **重要提示**：使用任何数据集前，请务必先阅读本文档以及对应数据集目录中的原始说明文件。
 
 ---
@@ -14,8 +55,8 @@
 |-----------|-----------|---------|-------------|---------|--------|---------|---------|
 | EEG+NIRS Single-Trial | EEG (30ch) + fNIRS (72ch: 36 lowWL + 36 highWL) + EOG, ECG, 呼吸 | 29 | 视觉指令 (箭头/数字) | Motor Imagery (左右手), Mental Arithmetic | EEG: 200Hz, fNIRS: 10Hz | Left/Right MI, MA/Baseline | `.html` 文档 |
 | REFED-dataset | EEG (64ch) + fNIRS (51ch, 6信号类型) | 32 | 情绪视频 (15个) | 情绪诱发 | EEG: 1000Hz, fNIRS: 47.62Hz | 实时动态 Valence + Arousal | `README.md` |
-| Visual Cognitive Motivation | EEG + fNIRS (Oxy/Deoxy CSV 导出, 共享位置) | 16 | 场景图片 (250个) | 视觉认知动机决策 | EEG: 高采样, fNIRS: Hitachi ETG-7100 原始导出 | RF/RR/FF/FR (记忆动机) | `readme.txt` |
-| Simultaneous EEG&NIRS | EEG + fNIRS (MATLAB 导出为 oxy/deoxy) | 26 | 认知任务 | N-back, 心算等认知任务 | EEG: 高采样, fNIRS: 10Hz (MATLAB导出) | 认知负荷等级 | PDF 文档 |
+| Visual Cognitive Motivation | EEG + fNIRS (Oxy/Deoxy CSV 导出, 共享位置) | 16 | 场景图片 (250个) | 视觉认知动机决策 | EEG: 500Hz, fNIRS: 10Hz | RF/RR/FF/FR (记忆动机) | `readme.txt` |
+| Simultaneous EEG&NIRS | EEG + fNIRS (MATLAB 导出为 oxy/deoxy) | 26 | 认知任务 | N-back、DSR、word generation | EEG: 200Hz, fNIRS: 10Hz (MATLAB导出) | 认知负荷、Go/No-go、词生成/基线 | PDF 文档 |
 
 ---
 
@@ -37,7 +78,12 @@
 - 这里的幅值只用于判断量级和语义是否一致，不代表所有被试的完整总体分布。
 - 单位与幅值联合判断后，可将四个数据集分成三类: `波长/optical-domain 通道`、`混合信号类型`、`已导出为 Oxy/Deoxy 浓度语义`。
 
-## 光强可用性与波段对照
+## 光强可用性与波段对照（历史 optical-cache 方案）
+
+以下保留旧 optical-cache 方案的来源辨析，不是当前训练输入指令。
+当前统一 loader 使用 `homer2_aligned_fnirs` 的 HbO/HbR 分支。
+将 HbO/HbR 前向投影为假定波长的光学量只能产生模型派生量，不能恢复原始测量；
+缺少消光系数、路径长度、基线和单位时，也不能据此构造物理可比的 optical cache。
 
 以下表格只回答统一 optical measurement space 所需的两个问题：当前仓库里是否已经有直接可用的 optical-domain 通道，以及这些通道的波段是否与 EEG+NIRS Single-Trial 的 `760/850 nm` 基准一致。
 
@@ -98,7 +144,7 @@
 - 样例字段明确给出 `signal = NIRS (low wavelength, high wavelength)`，`yUnit = V`，`wavelengths = [760, 850]`。
 - 通道名中的 `highWL` / `lowWL` 应视为波长通道标签，而不是已经转换完成的 HbO/HbR 浓度对。
 - 因此在统一缓存前，这个数据集应先标记为“波长通道输入”，不能直接和 mmol/L 的浓度型数据按相同语义对齐。
-- 当前 Croce source/observation cache 的统一语义应固定在 optical measurement space：Single-Trial 直接使用 `highWL` / `lowWL`；其他已经是 HbO/HbR 的数据集在进入统一缓存前，需要先显式前向投影到一对 optical channels，而不是反过来把 Single-Trial 误标成 HbO/HbR。
+- 历史 Croce source/observation cache 曾采用 optical measurement space；该派生监督方案不再定义当前 measured-data loader。当前 Single-Trial 经显式 OD/MBLL 形成近似 HbO/HbR 分支，其他数据集保留已发布的色团导出；转换细节与限制见统一数据合同。
 
 #### 适用场景
 ✅ Motor Imagery BCI  
@@ -183,8 +229,8 @@ REFED-dataset/
 
 | 模态 | 设备 | 采样率 | 位置系统 | 格式 |
 |------|------|--------|---------|------|
-| EEG | - | 高采样 | 国际10-20系统 | `.edf` / `.mat` |
-| fNIRS | Hitachi NIRS ETG-7100 | 设备原生 | 与EEG共享位置 | Oxy/Deoxy CSV 原始导出 |
+| EEG | Nihon Kohden Neurofax EEG-1100 | 500 Hz | 国际10-20系统 | `.edf` / `.mat` |
+| fNIRS | Hitachi NIRS ETG-7100 | 10 Hz | 与EEG共享位置 | Oxy/Deoxy CSV 原始导出 |
 
 #### 实验范式
 - **刺激**: 250个不重复场景图片
@@ -326,4 +372,4 @@ Simultaneous EEG&NIRS/
 
 ---
 
-*最后更新: 2026-05-29*
+*目录初版日期: 2026-05-29；采集方式与单位复核见本文开头的日期标记。*

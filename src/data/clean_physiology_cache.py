@@ -15,6 +15,8 @@ from .event_alignment import EVENT_ALIGNMENT_SCHEMA
 
 CLEAN_PHYSIOLOGY_CACHE_INDEX_SCHEMA = "clean_physiology_cache_index_v1"
 CLEAN_CACHE_SCHEMA = "clean_eeg_fnirs_cache_v2"
+DEFAULT_CLEAN_CACHE_ROOT = "data/cache/physiology_semantic_clean_v4"
+MEASUREMENT_CACHE_STORAGE = "measurement_npy_record_v1"
 # Immutable v1 artifacts remain historical evidence, not inputs to the v2 reader.
 DEPRECATED_CACHE_SCHEMAS = frozenset({"clean_eeg_fnirs_cache_v1"})
 
@@ -130,11 +132,13 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 class CleanPhysiologyCacheIndex:
     """Index signal records, events, and alignment reports by canonical keys."""
 
-    def __init__(self, cache_root: str | Path = "data/cache/physiology_semantic_clean_v1") -> None:
+    def __init__(self, cache_root: str | Path = DEFAULT_CLEAN_CACHE_ROOT) -> None:
         self.cache_root = Path(cache_root)
         self.project_root = Path.cwd()
         self.cache_manifest = _read_json(self.cache_root / "cache_manifest.json")
         require_current_cache_manifest(self.cache_manifest)
+        if self.cache_manifest.get("execution", "completed") != "completed":
+            raise ValueError("Physiology cache build is incomplete")
         self.event_manifest_path = self.cache_root / "event_index" / "event_manifest.json"
         self.event_manifest = _read_json(self.event_manifest_path) if self.event_manifest_path.exists() else {}
         if self.event_manifest.get("event_alignment_schema") != EVENT_ALIGNMENT_SCHEMA:
@@ -211,9 +215,14 @@ class CleanPhysiologyCacheIndex:
             "record_keys_without_alignment_reports": sorted(record_keys - report_keys),
         }
 
-    def load_record_arrays(self, record: CleanCacheRecord) -> dict[str, np.ndarray]:
+    def load_record_arrays(self, record: CleanCacheRecord, keys: Iterable[str] | None = None) -> dict[str, np.ndarray]:
+        if record.manifest.get("storage") == MEASUREMENT_CACHE_STORAGE:
+            paths = record.manifest["arrays"]
+            selected = paths if keys is None else keys
+            return {key: np.load(record.npz_path / paths[key], mmap_mode="r", allow_pickle=False)
+                    for key in selected if key in paths}
         with np.load(record.npz_path, allow_pickle=False) as npz:
-            return {key: np.asarray(npz[key]) for key in npz.files}
+            return {key: np.asarray(npz[key]) for key in (npz.files if keys is None else keys) if key in npz}
 
 
 class CleanPhysiologyAlignedWindowDataset:
@@ -221,7 +230,7 @@ class CleanPhysiologyAlignedWindowDataset:
 
     def __init__(
         self,
-        cache_root: str | Path = "data/cache/physiology_semantic_clean_v1",
+        cache_root: str | Path = DEFAULT_CLEAN_CACHE_ROOT,
         *,
         array_key: str = "homer2_aligned_fnirs",
         branch_preference: str | None = "hbo_hbr",
@@ -272,6 +281,8 @@ class CleanPhysiologyAlignedWindowDataset:
         return windows
 
     def _record_num_samples(self, record: CleanCacheRecord) -> int | None:
+        if record.manifest.get('storage') == MEASUREMENT_CACHE_STORAGE:
+            return int(record.manifest['array_shapes']['fnirs'][0])
         for contract_name in ("homer2_aligned_contract", "raw_native_contract"):
             contract = record.manifest.get(contract_name, {})
             if contract.get("array_key") != self.array_key:
@@ -289,8 +300,10 @@ class CleanPhysiologyAlignedWindowDataset:
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         window = self.windows[index]
-        arrays = self.index.load_record_arrays(window.record)
-        fnirs = np.asarray(arrays[self.array_key][window.start_index : window.stop_index], dtype=np.float32).T
+        measured = window.record.manifest.get('storage') == MEASUREMENT_CACHE_STORAGE
+        key = 'fnirs' if measured and self.array_key == 'homer2_aligned_fnirs' else self.array_key
+        arrays = self.index.load_record_arrays(window.record, (key,))
+        fnirs = np.asarray(arrays[key][window.start_index : window.stop_index], dtype=np.float64 if measured else np.float32).T
         return {
             "fnirs": fnirs,
             "eeg": None,

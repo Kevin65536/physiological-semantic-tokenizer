@@ -33,6 +33,22 @@ def first_difference_noise(trials, constant):
     return robust_mad(differences) / 1.482602218505602 / constant
 
 
+def noise_floor_evidence(estimate, floor, *, layer, unit, source, family='gaussian', nu=None):
+    """Audit the existing noise policy without changing its statistical weight."""
+    estimate, floor = np.broadcast_arrays(np.asarray(estimate, dtype=float), np.asarray(floor, dtype=float))
+    if not np.isfinite(estimate).all() or not np.isfinite(floor).all() or np.any(estimate < 0) or np.any(floor < 0):
+        raise ValueError('noise estimate and floor must be finite and nonnegative')
+    if family not in ('gaussian', 'student_t') or (family == 'student_t' and (nu is None or nu <= 2)):
+        raise ValueError('noise family and finite-variance Student degrees of freedom required')
+    final = np.maximum(estimate, floor)
+    sd_factor = np.sqrt(nu/(nu-2)) if family == 'student_t' else 1.
+    return dict(estimate_before_floor=estimate.tolist(), floor=floor.tolist(), final=final.tolist(),
+                triggered=(estimate < floor).tolist(), trigger_fraction=float(np.mean(estimate < floor)),
+                layer=layer, unit=unit, floor_source=source, family=family, student_nu=nu,
+                parameter='scale' if family == 'student_t' else 'SD',
+                standard_deviation=(final*sd_factor).tolist())
+
+
 def bridge_transform(values, variant, cfg):
     """Apply the configured finite-window transform to EEG/HbO/HbR columns."""
     y = np.array(values, copy=True)

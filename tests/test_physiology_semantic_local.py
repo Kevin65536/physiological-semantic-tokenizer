@@ -96,6 +96,37 @@ class _Base:
         return self.sample
 
 
+def test_measurement_local_view_preserves_units_pair_ratio_and_real_support(monkeypatch):
+    import torch
+    namespace, sample = _base_dataset()
+    sample['event']['label_index'] = 0
+    sample.update(coordinate_layer='cleaned_measurement', unit={'eeg': 'uV', 'fnirs': 'uM'},
+                  preprocessing_state={'eeg': {'reference': 'fixture'}, 'fnirs': {}},
+                  channel_valid_mask={'eeg': np.ones((8, 4000), dtype=bool),
+                                      'fnirs': np.ones((4, 200), dtype=bool)})
+    sample['fnirs'][1::2] *= 4
+    sample['channel_valid_mask']['eeg'][:, 450] = False
+    dataset = UnifiedPhysiologyLocalViewDataset(base_dataset=_Base(namespace, sample))
+    row = dataset[0]
+    assert row['eeg'].dtype == row['fnirs'].dtype == torch.float64
+    assert row['unit'] == sample['unit'] and 'teacher' not in row
+    assert not row['token_valid_mask']['eeg'][1]
+    assert row['token_valid_mask']['eeg'][0]
+    assert not row['channel_valid_mask']['eeg'][:, 450].any()
+    assert torch.all(row['fnirs'][1] == 4 * row['fnirs'][0])
+    assert len(json.loads(row['measurement_metadata_json'])['channel_geometry']['eeg']) == 6
+    from torch.utils.data import default_collate
+    assert default_collate([row, row])['eeg'].shape == (2, 6, 4000)
+    dataset.auxiliary_targets = object()
+    with pytest.raises(ValueError, match='no qualified compatible teacher'):
+        dataset[0]
+    import src.data.physiology_semantic_local as local
+    monkeypatch.setattr(local, 'PhysiologySemanticTargetSidecar', lambda *a, **k: pytest.fail('must reject before sidecar read'))
+    with pytest.raises(ValueError, match='no qualified compatible teacher'):
+        UnifiedPhysiologyLocalViewDataset(base_dataset=_Base(namespace, sample),
+            output_coordinate='measurement', auxiliary_target_root='unqualified_fixture')
+
+
 def test_unified_local_view_ignores_retired_artifact_invalidity_but_consumes_bad_channels():
     namespace, sample = _base_dataset()
     dataset = UnifiedPhysiologyLocalViewDataset(
@@ -188,6 +219,7 @@ def test_unified_local_view_joins_target_by_anchor_independent_identity(tmp_path
         base_dataset=_Base(namespace, sample),
         subject_keys=["eeg_fnirs_single_trial|subject_01"],
         reject_unknown_labels=False,
+        output_coordinate="legacy_robust",
         auxiliary_target_root=str(sidecar),
         auxiliary_target_family="adaptive_multimodal_consensus_proxy",
         auxiliary_target_version="adaptive_ssm_gauge_corrected_patch_v1",

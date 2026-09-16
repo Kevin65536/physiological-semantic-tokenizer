@@ -17,6 +17,7 @@ from .croce_local_cache_dataset import (
 )
 from .eeg_fnirs_dataset import EEGfNIRSDataset, MultiModalEEGfNIRSDataset, create_dataloaders as create_single_trial_dataloaders
 from .physiology_semantic_local import UnifiedPhysiologyLocalViewDataset
+from .clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from .registry import normalize_data_config, resolve_dataset_id, resolve_modality_preprocessing
 from .simultaneous_eeg_nirs_dataset import (
     SimultaneousContinuousDataset,
@@ -446,13 +447,18 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
     if dataset_id == 'unified_physiology_local':
         dataloaders: Dict[str, DataLoader] = {}
         split_cfg = data_cfg.get('split', {})
+        split_subjects = {name: set(split_cfg.get(f'{name}_subject_keys', split_cfg.get(name, [])))
+                          for name in ('train', 'val', 'test')}
+        if any(split_subjects[a] & split_subjects[b] for a,b in (('train','val'),('train','test'),('val','test'))):
+            raise ValueError('Measurement factory requires disjoint subject splits')
+        coordinate = str(data_cfg.get('output_coordinate', 'measurement'))
         for split_name in ('train', 'val', 'test'):
             subject_keys = split_cfg.get(f'{split_name}_subject_keys', split_cfg.get(split_name, []))
             target_cfg = data_cfg.get('auxiliary_target', {}) or {}
             target_root = target_cfg.get('root')
             required_splits = set(target_cfg.get('required_splits', ()))
             dataset = UnifiedPhysiologyLocalViewDataset(
-                cache_root=data_cfg.get('cache_root', 'data/cache/physiology_semantic_clean_v1'),
+                cache_root=data_cfg.get('cache_root', DEFAULT_CLEAN_CACHE_ROOT),
                 dataset_ids=tuple(data_cfg.get('dataset_ids', ('eeg_fnirs_single_trial',))),
                 subject_keys=subject_keys,
                 task_namespaces=data_cfg.get('task_namespaces'),
@@ -461,6 +467,7 @@ def create_configured_multimodal_dataloaders(config: Dict[str, Any]) -> Dict[str
                 eeg_signal_branch=str(
                     data_cfg.get('eeg_signal_branch', 'single_trial_eeg_artifact_clean_v4')
                 ),
+                output_coordinate=coordinate,
                 local_eeg_channels=int(data_cfg.get('local_view', {}).get('eeg_channels', 6)),
                 reject_unknown_labels=bool(data_cfg.get('reject_unknown_labels', True)),
                 allow_cross_coordinate_systems=bool(

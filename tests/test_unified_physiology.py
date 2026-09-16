@@ -30,6 +30,7 @@ from src.data.unified_physiology import (
     collate_refed_continuous_sequences,
     fnirs_component_roles,
     preprocess_eeg_record,
+    preprocess_eeg_record_with_quality,
     preprocess_fnirs_record,
     refed_continuous_target_window,
 )
@@ -45,8 +46,10 @@ def test_unified_loader_default_eeg_branch_is_single_trial_v4():
     assert default == "single_trial_eeg_artifact_clean_v4"
 
 
-def test_unified_window_disables_artifact_marking_and_invalidity():
+@pytest.mark.parametrize('coordinate', ['legacy_robust', 'measurement'])
+def test_unified_window_disables_artifact_marking_and_invalidity(coordinate):
     dataset = object.__new__(UnifiedPhysiologyWindowDataset)
+    dataset.output_coordinate = coordinate
     dataset.window_duration_s = 1.0
     dataset.window_offset_s = 0.0
     record = SimpleNamespace(
@@ -72,11 +75,13 @@ def test_unified_window_disables_artifact_marking_and_invalidity():
         "eeg_channel_names": ("F3", "F4"),
         "fnirs_channel_names": ("CH1_HbO", "CH1_HbR"),
         "fnirs_component_roles": ("HbO", "HbR"),
-        "eeg_preprocessing_state": {"signal_branch": "single_trial_eeg_artifact_clean_v4"},
-        "fnirs_preprocessing_state": {},
+        "eeg_preprocessing_state": {"signal_branch": "single_trial_eeg_artifact_clean_v4", "canonical_unit": "uV"},
+        "fnirs_preprocessing_state": {"canonical_unit": "uM"},
+        "fnirs_processed_valid_mask": np.ones((10, 2), dtype=bool),
         "eeg_quality": {
             "artifact_mask": np.ones(200, dtype=bool),
             "bad_channel_mask": np.zeros(2, dtype=bool),
+            "processed_valid_mask": np.column_stack((np.ones(200, dtype=bool), np.zeros(200, dtype=bool))),
         },
         "eeg_geometry": [{"channel_name": "F3"}, {"channel_name": "F4"}],
     }
@@ -89,6 +94,11 @@ def test_unified_window_disables_artifact_marking_and_invalidity():
 
     assert sample["artifact_mask_policy"] == EEG_ARTIFACT_MASK_POLICY
     assert not sample["artifact_mask"]["eeg"].any()
+    if coordinate == 'measurement':
+        assert sample['unit'] == {'eeg': 'uV', 'fnirs': 'uM'}
+        assert sample['channel_valid_mask']['eeg'].shape == sample['eeg'].shape
+        assert sample['channel_valid_mask']['eeg'][0].all()
+        assert not sample['channel_valid_mask']['eeg'][1].any()
     np.testing.assert_array_equal(
         sample["analysis_valid_mask"]["eeg"],
         sample["valid_mask"]["eeg"],
@@ -138,6 +148,23 @@ def test_common_preprocessing_unifies_rates_and_robust_units(tmp_path):
     assert fnirs.shape[0] == int(round(fnirs_native.shape[0] * CANONICAL_FNIRS_SAMPLE_RATE_HZ / 20.0))
     assert fnirs_state["canonical_unit"] == CANONICAL_UNIT
     assert np.max(np.abs(np.median(fnirs, axis=0))) < 0.05
+
+
+def test_measurement_coordinate_preserves_paired_amplitude_and_eeg_units(tmp_path):
+    time = np.arange(1000)/200
+    x = np.column_stack([20*np.sin(2*np.pi*10*time),5*np.sin(2*np.pi*10*time)])
+    outputs = []
+    for unit,factor in [('uV',1.),('V',1e-6)]:
+        record = NativeEEGRecord(x*factor,200.,('F3','F4'),unit,tmp_path/'fixture',unit_evidence='known synthetic')
+        y,state,q = preprocess_eeg_record_with_quality(record,output_coordinate='measurement')
+        assert y.dtype == np.float64 and state['canonical_unit']=='uV'
+        outputs.append(y)
+    np.testing.assert_allclose(*outputs,atol=1e-12)
+    hb = np.column_stack([4*np.sin(time),-np.sin(time)])
+    y,state = preprocess_fnirs_record(hb,sample_rate_hz=10,native_contract={'output_unit':'uM'},
+                                    output_coordinate='measurement')
+    np.testing.assert_array_equal(y,hb)
+    assert state['canonical_unit']=='uM' and y.dtype == np.float64
 
 
 def test_visual_label_separates_condition_from_event_role():

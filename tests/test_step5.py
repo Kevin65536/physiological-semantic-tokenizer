@@ -3,11 +3,36 @@ import numpy as np
 import pytest
 
 from src.inference.observation_baselines import (
-    first_difference_noise, student_difference_mad,
+    first_difference_noise, student_difference_mad, noise_floor_evidence,
 )
 from scipy.integrate import quad
 from scipy.stats import norm,t
 from experiments import evaluate_step5 as step5
+
+
+def test_noise_floor_retains_unfloored_estimate_and_student_sd():
+    evidence = noise_floor_evidence([.01,.3], [.1,.1], layer='feature', unit='relative',
+                                   source='fixed synthetic model',family='student_t',nu=5)
+    assert evidence['estimate_before_floor'] == [.01,.3]
+    assert evidence['triggered'] == [True,False]
+    assert evidence['trigger_fraction'] == .5
+    np.testing.assert_allclose(evidence['standard_deviation'],np.array([.1,.3])*np.sqrt(5/3))
+
+
+@pytest.mark.parametrize('amplitude', [20., 1e-7])
+def test_measurement_log_power_is_voltage_unit_invariant_including_floor(amplitude):
+    from src.data.homer2_preprocessing import MEASUREMENT_ALIGNMENT_SCHEMA
+    time = np.arange(6000)/200
+    eeg = amplitude*np.sin(2*np.pi*10*time)[:,None]
+    optical = np.ones((300,1,2))
+    kwargs = dict(processing_schema=MEASUREMENT_ALIGNMENT_SCHEMA, eeg_unit_evidence='synthetic known unit')
+    uv = step5.preprocess_native_trial(eeg,optical,eeg_unit='uV',**kwargs)
+    volts = step5.preprocess_native_trial(eeg/1e6,optical,eeg_unit='V',**kwargs)
+    np.testing.assert_allclose(uv['eeg_log_power'],volts['eeg_log_power'],atol=1e-12)
+    assert uv['eeg_feature_contract']['floor_fraction'] == volts['eeg_feature_contract']['floor_fraction']
+    assert uv['eeg_feature_contract']['floor_fraction'] == (1. if amplitude < 1e-6 else 0.)
+    with pytest.raises(ValueError,match='evidenced'):
+        step5.preprocess_native_trial(eeg,optical,processing_schema=MEASUREMENT_ALIGNMENT_SCHEMA)
 
 
 def test_full_contract_stops_scope_and_prior_drift():
@@ -173,6 +198,22 @@ def test_student_difference_noise_scale_and_reference_gauge():
     gauge=step5.reference_observation_gauge(base,spec)
     assert gauge['eeg']>0 and gauge['fnirs_common']>0
     assert np.isfinite(gauge['coordinate_sd']).all()
+
+
+def test_frozen_loading_does_not_refit_data_amplitude_when_process_prior_changes():
+    base,spec,_ = step5.load_measured_config()
+    rng = np.random.default_rng(219)
+    features = [dict(eeg_log_power=rng.normal(size=(120,3)),fnirs=rng.normal(size=(120,2,2))) for _ in range(3)]
+    fixed = step5.reference_observation_gauge(base,spec)
+    first = step5.fit_measured_projection(features,base,spec,frozen_reference_loading=fixed)
+    changed = copy.deepcopy(base)
+    changed['model']['process_std'] = (np.array(base['model']['process_std'])*2).tolist()
+    second = step5.fit_measured_projection(features,changed,spec,frozen_reference_loading=fixed)
+    assert first['eeg_factor'] == second['eeg_factor']
+    assert first['fnirs_factor'] == second['fnirs_factor']
+    for prefix in ['eeg','fnirs']:
+        key = 'fnirs_common' if prefix == 'fnirs' else prefix
+        assert first[prefix+'_factor'] == pytest.approx(first['computational_scale'][key]*first['observation_loading'][key])
 
 
 def test_frozen_measured_projection_preserves_raw_mask_isolation():

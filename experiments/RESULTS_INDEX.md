@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-09-15; payload-pruning record retained from
+_Evidence surface updated 2026-09-16; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -18,10 +18,22 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Measurement cache migration — 2026-09-16
+
+The [migration inventory](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_measurement_cache_migration_v4/migration.json)
+records authorized cleanup, retained metadata, cache validation and before/after
+allocated disk usage. The current data default is the v4 measurement cache;
+model-specific normalization belongs to SSM/tokenizer consumers. Retired general
+v1 and public smoke arrays are rebuildable; preserve their manifests, event and
+geometry metadata in this migration package before deleting those directories.
+The v3 SSM native cache and historical teacher sidecars remain retained inputs.
+This is a data preparation migration, not a new model result or protected evaluation.
+
 ## Main-method evidence
 
 | Stage | Retained authority / artifact | Why it remains |
 | --- | --- | --- |
+| Measurement alignment revision | [Detailed Chinese alignment report](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_dataset_alignment_report_v2/REPORT.md), [PDF](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_dataset_alignment_report_v2/REPORT.pdf), [self-contained HTML](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_dataset_alignment_report_v2/REPORT.html), [bitmap figure atlas](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_dataset_alignment_report_v2/FIGURES.pdf), [Execution and fixed-denominator summary](runs/physiology_semantic_tokenizer/ssm_overnight/20260916_measurement_alignment_v3/summary.json), [generated report](runs/physiology_semantic_tokenizer/ssm_overnight/20260916_measurement_alignment_v3/OVERNIGHT_REPORT.md), [contract](configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml), [public loader smoke](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_dataset_alignment_v3/public_loader_smoke.json), [independent MBLL check](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_dataset_alignment_v3/mbll_independent_check.json), [Visual CH6 audit](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_dataset_alignment_v3/visual_ch6_quality.json) | Versioned unit/precision/support repair; retain source snapshot, task identities, original-input manifests, numerical/physical failures and first failed public join smoke. These interfaces do not grant teacher or tokenizer qualification. All generated payload remains local. |
 | Four-dataset scaling audit and bounded SSM diagnostic | [Chinese report](runs/physiology_semantic_tokenizer/data_quality_audit/20260915_dataset_scaling_report_v1/REPORT.md), [PDF](runs/physiology_semantic_tokenizer/data_quality_audit/20260915_dataset_scaling_report_v1/REPORT.pdf), [self-contained HTML](runs/physiology_semantic_tokenizer/data_quality_audit/20260915_dataset_scaling_report_v1/REPORT.html), [summary](runs/physiology_semantic_tokenizer/data_quality_audit/20260915_dataset_scaling_report_v1/report_summary.json), [contract](configs/physiology_semantic_tokenizer/dataset_scaling_report_v1.yaml) | Actual raw/current amplitude and Hb-pair ratio audit, known-truth scaling controls, and fixed-fold pointwise measured sensitivity; distinct from v3 temporal qualification and tokenizer training. Generated report/evidence package remains local. |
 | SSM observation-contract v3 diagnostics | [Chinese visual report](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.md), [PDF](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.pdf), [self-contained HTML](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.html), [summary](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/summary.json), [continuation identity](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/continuation.json), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml) | Temporal mean/covariance ablations, independent gain/Q panels, measured failures and technical continuation; synthetic recovery evidence does not establish measured teacher qualification |
 | SSM overnight N1–N7 diagnostics | [Chinese visual report](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.md), [full PDF](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.pdf), [self-contained HTML](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.html), [vector figure atlas](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/FIGURES.pdf), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml) | Complete task denominators, failure evidence, synthetic/measurement boundaries and G/W ablations; exploratory evidence without teacher qualification |

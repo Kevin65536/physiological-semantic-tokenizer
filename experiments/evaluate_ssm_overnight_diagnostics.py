@@ -215,7 +215,10 @@ def scope_inventory(cfg, base, metadata):
             raise ValueError('missing admitted session inventory')
         rows = []
         for record in records:
-            for ordinal, (position, event) in enumerate(diagnostic.training_events(index.events_by_join_key[record.join_key], base)):
+            reports = (index.reports_by_join_key.get(record.join_key, [])
+                       if 'measurement_revision' in cfg else None)
+            for ordinal, (position, event) in enumerate(diagnostic.training_events(
+                    index.events_by_join_key[record.join_key], base, alignment_reports=reports)):
                 rows.append(dict(subject=subject, session=record.base_record_id, training_ordinal=ordinal,
                     original_ma_trial_position=position, event_index=int(event['event_index']),
                     sample_id=f"{record.join_key}|event={event['event_index']}|offset=-5.0|duration=30.0"))
@@ -523,13 +526,13 @@ def physical_valid(checks):
 
 def failure(exc):
     if isinstance(exc, core.FlowDomainExit):
-        return dict(status='failed_domain', error=repr(exc), flow_domain_exit=exc.diagnostic)
+        return dict(status='failed_domain', failure_category='illegal_physical_path', error=repr(exc), flow_domain_exit=exc.diagnostic)
     if isinstance(exc, FileNotFoundError):
-        return dict(status='data_unavailable', error=repr(exc))
+        return dict(status='data_unavailable', failure_category='missing_dependency', error=repr(exc))
     if isinstance(exc, (ValueError, AssertionError, KeyError)):
-        return dict(status='failed_contract', error=repr(exc))
+        return dict(status='failed_contract', failure_category='input_or_observation_contract', error=repr(exc))
     if isinstance(exc, TimeoutError):
-        return dict(status='timeout', error=repr(exc))
+        return dict(status='timeout', failure_category='time_budget', error=repr(exc))
     return dict(status='failed_numerical', error=repr(exc), traceback=traceback.format_exc())
 
 
@@ -1665,6 +1668,7 @@ def freeze_sources(run_dir, cfg):
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v1.yaml',
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml',
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml',
+             'experiments/configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml',
              'docs/EXPERIMENT_PLAN.md']
     paths = sorted(set(tracked+extra))
     hashes = {}
@@ -2397,6 +2401,14 @@ def v3_load_config(cfg):
             and 1 <= budget['map_max_nfev'] <= 200):
         raise ValueError('v3 budget exceeds the planned bounds')
     dc, base, measured, metadata = diagnostic.load_config(CODE_ROOT/cfg['diagnostic_config'])
+    if 'measurement_revision' in cfg:
+        revision = cfg['measurement_revision']
+        if revision != dict(processing_schema='physiology_measurement_alignment_v3',
+                            cache_root='data/cache/physiology_semantic_clean_v3_ssm_native',
+                            stages=[1,2]):
+            raise ValueError('measurement revision scope/version changed')
+        metadata = copy.deepcopy(metadata)
+        metadata['data']['cache_root'] = revision['cache_root']
     if base['measured']['heldout_trial_positions'] != [4, 9] or base['measured']['sessions'] != cfg['sessions']:
         raise ValueError('v3 differs from the owning original-training boundary')
     base['model']['steps'] = cfg['steps']
@@ -2407,11 +2419,15 @@ def v3_load_config(cfg):
 def v3_native_operators(steps=120):
     from scipy.signal import resample_poly
     from src.data.homer2_preprocessing import bandpass_fnirs, modified_beer_lambert
+    from src.data.physiology_measurement_adapter import measurement_baseline
     if steps <= 20 or (steps*5) % 2:
         raise ValueError('feature time window must support the five-second baseline')
     native_steps = steps*5//2
-    baseline = np.eye(steps)
-    baseline[:, :20] -= 1/20
+    _, weights, baseline_evidence = measurement_baseline(
+        np.zeros((steps,3)),np.arange(steps)/4.-5.,np.ones(steps,dtype=bool),
+        interval_s=(-5.,0.),role='pre_event_reference_not_latent_rest',
+        evidence='Step5 admitted 30 s window begins 5 s before MA event',minimum_samples=20)
+    baseline = np.eye(steps)-np.ones((steps,1))*weights
     filtered, quality = bandpass_fnirs(np.eye(native_steps), sample_rate_hz=10.)
     if quality['status'] != 'applied':
         raise ValueError('native feature filter unavailable at the declared support')
@@ -2424,7 +2440,8 @@ def v3_native_operators(steps=120):
     converted, _ = modified_beer_lambert(optical_basis, wavelengths_nm=(760., 850.))
     mbll = converted[:2, 0, :].T
     return dict(eeg=baseline, fnirs=fnirs, native_interpolation=interpolation,
-                model_time=model_clock, fnirs_time=native_clock, mbll=mbll)
+                model_time=model_clock, fnirs_time=native_clock, mbll=mbll,
+                baseline_evidence=baseline_evidence)
 
 
 @lru_cache(maxsize=96)
@@ -2456,16 +2473,26 @@ def v3_seed(cfg, *identity):
 def v3_noise_estimate(base, eeg, od, train, fnirs_factor):
     """Training-only feature noise; fixed MBLL retains HbO/HbR cross covariance."""
     from scipy.special import ndtri
+    from src.inference.observation_baselines import noise_floor_evidence
     normal_difference_mad = np.sqrt(2)*ndtri(.75)
     p, _, _ = model(base, BASE)
     marginal = np.asarray(p.fixed.observation_scale)*np.sqrt(p.fixed.student_nu/(p.fixed.student_nu-2))
     mbll = v3_native_operators(eeg.shape[1])['mbll']
-    eeg_sd = max(float(first_difference_noise([eeg[i, :, None] for i in train],
-                                                   normal_difference_mad)[0]), marginal[0])
+    eeg_estimate = float(first_difference_noise([eeg[i, :, None] for i in train], normal_difference_mad)[0])
+    eeg_sd = max(eeg_estimate, marginal[0])
     floor = min(marginal[1:])/(max(np.linalg.norm(mbll, axis=1))*fnirs_factor)
-    od_sd = np.maximum(first_difference_noise([od[i] for i in train], normal_difference_mad), floor)
+    od_estimate = first_difference_noise([od[i] for i in train], normal_difference_mad)
+    od_sd = np.maximum(od_estimate, floor)
     mixing = fnirs_factor*mbll@np.diag(od_sd)
     return dict(eeg_sd=eeg_sd, od_sd=od_sd, fnirs_mixing=mixing, fnirs_factor=fnirs_factor,
+        evidence=dict(eeg=noise_floor_evidence(eeg_estimate, marginal[0],
+            layer='projected EEG log-power before baseline', unit='frozen model observation coordinate',
+            source='synthetic model Student-t marginal SD; not independently measured sensor noise'),
+            optical_density=noise_floor_evidence(od_estimate, floor,
+                layer='motion-processed natural OD before linear filtering', unit='dimensionless OD',
+                source='synthetic Hb marginal SD mapped back through frozen MBLL and loading'),
+            synthetic_student_scale=list(p.fixed.observation_scale), synthetic_student_nu=p.fixed.student_nu,
+            synthetic_marginal_sd=marginal.tolist()),
         estimator='Gaussian first-difference MAD on training feature inputs',
         assumption='independent EEG-feature / motion-processed wavelength noise draws; not raw-noise calibration',
         training_trials=list(train))
@@ -2544,7 +2571,12 @@ def v3_view(cfg, arrays, info, identities, trial, mode, *, with_noise=True):
                             op['fnirs']@op['native_interpolation']))
     spec = joint.TrajectoryObservationSpec(mean, op['model_time'], op['model_time'],
         (dict(contract=cfg['observation']['schema'], mode=mode,
-              mean_native_clock='linear interpolation of canonical clean observations; constant endpoints'),),
+              mean_native_clock='linear interpolation of canonical clean observations; constant endpoints',
+              native_noise_clock_hz=dict(eeg=4.,optical_density=10.),
+              output_clock_hz=4.,support_seconds=n/4.,
+              filter_low_frequency_cycles=.01*n/4.,
+              causal=False,physiological_delay_removed=False,
+              baseline=op['baseline_evidence']),),
         output_mask=available)
     target_spec = joint.TrajectoryObservationSpec(target_mean, op['model_time'], op['model_time'], ())
     width = n+2*nh
@@ -2783,7 +2815,8 @@ def v3_generate_panel(run_dir, cfg, base, task):
 
 def v3_prepare_subject(run_dir, cfg, dc, base, measured, metadata, task):
     trials, detail = diagnostic.load_training_subject(task['subject'], dc, base, measured, metadata,
-                                                      retain_feature_boundary=True, data_root=ROOT)
+        retain_feature_boundary=True,data_root=ROOT,
+        processing_schema=cfg.get('measurement_revision',{}).get('processing_schema','homer2_alignment_contract_v1'))
     validate_identities(detail['trials'], cfg, task['subject'])
     expected = read_json(Path(run_dir)/'scope_inventory.json')[task['subject']]
     if [r['sample_id'] for r in expected] != [r['sample_id'] for r in detail['trials']]:
@@ -2823,7 +2856,9 @@ def v3_prepare_projection(run_dir, cfg, base, measured, task):
     else:
         features = [dict(eeg_log_power=e, fnirs=h) for e, h in zip(raw['target_eeg_log_power'], raw['target_fnirs'])]
         eligible = np.logical_and.reduce(raw['eligible'][train])
-        projection = step5.fit_measured_projection([features[i] for i in train], base, measured, eligible)
+        fixed_loading = step5.reference_observation_gauge(base,measured) if 'measurement_revision' in cfg else None
+        projection = step5.fit_measured_projection([features[i] for i in train], base, measured, eligible,
+                                                   frozen_reference_loading=fixed_loading)
         eeg = (((raw['feature_eeg_log_power']-projection['eeg_center'])/
             projection['eeg_feature_scale']-projection['pca_center'])@projection['loading'])*projection['eeg_factor']
         hb = raw['feature_fnirs'][:, :, projection['fnirs_pair']]*projection['fnirs_factor']
@@ -2839,7 +2874,8 @@ def v3_prepare_projection(run_dir, cfg, base, measured, task):
         projection=projection, feature_noise=noise, synthetic=synthetic,
         coordinate_use='fold_training_only_feature_missing_v1',
         source_preparation_sha256=diagnostic.digest(Path(run_dir)/'prepared'/f'{subject}.npz'),
-        normalization_sd=normalizer, feature_times=dict(eeg_hz=4., optical_hz=10., evaluation_hz=4.))
+        normalization_sd=normalizer, feature_times=dict(eeg_hz=4., optical_hz=10., evaluation_hz=4.),
+        baseline=op['baseline_evidence'])
     arrays = dict(feature_eeg=eeg, feature_fnirs=hb, target=target, normalizer=normalizer)
     if synthetic:
         arrays['truth'] = raw['truth']
@@ -3069,6 +3105,8 @@ def v3_make_tasks(cfg, inventory):
                                               [temporal_gate, screen], False)
         add(f'v3_S{stage}_report', measured_family, first_layer+11, 'v3_phase_report', stage, report_stage=stage,
             dependencies=measured_outer)
+    if 'measurement_revision' in cfg:
+        tasks = [task for task in tasks if task['stage'] in cfg['measurement_revision']['stages']]
     # Disjoint stages, not worker count, define when the next contract may run.
     tasks.sort(key=lambda t: (t['stage'], t['layer']))
     for i, task in enumerate(tasks):
@@ -3282,6 +3320,18 @@ def v3_engineering_checks(cfg, dc, base):
     weighted, _ = equal_subject_mean([dict(subject='a', session='x', v=1.)]*3+
         [dict(subject='a', session='y', v=9.), dict(subject='b', session='x', v=3.)], 'v')
     checks['unequal_denominators'] = dict(passed=abs(weighted-4.) < 1e-12, expected=4., actual=weighted)
+    if 'measurement_revision' in cfg:
+        kwargs = dict(processing_schema=cfg['measurement_revision']['processing_schema'],
+                      eeg_unit_evidence='known synthetic input')
+        new = step5.preprocess_native_trial(eeg,intensity,eeg_unit='uV',retain_feature_boundary=True,**kwargs)
+        volts = step5.preprocess_native_trial(eeg/1e6,intensity,eeg_unit='V',**kwargs)
+        filtered,_ = bandpass_fnirs(new['feature_boundary']['fnirs'],sample_rate_hz=10.)
+        error = float(np.max(abs(resample_poly(filtered,2,5,axis=0)-new['fnirs'])))
+        unit_error = float(np.max(abs(new['eeg_log_power']-volts['eeg_log_power'])))
+        checks['measurement_revision'] = dict(passed=error < 1e-10 and unit_error < 1e-10,
+            processing_schema=kwargs['processing_schema'],recomposition_error=error,
+            voltage_unit_error=unit_error,feature_dtype=str(new['fnirs'].dtype),
+            power_floor=new['eeg_feature_contract'])
     return checks
 
 

@@ -38,6 +38,7 @@ to navigate implemented commands. Short-term scratch plans are not dependencies.
 
 | Reading task | Sections |
 | --- | --- |
+| Dataset processing and SSM fit revision | [Joint revision](#数据统一化与-ssm-拟合的联合修订2026-09-15) |
 | Observation-contract design | [Observation repair follow-up](#观测合同修复后的下一轮实验设计2026-09-10) |
 | Retained overnight and observation protocols | [Overnight v2](#bounded-overnight-ssm-diagnostics-retained-v2-contract), [flow/mask bridge](#step5-flow-domain-and-mask-specific-observation-experiment), [repair v1](#step5-observation-contract-repair-and-regression-retained-v1), [observation diagnostic](#step5-observation-adaptation-diagnostic-retained-v1-contract) |
 | Synthetic calibration and staged qualification | [Step5A0 localization](#step5a0-inference-consistency-diagnostic), [Step5 stages](#full-step5-staged-continuation) |
@@ -45,6 +46,135 @@ to navigate implemented commands. Short-term scratch plans are not dependencies.
 | Qualification and tokenizer design | [P0](#p0-software-and-synthetic-qualification), [teacher selection](#t-physical-teacher-selection), [tokenizer](#bq-source-and-observation-tokenizer), [coupling prior](#c-coupling-prior-return) |
 | Implementation and remaining design decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
+
+## 数据统一化与 SSM 拟合的联合修订（2026-09-15）
+
+本节响应对数据缩放与 SSM 拟合的复核，定义后续候选方案的验证顺序。
+单位、特征、baseline、尺度与噪声接口唯一由
+[`DATA_CONTRACT.md` 第 5 节](DATA_CONTRACT.md#5-将状态空间拟合纳入统一化合同2026-09-15-修订建议)
+持有。这里不改变下文保留的 v3 设计、冻结配置、数据身份或结果。
+本节定义后续联合修订；本次新增的有界实测与合成缩放诊断见
+[数据统一化诊断报告](../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260915_dataset_scaling_report_v1/REPORT.md)，
+该诊断不替代下列完整主协议，也未启动 protected evaluation。
+
+### 依据与待检验解释
+
+[v3 保留报告](../experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.md)
+支持“已知时间处理必须同时进入均值与协方差”，但没有规则通过完整实测改进筛查。
+[N1–N7 保留报告](../experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.md)
+中的增益/Q 成功子集改善也没有建立无害的状态恢复改进。
+精度审计、折内投影、逐模式完成性继续从原 run 读取，不复制结果表。
+
+本次区分四个问题，分别验证：
+
+1. **工程等价性：** 单位或计算缩放改变后，数据、观测均值、R 和目标是否仍描述同一模型。
+2. **测量假设：** 先验预测幅度映射、噪声下限及特征选择是否在吸收采集/模型差异。
+3. **推断稳定性：** 算术重组通过后，求解预算与合法物理路径是否仍失败。
+4. **科学有效性：** 拟合观测更好是否同时保留合成潜状态和正确配对增量。
+
+前三项不能互相替代；低 NRMSE、有限输出或所有 task 进入终态均不足以证明第四项。
+本协议继续以物理 teacher、观测与耦合问题为范围，不用下游任务准确率选择预处理。
+
+### 修订次序与最小对照
+
+| 次序 | 只改变什么 | 对照与通过条件 |
+| --- | --- | --- |
+| 0：软件合同 | 明确单位/噪声层、保留 float64 特征与单一目标 producer；同步计算缩放；记录下限前后数值 | 既有单位重表达、线性 Gaussian 独立解、mask 干预、噪声传播与精度检查通过；原有错误缩放负对照仍应失败 |
+| 1：数值修订基线 | 在旧统计模型下修复精度和算子重组；保持现有 PCA、Hb 对、幅度桥、R/Q 和 G/W/Z | 旧输出保留为历史对照；新 producer 与自身算子闭合。只改变单位/预条件时潜状态与参数推断应等价，不能把数值误差当科学收益 |
+| 2：测量尺度候选 | 用数据合同定义的模型无关缩放与显式观测 loading，替代将训练折幅度匹配到模型先验预测 SD 的做法 | 先做独立合成，在训练校准组冻结参考桥后 apply；不同参数候选共享同一目标、尺度和 scoring SD；R 同步换单位，Q 不动 |
+| 3：特征噪声候选 | 尺度固定后，单独检验训练特征噪声估计与有依据的下限 | 对照次序 2；检验已知噪声恢复、有效子空间残差与预测校准，不同时搜索增益或 Q |
+| 4：固定参数实测验证 | 对已满足上述软件/合成要求的完整候选，复用 v3 的限定面板、同折线性对照与 14 模式 | 固定分母、共同身份比较；区分两方向 joint 结果与全模式完整结果；输入失败和求解失败保留 |
+| 5：条件性模型适配 | 固定输入后分别检查一个共同 Hb 均值增益、或既有 Q STD 三点；不联合搜索 | 沿用独立合成适配检查，增益不重标噪声，Q 不触发重新缩放数据；不确定/不完整不作合格结论 |
+| 6：跨数据集扩展 | 接入相同数据合同下的其他采集/单位组，再检验留组泛化 | 先完成单位/空间/噪声层的接口检查；每组完整性单列，独立校准与严格 zero-shot 分列；具体面板另行设计 |
+
+次序 0/1 是工程修复，次序 2/3 才改变统计假设。旧桥已经在训练折拟合并冻结；
+次序 2 要检验的是幅度参照取自模型先验的影响。
+第一版候选不扩展 EEG 频带、空间搜索、增益上界、生理参数网格、状态维数或面板。
+更改 EEG 参考、长上下文滤波、脑区选择等会改变真实观测，应独立比较，不能夹在精度
+修复里归功于缩放。先锁定上述最小比较，再考虑这些数据集层面的后续差异。
+
+### 软件与合成验证
+
+- **单位压力检查：** 同一观测以 V/µV 或 mmol/L/µM 等价表示，经同步观测变换后，
+  比较潜状态、参数后验/目标函数差和逆变换预测；加入只改数据、不改均值/R 的负对照。
+  同时覆盖弱 HbR、退化 baseline、不同采样时钟及缺失模式。大动态范围检查要区分
+  单位换算和 SVD 截断的数值影响，不能要求错误秩下的结果“近似相同”。
+- **特征链重组：** 使用独立合成 EEG 与双波长输入，包含低功率、非正/缺失光强、
+  色团幅度不等、漂移和运动扰动。检查从原生值到 float64 特征、已知线性算子与评分
+  目标的闭合；物理单位合成正例与旧近似 MBLL 行为分别报告。
+- **噪声与 mask：** 检查 baseline/滤波/重采样的完整协方差、色团交叉项、输入与带噪
+  target 的交叉项、秩与支持残差。分别做原生缺失和特征缺失干预，拒绝用补值增加
+  有效样本数。特征噪声估计同时报告下限前偏差与下限触发率。
+- **已知状态：** 沿用线性 Gaussian、非线性 Gaussian、Student-t 三种生成规律和
+  独立种子，保留正确/错误配对及均值/协方差消融。报告 r、clean EEG/HbO/HbR、
+  合法路径、观测恢复；MAP 不报告未估计的后验区间或边际似然。
+- **适配代价：** 使用下文独立 18/6、四 panel 的合成选择/assessment 设计；每次只
+  适配一个轴。沿用 `+0.02` NRMSE 非实质退化的探索容差和单侧上界检查，明确其小样本
+  不确定性；不把同一 trial 的多个 mask 视为独立重复，也不增加样本直到通过。
+
+沿用既有工程容差：目标均值重组 `1e-6` 个冻结训练 SD、雅可比 `1e-5`、隐藏干预
+`1e-10`、密度单位检查 `1e-8`，以及 SVD `1e-10` 主容差与 `1e-8/1e-12` 敏感性。
+这些量必须在同一声明坐标下计算；换单位时其绝对尺度和低方差判定同步变换。
+新版本不能要求旧 float32 数组逐位等于新 float64 特征；旧差异保留并量化，
+新实现与新算子必须自行闭合。未完成测量量纲标定时不赋绝对浓度资格。
+
+### 把拟合效果作为数据处理验收，而非调参反馈环
+
+后续实测第一面板沿用下文已定义的 Single-Trial 原训练身份、嵌套折、30 s 窗口和
+14 模式；本次不启动它，不扩展到额外被试或数据集测量数组。
+所有候选在同一训练身份上拟合变换，在外折只 apply。目标以保留的测量/特征坐标
+为共同参照，不随候选的尺度、gain、R 或 Q 改变；若特征定义本身改变，则另定义
+共同可观察目标，不能直接比较各自坐标的 loss。
+
+每组后续实验须并列给出：
+
+| 验收方面 | 必报量及解释 |
+| --- | --- |
+| 输入一致性 | 单位证据/转换误差、时钟误差、真实支持、量化/重组误差、Hb 对幅度关系、floor 触发率；缺失证据不靠幅值猜测补齐 |
+| 完整性与成本 | 预定 trial/选择折/模式分母，准备失败、求解失败、物理失败与依赖失败；固定预算下耗时、迭代数与峰值内存 |
+| 预测与残差 | 两方向隐藏目标的物理或声明相对坐标 RMSE/偏差、冻结训练 SD 的 NRMSE、HbR 残差尾部；clean-map 和同源带噪预测分列 |
+| 共享性 | 同折自身上下文/任务模板/跨模态线性对照，正确配对对四类 null 的增量；完整风险要求下文固定全部身份与选择折完整 |
+| 状态与参数 | 合成状态恢复、真值可用且推断支持时的校准；固定尺度后参数曲线/边界率与加权雅可比诊断，不把贴边称为可辨识 |
+| 动力学代价 | 绝对转移残差及按各自 Q 标准化的残差、非零 driver 确定性回放闭合、非法路径与初态影响 |
+
+继续沿用下文的 B 权重、层级等权聚合、至少 10% 相对风险改善、各模态最多 0.05
+NRMSE 退化及配对增量要求，作为改变统计假设后的探索筛查；已知单位重表达应以
+等价性为正确结果，不需要达到 10% 改善。低训练 SD 未定义分数保留为空；候选与
+基线不同成功子集不排名，候选失败不以降低分母或加大 epsilon 隐去。
+
+仅预测改善而状态恢复或配对增量变差，判为重建补偿；单位等价性通过但仍有物理/收敛
+失败，转向相应求解或模型问题。只有完整诊断支持时，才把新处理版本作为后续模型
+训练候选。跨数据集不强求相同 PSD、幅度直方图或随机水平的数据集身份识别率。
+
+### 实现归属与可审阅交付
+
+| 现有 owner | 后续最小改动 |
+| --- | --- |
+| `src/data/unified_physiology.py` 与现有数据 reader | 解析单位证据、真实支持与参考；保留可供各模型派生的测量坐标 |
+| `src/data/homer2_preprocessing.py` / `preprocess_native_trial` | 新版本 float64 特征边界、明确非线性次序、单位化功率 floor 与可重放线性处理 |
+| `fit_measured_projection` / `v3_prepare_projection` | 训练尺度与观测 loading 分离、单一目标生成、记录 fit 身份及噪声下限前后值 |
+| `BalloonObservationSpec` / `TrajectoryObservationSpec` / 既有推断器 | 复用已知坐标变换、噪声因子、有效子空间与同源 target 条件预测，不新增 adapter/manager 层 |
+| 既有 overnight 入口与报告 renderer | 同输入消融、失败固定分母、精度/成本/状态恢复汇报 |
+
+先完成上述局部实现与 targeted synthetic tests，再形成新版本配置、输入 identity、
+展开后的拟合次数和 synthetic pilot 成本。新 measured run 的准备与实际启动分开；
+旧配置、source snapshot、缓存与失败结果保留原身份。结果仍写入既有 run root，
+状态仍由 registry 持有；本设计不创建授权文件或额外控制器。
+
+### 测量修订的首轮执行合同（2026-09-16）
+
+本轮按用户要求执行上述软件修订及限定开发验证。新配置
+`experiments/configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml`
+复用 v3 控制器的 stage 1/2、既有独立合成种子和原训练身份；新处理身份为
+`physiology_measurement_alignment_v3`。它先验证数值修订基线：固定原 PCA/Hb 选择、
+参考 loading、R/Q 与评分规则，仅修复单位证据、精度和算子次序。独立合成门槛仍由
+原 v3 合同持有；未通过或实测不完整时不得晋级跨数据集 SSM、gain/Q 或 tokenizer。
+首轮不同时改变噪声下限或搜索 gain/Q。成对尺度和模型无关数值尺度的接口已可供
+独立候选使用，但该接口的存在不等同完成统计假设比较。
+
+输入使用新命名空间的 native-only 缓存，信号只在原允许窗口内预处理；旧 run、
+配置、失败与缓存保留。展开任务表、pilot 成本、实际执行和科学结论分别由新 run
+和 registry 持有，不在本设计维护状态副本。
 
 ## 观测合同修复后的下一轮实验设计（2026-09-10）
 

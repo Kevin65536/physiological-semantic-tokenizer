@@ -520,8 +520,11 @@ def clean_single_trial_eeg(
     eog_channel_names: Sequence[str] | None = None,
     channel_positions: np.ndarray | None = None,
     config: EEGArtifactCleaningConfig | None = None,
+    output_dtype: str = "float32",
 ) -> EEGArtifactCleaningResult:
     """Clean one complete task recording and return masks plus provenance."""
+    if output_dtype not in ('float32','float64'):
+        raise ValueError('EEG cleaning output must be float32 or float64')
     cfg = config or EEGArtifactCleaningConfig()
     eeg, eeg_repaired = _interpolate_nonfinite(eeg_values)
     eog, eog_repaired = _interpolate_nonfinite(eog_values)
@@ -634,8 +637,8 @@ def clean_single_trial_eeg(
         "muscle_action": cfg.muscle_action,
     }
     return EEGArtifactCleaningResult(
-        cleaned_values=corrected.astype(np.float32),
-        filtered_raw_values=filtered.astype(np.float32),
+        cleaned_values=corrected.astype(output_dtype),
+        filtered_raw_values=filtered.astype(output_dtype),
         artifact_mask=artifact_mask,
         ocular_mask=ocular_mask,
         high_frequency_mask=high_frequency_mask,

@@ -94,7 +94,7 @@ def test_gaussian_driver_path_matches_dense_joint_conditioning_with_gaps():
     assert result.parameter_log_likelihood==pytest.approx(multivariate_normal.logpdf(observed[available],cov=predicted),abs=1e-8)
 
 
-@pytest.mark.parametrize('scale', [(1., .5, .5), (2., -.3, 4.)])
+@pytest.mark.parametrize('scale', [(1., .5, .5), (2., -.3, 4.), (1e6, 1000., 1000.)])
 def test_known_coordinate_change_preserves_masked_parameter_and_state_posterior(scale):
     from scipy.special import softmax
     cfg=load_config(); cfg['model']['steps']=32

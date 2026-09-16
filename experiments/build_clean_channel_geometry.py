@@ -90,7 +90,8 @@ VISUAL_FNIRS_TEMPLATE_PROVENANCE = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--datasets", nargs="+", default=list(DATA_ROOTS), choices=list(DATA_ROOTS))
-    parser.add_argument("--output-dir", default="data/cache/physiology_semantic_clean_v1/channel_geometry")
+    from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
+    parser.add_argument("--output-dir", default=f"{DEFAULT_CLEAN_CACHE_ROOT}/channel_geometry")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -134,6 +135,8 @@ def _subject_id_from_name(name: str) -> int:
 
 def iter_single_trial(root: Path) -> Iterable[ChannelGeometryRecord]:
     for subject_dir in sorted((root / "NIRS_01-29").glob("subject *"), key=lambda item: _subject_id_from_name(item.name)):
+        if _subject_id_from_name(subject_dir.name) >= 24:
+            continue
         mnt = subject_dir / "mnt.mat"
         if mnt.exists():
             yield from records_from_mnt(
@@ -146,6 +149,8 @@ def iter_single_trial(root: Path) -> Iterable[ChannelGeometryRecord]:
                 source_file=_rel(mnt),
             )
     for subject_dir in sorted((root / "EEG_01-29").glob("subject *"), key=lambda item: _subject_id_from_name(item.name)):
+        if _subject_id_from_name(subject_dir.name) >= 24:
+            continue
         for name in ("mnt.mat", "mnt_artifact.mat"):
             mnt = subject_dir / name
             if mnt.exists():

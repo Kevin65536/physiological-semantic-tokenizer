@@ -64,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--cache-root",
-        default="data/cache/physiology_semantic_clean_v1",
+        default="data/cache/physiology_semantic_clean_v4",
         help="Canonical cache used by UnifiedPhysiologyWindowDataset.",
     )
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT))
@@ -149,9 +149,10 @@ class RunningSignalStats:
     channel_variances: list[float] = field(default_factory=list)
     near_constant_channel_window_count: int = 0
     quantile_samples: list[np.ndarray] = field(default_factory=list)
+    units: set[str] = field(default_factory=set)
 
     def update(self, signal: np.ndarray, mask: np.ndarray) -> None:
-        array = np.asarray(signal, dtype=np.float32)
+        array = np.asarray(signal, dtype=np.float64)
         selected = array[:, np.asarray(mask, dtype=bool)]
         self.total_value_count += int(selected.size)
         if selected.size == 0:
@@ -201,7 +202,7 @@ class RunningSignalStats:
         channel_variances = np.asarray(self.channel_variances, dtype=np.float64)
         return {
             "mask_applied": True,
-            "canonical_unit": CANONICAL_UNIT,
+            "canonical_unit": sorted(self.units),
             "value_count": self.total_value_count,
             "finite_value_count": self.finite_value_count,
             "finite_fraction": (
@@ -229,6 +230,7 @@ class RunningSignalStats:
         }
 
     def merge(self, other: "RunningSignalStats") -> None:
+        self.units.update(other.units)
         self.total_value_count += other.total_value_count
         self.finite_value_count += other.finite_value_count
         self.value_sum += other.value_sum
@@ -364,6 +366,11 @@ def _audit_record_worker(
         eeg_valid = np.asarray(sample["valid_mask"]["eeg"], dtype=bool)
         eeg_analysis = np.asarray(sample["analysis_valid_mask"]["eeg"], dtype=bool)
         fnirs_valid = np.asarray(sample["valid_mask"]["fnirs"], dtype=bool)
+        if sample.get('channel_valid_mask'):
+            eeg_analysis &= sample['channel_valid_mask']['eeg'].all(axis=0)
+            fnirs_valid &= sample['channel_valid_mask']['fnirs'].all(axis=0)
+        state['eeg'].units.add(sample['unit']['eeg'])
+        state['fnirs'].units.add(sample['unit']['fnirs'])
         artifact = np.asarray(sample["artifact_mask"]["eeg"], dtype=bool)
         state["eeg"].update(sample["eeg"], eeg_analysis)
         state["fnirs"].update(sample["fnirs"], fnirs_valid)
@@ -1095,7 +1102,7 @@ def _build_figures(output_dir: Path, tasks: Mapping[str, Any]) -> list[str]:
     )
     ax.axhline(1.0, color="#111827", linestyle="--", linewidth=1, label="robust-SD reference")
     ax.set_xticks(x, short, rotation=25, ha="right")
-    ax.set_ylabel(f"Global standard deviation ({CANONICAL_UNIT})")
+    ax.set_ylabel("Global standard deviation (dataset measurement units)")
     ax.set_title("Loaded canonical amplitude scale by task")
     ax.legend()
     path = figures_dir / "canonical_amplitude_std.png"
@@ -1330,7 +1337,7 @@ def main() -> None:
             "workers": args.workers,
             "dataset_ids": list(RAW_DATASET_IDS),
             "eeg_signal_branch": dataset.eeg_signal_branch,
-            "canonical_unit": CANONICAL_UNIT,
+            "canonical_unit": "per-dataset measurement units; not physically pooled",
         },
         "git": _git_state(),
         "input_hashes": {

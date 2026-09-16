@@ -22,7 +22,7 @@ from src.utils.io import write_json  # noqa: E402
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cache-root", default="data/cache/physiology_semantic_clean_v1")
+    parser.add_argument("--cache-root", default="data/cache/physiology_semantic_clean_v4")
     return parser.parse_args()
 
 
@@ -64,7 +64,7 @@ def main() -> None:
     for row in manifest.get("records", []):
         normalized = with_canonical_fields(row)
         records.append(normalized)
-        record_manifest = PROJECT_ROOT / str(normalized["record_npz"]).replace(".npz", ".manifest.json")
+        record_manifest = (PROJECT_ROOT / str(normalized["record_npz"])).with_suffix(".manifest.json")
         if record_manifest.exists():
             write_json(record_manifest, _jsonable(normalized), ensure_ascii=False)
     manifest["records"] = records

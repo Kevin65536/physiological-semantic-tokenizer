@@ -174,6 +174,9 @@ def _optimize(objective, initial, max_nfev):
     return dict(status='completed' if convergence else 'failed_numerical',
                 transformed_mean=x.reshape(objective.steps, 6), objective=final_cost,
                 converged=convergence, convergence_reason=reason, evaluations=calls,
+                failure_category=None if convergence else ('evaluation_budget' if reason == 'evaluation_budget' else 'numerical_solver'),
+                last_evaluated_gradient_inf_norm=float(np.max(np.abs(gradient))),
+                last_evaluated_jacobian_column_norms=np.linalg.norm(jac,axis=0).tolist(),
                 jacobian_evaluations=derivatives, rejected_steps=rejected, iterations=iterations)
 
 

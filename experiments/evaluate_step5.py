@@ -842,7 +842,10 @@ def run_teacher(cfg,run_dir,calibration_dir,workers):
 
 def preprocess_native_trial(eeg, intensity_pairs, *, eeg_hz=200., fnirs_hz=10.,
                             target_hz=4., mask_name=None, gap_seconds=4.,
-                            retain_feature_boundary=False):
+                            retain_feature_boundary=False,
+                            processing_schema='homer2_alignment_contract_v1',
+                            eeg_unit=None, eeg_unit_evidence='',
+                            power_reference_uv2=1., power_floor_uv2=1e-12):
     """Trial-local Step5B features with the target hidden before every transform.
 
     Inputs are native EEG and positive intensity [time, pair, wavelength].
@@ -854,9 +857,20 @@ def preprocess_native_trial(eeg, intensity_pairs, *, eeg_hz=200., fnirs_hz=10.,
     from fractions import Fraction
     from scipy.signal import butter, resample_poly, sosfiltfilt
     from experiments.evaluate_shared_neural_driver_unified import _downsample_eeg_power
-    from src.data.homer2_preprocessing import apply_homer2_aligned_contract
+    from src.data.homer2_preprocessing import apply_homer2_aligned_contract, MEASUREMENT_ALIGNMENT_SCHEMA
+    from src.data.physiology_measurement_adapter import measurement_unit_conversion
 
     eeg=np.asarray(eeg,dtype=float); intensity_pairs=np.asarray(intensity_pairs,dtype=float)
+    unit_state = None
+    if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA:
+        unit_state = measurement_unit_conversion(eeg_unit or 'unknown', quantity='electric_potential',
+                                                 evidence=eeg_unit_evidence, group='SSM_EEG')
+        if unit_state['unit_status'] != 'verified':
+            raise ValueError('SSM physical log-power requires evidenced EEG potential units')
+        if not (np.isfinite(power_reference_uv2) and power_reference_uv2 > 0
+                and np.isfinite(power_floor_uv2) and power_floor_uv2 > 0):
+            raise ValueError('power reference and floor must be positive finite uV^2')
+        eeg = eeg * unit_state['factor']
     if eeg.ndim!=2 or intensity_pairs.ndim!=3 or intensity_pairs.shape[2]!=2:
         raise ValueError('native trial requires EEG [time,channel] and intensity [time,pair,2]')
     duration=len(eeg)/eeg_hz
@@ -896,19 +910,29 @@ def preprocess_native_trial(eeg, intensity_pairs, *, eeg_hz=200., fnirs_hz=10.,
             raise ValueError('EEG power requires an integer sampling ratio')
         filtered=sosfiltfilt(butter(4,[1.,45.],btype='bandpass',fs=eeg_hz,output='sos'),input_eeg,axis=0)
         power=_downsample_eeg_power(filtered,eeg_hz,target_hz)
-        eeg_features=np.log(np.maximum(power,1e-12))
+        floor = power_floor_uv2 if unit_state is not None else 1e-12
+        reference = power_reference_uv2 if unit_state is not None else 1.
+        eeg_features=np.log(np.maximum(power,floor)/reference)
         eeg_features[~output_mask[:,0]]=np.nan
     if input_fnirs is None:
         fnirs_features=np.full((count,intensity_pairs.shape[1],2),np.nan)
     else:
         transformed=apply_homer2_aligned_contract(input_fnirs,dataset_id='eeg_fnirs_single_trial',
                          sample_rate_hz=fnirs_hz,entry_stage='raw_intensity',wavelengths_nm=(760.,850.),
-                         retain_feature_boundary=retain_feature_boundary)
+                         retain_feature_boundary=retain_feature_boundary,
+                         processing_schema=processing_schema)
         ratio=Fraction(target_hz/fnirs_hz).limit_denominator(1000)
         fnirs_features=resample_poly(transformed.values,ratio.numerator,ratio.denominator,axis=0)
         fnirs_features=fnirs_features.reshape(count,intensity_pairs.shape[1],2)
         fnirs_features[~output_mask[:,1]]=np.nan
     result=dict(eeg_log_power=eeg_features,fnirs=fnirs_features,observation_mask=output_mask)
+    if unit_state is not None:
+        result['eeg_feature_contract'] = dict(unit_conversion=unit_state, power_unit='uV^2',
+            feature='natural log(P/P_ref)', power_reference_uv2=power_reference_uv2,
+            power_floor_uv2=power_floor_uv2,
+            floor_fraction=None if input_eeg is None else float(np.mean(power <= power_floor_uv2)),
+            invalid_power_fraction=None if input_eeg is None else float(np.mean(~np.isfinite(power))),
+            band_hz=[1.,45.], dtype='float64')
     if retain_feature_boundary:
         result['feature_boundary']=dict(
             eeg_log_power=eeg_features.copy(), fnirs=transformed.pre_linear_values,
@@ -1113,7 +1137,7 @@ def noise_estimator_preflight(base,spec,calibration_dir):
                 interpretation='Checks known iid observation-noise draws only; filtered measured first differences remain an initial scale estimate.')
 
 
-def fit_measured_projection(features,base,spec,pair_eligible=None):
+def fit_measured_projection(features,base,spec,pair_eligible=None,*,frozen_reference_loading=None):
     baseline=round(spec['baseline_seconds']*spec['sampling_hz'])
     eeg=np.concatenate([v['eeg_log_power'] for v in features])
     center=np.median(eeg,axis=0);scale=np.maximum(robust_mad(eeg),1e-8)
@@ -1135,10 +1159,21 @@ def fit_measured_projection(features,base,spec,pair_eligible=None):
         selection_scores=np.where(pair_eligible,pair_scores,-np.inf)
     pair=int(np.argmax(selection_scores))
     common=max(float(robust_mad(np.concatenate([v[:,pair].reshape(-1) for v in fnirs]))),1e-12)
-    gauge=reference_observation_gauge(base,spec)
+    gauge=(reference_observation_gauge(base,spec) if frozen_reference_loading is None
+           else dict(frozen_reference_loading))
+    if any(not np.isfinite(gauge.get(k, np.nan)) or gauge[k] <= 0 for k in ('eeg','fnirs_common')):
+        raise ValueError('frozen observation loading must contain positive EEG and common Hb scales')
     return dict(eeg_center=center,eeg_feature_scale=scale,pca_center=pca_center,loading=loading,
                 eeg_factor=gauge['eeg']/pc_scale,fnirs_pair=pair,fnirs_factor=gauge['fnirs_common']/common,
+                inverse_eeg_factor=pc_scale/gauge['eeg'],inverse_fnirs_factor=common/gauge['fnirs_common'],
+                measurement_scale=dict(eeg=pc_scale,fnirs_common=common),
+                observation_loading=dict(eeg=gauge['eeg'],fnirs_common=gauge['fnirs_common'],
+                                         source='frozen reference_observation_gauge',absolute_calibration=False),
+                computational_scale=dict(eeg=1/pc_scale,fnirs_common=1/common),
+                loading_was_supplied=frozen_reference_loading is not None,
                 pair_scores=pair_scores,pair_eligible=pair_eligible,
+                selection_interpretation='training signal MAD / difference MAD; not cortical-source evidence',
+                eeg_loading_sign_rule='sum_positive; does_not_establish_neural_drive_direction',
                 pca_explained_fraction=float(singular[0]**2/np.sum(singular**2)),
                 gauge=gauge,baseline_samples=baseline,training_trials=len(features),task_labels_used=False)
 

@@ -28,7 +28,7 @@ class DatasetRegistryTests(unittest.TestCase):
         for registration in list_raw_datasets():
             self.assertEqual(registration.loader_status, 'implemented')
             self.assertEqual(registration.primary_loader, 'UnifiedPhysiologyWindowDataset')
-            self.assertEqual(registration.loader_contract, 'unified_physiology_window_v2')
+            self.assertEqual(registration.loader_contract, 'unified_physiology_measurement_window_v3')
             self.assertTrue(dataset_loader_is_implemented(registration.dataset_id, 'unified_physiology'))
 
     def test_loader_interfaces_do_not_overstate_legacy_visualization_support(self):

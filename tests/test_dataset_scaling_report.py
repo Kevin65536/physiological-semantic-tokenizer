@@ -59,3 +59,37 @@ def test_report_refuses_to_overwrite_retained_export(tmp_path):
     with pytest.raises(RuntimeError, match='immutable'):
         report.render_report({}, tmp_path)
     assert pdf.read_bytes() == b'retained evidence'
+
+
+def test_alignment_comparison_keeps_failures_and_pairs_by_identity():
+    import pandas as pd
+
+    old = pd.DataFrame([
+        dict(sample_id='a', mode='full', solver='O2', status='completed'),
+        dict(sample_id='b', mode='full', solver='O2', status='failed_numerical'),
+    ])
+    new = pd.DataFrame([
+        dict(sample_id='b', mode='full', solver='O2', status='completed'),
+        dict(sample_id='a', mode='full', solver='O2', status='failed_numerical'),
+        dict(sample_id='c', mode='full', solver='O2', status='failed_domain'),
+        dict(sample_id=None, mode=None, solver=None, status='diagnostic_summary'),
+    ])
+    candidate, reference, common, transitions = report.alignment_fit_comparison(new, old)
+    assert len(candidate) == 3 and len(reference) == 2 and len(common) == 2
+    assert common.set_index('sample_id').loc['a', 'status_candidate'] == 'failed_numerical'
+    assert set(zip(transitions.status_reference, transitions.status_candidate)) == {
+        ('completed', 'failed_numerical'), ('failed_numerical', 'completed')}
+    with pytest.raises(ValueError, match='duplicate'):
+        report.alignment_fit_comparison(pd.concat([new, new.iloc[:1]]), old)
+    with pytest.raises(ValueError, match='missing a retained'):
+        report.alignment_fit_comparison(new.iloc[1:], old)
+
+
+def test_alignment_export_refuses_existing_directory_before_evidence_read(tmp_path, monkeypatch):
+    monkeypatch.setattr(report, 'ROOT', tmp_path)
+    out = tmp_path / 'experiments/runs/physiology_semantic_tokenizer/data_quality_audit/retained'
+    out.mkdir(parents=True)
+    (out / 'REPORT.md').write_text('retained report')
+    with pytest.raises(RuntimeError, match='immutable'):
+        report.render_alignment_report(out)
+    assert (out / 'REPORT.md').read_text() == 'retained report'

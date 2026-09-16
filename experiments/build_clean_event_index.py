@@ -117,7 +117,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--datasets", nargs="+", default=list(DATA_ROOTS), choices=list(DATA_ROOTS))
     parser.add_argument("--subjects-per-dataset", type=int, default=1000)
     parser.add_argument("--records-per-subject", type=int, default=1000)
-    parser.add_argument("--output-dir", default="data/cache/physiology_semantic_clean_v2/event_index")
+    from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
+    parser.add_argument("--output-dir", default=f"{DEFAULT_CLEAN_CACHE_ROOT}/event_index")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -164,14 +165,19 @@ def _class_names(value: Any) -> list[str]:
 
 
 def _single_trial_subjects(root: Path, limit: int) -> list[int]:
-    subjects = sorted((root / "EEG_01-29").glob("subject *"))[:limit]
+    subjects = [p for p in sorted((root / "EEG_01-29").glob("subject *"))
+                if int(p.name.split()[-1]) < 24][:limit]
     return [int(subject.name.split()[-1]) for subject in subjects]
 
 
-def iter_single_trial(root: Path, subject_limit: int, record_limit: int) -> tuple[list[CanonicalEvent], list[EventAlignmentReport]]:
+def iter_single_trial(root: Path, subject_limit: int, record_limit: int, *,
+                      subject_ids: Iterable[int] | None = None, session_ids: Iterable[int] | None = None) -> tuple[list[CanonicalEvent], list[EventAlignmentReport]]:
     events: list[CanonicalEvent] = []
     reports: list[EventAlignmentReport] = []
-    for subject_id in _single_trial_subjects(root, subject_limit):
+    subjects = list(subject_ids) if subject_ids is not None else _single_trial_subjects(root, subject_limit)
+    if any(s not in range(1,24) for s in subjects):
+        raise ValueError('Single-Trial protected subject boundary before file access')
+    for subject_id in subjects:
         eeg_dir = root / "EEG_01-29" / f"subject {subject_id:02d}" / "with occular artifact"
         if not eeg_dir.exists():
             eeg_dir = root / "EEG_01-29" / f"subject {subject_id:02d}"
@@ -179,6 +185,8 @@ def iter_single_trial(root: Path, subject_limit: int, record_limit: int) -> tupl
         eeg_mrk = np.atleast_1d(_mat_payload(eeg_dir / "mrk.mat", "mrk"))
         nirs_mrk = np.atleast_1d(_mat_payload(nirs_dir / "mrk.mat", "mrk"))
         for session_idx in range(min(len(eeg_mrk), len(nirs_mrk), record_limit)):
+            if session_ids is not None and session_idx not in session_ids:
+                continue
             record_id = f"session_{session_idx:02d}"
             task = SINGLE_TRIAL_TASK_BY_SESSION.get(session_idx, "unknown")
             eeg_marker = normalize_marker_struct(eeg_mrk[session_idx])
@@ -339,7 +347,9 @@ def _simultaneous_dsr_events(
 def iter_simultaneous(root: Path, subject_limit: int, record_limit: int) -> tuple[list[CanonicalEvent], list[EventAlignmentReport]]:
     events: list[CanonicalEvent] = []
     reports: list[EventAlignmentReport] = []
-    tasks = ("nback", "dsr", "wg")[:record_limit]
+    # Match the signal builder's lexicographic cnt_*.mat selection, including
+    # bounded smoke runs; a different prefix otherwise creates orphan joins.
+    tasks = tuple(sorted(("nback", "dsr", "wg")))[:record_limit]
     for subject_id in _sim_subjects(root, subject_limit):
         for task in tasks:
             eeg_path = root / f"VP{subject_id:03d}-EEG" / f"mrk_{task}.mat"

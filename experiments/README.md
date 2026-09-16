@@ -31,7 +31,8 @@ state or permission to launch. Detailed usage follows in the linked sections.
 
 | Diagnostic / usage | Entry | Config | Targeted tests |
 | --- | --- | --- | --- |
-| Four-dataset amplitude audit and bounded SSM scaling report | [`scripts/analyze_dataset_scaling.py`](scripts/analyze_dataset_scaling.py) | [`dataset_scaling_report_v1.yaml`](configs/physiology_semantic_tokenizer/dataset_scaling_report_v1.yaml) | [`test_dataset_scaling_report.py`](../tests/test_dataset_scaling_report.py) |
+| Measurement precision and unit revision; fixed v3 stage 1/2 | [`evaluate_ssm_overnight_diagnostics.py`](evaluate_ssm_overnight_diagnostics.py) | [`ssm_measurement_alignment_v3.yaml`](configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml) | `test_ssm_overnight_diagnostics.py`, `test_step5_observation_diagnostic.py`, `test_step5.py`, `test_homer2_preprocessing.py` |
+| Four-dataset amplitude audit and alignment repair reports (`--stage alignment-report --output-dir <new versioned export>`) | [`scripts/analyze_dataset_scaling.py`](scripts/analyze_dataset_scaling.py) | [`dataset_scaling_report_v1.yaml`](configs/physiology_semantic_tokenizer/dataset_scaling_report_v1.yaml); alignment report reads the retained [measurement v3](configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml) evidence | [`test_dataset_scaling_report.py`](../tests/test_dataset_scaling_report.py) |
 | [Overnight observation diagnostics](#overnight-observation-diagnostics) | [`evaluate_ssm_overnight_diagnostics.py`](evaluate_ssm_overnight_diagnostics.py) | [`ssm_overnight_v3.yaml`](configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml); retained [`v1`](configs/physiology_semantic_tokenizer/ssm_overnight_v1.yaml), [`v2`](configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml) | [`test_ssm_overnight_diagnostics.py`](../tests/test_ssm_overnight_diagnostics.py) |
 | [Synthetic P0](#synthetic-p0) | [`evaluate_t3a_balloon_robust_p0.py`](evaluate_t3a_balloon_robust_p0.py) | [`t3a_balloon_robust_p0.yaml`](configs/physiology_semantic_tokenizer/t3a_balloon_robust_p0.yaml) | [`test_t3a_balloon_robust_p0.py`](../tests/test_t3a_balloon_robust_p0.py), [`test_t3a_balloon_robust_ssm.py`](../tests/test_t3a_balloon_robust_ssm.py) |
 | [Measured reconstruction/null](#measured-reconstruction-and-null) | [`evaluate_t3_measured_reconstruction_null.py`](evaluate_t3_measured_reconstruction_null.py) | [`t3_measured_reconstruction_null_v1.yaml`](configs/physiology_semantic_tokenizer/t3_measured_reconstruction_null_v1.yaml) | [`test_t3_measured_reconstruction_null.py`](../tests/test_t3_measured_reconstruction_null.py) |
@@ -103,6 +104,34 @@ provide the reader-facing evidence entry. Rebuilding figures requires the local
 per-task evidence, which is excluded from the published package.
 Install the Python dependencies in `../requirements.txt` and the system Noto
 CJK font (`fonts-noto-cjk` on Debian/Ubuntu) to reproduce the Chinese PDF figures.
+
+The measurement revision uses the same `--prepare`, `--freeze`, frozen `--run`
+sequence with `ssm_measurement_alignment_v3.yaml`. Before preparation, build its
+scoped native inputs with `build_clean_eeg_fnirs_cache.py --ssm-training-config
+experiments/configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml`.
+This writes a fresh native-only cache; it does not perform continuous-record
+processing over excluded SSM trials. Generic public measurement caches use the
+signal builder's `--output-dir`, the event builder's matching
+`--output-dir <cache>/event_index`, and the geometry builder's
+`--output-dir <cache>/channel_geometry`.
+
+### Default measurement cache
+
+The active signal/event/geometry builders share `data/cache/physiology_semantic_clean_v4`:
+
+```bash
+.venv/bin/python experiments/build_clean_event_index.py
+.venv/bin/python experiments/build_clean_channel_geometry.py
+.venv/bin/python experiments/build_clean_eeg_fnirs_cache.py
+```
+
+The signal builder persists float64 EEG and HbO/HbR as memory-mapped record arrays;
+Single-Trial subjects 24–29 are excluded before reads. Use explicit subject/record
+limits for a smoke build. These commands prepare data, not models or evaluations.
+The local-view factory defaults to float64 measurement inputs without cross-dataset
+amplitude normalization. Each SSM/tokenizer consumer owns its training-fitted
+scaling and computation dtype.
+Old experiment configs retain their historical cache identities.
 
 ### Synthetic P0
 

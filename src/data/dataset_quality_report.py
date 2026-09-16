@@ -25,6 +25,8 @@ from scipy.stats import kurtosis as scipy_kurtosis, skew as scipy_skew
 
 from .fnirs_standardization import DATASET_FNIRS_CONTRACTS, FNIRSMeasurementContract
 from .homer2_preprocessing import DATASET_HOMER2_COMPATIBILITY
+
+
 from .registry import PROJECT_ROOT, get_dataset_registration
 from .signal_visualization import compute_power_spectrum
 from .unified_physiology import (
@@ -39,6 +41,39 @@ from .unified_physiology import (
     UNIFIED_PHYSIOLOGY_SCHEMA,
 )
 
+
+def measurement_tail_evidence(values, time_s, channel_names, *, valid_mask=None):
+    """Locate finite extremes and their squared-loss contribution, without clipping.
+
+    The top 1% is a descriptive rank group, never an exclusion threshold.
+    Invalid support is reported separately from finite artifacts/physiology.
+    """
+    x = np.asarray(values,dtype=float)
+    clock = np.asarray(time_s,dtype=float)
+    if x.ndim != 2 or clock.shape != (len(x),) or len(channel_names) != x.shape[1]:
+        raise ValueError('tail audit requires matching [time,channel] values, clock and labels')
+    mask = np.isfinite(x)
+    if valid_mask is not None:
+        supplied = np.asarray(valid_mask,dtype=bool)
+        mask &= supplied[:,None] if supplied.ndim == 1 else supplied
+    rows = []
+    for j,name in enumerate(channel_names):
+        idx = np.flatnonzero(mask[:,j]); z = x[idx,j]
+        row = dict(channel=name,real_samples=len(z),invalid_samples=len(x)-len(z),
+                   action='annotation_only_no_clipping_or_exclusion')
+        if len(z):
+            peak = int(np.argmax(abs(z)))
+            centered = z-np.median(z)
+            peak_scale = float(np.max(abs(centered)))
+            energy = (centered/peak_scale)**2 if peak_scale else np.zeros_like(centered)
+            count = max(1,int(np.ceil(.01*len(z))))
+            row.update(max_abs=float(abs(z[peak])),peak_value=float(z[peak]),
+                       peak_time_s=float(clock[idx[peak]]),median=float(np.median(z)),
+                       sd=float(np.std(z)),negative_fraction=float(np.mean(z<0)),
+                       top_one_percent_centered_squared_fraction=float(np.sort(energy)[-count:].sum()/energy.sum())
+                           if energy.sum() else 0.)
+        rows.append(row)
+    return rows
 
 IMPLEMENTED_DATASET_IDS = set(RAW_DATASET_IDS)
 CONTINUOUS_VIS_DATASET_IDS = set(RAW_DATASET_IDS)
@@ -245,7 +280,7 @@ class DatasetQualityReporter:
         self,
         output_dir: Path,
         *,
-        cache_root: Path | str = PROJECT_ROOT / "data/cache/physiology_semantic_clean_v1",
+        cache_root: Path | str = PROJECT_ROOT / "data/cache/physiology_semantic_clean_v4",
         embed_images: bool = True,
         max_channels: int = 8,
         samples_per_dataset: int = 4,
@@ -344,7 +379,8 @@ class DatasetQualityReporter:
             "excluded_alignment_records": dict(dataset.excluded_alignment_records),
         }
         snapshot.contract_checks = {
-            "canonical_units": set(first["unit"].values()) == {CANONICAL_UNIT},
+            "canonical_units": (all(first["unit"].values()) if first.get("coordinate_layer") == "cleaned_measurement"
+                                else set(first["unit"].values()) == {CANONICAL_UNIT}),
             "canonical_sample_rates": first["sample_rate_hz"] == {
                 "eeg": CANONICAL_EEG_SAMPLE_RATE_HZ,
                 "fnirs": CANONICAL_FNIRS_SAMPLE_RATE_HZ,
@@ -410,7 +446,7 @@ class DatasetQualityReporter:
                 "dataset_id": snapshot.dataset_id,
                 "native_eeg_unit": snapshot.native_units.get("eeg", "unknown"),
                 "native_fnirs_unit": snapshot.native_units.get("fnirs", "unknown"),
-                "canonical_unit": CANONICAL_UNIT,
+                "canonical_unit": dict(snapshot.canonical_units),
             })
             comparison.sampling_rate_table.append({
                 "dataset_id": snapshot.dataset_id,
@@ -711,7 +747,7 @@ def _save_cross_dataset_amplitude_figure(snapshots: Sequence[DatasetQualitySnaps
     ax.bar(x + 0.18, fnirs_std, 0.36, label="fNIRS", color=_COLOR_PALETTE["fnirs"])
     ax.axhline(1.0, color="#111827", linestyle="--", linewidth=1, label="robust-SD reference")
     ax.set_xticks(x, labels, rotation=15, ha="right")
-    ax.set_ylabel(f"Global standard deviation ({CANONICAL_UNIT})")
+    ax.set_ylabel("Global standard deviation (dataset measurement units)")
     ax.set_title("Post-unification amplitude scale across the four datasets")
     ax.legend()
     ax.grid(axis="y", alpha=0.2)
