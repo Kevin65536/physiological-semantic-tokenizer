@@ -64,3 +64,19 @@ def test_complete_measurement_cache_roundtrip_never_reopens_native(tmp_path, mon
     assert payload['eeg'].dtype == payload['fnirs'].dtype == np.float64
     np.testing.assert_allclose(np.std(payload['fnirs'],axis=0)[0]/np.std(payload['fnirs'],axis=0)[1],4.,rtol=1e-8)
     assert set(row['arrays']) == {'eeg','fnirs','eeg_supported_channels','fnirs_supported_channels','eeg_bad_channel_mask'}
+
+
+def test_bounded_parallel_builder_preserves_record_identity(tmp_path):
+    from experiments import build_clean_eeg_fnirs_cache as builder
+    from src.data.fnirs_standardization import DATASET_FNIRS_CONTRACTS
+    source=tmp_path/'synthetic_source';source.write_bytes(b'fixture')
+    values=np.column_stack((np.sin(np.arange(1000)/10),-.25*np.sin(np.arange(1000)/10)))
+    records=[builder.CleanInputRecord(dataset_id='refed',subject=str(i),record_id='video_1_hbo_hbr',
+        source_paths=(source,),values=values,homer2_input=values,sample_rate_hz=10.,
+        contract=DATASET_FNIRS_CONTRACTS['refed']['hbo_hbr'],entry_stage='chromophore',wavelengths_nm=(),
+        channel_names=('CH1_HbO','CH1_HbR'),homer2_channel_names=('CH1_HbO','CH1_HbR'),metadata={}) for i in (1,2)]
+    results=list(builder.build_records(iter(records),tmp_path/'out',workers=2,storage='legacy_npz'))
+    assert {r['join_key'] for r,_ in results} == {'refed|1|video_1','refed|2|video_1'}
+    for row,_ in results:
+        with np.load(row['record_npz']) as arrays:
+            assert arrays['homer2_aligned_fnirs'].dtype == np.float64

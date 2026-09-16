@@ -12,6 +12,8 @@ import re
 import sys
 import os
 import time
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
+from multiprocessing import get_context
 from typing import Any, Iterator, Sequence
 
 import numpy as np
@@ -79,6 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-refed-absorbance", action="store_true")
     parser.add_argument("--output-dir", default=DEFAULT_CLEAN_CACHE_ROOT)
     parser.add_argument("--storage", choices=[MEASUREMENT_CACHE_STORAGE, "legacy_npz"], default=MEASUREMENT_CACHE_STORAGE)
+    parser.add_argument("--workers", type=int, default=4, help="Bounded independent record producers; use 1 for serial replay.")
     parser.add_argument("--processing-schema", default=MEASUREMENT_ALIGNMENT_SCHEMA,
                         choices=[MEASUREMENT_ALIGNMENT_SCHEMA, HOMER2_ALIGNMENT_SCHEMA])
     parser.add_argument("--overwrite", action="store_true")
@@ -540,6 +543,39 @@ def build_ssm_training_inputs(config_path: Path) -> dict[str, Any]:
     return dict(records=len(records),events=len(events),output_dir=str(destination))
 
 
+def _build_record_job(record, output_dir, overwrite, processing_schema, storage):
+    started = time.monotonic()
+    manifest = build_record(record, output_dir, overwrite, processing_schema, storage=storage)
+    return manifest, time.monotonic()-started
+
+
+def build_records(records, output_dir, *, overwrite=False, processing_schema=MEASUREMENT_ALIGNMENT_SCHEMA,
+                  storage=MEASUREMENT_CACHE_STORAGE, workers=4):
+    """Keep at most two records per worker in flight, including source arrays."""
+    if workers < 1 or workers > 16:
+        raise ValueError('workers must be between 1 and 16')
+    if workers == 1:
+        for record in records:
+            yield _build_record_job(record, output_dir, overwrite, processing_schema, storage)
+        return
+    iterator = iter(records)
+    with ProcessPoolExecutor(max_workers=workers, mp_context=get_context('spawn')) as pool:
+        pending = set()
+        exhausted = False
+        while pending or not exhausted:
+            while not exhausted and len(pending) < workers*2:
+                try:
+                    record = next(iterator)
+                except StopIteration:
+                    exhausted = True
+                    break
+                pending.add(pool.submit(_build_record_job, record, output_dir, overwrite, processing_schema, storage))
+            if pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    yield future.result()
+
+
 def main() -> None:
     args = parse_args()
     if getattr(args, 'ssm_training_config', None):
@@ -560,11 +596,11 @@ def main() -> None:
         raise ValueError('Cache storage changed; use a new root')
     records = [r for r in old_records if r['dataset_id'] not in args.datasets]
     write_json(old_manifest, dict(schema=CLEAN_CACHE_SCHEMA, storage=args.storage, execution='building', records=records))
-    for record in iter_records(args):
-        started = time.monotonic()
-        manifest = build_record(record, output_dir, args.overwrite, args.processing_schema, storage=args.storage)
+    for manifest, elapsed in build_records(iter_records(args), output_dir, overwrite=args.overwrite,
+            processing_schema=args.processing_schema, storage=args.storage, workers=args.workers):
         records.append(manifest)
-        print(json.dumps(dict(record=manifest['join_key'],elapsed_seconds=time.monotonic()-started)), flush=True)
+        print(json.dumps(dict(record=manifest['join_key'],elapsed_seconds=elapsed)), flush=True)
+    records.sort(key=lambda r: (r['dataset_id'], r['canonical_subject_id'], r['record_id']))
     cache_manifest = {
         "schema": CLEAN_CACHE_SCHEMA,
         "storage": args.storage,
