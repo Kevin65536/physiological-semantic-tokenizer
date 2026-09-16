@@ -3,6 +3,9 @@ import hashlib
 import json
 import inspect
 from pathlib import Path
+
+from src.data.clean_physiology_cache import CLEAN_CACHE_SCHEMA
+from src.data.event_alignment import EVENT_ALIGNMENT_SCHEMA
 from types import SimpleNamespace
 
 import pytest
@@ -21,6 +24,7 @@ from src.data.unified_physiology import (
     REFED_CONTINUOUS_SEQUENCE_SCHEMA,
     REFEDContinuousSequenceDataset,
     UnifiedPhysiologyWindowDataset,
+    UNIFIED_PHYSIOLOGY_SCHEMA,
     canonical_fnirs_channel_names,
     canonical_label,
     collate_refed_continuous_sequences,
@@ -89,6 +93,17 @@ def test_unified_window_disables_artifact_marking_and_invalidity():
         sample["analysis_valid_mask"]["eeg"],
         sample["valid_mask"]["eeg"],
     )
+
+    event["eeg_time_ms"], event["fnirs_time_ms"] = 12.0, 151.0
+    record_data["eeg"][:] = np.arange(200)[:, None]
+    record_data["fnirs"][:] = np.arange(10)[:, None]
+    sample = dataset[0]
+    grid = sample["alignment"]["sample_grid"]
+    assert grid["eeg"]["actual_start_ms"] == 10
+    assert grid["eeg"]["rounding_error_ms"] == -2
+    assert grid["fnirs"]["actual_start_ms"] == 200
+    assert grid["fnirs"]["rounding_error_ms"] == 49
+    assert sample["eeg"][0, 0] == sample["fnirs"][0, 0] == 2
 
 
 def test_fnirs_names_are_unified_to_hbo_hbr_components():
@@ -207,6 +222,7 @@ def test_refed_continuous_dataset_expands_video_and_versions_target_contract(tmp
     cache = tmp_path / "cache"
     (cache / "event_index").mkdir(parents=True)
     record = {
+        "schema": CLEAN_CACHE_SCHEMA,
         "dataset_id": "refed",
         "subject": "1",
         "record_id": "video_1_hbo_hbr",
@@ -225,8 +241,8 @@ def test_refed_continuous_dataset_expands_video_and_versions_target_contract(tmp
         "alignment_case": "shared_segment_index_no_marker_stream",
         "label_sequence_match": True,
     }
-    (cache / "cache_manifest.json").write_text(json.dumps({"records": [record]}), encoding="utf-8")
-    (cache / "event_index/event_manifest.json").write_text("{}", encoding="utf-8")
+    (cache / "cache_manifest.json").write_text(json.dumps({"schema": CLEAN_CACHE_SCHEMA, "records": [record]}), encoding="utf-8")
+    (cache / "event_index/event_manifest.json").write_text(json.dumps({"event_alignment_schema": EVENT_ALIGNMENT_SCHEMA}), encoding="utf-8")
     (cache / "event_index/events.jsonl").write_text(json.dumps(event) + "\n", encoding="utf-8")
     (cache / "event_index/alignment_reports.jsonl").write_text(json.dumps(report) + "\n", encoding="utf-8")
 
@@ -247,7 +263,7 @@ def test_refed_continuous_dataset_expands_video_and_versions_target_contract(tmp
         UnifiedPhysiologyWindowDataset,
         "__getitem__",
         lambda self, index: {
-            "schema": "unified_physiology_window_v1",
+            "schema": UNIFIED_PHYSIOLOGY_SCHEMA,
             "label": {"class_index": 0, "condition": "positive"},
             "valid_mask": {
                 "eeg": np.ones(4000, dtype=bool),
@@ -371,6 +387,7 @@ def test_alignment_admission_filter_excludes_unstable_records(tmp_path):
     cache = tmp_path / "cache"
     (cache / "event_index").mkdir(parents=True)
     record = {
+        "schema": CLEAN_CACHE_SCHEMA,
         "dataset_id": "refed",
         "subject": "1",
         "record_id": "video_1_hbo_hbr",
@@ -378,8 +395,8 @@ def test_alignment_admission_filter_excludes_unstable_records(tmp_path):
         "record_npz": str(cache / "unused.npz"),
         "metadata": {},
     }
-    (cache / "cache_manifest.json").write_text(json.dumps({"records": [record]}), encoding="utf-8")
-    (cache / "event_index/event_manifest.json").write_text("{}", encoding="utf-8")
+    (cache / "cache_manifest.json").write_text(json.dumps({"schema": CLEAN_CACHE_SCHEMA, "records": [record]}), encoding="utf-8")
+    (cache / "event_index/event_manifest.json").write_text(json.dumps({"event_alignment_schema": EVENT_ALIGNMENT_SCHEMA}), encoding="utf-8")
     event = {
         "dataset_id": "refed",
         "subject": "1",
@@ -413,6 +430,7 @@ def test_unified_loader_admits_restored_dsr_stimulus_labels(tmp_path):
     cache = tmp_path / "cache"
     (cache / "event_index").mkdir(parents=True)
     record = {
+        "schema": CLEAN_CACHE_SCHEMA,
         "dataset_id": "simultaneous_eeg_nirs",
         "subject": "VP001",
         "record_id": "cnt_dsr",
@@ -420,8 +438,8 @@ def test_unified_loader_admits_restored_dsr_stimulus_labels(tmp_path):
         "record_npz": str(cache / "unused.npz"),
         "metadata": {},
     }
-    (cache / "cache_manifest.json").write_text(json.dumps({"records": [record]}), encoding="utf-8")
-    (cache / "event_index/event_manifest.json").write_text("{}", encoding="utf-8")
+    (cache / "cache_manifest.json").write_text(json.dumps({"schema": CLEAN_CACHE_SCHEMA, "records": [record]}), encoding="utf-8")
+    (cache / "event_index/event_manifest.json").write_text(json.dumps({"event_alignment_schema": EVENT_ALIGNMENT_SCHEMA}), encoding="utf-8")
     event = {
         "dataset_id": "simultaneous_eeg_nirs",
         "subject": "VP001",
@@ -551,3 +569,23 @@ def test_v4_artifact_cache_rejects_stale_code_hash(tmp_path):
     dataset._artifact_cache_manifest = None
     with pytest.raises(RuntimeError, match="code hash mismatch"):
         dataset._validated_artifact_cache_manifest()
+
+
+def test_refed_annotation_clock_is_not_stretched_to_fnirs_duration():
+    event = _refed_continuous_event(duration_s=10)
+    event["duration_ms"] = 10_020
+    target = refed_continuous_target_window(event, window_start_s=2, window_duration_s=4)
+    np.testing.assert_allclose(target["values"][0], [2, 3, 4, 5])
+    assert target["source_sample_rate_hz"] == 1.0
+
+
+def test_window_crossing_unverified_session_gap_is_rejected_before_signal_read():
+    dataset = object.__new__(UnifiedPhysiologyWindowDataset)
+    dataset.window_duration_s = 1.0
+    dataset.window_offset_s = 0.0
+    event = {"eeg_time_ms": 500.0, "fnirs_time_ms": 500.0,
+             "metadata": {"alignment_support_ms": {"eeg": [None, 800], "fnirs": [None, 800]}}}
+    dataset.windows = [SimpleNamespace(event=event, record=None, window_offset_s=0.0)]
+    dataset._load_canonical_record = lambda _: pytest.fail("must check support before reading signals")
+    with pytest.raises(ValueError, match="unverified concatenation interval"):
+        dataset[0]

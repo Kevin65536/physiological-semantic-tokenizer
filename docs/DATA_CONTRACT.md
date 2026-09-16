@@ -11,8 +11,10 @@ implementation audit remains in
 
 ## Version boundary
 
-The measured-data loader, canonical identity, masks, splits, and protected
-boundaries below are hard-frozen for the forward method generation. The
+The v1 measured-data loader/cache remains frozen historical evidence. The
+2026-09-16 timing repair below versions its reader and producers as v2; it does
+not relabel v1 artifacts, change splits/protected boundaries, or authorize a
+measured cache rebuild. The
 continuous-target interface is **exploratory and unimplemented**: only the rule
 "preserve timestamps and construct the continuous trajectory before patching or
 tokenization" is frozen. Sampling rate, target coordinates, filters, and target
@@ -253,12 +255,48 @@ without an explicit transform and provenance record.
 
 ## Time and event alignment
 
+
+### Timing repair v2 — 2026-09-16
+
+The timing implementation owner is `src/data/event_alignment.py`; both the
+unified reader and legacy Simultaneous multimodal reader use its pairing and
+admission rules. The v2 changes are:
+
+- Physical drift is fitted on actual EEG milliseconds **within each offset
+  segment**, before checking dispersion. Global slopes across concatenated
+  sessions remain diagnostics and are explicitly marked as including jumps.
+- A single missing marker is matched with label consistency and original
+  source indices. Ambiguous pairing, nonfinite/nonmonotonic times, label
+  disagreement, and larger count differences are rejected rather than truncated.
+- Events retain conservative support on each modality clock. Without exact
+  append boundaries, the interval between anchors surrounding an offset jump
+  is unverified; windows entering it are excluded, including pre-event offsets.
+  This can reduce the admitted inventory. It is not a reconstruction of the
+  unpublished session boundary, and does not change full-record filtering into
+  a causal preprocessing method.
+- Returned windows record actual sample-grid start indices/times and rounding
+  errors as well as requested event anchors.
+- Visual fNIRS markers and signals use the same native CSV `Time` coordinate.
+  The v2 signal producer verifies Oxy/Deoxy clocks and marks, retains native
+  samples/times, and interpolates onto the regular grid **before** filtering.
+  Invalid rows, nonmonotonic clocks and gaps over 1.5 nominal sample periods
+  are rejected; no row deletion or silent Oxy/Deoxy truncation is permitted.
+  Event labels are joined using the original fNIRS marker index after skips.
+- REFED retains the published 1 Hz annotation rate rather than stretching it
+  to the rounded fNIRS duration. EEG/fNIRS duration disagreement larger than
+  one native fNIRS sample excludes the segment. Hardware offset and jitter are
+  unknown (`null`), with the publisher's shared origin and label first-sample
+  phase recorded as assumptions. This repair cannot recover absent triggers.
+
+The earlier counts below describe the retained **v1** inventory, not a v2
+inventory. No measured v2 cache has been built as part of this repair.
+
 - Window timestamps are expressed in a common record-relative coordinate with
   the dataset-native anchor preserved.
 - EEG and fNIRS support must overlap the requested window; missing support is
   not filled and called observed data.
-- DSR formal labels come from released EEG codes 16/32. The current event
-  registry retains 8,980 Go/No-go windows from 25 admitted subjects and
+- DSR formal labels come from released EEG codes 16/32. The retained v1 event
+  registry records 8,980 Go/No-go windows from 25 admitted subjects and
   excludes VP005 for continuous clock drift.
 - Visual timing follows the documented appearance-to-disappearance semantics;
   every-third-row heuristics are forbidden.
@@ -316,6 +354,24 @@ arrays.
 
 ## Cache contract
 
+
+The cache schema owner is `src/data/clean_physiology_cache.py`.
+`clean_eeg_fnirs_cache_v1`, including the retained
+`data/cache/physiology_semantic_clean_v1/` and its v1 event index, is
+**deprecated for current consumption**. Its files remain unchanged as
+historical evidence. The current reader rejects v1/missing schemas before
+reading event payloads or signal arrays; there is no automatic rebuild or
+silent fallback to the old cache. Historical sealed replay must use its
+retained historical implementation, not reinterpret old arrays as v2.
+
+New producers use `clean_eeg_fnirs_cache_v2` and
+`physiology_event_alignment_v2`; the window and REFED sequence contracts are
+`unified_physiology_window_v2` and `refed_continuous_va_sequence_v2`.
+Their default output namespace is `data/cache/physiology_semantic_clean_v2/`.
+`--overwrite` cannot upgrade an existing v1 cache/index in place. Existing
+configured v1 paths now fail explicitly until a separately requested versioned
+rebuild and configuration migration; updating a schema string is not a rebuild.
+
 Every derived cache records:
 
 - schema and branch version;
@@ -338,7 +394,7 @@ summary, and retained-result status are recorded. Never clean
 `data/cache/physiology_semantic_clean_v1/` while the active EFRM protocol is
 using it.
 
-## Current audit state
+## Retained v1 audit state
 
 The post-DSR unified audit traversed all 22,952 then-admitted windows and
 confirmed finite loading and stable Simultaneous channel signatures. It also
@@ -346,8 +402,8 @@ preserved explicit warnings and blockers rather than turning a successful
 loader pass into scientific validation. The exact counts remain a dated cache
 snapshot; formal protocols must record a fresh inventory and versioned identities.
 
-The active data layer is ready for the implemented STA-Net and EFRM adapters.
-That readiness establishes a software/data contract only. It does not qualify
+The historical v1 audit found its data layer ready for the then-implemented
+STA-Net and EFRM adapters. That historical readiness establishes a software/data contract only. It does not qualify
 a physical teacher, authorize SD-SVQ/VQ experiments, or validate physiological
 coupling.
 

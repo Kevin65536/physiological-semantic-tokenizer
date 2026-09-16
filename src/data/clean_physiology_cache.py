@@ -10,8 +10,24 @@ from typing import Any, Iterable, Mapping
 
 import numpy as np
 
+from .event_alignment import EVENT_ALIGNMENT_SCHEMA
+
 
 CLEAN_PHYSIOLOGY_CACHE_INDEX_SCHEMA = "clean_physiology_cache_index_v1"
+CLEAN_CACHE_SCHEMA = "clean_eeg_fnirs_cache_v2"
+# Immutable v1 artifacts remain historical evidence, not inputs to the v2 reader.
+DEPRECATED_CACHE_SCHEMAS = frozenset({"clean_eeg_fnirs_cache_v1"})
+
+
+def require_current_cache_manifest(manifest: Mapping[str, Any]) -> None:
+    schema = manifest.get("schema")
+    if schema != CLEAN_CACHE_SCHEMA:
+        status = "Deprecated" if schema in DEPRECATED_CACHE_SCHEMAS else "Unsupported"
+        raise ValueError(
+            f"{status} physiology cache schema {schema!r}; expected {CLEAN_CACHE_SCHEMA}. "
+            "Old caches are retained for historical evidence only. A separate versioned "
+            "rebuild is required; this reader never rebuilds automatically."
+        )
 
 
 def canonical_subject_id(dataset_id: str, subject: str) -> str:
@@ -118,8 +134,11 @@ class CleanPhysiologyCacheIndex:
         self.cache_root = Path(cache_root)
         self.project_root = Path.cwd()
         self.cache_manifest = _read_json(self.cache_root / "cache_manifest.json")
+        require_current_cache_manifest(self.cache_manifest)
         self.event_manifest_path = self.cache_root / "event_index" / "event_manifest.json"
         self.event_manifest = _read_json(self.event_manifest_path) if self.event_manifest_path.exists() else {}
+        if self.event_manifest.get("event_alignment_schema") != EVENT_ALIGNMENT_SCHEMA:
+            raise ValueError(f"Deprecated or missing event index; expected {EVENT_ALIGNMENT_SCHEMA}; rebuild separately.")
         self.records = [self._record_from_manifest(row) for row in self.cache_manifest.get("records", [])]
         self.events = [with_canonical_fields(row) for row in _read_jsonl(self.cache_root / "event_index" / "events.jsonl")]
         self.alignment_reports = [
@@ -137,6 +156,7 @@ class CleanPhysiologyCacheIndex:
         return candidate if candidate.exists() else path
 
     def _record_from_manifest(self, row: Mapping[str, Any]) -> CleanCacheRecord:
+        require_current_cache_manifest(row)
         normalized = with_canonical_fields(row)
         return CleanCacheRecord(
             dataset_id=str(normalized["dataset_id"]),
@@ -242,6 +262,10 @@ class CleanPhysiologyAlignedWindowDataset:
                     continue
                 start = int(round(float(onset_ms) / 1000.0 * sample_rate)) + offset
                 stop = start + length
+                lower, upper = event.get("metadata", {}).get("alignment_support_ms", {}).get("fnirs", (None, None))
+                if ((lower is not None and start / sample_rate * 1000 < lower)
+                        or (upper is not None and stop / sample_rate * 1000 > upper)):
+                    continue
                 if start < 0 or stop > num_samples:
                     continue
                 windows.append(AlignedWindow(record=record, event=event, start_index=start, stop_index=stop))

@@ -29,6 +29,7 @@ from scipy.io import loadmat
 from scipy.signal import butter, resample_poly, sosfiltfilt
 
 from .clean_physiology_cache import CleanCacheRecord, CleanPhysiologyCacheIndex
+from .event_alignment import ADMISSIBLE_ALIGNMENT_CASES, window_within_alignment_support
 from .eeg_artifact_preprocessing import (
     EEGArtifactCleaningConfig,
     SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
@@ -46,9 +47,9 @@ RAW_DATASET_IDS: tuple[str, ...] = (
     "simultaneous_eeg_nirs",
 )
 
-UNIFIED_PHYSIOLOGY_SCHEMA = "unified_physiology_window_v1"
+UNIFIED_PHYSIOLOGY_SCHEMA = "unified_physiology_window_v2"
 EEG_ARTIFACT_MASK_POLICY = "disabled_all_false_no_invalid_authority_v1"
-REFED_CONTINUOUS_SEQUENCE_SCHEMA = "refed_continuous_va_sequence_v1"
+REFED_CONTINUOUS_SEQUENCE_SCHEMA = "refed_continuous_va_sequence_v2"
 REFED_CONTINUOUS_TARGET_NAMES = ("valence", "arousal")
 REFED_DEFAULT_TARGET_SAMPLE_RATE_HZ = 1.0
 CANONICAL_UNIT = "robust_standard_deviation"
@@ -68,12 +69,7 @@ SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1 = "simultaneous_eeg_eog_clean_v1"
 SUPPORTED_EEG_SIGNAL_BRANCHES = SINGLE_TRIAL_EEG_SIGNAL_BRANCHES + (
     SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1,
 )
-DEFAULT_ADMISSIBLE_ALIGNMENT_CASES = frozenset({
-    "stable_fixed_offset",
-    "piecewise_constant_offset",
-    "skip_aligned_piecewise_constant_offset",
-    "shared_segment_index_no_marker_stream",
-})
+DEFAULT_ADMISSIBLE_ALIGNMENT_CASES = ADMISSIBLE_ALIGNMENT_CASES
 FORBIDDEN_TASK_NAMESPACES: frozenset[str] = frozenset()
 FORBIDDEN_TASK_POLICY = "no_hard_exclusions_dsr_restored_v2"
 
@@ -748,7 +744,9 @@ def _refed_continuous_stream(event: Mapping[str, Any]) -> tuple[np.ndarray, floa
     duration_s = float(event.get("duration_ms", 0.0)) / 1000.0
     if not np.isfinite(duration_s) or duration_s <= 0.0:
         raise ValueError(f"REFED event duration must be positive, got {duration_s}")
-    native_rate_hz = float(values.shape[0] / duration_s)
+    native_rate_hz = float(stream.get("native_sample_rate_hz", 1.0))
+    if not np.isfinite(native_rate_hz) or native_rate_hz <= 0:
+        raise ValueError("Invalid REFED annotation sampling rate")
     return values, duration_s, native_rate_hz
 
 
@@ -762,9 +760,9 @@ def refed_continuous_target_window(
     """Build a fixed-shape valence/arousal target sequence for one REFED window.
 
     Target timestamps are expressed on the event-relative clock.  The released
-    annotation grid is mapped to video time by normalized position, which
-    absorbs the sub-millisecond duration discrepancy caused by the nominal
-    47.62 Hz fNIRS rate.  Invalid time support and non-finite source values are
+    annotation grid retains its published 1 Hz rate. Nominal fNIRS duration
+    rounding must not stretch the annotation clock. Invalid time support and
+    non-finite source values are
     zero-filled and identified by a per-coordinate mask; callers must consume
     that mask in the regression loss.
     """
@@ -786,7 +784,7 @@ def refed_continuous_target_window(
     source, event_duration_s, native_rate_hz = _refed_continuous_stream(event)
     target_time_s = window_start_s + np.arange(target_count, dtype=np.float64) / target_sample_rate_hz
     metadata = event.get("metadata", {})
-    paired_signal_duration_s = event_duration_s
+    paired_signal_duration_s = min(event_duration_s, len(source) / native_rate_hz)
     if isinstance(metadata, Mapping):
         eeg_samples = metadata.get("eeg_samples")
         fnirs_samples = metadata.get("fnirs_samples")
@@ -796,7 +794,7 @@ def refed_continuous_target_window(
             paired_signal_duration_s = min(paired_signal_duration_s, float(fnirs_samples) / 47.62)
     time_valid = (target_time_s >= 0.0) & (target_time_s < paired_signal_duration_s)
     source_position = np.clip(
-        target_time_s / event_duration_s * source.shape[0],
+        target_time_s * native_rate_hz,
         0.0,
         float(source.shape[0] - 1),
     )
@@ -833,7 +831,7 @@ def refed_continuous_target_window(
         "paired_signal_duration_s": paired_signal_duration_s,
         "value_coordinate": "refed_joystick_native",
         "scaling_policy": "preserve_native_in_loader_fit_scaling_on_train_subjects_only",
-        "alignment_policy": "normalized_video_time_linear_interpolation_v1",
+        "alignment_policy": "published_annotation_rate_linear_interpolation_v2",
     }
 
 
@@ -914,6 +912,7 @@ class UnifiedPhysiologyWindowDataset:
         self.include_event_types = include_event_types
         self.admissible_alignment_cases = None if admissible_alignment_cases is None else frozenset(admissible_alignment_cases)
         self.excluded_alignment_records: dict[str, str] = {}
+        self.excluded_alignment_support_windows = 0
         self.excluded_forbidden_task_counts = {namespace: 0 for namespace in FORBIDDEN_TASK_NAMESPACES}
         self.excluded_forbidden_task_records: set[str] = set()
         self.windows = self._build_windows()
@@ -942,7 +941,7 @@ class UnifiedPhysiologyWindowDataset:
             if self.admissible_alignment_cases is not None:
                 cases = {str(report.get("alignment_case", "")) for report in reports}
                 label_match = all(report.get("label_sequence_match") is not False for report in reports)
-                if not reports or not cases.intersection(self.admissible_alignment_cases) or not label_match:
+                if not reports or not cases.issubset(self.admissible_alignment_cases) or not label_match:
                     self.excluded_alignment_records[record.join_key] = ",".join(sorted(cases)) or "missing_alignment_report"
                     continue
             for event in admitted_events:
@@ -953,6 +952,9 @@ class UnifiedPhysiologyWindowDataset:
                 if eeg_time is None and not self.require_paired_timestamps:
                     eeg_time = event.get("onset_ms")
                 if fnirs_time is None or (self.require_paired_timestamps and eeg_time is None):
+                    continue
+                if not window_within_alignment_support(event, self.window_offset_s, self.window_duration_s):
+                    self.excluded_alignment_support_windows += 1
                     continue
                 windows.append(UnifiedWindowRef(record=record, event=event))
         return windows
@@ -1346,6 +1348,10 @@ class UnifiedPhysiologyWindowDataset:
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         ref = self.windows[index]
+        if not window_within_alignment_support(
+            ref.event, self.window_offset_s + ref.window_offset_s, self.window_duration_s,
+        ):
+            raise ValueError("Window enters an unverified concatenation interval")
         record_data = self._load_canonical_record(ref.record)
         offset_ms = (self.window_offset_s + ref.window_offset_s) * 1000.0
         eeg_time_ms = float(ref.event.get("eeg_time_ms", ref.event.get("onset_ms"))) + offset_ms
@@ -1407,6 +1413,18 @@ class UnifiedPhysiologyWindowDataset:
                 "offset_ms": fnirs_time_ms - eeg_time_ms,
                 "event_relative_window_start_s": self.window_offset_s + ref.window_offset_s,
                 "separate_modality_clocks_used": True,
+                "sample_grid": {
+                    modality: {
+                        "start_index": int(round(time_ms * rate / 1000.0)),
+                        "actual_start_ms": round(time_ms * rate / 1000.0) * 1000.0 / rate,
+                        "rounding_error_ms": round(time_ms * rate / 1000.0) * 1000.0 / rate - time_ms,
+                        "sample_period_ms": 1000.0 / rate,
+                    }
+                    for modality, time_ms, rate in (
+                        ("eeg", eeg_time_ms, CANONICAL_EEG_SAMPLE_RATE_HZ),
+                        ("fnirs", fnirs_time_ms, CANONICAL_FNIRS_SAMPLE_RATE_HZ),
+                    )
+                },
             },
             "preprocessing_contract": CANONICAL_PREPROCESSING.to_dict(),
             "preprocessing_state": {
@@ -1432,6 +1450,7 @@ class UnifiedPhysiologyWindowDataset:
             "window_count_by_dataset": counts,
             "admissible_alignment_cases": sorted(self.admissible_alignment_cases or []),
             "excluded_alignment_record_count": len(self.excluded_alignment_records),
+            "excluded_alignment_support_windows": self.excluded_alignment_support_windows,
             "excluded_alignment_records": dict(self.excluded_alignment_records),
             "eeg_signal_branch": self.eeg_signal_branch,
             "require_eeg_artifact_cache": self.require_eeg_artifact_cache,

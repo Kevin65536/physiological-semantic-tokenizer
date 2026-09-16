@@ -26,13 +26,14 @@ from src.data.event_alignment import (  # noqa: E402
     align_paired_marker_streams,
     normalize_marker_struct,
     read_xlsx_rows,
+    read_visual_fnirs_csv,
     visual_stimulus_onsets_from_dc9,
 )
 from src.data.clean_physiology_cache import with_canonical_fields  # noqa: E402
 from src.utils.io import write_json  # noqa: E402
 
 
-EVENT_INDEX_SCHEMA = "clean_eeg_fnirs_event_index_v1"
+EVENT_INDEX_SCHEMA = "clean_eeg_fnirs_event_index_v2"
 
 DATA_ROOTS = {
     "eeg_fnirs_single_trial": PROJECT_ROOT / "data/EEG+NIRS Single-Trial",
@@ -63,7 +64,7 @@ VISUAL_MARK_LABELS = {
 VISUAL_VALID_EPOCH_TYPES = {"RR", "RF", "FF", "FR"}
 VISUAL_EPOCH_TYPE_INDICES = {"RR": 0, "RF": 1, "FF": 2, "FR": 3, "unknown": -1}
 VISUAL_TIMING_CONTRACT = {
-    "schema": "visual_dc9_stimulus_timing_v1",
+    "schema": "visual_dc9_stimulus_timing_v2",
     "eeg_trigger": "DC9",
     "eeg_stimulus_onset_rule": "dc9_followed_by_stimulus_offset_at_3000ms",
     "stimulus_duration_ms": 3_000.0,
@@ -73,11 +74,11 @@ VISUAL_TIMING_CONTRACT = {
     "source": "dataset_readme_and_data_in_brief_2024_110260",
 }
 REFED_CONTINUOUS_TIMING_CONTRACT = {
-    "schema": "refed_continuous_annotation_timing_v1",
+    "schema": "refed_continuous_annotation_timing_v2",
     "targets": ["valence", "arousal"],
     "released_layout": "time_by_target",
     "native_grid": "approximately_1_hz",
-    "time_basis": "event_relative_normalized_video_time",
+    "time_basis": "event_relative_published_1_hz",
     "signal_support": "intersection_of_eeg_fnirs_and_annotation_support",
     "value_coordinate": "refed_joystick_native",
     "scaling_policy": "fit_on_train_subjects_only",
@@ -99,7 +100,7 @@ SIMULTANEOUS_DSR_STIMULUS_CODEBOOK = {
     32: ("No-go", 1),
 }
 SIMULTANEOUS_DSR_TIMING_CONTRACT = {
-    "schema": "simultaneous_dsr_go_nogo_timing_v1",
+    "schema": "simultaneous_dsr_go_nogo_timing_v2",
     "eeg_stimulus_codes": {"16": "Go", "32": "No-go"},
     "eeg_block_code": 48,
     "fnirs_block_code": 3,
@@ -116,7 +117,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--datasets", nargs="+", default=list(DATA_ROOTS), choices=list(DATA_ROOTS))
     parser.add_argument("--subjects-per-dataset", type=int, default=1000)
     parser.add_argument("--records-per-subject", type=int, default=1000)
-    parser.add_argument("--output-dir", default="data/cache/physiology_semantic_clean_v1/event_index")
+    parser.add_argument("--output-dir", default="data/cache/physiology_semantic_clean_v2/event_index")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -314,6 +315,7 @@ def _simultaneous_dsr_events(
                     "source_event_index": int(source_index),
                     "block_index": block_index,
                     "block_anchor_offset_ms": offset_ms,
+                    "alignment_support_ms": anchor.metadata["alignment_support_ms"],
                     "timing_contract": SIMULTANEOUS_DSR_TIMING_CONTRACT,
                     "source_files": source_files,
                 },
@@ -424,6 +426,10 @@ def iter_refed(root: Path, subject_limit: int, record_limit: int) -> tuple[list[
             eeg_len = int(np.asarray(eeg_payload[key]).shape[-1]) if key in eeg_payload else None
             fnirs_len = int(np.asarray(fnirs_payload[key]).shape[-1])
             labels = np.asarray(label_payload.get(key, np.empty((0, 2))), dtype=np.float32)
+            if labels.ndim != 2 or 2 not in labels.shape:
+                raise ValueError(f"Invalid REFED label shape for {subject_id}/{key}: {labels.shape}")
+            if labels.shape[1] != 2:
+                labels = labels.T
             duration_ms = float(fnirs_len / 47.62 * 1000.0)
             label_sample_count = int(labels.shape[0]) if labels.ndim == 2 else 0
             metadata = {
@@ -436,18 +442,18 @@ def iter_refed(root: Path, subject_limit: int, record_limit: int) -> tuple[list[
                     "values": labels.tolist(),
                     "sample_count": label_sample_count,
                     "layout": "time_by_target",
-                    "native_sample_rate_hz": (
-                        float(label_sample_count / (duration_ms / 1000.0)) if label_sample_count else None
-                    ),
-                    "time_basis": "event_relative_normalized_video_time",
+                    "native_sample_rate_hz": 1.0,
+                    "time_basis": "event_relative_published_1_hz",
                     "value_coordinate": "refed_joystick_native",
                     "sampling_note": (
                         "released REFED annotation grid is approximately 1 Hz; "
-                        "align to the video by normalized event-relative time"
+                        "preserve the published rate; first-sample phase is assumed at video zero"
                     ),
                 },
                 "eeg_samples": eeg_len,
                 "fnirs_samples": fnirs_len,
+                "clock_evidence": "publisher_segment_origin_assumed_not_measured",
+                "annotation_first_sample_time_s_assumed": 0.0,
                 "source_files": [
                     _rel(subject_dir / "EEG_videos.mat"),
                     _rel(subject_dir / "fNIRS_videos.mat"),
@@ -479,49 +485,24 @@ def iter_refed(root: Path, subject_limit: int, record_limit: int) -> tuple[list[
                     num_eeg_events=1 if eeg_len else 0,
                     num_fnirs_events=1,
                     num_aligned_events=1 if eeg_len else 0,
-                    alignment_case="shared_segment_index_no_marker_stream",
+                    alignment_case=("shared_segment_index_no_marker_stream"
+                                    if eeg_len and abs(eeg_len / 1000.0 - duration_ms / 1000.0) <= 1.0 / 47.62
+                                    else "segment_duration_mismatch"),
                     label_sequence_match=True,
-                    offset_mean_ms=0.0,
-                    offset_std_ms=0.0,
+                    offset_mean_ms=None,
+                    offset_std_ms=None,
                     drift_slope_ms_per_min=None,
-                    metadata={"eeg_samples": eeg_len, "fnirs_samples": fnirs_len, "duration_ms": duration_ms},
+                    metadata={"eeg_samples": eeg_len, "fnirs_samples": fnirs_len, "duration_ms": duration_ms,
+                              "clock_evidence": "publisher_segment_origin_assumed_not_measured",
+                              "assumed_offset_ms": 0.0},
                 )
             )
     return events, reports
 
 
 def _read_visual_marks(path: Path) -> tuple[list[dict[str, Any]], float]:
-    lines = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
-    data_line = next(index for index, line in enumerate(lines) if line.strip() == "Data")
-    sampling_line = next(line for line in lines[:data_line] if line.startswith("Sampling Period[s]"))
-    sample_period_s = float(next(csv.reader([sampling_line]))[1])
-    rows = list(csv.reader(lines[data_line + 1 :]))
-    header = rows[0]
-    mark_idx = header.index("Mark")
-    time_idx = header.index("Time") if "Time" in header else None
-    body_idx = header.index("BodyMovement") if "BodyMovement" in header else None
-    removal_idx = header.index("RemovalMark") if "RemovalMark" in header else None
-    events = []
-    for sample_index, row in enumerate(rows[1:]):
-        if len(row) <= mark_idx:
-            continue
-        try:
-            mark = int(float(row[mark_idx]))
-        except ValueError:
-            continue
-        if mark <= 0:
-            continue
-        events.append(
-            {
-                "sample_index": sample_index,
-                "onset_ms": float(sample_index * sample_period_s * 1000.0),
-                "mark": mark,
-                "clock_time": row[time_idx] if time_idx is not None and len(row) > time_idx else "",
-                "body_movement": row[body_idx] if body_idx is not None and len(row) > body_idx else "",
-                "removal_mark": row[removal_idx] if removal_idx is not None and len(row) > removal_idx else "",
-            }
-        )
-    return events, 1.0 / sample_period_s
+    recording = read_visual_fnirs_csv(path)
+    return recording["marks"], recording["sample_rate_hz"]
 
 
 def _visual_type_map(subject_dir: Path) -> dict[int, str]:
@@ -630,10 +611,11 @@ def iter_visual(root: Path, subject_limit: int, record_limit: int) -> tuple[list
                 _rel(subject_dir / f"{subject_dir.name}_type.xlsx"),
             ]
             for index, event in enumerate(aligned_events):
-                epoch_id = epoch_offset + index + 1
+                source_index = int(event.metadata["fnirs_source_index"])
+                epoch_id = epoch_offset + source_index + 1
                 epoch_type_raw = type_map.get(epoch_id, "")
                 epoch_type = epoch_type_raw if epoch_type_raw in VISUAL_VALID_EPOCH_TYPES else "unknown"
-                mark = stimulus_marks[index] if index < len(stimulus_marks) else {}
+                mark = stimulus_marks[source_index]
                 events.append(
                     CanonicalEvent(
                         **{
@@ -679,6 +661,13 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     if not output_dir.is_absolute():
         output_dir = PROJECT_ROOT / output_dir
+    previous = output_dir / "event_manifest.json"
+    if previous.exists() and json.loads(previous.read_text()).get("event_alignment_schema") != EVENT_ALIGNMENT_SCHEMA:
+        raise ValueError("Refusing to overwrite a deprecated event index; use a new versioned directory")
+    parent_manifest = output_dir.parent / "cache_manifest.json"
+    if parent_manifest.exists():
+        from src.data.clean_physiology_cache import require_current_cache_manifest
+        require_current_cache_manifest(json.loads(parent_manifest.read_text()))
     if output_dir.exists() and not args.overwrite:
         raise FileExistsError(f"output directory exists; pass --overwrite: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)

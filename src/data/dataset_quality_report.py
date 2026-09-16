@@ -36,6 +36,7 @@ from .unified_physiology import (
     CANONICAL_UNIT,
     RAW_DATASET_IDS,
     UnifiedPhysiologyWindowDataset,
+    UNIFIED_PHYSIOLOGY_SCHEMA,
 )
 
 
@@ -476,7 +477,7 @@ class DatasetQualityReporter:
             },
             "loader_contract": {
                 "loader_class": "UnifiedPhysiologyWindowDataset",
-                "schema": "unified_physiology_window_v1",
+                "schema": UNIFIED_PHYSIOLOGY_SCHEMA,
                 "window_duration_s": self.window_duration_s,
                 "eeg_signal_branch": self.eeg_signal_branch,
             },
@@ -517,7 +518,7 @@ class DatasetQualityReporter:
             "<h1>Four-Dataset Unified Physiology Quality Audit</h1>",
             f"<p>Generated {escape(datetime.now().isoformat(timespec='seconds'))}</p>",
             "<div class='notice'><strong>Scope:</strong> exactly four original datasets. Croce caches are derived EEG/fNIRS source/observation supervision targets and are excluded from the dataset count.</div>",
-            f"<div class='notice'><strong>Loader:</strong> UnifiedPhysiologyWindowDataset · unified_physiology_window_v1 · {self.window_duration_s:g} s observation context · EEG branch {escape(self.eeg_signal_branch)}.</div>",
+            f"<div class='notice'><strong>Loader:</strong> UnifiedPhysiologyWindowDataset · {UNIFIED_PHYSIOLOGY_SCHEMA} · {self.window_duration_s:g} s observation context · EEG branch {escape(self.eeg_signal_branch)}.</div>",
             "<h2>Final contract status</h2>",
             _dict_list_to_html_table(rows),
             "<h2>Canonical preprocessing</h2>",
@@ -571,7 +572,7 @@ class DatasetQualityReporter:
             "",
             "Scope: the four original EEG-fNIRS datasets only. `croce_local_cache` is a derived Croce-2017 source/observation supervision cache, not a dataset.",
             "",
-            f"Loader: `UnifiedPhysiologyWindowDataset` / `unified_physiology_window_v1`; observation context: **{self.window_duration_s:g} s**; EEG branch: `{self.eeg_signal_branch}`.",
+            f"Loader: `UnifiedPhysiologyWindowDataset` / `{UNIFIED_PHYSIOLOGY_SCHEMA}`; observation context: **{self.window_duration_s:g} s**; EEG branch: `{self.eeg_signal_branch}`.",
             "",
             "## Final status",
             "",

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 from dataclasses import dataclass
@@ -27,11 +26,11 @@ from src.data.homer2_preprocessing import (  # noqa: E402
     apply_homer2_aligned_contract,
     homer2_compatibility_manifest,
 )
-from src.data.clean_physiology_cache import with_canonical_fields  # noqa: E402
+from src.data.clean_physiology_cache import CLEAN_CACHE_SCHEMA, require_current_cache_manifest, with_canonical_fields  # noqa: E402
 from src.utils.io import save_npz, write_json  # noqa: E402
 
 
-CLEAN_CACHE_SCHEMA = "clean_eeg_fnirs_cache_v1"
+from src.data.event_alignment import read_visual_fnirs_csv
 
 DATA_ROOTS = {
     "eeg_fnirs_single_trial": PROJECT_ROOT / "data/EEG+NIRS Single-Trial",
@@ -58,6 +57,7 @@ class CleanInputRecord:
     channel_names: tuple[str, ...]
     homer2_channel_names: tuple[str, ...]
     metadata: dict[str, Any]
+    native_time_s: np.ndarray | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,7 +73,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--records-per-subject", type=int, default=1)
     parser.add_argument("--max-samples", type=int, default=0, help="Optional leading sample cap for smoke runs.")
     parser.add_argument("--include-refed-absorbance", action="store_true")
-    parser.add_argument("--output-dir", default="data/cache/physiology_semantic_clean_v1")
+    parser.add_argument("--output-dir", default="data/cache/physiology_semantic_clean_v2")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -249,24 +249,8 @@ def iter_refed(
 
 
 def _read_etg_csv(path: Path) -> tuple[np.ndarray, float]:
-    lines = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
-    data_line = next(index for index, line in enumerate(lines) if line.strip() == "Data")
-    sampling_line = next(line for line in lines[:data_line] if line.startswith("Sampling Period[s]"))
-    sample_period = float(next(csv.reader([sampling_line]))[1])
-    rows = list(csv.reader(lines[data_line + 1 :]))
-    header = rows[0]
-    channel_indices = [index for index, name in enumerate(header) if re.fullmatch(r"CH\d+", name.strip())]
-    values = []
-    for row in rows[1:]:
-        if len(row) <= max(channel_indices):
-            continue
-        try:
-            values.append([float(row[index]) for index in channel_indices])
-        except ValueError:
-            continue
-    if not values:
-        raise ValueError(f"no fNIRS data rows in {path}")
-    return np.asarray(values, dtype=np.float64), 1.0 / sample_period
+    recording = read_visual_fnirs_csv(path, load_signals=True)
+    return recording["values"], recording["sample_rate_hz"]
 
 
 def iter_visual(root: Path, subject_limit: int, record_limit: int, max_samples: int) -> Iterator[CleanInputRecord]:
@@ -277,10 +261,13 @@ def iter_visual(root: Path, subject_limit: int, record_limit: int, max_samples: 
             deoxy_path = Path(str(oxy_path).replace("_Oxy.csv", "_Deoxy.csv"))
             if not deoxy_path.exists():
                 continue
-            oxy, fs_oxy = _read_etg_csv(oxy_path)
-            deoxy, fs_deoxy = _read_etg_csv(deoxy_path)
-            length = min(len(oxy), len(deoxy))
-            stacked = np.stack((oxy[:length], deoxy[:length]), axis=2)
+            oxy_record = read_visual_fnirs_csv(oxy_path, load_signals=True)
+            deoxy_record = read_visual_fnirs_csv(deoxy_path, load_signals=True)
+            if (oxy_record["sample_rate_hz"] != deoxy_record["sample_rate_hz"]
+                    or not np.array_equal(oxy_record["clock_s"], deoxy_record["clock_s"])
+                    or oxy_record["marks"] != deoxy_record["marks"]):
+                raise ValueError(f"Oxy/Deoxy clock or marker mismatch: {oxy_path}")
+            stacked = np.stack((oxy_record["values"], deoxy_record["values"]), axis=2)
             stacked = _cap(stacked, max_samples)
             values = stacked.reshape(stacked.shape[0], -1)
             channel_names = tuple(f"CH{channel + 1}_{role}" for channel in range(stacked.shape[1]) for role in ("Oxy", "Deoxy"))
@@ -291,13 +278,16 @@ def iter_visual(root: Path, subject_limit: int, record_limit: int, max_samples: 
                 source_paths=(oxy_path, deoxy_path),
                 values=values,
                 homer2_input=values,
-                sample_rate_hz=min(fs_oxy, fs_deoxy),
+                sample_rate_hz=oxy_record["sample_rate_hz"],
                 contract=contract,
                 entry_stage="chromophore",
                 wavelengths_nm=(695.0, 830.0),
                 channel_names=channel_names,
                 homer2_channel_names=channel_names,
-                metadata={"metadata_unit": contract.native_unit, "metadata_signal": "ETG-7100 Oxy/Deoxy export"},
+                metadata={"metadata_unit": contract.native_unit, "metadata_signal": "ETG-7100 Oxy/Deoxy export",
+                          "clock_policy": "native_Time_column_resampled_before_filtering",
+                          "native_clock_origin_s": float(oxy_record["clock_s"][0])},
+                native_time_s=oxy_record["time_s"][:len(values)],
             )
 
 
@@ -328,27 +318,40 @@ def build_record(record: CleanInputRecord, output_dir: Path, overwrite: bool) ->
     npz_path = subject_dir / f"{record_name}.npz"
     manifest_path = subject_dir / f"{record_name}.manifest.json"
     if npz_path.exists() and manifest_path.exists() and not overwrite:
-        return json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        require_current_cache_manifest(manifest)
+        return manifest
+    if manifest_path.exists():
+        require_current_cache_manifest(json.loads(manifest_path.read_text(encoding="utf-8")))
+
+    values, homer2_input = record.values, record.homer2_input
+    native_time_s = (np.asarray(record.native_time_s, dtype=np.float64) if record.native_time_s is not None
+                     else np.arange(len(values), dtype=np.float64) / record.sample_rate_hz)
+    time_s = np.arange(len(values), dtype=np.float64) / record.sample_rate_hz
+    if record.native_time_s is not None:
+        time_s = np.arange(int(np.floor(native_time_s[-1] * record.sample_rate_hz)) + 1) / record.sample_rate_hz
+        values = np.column_stack([np.interp(time_s, native_time_s, c) for c in values.T])
+        homer2_input = np.column_stack([np.interp(time_s, native_time_s, c) for c in homer2_input.T])
 
     raw_native = standardize_fnirs_record(
-        record.values,
+        values,
         sample_rate_hz=record.sample_rate_hz,
         contract=record.contract,
     )
     homer2 = apply_homer2_aligned_contract(
-        record.homer2_input,
+        homer2_input,
         dataset_id=record.dataset_id,
         sample_rate_hz=record.sample_rate_hz,
         entry_stage=record.entry_stage,
         wavelengths_nm=record.wavelengths_nm,
     )
-    time_s = np.arange(record.values.shape[0], dtype=np.float64) / record.sample_rate_hz
     save_npz(
         npz_path,
         raw_native_fnirs=raw_native.values,
         homer2_aligned_fnirs=homer2.values,
         native_input_fnirs=np.asarray(record.values, dtype=np.float32),
-        time_s=time_s.astype(np.float32),
+        time_s=time_s,
+        native_input_time_s=native_time_s,
         native_channel_names=np.asarray(record.channel_names, dtype=str),
         homer2_channel_names=np.asarray(record.homer2_channel_names, dtype=str),
     )
@@ -361,7 +364,7 @@ def build_record(record: CleanInputRecord, output_dir: Path, overwrite: bool) ->
     ]
     manifest = with_canonical_fields({
         "schema": CLEAN_CACHE_SCHEMA,
-        "record_npz": str(npz_path.relative_to(PROJECT_ROOT)),
+        "record_npz": str(npz_path.relative_to(PROJECT_ROOT) if npz_path.is_relative_to(PROJECT_ROOT) else npz_path),
         "dataset_id": record.dataset_id,
         "subject": record.subject,
         "record_id": record.record_id,
@@ -393,6 +396,9 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     if not output_dir.is_absolute():
         output_dir = PROJECT_ROOT / output_dir
+    old_manifest = output_dir / "cache_manifest.json"
+    if old_manifest.exists():
+        require_current_cache_manifest(json.loads(old_manifest.read_text()))
     output_dir.mkdir(parents=True, exist_ok=True)
 
     records = [build_record(record, output_dir, args.overwrite) for record in iter_records(args)]

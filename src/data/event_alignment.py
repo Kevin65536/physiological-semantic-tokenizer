@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import csv
+from pathlib import Path
 import re
 from typing import Any, Mapping, Sequence
 from zipfile import ZipFile
@@ -11,7 +13,11 @@ import xml.etree.ElementTree as ET
 import numpy as np
 
 
-EVENT_ALIGNMENT_SCHEMA = "physiology_event_alignment_v1"
+EVENT_ALIGNMENT_SCHEMA = "physiology_event_alignment_v2"
+ADMISSIBLE_ALIGNMENT_CASES = frozenset({
+    "stable_fixed_offset", "piecewise_constant_offset",
+    "skip_aligned_piecewise_constant_offset", "shared_segment_index_no_marker_stream",
+})
 
 
 @dataclass(frozen=True)
@@ -207,6 +213,7 @@ def classify_alignment(
     residual_ms: np.ndarray,
     blocks: Sequence[Mapping[str, Any]],
     *,
+    eeg_time_ms: np.ndarray | None = None,
     skipped_marker_indices: Mapping[str, Sequence[int]] | None = None,
     stable_block_std_threshold_ms: float = 100.0,
     continuous_drift_slope_threshold_ms_per_min: float = 10.0,
@@ -214,122 +221,184 @@ def classify_alignment(
     residual = np.asarray(residual_ms, dtype=np.float64).reshape(-1)
     if residual.size == 0:
         return "no_common_events"
+    # Evaluate physical drift within segments before the dispersion shortcut.
+    for block in blocks:
+        start, stop = int(block["start_index"]), int(block["end_index"]) + 1
+        slope = (drift_slope_ms_per_min(eeg_time_ms[start:stop], residual[start:stop])
+                 if eeg_time_ms is not None else block.get("drift_slope_ms_per_min"))
+        if slope is not None and abs(slope) >= continuous_drift_slope_threshold_ms_per_min:
+            return "continuous_drift"
     stable_blocks = all(float(block["offset_std_ms"]) <= stable_block_std_threshold_ms for block in blocks)
     skipped = bool(skipped_marker_indices and any(skipped_marker_indices.values()))
     if len(blocks) == 1 and stable_blocks:
         return "stable_fixed_offset"
     if len(blocks) > 1 and stable_blocks:
         return "skip_aligned_piecewise_constant_offset" if skipped else "piecewise_constant_offset"
-    slope = drift_slope_ms_per_min(np.arange(len(residual), dtype=np.float64), residual)
-    if slope is not None and abs(slope) >= continuous_drift_slope_threshold_ms_per_min:
-        return "continuous_drift"
     return "mixed_or_unstable_offset"
 
 
-def _select_best_skip(longer: np.ndarray, shorter: np.ndarray) -> tuple[int, np.ndarray]:
-    best_skip = 0
-    best_residual = shorter - np.delete(longer, 0)
-    best_score = float("inf")
-    for skip_index in range(len(longer)):
-        residual = shorter - np.delete(longer, skip_index)
-        score = sum(float(block["offset_std_ms"]) for block in detect_offset_blocks(residual))
-        if score < best_score:
-            best_score = score
-            best_skip = skip_index
-            best_residual = residual
-    return best_skip, best_residual
-
-
 def align_paired_marker_streams(
-    *,
-    dataset_id: str,
-    subject: str,
-    record_id: str,
-    eeg_marker: Mapping[str, Any],
-    fnirs_marker: Mapping[str, Any],
-    event_type: str = "trial",
-    jump_threshold_ms: float = 20_000.0,
+    *, dataset_id: str, subject: str, record_id: str,
+    eeg_marker: Mapping[str, Any], fnirs_marker: Mapping[str, Any],
+    event_type: str = "trial", jump_threshold_ms: float = 20_000.0,
 ) -> tuple[list[CanonicalEvent], EventAlignmentReport]:
     eeg_times = np.asarray(eeg_marker.get("time", []), dtype=np.float64).reshape(-1)
     fnirs_times = np.asarray(fnirs_marker.get("time", []), dtype=np.float64).reshape(-1)
-    eeg_labels = marker_label_names(eeg_marker)
-    fnirs_labels = marker_label_names(fnirs_marker)
-    eeg_indices = marker_label_indices(eeg_marker)
-    fnirs_indices = marker_label_indices(fnirs_marker)
+    eeg_labels, fnirs_labels = marker_label_names(eeg_marker), marker_label_names(fnirs_marker)
+    labels = marker_label_indices(eeg_marker)
+    ei, fi = np.arange(len(eeg_times)), np.arange(len(fnirs_times))
     skipped: dict[str, list[int]] = {"eeg_indices": [], "fnirs_indices": []}
 
-    if len(eeg_times) == len(fnirs_times):
-        aligned_eeg_times = eeg_times
-        aligned_fnirs_times = fnirs_times
-        aligned_eeg_labels = eeg_labels
-        aligned_fnirs_labels = fnirs_labels
-        aligned_label_indices = eeg_indices
-    elif len(eeg_times) == len(fnirs_times) + 1:
-        skip, _ = _select_best_skip(eeg_times, fnirs_times)
-        aligned_eeg_times = np.delete(eeg_times, skip)
-        aligned_fnirs_times = fnirs_times
-        aligned_eeg_labels = [label for index, label in enumerate(eeg_labels) if index != skip]
-        aligned_fnirs_labels = fnirs_labels
-        aligned_label_indices = np.delete(eeg_indices, skip)
-        skipped["eeg_indices"] = [int(skip)]
-    elif len(fnirs_times) == len(eeg_times) + 1:
-        skip, _ = _select_best_skip(fnirs_times, eeg_times)
-        aligned_eeg_times = eeg_times
-        aligned_fnirs_times = np.delete(fnirs_times, skip)
-        aligned_eeg_labels = eeg_labels
-        aligned_fnirs_labels = [label for index, label in enumerate(fnirs_labels) if index != skip]
-        aligned_label_indices = eeg_indices
-        skipped["fnirs_indices"] = [int(skip)]
-    else:
-        common = min(len(eeg_times), len(fnirs_times))
-        aligned_eeg_times = eeg_times[:common]
-        aligned_fnirs_times = fnirs_times[:common]
-        aligned_eeg_labels = eeg_labels[:common]
-        aligned_fnirs_labels = fnirs_labels[:common]
-        aligned_label_indices = eeg_indices[:common]
-
-    residual = aligned_fnirs_times - aligned_eeg_times
-    blocks = detect_offset_blocks(residual, jump_threshold_ms=jump_threshold_ms)
-    label_match = aligned_eeg_labels == aligned_fnirs_labels if len(residual) else None
-    report = EventAlignmentReport(
-        dataset_id=dataset_id,
-        subject=subject,
-        record_id=record_id,
-        num_eeg_events=int(len(eeg_times)),
-        num_fnirs_events=int(len(fnirs_times)),
-        num_aligned_events=int(len(residual)),
-        alignment_case=classify_alignment(residual, blocks, skipped_marker_indices=skipped),
-        label_sequence_match=label_match,
-        offset_mean_ms=float(np.mean(residual)) if residual.size else None,
-        offset_std_ms=float(np.std(residual)) if residual.size else None,
-        drift_slope_ms_per_min=drift_slope_ms_per_min(aligned_eeg_times, residual),
-        offset_blocks=tuple(blocks),
-        skipped_marker_indices=skipped,
-        metadata={"residual_series_ms": residual.tolist()},
-    )
-    events = [
-        CanonicalEvent(
-            dataset_id=dataset_id,
-            subject=subject,
-            record_id=record_id,
-            event_index=int(index),
-            event_type=event_type,
-            label=str(aligned_eeg_labels[index] if label_match or index >= len(aligned_fnirs_labels) else aligned_fnirs_labels[index]),
-            label_index=int(aligned_label_indices[index]) if index < len(aligned_label_indices) else None,
-            eeg_time_ms=float(aligned_eeg_times[index]),
-            fnirs_time_ms=float(aligned_fnirs_times[index]),
-            onset_ms=float(aligned_fnirs_times[index]),
-            alignment_role="paired_eeg_fnirs_marker",
-            metadata={
-                "eeg_label": aligned_eeg_labels[index] if index < len(aligned_eeg_labels) else None,
-                "fnirs_label": aligned_fnirs_labels[index] if index < len(aligned_fnirs_labels) else None,
-                "offset_ms": float(residual[index]),
-            },
+    def reject(reason: str) -> tuple[list[CanonicalEvent], EventAlignmentReport]:
+        return [], EventAlignmentReport(
+            dataset_id, subject, record_id, len(eeg_times), len(fnirs_times), 0,
+            reason, False, None, None, None, metadata={"rejection_reason": reason},
         )
-        for index in range(len(residual))
-    ]
+
+    if any(not np.isfinite(t).all() or np.any(np.diff(t) <= 0) for t in (eeg_times, fnirs_times)):
+        return reject("invalid_marker_timestamps")
+    if not len(ei) or not len(fi):
+        return reject("no_common_events")
+    if abs(len(ei) - len(fi)) > 1:
+        return reject("unresolved_marker_count_mismatch")
+    if len(ei) != len(fi):
+        candidates = []
+        eeg_longer = len(ei) > len(fi)
+        for skip in range(max(len(ei), len(fi))):
+            ce = np.delete(ei, skip) if eeg_longer else ei
+            cf = fi if eeg_longer else np.delete(fi, skip)
+            if [eeg_labels[i] for i in ce] != [fnirs_labels[i] for i in cf]:
+                continue
+            residual = fnirs_times[cf] - eeg_times[ce]
+            blocks = detect_offset_blocks(residual, jump_threshold_ms)
+            # A wrong pairing must not benefit from inventing extra segments.
+            score = (len(blocks), sum(b["count"] * b["offset_std_ms"] ** 2 for b in blocks))
+            candidates.append((score, skip, ce, cf))
+        candidates.sort(key=lambda item: item[0])
+        if not candidates:
+            return reject("label_sequence_mismatch")
+        if (len(candidates) > 1 and candidates[0][0][0] == candidates[1][0][0]
+                and np.isclose(candidates[0][0][1], candidates[1][0][1])):
+            return reject("ambiguous_marker_pairing")
+        _, skip, ei, fi = candidates[0]
+        skipped["eeg_indices" if eeg_longer else "fnirs_indices"] = [int(skip)]
+    if [eeg_labels[i] for i in ei] != [fnirs_labels[i] for i in fi]:
+        return reject("label_sequence_mismatch")
+
+    et, ft = eeg_times[ei], fnirs_times[fi]
+    residual = ft - et
+    blocks = detect_offset_blocks(residual, jump_threshold_ms)
+    for block in blocks:
+        start, stop = block["start_index"], block["end_index"] + 1
+        block["drift_slope_ms_per_min"] = drift_slope_ms_per_min(et[start:stop], residual[start:stop])
+    case = classify_alignment(residual, blocks, eeg_time_ms=et, skipped_marker_indices=skipped)
+    report = EventAlignmentReport(
+        dataset_id, subject, record_id, len(eeg_times), len(fnirs_times), len(residual),
+        case, True, float(residual.mean()), float(residual.std()),
+        drift_slope_ms_per_min(et, residual), tuple(blocks), skipped,
+        metadata={"residual_series_ms": residual.tolist(),
+                  "global_slope_includes_segment_jumps": len(blocks) > 1},
+    )
+    events = []
+    for block_index, block in enumerate(blocks):
+        start, stop = block["start_index"], block["end_index"]
+        # Exact append boundaries are unavailable: the inter-anchor gap around
+        # an offset jump is unverified support, not a guessed midpoint boundary.
+        support = {
+            "policy": "exclude_unverified_concatenation_gaps",
+            "eeg": [float(et[start]) if block_index else None,
+                    float(et[stop]) if block_index < len(blocks) - 1 else None],
+            "fnirs": [float(ft[start]) if block_index else None,
+                      float(ft[stop]) if block_index < len(blocks) - 1 else None],
+        }
+        for index in range(start, stop + 1):
+            events.append(CanonicalEvent(
+                dataset_id, subject, record_id, index, event_type,
+                eeg_labels[ei[index]], int(labels[ei[index]]),
+                float(et[index]), float(ft[index]), float(ft[index]),
+                alignment_role="paired_eeg_fnirs_marker",
+                metadata={"eeg_label": eeg_labels[ei[index]], "fnirs_label": fnirs_labels[fi[index]],
+                          "eeg_source_index": int(ei[index]), "fnirs_source_index": int(fi[index]),
+                          "offset_ms": float(residual[index]), "alignment_support_ms": support},
+            ))
     return events, report
 
+
+def window_within_alignment_support(
+    event: Mapping[str, Any], offset_s: float, duration_s: float,
+    eeg_rate: float = 200.0, fnirs_rate: float = 10.0,
+) -> bool:
+    """Check the entire sampled window against verified segment support."""
+    support = event.get("metadata", {}).get("alignment_support_ms", {})
+    for modality, rate in (("eeg", eeg_rate), ("fnirs", fnirs_rate)):
+        lower, upper = support.get(modality, (None, None))
+        anchor = event.get(f"{modality}_time_ms")
+        if anchor is None:
+            anchor = event.get("onset_ms")
+        if anchor is None or not np.isfinite(anchor):
+            return False
+        onset = float(anchor) + offset_s * 1000.0
+        start = round(onset * rate / 1000.0) * 1000.0 / rate
+        stop = start + round(duration_s * rate) * 1000.0 / rate
+        if lower is not None and start < lower - 1e-8:
+            return False
+        if upper is not None and stop > upper + 1e-8:
+            return False
+    return True
+
+
+
+def read_visual_fnirs_csv(path: str | Path, *, load_signals: bool = False) -> dict[str, Any]:
+    """Read one ETG export without compressing dropped rows or its native clock."""
+    lines = Path(path).read_text(encoding="utf-8-sig").splitlines()
+    data_line = lines.index("Data")
+    period = float(next(csv.reader([next(
+        line for line in lines[:data_line] if line.startswith("Sampling Period[s]")
+    )]))[1])
+    if not np.isfinite(period) or period <= 0:
+        raise ValueError(f"Invalid sampling period: {path}")
+    header, *rows = list(csv.reader(lines[data_line + 1:]))
+    time_index, mark_index = header.index("Time"), header.index("Mark")
+    channel_indices = [i for i, name in enumerate(header) if re.fullmatch(r"CH\d+", name.strip())]
+    if not rows or not channel_indices:
+        raise ValueError(f"Empty ETG recording: {path}")
+    times, marks, values = [], [], []
+    day = 0.0
+    previous = None
+    for index, row in enumerate(rows):
+        if len(row) != len(header):
+            raise ValueError(f"Malformed ETG row {index}: {path}")
+        try:
+            parts = row[time_index].strip().split(":")
+            if len(parts) not in (2, 3):
+                raise ValueError("expected mm:ss or hh:mm:ss")
+            seconds = sum(float(v) * scale for v, scale in zip(parts, (3600, 60, 1)[-len(parts):]))
+            if previous is not None and seconds - previous < -43200:
+                day += 86400.0
+            previous = seconds
+            times.append(seconds + day)
+            mark = int(float(row[mark_index]))
+            if load_signals:
+                sample = [float(row[i]) for i in channel_indices]
+                if not np.isfinite(sample).all():
+                    raise ValueError("nonfinite signal")
+                values.append(sample)
+        except (ValueError, IndexError) as error:
+            raise ValueError(f"Invalid ETG row {index}: {path}: {error}") from error
+        if mark > 0:
+            marks.append({"sample_index": index, "mark": mark, "clock_time": row[time_index],
+                          "body_movement": row[header.index("BodyMovement")] if "BodyMovement" in header else "",
+                          "removal_mark": row[header.index("RemovalMark")] if "RemovalMark" in header else ""})
+    clock = np.asarray(times, dtype=np.float64)
+    if not np.isfinite(clock).all() or np.any(np.diff(clock) <= 0):
+        raise ValueError(f"Non-monotonic ETG clock: {path}")
+    if np.any(np.diff(clock) > 1.5 * period):
+        raise ValueError(f"Missing ETG time support; refusing to interpolate a gap: {path}")
+    relative = clock - clock[0]
+    for mark in marks:
+        mark["onset_ms"] = float(relative[mark["sample_index"]] * 1000.0)
+    return {"time_s": relative, "clock_s": clock, "sample_rate_hz": 1.0 / period,
+            "marks": marks, "values": np.asarray(values, dtype=np.float64) if load_signals else None}
 
 def read_xlsx_rows(path: str) -> list[dict[str, str]]:
     """Read the first worksheet of a small xlsx file using only stdlib."""
