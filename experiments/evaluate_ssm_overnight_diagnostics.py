@@ -1670,6 +1670,7 @@ def freeze_sources(run_dir, cfg):
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml',
              'experiments/configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml',
              'experiments/configs/physiology_semantic_tokenizer/ssm_measurement_retest_v1.yaml',
+             'experiments/configs/physiology_semantic_tokenizer/ssm_band_geometry_v1.yaml',
              'docs/EXPERIMENT_PLAN.md']
     paths = sorted(set(tracked+extra))
     hashes = {}
@@ -1947,6 +1948,8 @@ def influence_rows(run_dir, tasks, results):
 
 
 def summarize_run(run_dir, cfg, *, final=False):
+    if 'structure' in cfg:
+        return structure_summarize(run_dir, cfg, final=final)
     if 'measurement_retest' in cfg:
         return retest_summarize(run_dir, cfg, final=final)
     if cfg['schema'] == 'ssm_overnight_v3':
@@ -2114,6 +2117,8 @@ def summarize_run(run_dir, cfg, *, final=False):
 
 
 def prepare_run(run_dir, cfg, dc, base, measured, metadata):
+    if 'structure' in cfg:
+        return structure_prepare(run_dir, cfg, dc, base, measured, metadata)
     if 'measurement_retest' in cfg:
         return retest_prepare(run_dir, cfg, dc, base, measured)
     if cfg['schema'] == 'ssm_overnight_v3':
@@ -2204,6 +2209,8 @@ def freeze_run(run_dir, cfg):
         paths.append('continuation.json')
     if (run_dir/'retained_input_identity.json').exists():
         paths.append('retained_input_identity.json')
+        if 'technical_correction' in cfg:
+            paths.extend(read_json(run_dir/'retained_input_identity.json')['prepared_sha256'])
     inventory = read_json(run_dir/'scope_inventory.json')
     for subject in inventory if cfg['schema'] != 'ssm_overnight_v3' else ():
         for outer in (None, 0, 1, 2, 3):
@@ -2386,6 +2393,8 @@ def v3_load_config(cfg):
         output_root='experiments/runs/physiology_semantic_tokenizer/ssm_overnight',
         plan='docs/EXPERIMENT_PLAN.md', teacher_qualification='none', tokenizer_training=False)
     retest = cfg.get('measurement_retest')
+    if 'structure' in cfg:
+        structure_validate(cfg['structure'])
     if retest:
         fixed['fixed_w'] = [0., -.5]
         if (retest['id'] != 'ssm_measurement_retest_v1' or
@@ -2409,7 +2418,7 @@ def v3_load_config(cfg):
             or len(adapt['gain_truth']) != 11 or len(adapt['process_truth']) != 5
             or adapt['process_solvers'] != ['O0', 'O2']):
         raise ValueError('v3 observation or independent-panel contract drift')
-    if not (0 < budget['hours'] <= 8 and 1 <= budget['max_workers'] <= (48 if retest else 16)
+    if not (0 < budget['hours'] <= 8 and 1 <= budget['max_workers'] <= (48 if retest or 'structure' in cfg else 16)
             and 0 < budget['memory_fraction'] <= .6
             and 0 < budget['cell_timeout_seconds'] <= 900
             and 0 < budget['map_timeout_seconds'] <= 1800
@@ -3237,6 +3246,8 @@ def v3_dispatch(run_dir, cfg, dc, base, measured, metadata, task):
         if gate.get('status') != 'completed' or not gate.get('passed', False):
             return dict(status='not_started_prerequisite', reason=prerequisite, rows=[], actual_solves=0)
     kind = task['kind']
+    if kind.startswith('structure_'):
+        return structure_dispatch(run_dir, cfg, dc, base, measured, metadata, task)
     if kind.startswith('retest_'):
         return retest_dispatch(run_dir, cfg, dc, base, measured, task)
     if kind == 'v3_temporal':
@@ -3973,17 +3984,598 @@ def retest_summarize(run_dir, cfg, *, final=False):
     return summary
 
 
+def structure_validate(s):
+    if (s['id'] != 'ssm_band_geometry_v1' or s['bands'] != [[8.,13.],[13.,30.],[30.,45.]]
+            or s['channels'] != 6 or s['panels'] != 4 or s['training_trials'] != 18 or s['evaluation_trials'] != 6
+            or s['candidates'] != ['B_ref','local_scalar','local_multi','merged','split','geometry','permuted']
+            or s['geometry_lambda'] != [0.,.1,1.] or s['base_ridge'] != .01
+            or s['covariance_shrinkage'] != .1 or not s['point_prediction_only']):
+        raise ValueError('band/geometry contract drift')
+
+
+def structure_prefix(run_dir, subject, outer, candidate, inner=None):
+    return Path(run_dir)/'prepared'/f'{subject}_{split_name(outer, inner)}_{candidate}'
+
+
+def structure_features(raw, candidate, indices):
+    if candidate == 'B_ref':
+        return raw['broad']
+    if candidate in ('local_scalar', 'local_multi'):
+        return raw['broad'][:, :, indices]
+    if candidate == 'merged':
+        # Merge physical power, never sum logarithms.
+        return np.log(np.maximum(raw['power'][:, :, indices].sum(axis=-1), 1e-12))
+    return np.log(np.maximum(raw['power'][:, :, indices], 1e-12)).reshape(len(raw['broad']), len(raw['broad'][0]), -1)
+
+
+def structure_fit_features(features, driver, train, geometry, candidate, cfg, gauge, penalty=0.):
+    from src.inference.observation_baselines import signed_loading_fit, correlated_feature_noise, gaussian_driver_statistic
+    train = list(train)
+    center = np.median(np.concatenate(features[train]), axis=0)
+    scale = np.maximum(robust_mad(np.concatenate(features[train])), 1e-8)
+    x = (features-center)/scale
+    xbase = x-x[:, :20].mean(axis=1, keepdims=True)
+    rbase = driver-driver[:, :20].mean(axis=1, keepdims=True)
+    metadata = dict(training_trials=train, center=center, scale=scale, candidate=candidate,
+                    geometry=geometry, loading_estimator=cfg['structure']['loading_fit'])
+    if candidate in ('B_ref', 'local_scalar'):
+        pooled = np.concatenate(xbase[train])
+        pca_center = pooled.mean(axis=0)
+        _, singular, vt = np.linalg.svd(pooled-pca_center, full_matrices=False)
+        loading = vt[0]
+        if loading.sum() < 0:
+            loading = -loading
+        factor = gauge/max(float(robust_mad((pooled-pca_center)@loading)), 1e-8)
+        eeg = ((x-pca_center)@loading)*factor
+        metadata.update(pca_loading=loading, pca_center=pca_center, factor=factor,
+                        explained_variance=float(singular[0]**2/np.sum(singular**2)))
+        noise = correlated_feature_noise(eeg[train, :, None], floor=.08*np.sqrt(5/3), shrinkage=.1)
+        metadata.update(loading=[1.], covariance=noise['covariance'], noise_audit=noise, sufficient_weights=[1.])
+        return eeg, float(noise['final_sd'][0]), metadata, x*gauge
+    x *= gauge
+    xbase *= gauge
+    bands = 3 if candidate in ('split', 'geometry', 'permuted') else 1
+    weights = np.array(geometry['weights'])
+    if candidate == 'permuted':
+        # One fixed derangement, shared across all trials and penalty values.
+        weights = weights[np.roll(np.arange(len(weights)), 2)]
+    ell = signed_loading_fit(xbase[train],rbase[train],weights if penalty else None,
+                            bands=bands,ridge=.01,geometry_penalty=penalty,gauge=gauge)
+    noise = correlated_feature_noise(x[train], floor=.08*np.sqrt(5/3), shrinkage=.1)
+    reduced = gaussian_driver_statistic(x, ell, noise['covariance'])
+    metadata.update(loading=ell, covariance=noise['covariance'], noise_audit=noise,
+                    sufficient_weights=reduced['weights'], selected_penalty=penalty,
+                    gauge=gauge, geometry_weights_used=weights,
+                    sufficient_statistic='exact Gaussian driver statistic for fitted loading and covariance; not PCA')
+    return reduced['values'], float(np.sqrt(reduced['variance'])), metadata, x
+
+
+def structure_synthetic_raw(cfg, base, condition, panel):
+    n = cfg['steps']; st = cfg['structure']; p,c,spec = model(base, BASE)
+    op = v3_native_operators(n)
+    rng = np.random.default_rng(st['seed']+panel*1000+st['conditions'].index(condition)*10000)
+    weights = np.exp(-.5*(np.linspace(.2,1.2,6)/.7)**2); weights /= np.linalg.norm(weights)
+    spatial = weights*np.sqrt(6)
+    if condition == 'geometry_biased':
+        spatial = spatial[np.roll(np.arange(6),3)]*np.array([1.,-.7,1.2,.8,-.6,1.])
+    signs = np.array([1.,-.9,.35]) if condition == 'opposite_bands' else np.array([1.,.7,.4])
+    ell = spatial[:,None]*signs
+    noise_sd = .25 if 'weak' in condition else .1
+    marginal = np.asarray(p.fixed.observation_scale)*np.sqrt(p.fixed.student_nu/(p.fixed.student_nu-2))
+    od_sd = float(np.sqrt(np.mean(marginal[1:]**2)/np.mean(np.sum(op['mbll']**2,axis=1))))
+    values=[]
+    for trial in range(24):
+        seed=st['seed']+st['conditions'].index(condition)*100000+panel*1000+trial
+        g=generated_trial(base,'nonlinear_gaussian',seed,n)
+        z=g['transformed_states']; states=g['states']; clean=g['clean']
+        er=states[:,0].copy()
+        if condition.startswith('task_only'):
+            # Same deterministic task forcing; independent trial innovations.
+            def forced(seed):
+                rr=np.random.default_rng(seed);zz=np.zeros((n,6));zz[0]=rr.normal(size=6)*c.initial_state_std
+                for t in range(1,n):
+                    zz[t]=core.rk4_transition(zz[t-1],p,c)+rr.normal(size=6)*np.array(p.fixed.process_std)*np.sqrt(c.dt)
+                    zz[t,0] += .04*c.dt*(20 <= t < 60)
+                ss=np.array([core.transformed_to_physical(a) for a in zz])
+                yy=np.array([core.observation_map(a,p,spec) for a in ss])
+                return zz,ss,yy
+            z,states,clean=forced(seed)
+            er=forced(seed+5000000)[1][:,0]
+        def draw(shape,sd):
+            if condition.endswith('student'):
+                return rng.standard_t(5,shape)*sd*np.sqrt(3/5)
+            return rng.normal(size=shape)*sd
+        clean_e = er[:,None,None]*ell[None]
+        nuisance=np.zeros_like(clean_e)
+        if condition == 'slow_nuisance':
+            nuisance=.2*np.sin(np.arange(n)[:,None,None]/n*2*np.pi+rng.uniform(0,2*np.pi,(1,6,3)))
+        common=draw((n,6,1),noise_sd*.5)
+        logpower=2.+clean_e+nuisance+common+draw((n,6,3),noise_sd*np.sqrt(.75))
+        power=np.exp(logpower)
+        broad=np.log(power.sum(-1)+np.exp(2.+er[:,None]*.3+draw((n,6),.15)))
+        # Full reference has thirty channels; four additional groups with independent nuisance.
+        full=np.concatenate([broad]+[broad+draw(broad.shape,.15) for _ in range(4)],axis=1)
+        od_clean=(op['native_interpolation']@clean[:,1:])@np.linalg.inv(op['mbll']).T
+        od=od_clean+draw(od_clean.shape,od_sd)
+        values.append(dict(broad=full,power=power,feature_fnirs=od@op['mbll'].T,
+            states=states,canonical=clean,clean_eeg=clean_e.reshape(n,-1),eeg_driver_truth=er,feature_od=od))
+    raw={k:np.array([v[k] for v in values]) for k in values[0]}
+    # Local support is the first six channels; power need not invent the other 24 bands.
+    geometry=dict(indices=list(range(6)),weights=weights,channels=[f'E{i}' for i in range(6)],
+                  coordinate_system='known synthetic support',coordinate_units='arbitrary',truth_loading=ell)
+    return raw,geometry
+
+
+def structure_projection(run_dir,cfg,base,measured,subject,outer,inner=None,synthetic=False):
+    directory=Path(run_dir)/'prepared'
+    with np.load(directory/f'{subject}.npz') as d:
+        raw={k:d[k] for k in d.files}
+    detail=read_json(directory/f'{subject}.json')
+    ids=detail['trials']
+    if synthetic:
+        train=list(range(18)); val=list(range(18,24)); geometry=detail['geometry']
+        if inner is not None:
+            val=[i for i in train if i%3==inner];train=[i for i in train if i%3!=inner]
+        # Only fitted training features define the EEG gauge. State truth is evaluation-only.
+        gauge=step5.reference_observation_gauge(base,measured)['eeg']
+        broad=raw['broad'];center=np.median(np.concatenate(broad[train]),axis=0)
+        scale=np.maximum(robust_mad(np.concatenate(broad[train])),1e-8)
+        standardized=(broad-center)/scale
+        pooled=np.concatenate(standardized[train]-standardized[train,:20].mean(1,keepdims=True))
+        _,_,vt=np.linalg.svd(pooled-pooled.mean(0),full_matrices=False);loading=vt[0]
+        if loading.sum()<0:loading=-loading
+        driver=(standardized@loading)*gauge/max(float(robust_mad(pooled@loading)),1e-8)
+        hb=raw['feature_fnirs']; normalizer=np.std(np.concatenate([
+            np.column_stack((v3_native_operators()['eeg']@driver[i],v3_native_operators()['fnirs']@hb[i])) for i in train]),axis=0)
+        fnirs_noise=v3_noise_estimate(base,driver,raw['feature_od'],train,1.)
+        baseline_meta=None
+    else:
+        split=folds(ids,outer); split=split if inner is None else split['inner'][inner]
+        train,val=split['train'],split['validation']
+        source=ROOT/cfg['structure']['source_run'];stem=projection_path(source,subject,outer,inner,'E0')
+        baseline_meta=read_json(stem.with_suffix('.json'))
+        if baseline_meta['train']!=train or baseline_meta['validation']!=val:
+            raise ValueError('retained fold identity differs')
+        with np.load(stem.with_suffix('.npz')) as d:
+            driver=d['feature_eeg'];hb=d['feature_fnirs'];normalizer=d['normalizer']
+        projection=baseline_meta['projection'];gauge=projection['gauge']['eeg']
+        from src.inference.observation_baselines import geometry_neighbours
+        geometry=geometry_neighbours(detail['geometry_rows'],detail['eeg_channels'],
+                                     detail['fnirs_pairs'][projection['fnirs_pair']],6)
+        fnirs_noise=baseline_meta['feature_noise']
+    op=v3_native_operators();target=np.array([np.column_stack((op['eeg']@e,op['fnirs']@h)) for e,h in zip(driver,hb)])
+    choices=[]
+    for candidate in cfg['structure']['candidates']:
+        if candidate in ('geometry','permuted'):
+            if inner is not None:
+                choices.extend((candidate,f'{candidate}_l{penalty:g}',penalty) for penalty in cfg['structure']['geometry_lambda'])
+                continue
+            scores=[]
+            for penalty in cfg['structure']['geometry_lambda']:
+                losses=[]
+                for j in range(3):
+                    pref=structure_prefix(run_dir,subject,outer,f'{candidate}_l{penalty:g}',j)
+                    ii=read_json(pref.with_suffix('.json'))
+                    with np.load(pref.with_suffix('.npz')) as d:
+                        xx=d['linear_features'];rr=d['target'][:,:,0]
+                    xx=xx-xx[:,:20].mean(1,keepdims=True)
+                    ell=np.array(ii['structure_fit']['loading']);gg=ii['structure_fit']['gauge']
+                    val_inner=ii['validation']
+                    losses.append(float(np.mean(((xx[val_inner]-rr[val_inner,:,None]*ell)/gg)**2)))
+                scores.append(dict(penalty=penalty,inner_losses=losses,mean=float(np.mean(losses))))
+            chosen=min(scores,key=lambda r:(r['mean'],r['penalty']))['penalty']
+            choices.append((candidate,candidate,chosen))
+            atomic_json(directory/f'{subject}_{split_name(outer)}_{candidate}_selection.json',dict(scores=scores,selected=chosen))
+        else:choices.append((candidate,candidate,0.))
+    for candidate,storage_name,penalty in choices:
+        features=structure_features(raw,candidate,geometry['indices'])
+        if candidate=='B_ref' and not synthetic:
+            eeg=driver;sd=fnirs_noise['eeg_sd'];meta=dict(retained_projection=baseline_meta['projection'],training_trials=train)
+            linear=driver[:,:,None]
+        else:
+            eeg,sd,meta,linear=structure_fit_features(features,driver,train,geometry,candidate,cfg,gauge,penalty)
+            if candidate in ('B_ref','local_scalar'):linear=eeg[:,:,None]
+        info=dict(subject=subject,outer=outer,inner=inner,train=train,validation=val,synthetic=synthetic,
+                  candidate=candidate,feature_noise=dict(fnirs_noise,eeg_sd=sd),structure_fit=meta,
+                  fixed_scoring='common B_ref EEG audit coordinate and paired Hb target; EEG model-native losses not compared')
+        prefix=structure_prefix(run_dir,subject,outer,storage_name,inner)
+        arrays=dict(feature_eeg=eeg,feature_fnirs=hb,target=target,normalizer=normalizer,linear_features=linear)
+        if synthetic:
+            arrays.update(truth_states=raw['states'],truth_canonical=raw['canonical'],truth_eeg=raw['clean_eeg'])
+            if 'eeg_driver_truth' in raw:
+                arrays['truth_eeg_driver']=raw['eeg_driver_truth']
+        v3_save_npz(prefix.with_suffix('.npz'),**arrays);atomic_json(prefix.with_suffix('.json'),info)
+    return dict(status='completed',rows=[],actual_solves=0,train=train,validation=val,geometry=geometry)
+
+
+def structure_compile_view(cfg,arrays,info,ids,trial,mode):
+    if mode in ('EEG_only_random10','EEG_only_random30','EEG_only_channel'):
+        aa={k:v.copy() if isinstance(v,np.ndarray) else v for k,v in arrays.items()}
+        changed_info=copy.deepcopy(info)
+        if mode=='EEG_only_channel':
+            from src.inference.observation_baselines import gaussian_driver_statistic
+            meta=info['structure_fit'];ell=np.array(meta['loading']);cov=np.array(meta['covariance'])
+            bands=3 if info['candidate'] in ('split','geometry','permuted') else 1
+            visible=np.arange(bands,len(ell))
+            result=gaussian_driver_statistic(arrays['linear_features'][trial][:,visible],ell[visible],cov[np.ix_(visible,visible)])
+            aa['feature_eeg'][trial]=result['values'];changed_info['feature_noise']['eeg_sd']=np.sqrt(result['variance'])
+            return v3_view(cfg,aa,changed_info,ids,trial,'EEG_only')
+        view=v3_view(cfg,aa,changed_info,ids,trial,'EEG_only')
+        n=len(view['input']);rng=np.random.default_rng(cfg['structure']['seed']+trial)
+        hidden=rng.choice(n,round(n*(.1 if mode.endswith('10') else .3)),replace=False)
+        visible=np.setdiff1d(np.arange(n),hidden)
+        interpolation=np.zeros((n,n))
+        interpolation[:,visible]=np.column_stack([np.interp(np.arange(n),visible,col) for col in np.eye(len(visible))])
+        pe=v3_native_operators()['eeg']@interpolation;pe[hidden]=0.
+        operators=view['operator'].operators.copy();operators[0]=pe
+        mask=np.isfinite(view['input']);mask[hidden,0]=False
+        view['operator']=replace(view['operator'],operators=operators,output_mask=mask)
+        view['input'][:,0]=pe@aa['feature_eeg'][trial];view['input'][hidden,0]=np.nan
+        view['noise_factor'][0::3,:n]=pe*info['feature_noise']['eeg_sd']
+        return view
+    if mode.startswith('EEG_only_'):
+        suffix=mode.removeprefix('EEG_only_')
+        aa={k:v.copy() if isinstance(v,np.ndarray) else v for k,v in arrays.items()}
+        peers=[i for i in info['train'] if ids[i]['session']==ids[trial]['session']]
+        if suffix=='pairing':aa['feature_eeg'][trial]=arrays['feature_eeg'][peers[ids[trial]['training_ordinal']%len(peers)]]
+        elif suffix=='template':aa['feature_eeg'][trial]=arrays['feature_eeg'][peers].mean(0)
+        elif suffix=='shift':aa['feature_eeg'][trial]=np.roll(arrays['feature_eeg'][trial],60)
+        else:raise ValueError('unknown whole-modality control')
+        view=v3_view(cfg,aa,info,ids,trial,'EEG_only')
+        if suffix=='template':
+            view['noise_factor'][0::3,:len(aa['feature_eeg'][trial])] /= np.sqrt(len(peers))
+        # Hidden fNIRS and EEG are independent in the declared feature noise law.
+        # For the common EEG audit target the donor has no same-source noise.
+        if suffix in ('pairing','template'):view['target_noise_factor'][0::3]=0.
+        return view
+    return v3_view(cfg,arrays,info,ids,trial,mode)
+
+
+def structure_fit_task(run_dir,cfg,base,task):
+    subject,outer,candidate=task['subject'],task['outer'],task['candidate_name']
+    prefix=structure_prefix(run_dir,subject,outer,candidate)
+    info=read_json(prefix.with_suffix('.json'))
+    with np.load(prefix.with_suffix('.npz')) as d:arrays={k:d[k] for k in d.files}
+    ids=read_json(Path(run_dir)/'prepared'/f'{subject}.json')['trials'];trial=task['trial']
+    rows=[]
+    for mode in task['modes']:
+        view=structure_compile_view(cfg,arrays,info,ids,trial,mode)
+        row=v3_fit_row(run_dir,cfg,base,task,mode,view,BASE,mode=mode,identity=ids[trial])
+        row.update(candidate_name=candidate,outer=outer,trial=trial,condition=task.get('condition'),panel=task.get('panel'))
+        if row['status']=='completed':
+            with np.load(Path(run_dir)/'cells'/task['id']/(mode+'.npz')) as d:
+                states=d['state_mean'];pred=d['prediction'];canonical=d['canonical_clean_mean']
+            score_slice=slice(52,68) if mode.startswith('center_fNIRS') else slice(None)
+            row['fnirs_mse']=np.mean(((pred[score_slice,1:]-arrays['target'][trial,score_slice,1:])/arrays['normalizer'][1:])**2,axis=0)
+            row['fnirs_bias']=np.mean((pred[score_slice,1:]-arrays['target'][trial,score_slice,1:])/arrays['normalizer'][1:],axis=0)
+            # A fixed common audit map r -> the reference EEG coordinate. Native
+            # multi-feature residuals are recorded separately and not ranked.
+            audit=v3_native_operators()['eeg']@states[:,0]
+            row['common_eeg_audit_nrmse']=float(np.sqrt(np.mean((audit-arrays['target'][trial,:,0])**2))/arrays['normalizer'][0])
+            if info['synthetic']:
+                truth=arrays['truth_states'][trial];sd=np.maximum(np.std(truth,axis=0),1e-8)
+                row['state_nrmse']=np.sqrt(np.mean((states-truth)**2,axis=0))/sd
+                row['r_correlation']=float(np.corrcoef(states[:,0],truth[:,0])[0,1]) if np.std(states[:,0])>0 else 0.
+                clean=arrays['truth_canonical'][trial]
+                row['clean_hb_nrmse']=np.sqrt(np.mean((canonical[:,1:]-clean[:,1:])**2,axis=0))/np.maximum(np.std(clean[:,1:],axis=0),1e-8)
+                if 'truth_eeg_driver' in arrays:
+                    eeg_truth=v3_native_operators()['eeg']@arrays['truth_eeg_driver'][trial]
+                    row['clean_eeg_common_nrmse']=float(np.sqrt(np.mean((audit-eeg_truth)**2))/max(np.std(eeg_truth),1e-8))
+        atomic_json(Path(run_dir)/'cells'/task['id']/(mode+'.json'),row);rows.append(row)
+    return dict(status='completed',rows=rows,actual_solves=len(rows))
+
+
+def structure_tasks(cfg,inventory):
+    tasks=[];s=cfg['structure'];synth=[]
+    def add(name,stage,layer,kind,family,dependencies=(),prerequisites=(),**kw):
+        t=dict(id=name,stage=stage,layer=layer,kind='structure_'+kind,family=family,
+               dependencies=list(dependencies),prerequisites=list(prerequisites),planned_solves=0,
+               queue_position=len(tasks),timeout_seconds=cfg['budget']['cell_timeout_seconds'],**kw)
+        if kind=='fit':t.update(planned_solves=len(t['modes']),solver='O2',row_ids=t['modes'],timeout_seconds=1800)
+        tasks.append(t);return name
+    for condition in s['conditions']:
+        for panel in range(4):
+            subject=f'syn_{condition}_{panel}';gen=add(subject+'_generate',1,0,'generate','S',subject=subject,condition=condition,panel=panel)
+            proj=add(subject+'_projection',1,1,'projection','S',[gen],subject=subject,outer=0,synthetic=True)
+            for candidate in s['candidates']:
+                for trial in range(18,24):
+                    modes=s['modes']+['EEG_only_pairing','EEG_only_shift']
+                    if condition=='shared':
+                        modes=modes+['EEG_only_random10','EEG_only_random30']
+                        if candidate not in ('B_ref','local_scalar'):
+                            modes=modes+['EEG_only_channel']
+                    name=add(f'{subject}_{candidate}_{trial}',1,2,'fit','S',[proj],subject=subject,outer=0,candidate_name=candidate,
+                             trial=trial,modes=modes,condition=condition,panel=panel)
+                    synth.append(name)
+            add(subject+'_linear',1,2,'linear','L',[proj],subject=subject,outer=0,synthetic=True)
+    gates={}
+    for candidate in s['candidates']:
+        dependencies=[t['id'] for t in tasks if t['kind']=='structure_fit' and t['candidate_name']==candidate and t['condition']=='shared']
+        gates[candidate]=add('structure_gate_'+candidate,1,3,'gate','G',dependencies,candidate_name=candidate)
+    for subject,ids in inventory.items():
+        native=add(subject+'_native',2,0,'native','M',list(gates.values()),[gates['B_ref']],subject=subject)
+        for outer in range(4):
+            proj=add(f'{subject}_o{outer}_projection',2,1,'projection','M',[native],[gates['B_ref']],subject=subject,outer=outer,synthetic=False)
+            for candidate in s['candidates']:
+                prerequisites=[gates[candidate]]
+                if candidate in ('geometry','permuted'):prerequisites.append(gates['split'])
+                for trial in folds(ids,outer)['validation']:
+                    add(f'{subject}_o{outer}_{candidate}_{trial}',2,2,'fit','M',[proj],prerequisites,
+                        subject=subject,outer=outer,candidate_name=candidate,trial=trial,modes=s['modes']+s['controls'])
+            add(f'{subject}_o{outer}_linear',2,2,'linear','L',[proj],[gates['B_ref']],subject=subject,outer=outer)
+    return tasks
+
+
+def structure_gate(run_dir,cfg,task):
+    rows=[r for name in task['dependencies'] for r in cell_result(run_dir,name).get('rows',[]) if r['mode']=='full']
+    valid=[r for r in rows if r['status']=='completed' and 'state_nrmse' in r]
+    nrmse=float(np.mean([r['state_nrmse'][0] for r in valid])) if valid else None
+    corr=float(np.mean([r['r_correlation'] for r in valid])) if valid else None
+    return dict(status='completed',rows=[],actual_solves=0,expected=24,valid=len(valid),
+        mean_r_nrmse=nrmse,mean_r_correlation=corr,
+        passed=bool(len(valid)==24 and nrmse<=.65 and corr>=.8),
+        rule=cfg['structure']['synthetic_entry'],candidate=task['candidate_name'])
+
+
+def structure_dispatch(run_dir,cfg,dc,base,measured,metadata,task):
+    kind=task['kind'].removeprefix('structure_');subject=task.get('subject')
+    if kind=='generate':
+        raw,geometry=structure_synthetic_raw(cfg,base,task['condition'],task['panel'])
+        ids=[dict(subject=subject,session='synthetic',training_ordinal=i,sample_id=f'{subject}/{i}') for i in range(24)]
+        v3_save_npz(Path(run_dir)/'prepared'/f'{subject}.npz',**raw)
+        atomic_json(Path(run_dir)/'prepared'/f'{subject}.json',dict(trials=ids,geometry=geometry,condition=task['condition'],panel=task['panel']))
+        return dict(status='completed',rows=[],actual_solves=0)
+    if kind=='native':
+        from src.data.unified_physiology import ChannelGeometryIndex
+        from src.inference.observation_baselines import eeg_band_power
+        trials,detail=diagnostic.load_training_subject(subject,dc,base,measured,metadata,retain_native=True,
+            retain_feature_boundary=True,data_root=ROOT,processing_schema=cfg['measurement_revision']['processing_schema'])
+        expected=read_json(Path(run_dir)/'scope_inventory.json')[subject]
+        if [r['sample_id'] for r in detail['trials']] != [r['sample_id'] for r in expected]:raise ValueError('new feature identity mismatch')
+        geometry=ChannelGeometryIndex(ROOT/cfg['structure']['geometry_cache'])
+        detail['geometry_rows']=[r for r in geometry.rows if r.get('dataset_id')=='eeg_fnirs_single_trial' and r.get('canonical_subject_id')==subject]
+        broad=np.array([t['views']['target']['feature_boundary']['eeg_log_power'] for t in trials])
+        power=np.array([eeg_band_power(t['native_eeg']*t['views']['target']['eeg_feature_contract']['unit_conversion']['factor']) for t in trials])
+        source=ROOT/cfg['structure']['source_run']/'prepared'/f'{subject}.npz'
+        with np.load(source) as d:
+            error=float(np.max(abs(broad-d['feature_eeg_log_power'])))
+        if error>1e-10:raise ValueError('broadband reference changed during structural preparation')
+        detail.update(broadband_recomposition_max_abs=error,feature_schema='ssm_band_geometry_v1',bands=cfg['structure']['bands'],power_unit='uV^2')
+        v3_save_npz(Path(run_dir)/'prepared'/f'{subject}.npz',broad=broad,power=power)
+        atomic_json(Path(run_dir)/'prepared'/f'{subject}.json',detail)
+        return dict(status='completed',rows=[],actual_solves=0,broadband_recomposition_max_abs=error)
+    if kind=='projection':
+        for inner in range(3):structure_projection(run_dir,cfg,base,measured,subject,task['outer'],inner=inner,synthetic=task['synthetic'])
+        return structure_projection(run_dir,cfg,base,measured,subject,task['outer'],synthetic=task['synthetic'])
+    if kind=='fit':return structure_fit_task(run_dir,cfg,base,task)
+    if kind=='gate':return structure_gate(run_dir,cfg,task)
+    if kind=='linear':return structure_linear(run_dir,cfg,task)
+    raise ValueError('unknown structural task')
+
+
+def structure_prepare(run_dir,cfg,dc,base,measured,metadata):
+    run_dir=Path(run_dir).resolve()
+    if run_dir.exists() or run_dir.parent!=(ROOT/cfg['output_root']).resolve():raise ValueError('fresh bounded run path required')
+    checks=v3_engineering_checks(cfg,dc,base)
+    if not all(v['passed'] for v in checks.values()):raise ValueError('observation engineering checks failed')
+    source=ROOT/cfg['structure']['source_run'];inventory=read_json(source/'scope_inventory.json')
+    for subject,ids in inventory.items():validate_identities(ids,cfg,subject)
+    run_dir.mkdir(parents=True);(run_dir/'prepared').mkdir()
+    (run_dir/'resolved_config.yaml').write_text(yaml.safe_dump(cfg,sort_keys=False))
+    atomic_json(run_dir/'scope_inventory.json',inventory)
+    atomic_json(run_dir/'fold_inventory.json',{s:[folds(ids,o) for o in range(4)] for s,ids in inventory.items()})
+    atomic_json(run_dir/'preflight.json',checks)
+    # Read-only source identities; measured arrays are first opened by gated tasks.
+    atomic_json(run_dir/'retained_input_identity.json',dict(source=str(source),manifest_sha256=diagnostic.digest(source/'manifest.json')))
+    tasks=structure_tasks(cfg,inventory);persist_tasks(run_dir,tasks)
+    now=datetime.now(timezone.utc).isoformat()
+    manifest=dict(schema=cfg['structure']['id'],execution='preparing',created_at=now,budget_started_at=now,
+                  task_count=len(tasks),planned_solves=sum(t['planned_solves'] for t in tasks),teacher_qualification='none',project_root=ROOT,run_dir=run_dir)
+    atomic_json(run_dir/'manifest.json',manifest)
+    # A separate development seed/panel never enters evaluation summaries.
+    pilot_cfg=copy.deepcopy(cfg);pilot_cfg['structure']['seed']=cfg['synthetic']['development_seed']+900000
+    for task in [dict(id='pilot_generate',family='P',kind='structure_generate',subject='pilot',condition='shared',panel=0),
+                 dict(id='pilot_projection',family='P',kind='structure_projection',subject='pilot',outer=0,synthetic=True)]:
+        if task['kind']=='structure_generate':
+            raw,g=structure_synthetic_raw(pilot_cfg,base,'shared',0)
+            v3_save_npz(run_dir/'prepared/pilot.npz',**raw)
+            atomic_json(run_dir/'prepared/pilot.json',dict(trials=[dict(subject='pilot',session='synthetic',training_ordinal=i,sample_id=f'pilot/{i}') for i in range(24)],geometry=g))
+        else:
+            for inner in range(3):structure_projection(run_dir,cfg,base,measured,'pilot',0,inner=inner,synthetic=True)
+            structure_projection(run_dir,cfg,base,measured,'pilot',0,synthetic=True)
+    pilots=[]
+    for candidate in ('B_ref','split','geometry'):
+        task=dict(id='pilot_'+candidate,family='P',kind='structure_fit',subject='pilot',outer=0,candidate_name=candidate,trial=18,
+                  modes=['full'],solver='O2',row_ids=['full'])
+        result=execute_cell(run_dir,cfg,task);result['solver']='O2';pilots.append(result)
+        print('pilot',candidate,result,flush=True)
+    atomic_json(run_dir/'pilots.json',dict(pilots=pilots,preparations=[]))
+    manifest.update(execution='prepared',resources=resource_budget(cfg,pilots));atomic_json(run_dir/'manifest.json',manifest)
+    print(json.dumps(serial(manifest)),flush=True)
+
+
+def structure_linear(run_dir,cfg,task):
+    subject,outer=task['subject'],task['outer'];rows=[];selection=[]
+    ids=read_json(Path(run_dir)/'prepared'/f'{subject}.json')['trials']
+    @lru_cache(maxsize=24)
+    def load(candidate,inner=None):
+        prefix=structure_prefix(run_dir,subject,outer,candidate,inner)
+        info=read_json(prefix.with_suffix('.json'))
+        with np.load(prefix.with_suffix('.npz')) as d:arr={k:d[k] for k in d.files}
+        return arr,info
+    def design(arr,info,trial,mode,lags,control='correct'):
+        visible_input=v3_view(cfg,arr,info,ids,trial,mode,with_noise=False)
+        target=arr['target'][trial,:,1:];clock=np.arange(len(target))
+        hidden=np.zeros(len(clock),bool);hidden[52:68]=True
+        if mode=='EEG_only':hidden[:]=True
+        visible=~hidden
+        own=np.zeros_like(target)
+        if visible.any():
+            for j in range(2):own[:,j]=np.interp(clock,clock[visible],visible_input[visible,1+j])
+        peers=[i for i in info['train'] if ids[i]['session']==ids[trial]['session'] and i!=trial]
+        if not peers:peers=[i for i in info['train'] if i!=trial]
+        template=arr['target'][peers,:,1:].mean(0)
+        feature=arr['linear_features'][trial]
+        if control=='pairing':feature=arr['linear_features'][peers[ids[trial]['training_ordinal']%len(peers)]]
+        elif control=='shift':feature=np.roll(feature,60,axis=0)
+        feature=v3_native_operators()['eeg']@feature
+        lagged=np.column_stack([feature[np.clip(clock-round(lag*4),0,len(clock)-1)] for lag in lags])
+        blocks=dict(own=own,template=template,context=np.column_stack((own,template)),
+                    correct=np.column_stack((own,template,lagged)),pairing=np.column_stack((own,template,lagged)),
+                    shift=np.column_stack((own,template,lagged)))
+        return blocks[control][hidden],target[hidden]/arr['normalizer'][1:]
+    def fit(arr,info,mode,lags,alpha,control):
+        x,y=zip(*(design(arr,info,i,mode,lags,control) for i in info['train']))
+        return ridge_fit(np.concatenate(x),np.concatenate(y),alpha)
+    for candidate in ('B_ref','local_scalar','local_multi','merged','split'):
+        grid=[]
+        for lags in cfg['structure']['linear_lags_seconds']:
+            for alpha in cfg['structure']['linear_ridge']:
+                losses=[]
+                for inner in range(3):
+                    arr,info=load(candidate,inner)
+                    for mode in ('center_fNIRS','EEG_only'):
+                        fitted=fit(arr,info,mode,lags,alpha,'correct')
+                        losses.append(np.mean([np.mean((ridge_predict(fitted,design(arr,info,i,mode,lags)[0])-design(arr,info,i,mode,lags)[1])**2)
+                                               for i in info['validation']]))
+                grid.append(dict(lags=lags,alpha=alpha,risk=float(np.mean(losses))))
+        best=min(grid,key=lambda r:(r['risk'],len(r['lags']),-r['alpha']))
+        selection.append(dict(candidate=candidate,selected=best,inner_grid=grid))
+        arr,info=load(candidate)
+        for mode in ('center_fNIRS','EEG_only'):
+            models={control:fit(arr,info,mode,best['lags'],best['alpha'],control)
+                    for control in ('correct','context','template','own')}
+            for trial in info['validation']:
+                for control in ('correct','context','template','own','pairing','shift'):
+                    x,y=design(arr,info,trial,mode,best['lags'],control)
+                    prediction=ridge_predict(models['correct' if control in ('pairing','shift') else control],x)
+                    rows.append(dict(**ids[trial],outer=outer,trial=trial,candidate_name=candidate,mode=mode,control=control,
+                        status='completed',fnirs_mse=np.mean((prediction-y)**2,axis=0),fnirs_bias=np.mean(prediction-y,axis=0)))
+    atomic_json(Path(run_dir)/'cells'/task['id']/'selection.json',selection)
+    return dict(status='completed',rows=rows,actual_solves=0)
+
+
+def structure_summarize(run_dir,cfg,final=False):
+    tasks=read_tasks(run_dir);families={};rows=[]
+    for family in ('S','G','M','L'):
+        selected=[t for t in tasks if t['family']==family]
+        results=[cell_result(run_dir,t['id']) for t in selected]
+        families[family]=dict(expected_cells=len(selected),statuses=dict(Counter(r.get('status','pending') for r in results)),
+                              actual_solves=sum(r.get('actual_solves',0) for r in results))
+        for task,result in zip(selected,results):
+            rows.extend(dict(r,family=('SL' if task.get('synthetic') and family=='L' else family),task_id=task['id']) for r in result.get('rows',[]))
+    if 'technical_correction' in cfg:
+        summary=dict(schema=cfg['technical_correction']['id'],final=final,families=families,
+            correction=cfg['technical_correction'],expected_fits=len(tasks),
+            fit_statuses=dict(Counter(r['status'] for r in rows)),primary_endpoint_changed=False)
+        atomic_json(Path(run_dir)/'summary.json',summary);write_csv(Path(run_dir)/'trial_metrics.csv',rows)
+        (Path(run_dir)/'OVERNIGHT_REPORT.md').write_text('# Whole-modality template noise correction\n\n'+
+            'Only the EEG training-template control is rerun. Primary endpoints and original fit files remain unchanged.\n\n'+json.dumps(serial(summary),ensure_ascii=False,indent=2)+'\n')
+        return summary
+    def average(values):
+        groups=defaultdict(list)
+        for r in values:groups[(r['subject'],r['session'])].append(np.mean(r['fnirs_mse']))
+        subjects=defaultdict(list)
+        for (subject,session),values in groups.items():subjects[subject].append(np.mean(values))
+        return float(np.mean([np.mean(v) for v in subjects.values()])) if subjects else None
+    risks=[];completion=[]
+    for family in ('M','L'):
+        for candidate in cfg['structure']['candidates']:
+            controls=('correct','context','template','own','pairing','shift') if family=='L' else ('correct','own','template','pairing','shift')
+            for control in controls:
+                modes=['center_fNIRS','EEG_only'] if family=='L' or control=='correct' else ['center_fNIRS_'+control,'EEG_only_'+control]
+                group=[r for r in rows if r['family']==family and r.get('candidate_name')==candidate and
+                       (family!='L' or r.get('control')==control) and r.get('mode') in modes]
+                if not group:continue
+                good=[r for r in group if r['status']=='completed' and 'fnirs_mse' in r]
+                mode_values=[average([r for r in good if r['mode']==mode]) for mode in modes]
+                risks.append(dict(family=family,candidate=candidate,control=control,valid=len(good),expected=144,
+                    RF=float(np.mean(mode_values)) if len(good)==144 and all(v is not None for v in mode_values) else None,
+                    successful_subset_risk=float(np.mean([v for v in mode_values if v is not None])) if any(v is not None for v in mode_values) else None,
+                    mode_risks=mode_values,statuses=dict(Counter(r['status'] for r in group))))
+            if family=='M':
+                for mode in cfg['structure']['modes']:
+                    group=[r for r in rows if r['family']==family and r.get('candidate_name')==candidate and r['mode']==mode]
+                    completion.append(dict(candidate=candidate,mode=mode,expected=72,attempted=len(group),
+                                           statuses=dict(Counter(r['status'] for r in group))))
+    gates={c:cell_result(run_dir,'structure_gate_'+c) for c in cfg['structure']['candidates']}
+    summary=dict(schema=cfg['structure']['id'],final=final,families=families,entry_gates=gates,risks=risks,completion=completion,
+        uncertainty='Gaussian MAP point paths only; no credible intervals, marginal likelihood or teacher qualification',
+        scientific_verdict='inconclusive; complete endpoint and synthetic non-inferiority required before retaining a candidate')
+    atomic_json(Path(run_dir)/'summary.json',summary);write_csv(Path(run_dir)/'trial_metrics.csv',rows)
+    lines=['# EEG frequency-band and geometry diagnostic','',json.dumps(serial(families),ensure_ascii=False),'',
+           '| Family | Candidate | Control | Valid / expected | RF |','|---|---|---|---|---|']
+    for r in risks:lines.append(f"| {r['family']} | {r['candidate']} | {r['control']} | {r['valid']}/{r['expected']} | {r['RF']} |")
+    lines+=['','Incomplete RF is undefined. Successful-subset results do not replace the fixed denominator.',summary['uncertainty']]
+    (Path(run_dir)/'OVERNIGHT_REPORT.md').write_text('\n'.join(lines)+'\n')
+    return summary
+
+
+def prepare_structure_template_correction(run_dir, source):
+    """Version a numerical control correction; never overwrite original fits."""
+    run_dir,source=Path(run_dir).resolve(),Path(source).resolve()
+    cfg,*_=load_config(source/'resolved_config.yaml')
+    if ('structure' not in cfg or 'technical_correction' in cfg or
+            read_json(source/'manifest.json')['execution']!='completed'):
+        raise ValueError('completed original structure run required')
+    if run_dir.exists() or run_dir.parent!=(ROOT/cfg['output_root']).resolve():
+        raise ValueError('fresh correction run under the owning run root required')
+    run_dir.mkdir(parents=True)
+    cfg['technical_correction']=dict(id='ssm_whole_fnirs_template_noise_v1',source_run=str(source),
+        affected_mode='EEG_only_template',reason='training-average EEG noise factor must be divided by sqrt(number of session training donors)',
+        original_results_retained=True,primary_endpoint_changed=False,selection_changed=False)
+    (run_dir/'resolved_config.yaml').write_text(yaml.safe_dump(cfg,sort_keys=False))
+    (run_dir/'prepared').symlink_to(source/'prepared',target_is_directory=True)
+    for name in ('scope_inventory.json','fold_inventory.json','pilots.json'):
+        shutil.copyfile(source/name,run_dir/name)
+    tasks=[];paths={}
+    for original in read_tasks(source):
+        if original['kind']!='structure_fit' or original['family']!='M':continue
+        task=dict(original,stage=1,layer=0,dependencies=[],prerequisites=[],modes=['EEG_only_template'],
+                  row_ids=['EEG_only_template'],planned_solves=1,queue_position=len(tasks))
+        tasks.append(task)
+        stem=structure_prefix(run_dir,task['subject'],task['outer'],task['candidate_name'])
+        for suffix in ('.json','.npz'):
+            path=stem.with_suffix(suffix);paths[str(path.relative_to(run_dir))]=diagnostic.digest(path)
+        path=run_dir/'prepared'/f"{task['subject']}.json";paths[str(path.relative_to(run_dir))]=diagnostic.digest(path)
+    if len(tasks)!=504:raise ValueError('correction must cover seven candidates and exactly 72 identities')
+    persist_tasks(run_dir,tasks)
+    task=tasks[0];prefix=structure_prefix(run_dir,task['subject'],task['outer'],task['candidate_name'])
+    info=read_json(prefix.with_suffix('.json'))
+    with np.load(prefix.with_suffix('.npz')) as d:arrays={k:d[k] for k in d.files}
+    ids=read_json(run_dir/'prepared'/f"{task['subject']}.json")['trials'];i=task['trial']
+    n=sum(ids[j]['session']==ids[i]['session'] for j in info['train'])
+    single=structure_compile_view(cfg,arrays,info,ids,i,'EEG_only')
+    template=structure_compile_view(cfg,arrays,info,ids,i,'EEG_only_template')
+    error=float(np.max(abs(template['noise_factor']-single['noise_factor']/np.sqrt(n))))
+    if error>1e-12:raise ValueError('template mean-noise propagation check failed')
+    atomic_json(run_dir/'preflight.json',dict(template_mean_noise=dict(passed=True,donors=n,max_error=error),
+        original_engineering_preflight=str(source/'preflight.json')))
+    atomic_json(run_dir/'retained_input_identity.json',dict(source_run=str(source),prepared_sha256=paths,
+        source_manifest_sha256=diagnostic.digest(source/'manifest.json')))
+    now=datetime.now(timezone.utc).isoformat();pilots=read_json(run_dir/'pilots.json')['pilots']
+    atomic_json(run_dir/'manifest.json',dict(schema=cfg['technical_correction']['id'],execution='prepared',
+        created_at=now,budget_started_at=read_json(source/'manifest.json')['budget_started_at'],
+        task_count=len(tasks),planned_solves=len(tasks),
+        project_root=ROOT,run_dir=run_dir,source_run=str(source),resources=resource_budget(cfg,pilots),
+        teacher_qualification='none',primary_endpoint_changed=False))
+    print(f'Prepared {len(tasks)} template-control corrections; original evidence retained.',flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
     parser.add_argument('--run-dir', type=Path)
     parser.add_argument('--continue-from', type=Path, help='with --prepare: preserve a technically interrupted v3 run and its original budget')
+    parser.add_argument('--template-correction-from', type=Path, help='with --prepare: version the whole-fNIRS EEG-template noise correction')
     actions = parser.add_mutually_exclusive_group(required=True)
     for flag in ('check-only', 'prepare', 'freeze', 'run', 'report'):
         actions.add_argument('--'+flag, action='store_true')
     args = parser.parse_args()
     if args.continue_from is not None and not args.prepare:
         parser.error('--continue-from is only valid with --prepare')
+    if args.template_correction_from is not None and (not args.prepare or args.continue_from is not None):
+        parser.error('--template-correction-from requires --prepare and no --continue-from')
     if args.check_only:
         cfg, dc, base, _, _ = load_config(args.config)
         result = v3_engineering_checks(cfg, dc, base) if cfg['schema'] == 'ssm_overnight_v3' else engineering_checks(cfg, dc, base)
@@ -3992,7 +4584,9 @@ def main():
     if args.run_dir is None:
         parser.error('--run-dir is required')
     if args.prepare:
-        if args.continue_from is not None:
+        if args.template_correction_from is not None:
+            prepare_structure_template_correction(args.run_dir,args.template_correction_from)
+        elif args.continue_from is not None:
             cfg, *_ = load_config(args.continue_from/'resolved_config.yaml')
             v3_prepare_continuation(args.run_dir, args.continue_from, cfg)
         else:

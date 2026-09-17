@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-17T08:51:03.964662+00:00",
+  "updated_at": "2026-09-17T10:57:43.781043+00:00",
   "tracks": [
     {
       "id": "main",
@@ -428,6 +428,42 @@
       "id": "e.measurement_retest_v1_recovery",
       "label": "重测汇总导出恢复记录",
       "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_measurement_retest_v1/aggregation_recovery.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.band_geometry_v1_contract",
+      "label": "多频带与空间软约束测试合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/ssm_band_geometry_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.band_geometry_v1_run",
+      "label": "多频带与空间软约束持久运行",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_v2/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.band_geometry_v1_summary",
+      "label": "分频带与空间约束固定分母结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_v2/analysis_20260917_v1/analysis.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.band_geometry_v1_report",
+      "label": "分频带与空间约束中文报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_v2/analysis_20260917_v1/REPORT.md",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.band_geometry_v1_template_correction",
+      "label": "EEG 训练模板均值噪声修正",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_template_correction_v1/summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.band_geometry_v1_preparation_failure",
+      "label": "首次准备序列化失败保留",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_v1/manifest.json",
       "role": "diagnostic"
     }
   ],
@@ -2991,6 +3027,36 @@
         "main.step5_observation"
       ],
       "headline": false
+    },
+    {
+      "state_id": "main.ssm_overnight@2026-09-17.band_geometry_v1",
+      "entity": "main.ssm_overnight",
+      "label": "多频带与空间软约束测试",
+      "track": "main",
+      "order": 8,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "完成 17,760 次主实验 MAP 与 504 次独立模板噪声修正。合成共享/相反频带显示分频带收益，但无试次共享情形状态恢复退化；实测 7 候选完整及中心 fNIRS 缺失均 0/72 有效，RF 未定义。线性 RF 宽频/合并/分频带为 0.24471/0.24654/0.26256；真实几何 11/12 折选择零惩罚。未保留结构改进候选；结论限定训练 PCA 代理载荷与当前 MAP，全部失败和原始模板记录保留。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.band_geometry_v1_contract",
+        "e.band_geometry_v1_run",
+        "e.band_geometry_v1_summary",
+        "e.band_geometry_v1_report",
+        "e.band_geometry_v1_template_correction",
+        "e.band_geometry_v1_preparation_failure"
+      ],
+      "supersedes": [
+        "main.ssm_overnight@2026-09-17.measurement_retest_v1"
+      ],
+      "updated_at": "2026-09-17T10:57:43.781043+00:00",
+      "depends_on": [
+        "main.step5_observation"
+      ],
+      "headline": false,
+      "next_step": "先定位固定 fNIRS 观测下的数值/物理域失败及 PCA 代理载荷限制；新的载荷学习或求解修订须独立冻结验证。缺失目标训练、多区域状态、学习型初始化及受保护评价均未启动。"
     }
   ]
 }
