@@ -76,6 +76,76 @@ def test_measurement_revision_keeps_fixed_denominators_without_adaptation():
     assert metadata['data']['cache_root'] == cfg['measurement_revision']['cache_root']
 
 
+def test_measurement_retest_fixed_panel_and_conditional_adaptation():
+    cfg, _, base, measured, _ = suite.load_config(
+        suite.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_measurement_retest_v1.yaml')
+    tasks = suite.retest_tasks(cfg, inventory(cfg), base, measured)
+    index = {t['id']: t for t in tasks}
+    assert len(index) == len(tasks)
+    for task in tasks:
+        for dep in task['dependencies']:
+            assert (index[dep]['stage'], index[dep]['layer']) < (task['stage'], task['layer'])
+    assert sum(t['planned_solves'] for t in tasks if t['family'] == 'B') == 3600
+    assert {t['candidate']['w'] for t in tasks if t['family'] == 'C'} == set(cfg['measurement_retest']['w_grid'])
+    assert all('retest_adaptation_trigger' in t['prerequisites'] for t in tasks
+               if t['family'] == 'E' and t['kind'] == 'retest_synthetic')
+
+
+def test_retest_summary_accepts_mapping_in_saved_synthetic_row(tmp_path):
+    task = dict(id='synthetic', family='A', kind='retest_synthetic', layer=0,
+                queue_position=0, planned_solves=1, timeout_seconds=10,
+                mapping='prior_gauge', candidate=dict(w=0.))
+    suite.persist_tasks(tmp_path, [task])
+    suite.atomic_json(tmp_path/'cells/synthetic/result.json', dict(status='completed', actual_solves=1,
+        rows=[dict(mapping='prior_gauge', mode='full', status='completed')]))
+    summary = suite.retest_summarize(tmp_path, dict(measurement_retest=dict(id='fixture')), final=True)
+    assert summary['families']['A']['actual_solves'] == 1
+    assert 'prior_gauge' in (tmp_path/'trial_metrics.csv').read_text()
+
+
+def test_hb_single_channel_view_does_not_read_other_chromophore():
+    cfg, _, base, _, _ = suite.load_config(
+        suite.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml')
+    rng = np.random.default_rng(741)
+    op = suite.v3_native_operators()
+    e, od = rng.normal(size=(24, 120)), rng.normal(size=(24, 300, 2))*.00001
+    hb = od@op['mbll'].T
+    arrays = dict(feature_eeg=e, feature_fnirs=hb, normalizer=np.ones(3),
+                  target=np.array([np.column_stack((op['eeg']@a, op['fnirs']@b)) for a, b in zip(e, hb)]))
+    ids = suite.v3_inventory(cfg, 'fixture')
+    train = suite.folds(ids, 0)['train']
+    info = dict(train=train, feature_noise=suite.v3_noise_estimate(base, e, od, train, 1.))
+    for mode, hidden in [('HbO_only', 1), ('HbR_only', 0)]:
+        first = suite.v3_view(cfg, arrays, info, ids, 0, mode)
+        changed = copy.deepcopy(arrays)
+        changed['feature_fnirs'][0, :, hidden] = 1e80
+        second = suite.v3_view(cfg, changed, info, ids, 0, mode)
+        np.testing.assert_array_equal(first['input'], second['input'])
+        assert np.isfinite(first['input']).sum() == 120
+        np.testing.assert_array_equal(first['noise_factor'], second['noise_factor'])
+
+
+def test_explicit_loading_is_mean_only_and_equivalent_coordinate_is_invariant():
+    cfg, dc, base, measured, _ = suite.load_config(
+        suite.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_measurement_retest_v1.yaml')
+    candidate = suite.retest_candidate('unit_loading', 0., base, measured)
+    p, c, spec = suite.model(base, candidate)
+    p0, _, _ = suite.model(base, suite.BASE)
+    assert p.fixed == p0.fixed  # No compensating process-noise or baseline-Hb change.
+    g = suite.generated_trial(base, 'nonlinear_gaussian', 744, steps=24)
+    view = suite.v3_bridge_view(cfg, dc, base, g, 'model', 'full')
+    old = batch_map.TrajectoryObjective(view['input'], p, c, view['operator'], None,
+        noise_factor=view['noise_factor'], observation_spec=spec)
+    scale = np.array([1., 1/candidate['gain'], 1/candidate['gain']])
+    new = batch_map.TrajectoryObjective(view['input']*scale, p, c, view['operator'], None,
+        noise_factor=view['noise_factor']*np.tile(scale, 24)[:, None],
+        observation_spec=replace(spec, coordinate_scale=tuple(scale)))
+    a, _ = old.evaluate(g['transformed_states'].ravel(), derivative=False)
+    b, _ = new.evaluate(g['transformed_states'].ravel(), derivative=False)
+    assert old.rank == new.rank
+    np.testing.assert_allclose(a@a, b@b, rtol=1e-9)
+
+
 def test_retained_residual_fields_read_without_changing_evidence(tmp_path):
     import csv
     import json

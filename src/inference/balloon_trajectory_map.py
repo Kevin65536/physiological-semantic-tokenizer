@@ -217,12 +217,15 @@ def smooth_balloon_trajectory_map(observations, parameters, *, config,
         return result
     best = min(complete, key=lambda a: a['objective'])
     z = best['transformed_mean']
+    residual, _ = objective.evaluate(z.ravel(), derivative=False)
     physical = np.array([core.transformed_to_physical(row) for row in z])
     clean = (z@objective.h.T+objective.offset if linear else
              np.array([core._observation_map_unchecked(row, parameters, objective.spec) for row in physical]))
     result.update(transformed_mean=z, state_mean=physical, canonical_clean_mean=clean,
         processed_clean_mean=(objective.matrix@clean.ravel()).reshape(np.asarray(observations).shape),
         objective=best['objective'], selected_start=best['start'],
+        state_prior_cost=float(residual[:6*objective.steps]@residual[:6*objective.steps]/2),
+        observation_cost=float(residual[6*objective.steps:]@residual[6*objective.steps:]/2),
         observation_mask=objective.available, physical_checks=core.run_physical_checks(physical, parameters),
         negative_joint_log_density=best['objective']+objective.observation_normalization+objective.prior_normalization,
         converged_start_max_path_difference=(float(np.max(np.abs(complete[0]['transformed_mean']-

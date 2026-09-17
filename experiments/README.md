@@ -115,6 +115,17 @@ signal builder's `--output-dir`, the event builder's matching
 `--output-dir <cache>/event_index`, and the geometry builder's
 `--output-dir <cache>/channel_geometry`.
 
+The A–E measurement follow-up uses the same overnight entry and
+[`ssm_measurement_retest_v1.yaml`](configs/physiology_semantic_tokenizer/ssm_measurement_retest_v1.yaml).
+It references completed native feature/fold evidence explicitly, adds fixed W,
+single-chromophore, loading and W-curve diagnostics, and conditionally screens
+gain/Q. Its scope and interpretation are owned by the
+[2026-09-17 protocol](../docs/EXPERIMENT_PLAN.md#新测量链固定模型w-曲线与配对增量重测2026-09-17).
+Export its completed evidence with
+[`render_ssm_measurement_retest_report.py`](scripts/render_ssm_measurement_retest_report.py)
+using `--run-dir <completed_run> --output-dir <fresh_versioned_export>`;
+both delivered PDFs embed PNG figures and retain selectable text.
+
 ### Default measurement cache
 
 The active signal/event/geometry builders share `data/cache/physiology_semantic_clean_v4`:

@@ -1669,6 +1669,7 @@ def freeze_sources(run_dir, cfg):
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml',
              'experiments/configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml',
              'experiments/configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml',
+             'experiments/configs/physiology_semantic_tokenizer/ssm_measurement_retest_v1.yaml',
              'docs/EXPERIMENT_PLAN.md']
     paths = sorted(set(tracked+extra))
     hashes = {}
@@ -1946,6 +1947,8 @@ def influence_rows(run_dir, tasks, results):
 
 
 def summarize_run(run_dir, cfg, *, final=False):
+    if 'measurement_retest' in cfg:
+        return retest_summarize(run_dir, cfg, final=final)
     if cfg['schema'] == 'ssm_overnight_v3':
         return v3_summarize(run_dir, cfg, final=final)
     tasks = read_tasks(run_dir)
@@ -2111,6 +2114,8 @@ def summarize_run(run_dir, cfg, *, final=False):
 
 
 def prepare_run(run_dir, cfg, dc, base, measured, metadata):
+    if 'measurement_retest' in cfg:
+        return retest_prepare(run_dir, cfg, dc, base, measured)
     if cfg['schema'] == 'ssm_overnight_v3':
         return v3_prepare_run(run_dir, cfg, dc, base, metadata)
     expected_root = (ROOT/cfg['output_root']).resolve()
@@ -2197,6 +2202,8 @@ def freeze_run(run_dir, cfg):
     paths = ['task_table.csv', 'resolved_config.yaml', 'scope_inventory.json', 'fold_inventory.json', 'preflight.json']
     if (run_dir/'continuation.json').exists():
         paths.append('continuation.json')
+    if (run_dir/'retained_input_identity.json').exists():
+        paths.append('retained_input_identity.json')
     inventory = read_json(run_dir/'scope_inventory.json')
     for subject in inventory if cfg['schema'] != 'ssm_overnight_v3' else ():
         for outer in (None, 0, 1, 2, 3):
@@ -2378,6 +2385,14 @@ def v3_load_config(cfg):
         sampling_hz=4., steps=120, center_steps=16, fixed_w=[0.],
         output_root='experiments/runs/physiology_semantic_tokenizer/ssm_overnight',
         plan='docs/EXPERIMENT_PLAN.md', teacher_qualification='none', tokenizer_training=False)
+    retest = cfg.get('measurement_retest')
+    if retest:
+        fixed['fixed_w'] = [0., -.5]
+        if (retest['id'] != 'ssm_measurement_retest_v1' or
+                retest['w_grid'] != [-.5, -.25, 0., .25, .5] or
+                retest['mappings'] != ['prior_gauge', 'unit_loading'] or
+                retest['equivalent_score_relative_tolerance'] != .01):
+            raise ValueError('measurement retest contract drift')
     if any(cfg.get(k) != v for k, v in fixed.items()):
         raise ValueError('v3 scope, fold, model or interpretation contract drift')
     obs, syn, adapt, budget = (cfg[k] for k in ('observation', 'synthetic', 'adaptation', 'budget'))
@@ -2394,7 +2409,7 @@ def v3_load_config(cfg):
             or len(adapt['gain_truth']) != 11 or len(adapt['process_truth']) != 5
             or adapt['process_solvers'] != ['O0', 'O2']):
         raise ValueError('v3 observation or independent-panel contract drift')
-    if not (0 < budget['hours'] <= 8 and 1 <= budget['max_workers'] <= 16
+    if not (0 < budget['hours'] <= 8 and 1 <= budget['max_workers'] <= (48 if retest else 16)
             and 0 < budget['memory_fraction'] <= .6
             and 0 < budget['cell_timeout_seconds'] <= 900
             and 0 < budget['map_timeout_seconds'] <= 1800
@@ -2500,6 +2515,17 @@ def v3_noise_estimate(base, eeg, od, train, fnirs_factor):
 
 def v3_view(cfg, arrays, info, identities, trial, mode, *, with_noise=True):
     """Compile a feature-missing view and its same-source target noise map."""
+    if mode in ('HbO_only', 'HbR_only'):
+        view = v3_view(cfg, arrays, info, identities, trial, 'fNIRS_only', with_noise=with_noise)
+        excluded = 2 if mode == 'HbO_only' else 1
+        if not with_noise:
+            view[:, excluded] = np.nan
+            return view
+        view['input'][:, excluded] = np.nan
+        mask = np.isfinite(view['input'])
+        view['operator'] = replace(view['operator'], output_mask=mask)
+        view['noise_factor'][excluded::3] = 0.
+        return view
     e = arrays['feature_eeg'][trial].copy()
     hb = arrays['feature_fnirs'][trial].copy()
     n, nh = len(e), len(hb)
@@ -3211,6 +3237,8 @@ def v3_dispatch(run_dir, cfg, dc, base, measured, metadata, task):
         if gate.get('status') != 'completed' or not gate.get('passed', False):
             return dict(status='not_started_prerequisite', reason=prerequisite, rows=[], actual_solves=0)
     kind = task['kind']
+    if kind.startswith('retest_'):
+        return retest_dispatch(run_dir, cfg, dc, base, measured, task)
     if kind == 'v3_temporal':
         return v3_temporal_cell(run_dir, cfg, dc, base, task)
     if kind == 'v3_native':
@@ -3631,6 +3659,317 @@ def v3_summarize(run_dir, cfg, *, final=False):
     temporary = run_dir/'OVERNIGHT_REPORT.md.tmp'
     temporary.write_text('\n'.join(lines))
     os.replace(temporary, run_dir/'OVERNIGHT_REPORT.md')
+    return summary
+
+
+def retest_candidate(mapping, w, base, measured):
+    # In training-MAD coordinates the new hypothesis is y_Hb = h_Hb(z).
+    # Express it back in the unchanged scored coordinate, y_old=gauge*y_MAD.
+    # Only the mean changes; target, R, Q and scoring SD remain frozen.
+    gain = 1. if mapping == 'prior_gauge' else step5.reference_observation_gauge(base, measured)['fnirs_common']
+    return dict(BASE, id=mapping, gain=gain, w=w)
+
+
+def retest_tasks(cfg, inventory, base, measured):
+    tasks = []
+    mapping_candidates = {m: retest_candidate(m, 0., base, measured)
+                          for m in cfg['measurement_retest']['mappings']}
+    def candidate_for(mapping, w):
+        return dict(mapping_candidates['prior_gauge' if mapping == 'wrong_chromophore' else mapping], w=w)
+    def add(identifier, family, kind, stage, layer=0, **kw):
+        tasks.append(dict(id=identifier, family=family, kind=kind, stage=stage, layer=layer,
+            dependencies=kw.pop('dependencies', []), prerequisites=kw.pop('prerequisites', []),
+            planned_solves=kw.pop('planned_solves', 0), row_ids=kw.pop('row_ids', []),
+            timeout_seconds=cfg['budget']['map_timeout_seconds'], **kw))
+        return identifier
+    add('retest_basis', 'A', 'retest_basis', 1)
+    synthetic = []
+    for law in cfg['synthetic']['stage1_seed_start']:
+        for rep in range(24):
+            for mode in cfg['synthetic']['masks']:
+                for mapping in [*cfg['measurement_retest']['mappings'], 'wrong_chromophore']:
+                    ident = task_id('A', law, rep, mode, mapping)
+                    synthetic.append(add(ident, 'A', 'retest_synthetic', 1, 1,
+                        law=law, replicate=rep, mode=mode, mapping=mapping, solver='O2',
+                        candidate=candidate_for(mapping, 0.),
+                        seed=cfg['measurement_retest']['synthetic_seed_start']+rep,
+                        dependencies=['retest_basis'], planned_solves=1, row_ids=['fit']))
+    add('retest_synthetic_gate', 'A', 'retest_synthetic_gate', 1, 2, dependencies=synthetic)
+    fixed = []
+    for subject, ids in inventory.items():
+        for outer in range(4):
+            for solver in ('O0', 'O1', 'O2'):
+                for trial in folds(ids, outer)['validation']:
+                    ident = task_id('B', 'prior_gauge', 0., subject, outer, trial, solver)
+                    fixed.append(add(ident, 'B', 'retest_import', 2, subject=subject, outer=outer,
+                        trial=trial, solver=solver, mapping='prior_gauge', candidate=dict(BASE),
+                        modes=list(OUTER_MASKS), role='fixed',
+                        source_task=task_id('v3_S2', subject, outer, trial, solver)))
+            for modality in ('EEG', 'fNIRS'):
+                add(task_id('D_linear', subject, outer, modality), 'D', 'retest_import', 2,
+                    subject=subject, outer=outer, modality=modality,
+                    source_task=task_id('v3_linear', subject, outer, modality))
+            for trial in folds(ids, outer)['validation']:
+                for mapping in cfg['measurement_retest']['mappings']:
+                    for w in cfg['fixed_w']:
+                        modes = (['HbO_only', 'HbR_only'] if mapping == 'prior_gauge' and w == 0.
+                                 else [*OUTER_MASKS, 'HbO_only', 'HbR_only'])
+                        ident = task_id('B_new', mapping, w, subject, outer, trial)
+                        fixed.append(add(ident, 'B', 'v3_fits', 2, 1, solver='O2', subject=subject,
+                            outer=outer, trials=[trial], modes=modes, mapping=mapping, role='fixed',
+                            candidate=candidate_for(mapping, w),
+                            prerequisites=['retest_synthetic_gate'], dependencies=['retest_synthetic_gate'],
+                            planned_solves=len(modes), row_ids=[task_id(trial, m) for m in modes]))
+                    for w in cfg['measurement_retest']['w_grid']:
+                        for solver in ('O1', 'O2'):
+                            if solver == 'O2' and w in cfg['fixed_w']:
+                                continue  # The identical full/single-modality fits are owned by B.
+                            if solver == 'O1' and mapping == 'prior_gauge' and w == 0.:
+                                continue
+                            modes = ['full', 'fNIRS_only', 'EEG_only']
+                            add(task_id('C', mapping, w, subject, outer, trial, solver), 'C', 'v3_fits', 3,
+                                solver=solver, subject=subject, outer=outer, trials=[trial], modes=modes,
+                                mapping=mapping, candidate=candidate_for(mapping, w),
+                                prerequisites=['retest_synthetic_gate'], dependencies=['retest_synthetic_gate'],
+                                planned_solves=3, row_ids=[task_id(trial, m) for m in modes])
+    add('retest_adaptation_trigger', 'E', 'retest_adaptation_trigger', 4, dependencies=fixed)
+    for axis in ('gain', 'process'):
+        for candidate in v3_candidates(cfg, axis):
+            if candidate['id'] == 'baseline':
+                continue
+            assessment = []
+            for rep in range(24):
+                for mode in ('full', 'center_EEG', 'center_fNIRS'):
+                    ident = task_id('E_synthetic', axis, candidate['id'], rep, mode)
+                    assessment.append(add(ident, 'E', 'retest_synthetic', 4, 1,
+                        axis=axis, law='nonlinear_gaussian', replicate=rep, mode=mode,
+                        mapping='prior_gauge', candidate=candidate, solver='O2',
+                        seed=cfg['measurement_retest']['synthetic_seed_start']+rep,
+                        prerequisites=['retest_adaptation_trigger'], dependencies=['retest_adaptation_trigger'],
+                        planned_solves=1, row_ids=['fit']))
+            gate = add(task_id('E_screen', axis, candidate['id']), 'E', 'retest_adaptation_screen', 4, 2,
+                candidate=candidate, axis=axis, dependencies=assessment)
+            for subject, ids in inventory.items():
+                for outer in range(4):
+                    for trial in folds(ids, outer)['validation']:
+                        add(task_id('E_measured', axis, candidate['id'], subject, outer, trial), 'E', 'v3_fits', 4, 3,
+                            axis=axis, candidate=candidate, solver='O2', subject=subject, outer=outer,
+                            trials=[trial], modes=list(OUTER_MASKS), role='fixed_adaptation_probe',
+                            mapping='prior_gauge', prerequisites=[gate], dependencies=[gate],
+                            planned_solves=14, row_ids=[task_id(trial, m) for m in OUTER_MASKS])
+    tasks.sort(key=lambda t: (t['stage'], t['layer']))
+    for i, task in enumerate(tasks):
+        task['queue_position'] = i
+    return tasks
+
+
+def retest_prepare(run_dir, cfg, dc, base, measured):
+    run_dir = Path(run_dir).resolve()
+    if run_dir.exists() or run_dir.parent != (ROOT/cfg['output_root']).resolve():
+        raise ValueError('retest requires a fresh child of the existing run root')
+    source = ROOT/cfg['measurement_retest']['source_run']
+    checks = v3_engineering_checks(cfg, dc, base)
+    if not all(v['passed'] for v in checks.values()):
+        raise ValueError('engineering preflight failed')
+    if read_json(source/'manifest.json')['execution'] != 'completed':
+        raise ValueError('retained source run is not terminal')
+    if not read_json(source/'cells/v3_S1_gate/result.json')['passed']:
+        raise ValueError('retained known-truth bridge did not pass')
+    inventory = read_json(source/'scope_inventory.json')
+    for subject, ids in inventory.items():
+        validate_identities(ids, cfg, subject)
+    run_dir.mkdir(parents=True)
+    (run_dir/'resolved_config.yaml').write_text(yaml.safe_dump(cfg, sort_keys=False))
+    atomic_json(run_dir/'scope_inventory.json', inventory)
+    atomic_json(run_dir/'fold_inventory.json', read_json(source/'fold_inventory.json'))
+    atomic_json(run_dir/'preflight.json', checks)
+    coordinate_audit = []
+    candidate = retest_candidate('unit_loading', 0., base, measured)
+    p, c, spec = model(base, candidate)
+    generated = generated_trial(base, 'nonlinear_gaussian', 744, steps=24)
+    scale = np.array([1., 1/candidate['gain'], 1/candidate['gain']])
+    for variant in ('model', 'combined'):
+        view = v3_bridge_view(cfg, dc, base, generated, variant, 'full')
+        original = batch_map.TrajectoryObjective(view['input'], p, c, view['operator'], None,
+            noise_factor=view['noise_factor'], observation_spec=spec)
+        scaled = batch_map.TrajectoryObjective(view['input']*scale, p, c, view['operator'], None,
+            noise_factor=view['noise_factor']*np.tile(scale, 24)[:, None],
+            observation_spec=replace(spec, coordinate_scale=tuple(scale)))
+        a, _ = original.evaluate(generated['transformed_states'].ravel(), derivative=False)
+        b, _ = scaled.evaluate(generated['transformed_states'].ravel(), derivative=False)
+        coordinate_audit.append(dict(variant=variant, ranks=[original.rank, scaled.rank],
+            objective_difference=float((b@b-a@a)/2),
+            interpretation='Same rank required for unit equivalence. Retest inference keeps the original computational coordinates and rank threshold.'))
+    atomic_json(run_dir/'coordinate_rank_audit.json', coordinate_audit)
+    # Exact completed feature evidence, not a second raw parser or cache rebuild.
+    copied = {}
+    for subject in inventory:
+        stems = [source/'prepared'/subject]
+        stems += [projection_path(source, subject, outer, inner, 'E0')
+                  for outer in range(4) for inner in (None, 0, 1, 2)]
+        for stem in stems:
+            for suffix in ('.json', '.npz'):
+                path = stem.with_suffix(suffix)
+                dest = run_dir/'prepared'/path.name
+                dest.parent.mkdir(exist_ok=True)
+                shutil.copyfile(path, dest)
+                copied[str(dest.relative_to(run_dir))] = diagnostic.digest(path)
+    atomic_json(run_dir/'retained_input_identity.json', dict(source=str(source), sha256=copied))
+    tasks = retest_tasks(cfg, inventory, base, measured)
+    for task in tasks:
+        if task['kind'] == 'retest_import':
+            task['source_result_sha256'] = diagnostic.digest(source/'cells'/task['source_task']/'result.json')
+    persist_tasks(run_dir, tasks)
+    now = datetime.now(timezone.utc).isoformat()
+    manifest = dict(schema=cfg['measurement_retest']['id'], execution='preparing', created_at=now,
+        budget_started_at=now, task_count=len(tasks), planned_solves=sum(t['planned_solves'] for t in tasks),
+        teacher_qualification='none', source_run=str(source), project_root=ROOT, run_dir=run_dir,
+        software=dict(python=sys.version, numpy=np.__version__, scipy=scipy.__version__))
+    atomic_json(run_dir/'manifest.json', manifest)
+    pilots = []
+    for solver in ('O1', 'O2'):
+        task = dict(id='pilot_'+solver, family='A', kind='retest_synthetic', solver=solver,
+            law='nonlinear_gaussian', seed=cfg['synthetic']['development_seed'], replicate=0,
+            mode='center_fNIRS', mapping='prior_gauge', candidate=dict(BASE), row_ids=['fit'])
+        result = execute_cell(run_dir, cfg, task)
+        result['solver'] = solver
+        pilots.append(result)
+        print('Pilot', solver, result['status'], result['elapsed_seconds'], flush=True)
+    atomic_json(run_dir/'pilots.json', dict(pilots=pilots, preparations=[]))
+    manifest.update(execution='prepared', resources=resource_budget(cfg, pilots))
+    atomic_json(run_dir/'manifest.json', manifest)
+    print(json.dumps(serial(manifest)), flush=True)
+
+
+def retest_dispatch(run_dir, cfg, dc, base, measured, task):
+    source = ROOT/cfg['measurement_retest']['source_run']
+    kind = task['kind']
+    if kind == 'retest_import':
+        if diagnostic.digest(source/'cells'/task['source_task']/'result.json') != task['source_result_sha256']:
+            raise ValueError('retained result identity changed')
+        result = copy.deepcopy(cell_result(source, task['source_task']))
+        for row in result.get('rows', []):
+            row['reuse_source_task'] = str(source/'cells'/task['source_task'])
+            if row.get('trajectory_path'):
+                row['trajectory_path'] = str(source/row['trajectory_path'])
+        return dict(result, actual_solves=0, reused_task=task['source_task'])
+    if kind == 'retest_basis':
+        identity = read_json(Path(run_dir)/'retained_input_identity.json')
+        for rel, digest in identity['sha256'].items():
+            if diagnostic.digest(Path(run_dir)/rel) != digest:
+                raise ValueError('retained feature evidence changed: '+rel)
+        return dict(status='completed', rows=[], attribution=retest_input_audit(run_dir, cfg))
+    if kind == 'retest_synthetic':
+        truth_gain = retest_candidate('prior_gauge' if task['mapping'] == 'wrong_chromophore' else task['mapping'], 0., base, measured)['gain']
+        g = generated_trial(base, task['law'], task['seed'], cfg['steps'], truth_gain=truth_gain)
+        if task['law'] == 'linearized_gaussian' and truth_gain != 1.:
+            # The linear generator has no measurement-gain parameter.
+            noise = g['observations']-g['clean']
+            g['clean'][:, 1:] *= truth_gain
+            g['observations'] = g['clean']+noise
+        view = v3_bridge_view(cfg, dc, base, g, 'combined', task['mode'])
+        if task['mapping'] == 'wrong_chromophore':
+            view['input'][:, 2] *= 5.
+        row = v3_fit_row(run_dir, cfg, base, task, 'fit', view, task['candidate'], mode=task['mode'],
+                         truth=np.column_stack((g['states'][:, 0], g['clean'])))
+        row.update(law=task['law'], replicate=task['replicate'], mapping=task['mapping'])
+        save_fit(run_dir, task['id'], 'fit', None, row)
+        return dict(status=row['status'], rows=[row], actual_solves=1)
+    if kind == 'retest_synthetic_gate':
+        rows = [r for t in read_tasks(run_dir) if t['family'] == 'A' and t['kind'] == 'retest_synthetic'
+                and t['law'] == 'nonlinear_gaussian' and t['mode'] == 'full' and t['mapping'] == 'prior_gauge'
+                for r in cell_result(run_dir, t['id']).get('rows', [])]
+        good = [r for r in rows if r['status'] == 'completed']
+        nrmse = float(np.mean([r['truth']['r']['nrmse'] for r in good])) if good else None
+        return dict(status='completed', passed=len(good) == 24 and nrmse <= .65,
+            completed=len(good), expected=24, r_nrmse=nrmse, rows=[],
+            interpretation='Gaussian mean diagnostic only; Student-t is generator-mismatch stress')
+    if kind == 'retest_adaptation_trigger':
+        rows = [r for t in read_tasks(run_dir) if t['family'] == 'B' and t.get('solver') == 'O2'
+                and t.get('mapping') == 'prior_gauge' and t['candidate']['w'] == 0.
+                for r in cell_result(run_dir, t['id']).get('rows', [])
+                if r['mode'] in ('full', 'center_EEG', 'center_fNIRS')]
+        good = [r for r in rows if r['status'] == 'completed']
+        residual = [r['clean_map_residual'][m]['nrmse'] for r in good for m in ('HbO', 'HbR')
+                    if r.get('clean_map_residual', {}).get(m)]
+        return dict(status='completed', passed=len(good) == 216 and bool(residual) and np.mean(residual) > .5,
+            rows=[], completed=len(good), expected=216,
+            reason='Adaptation requires complete valid fixed inference and a residual; numerical/physical failures are not a gain/Q selection criterion')
+    if kind == 'retest_adaptation_screen':
+        from scipy.stats import t as student
+        differences = defaultdict(list)
+        for rep in range(24):
+            values = defaultdict(list)
+            for mode in ('full', 'center_EEG', 'center_fNIRS'):
+                candidate = cell_result(run_dir, task_id('E_synthetic', task['axis'], task['candidate']['id'], rep, mode))
+                baseline = cell_result(run_dir, task_id('A', 'nonlinear_gaussian', rep, mode, 'prior_gauge'))
+                if candidate['status'] != 'completed' or baseline['status'] != 'completed':
+                    return dict(status='completed', passed=False, reason='incomplete paired synthetic panel', rows=[])
+                for coordinate in ('r', 'clean_HbO', 'clean_HbR'):
+                    values[coordinate].append(candidate['rows'][0]['truth'][coordinate]['nrmse']-
+                                              baseline['rows'][0]['truth'][coordinate]['nrmse'])
+            for coordinate, v in values.items():
+                differences[coordinate].append(float(np.mean(v)))
+        upper = {k: float(np.mean(v)+student.ppf(.95, 23)*np.std(v, ddof=1)/np.sqrt(24)) for k, v in differences.items()}
+        return dict(status='completed', passed=all(v <= .02 for v in upper.values()), upper95=upper, rows=[])
+    raise ValueError('unknown retest task')
+
+
+def retest_input_audit(run_dir, cfg):
+    historical = ROOT/cfg['measurement_retest']['historical_run']
+    rows, noise_rows = [], []
+    for subject in cfg['subjects']:
+        old_detail = read_json(historical/'prepared'/f'{subject}.json')
+        new_detail = read_json(Path(run_dir)/'prepared'/f'{subject}.json')
+        with np.load(historical/'prepared'/f'{subject}.npz') as old, np.load(Path(run_dir)/'prepared'/f'{subject}.npz') as new:
+            for i, identity in enumerate(new_detail['trials']):
+                if identity['sample_id'] != old_detail['trials'][i]['sample_id']:
+                    raise ValueError('historical/new attribution identity mismatch')
+                record = dict(subject=subject, sample_id=identity['sample_id'],
+                    old_native_start=old_detail['trials'][i]['native_start_samples'], new_native_start=identity['native_start_samples'],
+                    unit=identity['feature_contract']['unit_conversion'], power_floor_fraction=identity['feature_contract']['floor_fraction'])
+                for version, arrays in [('historical', old), ('measurement', new)]:
+                    h = arrays['target_fnirs'][i]
+                    h = h-h[:20].mean(axis=0)
+                    record[version] = dict(hbo_rms=float(np.sqrt(np.mean(h[..., 0]**2))),
+                        hbr_rms=float(np.sqrt(np.mean(h[..., 1]**2))), hbt_rms=float(np.sqrt(np.mean(h.sum(axis=-1)**2))),
+                        paired_mad=robust_mad(h.reshape(-1, 2)), baseline=arrays['target_fnirs'][i][:20].mean(axis=0),
+                        edge_rms=float(np.sqrt(np.mean(h[np.r_[0:8,112:120]]**2))),
+                        eligible_pairs=int(arrays['eligible'][i].sum()), dtype=str(arrays['target_fnirs'].dtype))
+                record['feature_max_absolute_change'] = {k: float(np.max(abs(old[k][i]-new[k][i])))
+                    for k in ('target_eeg_log_power', 'target_fnirs', 'feature_od')}
+                rows.append(record)
+        for outer in range(4):
+            info, _ = load_projection(str(run_dir), subject, outer, None, 'E0')
+            noise_rows.append(dict(subject=subject, outer=outer, projection=info['projection'],
+                noise=info['feature_noise'], recomposition=info['legacy_full_recomposition_max_error_training_sd']))
+    atomic_json(Path(run_dir)/'input_attribution.json', dict(trials=rows, folds=noise_rows,
+        interpretation='Historical native SSM never consumed per-chromophore generic MAD; Hb units remain relative'))
+    return dict(trials=len(rows), folds=len(noise_rows), path='input_attribution.json')
+
+
+def retest_summarize(run_dir, cfg, *, final=False):
+    run_dir = Path(run_dir)
+    tasks = read_tasks(run_dir)
+    families, all_rows = {}, []
+    for family in ('A', 'B', 'C', 'D', 'E'):
+        panel = [t for t in tasks if t['family'] == family]
+        results = [cell_result(run_dir, t['id']) for t in panel]
+        families[family] = dict(expected_cells=len(panel), status_counts=dict(Counter(r['status'] for r in results)),
+            planned_solves=sum(t['planned_solves'] for t in panel), actual_solves=sum(r.get('actual_solves', 0) for r in results))
+        for task, result in zip(panel, results):
+            for row in result.get('rows', []):
+                all_rows.append(dict(row, family=family, task_id=task['id'], mapping=task.get('mapping'),
+                    w=task.get('candidate', {}).get('w')))
+    write_csv(run_dir/'trial_metrics.csv', all_rows)
+    summary = dict(schema=cfg['measurement_retest']['id'], families=families, final=final,
+        teacher_qualification='none', uncertainty='NOT_ESTIMATED',
+        synthetic_gate=cell_result(run_dir, 'retest_synthetic_gate'),
+        adaptation_trigger=cell_result(run_dir, 'retest_adaptation_trigger'))
+    atomic_json(run_dir/'summary.json', summary)
+    (run_dir/'OVERNIGHT_REPORT.md').write_text('# Measurement retest\n\n'
+        'Per-cell result.json owns evidence. Feature missingness only; no teacher qualification.\n\n'
+        '```json\n'+json.dumps(serial(summary), ensure_ascii=False, indent=2)+'\n```\n')
     return summary
 
 

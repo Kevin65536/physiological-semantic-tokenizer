@@ -36,6 +36,7 @@ The version-controlled configuration surface is deliberately limited to:
 
 | File | Purpose | Contract / reading boundary |
 | --- | --- | --- |
+| `ssm_measurement_retest_v1.yaml` | Fixed W, explicit Hb loading, single-chromophore attribution, W curves and paired nulls on repaired measurement inputs | [A–E retest protocol](../../../docs/EXPERIMENT_PLAN.md#新测量链固定模型w-曲线与配对增量重测2026-09-17); original 72 diagnostic identities, conditional gain/Q probes, no teacher qualification |
 | `ssm_overnight_v3.yaml` | Observation-layer and missing-feature comparisons with independent adaptation panels | [Observation protocol](../../../docs/EXPERIMENT_PLAN.md#观测合同修复后的下一轮实验设计2026-09-10); uses `docs/EXPERIMENT_PLAN.md` as its design owner |
 | `ssm_overnight_v1.yaml` / `ssm_overnight_v2.yaml` | Retained N1–N6 / N1–N7 diagnostic panels | [Retained v2 protocol](../../../docs/EXPERIMENT_PLAN.md#bounded-overnight-ssm-diagnostics-retained-v2-contract); their literal `plan: ssm_next.md` records the removed short-term note and is not a live documentation link |
 | `t3a_balloon_robust_p0.yaml` | Synthetic physics, identifiability, corruption, null, calibration and visualization contract | Synthetic qualification contract; measured/protected inputs disabled |
