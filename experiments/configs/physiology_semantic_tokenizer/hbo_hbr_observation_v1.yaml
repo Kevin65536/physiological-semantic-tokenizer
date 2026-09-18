@@ -1,0 +1,54 @@
+schema: hbo_hbr_observation_v1
+experiment_id: HBO-HBR-OBSERVATION-SEPARATION-v1
+parent: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_adaptation_v1
+output_namespace: experiments/runs/physiology_semantic_tokenizer/data_quality_audit
+scope: retained_public_audit_arrays_and_synthetic_only
+tensor: {components: [HbO, HbR], samples: 300, sample_rate_hz: 10}
+split: parent_subject_early_late_groups_with_gap_no_new_windows
+primary: known_truth_physiology_recovery_and_gain_equivalence
+secondary: paired_heldout_euclidean_and_training_frozen_weighted_distances
+diagnostic: total_covariance_whitening_negative_control
+null: observation_gain_and_physiology_are_identifiable_from_two_curves_alone
+baseline: identity_metric_and_unit_observation_gain
+effective_coordinates: [lambda, a, k]
+effective_bounds: [[0.0, 4.0], [0.0, 1.0], [0.0, 40.0]]
+gain_bounds: [0.25, 4.0]
+gain_profile: [0.25, 0.5, 1.0, 2.0, 4.0]
+observation_model: y_O=x_O_and_y_R=g*x_R_plus_additive_error
+metrics: [identity, difference_diagonal_proxy, ar1_proxy]
+metric_fit: training_only_frozen_for_heldout_and_all_parameter_candidates
+repair_space: common_24_dimensional_constraint_span_no_changes_outside
+proxy_contract:
+  diagonal: mean_squared_first_difference_divided_by_two_per_Hb
+  ar1: pooled_raw_training_lag_one_rho_with_difference_innovation_Hb_covariance
+  rho_bounds: [0.0, 0.995]
+  eigenvalue_floor_relative: 1.0e-8
+  interpretation: assumptions_to_test_not_independently_measured_noise
+optimizer: {seed: 20260920, random_starts: 32, refined_starts: 5, maxiter: 260, ftol: 1.0e-12, gtol: 1.0e-8}
+synthetic:
+  seed: 20260920
+  replicates: 8
+  train_windows: 64
+  heldout_windows: 64
+  truth: [2.0, 0.35, 0.32, 0.32]
+  conditions: [white, independent_slow, shared_slow, gain2_white, gain2_independent_slow]
+  signal_frequencies_hz: [0.02, 0.035, 0.06, 0.09, 0.14, 0.19]
+  slow_frequencies_hz: [0.015, 0.025, 0.05, 0.08]
+  white_sd: 0.02
+  slow_sd: 0.3
+  reference_calibration_samples: 512
+  response: equilibrated_steady_response_first_order_constraint
+  scale: clean_pair_unit_norm_before_additive_noise_no_observed_per_window_renormalization
+  extra_metrics: [oracle_covariance, independent_noise_calibration]
+  extra_gain_mode: known_true_gain
+  no_truth_warm_start: true
+  references: independent_noise_only_samples_are_available_only_in_synthetic_controls
+measured_response: second_order_constraint_allowing_arbitrary_initial_p_minus_v
+resources: {workers: 32, max_in_flight: 64, numerical_threads_per_worker: 1}
+stopping: fixed_24_measured_groups_and_40_synthetic_panels
+protected_boundary: no_raw_loader_or_protected_array_access
+claim_limits:
+  - synthetic_gain_invariance_proved_for_equilibrated_responses_not_every_excited_initial_transient
+  - no_unique_E0_eta_alpha_recovery_from_the_three_linear_combinations
+  - proxy_whitening_is_not_noise_identification
+  - no_full_six_state_likelihood_or_new_physiological_model

@@ -1,0 +1,42 @@
+schema: hbo_hbr_boundary_v1
+experiment_id: HBO-HBR-BOUNDARY-MECHANISM-v1
+scope: retained_public_audit_arrays_and_synthetic_diagnostics
+parent: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_adaptation_v1
+output_namespace: experiments/runs/physiology_semantic_tokenizer/data_quality_audit
+tensor: {components: [HbO, HbR], samples: 300, sample_rate_hz: 10}
+split: exactly_parent_subject_level_fit_groups_no_new_windows
+primary: objective_profiles_and_signed_effective_coupling_heldout_comparison
+secondary: smooth_metric_refitting_and_equilibrated_initial_total_volume_sensitivity
+diagnostic: boundary_ridge_classification_and_known_truth_contamination_controls
+baseline: parent_primary_and_expanded_shared_subject_physical_fits
+null: coordinate_redundancy_or_numerical_optimization_alone_explains_boundary_pressure
+effective_coordinates: [lambda, a, k]
+effective_domain:
+  lambda: [0.0, 4.0]
+  positive_a: [0.0, 1.0]
+  signed_a: [-1.0, 1.0]
+  positive_k: [0.0, 40.0]
+  signed_k: [-40.0, 40.0]
+effective_models: [positive, signed_a, signed_k, signed_both]
+lambda_profile: [0.0, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 4.0]
+a_profile: [-0.8, -0.4, -0.2, -0.1, 0.0, 0.02, 0.05, 0.1, 0.2, 0.4, 0.8]
+profile_companions: reoptimized_training_only
+metric: same_seven_weak_constraints_equal_Hb_unit_projection
+smooth_metric: minimum_correction_in_12_non_DC_cosine_modes
+optimizer: {random_starts: 32, refined_starts: 5, maxiter: 220, ftol: 1.0e-12, gtol: 1.0e-8}
+optimizer_crosscheck: {method: differential_evolution, maxiter: 90, popsize: 10, tol: 1.0e-7, models: [positive, signed_both], scope: measured_subject_groups}
+synthetic:
+  seed: 20260919
+  replicates: 8
+  training_windows: 12
+  heldout_windows: 12
+  truth: [2.0, 0.35, 0.32, 0.32]
+  conditions: [matched, white_10pct, colored_independent_30pct, hbr_gain_2, shared_component_50pct, independent_hbr_50pct]
+  interpretation: mechanism_examples_not_an_estimate_of_actual_noise_or_physiology
+resources: {workers: 32, numerical_threads_per_worker: 1, max_in_flight: 64}
+stopping: fixed_24_parent_subject_groups_and_48_synthetic_panels_no_adaptive_data_expansion
+protected_boundary: no_raw_dataset_or_protected_evidence_reads
+claim_limits:
+  - objective_profiles_are_not_likelihood_confidence_intervals
+  - signed_effective_models_are_diagnostic_not_valid_physiological_replacements
+  - no_new_full_six_state_likelihood_fit

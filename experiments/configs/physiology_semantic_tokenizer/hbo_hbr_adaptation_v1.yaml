@@ -1,0 +1,45 @@
+schema: hbo_hbr_adaptation_v1
+experiment_id: HBO-HBR-SHARED-ADAPT-v1
+scope: descriptive_public_measurement_audit_no_teacher_qualification
+output_namespace: experiments/runs/physiology_semantic_tokenizer/data_quality_audit
+scope_source: experiments/configs/physiology_semantic_tokenizer/dataset_scaling_report_v1.yaml
+reference_evidence: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_dynamics_v1
+cache: data/cache/physiology_semantic_clean_v4
+tensor: {components: [HbO, HbR], samples: 300, sample_rate_hz: 10, dtype: float64}
+mask: complete_intersection_finite_recorded_processed_no_interpolation
+split:
+  method: two_fold_early_late_blocks_with_middle_gap_per_record
+  block_size: floor((record_windows-1)/2)
+  sharing: [subject, subject_channel]
+  preprocessing_context: frozen_full_record_offline_filter_not_independent_raw_records
+  minimum_fit_windows_per_channel: 2
+target: minimum_equal_Hb_unit_curve_change_to_seven_weak_constraints
+objective: mean_squared_relative_curve_change_equal_pair_windows
+seed: 20260918
+reference_parameters: {tau: 2.0, eta: 0.35, E0: 0.32, alpha: 0.32}
+parameter_order: [tau, eta, E0, alpha]
+parameter_boxes:
+  primary: {tau: [0.5, 5.0], eta: [0.15, 0.6], E0: [0.15, 0.6], alpha: [0.15, 0.6]}
+  expanded: {tau: [0.25, 10.0], eta: [0.05, 0.8], E0: [0.05, 0.8], alpha: [0.1, 0.8]}
+bounds_interpretation: exploratory_sensitivity_boxes_not_validated_normal_ranges
+optimization:
+  grid: all_box_corners_plus_reference_plus_log_midpoint
+  random_starts: 32
+  refined_starts: 5
+  method: L-BFGS-B_in_log_parameters
+  maxiter: 180
+  ftol: 1.0e-12
+  gtol: 1.0e-8
+  retain_reference_candidate: true
+  expanded_initialization: include_primary_fit
+  interpretation: numerical_best_found_not_certified_global_minimum
+endpoints:
+  primary: heldout_distance_fixed_vs_subject_vs_subject_channel_primary_box
+  secondary: expanded_box_heldout_distance_and_parameter_boundary_frequency
+  diagnostic: conditional_fixed_total_Hb_vs_fixed_linearized_oxygenation_repairs
+null: no_heldout_reduction_after_training_only_parameter_adaptation
+baseline: original_fixed_reference_recomputed_on_identical_heldout_rows
+stopping: exactly_two_folds_two_sharing_levels_two_boxes_no_data_dependent_scope_expansion
+protected_boundary: same_previously_audited_public_subjects_records_only_no_protected_artifacts
+physiological_claim: no_unique_oxygen_extraction_fault_from_Hb_only
+resources: {workers: 32, numerical_threads_per_worker: 1, max_in_flight: 64}
