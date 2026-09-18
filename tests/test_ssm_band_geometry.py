@@ -11,6 +11,20 @@ from src.inference.observation_baselines import (
 CONFIG='experiments/configs/physiology_semantic_tokenizer/ssm_band_geometry_v1.yaml'
 
 
+def test_geometry_penalty_artifact_paths_do_not_alias(tmp_path):
+    paths=[]
+    for candidate in ('geometry','permuted'):
+        for penalty in (0.,.1,1.):
+            prefix=run.structure_prefix(tmp_path,'subject',0,f'{candidate}_l{penalty:g}',0)
+            for suffix in ('.json','.npz'):
+                paths.append(prefix.with_suffix(suffix))
+    assert len(set(paths))==12
+    for i,path in enumerate(paths):
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(str(i))
+    assert [p.read_text() for p in paths]==[str(i) for i in range(12)]
+
+
 def test_correlated_sufficient_statistic_preserves_objective_differences_and_gradient():
     rng=np.random.default_rng(4);x=rng.normal(size=(13,18));ell=rng.normal(size=18)
     a=rng.normal(size=(18,18));cov=a@a.T+np.eye(18)*.3
@@ -141,3 +155,18 @@ def test_report_uses_panel_uncertainty_and_equal_session_weight():
     assert paired_interval([.01]*3)['upper95'] is None
     rows=[dict(subject='s',session='one',score=0.)]*9+[dict(subject='s',session='two',score=10.)]
     assert hierarchical(rows,'score')==5.
+
+
+def test_report_audit_marks_geometry_without_replacing_predictions(tmp_path):
+    from experiments.scripts.render_ssm_band_geometry_report import apply_geometry_selection_audit
+    data=dict(risks=[dict(candidate='geometry',RF=3.),dict(candidate='split',RF=2.)],
+              comparisons=[dict(candidate='split',reference='permuted',relative_improvement=.1)])
+    audit=dict(schema='geometry_selection_path_collision_audit_v1',source_run=str(tmp_path),
+               outer_predictions_recomputed=False,measured_choices=[dict(recomputed_selected=.1)])
+    result=apply_geometry_selection_audit(data,audit,tmp_path)
+    assert result['risks'][0]['RF']==3.
+    assert 'corrected_predictions_pending' in result['risks'][0]['evidence_scope']
+    assert 'evidence_scope' not in result['risks'][1]
+    assert 'evidence_scope' in result['comparisons'][0]
+    with pytest.raises(ValueError,match='matching selection-only audit'):
+        apply_geometry_selection_audit({},audit,tmp_path/'different_run')

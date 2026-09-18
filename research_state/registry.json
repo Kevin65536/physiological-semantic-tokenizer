@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-17T10:57:43.781043+00:00",
+  "updated_at": "2026-09-18T01:17:37.360178+00:00",
   "tracks": [
     {
       "id": "main",
@@ -465,6 +465,24 @@
       "label": "首次准备序列化失败保留",
       "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_v1/manifest.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.band_geometry_v1_selection_audit",
+      "label": "几何内折文件名碰撞及选择重算审计",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_v2/geometry_selection_audit_20260918_v1.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.band_geometry_v2_report",
+      "label": "几何选择错误更正报告（预测待重跑）",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_v2/analysis_20260918_v2/REPORT.md",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.band_geometry_v2_analysis",
+      "label": "更正证据标签与内折选择表",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_v2/analysis_20260918_v2/analysis.json",
+      "role": "result_summary"
     }
   ],
   "records": [
@@ -3038,7 +3056,7 @@
       "execution": "completed",
       "scientific_verdict": "inconclusive",
       "analysis_intent": "exploratory",
-      "summary": "完成 17,760 次主实验 MAP 与 504 次独立模板噪声修正。合成共享/相反频带显示分频带收益，但无试次共享情形状态恢复退化；实测 7 候选完整及中心 fNIRS 缺失均 0/72 有效，RF 未定义。线性 RF 宽频/合并/分频带为 0.24471/0.24654/0.26256；真实几何 11/12 折选择零惩罚。未保留结构改进候选；结论限定训练 PCA 代理载荷与当前 MAP，全部失败和原始模板记录保留。",
+      "summary": "17,760 次主 MAP 与 504 次模板修正保留。2026-09-18 复核发现几何内折 λ=0.1 文件覆盖 λ=0，撤回原零惩罚选择及几何无收益解释；实测选择重算改变真实/置换几何 9/8 个外折，修正预测尚未运行。该碰撞不影响非几何与线性结果：原 7 候选中心 fNIRS 缺失均 0/72 有效；线性 RF 宽频/合并/分频带 0.24471/0.24654/0.26256。原始冻结结果保留，几何选择规则的预测效果待定，不能据此归因原数据质量。",
       "evidence_ids": [
         "e.experiment_plan",
         "e.band_geometry_v1_contract",
@@ -3046,17 +3064,20 @@
         "e.band_geometry_v1_summary",
         "e.band_geometry_v1_report",
         "e.band_geometry_v1_template_correction",
-        "e.band_geometry_v1_preparation_failure"
+        "e.band_geometry_v1_preparation_failure",
+        "e.band_geometry_v1_selection_audit",
+        "e.band_geometry_v2_report",
+        "e.band_geometry_v2_analysis"
       ],
       "supersedes": [
         "main.ssm_overnight@2026-09-17.measurement_retest_v1"
       ],
-      "updated_at": "2026-09-17T10:57:43.781043+00:00",
+      "updated_at": "2026-09-18T01:17:37.360178+00:00",
       "depends_on": [
         "main.step5_observation"
       ],
       "headline": false,
-      "next_step": "先定位固定 fNIRS 观测下的数值/物理域失败及 PCA 代理载荷限制；新的载荷学习或求解修订须独立冻结验证。缺失目标训练、多区域状态、学习型初始化及受保护评价均未启动。"
+      "next_step": "修正几何内折文件名碰撞的代码并保留回归测试；后续需版本化重算受影响几何选择与外折预测。再区分载荷学习限制、推断失败和数据可预测性；本次解释核查不启动新 measured campaign。"
     }
   ]
 }

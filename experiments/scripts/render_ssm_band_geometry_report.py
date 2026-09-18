@@ -257,11 +257,32 @@ def table(rows,columns):
     return '| '+' | '.join(columns)+' |\n|'+'|'.join(['---']*len(columns))+'|\n'+''.join('| '+' | '.join(fmt(r.get(c)) for c in columns)+' |\n' for r in rows)
 
 
+def apply_geometry_selection_audit(data, audit, run):
+    if (audit.get('schema')!='geometry_selection_path_collision_audit_v1' or
+            Path(audit['source_run']).resolve()!=Path(run).resolve() or
+            audit.get('outer_predictions_recomputed') is not False):
+        raise ValueError('matching selection-only audit required; no corrected predictions inferred')
+    for rows in data.values():
+        for row in rows:
+            if any(row.get(k) in ('geometry','permuted') for k in ('candidate','candidate_name','reference')):
+                row['evidence_scope']='historical_execution_only; intended_geometry_selection_invalid; corrected_predictions_pending'
+    data['geometry_selection_audit']=[{k:v for k,v in audit.items() if k not in ('source_sha256','measured_choices')}]
+    data['geometry_selection_recomputed']=audit['measured_choices']
+    return data
+
+
 def render(run,out,data):
     out.mkdir(parents=True,exist_ok=False);(out/'figures').mkdir()
     shutil.copyfile(__file__,out/'render_source.py')
     dump(out/'analysis.json',data)
     for key,rows in data.items():pd.DataFrame(rows).to_csv(out/f'{key}.csv',index=False)
+    geometry_audit=bool(data.get('geometry_selection_audit'))
+    labels=[c+'*' if geometry_audit and c in ('geometry','permuted') else c for c in CANDIDATES]
+    def report_table(rows,columns):
+        if geometry_audit:
+            rows=[{k:(str(v)+' [旧运行]' if k in ('candidate','reference') and v in ('geometry','permuted') else v)
+                   for k,v in row.items()} for row in rows]
+        return table(rows,columns)
     figures=[]
     def save(name,fig):
         fig.tight_layout();fig.savefig(out/'figures'/f'{name}.png',dpi=240,bbox_inches='tight');plt.close(fig);figures.append(name)
@@ -269,12 +290,15 @@ def render(run,out,data):
     for j,mode in enumerate(MODES):
         vals=[next((r['valid'] for r in data['completion'] if r['candidate']==c and r['mode']==mode),0) for c in CANDIDATES]
         ax.bar(x+(j-2.5)*width,vals,width,label=mode)
-    ax.set_xticks(x,CANDIDATES,rotation=20);ax.set_ylabel('Valid / fixed 72 trials');ax.set_ylim(0,78);ax.legend(fontsize=7,ncol=3);save('completion',fig)
+    ax.set_xticks(x,labels,rotation=20);ax.set_ylabel('Valid / fixed 72 trials');ax.set_ylim(0,78);ax.legend(fontsize=7,ncol=3)
+    if geometry_audit:ax.set_title('* Historical geometry execution; corrected predictions pending',fontsize=9)
+    save('completion',fig)
     fig,axs=plt.subplots(1,2,figsize=(9,3.4))
     for j,condition in enumerate(('shared','opposite_bands')):
         records=[r for r in data['synthetic'] if r['condition']==condition and r['mode']=='full']
         vals=[next((r['state_nrmse'][0] for r in records if r['candidate']==c and r['state_nrmse']),np.nan) for c in CANDIDATES]
-        axs[j].bar(CANDIDATES,vals);axs[j].set_title(condition);axs[j].tick_params(axis='x',rotation=40);axs[j].set_ylabel('Driver NRMSE, successful subset')
+        axs[j].bar(labels,vals);axs[j].set_title(condition);axs[j].tick_params(axis='x',rotation=40);axs[j].set_ylabel('Driver NRMSE, successful subset')
+    if geometry_audit:fig.suptitle('* Historical geometry execution; corrected predictions pending',fontsize=9)
     save('synthetic',fig)
     fig,ax=plt.subplots(figsize=(8,3.5));lin=[r for r in data['risks'] if r['family']=='L']
     for j,control in enumerate(('correct','context','template','pairing','shift')):
@@ -282,9 +306,12 @@ def render(run,out,data):
         ax.bar(np.arange(5)+(j-2)*.15,[np.nan if v is None else v for v in vals],.15,label=control)
     ax.set_xticks(np.arange(5),CANDIDATES[:5]);ax.set_ylabel('RF (center / whole fNIRS equal weight)');ax.legend(fontsize=7,ncol=3);save('linear',fig)
     report='# 分频带与空间约束 SSM 开发测试\n\n'
+    if geometry_audit:
+        report+='**2026-09-18 修订：撤回原几何选择及空间无收益解释。** 内折文件名中的 λ=0.1 被当作扩展名替换，覆盖 λ=0 的记录；选择器将同一份 λ=0.1 损失重复标作 0 和 0.1，再按平手规则选 0。原“真实几何 11/12 折、置换几何 12/12 折选择零”不能解释为数据偏好无空间约束。\n\n'
+        report+='本版只更正证据解释并引用保留数组的内折评分重算，**没有重跑几何外折预测或合成拟合**。全部表格中 geometry/permuted 的“[旧运行]”及图中星号均表示受错误选择流程影响的历史输出；其风险、非劣检验 True、配对增量和完成率不能作为预定几何选择规则的验证。数值原样保留以便追溯。非几何候选和同特征线性对照不受该文件名错误影响。原版位于 ../analysis_20260917_v1/REPORT.md；审计为 ../geometry_selection_audit_20260918_v1.json。\n\n'
     report+='本报告读取冻结任务表和逐拟合证据；固定六状态、生理参数、过程噪声和 Gaussian 轨迹 MAP。结果只解释为离线条件补全。\n\n'
     complete_ssm=[r for r in data['risks'] if r['family']=='M' and r['RF'] is not None]
-    report+=f"本轮形成完整主端点的 SSM 候选为 {len(complete_ssm)}/7。"
+    report+=f"原运行形成完整主端点的 SSM 候选为 {len(complete_ssm)}/7。"
     if not complete_ssm:report+='因此不能按预设 10% 主风险改善标准保留新的 SSM；合成收益与整模态预测子项需要分别解释。'
     report+='\n\n'
     synthetic_full={(r['condition'],r['candidate']):r for r in data['synthetic'] if r['mode']=='full'}
@@ -297,7 +324,7 @@ def render(run,out,data):
     report+='## 设计与完成情况\n\n'
     report+='3 被试 × 3 session × 8 原训练 trial；4 外折、3 内折。局部最多 6 个 EEG 通道，alpha 8–13、beta 13–30、low-gamma 30–45 Hz。目标 Hb 对及评分尺度在每折各候选间相同。载荷采用训练宽频 PCA 代理回归，几何强度在内折载荷重建 MSE 上选取；本轮没有缺失目标端到端训练。内折重新拟合目标锚点、邻域、缩放与 PCA。\n\n'
     counts=Counter((r['family'],r['status']) for r in data['cells'])
-    report+=table([dict(family=k[0],status=k[1],cells=v) for k,v in counts.items()],['family','status','cells'])
+    report+=report_table([dict(family=k[0],status=k[1],cells=v) for k,v in counts.items()],['family','status','cells'])
     report+='\nS 为合成、G 为入口检查、M 为实测 SSM、L 为线性对照（包含合成及实测）。cell 完成不等于内部每次 MAP 有效；失败始终保留。\n\n'
     if data['corrections']:
         report+=f"另在独立版本补跑 {len(data['corrections'])} 次整段 fNIRS 缺失的 EEG 模板控制（R）：平均 N 个训练 trial 的 EEG 特征，其噪声因子应除以 √N。原始 run 错用单 trial 噪声，此处模板比较采用修正版；原始记录完整保留，corrections.csv 逐项连接新旧结果。主 RF、载荷/正则选择及其余拟合未变。\n\n"
@@ -305,31 +332,37 @@ def render(run,out,data):
     report+=f"与上一组新测量基线共有的 {len(replay)}/720 次拟合中，状态一致 {sum(r['status_identical'] for r in replay)} 次；有效行 Hb NMSE 最大差值为 {max(deltas) if deltas else None}。\n\n"
     report+='## 主端点与每名被试\n\n'
     report+='RF 为中心和整段 fNIRS 缺失风险各占一半，内部对 HbO/HbR 训练 SD 归一化 MSE 等权，再按 trial→session→subject 等权。完整端点要求相同 72 身份的两个模式均有效。\n\n'
-    report+=table(data['risks'],['family','candidate','control','valid_center','valid_whole','paired_identities','RF','common_success_subset_RF'])
-    report+='\n'+table([r for r in data['by_subject'] if r['control']=='correct'],['family','candidate','subject','paired_identities','RF'])
+    report+=report_table(data['risks'],['family','candidate','control','valid_center','valid_whole','paired_identities','RF','common_success_subset_RF'])
+    report+='\n'+report_table([r for r in data['by_subject'] if r['control']=='correct'],['family','candidate','subject','paired_identities','RF'])
     report+='\n预定关键对照只在候选与参照共同成功的相同身份上比较；少于 72 的比较不升级为完整主端点：\n\n'
-    report+=table(data['comparisons'],['family','candidate','reference','endpoint','common_identities','candidate_risk','reference_risk','relative_improvement'])
-    report+='\n实测 SSM 各必需模式有效数：\n\n'+table(data['completion'],['candidate','mode','valid','expected'])
+    report+=report_table(data['comparisons'],['family','candidate','reference','endpoint','common_identities','candidate_risk','reference_risk','relative_improvement'])
+    report+='\n实测 SSM 各必需模式有效数：\n\n'+report_table(data['completion'],['candidate','mode','valid','expected'])
     report+='\n## 分模式预测与配对贡献\n\n'
-    report+=table([r for r in data['modes'] if r['mode'] in ('center_fNIRS','EEG_only') and r['control']=='correct'],['family','candidate','mode','valid','mse','hbo_nrmse','hbr_nrmse'])
+    report+=report_table([r for r in data['modes'] if r['mode'] in ('center_fNIRS','EEG_only') and r['control']=='correct'],['family','candidate','mode','valid','mse','hbo_nrmse','hbr_nrmse'])
     report+='\n错配和移位只干预 EEG 特征。正增量表示正确配对的风险更低；未完成分母只能作为成功子集诊断。\n\n'
-    report+=table([r for r in data['paired_increments'] if r['family'] in ('M','L')],['family','candidate','mode','null','valid','increment'])
+    report+=report_table([r for r in data['paired_increments'] if r['family'] in ('M','L')],['family','candidate','mode','null','valid','increment'])
     report+='\n## 合成恢复与错误耦合检查\n\n每情形 4 独立 panel，每 panel 18 训练与 6 评价。下表是完整模式的成功子集，所有分母固定 24；六状态及 clean EEG/Hb 全表保存在 synthetic.csv。\n\n'
     small=[]
     for r in data['synthetic']:
         if r['mode']=='full':small.append(dict(condition=r['condition'],candidate=r['candidate'],valid=r['valid'],r_nrmse=r['state_nrmse'][0] if r['state_nrmse'] else None,r_corr=r['r_correlation']))
-    report+=table(small,['condition','candidate','valid','r_nrmse','r_corr'])
+    report+=report_table(small,['condition','candidate','valid','r_nrmse','r_corr'])
     report+='\n四 panel 非劣检验：在共享 Gaussian 下，每 panel 对六个评价 trial 和六必需模式平均，再与 B_ref 配对。单侧 95% t 上界≤+0.02 才通过；不以时间点充当独立样本。\n\n'
-    report+=table(data['noninferiority'],['candidate','coordinate','panels','mean','upper95','passed'])
+    report+=report_table(data['noninferiority'],['candidate','coordinate','panels','mean','upper95','passed'])
     report+='\n失配压力下完整模式 r 恢复相对 B_ref 的四 panel 差值（正值为退化，和上表六模式平均检验分开）：\n\n'
-    report+=table(data['stress_state_comparisons'],['condition','candidate','panels','mean','upper95'])
+    report+=report_table(data['stress_state_comparisons'],['condition','candidate','panels','mean','upper95'])
     report+='\n共同任务时序但 trial 扰动独立的整段 fNIRS 缺失 null 结果：\n\n'
-    report+=table([r for r in data['paired_increments'] if r['condition'] in ('task_only','task_only_student') and r['mode']=='EEG_only' and r['null']=='pairing'],['family','condition','candidate','valid','increment','panel_ci95'])
+    report+=report_table([r for r in data['paired_increments'] if r['condition'] in ('task_only','task_only_student') and r['mode']=='EEG_only' and r['null']=='pairing'],['family','condition','candidate','valid','increment','panel_ci95'])
     report+='\n四 panel 区间只作开发诊断，未作多重比较校正。错配 donor 来自训练分区，而正确输入来自评价 trial；两者对已拟合线性模型的分布地位不同。已知无试次共享的情形出现小幅正增量时，应将其保留为 null 局限，不能据此声称发现真实耦合。后续可在独立评价 trial 内交换 donor 复核。\n\n'
     report+='无试次共享情形的 r 真值指 fNIRS 的生成驱动；EEG 由另一个具有相同任务均值、独立试次扰动的驱动生成，并不存在跨模态的共有 r 真值。\n\n'
     report+='\n## 几何选择、限制与保留判断\n\n'
-    report+=table([dict(candidate=c,penalty=p,folds=sum(r['candidate']==c and r['penalty']==p for r in data['geometry'])) for c in ('geometry','permuted') for p in (0.,.1,1.)],['candidate','penalty','folds'])
+    if geometry_audit:report+='以下是错误选择流程在原运行中实际使用的惩罚，**不是有效的模型选择结果**：\n\n'
+    report+=report_table([dict(candidate=c,penalty=p,folds=sum(r['candidate']==c and r['penalty']==p for r in data['geometry'])) for c in ('geometry','permuted') for p in (0.,.1,1.)],['candidate','penalty','folds'])
     report+='\n几何来自 dataset montage 的共同坐标，仅支持邻近与软约束，不支持个体皮层共配准。若选择零额外惩罚，真实/置换几何退回同一无几何模型，不能把相同结果解释为空间收益。带通功率采用相同窗口；合并功率后取 log 与逐带取 log 是主要分频带对照。\n\n'
+    if geometry_audit:
+        report+='**仅重算内折选择后的计数（对应预测待重跑）**：λ=0 使用保留的同表示 split 载荷，λ=0.1 使用元数据确认的原覆盖文件，λ=1 使用原文件；各组输入特征、目标及评分尺度已核对一致。\n\n'
+        selection_counts=[dict(candidate=c,penalty=float(p),folds=n) for c,values in data['geometry_selection_audit'][0]['counts'].items() for p,n in values.items()]
+        report+=table(selection_counts,['candidate','penalty','folds'])
+        report+='\n真实几何有 9/12 折、置换几何有 8/12 折需改变原选择。弱惩罚同时被真实和置换几何选中，不等于真实空间对应产生预测收益；须重跑受影响的外折预测及合成验证后比较。当前不能以原几何负结果判定原数据质量差或不存在跨模态耦合。局部标量对照为 PCA，本轮没有六通道等权平均对照。\n\n'
     report+='线性自身/模板控制共用对应联合模型在内折选定的正则强度，并未独立搜索各控制的最优正则；小幅超过控制不能作为已验证的稳健增益。特征噪声保留训练差分估计、相关矩阵收缩和合成 floor，不称为实测传感器标定。\n\n'
     report+='本轮载荷以固定训练 PCA 代理驱动回归，因而结论限定于这一拟合规则；它未联合学习一个与 PCA 低相关但可能对 fNIRS 有用的新驱动方向。负结果不能排除更合适载荷学习下的频带或空间收益。反向 EEG 只使用公共 clean 审计读出（中心缺失另评分隐藏段），不使用通用 runner 留下的候选原生 EEG 带噪指标作跨表示比较。\n\n'
     report+='完整 RF、10% 相对改善、每色团 NRMSE 退化≤0.05、至少两被试改善、配对 null 优势、合成恢复及必需模式完整性必须同时满足才保留。缺失的基线风险不以成功子集替代。当前 Gaussian MAP 不提供预测/状态可信区间、边际似然或 Student-t 校准；未取得 teacher/tokenizer 资格。\n\n'
@@ -357,9 +390,13 @@ def render(run,out,data):
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--run-dir',required=True,type=Path);parser.add_argument('--output-dir',required=True,type=Path)
     parser.add_argument('--template-correction',type=Path)
+    parser.add_argument('--geometry-selection-audit',type=Path)
     args=parser.parse_args()
     if read(args.run_dir/'manifest.json')['execution']!='completed':raise ValueError('terminal completed manifest required')
-    render(args.run_dir,args.output_dir,analyze(args.run_dir,template_correction=args.template_correction))
+    data=analyze(args.run_dir,template_correction=args.template_correction)
+    if args.geometry_selection_audit:
+        apply_geometry_selection_audit(data,read(args.geometry_selection_audit),args.run_dir)
+    render(args.run_dir,args.output_dir,data)
 
 
 if __name__=='__main__':main()

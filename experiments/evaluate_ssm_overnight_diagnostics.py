@@ -3994,6 +3994,8 @@ def structure_validate(s):
 
 
 def structure_prefix(run_dir, subject, outer, candidate, inner=None):
+    # Decimal penalties must not become suffixes when callers append .json/.npz.
+    candidate = candidate.replace('.', 'p')
     return Path(run_dir)/'prepared'/f'{subject}_{split_name(outer, inner)}_{candidate}'
 
 
