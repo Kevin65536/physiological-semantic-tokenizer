@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-18T01:17:37.360178+00:00",
+  "updated_at": "2026-09-18T10:57:28.787398+00:00",
   "tracks": [
     {
       "id": "main",
@@ -482,6 +482,48 @@
       "id": "e.band_geometry_v2_analysis",
       "label": "更正证据标签与内折选择表",
       "path": "experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_band_geometry_v2/analysis_20260918_v2/analysis.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_calibration_contract",
+      "label": "独立观测校准 A/B 执行合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/hbo_hbr_calibration_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.hbo_calibration_run",
+      "label": "独立观测校准与非线性反事实运行",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_calibration_v1/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.hbo_calibration_information",
+      "label": "逐记录独立观测信息盘点",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_calibration_v1/information_summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.hbo_calibration_pilot",
+      "label": "条件恢复并行预跑结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_calibration_pilot_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_calibration_summary",
+      "label": "非线性反事实筛查摘要",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_calibration_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_calibration_report",
+      "label": "独立观测信息及条件恢复报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_calibration_v1/REPORT.md",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_calibration_contrasts",
+      "label": "真实生理变化配对结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_calibration_v1/physiology_counterfactual.csv",
       "role": "result_summary"
     }
   ],
@@ -3078,6 +3120,33 @@
       ],
       "headline": false,
       "next_step": "修正几何内折文件名碰撞的代码并保留回归测试；后续需版本化重算受影响几何选择与外折预测。再区分载荷学习限制、推断失败和数据可预测性；本次解释核查不启动新 measured campaign。"
+    },
+    {
+      "state_id": "main.hbo_calibration@2026-09-18.v1",
+      "entity": "main.hbo_calibration",
+      "label": "独立观测信息与非线性双向反事实",
+      "track": "main",
+      "order": 9,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "A 的四数据集既有记录盘点尚未建立独立实测标定；Single-Trial ECG/呼吸保留为待核实线索。B 条件非线性筛查完成：独立校准的有效组合/r误差中位数为12.57%/11.42%，固定观测为55.10%/29.34%。独立校准保留56/56个tau变化方向，估计差值中位2.955s（真值3s）；同目标自由观测仅28/49个完整配对保留方向，并出现11次未收敛。独立校准有7个触界无效区间，161个有效区间的tau 95%覆盖为90.1%，混合及非平衡条件仍有明显误差。支持独立信息的价值，不构成分离或teacher资格；C/D未启动。",
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.hbo_calibration_contract",
+        "e.hbo_calibration_run",
+        "e.hbo_calibration_information",
+        "e.hbo_calibration_pilot",
+        "e.hbo_calibration_summary",
+        "e.hbo_calibration_report",
+        "e.hbo_calibration_contrasts"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-18T10:57:28.787398+00:00",
+      "depends_on": [],
+      "headline": false,
+      "next_step": "先核实Single-Trial ECG/呼吸发布文件、记录身份和时间接口能否提供独立来源约束；按保存的负结果审查局部区间与噪声协方差估计不确定性。在建立实测校准及B正恢复证据前，不启动C；D继续依赖C和非线性推断资格。"
     }
   ]
 }

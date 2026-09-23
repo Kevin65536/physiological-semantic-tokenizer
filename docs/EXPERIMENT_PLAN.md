@@ -33,6 +33,48 @@ teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
 
+## 独立观测信息与非线性双向反事实（2026-09-18）
+
+用户按同日附件要求执行 A–D 的依赖顺序。本轮入口为
+[`evaluate_hbo_hbr_calibration.py`](../experiments/scripts/evaluate_hbo_hbr_calibration.py)，
+执行合同为 [`hbo_hbr_calibration_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/hbo_hbr_calibration_v1.yaml)。
+它与旧线性增益/AR1 试验保持不同身份，不修改旧结果或已冻结配置。
+
+- **A：独立信息盘点。** 以旧 Hb 适配试验的逐记录身份为范围，使用当前中央缓存索引、
+  registry 和原始说明，输出已知处理/单位、光学入口、波长/几何、增益/混合、DPF、
+  绝对生理基线、噪声、辅助记录和连续支持的可固定/可估计/区间/未知表。
+  此阶段不读实测信号数组；未在所查资料找到证据不等于证明数据不存在。
+  原始说明中 Single-Trial ECG/呼吸的线索必须与已验证的消费者接口分开。
+- **B：首轮条件性恢复筛查。** 使用现有六状态非线性 drift，在受控的未知频带内
+  r(t) 强迫下生成五个血流状态；完整经过合成强度、OD、现有 MBLL、10 Hz 采样、
+  现有 0.01–0.2 Hz 带通、2 Hz polyphase 重采样和前 5 s 基线算子。
+  加性误差在发布 Hb 层进入；没有加入血流过程扩散或原始光强噪声。
+  均值与完整时序/双 Hb 协方差同步传播，低秩基线方向不以 jitter 补回。
+  这不是任意 r 的随机 SSM 恢复或原生仪器噪声验证。
+- 比较固定单位观测、同目标自由观测矩阵、真实观测 oracle、独立已知标准与噪声
+  记录估计后冻结四种方法。两个额外拟合只检查独立校准最大不确定方向的正负扰动。
+  所有拟合从固定的非真值起点开始，且拟合全部五个血流初态。P0=1、alpha/E0、
+  kappa/gamma 与 driver 频带作为明确的有利条件固定，只拟合 tau/eta 和 r 系数；
+  报告 lambda/a/k 不代表它们是三个独立自由参数，更不代表四个生理量唯一可辨识。
+- 每个独立重复在 tau=1/2/4 s 下复用同一个真实 r，跨白噪声、独立/共同慢成分、
+  相对 gain=2、波长依赖 DPF 混合及非平衡初态进行配对。DPF 0.8/1.2 是合成
+  敏感性设定，不是任何实测记录的可信区间。独立标准和噪声记录不使用目标 Hb。
+  首轮固定 8 次重复；不按结果重抽、调阈值或自动增加重复。
+- 主端点是有效组合与不做后验对齐的 r 恢复；并列报告真实 tau 差异保留、HbO/HbR
+  分项误差、校准敏感性、局部 Gaussian 区间覆盖、秩亏/触界和全分母失败。
+  区间传播光学校准不确定性，但把估计噪声协方差条件性冻结；其有限样本不确定性
+  没有额外积分，覆盖率需实证复核。不得仅凭触界减少或重建改善宣布通过。
+
+**C** 需 A 建立可用于目标记录的独立校准依据，且 B 出现正恢复证据后才构造实测候选。
+保持原开发身份，比较原坐标偏离、冻结误差评分和实际曲线修正；匹配随机参照分布，
+并在已验证真实连续支持上比较 30/60/120 s，不拼接 trial。跨记录验证先固定预处理和
+校准支持。**D** 需 C 正证据及相应非线性推断资格；再比较模态/中心遮挡、配对/
+移位/错配和同特征线性对照，并审查等价观测解释下 r 的尺度、符号和时间稳定性。
+本轮 A/B 不能替代这些条件，也不自动启动完整 teacher、tokenizer 或受保护评价。
+
+所有运行使用独立持久 supervisor、冻结源码和配置、逐面板原子结果与唯一续跑锁。
+执行状态由 registry 和 run manifest 持有；附加重复与实测候选根据保存的筛查证据决定。
+
 ## Reading guide
 
 This file owns experiment design. It contains bounded diagnostic protocols and
