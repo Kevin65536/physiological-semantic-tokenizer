@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-18T10:57:28.787398+00:00",
+  "updated_at": "2026-09-24T08:30:13.642550+00:00",
   "tracks": [
     {
       "id": "main",
@@ -524,6 +524,60 @@
       "id": "e.hbo_calibration_contrasts",
       "label": "真实生理变化配对结果",
       "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_calibration_v1/physiology_counterfactual.csv",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_calibration_v2_contract",
+      "label": "校准归因与误差定位合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/hbo_hbr_calibration_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.hbo_calibration_v2_run",
+      "label": "交叉/闭环/上下文主运行",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_calibration_v2/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.hbo_calibration_v2_summary",
+      "label": "校准归因逐组结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_calibration_v2/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_calibration_v2_source_audit",
+      "label": "Single-Trial实际文件与时钟核查",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_calibration_v2/source_audit.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_calibration_v2_profiles",
+      "label": "剖面局部分辨率补充",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_calibration_profile_resolution_v1/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.hbo_calibration_v2_basin",
+      "label": "oracle局部解释放约束复核",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_calibration_basin_check_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_calibration_v2_profile_basin",
+      "label": "受影响剖面多起点复核",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_calibration_profile_basin_v1/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.hbo_calibration_v2_report",
+      "label": "完整可视化汇报",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_calibration_v2/report_v3/REPORT.md",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_calibration_v2_analysis",
+      "label": "配对效应/覆盖/剖面与完整分母",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_calibration_v2/report_v3/analysis.json",
       "role": "result_summary"
     }
   ],
@@ -3147,6 +3201,36 @@
       "depends_on": [],
       "headline": false,
       "next_step": "先核实Single-Trial ECG/呼吸发布文件、记录身份和时间接口能否提供独立来源约束；按保存的负结果审查局部区间与噪声协方差估计不确定性。在建立实测校准及B正恢复证据前，不启动C；D继续依赖C和非线性推断资格。"
+    },
+    {
+      "state_id": "main.hbo_calibration@2026-09-24.v2",
+      "entity": "main.hbo_calibration",
+      "label": "观测校准归因与oracle误差定位",
+      "track": "main",
+      "order": 9,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "新增1407次拟合、1403次完成，4次失败均为自由矩阵诊断。固定/仅均值/仅噪声/联合校准r误差中位29.34%/24.48%/19.21%/11.42%；168无噪声闭环全部恢复。相同中间30秒的r误差随30/60/120秒上下文降至22.10%/5.95%/0.89%。剖面发现一例旧oracle局部解，释放约束降低目标却使r误差17.85%升至36.31%并触生理下界；原结果及复核均保留。9条Single-Trial实际记录核实双波长与处理系数，所查发布文件未建立ECG/呼吸或独立光学校准；C/D依赖未满足。",
+      "evidence_ids": [
+        "e.hbo_calibration_v2_contract",
+        "e.hbo_calibration_v2_run",
+        "e.hbo_calibration_v2_summary",
+        "e.hbo_calibration_v2_source_audit",
+        "e.hbo_calibration_v2_profiles",
+        "e.hbo_calibration_v2_basin",
+        "e.hbo_calibration_v2_profile_basin",
+        "e.hbo_calibration_v2_report",
+        "e.hbo_calibration_v2_analysis"
+      ],
+      "supersedes": [
+        "main.hbo_calibration@2026-09-18.v1"
+      ],
+      "updated_at": "2026-09-24T08:30:13.642550+00:00",
+      "depends_on": [],
+      "headline": false,
+      "next_step": "优先落实同步ECG/呼吸或独立光学标定来源，再做同记录留出观测约束验证；将连续上下文、多解/边界稳定性纳入候选推断，检验未知频谱与完整随机SSM。当前条件合成结果不授权teacher/tokenizer资格，C/D不因点恢复改善自动启动。"
     }
   ]
 }

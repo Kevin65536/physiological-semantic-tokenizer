@@ -75,6 +75,27 @@ contract.
 所有运行使用独立持久 supervisor、冻结源码和配置、逐面板原子结果与唯一续跑锁。
 执行状态由 registry 和 run manifest 持有；附加重复与实测候选根据保存的筛查证据决定。
 
+## 观测校准归因与 oracle 定位补充（2026-09-24）
+
+复用上述 v1 面板与已完成拟合，合同为
+[`hbo_hbr_calibration_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/hbo_hbr_calibration_v2.yaml)，
+入口仍为 `evaluate_hbo_hbr_calibration.py`。仅均值与仅噪声两臂补齐交叉比较；
+另做无噪声闭环、已知初态/生理参数、慢噪声减弱、正确协方差下自由矩阵及固定 eta 诊断。
+连续时长从同一120秒轨迹裁出30/60/120秒上下文，仅在共同45–75秒评价驱动。
+局部投影信息与 tau/驱动系数剖面互补，不能用 Hessian 秩替代全局可辨识性。
+
+剖面分辨率补充与发现局部解后的有限复核各保留独立版本合同、源码与输出：
+[`profile resolution`](../experiments/configs/physiology_semantic_tokenizer/hbo_hbr_calibration_profile_resolution_v1.yaml)、
+[`basin check`](../experiments/configs/physiology_semantic_tokenizer/hbo_hbr_calibration_basin_check_v1.yaml)、
+[`profile basin`](../experiments/configs/physiology_semantic_tokenizer/hbo_hbr_calibration_profile_basin_v1.yaml)。
+原结果只读；复核起点来自已保存的目标拟合解，不能以真值初始化或覆盖旧 oracle。
+
+`audit_hbo_hbr_calibration_sources.py` 将 Single-Trial 已有9条公开记录落实到原始双波长、
+实际 MAT 通道、单位、ZIP 成员及事件时间，复用中央索引和既有读取器；不改通用数据幅度。
+只有查得独立约束，才构造辅助观测候选并开展 C 的留出验证；文档声称存在但实际文件未找到的
+ECG/呼吸不能替代数据，DPF 合成压力范围不能转成经验区间。D 仍依赖 C 的正证据。
+汇报由 `render_hbo_hbr_calibration_report.py` 读取保存结果生成，图在 PDF 中均为位图。
+
 ## Reading guide
 
 This file owns experiment design. It contains bounded diagnostic protocols and
