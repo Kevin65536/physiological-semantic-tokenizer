@@ -2011,7 +2011,8 @@ def train_gain_prior_start(payload):
     if tau_branch:amplitude=0.
     path=destination/'result.json'
     if path.exists():return json.loads(path.read_text())
-    started=time.monotonic();prepared=json.loads((Path(out)/'prepared'/f"{spec['group']}.json").read_text())
+    started=time.monotonic();cpu_started=time.process_time()
+    prepared=json.loads((Path(out)/'prepared'/f"{spec['group']}.json").read_text())
     parent_record=None;parent_path=None
     if 'continuation' in cfg:
         parent=Path(prepared['continuation']['parent_record']).parent.parent
@@ -2060,6 +2061,9 @@ def train_gain_prior_start(payload):
             trace_options=dict(record_trace=True) if tau_branch else {}
             if flow_branch:trace_options.update(flow_options(cfg,method))
             if conditional_branch:trace_options.update(initial_coordinates='independent_logs',tie_total_hb_to_volume=False)
+            if 'training_step_control' in cfg:
+                trace_options['step_control']=cfg['training_step_control']
+                record['step_control']=cfg['training_step_control']
             if initial_branch:trace_options['tie_total_hb_to_volume']=method.endswith('_tied')
             if parent_record is not None:
                 starts=[gain_restart_arrays(parent_record,parent_path.parent/'trajectories.npz',target,sd,train)]
@@ -2123,7 +2127,8 @@ def train_gain_prior_start(payload):
     if saved:
         with (destination/'trajectories.npz.tmp').open('wb') as stream:np.savez_compressed(stream,**saved)
         (destination/'trajectories.npz.tmp').replace(destination/'trajectories.npz')
-    record.update(seconds=time.monotonic()-started,peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    record.update(seconds=time.monotonic()-started,cpu_seconds=time.process_time()-cpu_started,
+        peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
     write_json(path,record)
     return record
 
@@ -2334,6 +2339,240 @@ def gain_prior_fit_main(args):
     print(json.dumps(dict(event='phase_complete',phase=kind,summary=summary)),flush=True)
 
 
+STEP_CONTROL_SCOPE=['no_motion__subject_01_o1','no_motion__subject_18_o0',
+                    'mne_tddr__subject_01_o3','mne_tddr__subject_18_o3']
+STEP_CONTROL_CONTRACT=dict(schema='shared_driver_conditional_step_control_v1',
+    experiment_id='SSM-SHARED-DRIVER-CONDITIONAL-STEP-CONTROL-v1',
+    parent_run='experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_v1',
+    output_root='experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction',
+    scope='training_only_retained_synthetic_then_four_declared_public_measured_groups_no_validation_fits',
+    step_control='quadratic_interpolation',baseline_step_control='armijo',
+    pilot='separate_output_synthetic_g1_mixed_r0_start_index1_no_measured',
+    measured_groups=STEP_CONTROL_SCOPE,synthetic_groups=12,synthetic_starts=36,measured_starts=12,
+    resources=dict(max_workers=48,max_in_flight=48,numerical_threads_per_worker=1),
+    stopping='all_declared_starts_terminal_preserve_failures_no_validation_or_NRMSE_claim',
+    phase_rule='synthetic_terminal_and_original_recovery_screen_before_measured_prepared_access')
+
+
+STEP_CONTROL_PANEL_CONTRACT=dict(STEP_CONTROL_CONTRACT,
+    schema='shared_driver_conditional_step_control_v2',
+    experiment_id='SSM-SHARED-DRIVER-CONDITIONAL-STEP-CONTROL-v2',
+    scope='paired_training_only_all_retained_public_groups_no_validation_fits',
+    measured_groups=[f'{pipeline}__{subject}_o{fold}' for pipeline in ('no_motion','mne_tddr')
+        for subject in ('subject_01','subject_09','subject_18') for fold in range(4)],
+    measured_starts=72,paired_baseline=True,task_order_seed=20260928,
+    primary_endpoint='same_budget_success_without_loss_of_any_armijo_success',
+    performance_endpoint='at_least_10_percent_lower_total_measured_optimization_evaluations',
+    secondary_endpoints=['process_cpu_seconds','wall_seconds','objective','gain','trajectory_agreement'],
+    null='no_convergence_or_forward_evaluation_improvement',
+    phase_rule='both_arms_synthetic_recovery_and_no_start_regressions_before_measured_access')
+
+
+def read_conditional_step_config(path):
+    cfg=yaml.safe_load(Path(path).read_text())
+    expected=STEP_CONTROL_PANEL_CONTRACT if cfg.get('schema')=='shared_driver_conditional_step_control_v2' else STEP_CONTROL_CONTRACT
+    if {k:v for k,v in cfg.items() if k!='base_contract'}!=expected:
+        raise ValueError('step-control diagnostic scope/config mismatch')
+    base=read_conditional_optical_gain_config(CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_conditional_optical_gain_v1.yaml')
+    if cfg.get('base_contract')!=base:raise ValueError('step-control objective differs from frozen base contract')
+    return cfg
+
+
+def step_control_specs(cfg,kind):
+    specs=conditional_gain_specs(cfg['base_contract'],kind)
+    return specs if kind=='synthetic' else [s for s in specs if s['group'] in cfg['measured_groups']]
+
+
+def validate_step_parent(cfg,root,kind):
+    """JSON-only fixed parent/identity closure; phase controller gates measured use."""
+    parent=Path(root)/cfg['parent_run'];m=json.loads((parent/'manifest.json').read_text())
+    if (m.get('execution')!='completed' or m.get('pilot') is not False
+            or m.get('experiment_id')!=cfg['base_contract']['experiment_id']
+            or m.get('project_root')!=str(Path(root).resolve())
+            or not m.get('synthetic_terminal') or not m.get('measured_terminal')
+            or yaml.safe_load((parent/'resolved_config.yaml').read_text())!=cfg['base_contract']):
+        raise ValueError('step-control parent must be exact completed conditional run')
+    for spec in step_control_specs(cfg,kind):
+        record=json.loads((parent/'prepared'/f"{spec['group']}.json").read_text())
+        train=[i for i in range(24) if i%4!=spec['outer']];val=[i for i in range(24) if i%4==spec['outer']]
+        if (record.get('status')!='completed' or record.get('spec')!=spec
+                or record['metadata']['train']!=train or record['metadata']['validation']!=val
+                or len(record['metadata']['trials'])!=24 or 'conditional_mapping' not in record):
+            raise ValueError('step-control prepared identity/18/6 contract mismatch')
+        if kind=='measured' and record['metadata']['optical_processing']['pipeline']!=spec['optical_pipeline']:
+            raise ValueError('step-control pipeline mismatch')
+        for i,g in enumerate(cfg['base_contract']['conditional_gain_training']['relative_start_values']):
+            r=json.loads((gain_training_directory(parent,spec,'conditional_trained_gain')/f'start_{i}'/'result.json').read_text())
+            if (r.get('spec')!=spec or r.get('start_index')!=i or r.get('start_relative_gain')!=g
+                    or r.get('training_trials')!=train or r.get('parameter_name')!='neurovascular_gain'
+                    or r.get('status') not in ('completed','failed_numerical')
+                    or r.get('tau')!=2. or r.get('parameter_prior_cost')!=0.):
+                raise ValueError('step-control baseline start identity/objective mismatch')
+    return parent
+
+
+def prepare_step_control_group(cfg,out,root,spec,start_indices=(0,1,2)):
+    if spec not in step_control_specs(cfg,spec.get('kind')):raise ValueError('step-control group outside declared scope')
+    parent=Path(root)/cfg['parent_run'];out=Path(out)
+    source=parent/'prepared'/f"{spec['group']}.json";record=json.loads(source.read_text());meta=record['metadata']
+    with np.load(source.with_suffix('.npz'),allow_pickle=False) as a:
+        target=a['target'][meta['train']].copy();sd=a['normalizer'].copy()
+        if a['target'].shape!=(24,120,3) or sd.shape!=(3,) or not np.isfinite(target).all() or not np.isfinite(sd).all() or np.any(sd<=0):
+            raise ValueError('step-control prepared tensor mismatch')
+    sources=[(source,out/'prepared'/source.name),(source.with_suffix('.npz'),out/'prepared'/source.with_suffix('.npz').name)]
+    for i in start_indices:
+        folder=gain_training_directory(parent,spec,'conditional_trained_gain')/f'start_{i}'
+        with np.load(folder/'trajectories.npz',allow_pickle=False) as a:
+            if (not np.array_equal(a['trial_indices'],meta['train']) or not np.array_equal(a['target'],target)
+                    or not np.array_equal(a['normalizer'],sd)):
+                raise ValueError('step-control parent training target/SD/index mismatch')
+        dest=out/'baseline_training'/f"{spec['group']}__conditional_trained_gain"/f'start_{i}'
+        sources.extend((folder/name,dest/name) for name in ('result.json','trajectories.npz'))
+    # Publish only after every declared source artifact has passed closure.
+    for src,dest in sources:
+        if dest.exists():
+            if src.read_bytes()!=dest.read_bytes():raise ValueError('step-control resume inherited bytes differ')
+        else:
+            dest.parent.mkdir(parents=True,exist_ok=True);tmp=dest.with_suffix(dest.suffix+'.tmp');shutil.copyfile(src,tmp);tmp.replace(dest)
+    return record
+
+
+def summarize_step_control(cfg,out,kind,pilot=False):
+    rows=[];specs=step_control_specs(cfg,kind);out=Path(out)
+    if pilot:specs=[s for s in specs if s['group']=='synthetic_g1_mixed_r0']
+    for spec in specs:
+        for i in ([1] if pilot else range(3)):
+            path=gain_training_directory(out,spec,'conditional_trained_gain')/f'start_{i}'/'result.json'
+            if not path.exists():continue
+            r=json.loads(path.read_text());old=json.loads((out/'baseline_training'/f"{spec['group']}__conditional_trained_gain"/f'start_{i}'/'result.json').read_text())
+            success=r['status']=='completed' and r.get('converged',False)
+            old_success=old['status']=='completed' and old.get('converged',False)
+            rows.append(dict(group=spec['group'],start=i,status=r['status'],converged=r.get('converged',False),
+                objective=r.get('objective'),relative_gain=r.get('relative_gain'),evaluations=r.get('evaluations'),
+                optimization_evaluations=r.get('optimization_evaluations'),
+                convergence_reason=r.get('convergence_reason'),seconds=r.get('seconds'),cpu_seconds=r.get('cpu_seconds'),
+                iterations=r.get('starts',[{}])[0].get('iterations'),
+                scaled_gradient=r.get('projected_scaled_gradient_inf_norm'),
+                interpolation_counts=r.get('starts',[{}])[0].get('interpolation_counts',{}),
+                baseline_success=old_success,regression=bool(old_success and not success),
+                baseline_status=old['status'],baseline_objective=old.get('objective'),baseline_relative_gain=old.get('relative_gain'),
+                baseline_evaluations=old.get('evaluations'),baseline_optimization_evaluations=old.get('optimization_evaluations')))
+    expected=(1 if pilot else 3)*len(specs);result=dict(kind=kind,expected_starts=expected,terminal_starts=len(rows),
+        successful_starts=sum(r['status']=='completed' and r['converged'] for r in rows),rows=rows,
+        regressions=sum(r['regression'] for r in rows),
+        interpretation='training_numerical_diagnostic_only_baseline_is_inherited_not_independent_no_validation_scores')
+    if kind=='synthetic':result['engineering_screen']=conditional_gain_screen(out,specs,pilot=pilot)
+    write_json(out/f'{kind}_training_summary.json',result)
+    return result
+
+
+def summarize_step_panel(cfg,out,kind,pilot=False):
+    """Pair fresh arms by exact group/start; historical results remain separate."""
+    out=Path(out);summaries={arm:summarize_step_control(cfg,out/'arms'/arm,kind,pilot)
+        for arm in ('armijo','quadratic_interpolation')}
+    indexed={arm:{(r['group'],r['start']):r for r in s['rows']} for arm,s in summaries.items()}
+    rows=[]
+    for key,old in indexed['armijo'].items():
+        new=indexed['quadratic_interpolation'].get(key)
+        if new is None:continue
+        success=lambda r:r['status']=='completed' and r['converged']
+        rows.append(dict(group=key[0],start=key[1],baseline=old,candidate=new,
+            recovered=bool(success(new) and not success(old)),regressed=bool(success(old) and not success(new))))
+    expected=summaries['armijo']['expected_starts']
+    complete=len(rows)==expected and all(s['terminal_starts']==expected for s in summaries.values())
+    old_calls=sum(r['baseline'].get('optimization_evaluations') or 0 for r in rows)
+    new_calls=sum(r['candidate'].get('optimization_evaluations') or 0 for r in rows)
+    cost_records=[r[arm] for r in rows for arm in ('baseline','candidate')]
+    costs_available=bool(cost_records) and all(
+        r['status'] in ('completed','failed_numerical') and
+        isinstance(r.get('optimization_evaluations'),(int,float)) and
+        np.isfinite(r['optimization_evaluations']) and 0<r['optimization_evaluations']<=3600
+        for r in cost_records)
+    regressions=sum(r['regressed'] for r in rows)
+    old_success=summaries['armijo']['successful_starts'];new_success=summaries['quadratic_interpolation']['successful_starts']
+    numerical_pass=complete and regressions==0 and new_success>=old_success
+    recovery_pass=kind!='synthetic' or all(s['engineering_screen']['all_groups_passed'] and s['regressions']==0 for s in summaries.values())
+    result=dict(kind=kind,expected_pairs=expected,terminal_pairs=len(rows),complete=complete,
+        baseline_successes=old_success,candidate_successes=new_success,
+        recovered=sum(r['recovered'] for r in rows),regressions=regressions,
+        baseline_optimization_evaluations=old_calls,candidate_optimization_evaluations=new_calls,
+        cost_records_valid=bool(costs_available),
+        evaluation_reduction_fraction=1-new_calls/old_calls if costs_available and old_calls else None,
+        numerical_screen_passed=bool(numerical_pass and recovery_pass),
+        performance_screen_passed=bool(complete and numerical_pass and costs_available and old_calls and new_calls<=.9*old_calls),
+        rows=rows,interpretation='fresh_paired_training_numerics_no_validation_or_physiology_claim')
+    write_json(out/f'{kind}_paired_summary.json',result)
+    return result
+
+
+def conditional_step_control_main(args):
+    cfg=read_conditional_step_config(args.config);root=args.project_root.resolve()
+    # Check-only never reads measured metadata or any arrays.
+    validate_step_parent(cfg,root,'synthetic')
+    if args.check_only:
+        print(json.dumps(dict(status='passed',source_arrays_read=0,synthetic_starts=cfg['synthetic_starts'],
+            measured_starts=cfg['measured_starts'],arms=2 if cfg.get('paired_baseline') else 1,validation_fits=0)));return
+    if args.phase not in ('synthetic','measured') or args.pilot and args.phase!='synthetic':
+        raise ValueError('step-control requires explicit phase; pilot is synthetic only')
+    if args.run_dir is None or not 1<=args.workers<=cfg['resources']['max_workers']:raise ValueError('bounded workers and run-dir required')
+    out=args.run_dir.resolve()
+    if out.parent!=(root/cfg['output_root']).resolve():raise ValueError('step-control output outside owning namespace')
+    out.mkdir(parents=True,exist_ok=True);lock=(out/'controller.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    path=out/'manifest.json';old=json.loads(path.read_text()) if path.exists() else {}
+    if old and (old.get('execution')=='completed' or old.get('source_root')!=str(CODE_ROOT)
+            or old.get('project_root')!=str(root) or old.get('experiment_id')!=cfg['experiment_id'] or old.get('pilot')!=args.pilot):
+        raise ValueError('step-control immutable/resume identity mismatch')
+    resolved=out/'resolved_config.yaml'
+    if resolved.exists() and yaml.safe_load(resolved.read_text())!=cfg:raise ValueError('step-control resume config mismatch')
+    if args.phase=='measured':
+        syn=(summarize_step_panel if cfg.get('paired_baseline') else summarize_step_control)(cfg,out,'synthetic')
+        passed=(syn['numerical_screen_passed'] if cfg.get('paired_baseline') else
+            syn['terminal_starts']==36 and syn['regressions']==0 and syn['engineering_screen']['all_groups_passed'])
+        if not passed:
+            raise ValueError('step-control synthetic recovery gate must pass before measured access')
+    validate_step_parent(cfg,root,args.phase)
+    if not resolved.exists():resolved.write_text(yaml.safe_dump(cfg,sort_keys=False))
+    manifest=dict(old,experiment_id=cfg['experiment_id'],execution='running',phase=args.phase+'_training',pilot=args.pilot,
+        source_root=str(CODE_ROOT),project_root=str(root),controller_pid=os.getpid(),supervisor=os.environ.get('SSM_SYSTEMD_UNIT'),
+        workers=args.workers,max_in_flight=cfg['resources']['max_in_flight'],step_control=cfg['step_control'],
+        progress=dict(phase=args.phase,terminal=0,expected=(1 if args.pilot else cfg[args.phase+'_starts'])*(2 if cfg.get('paired_baseline') else 1)),
+        started_at=old.get('started_at',datetime.now(timezone.utc).isoformat()))
+    write_json(path,manifest);specs=step_control_specs(cfg,args.phase)
+    if args.pilot:specs=[s for s in specs if s['group']=='synthetic_g1_mixed_r0']
+    indices=[1] if args.pilot else [0,1,2]
+    arms=['armijo',cfg['step_control']] if cfg.get('paired_baseline') else [cfg['step_control']]
+    work=[]
+    for arm in arms:
+        arm_out=out/'arms'/arm if cfg.get('paired_baseline') else out
+        for spec in specs:prepare_step_control_group(cfg,arm_out,root,spec,indices)
+        base=deepcopy(cfg['base_contract']);base['training_step_control']=arm
+        work.extend((base,str(arm_out),s,'conditional_trained_gain',i,g) for s in specs
+            for i,g in enumerate(base['conditional_gain_training']['relative_start_values']) if i in indices)
+    if cfg.get('paired_baseline'):np.random.default_rng(cfg['task_order_seed']).shuffle(work)
+    write_json(out/f'{args.phase}_task_order.json',[dict(arm=w[0]['training_step_control'],group=w[2]['group'],start=w[4]) for w in work])
+    terminal=0
+    for payload,result,error in bounded_nonlinear_work(train_gain_prior_start,work,min(args.workers,len(work)),cfg['resources']['max_in_flight']):
+        if error:
+            base,arm_out,s,method,i,g=payload;result=dict(spec=s,start_index=i,start_relative_gain=g,method=method,status='failed_worker',converged=False,error=error,expected_trials=18,completed_trials=0,step_control=base['training_step_control'])
+            write_json(gain_training_directory(arm_out,s,method)/f'start_{i}'/'result.json',result)
+        terminal+=1
+        progress=dict(event='training_start_terminal',phase=args.phase,group=payload[2]['group'],start=payload[4],status=result['status'],
+            arm=payload[0]['training_step_control'],terminal=terminal,expected=len(work))
+        print(json.dumps(progress),flush=True)
+        manifest['progress']=progress;write_json(path,manifest)
+    for arm in arms:
+        arm_out=out/'arms'/arm if cfg.get('paired_baseline') else out
+        for spec in specs:select_gain_prior_training(arm_out,spec,'conditional_trained_gain',indices)
+    summary=(summarize_step_panel if cfg.get('paired_baseline') else summarize_step_control)(cfg,out,args.phase,pilot=args.pilot)
+    passed=(summary['numerical_screen_passed'] if cfg.get('paired_baseline') else
+        args.phase=='measured' or summary['regressions']==0 and summary['engineering_screen']['all_groups_passed'])
+    manifest.update(execution=('completed' if args.phase=='measured' or args.pilot else 'synthetic_terminal') if passed or args.phase=='measured' else 'stopped_synthetic_check',
+        numerical_screen_passed=bool(passed),
+        **{args.phase+'_terminal':True},finished_at=datetime.now(timezone.utc).isoformat(),
+        summary=f"{args.phase}_{'paired' if cfg.get('paired_baseline') else 'training'}_summary.json")
+    write_json(path,manifest)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config',type=Path,default=DEFAULT)
@@ -2350,8 +2589,13 @@ def main():
     ap.add_argument('--fixed-roi-initial-fit',action='store_true')
     ap.add_argument('--fixed-roi-optical-fit',action='store_true')
     ap.add_argument('--conditional-optical-gain-fit',action='store_true')
+    ap.add_argument('--conditional-step-control',action='store_true')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.conditional_step_control:
+        if any((args.conditional_optical_gain_fit,args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None)):
+            ap.error('conditional-step-control cannot combine with model modes')
+        return conditional_step_control_main(args)
     if args.conditional_optical_gain_fit:
         if args.fixed_roi_optical_fit or args.fixed_roi_initial_fit or args.fixed_roi_flow_fit or args.fixed_roi_tau_fit or args.gain_prior_fit or args.nonlinear_fit or args.replay_of is not None:
             ap.error('conditional-optical-gain-fit cannot be combined with another fit/replay mode')

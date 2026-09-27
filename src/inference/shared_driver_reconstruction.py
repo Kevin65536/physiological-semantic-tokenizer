@@ -716,7 +716,8 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
         max_iterations=40, visible=None, substeps=4, gradient_tolerance=1e-6,
         information_rcond=1e-10, return_jacobian=False, record_trace=False,
         driver_amplitude_weight=0., driver_prior_sd=1., flow_prior_weight=0., flow_prior_log_sd=1.,
-        tie_total_hb_to_volume=False, initial_coordinates="independent_logs"):
+        tie_total_hb_to_volume=False, initial_coordinates="independent_logs",
+        step_control="armijo"):
     """Fit exactly one declared positive shared parameter using block GN.
 
     Arrays are [B,T,3], with one common mean operator. sd accepts [3], [B,3]
@@ -751,10 +752,25 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
     including partial failed group evaluations. Final independent replay calls
     are reported separately and included in total evaluations.
 
+    step_control='quadratic_interpolation' optionally tries one extra objective
+    evaluation after a feasible Armijo candidate whose actual/predicted GN
+    reduction ratio is below .25. The quadratic fraction is clipped to [.1,.5]
+    times that candidate fraction; only a lower feasible Armijo objective wins.
+    All residual rows (including flow and the single group parameter prior)
+    enter the prediction. The final derivative group is budget-reserved; an
+    unavailable or invalid extra candidate leaves the original candidate intact.
+    Trace step_control_diagnostics describe the original candidate and selection;
+    interpolation domain failures also enter ordinary domain/evaluation failures.
+    interpolation_counts.selected counts objective selections, which can still
+    fail the subsequent derivative evaluation; it is not accepted iterations.
+    Default 'armijo' preserves the original arithmetic and result fields.
+
     Local projected squared-residual information is returned with and without
     nuisance penalties, in the declared log-parameter coordinate. It is not a calibrated Fisher
     information, profile interval or physiological identifiability verdict.
     """
+    if step_control not in ("armijo", "quadratic_interpolation"):
+        raise ValueError("step_control must be armijo or quadratic_interpolation")
     parameters.validate()
     _validate_initial_coordinates(initial_coordinates, tie_total_hb_to_volume, parameters)
     if not isinstance(tie_total_hb_to_volume, (bool, np.bool_)):
@@ -782,6 +798,8 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
         total_free_parameters=batch*(steps+4 if tie_total_hb_to_volume else steps+5)+1,
         initial_state_coordinate_order=['s0','logf0','logv0','logq0'] if tie_total_hb_to_volume else
             ['s0','logf0','logv0','logp0','logq0'])
+    if step_control != 'armijo':
+        constraint_metadata['step_control'] = step_control
     constraint_metadata['initial_coordinates'] = initial_coordinates
     constraint_metadata['stationarity_coordinate_basis'] = 'legacy_free_initial_coordinates'
     if initial_coordinates == 'positive_hb':
@@ -860,6 +878,11 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
         if record_trace:
             record['trace'] = []
         accepted_fraction = accepted_step_norm = None
+        control_diagnostics = None
+        interpolation_counts = dict(attempts=0, selected=0, domain_rejections=0,
+                                    not_selected=0, budget_skips=0)
+        if step_control != 'armijo':
+            record.update(step_control=step_control, interpolation_counts=interpolation_counts)
 
         def append_trace():
             if not record_trace:
@@ -872,6 +895,8 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
                 nondecreasing_rejections=nondecreasing_rejections,
                 derivative_rejections=derivative_rejections,
                 accepted_fraction=accepted_fraction, accepted_step_norm=accepted_step_norm)
+            if step_control != 'armijo':
+                point['step_control_diagnostics'] = control_diagnostics
             if initial_coordinates == 'positive_hb':
                 point['optimization_coordinate_scaled_gradient_inf_norm'] = float(coordinate_scaled_gradient)
             if not record['trace'] or point != record['trace'][-1]:
@@ -1006,6 +1031,50 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
                     continue
                 if (trial_group['objective'] < current['objective'] and
                         trial_group['objective'] <= current['objective']+2e-4*fraction*directional):
+                    if step_control == 'quadratic_interpolation':
+                        # Full arrow Jacobian: include all cross terms and the
+                        # group parameter prior once, outside trial summation.
+                        jd_squared = prior_precision*delta_parameter**2
+                        for trial, dx in zip(current['trials'], delta_x):
+                            jd = trial['jacobian']@dx + value*trial['parameter_jacobian']*delta_parameter
+                            jd_squared += float(jd@jd)
+                        predicted = -2*fraction*directional-fraction**2*jd_squared
+                        actual = current['objective']-trial_group['objective']
+                        ratio = actual/predicted if np.isfinite(predicted) and predicted > 0 else None
+                        control_diagnostics = dict(candidate_fraction=float(fraction),
+                            predicted_reduction=float(predicted), actual_reduction=float(actual),
+                            gain_ratio=None if ratio is None else float(ratio),
+                            directional_derivative=float(2*directional),
+                            interpolation_fraction=None, interpolation_status='not_needed')
+                        if ratio is not None and np.isfinite(ratio) and ratio < .25:
+                            if evaluations+2*batch > max_evaluations:
+                                interpolation_counts['budget_skips'] += 1
+                                control_diagnostics['interpolation_status'] = 'budget_skip'
+                            else:
+                                denominator = trial_group['objective']-current['objective']-2*fraction*directional
+                                interpolated_fraction = float(np.clip(
+                                    -directional*fraction**2/denominator, .1*fraction, .5*fraction))
+                                control_diagnostics['interpolation_fraction'] = interpolated_fraction
+                                interpolation_counts['attempts'] += 1
+                                interpolated_x = x+interpolated_fraction*delta_x
+                                interpolated_log_parameter = log_parameter+interpolated_fraction*delta_parameter
+                                try:
+                                    interpolated = evaluate_group(interpolated_x, interpolated_log_parameter, False)
+                                except (FloatingPointError, OverflowError, ValueError):
+                                    domain_rejections += 1
+                                    interpolation_counts['domain_rejections'] += 1
+                                    control_diagnostics['interpolation_status'] = 'domain_rejection'
+                                else:
+                                    control_diagnostics['interpolated_objective'] = interpolated['objective']
+                                    if (interpolated['objective'] < trial_group['objective'] and
+                                            interpolated['objective'] <= current['objective']+2e-4*interpolated_fraction*directional):
+                                        fraction, trial_x, trial_log_parameter, trial_group = (
+                                            interpolated_fraction, interpolated_x, interpolated_log_parameter, interpolated)
+                                        interpolation_counts['selected'] += 1
+                                        control_diagnostics['interpolation_status'] = 'selected'
+                                    else:
+                                        interpolation_counts['not_selected'] += 1
+                                        control_diagnostics['interpolation_status'] = 'not_selected'
                     try:
                         differentiated = evaluate_group(trial_x, trial_log_parameter, True)
                     except (FloatingPointError, OverflowError, ValueError):

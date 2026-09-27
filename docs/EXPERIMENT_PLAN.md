@@ -324,6 +324,26 @@ driver/状态误差与初态贡献；具体恢复阈值及未通过时的停止�
 训练增益的跨折变化、状态幅度和固定顺序全曲线；联合重建为主，遮挡预测独立保留。
 这组实验只能判断条件性观测/增益假设，不能建立个体绝对生理标定或teacher资格。
 
+条件增益的数值步控制诊断复用 `--conditional-step-control`，合同为
+[`shared_driver_conditional_step_control_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_conditional_step_control_v1.yaml)。
+仅改变共享参数求解器的可选步长控制：当实际下降与完整Gauss–Newton预测下降之比低于0.25，
+额外尝试一次受限二次插值，仍须满足原下降与物理域条件。默认Armijo路径保持原样；
+目标、坐标、起点、3600次试次评估/90次迭代预算、梯度阈值和积分检查均不改变。
+
+先在已保留的12组合成真值上比较全部36起点，要求没有相对父级的收敛退步，且通过原参数恢复检查。
+之后只比较四个预声明受影响实测训练组的全部12起点，包含原成功对照；父级失败原样保留。
+主要端点为同预算的收敛率，另比较目标、β、调用数及插值诊断。仅复制父级prepared和训练证据，
+不读取新原始数据，不运行验证拟合，不由这组训练诊断改写旧重建成绩或宣称生理参数已识别。
+
+2026-09-28 的多数据求解器验证扩展为同入口的
+[`shared_driver_conditional_step_control_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_conditional_step_control_v2.yaml)。
+在同一冻结代码与机器上从相同起点重跑 Armijo 与二次插值两臂，先做12组合成数据的36对起点，
+通过两臂原恢复检查且无逐起点收敛退步后，再覆盖全部3被试×2光学处理×4划分的72对实测起点。
+这是既有单一公开数据集的多被试检验，不视为跨独立数据集验证。目标、积分器、阈值及预算不变。
+主端点为同预算收敛且不丢失任一原成功起点；性能端点预定为实测总优化forward调用至少下降10%。
+另记录进程CPU时间、墙钟时间、目标与参数/轨迹一致性；固定种子交错提交两臂，以减小机器负载的时间偏差。
+每次运行冻结源代码、命令和资源证据，由持久systemd服务执行；失败与未通过端点照实保留。
+
 ## Reading guide
 
 This file owns experiment design. It contains bounded diagnostic protocols and

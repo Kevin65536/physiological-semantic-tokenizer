@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-27T16:28:08.380349+00:00",
+  "updated_at": "2026-09-27T17:05:38.983401+00:00",
   "tracks": [
     {
       "id": "main",
@@ -980,6 +980,48 @@
       "id": "e.motion_cache_v5_validation",
       "label": "四数据集缓存、全窗口与连续目标核验",
       "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/validation.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_conditional_step_control_contract",
+      "label": "同目标配对求解器合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_conditional_step_control_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.shared_driver_conditional_step_control_pilot",
+      "label": "配对求解器资源及合成pilot",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_pilot_v2/manifest.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_conditional_step_control_run",
+      "label": "新旧求解器同目标完整配对面板",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/manifest.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_conditional_step_control_summary",
+      "label": "完整72对同目标求解器结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/measured_paired_summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_conditional_step_control_audit",
+      "label": "108对复现与参数/轨迹核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/report_v1/audit.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_conditional_step_control_report",
+      "label": "求解器逐被试比较与轨迹位图报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/report_v1/REPORT.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_conditional_step_control_slides",
+      "label": "求解器开发验证PPT",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/report_v1/SOLVER_RESULTS.pptx",
       "role": "result_summary"
     }
   ],
@@ -3969,6 +4011,34 @@
       "updated_at": "2026-09-27T16:28:08.380349+00:00",
       "depends_on": [],
       "headline": false
+    },
+    {
+      "state_id": "main.shared_driver_conditional_step_control@2026-09-28.v2",
+      "entity": "main.shared_driver_conditional_step_control",
+      "label": "同目标二次插值求解器配对验证",
+      "track": "main",
+      "order": 163,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "qualified",
+      "analysis_intent": "exploratory",
+      "summary": "同目标配对数值验证通过，资格仅限本面板的共享β求解器。合成36/36起点两臂成功，12/12恢复检查通过，最大β误差1.11%；新调用7128比7056增加1.02%。实测旧63/72→新72/72，全部9失败救回、零退步，训练组23/24→24/24；优化调用132678→92124（−30.57%），CPU40834→29185秒（−28.53%）。108/108旧重跑的状态/目标/β/调用数逐值复现历史。63共同成功起点最大目标相对差6.69e−9、β差0.0256%、预测差0.000212训练SD。收益不普遍：S09两路径调用增加2.29%/3.30%，24/72单起点增耗，最坏15.25%；S01/S18的减少支撑总体收益。默认Armijo保留。仅同一公开数据集3被试、两光学处理及原18/6训练划分，未做新验证拟合或跨独立数据集评价，不是生理可辨识性或NRMSE改善结论。",
+      "evidence_ids": [
+        "e.shared_driver_conditional_step_control_contract",
+        "e.shared_driver_conditional_step_control_pilot",
+        "e.shared_driver_conditional_step_control_run",
+        "e.shared_driver_conditional_step_control_summary",
+        "e.shared_driver_conditional_step_control_audit",
+        "e.shared_driver_conditional_step_control_report",
+        "e.shared_driver_conditional_step_control_slides"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-27T17:05:38.983401+00:00",
+      "depends_on": [
+        "main.shared_driver_conditional_optical_gain"
+      ],
+      "headline": false,
+      "next_step": "后续共享β拟合可显式使用quadratic_interpolation并保留基线；共享τ仅软件覆盖，跨数据集及更大面板的性能仍需独立检验。波形形态和参数可辨识性继续由各自诊断判断。"
     }
   ]
 }

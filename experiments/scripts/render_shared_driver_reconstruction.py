@@ -2694,6 +2694,202 @@ def render_conditional_optical_gain(run, out, *, pilot_truth_audit=None, termina
     (out/'export_validation.json').write_text(json.dumps(audit,indent=2))
 
 
+def step_control_audit(run):
+    """Read every paired start, including failures, without fitting a model."""
+    import yaml
+    cfg=yaml.safe_load((run/'resolved_config.yaml').read_text())
+    if cfg.get('schema')!='shared_driver_conditional_step_control_v2':
+        raise ValueError('paired solver report requires the v2 contract')
+    rows=[]
+    for kind in ('synthetic','measured'):
+        summary=json.loads((run/f'{kind}_paired_summary.json').read_text())
+        expected=cfg[kind+'_starts']
+        if not summary['complete'] or summary['terminal_pairs']!=expected:
+            raise ValueError('paired solver report requires complete denominators')
+        if len({(p['group'],p['start']) for p in summary['rows']})!=expected:
+            raise ValueError('duplicate solver pair')
+        for pair in summary['rows']:
+            records={};arrays={}
+            for arm in ('armijo','quadratic_interpolation'):
+                folder=run/'arms'/arm/'training'/f"{pair['group']}__conditional_trained_gain"/f"start_{pair['start']}"
+                records[arm]=json.loads((folder/'result.json').read_text())
+                if (folder/'trajectories.npz').exists():
+                    with np.load(folder/'trajectories.npz',allow_pickle=False) as a:arrays[arm]={k:a[k].copy() for k in a.files}
+            old,new=records['armijo'],records['quadratic_interpolation']
+            success=lambda r:r['status']=='completed' and r.get('converged',False)
+            row=dict(kind=kind,group=pair['group'],start=pair['start'],
+                subject=new['spec'].get('subject','synthetic'),pipeline=new['spec'].get('optical_pipeline','synthetic'),
+                old_success=success(old),new_success=success(new),
+                recovered=success(new) and not success(old),regressed=success(old) and not success(new))
+            for prefix,record in [('old',old),('new',new)]:
+                for key in ('status','objective','relative_gain','optimization_evaluations','seconds','cpu_seconds',
+                            'projected_scaled_gradient_inf_norm','convergence_reason'):
+                    row[prefix+'_'+key]=record.get(key)
+                row[prefix+'_iterations']=record.get('starts',[{}])[0].get('iterations')
+                row[prefix+'_integration_gap']=max((c['difference_training_sd'] for c in record.get('integration_checks',[])),default=np.nan)
+                checked=np.asarray([record.get('optimization_evaluations',np.nan),
+                    record.get('projected_scaled_gradient_inf_norm',np.nan),row[prefix+'_integration_gap']],dtype=float)
+                if success(record) and (not np.isfinite(checked).all() or checked[0]>3600 or
+                    checked[1]>1e-4 or checked[2]>.005):
+                    raise ValueError('successful start violates frozen budget/gradient/integration check')
+            counts=new.get('starts',[{}])[0].get('interpolation_counts',{})
+            row.update(interpolation_attempts=counts.get('attempts',0),interpolation_selected=counts.get('selected',0))
+            inherited=run/'arms/armijo/baseline_training'/f"{pair['group']}__conditional_trained_gain"/f"start_{pair['start']}/result.json"
+            parent=json.loads(inherited.read_text())
+            row['legacy_reproduced']=all(old.get(k)==parent.get(k) for k in
+                ('status','converged','objective','parameter_value','optimization_evaluations'))
+            if len(arrays)==2:
+                a,b=arrays['armijo'],arrays['quadratic_interpolation']
+                if any(not np.array_equal(a[k],b[k]) for k in ('target','normalizer','trial_indices')):
+                    raise ValueError('paired solver target/SD/trial mismatch')
+                row['prediction_max_difference_sd']=float(np.max(abs(a['prediction']-b['prediction'])/a['normalizer']))
+                row['driver_max_difference']=float(np.max(abs(a['driver']-b['driver'])))
+                row['flow_max_difference']=float(np.max(abs(a['states'][:,:,2]-b['states'][:,:,2])))
+            if old.get('objective') is not None and new.get('objective') is not None:
+                row['objective_relative_difference']=abs(new['objective']-old['objective'])/max(abs(old['objective']),1e-12)
+                row['gain_relative_difference']=abs(new['relative_gain']/old['relative_gain']-1)
+            rows.append(row)
+    frame=pd.DataFrame(rows);aggregate=[]
+    for (kind,subject,pipeline),part in frame.groupby(['kind','subject','pipeline'],sort=False):
+        row=dict(kind=kind,subject=subject,pipeline=pipeline,starts=len(part),
+            old_success=int(part.old_success.sum()),new_success=int(part.new_success.sum()),
+            recovered=int(part.recovered.sum()),regressions=int(part.regressed.sum()))
+        for metric in ('optimization_evaluations','seconds','cpu_seconds'):
+            for prefix in ('old','new'):row[prefix+'_'+metric]=float(part[prefix+'_'+metric].sum())
+            row[metric+'_reduction']=1-row['new_'+metric]/row['old_'+metric]
+        aggregate.append(row)
+    return frame,pd.DataFrame(aggregate)
+
+
+def render_step_control(run,out):
+    if out.exists() and any(out.iterdir()):raise ValueError('choose a new versioned report output')
+    frame,groups=step_control_audit(run)
+    out.mkdir(parents=True,exist_ok=True);(out/'figures').mkdir()
+    frame.to_csv(out/'paired_starts.csv',index=False);groups.to_csv(out/'subject_pipeline_summary.csv',index=False)
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':9,'axes.unicode_minus':False});figures=[]
+    def save(fig,name):
+        fig.tight_layout();fig.savefig(out/'figures'/f'{name}.png',dpi=240);plt.close(fig);figures.append(name)
+        return f'![{name}](figures/{name}.png)'
+    syn=frame[frame.kind=='synthetic'];real=frame[frame.kind=='measured'];rows=[]
+    for kind,part in [('合成',syn),('实测',real)]:
+        rows.append(dict(数据=kind,起点对=len(part),旧成功=int(part.old_success.sum()),新成功=int(part.new_success.sum()),
+            修复=int(part.recovered.sum()),退步=int(part.regressed.sum()),
+            优化调用降幅=f'{100*(1-part.new_optimization_evaluations.sum()/part.old_optimization_evaluations.sum()):.2f}%',
+            CPU降幅=f'{100*(1-part.new_cpu_seconds.sum()/part.old_cpu_seconds.sum()):.2f}%'))
+    pages=['# 同目标求解器：收敛与计算量\n\n'+table(pd.DataFrame(rows))+
+        '\n同一固定目标、起点、3600次试次评估、90次迭代、梯度阈值1e−4。只增加一次有条件的二次插值；不改模型、先验或积分器。\n\n'+
+        '两臂均重新运行，CPU时间含最终重放、信息矩阵及积分复核。墙钟受共享机器负载影响；调用量是确定性计算指标。分母含失败起点。']
+    part=groups[groups.kind=='measured'];x=np.arange(len(part));fig,axes=plt.subplots(1,2,figsize=(11,4.5))
+    labels=[r.subject.replace('subject_','S')+'\n'+r.pipeline for r in part.itertuples()]
+    for prefix,offset,color,label in [('old',-.18,'#2877ab','原Armijo'),('new',.18,'#dc8030','二次插值')]:
+        bars=axes[0].bar(x+offset,part[prefix+'_success'],.36,color=color,label=label)
+        axes[0].bar_label(bars,padding=2,fontsize=8)
+        axes[1].bar(x+offset,part[prefix+'_optimization_evaluations'],.36,color=color,label=label)
+    for ax in axes:ax.set_xticks(x,labels,fontsize=7);ax.legend(fontsize=8)
+    axes[0].set_ylabel('成功起点 / 12');axes[0].set_ylim(0,13);axes[1].set_ylabel('优化期试次forward调用总数')
+    pages.append('## 三被试、两条处理路径\n\n'+save(fig,'solver_summary')+
+        '\n全部四个划分、每组三个起点均计入。三位被试来自同一公开数据集；两种光学处理使用同源窗口，不是六个独立数据集。')
+    fig,axes=plt.subplots(1,3,figsize=(11,3.8))
+    for ax,metric,label in zip(axes,['optimization_evaluations','cpu_seconds','seconds'],['优化调用','进程CPU秒','墙钟秒']):
+        for success,marker,name in [(True,'o','两臂成功'),(False,'x','至少一臂失败')]:
+            sub=real[(real.old_success&real.new_success)==success]
+            ax.scatter(sub['old_'+metric],sub['new_'+metric],s=17,marker=marker,label=name)
+        lim=max(real['old_'+metric].max(),real['new_'+metric].max())*1.05
+        ax.plot([0,lim],[0,lim],'k--',lw=.8);ax.set(xlim=(0,lim),ylim=(0,lim),xlabel='原Armijo '+label,ylabel='二次插值 '+label)
+    axes[0].legend(fontsize=7)
+    call_changes=real.new_optimization_evaluations/real.old_optimization_evaluations-1
+    increased_count=int((call_changes>0).sum());worst_increase=float(call_changes.max())
+    slower_groups=part[part.optimization_evaluations_reduction<0]
+    slower_text='；'.join(f"{r.subject.replace('subject_','S')}/{r.pipeline} +{-100*r.optimization_evaluations_reduction:.2f}%" for r in slower_groups.itertuples()) or '无分组总调用增加'
+    pages.append('## 每个起点的计算代价\n\n'+save(fig,'paired_cost')+
+        f'\n对角线下方表示减少，叉号保留数值失败。{increased_count}/72起点调用增加，最大+{100*worst_increase:.2f}%。分组增加：{slower_text}。相同调用数不保证相同耗时；额外插值本身也有成本。')
+    affected=['no_motion__subject_01_o1','no_motion__subject_18_o0','mne_tddr__subject_01_o3','mne_tddr__subject_18_o3']
+    fig,axes=plt.subplots(4,2,figsize=(10,10))
+    for i,group in enumerate(affected):
+        ref=json.loads((run/'arms/quadratic_interpolation/training'/f'{group}__conditional_trained_gain/start_0/result.json').read_text())['parameter_value']
+        for arm,color,label in [('armijo','#2877ab','原Armijo'),('quadratic_interpolation','#dc8030','二次插值')]:
+            record=json.loads((run/'arms'/arm/'training'/f'{group}__conditional_trained_gain/start_0/result.json').read_text())
+            trace=record['trace'];tail=trace[-10:]
+            axes[i,0].plot(np.arange(1-len(tail),1),[100*(t['parameter_value']/ref-1) for t in tail],'.-',color=color,label=label,ms=3)
+            axes[i,1].semilogy([t['evaluations'] for t in trace],[max(t['projected_scaled_gradient_inf_norm'],1e-14) for t in trace],color=color,label=label)
+        axes[i,0].axhline(0,color='.6',lw=.6)
+        axes[i,0].set(title=group+' / start0',xlabel='距本臂停止的记录步（0为停止）',ylabel='β相对新算法终值的偏差 / %')
+        axes[i,1].axhline(1e-4,color='k',ls='--',lw=.8);axes[i,1].set(xlabel='累计优化forward调用',ylabel='缩放投影梯度')
+        axes[i,0].ticklabel_format(axis='y',style='plain',useOffset=False)
+        for ax in axes[i]:ax.legend(fontsize=7)
+    pages.append('## 原先四个困难训练组\n\n'+save(fig,'convergence_traces')+
+        '\n固定展示预声明四组的start0。左图为各自停止前10个记录点，只比较尾段变化；横轴不代表两臂用了相同迭代数。右图以实际调用量展示完整收敛过程。目标变化很小并不等于梯度达到阈值。')
+    common=real[real.old_success&real.new_success]
+    synthetic_screen=json.loads((run/'arms/quadratic_interpolation/synthetic_training_summary.json').read_text())['engineering_screen']
+    availability=real.groupby('group')[['old_success','new_success']].sum()
+    gain_spans=[]
+    for group,part in real[real.new_success].groupby('group'):
+        values=part.new_relative_gain.to_numpy(float)
+        gain_spans.append(dict(group=group,successful_starts=len(values),relative_gain_span=(values.max()-values.min())/np.median(values)))
+    pd.DataFrame(gain_spans).to_csv(out/'multistart_gain_consistency.csv',index=False)
+    agreement=dict(common_success_pairs=len(common),legacy_reproduced=int(frame.legacy_reproduced.sum()),total_pairs=len(frame),
+        synthetic_recovery_all_passed=synthetic_screen['all_groups_passed'],
+        synthetic_maximum_gain_recovery_error=max(r['selected_relative_error'] for r in synthetic_screen['groups']),
+        old_available_training_groups=int((availability.old_success>0).sum()),
+        new_available_training_groups=int((availability.new_success>0).sum()),
+        new_maximum_multistart_relative_gain_span=max(r['relative_gain_span'] for r in gain_spans),
+        regressions=int(real.regressed.sum()),recovered=int(real.recovered.sum()),
+        maximum_relative_objective_difference=float(common.objective_relative_difference.max()),
+        maximum_relative_gain_difference=float(common.gain_relative_difference.max()),
+        maximum_prediction_difference_training_sd=float(common.prediction_max_difference_sd.max()),
+        maximum_driver_difference=float(common.driver_max_difference.max()),maximum_flow_difference=float(common.flow_max_difference.max()),
+        interpolation_attempts=int(real.interpolation_attempts.sum()),interpolation_selected=int(real.interpolation_selected.sum()),
+        measured_starts_with_increased_calls=increased_count,maximum_call_increase_fraction=worst_increase,
+        max_integration_difference_training_sd=float(real.new_integration_gap.max()))
+    (out/'audit.json').write_text(json.dumps(agreement,indent=2))
+    pages.append('## 是否改变了解\n\n'+table(pd.DataFrame([agreement]).T.reset_index().rename(columns={'index':'核验',0:'值'}))+
+        '\n一致性只比较两臂均成功的起点；修复失败单独计数。配对目标、训练尺度、试次身份逐元素一致；原算法另与历史结果核对。')
+    pages.append('## 范围与限制\n\n'+f'来源：{run.name}。全部108对训练起点，未运行新的验证重建，没有独立数据集泛化证据。数值收敛改善不等于NRMSE已改善，也不证明β为唯一可识别的生理量。\n\n'+
+        '默认Armijo仍保留；二次插值为显式选项。旧证据不覆盖。完整指标见paired_starts.csv，分组汇总见subject_pipeline_summary.csv。图为240dpi位图，PDF正文可搜索；WPS未检查。')
+    export_pdf('\n\n'.join(pages),out,figures,split_images=False)
+    # A short editable presentation shares the audited tables and bitmap figures.
+    from pptx import Presentation
+    from pptx.dml.color import RGBColor
+    from pptx.util import Inches,Pt
+    deck=Presentation();deck.slide_width=Inches(13.333);deck.slide_height=Inches(7.5)
+    def box(slide,text,x,y,w,h,size=22,color='17364B',bold=False):
+        shape=slide.shapes.add_textbox(Inches(x),Inches(y),Inches(w),Inches(h));tf=shape.text_frame;tf.word_wrap=True
+        for i,line in enumerate(text.split('\n')):
+            p=tf.paragraphs[0] if i==0 else tf.add_paragraph();p.text=line;p.space_after=Pt(14)
+            for r in p.runs:r.font.name='Noto Sans CJK SC';r.font.size=Pt(size);r.font.bold=bold;r.font.color.rgb=RGBColor.from_string(color)
+    def slide(title,subtitle):
+        s=deck.slides.add_slide(deck.slide_layouts[6]);s.background.fill.solid();s.background.fill.fore_color.rgb=RGBColor(246,248,251)
+        box(s,title,.6,.35,12.1,.65,30,bold=True);box(s,subtitle,.65,1.10,12,.48,15,color='597184')
+        box(s,f'2026-09-28 · 同目标求解器验证 · {len(deck.slides)}',.65,7.03,12,.3,11,color='597184')
+        s.notes_slide.notes_text_frame.text='事实源：'+str(run)+'\n逐起点指标：'+str(out/'paired_starts.csv')+'\n训练数值诊断，不是独立数据集或生理参数资格结论。'
+        return s
+    reduction=1-real.new_optimization_evaluations.sum()/real.old_optimization_evaluations.sum()
+    cpu_reduction=1-real.new_cpu_seconds.sum()/real.old_cpu_seconds.sum()
+    s=slide('求解器开发：收敛与速度的完整对照','相同目标、相同起点、相同预算；两臂均重新运行')
+    box(s,f"实测成功起点\n{int(real.old_success.sum())}/72 → {int(real.new_success.sum())}/72",.75,2.05,3.8,1.9,28,bold=True)
+    box(s,f'优化调用减少\n{100*reduction:.1f}%',4.85,2.05,3.5,1.9,28,bold=True)
+    box(s,f'总CPU时间减少\n{100*cpu_reduction:.1f}%',8.95,2.05,3.7,1.9,28,bold=True)
+    syn_change=100*(syn.new_optimization_evaluations.sum()/syn.old_optimization_evaluations.sum()-1)
+    box(s,f"可用训练组 {agreement['old_available_training_groups']}/24 → {agreement['new_available_training_groups']}/24；救回失败 {int(real.recovered.sum())} 个，退步 {int(real.regressed.sum())} 个。\n合成成功 {int(syn.old_success.sum())}/36 → {int(syn.new_success.sum())}/36；调用量变化 {syn_change:+.2f}%。",.8,4.65,11.8,1.85,23)
+    s=slide('覆盖多个被试与处理条件，冻结评价规则','不是独立数据集泛化：所有实测来自同一公开数据集的保留目标')
+    box(s,'12组合成条件 × 3起点 = 36对拟合\n3被试 × 2处理路径 × 4划分 × 3起点 = 72对拟合\n每次用18条训练试次；未重新拟合验证目标\n'+f"合成β最大恢复误差 {100*agreement['synthetic_maximum_gain_recovery_error']:.2f}%",.85,1.85,11.6,2.95,24)
+    box(s,'原目标、90次迭代、3600次试次forward预算、梯度阈值1e−4均不变。\n采用相同积分器，保留物理域检查和4/8子步积分复核。',.85,5.0,11.6,1.35,21)
+    s=slide('逐被试、逐处理路径看成功率与计算量','蓝：原Armijo；橙：有条件的二次插值；失败起点保留在分母中')
+    s.shapes.add_picture(str(out/'figures/solver_summary.png'),Inches(.65),Inches(1.72),width=Inches(12.0))
+    s=slide('收益不均匀：部分起点增加计算量','每个点是一对相同起点；低于对角线表示新方法减少计算代价')
+    s.shapes.add_picture(str(out/'figures/paired_cost.png'),Inches(.65),Inches(1.78),width=Inches(12.0))
+    box(s,f'{increased_count}/72起点调用增加，最大+{100*worst_increase:.1f}%。\n{slower_text}。',.75,6.02,11.8,.90,16)
+    s=slide('速度改善是否改变了解？','只在两臂都成功的相同起点上比较，新增成功单独统计')
+    box(s,f"共同成功起点：{len(common)}\n目标值最大相对差：{agreement['maximum_relative_objective_difference']:.3g}\nβ最大相对变化：{100*agreement['maximum_relative_gain_difference']:.4f}%\n预测曲线最大差：{agreement['maximum_prediction_difference_training_sd']:.4g} 个训练SD\n血流f最大绝对差：{agreement['maximum_flow_difference']:.4g}",.85,1.85,11.5,4.45,25)
+    s=slide('适用范围与仍未解决的问题','数值优化更可靠，不自动等于模型或生理解释已经通过验收')
+    box(s,'只在实际下降远小于GN预测时，额外尝试一个较短步长。\n只有原目标更低、物理域有效时才采用；不放宽成功条件。\n显式启用：step_control="quadratic_interpolation"。',.85,1.85,11.6,2.9,24)
+    box(s,'本次未验证跨独立数据集、验证NRMSE改善或生理参数可辨识性。\n原Armijo默认路径与旧证据保留；困难波形仍需独立的模型诊断。',.85,5.1,11.6,1.2,21)
+    deck.save(out/'SOLVER_RESULTS.pptx')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
@@ -2708,11 +2904,15 @@ def main():
     parser.add_argument("--fixed-roi-initial", action="store_true", help="Render free vs tied initial total-Hb/volume contrast")
     parser.add_argument("--fixed-roi-flow", action="store_true", help="Render fixed ROI log-flow soft regularization diagnostic")
     parser.add_argument("--fixed-roi-tau", action="store_true", help="Render fixed AF7Fp1 shared nonlinear tau diagnostic")
+    parser.add_argument("--step-control", action="store_true", help="Audit and render the complete paired training-only solver comparison")
     args = parser.parse_args()
-    if sum((args.replay, args.nonlinear_fit, args.gain_prior_fit, args.fixed_roi_tau, args.fixed_roi_flow, args.fixed_roi_initial, args.fixed_roi_optical, args.conditional_optical_gain)) > 1:
+    if sum((args.replay, args.nonlinear_fit, args.gain_prior_fit, args.fixed_roi_tau, args.fixed_roi_flow, args.fixed_roi_initial, args.fixed_roi_optical, args.conditional_optical_gain, args.step_control)) > 1:
         parser.error("Choose one report mode")
     if (args.pilot_truth_audit or args.terminal_input_snapshot) and not args.conditional_optical_gain:
         parser.error("--pilot-truth-audit requires --conditional-optical-gain")
+    if args.step_control:
+        render_step_control(args.run.resolve(),args.output.resolve())
+        return
     if args.conditional_optical_gain:
         render_conditional_optical_gain(args.run.resolve(),args.output.resolve(),pilot_truth_audit=args.pilot_truth_audit,terminal_input_snapshot=args.terminal_input_snapshot)
         return
