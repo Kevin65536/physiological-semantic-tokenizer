@@ -5,6 +5,8 @@ own train/validation membership, masks, candidate selection and data access.
 Importing this module neither loads recordings nor changes process settings.
 """
 
+from functools import lru_cache
+
 import numpy as np
 from scipy.signal import resample_poly
 from scipy.stats import t as student_t
@@ -231,3 +233,68 @@ def linear_features(masked, template, modality, cfg, other=None):
         indices = np.clip(t+sign*round(lag*4), 0, len(masked)-1)
         lagged.append(other[indices][:, source])
     return basic, np.column_stack((basic, *lagged)), hidden, columns
+
+
+@lru_cache(maxsize=8)
+def native_feature_operators(steps=120):
+    from scipy.signal import resample_poly
+    from src.data.homer2_preprocessing import bandpass_fnirs, modified_beer_lambert
+    from src.data.physiology_measurement_adapter import measurement_baseline
+    if steps <= 20 or (steps*5) % 2:
+        raise ValueError('feature time window must support the five-second baseline')
+    native_steps = steps*5//2
+    _, weights, baseline_evidence = measurement_baseline(
+        np.zeros((steps,3)),np.arange(steps)/4.-5.,np.ones(steps,dtype=bool),
+        interval_s=(-5.,0.),role='pre_event_reference_not_latent_rest',
+        evidence='Step5 admitted 30 s window begins 5 s before MA event',minimum_samples=20)
+    baseline = np.eye(steps)-np.ones((steps,1))*weights
+    filtered, quality = bandpass_fnirs(np.eye(native_steps), sample_rate_hz=10.)
+    if quality['status'] != 'applied':
+        raise ValueError('native feature filter unavailable at the declared support')
+    fnirs = baseline@resample_poly(filtered, 2, 5, axis=0)
+    model_clock, native_clock = np.arange(steps)/4., np.arange(native_steps)/10.
+    interpolation = np.column_stack([np.interp(native_clock, model_clock, col)
+                                     for col in np.eye(steps)])
+    optical_basis = np.zeros((16, 1, 2))
+    optical_basis[:2, 0] = np.eye(2)
+    converted, _ = modified_beer_lambert(optical_basis, wavelengths_nm=(760., 850.))
+    mbll = converted[:2, 0, :].T
+    return dict(eeg=baseline, fnirs=fnirs, native_interpolation=interpolation,
+                model_time=model_clock, fnirs_time=native_clock, mbll=mbll,
+                baseline_evidence=baseline_evidence)
+
+
+@lru_cache(maxsize=96)
+def visible_feature_interpolation(length, hidden_left, hidden_right):
+    mask = np.ones(length, dtype=bool)
+    mask[hidden_left:hidden_right] = False
+    selected = np.flatnonzero(mask)
+    if not len(selected):
+        return np.zeros((length, length))
+    if len(selected) < 2:
+        raise ValueError('partly visible feature needs two real input samples')
+    result = np.zeros((length, length))
+    result[:, selected] = np.column_stack(
+        [np.interp(np.arange(length), selected, col) for col in np.eye(len(selected))])
+    return result
+
+
+def conditional_optical_hb_mapping(fnirs_factor):
+    """Conditional physical-to-retained Hb map, not individual calibration.
+
+    Both Beer--Lambert paths are 3 cm * DPF 6 and cancel. The published
+    decadic extinction table uses M^-1 cm^-1; ln(10)*1e-6 converts to natural
+    OD per micromolar. P0=71 micromolar and tissue sensitivity one are fixed
+    diagnostic assumptions. Negative off-diagonals are retained, not clipped.
+    """
+    k=float(fnirs_factor)
+    if not np.isfinite(k) or k<=0:
+        raise ValueError('fnirs_factor must be finite positive')
+    old=np.array([[.148,.384],[.252,.179]])
+    decadic=np.array([[586.,1548.52],[1058.,691.32]])
+    bbar=np.linalg.solve(old,np.log(10.)*1e-6*decadic*71.)
+    matrix=k*bbar
+    reference=float(1./np.sqrt(np.linalg.det(matrix)))
+    return dict(matrix=matrix,base_matrix=bbar,fnirs_factor=k,beta_reference=reference,
+                P0_assumed_uM=71.,tissue_sensitivity_assumed=1.,path_length_cm=3.,dpf=6.,
+                interpretation='conditional_prediction_map_not_individual_absolute_calibration')

@@ -1,0 +1,85 @@
+schema: shared_driver_optical_motion_audit_v1
+experiment_id: SSM-SHARED-DRIVER-OPTICAL-MOTION-AUDIT-v1
+scope: read_only_public_optical_pipeline_audit_same_72_retained_windows_no_model_evaluation
+cache_root: data/cache/physiology_semantic_clean_v3_ssm_native
+retained_prepared: experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_measurement_retest_v1/prepared
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+dataset_id: eeg_fnirs_single_trial
+subjects:
+- subject_01
+- subject_09
+- subject_18
+sessions:
+- session_01
+- session_03
+- session_05
+original_positions:
+- 0
+- 1
+- 2
+- 3
+- 5
+- 6
+- 7
+- 8
+allowed_array_keys:
+- native_input_fnirs
+- native_channel_names
+pair_name: AF7Fp1
+wavelengths_nm:
+- 760.0
+- 850.0
+sampling_hz: 10.0
+window_samples: 300
+window_offset_s: -5.0
+window_duration_s: 30.0
+pipelines:
+- no_motion
+- current
+- mne_tddr
+mne_version: 1.11.0
+processing_schema: physiology_measurement_alignment_v3
+linear_filter:
+  low_hz: 0.01
+  high_hz: 0.2
+  order: 3
+  resample_up: 2
+  resample_down: 5
+reproduction:
+  absolute_tolerance: 1.0e-12
+  relative_tolerance: 1.0e-10
+  retained_keys:
+  - feature_od
+  - feature_fnirs
+  - target_fnirs
+  pair_index: 0
+synthetic:
+  seed: 20260927
+  steps: 1201
+  cases:
+  - zero
+  - constant
+  - asymmetric_positive
+  - asymmetric_negative
+  - true_linear_trend
+  - noise
+resources:
+  numerical_threads: 1
+  max_workers: 1
+source_policy: published_subjects_01_to_29_public_policy_2026_09_17_scope_narrowed_to_exact_three_subjects
+phase_rule: synthetic_terminal_before_measured_metadata_and_array_audit
+stop_rule: retain_all_differences_and_block_pipeline_attribution_if_current_reproduction_fails
+source_sha256:
+  data/cache/physiology_semantic_clean_v3_ssm_native/eeg_fnirs_single_trial/subject_01/session_01.npz: b4c204bc0dbf863cf10b379a670b80d5b93efc4d9c6a39bbcd45d4fd71231495
+  data/cache/physiology_semantic_clean_v3_ssm_native/eeg_fnirs_single_trial/subject_01/session_03.npz: 6cc66cd8e2af68624452a0a6ec5e4fd92f686723ff64faaeb8da4a63fdfa9a36
+  data/cache/physiology_semantic_clean_v3_ssm_native/eeg_fnirs_single_trial/subject_01/session_05.npz: cccc092c6655659381810636aef4634eb0475f1c635abaa42e32cabc6e577ab9
+  data/cache/physiology_semantic_clean_v3_ssm_native/eeg_fnirs_single_trial/subject_09/session_01.npz: 3abb52c58ad23a81bcd20d1bf8d2013a705f69dd0e24637713c616b565bc11ce
+  data/cache/physiology_semantic_clean_v3_ssm_native/eeg_fnirs_single_trial/subject_09/session_03.npz: f8573a2189489cda65dc9aaa16f775da70a75b34c5cc1cf2a3bacc47f1cd0938
+  data/cache/physiology_semantic_clean_v3_ssm_native/eeg_fnirs_single_trial/subject_09/session_05.npz: a6be141f349d7a61935d83360e569cc3be0101bcfffe2e22d3abfcc79cc05ee0
+  data/cache/physiology_semantic_clean_v3_ssm_native/eeg_fnirs_single_trial/subject_18/session_01.npz: 0880e0f2551d35d001a1ffc8c2d1ffee4a9c43fac25c5077ef18ea3af2f6fcd4
+  data/cache/physiology_semantic_clean_v3_ssm_native/eeg_fnirs_single_trial/subject_18/session_03.npz: 4c34daff455d27e63ee6259e48e5e2eb70b74a763614da7c777757bfdf314106
+  data/cache/physiology_semantic_clean_v3_ssm_native/eeg_fnirs_single_trial/subject_18/session_05.npz: c4fbed5de422fdc864fbee7282824414419ece64b78ee1366a472f8596cc9358
+primary: paired_preprocessing_differences_on_all_72_fixed_optical_windows
+secondary: signed_endpoint_slope_corrected_derivative_mean_late_early_and_postfilter_shape
+'null': current_motion_processing_does_not_explain_retained_slow_decline_after_exact_reproduction
+interpretation: no_motion_and_MNE_are_algorithm_controls_not_ground_truth_no_relabeling_or_model_selection

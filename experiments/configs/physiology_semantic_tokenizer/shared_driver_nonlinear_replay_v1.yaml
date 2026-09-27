@@ -1,0 +1,29 @@
+schema: shared_driver_nonlinear_replay_v1
+experiment_id: SSM-SHARED-DRIVER-NONLINEAR-REPLAY-v1
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_linear_screen_v1
+source_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_reconstruction_v1.yaml
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+scope: exact_completed_linear_screen_arrays_no_new_measured_inputs
+tensor: {trials_per_group: 6, steps: 120, components: [EEG, HbO, HbR], dt_s: 0.25}
+methods: [fixed_tau, fitted_tau, source_prior_tau, oracle_lower_bound]
+mode: full
+model: original_nonlinear_Balloon_ZOH_driver_and_five_physical_initial_states_frozen_from_linear_fit
+substeps: 4
+integration_check_substeps: 8
+maximum_integration_difference_training_sd: 0.005
+primary: nonlinear_replay_EEG_HbO_HbR_NRMSE_with_parent_frozen_training_SD
+secondary: replay_minus_linear_prediction_NRMSE_and_full_failure_denominator
+diagnostic: mathematical_state_validity_tau_and_state_ranges_no_new_optimization
+'null': linear_low_error_persists_under_original_nonlinear_dynamics
+baseline: exact_saved_linear_reconstruction_same_driver_initial_state_tau_and_gauge
+mask: full_observations_only_no_new_fitting
+split: inherited_parent_outer_validation_72_unique_measured_and_72_synthetic_trials
+seed: 20260926
+stopping: exactly_24_groups_576_method_trials_no_retry_no_parameter_changes
+resources: {max_workers: 24, numerical_threads_per_worker: 1, max_seconds: 3600}
+protected_boundary: only_exact_parent_prediction_arrays_no_raw_or_protected_loaders
+claim_limits:
+  - deterministic_replay_not_nonlinear_refitting_or_SSM_posterior
+  - invalid_initial_or_intermediate_states_are_failures_not_clipped_or_repaired
+  - common_success_subset_is_descriptive_and_cannot_replace_full_denominator
+  - passing_replay_does_not_establish_unique_parameters_or_teacher_qualification

@@ -1,5 +1,5 @@
 import copy
-from pathlib import Path
+import re
 
 import pytest
 
@@ -16,22 +16,34 @@ from src.utils.project_state import (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-
 def _registry():
     return load_registry(DEFAULT_REGISTRY)
+
+
+@pytest.fixture
+def registry_repo(tmp_path):
+    """Exercise link/schema rules without requiring retained campaign files.
+
+    These placeholders only satisfy the validator's file-presence contract;
+    they contain no experiment evidence. The project-state CLI validates real
+    evidence paths separately in the repository that retains those artifacts.
+    """
+    for source in _registry()["evidence"]:
+        path = tmp_path / source["path"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("Test-only evidence-link placeholder.\n", encoding="utf-8")
+    return tmp_path
 
 
 def _current_by_entity(registry):
     return {record["entity"]: record for record in current_records(registry)}
 
 
-def test_current_registry_is_lightweight_and_views_are_readable():
+def test_current_registry_is_lightweight_and_views_are_readable(registry_repo):
     registry = _registry()
-    validate_registry(registry, repo_root=PROJECT_ROOT)
+    validate_registry(registry, repo_root=registry_repo)
 
-    status = render_status_markdown(registry, repo_root=PROJECT_ROOT)
+    status = render_status_markdown(registry, repo_root=registry_repo)
     assert "| Item | Status | Conclusion | Evidence | Next | Updated |" in status
     assert "## Evidence registry" not in status
     assert "主方法实验日志" in status
@@ -45,7 +57,7 @@ def test_current_registry_is_lightweight_and_views_are_readable():
         and ("已停止（此前已完成）" in line or "已废弃（未完成且不再开展）" in line)
     ]
     assert terminal_rows
-    assert all("| — | 2026-08-25 |" in line for line in terminal_rows)
+    assert all(re.search(r"\| — \| \d{4}-\d{2}-\d{2} \|$", line) for line in terminal_rows)
 
     readme = render_readme_block(registry)
     assert "### Next steps" in readme
@@ -82,9 +94,16 @@ def test_execution_and_scientific_verdict_remain_independent():
     assert current["main.program"]["scientific_verdict"] == "unreviewed"
     assert current["main.step5a"]["execution"] == "completed"
     assert current["main.step5a"]["scientific_verdict"] == "inconclusive"
-    assert {
-        entity for entity, record in current.items() if record.get("next_step")
-    } == {"main.program"}
+    # Completed diagnostics can retain follow-up work; stopped and abandoned
+    # queues must not become active merely because a new experiment is added.
+    assert current["main.program"]["next_step"]
+    assert current["main.shared_driver_conditional_optical_gain"]["execution"] == "completed"
+    assert current["main.shared_driver_conditional_optical_gain"]["next_step"]
+    assert all(
+        not record.get("next_step")
+        for record in current.values()
+        if record["execution"] in {"stopped", "abandoned"}
+    )
 
 
 def test_comparison_method_totals_match_the_campaign_aggregate():
@@ -113,49 +132,49 @@ def test_comparison_method_totals_match_the_campaign_aggregate():
         )
 
 
-def test_registry_does_not_scan_authorization_names_recursively():
+def test_registry_does_not_scan_authorization_names_recursively(registry_repo):
     registry = copy.deepcopy(_registry())
     campaign = next(
         item for item in registry["records"] if item["entity"] == "comparison.campaign"
     )
     campaign["outcome_counts"]["authorization_status"] = 1
 
-    validate_registry(registry, repo_root=PROJECT_ROOT)
+    validate_registry(registry, repo_root=registry_repo)
 
 
-def test_registry_rejects_scientific_verdict_before_execution():
+def test_registry_rejects_scientific_verdict_before_execution(registry_repo):
     registry = copy.deepcopy(_registry())
     record = next(item for item in registry["records"] if item["entity"] == "atlas.statistical")
     record["scientific_verdict"] = "qualified"
 
     with pytest.raises(ProjectStateError, match="planned work cannot"):
-        validate_registry(registry, repo_root=PROJECT_ROOT)
+        validate_registry(registry, repo_root=registry_repo)
 
 
-def test_registry_rejects_scientific_verdict_for_abandoned_work():
+def test_registry_rejects_scientific_verdict_for_abandoned_work(registry_repo):
     registry = copy.deepcopy(_registry())
     record = _current_by_entity(registry)["atlas.statistical"]
     record["scientific_verdict"] = "qualified"
 
     with pytest.raises(ProjectStateError, match="abandoned work cannot"):
-        validate_registry(registry, repo_root=PROJECT_ROOT)
+        validate_registry(registry, repo_root=registry_repo)
 
 
-def test_stopped_work_requires_complete_progress_and_no_next_step():
+def test_stopped_work_requires_complete_progress_and_no_next_step(registry_repo):
     registry = copy.deepcopy(_registry())
     record = _current_by_entity(registry)["comparison.campaign"]
     record["progress"]["completed"] -= 1
 
     with pytest.raises(ProjectStateError, match="stopped execution requires completed == total"):
-        validate_registry(registry, repo_root=PROJECT_ROOT)
+        validate_registry(registry, repo_root=registry_repo)
 
     record["progress"]["completed"] += 1
     record["next_step"] = "旧队列"
     with pytest.raises(ProjectStateError, match="stopped execution cannot carry next_step"):
-        validate_registry(registry, repo_root=PROJECT_ROOT)
+        validate_registry(registry, repo_root=registry_repo)
 
 
-def test_registry_rejects_mixed_verdict_without_mixed_outcomes():
+def test_registry_rejects_mixed_verdict_without_mixed_outcomes(registry_repo):
     registry = copy.deepcopy(_registry())
     campaign = next(
         item for item in registry["records"] if item["entity"] == "comparison.campaign"
@@ -163,14 +182,14 @@ def test_registry_rejects_mixed_verdict_without_mixed_outcomes():
     campaign["outcome_counts"] = {"table_ready_with_note": 42}
 
     with pytest.raises(ProjectStateError, match="two non-zero outcome counts"):
-        validate_registry(registry, repo_root=PROJECT_ROOT)
+        validate_registry(registry, repo_root=registry_repo)
 
 
-def test_registry_accepts_a_date_only_snapshot_timestamp():
+def test_registry_accepts_a_date_only_snapshot_timestamp(registry_repo):
     registry = copy.deepcopy(_registry())
     registry["updated_at"] = "2026-08-16"
 
-    validate_registry(registry, repo_root=PROJECT_ROOT)
+    validate_registry(registry, repo_root=registry_repo)
 
 
 def test_evidence_entries_use_path_only():
@@ -180,7 +199,15 @@ def test_evidence_entries_use_path_only():
     )
 
 
-def test_current_record_can_be_updated_in_place_without_supersedes():
+def test_registry_rejects_missing_evidence(registry_repo):
+    registry = _registry()
+    (registry_repo / registry["evidence"][0]["path"]).unlink()
+
+    with pytest.raises(ProjectStateError, match="evidence file is missing"):
+        validate_registry(registry, repo_root=registry_repo)
+
+
+def test_current_record_can_be_updated_in_place_without_supersedes(registry_repo):
     registry = copy.deepcopy(_registry())
     record = _current_by_entity(registry)["main.data_contract"]
     # Optional supersedes applies to a single-version entity. The live data
@@ -194,23 +221,23 @@ def test_current_record_can_be_updated_in_place_without_supersedes():
     record.pop("supersedes", None)
     record.pop("depends_on", None)
 
-    validate_registry(registry, repo_root=PROJECT_ROOT)
+    validate_registry(registry, repo_root=registry_repo)
 
 
-def test_effective_snapshot_timestamp_follows_a_current_record_update():
+def test_effective_snapshot_timestamp_follows_a_current_record_update(registry_repo):
     registry = copy.deepcopy(_registry())
     record = _current_by_entity(registry)["atlas.statistical"]
     record["updated_at"] = "2099-09-01"
 
-    validate_registry(registry, repo_root=PROJECT_ROOT)
+    validate_registry(registry, repo_root=registry_repo)
     assert current_snapshot(registry)["updated_at"] == "2099-09-01"
     assert "updated_at=2099-09-01" in render_agent_summary(registry)
     assert "_Registry snapshot: `2099-09-01`" in render_status_markdown(
-        registry, repo_root=PROJECT_ROOT
+        registry, repo_root=registry_repo
     )
 
 
-def test_superseding_record_replaces_exactly_one_current_state():
+def test_superseding_record_replaces_exactly_one_current_state(registry_repo):
     registry = copy.deepcopy(_registry())
     previous = _current_by_entity(registry)["atlas.statistical"]
     replacement = copy.deepcopy(previous)
@@ -224,12 +251,12 @@ def test_superseding_record_replaces_exactly_one_current_state():
     registry["records"].append(replacement)
     registry["updated_at"] = replacement["updated_at"]
 
-    validate_registry(registry, repo_root=PROJECT_ROOT)
+    validate_registry(registry, repo_root=registry_repo)
     current = _current_by_entity(registry)
     assert current["atlas.statistical"]["state_id"] == replacement["state_id"]
 
 
-def test_optional_supersedes_cannot_replace_a_newer_snapshot_with_an_older_one():
+def test_optional_supersedes_cannot_replace_a_newer_snapshot_with_an_older_one(registry_repo):
     registry = copy.deepcopy(_registry())
     previous = _current_by_entity(registry)["atlas.statistical"]
     replacement = copy.deepcopy(previous)
@@ -243,10 +270,10 @@ def test_optional_supersedes_cannot_replace_a_newer_snapshot_with_an_older_one()
     registry["records"].append(replacement)
 
     with pytest.raises(ProjectStateError, match="newer than superseded"):
-        validate_registry(registry, repo_root=PROJECT_ROOT)
+        validate_registry(registry, repo_root=registry_repo)
 
 
-def test_registry_rejects_supersedes_cycle_and_missing_current_state():
+def test_registry_rejects_supersedes_cycle_and_missing_current_state(registry_repo):
     registry = copy.deepcopy(_registry())
     first = _current_by_entity(registry)["atlas.full"]
     second = copy.deepcopy(first)
@@ -262,7 +289,7 @@ def test_registry_rejects_supersedes_cycle_and_missing_current_state():
     registry["updated_at"] = second["updated_at"]
 
     with pytest.raises(ProjectStateError, match="newer than superseded|cycle|current state"):
-        validate_registry(registry, repo_root=PROJECT_ROOT)
+        validate_registry(registry, repo_root=registry_repo)
 
 
 def test_agent_summary_has_only_the_two_status_axes():

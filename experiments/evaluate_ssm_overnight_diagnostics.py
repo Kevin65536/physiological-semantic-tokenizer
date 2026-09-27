@@ -53,6 +53,8 @@ from src.metrics.trajectory_reliability import canonical_residual_fields
 from src.inference.observation_baselines import (
     bridge_transform, first_difference_noise, linear_features, ridge_fit,
     ridge_predict, robust_mad, student_difference_mad,
+    native_feature_operators as v3_native_operators,
+    visible_feature_interpolation as v3_visible_interpolation,
 )
 
 # Configurations resolve beside the code (including frozen source); data and
@@ -2438,49 +2440,6 @@ def v3_load_config(cfg):
     base['model']['steps'] = cfg['steps']
     return cfg, dc, base, measured, metadata
 
-
-@lru_cache(maxsize=8)
-def v3_native_operators(steps=120):
-    from scipy.signal import resample_poly
-    from src.data.homer2_preprocessing import bandpass_fnirs, modified_beer_lambert
-    from src.data.physiology_measurement_adapter import measurement_baseline
-    if steps <= 20 or (steps*5) % 2:
-        raise ValueError('feature time window must support the five-second baseline')
-    native_steps = steps*5//2
-    _, weights, baseline_evidence = measurement_baseline(
-        np.zeros((steps,3)),np.arange(steps)/4.-5.,np.ones(steps,dtype=bool),
-        interval_s=(-5.,0.),role='pre_event_reference_not_latent_rest',
-        evidence='Step5 admitted 30 s window begins 5 s before MA event',minimum_samples=20)
-    baseline = np.eye(steps)-np.ones((steps,1))*weights
-    filtered, quality = bandpass_fnirs(np.eye(native_steps), sample_rate_hz=10.)
-    if quality['status'] != 'applied':
-        raise ValueError('native feature filter unavailable at the declared support')
-    fnirs = baseline@resample_poly(filtered, 2, 5, axis=0)
-    model_clock, native_clock = np.arange(steps)/4., np.arange(native_steps)/10.
-    interpolation = np.column_stack([np.interp(native_clock, model_clock, col)
-                                     for col in np.eye(steps)])
-    optical_basis = np.zeros((16, 1, 2))
-    optical_basis[:2, 0] = np.eye(2)
-    converted, _ = modified_beer_lambert(optical_basis, wavelengths_nm=(760., 850.))
-    mbll = converted[:2, 0, :].T
-    return dict(eeg=baseline, fnirs=fnirs, native_interpolation=interpolation,
-                model_time=model_clock, fnirs_time=native_clock, mbll=mbll,
-                baseline_evidence=baseline_evidence)
-
-
-@lru_cache(maxsize=96)
-def v3_visible_interpolation(length, hidden_left, hidden_right):
-    mask = np.ones(length, dtype=bool)
-    mask[hidden_left:hidden_right] = False
-    selected = np.flatnonzero(mask)
-    if not len(selected):
-        return np.zeros((length, length))
-    if len(selected) < 2:
-        raise ValueError('partly visible feature needs two real input samples')
-    result = np.zeros((length, length))
-    result[:, selected] = np.column_stack(
-        [np.interp(np.arange(length), selected, col) for col in np.eye(len(selected))])
-    return result
 
 
 def v3_inventory(cfg, subject):

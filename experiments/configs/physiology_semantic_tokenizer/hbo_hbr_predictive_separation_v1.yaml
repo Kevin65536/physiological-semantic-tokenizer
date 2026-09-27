@@ -1,0 +1,43 @@
+schema: hbo_hbr_predictive_separation_v1
+experiment_id: HBO-HBR-PREDICTIVE-SEPARATION-v1
+scope: exploratory_retained_public_panel_training_anchored_gain_not_calibrated_C
+parent: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_adaptation_v1
+output_namespace: experiments/runs/physiology_semantic_tokenizer/data_quality_audit
+tensor: {components: [HbO, HbR], samples: 300, sample_rate_hz: 10}
+split: inherited_subject_early_late_two_folds_with_middle_gap
+expected_measured_groups: 24
+target: released_processed_HbR_center_10_to_20_seconds
+mask: HbO_all_visible_HbR_center_hidden_before_local_fitting
+preprocessing: retained_full_record_offline_features_not_raw_sensor_masking
+scaling: invert_parent_pair_normalization_then_single_training_pair_rms
+model: linearized_two_Hb_necessary_relation_with_two_initial_transients_and_constant_offset
+reference_parameters: {tau: 2.0, eta: 0.35, E0: 0.32, alpha: 0.32}
+fit_parameters: [tau, eta]
+fixed_parameters: [E0, alpha]
+bounds: {tau: [0.5, 10.0], eta: [0.15, 0.65], gain: [0.25, 4.0]}
+gain_estimation: shared_training_least_squares_with_reference_physiology_then_frozen
+noise_model: unweighted_least_squares_no_claim_of_independent_noise_calibration
+methods: [fixed, physiology_only, observation_only, separated, joint_target, linear_context, separated_shift, own_context]
+primary: paired_hidden_HbR_MSE_over_frozen_training_HbR_variance_separated_vs_physiology_only
+secondary: comparison_to_fixed_linear_context_and_own_context
+diagnostic: gain_tau_eta_bounds_shift_null_visible_fit_and_synthetic_recovery
+'null': training_anchored_observation_gain_does_not_improve_heldout_prediction
+baseline: fixed_reference_physiology_and_unit_gain_on_identical_rows
+stopping: exactly_24_measured_groups_and_40_synthetic_groups_no_retry_or_scope_expansion
+seed: 20260924
+optimizer: {starts: [[1.0, 0.25], [2.0, 0.35], [5.0, 0.5]], max_nfev: 150}
+synthetic:
+  replicates: 8
+  train_windows: 12
+  test_windows: 12
+  conditions: [white, gain2_white, slow, gain2_slow, tau4_gain2]
+  white_sd: 0.02
+  slow_sd: 0.2
+resources: {workers: 24, max_in_flight: 24, numerical_threads_per_worker: 1}
+protected_boundary: only_parent_retained_public_arrays_no_raw_loaders_or_protected_artifacts
+claim_limits:
+  - gain_is_reference_anchored_not_independently_identified
+  - no_unique_physiological_parameters_or_teacher_qualification
+  - HbO_predictor_noise_and_full_record_filter_context_remain_limitations
+  - conditional_HbR_completion_not_EEG_to_fNIRS_or_future_prediction
+  - no_promotion_or_override_of_independent_calibration_C_D_gates

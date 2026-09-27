@@ -1,0 +1,59 @@
+schema: shared_driver_reconstruction_v1
+experiment_id: SSM-SHARED-DRIVER-RECONSTRUCTION-v1
+scope: nonprotected_retained_public_development_diagnostic
+source_run: experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_measurement_retest_v1
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+subjects: [subject_01, subject_09, subject_18]
+outer_folds: [0, 1, 2, 3]
+sessions: [session_01, session_03, session_05]
+original_positions: [0, 1, 2, 3, 5, 6, 7, 8]
+tensor: {trials_per_subject: 24, steps: 120, components: [EEG, HbO, HbR], dt_s: 0.25}
+split: frozen_parent_18_train_6_validation_each_outer_fold
+target: parent_processed_EEG_log_power_PCA_and_relative_HbO_HbR
+normalizer: frozen_parent_outer_training_SD_per_component_unchanged_for_all_candidates
+mask: feature_missing_before_linear_processing_with_visible_interpolation
+model: rest_linearized_Balloon_single_driver_exact_ZOH_no_vascular_innovations
+fixed: {kappa: 0.64, gamma: 0.32, alpha: 0.32, E0: 0.32, P0: 1.0, Q0: 0.35, neurovascular_gain: 1.0, eeg_loading: 1.0}
+reference_tau_s: 2.0
+tau_grid: {minimum: 0.5, maximum: 10.0, log_points: 33, include: [1.0, 2.0, 4.0]}
+regularization:
+  driver_second_difference_weight: 100.0
+  initial_state_weight: 100.0
+  tau_log_sd: 0.05
+  tau_penalty: squared_log_ratio_over_sd_added_once_to_subject_training_objective
+  source: https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf
+  interpretation: source_log_prior_shape_in_engineering_SSE_not_calibrated_posterior_or_population_range
+  driver_and_initial_weights: fixed_engineering_choices_no_measured_selection
+methods: [fixed_tau, fitted_tau, source_prior_tau, oracle_lower_bound]
+modes: [full, center_EEG, center_fNIRS, EEG_only, fNIRS_only, center_EEG_shift, center_fNIRS_shift]
+center_steps: 16
+primary: full_joint_shared_only_component_NRMSE_below_0.5_on_72_outer_validation_trials
+secondary: center_hidden_component_prediction_and_own_context_interpolation
+diagnostic: optimistic_linear_SSE_lower_bound_physical_validity_tau_profiles_cross_fold_stability_synthetic_truth
+baseline: fixed_tau_identical_driver_initial_state_penalties_and_measurement_map
+'null': releasing_tau_does_not_improve_shared_only_reconstruction_or_recover_subject_differences
+small_signal_limit: 0.25
+svd_rcond: 1.0e-10
+lower_bound_sensitivity_rconds: [1.0e-12, 1.0e-14]
+synthetic:
+  seed: 20260926
+  taus_s: [1.0, 2.0, 4.0]
+  replicates: 4
+  driver_sd: 0.04
+  initial_state_sd: 0.005
+  noise_fraction: 0.1
+  law: matched_linear_ZOH_driver_AR_plus_smooth_task_transient_native_white_feature_noise
+  qualification: software_and_conditional_linear_recovery_only
+  maximum_mean_reconstruction_nrmse: 0.5
+stopping: exactly_12_synthetic_and_12_measured_groups_no_result_driven_grid_expansion
+resources: {max_workers: 24, numerical_threads_per_worker: 1, max_seconds: 3600}
+protected_boundary: only_exact_parent_prepared_arrays_no_raw_or_protected_loaders
+claim_limits:
+  - linear_small_signal_screen_not_full_nonlinear_SSM_or_teacher
+  - oracle_uses_same_target_only_for_optimistic_SSE_lower_bound_not_model_selection
+  - aggregate_NRMSE_is_sqrt_subject_session_equal_mean_NMSE_not_mean_trial_NRMSE
+  - numerical_lower_bound_is_limited_to_retained_SVD_rank_discrete_driver_and_tau_grid_not_a_full_nonlinear_impossibility_proof
+  - invalid_or_large_states_count_as_failed_physiological_reconstruction
+  - EEG_coordinate_is_log_power_PCA_not_native_voltage
+  - no_absolute_physiology_or_unique_measured_subject_parameters
+  - no_independent_optical_calibration_C_D_or_protected_evaluation

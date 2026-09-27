@@ -1,0 +1,243 @@
+schema: shared_driver_conditional_optical_gain_v1
+experiment_id: SSM-SHARED-DRIVER-CONDITIONAL-OPTICAL-GAIN-v1
+scope: nonprotected_retained_public_development_diagnostic
+source_run: experiments/runs/physiology_semantic_tokenizer/ssm_overnight/20260917_measurement_retest_v1
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+subjects:
+- subject_01
+- subject_09
+- subject_18
+outer_folds:
+- 0
+- 1
+- 2
+- 3
+sessions:
+- session_01
+- session_03
+- session_05
+original_positions:
+- 0
+- 1
+- 2
+- 3
+- 5
+- 6
+- 7
+- 8
+tensor:
+  trials_per_subject: 24
+  steps: 120
+  components:
+  - EEG
+  - HbO
+  - HbR
+  dt_s: 0.25
+split: frozen_parent_18_train_6_validation_each_outer_fold
+target: fixed_AF7Fp1_relative_HbO_HbR_and_exact_parent_EEG_log_power_PCA
+normalizer: exact_parent_EEG_SD_and_fixed_ROI_Hb_component_SD_from_18_training_trials
+mask: feature_missing_before_linear_processing_with_visible_interpolation
+model: original_nonlinear_Balloon_single_ZOH_driver_no_vascular_innovations
+fixed:
+  kappa: 0.64
+  gamma: 0.32
+  alpha: 0.32
+  E0: 0.32
+  P0: 1.0
+  Q0: 0.35
+  neurovascular_gain: 1.0
+  eeg_loading: 1.0
+reference_tau_s: 2.0
+regularization:
+  initial_state_weight: 100.0
+  driver_curvature_weight: 0.01
+  driver_amplitude_weight: 0.0
+  interpretation: fixed_curvature_and_initial_state_engineering_penalties_not_calibrated_posterior
+  observation_scale: unchanged_reference_covariance_gauge_not_independent_physical_calibration
+methods:
+- fixed_tau_logflow1
+- conditional_fixed_gain
+- conditional_trained_gain
+modes:
+- full
+- center_EEG
+- center_fNIRS
+center_steps: 16
+small_signal_limit: 0.25
+small_signal_interpretation: linear_initialization_diagnostic_only_not_a_nonlinear_physiological_boundary
+svd_rcond: 1.0e-10
+nonlinear:
+  max_evaluations: 160
+  gradient_tolerance: 0.0001
+  substeps: 4
+  integration_check_substeps: 8
+  maximum_integration_difference_training_sd: 0.005
+  starts:
+  - visible_curvature_linear_if_initial_domain_valid
+  - rest
+  invalid_linear_start: record_and_omit_without_clipping
+  fit_variables: driver_T_and_s0_logf0_logv0_logp0_logq0
+  derivatives: exact_RK4_chain_sensitivities_using_existing_core_drift_and_jacobian
+  constraints: positive_f_v_p_q_and_absolute_Hb_balance_at_all_RK_stages
+  selection: minimum_converged_objective_across_declared_starts
+  failure: keep_last_valid_arrays_but_do_not_count_as_primary_success
+synthetic:
+  seed: 2026092603
+  spectra:
+  - slow
+  - mixed
+  replicates: 2
+  driver_sd: 0.04
+  initial_state_sd: 0.005
+  noise_fraction: 0.1
+  fast_fraction: 0.7
+  fast_fraction_interpretation: fraction_of_driver_variance_before_final_normalization
+  law: original_nonlinear_core_tau2_beta_g_times_reference_conditional_Hb_map_before_native_noise
+  qualification: conditional_tau_driver_state_recovery_diagnostic_not_teacher
+  taus_s:
+  - 1.0
+  - 2.0
+  - 4.0
+  tau_pairing: same_driver_initial_and_standardized_noise_draws_across_taus_within_spectrum_replicate
+  relative_gains:
+  - 0.5
+  - 1.0
+  - 2.0
+  mapping_fnirs_factor: 40.0
+  pairing: same_driver_initial_draws_and_standardized_native_noise_across_relative_gain
+  interpretation: new_conditional_model_software_recovery_not_inverse_TDDR_or_measured_calibration
+primary: same_target_full_joint_shared_only_component_NRMSE_below_0.5_and_paired_identity_map_baseline_contrast_per_pipeline
+secondary: hidden_center_EEG_and_Hb_predictions_and_extreme_state_counts
+diagnostic: conditional_optical_scale_mapping_and_relative_gain_at_fixed_tau2
+baseline: exact_inherited_measured_identity_map_beta1_fixed_tau2_including_all_failures_synthetic_all_fresh
+'null': conditional_prediction_mapping_and_shared_gain_do_not_improve_same_target_reconstruction_or_remove_extreme_states
+stopping: 12_new_synthetic_groups_36_gain_starts_648_rows_then_24_measured_groups_72_gain_starts_1296_rows_432_inherited_no_scope_expansion
+phase_rule: separate_synthetic_and_measured_calls_with_full_synthetic_terminal_evidence_before_measured_access
+resources:
+  max_workers: 48
+  max_in_flight: 48
+  numerical_threads_per_worker: 1
+  max_seconds: 7200
+protected_boundary: only_exact_parent_prepared_arrays_no_raw_or_protected_loaders
+claim_limits:
+- fixed_optode_pair_is_a_common_montage_location_not_individual_cortical_registration
+- retained_EEG_gauge_and_relative_Hb_have_no_independent_physical_amplitude_calibration
+- fixed_ROI_changes_Hb_targets_and_SD_so_historical_scores_are_not_same_target_paired_baselines
+- tau_controls_compartment_transit_and_does_not_directly_enter_s_or_f_dynamics
+- local_projected_information_is_not_calibrated_confidence_or_global_identifiability
+- folds_share_training_trials_so_between_fold_variation_is_not_independent_subject_evidence
+- engineering_log_prior_and_search_bounds_are_not_normal_population_physiological_ranges
+- mathematical_domain_validity_does_not_establish_empirical_physiological_ranges
+- EEG_is_a_log_power_PCA_feature_not_native_voltage
+- no_absolute_physiology_unique_measured_subject_parameters_teacher_tokenizer_or_protected_evaluation
+- inherited_baseline_and_prepared_evidence_is_not_an_independent_replication
+- flow_anchor_weights_and_log_sd_are_engineering_sensitivity_choices_not_empirical_normal_ranges
+- flow_regularization_changes_the_estimator_and_can_bias_tau_driver_and_states
+- tau_has_zero_direct_flow_sensitivity_flow_anchor_affects_tau_indirectly_through_driver_and_initial_states
+- objectives_are_comparable_only_between_starts_within_the_same_weight_arm
+- different_optical_targets_and_training_SD_are_not_same_task_NRMSE_rankings
+- no_motion_and_MNE_are_processing_sensitivity_conditions_not_physiological_truth
+- motion_synthetic_controls_remain_in_separate_completed_optical_audit
+- weight1_is_prespecified_engineering_anchor_not_population_prior
+- P0_71uM_site_sensitivity1_and_DPF6_are_conditional_assumptions_not_subject_calibration
+- B_has_signed_cross_component_terms_no_clipping_and_only_changes_prediction_mean
+- beta_and_beta_over_reference_are_confounded_with_optical_sensitivity_and_driver_gauge_not_independent_NVC
+- same_target_and_SD_within_each_pipeline_enable_paired_baseline_comparison_not_cross_pipeline_ranking
+- positive_Hb_optimization_coordinates_off_independent_logs_isolate_mean_mapping_hypothesis
+- new_synthetic_conditional_truth_is_not_recovery_of_real_Hb_after_motion_processing
+- identity_to_conditional_fixed_changes_both_map_and_beta_reference_not_pure_map_effect
+- fixed_to_trained_conditional_arm_is_the_shared_beta_contribution_at_the_same_map
+- B_amplifies_initial_state_contributions_while_physical_initial_prior_is_unchanged_and_flow_penalty_changes_with_physical_states
+- Tak71_is_cortical_source_compartment_assumption_not_individual_intravascular_venous_concentration;
+  wavelength_sensitivity1_and_omitted_pial_terms_are_not_exact_Tak_reproduction
+fixed_roi:
+  pair_name: AF7Fp1
+  pair_index: 0
+  selection: predeclared_first_registry_pair_not_validation_score
+  eeg: exact_parent_projection_unchanged
+  fnirs_scale: training_common_MAD_with_frozen_parent_observation_loading
+tau_training:
+  parameter_name: tau
+  bounds:
+  - 0.5
+  - 8.0
+  start_values:
+  - 1.0
+  - 2.0
+  - 4.0
+  prior_mean: 2.0
+  prior_log_sd: 0.6931471805599453
+  prior_interpretation: unused_no_parameter_prior_in_optical_contrast
+  bounds_interpretation: declared_numerical_search_range_not_a_normal_physiological_interval
+  initialization: zero_driver_and_physical_rest_for_every_training_trial_at_each_declared_tau
+  scope: one_tau_shared_across_all_18_training_trials_then_frozen_for_validation
+  max_evaluations: 3600
+  max_iterations: 90
+  gradient_tolerance: 0.0001
+  information_rcond: 1.0e-10
+  selection: minimum_converged_group_objective_after_all_three_starts_terminal
+  failure: no_converged_group_parameter_means_all_dependent_validation_trials_failed_training
+  record_trace: true
+parent_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_optical_v1
+flow_prior:
+  log_sd: 0.6931471805599453
+  weights:
+    fixed_tau_logflow1: 1.0
+    conditional_fixed_gain: 1.0
+    conditional_trained_gain: 1.0
+  residual: sqrt_weight_dt_times_log_flow_over_log_sd_at_all_output_times_including_initial
+  interpretation: engineering_soft_anchor_not_physiological_population_range_or_calibrated_uncertainty
+  inheritance: only_measured_identity_map_fixed_tau2_inherited_nonindependent
+  tau_prior: none_in_all_new_training_arms
+optical_audit_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_optical_motion_audit_v1
+optical_pipelines:
+- no_motion
+- mne_tddr
+conditional_mapping:
+  old_extinction:
+  - - 0.148
+    - 0.384
+  - - 0.252
+    - 0.179
+  decadic_extinction_M_inv_cm_inv:
+  - - 586.0
+    - 1548.52
+  - - 1058.0
+    - 691.32
+  natural_log_conversion: ln10_times_1e-6
+  P0_assumed_uM: 71.0
+  tissue_sensitivity_assumed: 1.0
+  path_length_cm: 3.0
+  dpf: 6.0
+  formula: B=k*inv(Eold)@(ln(10)*1e-6*Edecadic*71); equal_18cm_paths_cancel
+  k: exact_parent_optical_processing_fnirs_factor_from_18_train
+  predictor: existing_mean_operator@kron(I,blockdiag(1,B));targets_and_SD_unchanged
+  beta_reference: 1/sqrt(det(B))_engineering_amplitude_gauge_not_independent_NVC_calibration
+  initial_coordinates: independent_logs
+  tau_s: 2.0
+  P0_primary_source: https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf
+synthetic_engineering_screen:
+  expected_groups: 12
+  expected_starts_per_group: 3
+  minimum_successful_starts: 1
+  maximum_selected_relative_g_error: 0.1
+  maximum_successful_g_span_over_true: 0.05
+  require_successful_starts_interior: true
+  failure_action: retain_negative_synthetic_evidence_and_stop_before_measured_arrays
+conditional_gain_training:
+  parameter_name: neurovascular_gain
+  relative_bounds:
+  - 0.1
+  - 10.0
+  relative_start_values:
+  - 0.5
+  - 1.0
+  - 2.0
+  parameter_prior: null
+  max_evaluations: 3600
+  max_iterations: 90
+  gradient_tolerance: 0.0001
+  information_rcond: 1.0e-10
+  record_trace: true
+  initialization: zero_driver_physical_rest_all18trials
+  selection: minimum_converged_objective_after_all_declared_starts_terminal

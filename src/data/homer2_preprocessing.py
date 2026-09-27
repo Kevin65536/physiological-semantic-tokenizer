@@ -17,6 +17,7 @@ from scipy.signal import butter, sosfiltfilt
 
 HOMER2_ALIGNMENT_SCHEMA = "homer2_alignment_contract_v1"
 MEASUREMENT_ALIGNMENT_SCHEMA = "physiology_measurement_alignment_v3"
+MEASUREMENT_ALIGNMENT_V4_SCHEMA = "physiology_measurement_alignment_v4"
 
 
 @dataclass(frozen=True)
@@ -211,7 +212,12 @@ def robust_derivative_motion_suppression(
     tune: float = 4.685,
     epsilon: float = 1e-9,
 ) -> tuple[np.ndarray, dict[str, float]]:
-    """TDDR-like robust derivative suppression for spike-heavy fNIRS traces."""
+    """Legacy derivative suppression retained for exact V1/V3 replay.
+
+    Asymmetric derivative weights can introduce a cumulative drift even for
+    a zero-net-change input. This is not canonical TDDR; new optical work
+    should declare a V4 motion method explicitly.
+    """
     array = _as_float_array(values)
     finite, repaired = _finite_interp(array)
     flat = finite.reshape(finite.shape[0], -1)
@@ -231,6 +237,33 @@ def robust_derivative_motion_suppression(
         "motion_derivative_outlier_fraction": outlier_fraction,
         "median_derivative_weight": float(np.median(weights)),
     }
+
+
+def _mne_tddr_optical_density(values, sample_rate_hz, wavelengths_nm):
+    """Official public TDDR API on [time, pair, wavelength] natural OD.
+
+    Synthetic channel geometry serves only MNE's channel contract, not an
+    anatomical measurement. Correction is independently applied per channel.
+    """
+    import mne
+    from mne.preprocessing.nirs import temporal_derivative_distribution_repair
+
+    wavelengths = np.asarray(wavelengths_nm, dtype=float)
+    labels = [f'S{pair+1}_D{pair+1} {wavelength:g}'
+              for pair in range(values.shape[1]) for wavelength in wavelengths]
+    info = mne.create_info(labels, sample_rate_hz, ch_types=['fnirs_od']*len(labels))
+    for index, ch in enumerate(info['chs']):
+        ch['loc'][:3] = [.015, 0., 0.]
+        ch['loc'][3:6] = [0., 0., 0.]
+        ch['loc'][6:9] = [.03, 0., 0.]
+        ch['loc'][9] = wavelengths[index % 2]
+    raw = mne.io.RawArray(values.reshape(len(values), -1).T, info, verbose=False)
+    corrected = temporal_derivative_distribution_repair(raw, verbose=False).get_data().T
+    return corrected.reshape(values.shape), dict(
+        implementation='mne.preprocessing.nirs.temporal_derivative_distribution_repair',
+        mne_version=mne.__version__, channel_labels=labels,
+        geometry='synthetic_API_metadata_not_anatomical_calibration',
+        interpretation='motion_algorithm_not_ground_truth; may_remove_true_slow_trends')
 
 
 def bandpass_fnirs(
@@ -345,6 +378,7 @@ def apply_homer2_aligned_contract(
     low_hz: float = 0.01,
     high_hz: float = 0.2,
     motion_correction: bool = True,
+    motion_method: str | None = None,
     source_detector_distance_cm: float = 3.0,
     partial_pathlength_factor: float = 6.0,
     retain_feature_boundary: bool = False,
@@ -353,15 +387,38 @@ def apply_homer2_aligned_contract(
     unit_evidence: str = "",
     valid_mask: np.ndarray | None = None,
 ) -> Homer2PreprocessResult:
-    """Apply the best available HOMER2-aligned branch for one fNIRS record."""
+    """Apply the declared branch over exactly the supplied time support.
+
+    V4 requires motion_method='none' or 'mne_tddr' on intensity/OD input.
+    That method exclusively controls motion correction; the legacy
+    motion_correction boolean is unused in V4. V1/V3 retain their original
+    boolean behavior and reject a non-None motion_method. V4 retains V3's
+    relative Hb mapping, not an independently calibrated concentration scale.
+    """
     compatibility = get_homer2_dataset_compatibility(dataset_id)
-    if processing_schema not in (HOMER2_ALIGNMENT_SCHEMA, MEASUREMENT_ALIGNMENT_SCHEMA):
+    v4 = processing_schema == MEASUREMENT_ALIGNMENT_V4_SCHEMA
+    if processing_schema not in (HOMER2_ALIGNMENT_SCHEMA, MEASUREMENT_ALIGNMENT_SCHEMA, MEASUREMENT_ALIGNMENT_V4_SCHEMA):
         raise ValueError("unsupported measurement alignment schema")
+    if v4:
+        if motion_method not in ('none', 'mne_tddr'):
+            raise ValueError("V4 requires explicit motion_method 'none' or 'mne_tddr'")
+        if entry_stage not in ('raw_intensity', 'optical_density'):
+            raise ValueError('V4 supports only raw_intensity or optical_density')
+        wavelengths = np.asarray(wavelengths_nm, dtype=float)
+        if (wavelengths.shape != (2,) or not np.isfinite(wavelengths).all()
+                or np.any(wavelengths <= 0) or wavelengths[0] >= wavelengths[1]):
+            raise ValueError('V4 requires two finite positive increasing wavelengths')
+        if not np.isfinite(sample_rate_hz) or sample_rate_hz <= 0:
+            raise ValueError('V4 requires finite positive sample rate')
+    elif motion_method is not None:
+        raise ValueError('motion_method is only supported by V4')
     if entry_stage not in ("raw_intensity", "optical_density", "chromophore", "absorbance"):
         raise ValueError("explicit intensity, OD, chromophore or absorbance entry required")
     if entry_stage == "raw_intensity" and dataset_id != "eeg_fnirs_single_trial":
         raise ValueError("released chromophores cannot re-enter intensity/MBLL processing")
     array = _as_float_array(values)
+    if v4 and (array.ndim != 3 or array.shape[-1] != 2 or array.shape[0] < 4 or array.shape[1] < 1):
+        raise ValueError('V4 requires [time>=4, pair>=1, two wavelengths]')
     applied: list[str] = []
     skipped: list[str] = []
     missing: list[str] = []
@@ -378,7 +435,7 @@ def apply_homer2_aligned_contract(
         recorded &= np.broadcast_to(supplied,array.shape)
     if entry_stage == 'raw_intensity':
         recorded &= array > 0
-    if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA:
+    if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA or v4:
         working = np.where(recorded,array,np.nan)
         quality['recorded_fraction'] = float(recorded.mean())
         quality['missing_policy'] = 'mask_before_nonlinear_processing; visible_only_interpolation; no_new_measurements'
@@ -391,7 +448,7 @@ def apply_homer2_aligned_contract(
 
     if entry_stage == "raw_intensity":
         od, od_quality = intensity_to_optical_density(
-            working,epsilon=np.finfo(float).tiny if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA else 1e-9)
+            working,epsilon=np.finfo(float).tiny if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA or v4 else 1e-9)
         working = od
         applied.append("intensity_to_optical_density")
         quality["intensity_to_optical_density"] = od_quality
@@ -399,7 +456,17 @@ def apply_homer2_aligned_contract(
         skipped.append("intensity_to_optical_density")
         missing.append("raw_light_intensity")
 
-    if motion_correction:
+    if v4:
+        working, repaired = _finite_interp(working)
+        quality['motion_input_nonfinite_repaired'] = float(repaired)
+        quality['motion_method'] = motion_method
+        if motion_method == 'mne_tddr':
+            working, motion_quality = _mne_tddr_optical_density(working, sample_rate_hz, wavelengths_nm)
+            quality['motion_correction'] = motion_quality
+            applied.append('mne_tddr')
+        else:
+            skipped.append('motion_correction')
+    elif motion_correction:
         working, motion_quality = robust_derivative_motion_suppression(working)
         applied.append("robust_derivative_motion_suppression")
         quality["motion_correction"] = motion_quality
@@ -411,7 +478,7 @@ def apply_homer2_aligned_contract(
     pre_linear = np.array(working, dtype=float, copy=True) if retain_feature_boundary else None
     pre_od = pre_linear.copy() if retain_feature_boundary and entry_stage in ("raw_intensity", "optical_density") else None
     optical = entry_stage in ("raw_intensity", "optical_density")
-    new_measurement = processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA
+    new_measurement = processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA or v4
     if optical and (array.ndim != 3 or array.shape[-1] != 2):
         raise ValueError("intensity/OD requires [time, pair, two wavelengths]")
     if optical and new_measurement:
@@ -472,7 +539,8 @@ def apply_homer2_aligned_contract(
         parameters={
             "low_hz": float(low_hz),
             "high_hz": float(high_hz),
-            "motion_correction": bool(motion_correction),
+            "motion_correction": motion_method != 'none' if v4 else bool(motion_correction),
+            **({"motion_method": motion_method, "legacy_motion_correction_argument": "unused_in_v4"} if v4 else {}),
             "wavelengths_nm": [float(item) for item in wavelengths_nm],
             "source_detector_distance_cm": float(source_detector_distance_cm),
             "partial_pathlength_factor": float(partial_pathlength_factor),

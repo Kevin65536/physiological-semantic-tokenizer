@@ -434,12 +434,18 @@ def main():
     parser.add_argument('--boundary', action='store_true', help='Boundary mechanisms on retained shared-parameter evidence')
     parser.add_argument('--boundary-report', action='store_true', help='Report completed boundary diagnostics without refitting')
     parser.add_argument('--observation', action='store_true', help='Observation gain and metric separation diagnostic')
+    parser.add_argument('--predictive-separation', action='store_true', help='Training-frozen gain and held-out HbR prediction')
+    parser.add_argument('--predictive-config', type=Path, default=ROOT/'experiments/configs/physiology_semantic_tokenizer/hbo_hbr_predictive_separation_v1.yaml')
+    parser.add_argument('--stage', choices=['synthetic', 'measured', 'report'], default='synthetic')
     parser.add_argument('--observation-report', action='store_true', help='Report completed observation separation evidence')
     parser.add_argument('--observation-config', type=Path, default=ROOT/'experiments/configs/physiology_semantic_tokenizer/hbo_hbr_observation_v1.yaml')
     parser.add_argument('--boundary-config', type=Path, default=ROOT/'experiments/configs/physiology_semantic_tokenizer/hbo_hbr_boundary_v1.yaml')
     parser.add_argument('--adapt-config', type=Path, default=ADAPT_CONFIG)
     parser.add_argument('--resume', action='store_true', help='Resume an existing adaptation run')
     args = parser.parse_args()
+    if args.predictive_separation:
+        run_predictive_separation(args)
+        return
     if args.observation_report:
         render_observation_report(args.output_dir)
         return
@@ -2516,6 +2522,453 @@ AR1、固定 g=1 的 tau 中位数由 82.92 秒降到 2.34 秒，a=0 从 23/24 �
     report=report.replace('@SYNTHETIC@',md(pd.DataFrame(synthetic_rows))).replace('@MEASURED@',md(measured_display))
     (out/'REPORT.md').write_text(report);shutil.copy2(Path(__file__),out/'source_snapshot'/'report_export_v1.py')
     print(json.dumps(verification,indent=2));print(measured_display.to_string(index=False))
+
+
+def predictive_config(path):
+    cfg = yaml.safe_load(Path(path).read_text())
+    if cfg['schema'] != 'hbo_hbr_predictive_separation_v1':
+        raise ValueError('Unsupported predictive separation contract')
+    if cfg['tensor'] != dict(components=['HbO', 'HbR'], samples=300, sample_rate_hz=10):
+        raise ValueError('Expected native 300-point paired Hb features')
+    if cfg['expected_measured_groups'] != 24 or cfg['synthetic']['replicates'] != 8:
+        raise ValueError('Changed fixed panel')
+    if cfg['protected_boundary'] != 'only_parent_retained_public_arrays_no_raw_loaders_or_protected_artifacts':
+        raise ValueError('Invalid read boundary')
+    return cfg
+
+
+def predictive_response(oxy, tau, eta, cfg):
+    """R/O transfer of the existing linearized relation, with free initial modes.
+
+    H_R/O(s) = a/(1-a) - k/(1-a)^2 / (s + lambda + k/(1-a)).
+    The eliminated p-v initial condition adds an exp(-lambda*t) mode.
+    Integrate a piecewise-linear O exactly; no numerical differentiation.
+    """
+    from scipy.signal import lfilter
+    oxy = np.asarray(oxy, dtype=float)
+    if oxy.ndim != 2 or oxy.shape[1] != 300 or not np.isfinite(oxy).all():
+        raise ValueError('Expected finite [windows,300] HbO')
+    ref = cfg['reference_parameters']
+    lam, a, k = physical_to_effective([tau, eta, ref['E0'], ref['alpha']])
+    mu = lam + k/(1-a)
+    dt = 1/cfg['tensor']['sample_rate_hz']
+    decay = np.exp(-mu*dt)
+    b0 = (mu*dt + np.expm1(-mu*dt))/(dt*mu*mu)
+    b1 = -np.expm1(-mu*dt)/mu-b0
+    conv = lfilter([b0, b1], [1, -decay], oxy, axis=1)
+    t = np.arange(300)*dt
+    conv -= b0*oxy[:, :1]*np.exp(-mu*t)
+    forced = a/(1-a)*oxy-k/(1-a)**2*conv
+    nuisance = np.column_stack([np.ones(300), np.exp(-mu*t),
+        (np.exp(-lam*t)-np.exp(-mu*t))/(mu-lam)])
+    return forced, nuisance
+
+
+def predictive_apply(curves, tau, eta, gain, cfg, visible=None, *, shift=False):
+    values = np.asarray(curves, dtype=float)
+    if values.ndim != 3 or values.shape[1:] != (2, 300):
+        raise ValueError('Expected [windows,HbO/HbR,300]')
+    visible = np.ones(300, dtype=bool) if visible is None else np.asarray(visible, dtype=bool)
+    if visible.shape != (300,) or visible.sum() < 3:
+        raise ValueError('Insufficient visible HbR')
+    oxy = np.roll(values[:, 0], 150, axis=1) if shift else values[:, 0]
+    forced, basis = predictive_response(oxy, tau, eta, cfg)
+    residual = values[:, 1, visible]-gain*forced[:, visible]
+    coefficients = np.linalg.lstsq(basis[visible], residual.T, rcond=1e-10)[0]
+    return gain*forced+(basis@coefficients).T
+
+
+def predictive_fit(train, cfg, *, gain=1., joint=False):
+    from scipy.optimize import least_squares
+    bounds = cfg['bounds']
+    lo = [bounds['tau'][0], bounds['eta'][0]]
+    hi = [bounds['tau'][1], bounds['eta'][1]]
+    if joint:
+        lo.append(bounds['gain'][0]); hi.append(bounds['gain'][1])
+    def residual(x):
+        prediction = predictive_apply(train, x[0], x[1], x[2] if joint else gain, cfg)
+        return (prediction-train[:, 1]).ravel()/np.sqrt(len(train))
+    fits = []
+    for start in cfg['optimizer']['starts']:
+        x = list(start)+([gain] if joint else [])
+        fit = least_squares(residual, x, bounds=(lo, hi),
+            max_nfev=cfg['optimizer']['max_nfev'], ftol=1e-9, xtol=1e-9, gtol=1e-9)
+        fits.append(fit)
+    finite = [f for f in fits if f.success and np.isfinite(f.fun).all()]
+    if not finite:
+        raise RuntimeError('No converged multistart fit')
+    fit = min(finite, key=lambda f: np.dot(f.fun, f.fun))
+    return dict(tau=float(fit.x[0]), eta=float(fit.x[1]),
+        gain=float(fit.x[2] if joint else gain), objective=float(np.mean(fit.fun**2)),
+        converged_starts=len(finite), boundary=bool(np.any(fit.active_mask)),
+        boundary_parameters=[name for name, flag in zip(['tau', 'eta', 'gain'], fit.active_mask) if flag])
+
+
+def predictive_gain(train, cfg):
+    ref = cfg['reference_parameters']
+    forced, basis = predictive_response(train[:, 0], ref['tau'], ref['eta'], cfg)
+    q = np.linalg.qr(basis)[0]
+    x = forced-(forced@q)@q.T
+    y = train[:, 1]-(train[:, 1]@q)@q.T
+    unconstrained = float(np.sum(x*y)/max(np.sum(x*x), 1e-30))
+    return float(np.clip(unconstrained, *cfg['bounds']['gain']))
+
+
+def predictive_synthetic(condition, replicate, cfg):
+    rng = np.random.default_rng(cfg['seed']+replicate)
+    n = cfg['synthetic']['train_windows']+cfg['synthetic']['test_windows']
+    tau = 4. if condition == 'tau4_gain2' else 2.
+    gain = 2. if 'gain2' in condition else 1.
+    y = synthetic_adaptation_curves([tau, .35, .32, .32], rng.uniform(0, 2*np.pi, n))
+    # Generation uses an independent analytic transfer; scale before noise only.
+    y *= np.sqrt(300)
+    y[:, 1] *= gain
+    y += rng.normal(0, cfg['synthetic']['white_sd'], y.shape)
+    if 'slow' in condition:
+        t = np.arange(300)/10
+        frequencies = np.array([.015, .025, .05, .08])
+        phase = 2*np.pi*frequencies[:, None]*t
+        modes = np.concatenate([np.sin(phase), np.cos(phase)])
+        y += cfg['synthetic']['slow_sd']/2 * (rng.normal(size=(n, 2, 8))@modes)
+    count = cfg['synthetic']['train_windows']
+    return y[:count], y[count:], dict(true_tau=tau, true_eta=.35, true_gain=gain)
+
+
+def predictive_task(task):
+    import time
+    import resource
+    key, train, test, cfg, info = task
+    started = time.monotonic()
+    # A single train-derived scale preserves the relative Hb amplitude.
+    centered = train-train.mean(axis=2, keepdims=True)
+    scale = float(np.sqrt(np.mean(centered**2)))
+    if not np.isfinite(scale) or scale <= 0:
+        raise ValueError('Invalid training scale')
+    train, test = train/scale, test/scale
+    variance = float(np.mean((train[:, 1]-train[:, 1].mean(axis=1, keepdims=True))**2))
+    if variance <= 1e-20:
+        raise ValueError('No training HbR variance')
+    visible = np.ones(300, dtype=bool); visible[100:200] = False
+    ref = cfg['reference_parameters']; gain = predictive_gain(train, cfg)
+    reference = dict(tau=ref['tau'], eta=ref['eta'], gain=1., boundary=False)
+    models = dict(fixed=reference, observation_only={**reference, 'gain': gain})
+    failures = []
+    for name, g, joint in [('physiology_only', 1., False), ('separated', gain, False), ('joint_target', gain, True)]:
+        try:
+            models[name] = predictive_fit(train, cfg, gain=g, joint=joint)
+        except Exception as exc:
+            failures.append(dict(method=name, error=repr(exc)))
+    if 'separated' in models:
+        models['separated_shift'] = models['separated'].copy()
+    # Low-capacity train-fitted slope; only visible HbR residuals interpolate.
+    x = centered[:, 0]/scale; y = centered[:, 1]/scale
+    slope = float(np.sum(x*y)/max(np.sum(x*x), 1e-30))
+    predictions = {}
+    rows = []
+    for name in cfg['methods']:
+        if name in ('linear_context', 'own_context'):
+            forced = slope*test[:, 0] if name == 'linear_context' else np.zeros_like(test[:, 0])
+            residual = test[:, 1, visible]-forced[:, visible]
+            pred = forced+np.array([np.interp(np.arange(300), np.where(visible)[0], r) for r in residual])
+            pars = {}
+        elif name in models:
+            pars = models[name]
+            pred = predictive_apply(test, pars['tau'], pars['eta'], pars['gain'], cfg, visible,
+                shift=name == 'separated_shift')
+        else:
+            continue
+        predictions[name] = pred[0].tolist()
+        error = pred-test[:, 1]
+        per_window = np.mean(error[:, ~visible]**2, axis=1)/variance
+        rows.append(dict(method=name, **pars, hidden_nmse=float(per_window.mean()),
+            visible_nmse=float(np.mean(error[:, visible]**2)/variance),
+            hidden_nmse_by_window=per_window.tolist(),
+            hidden_bias=float(np.mean(error[:, ~visible])/np.sqrt(variance))))
+    return dict(key=key, info=info, status='completed' if not failures else 'completed_with_failures',
+        train_count=len(train), test_count=len(test), training_scale=scale,
+        training_HbR_variance=variance, frozen_gain=gain,
+        gain_at_bound=bool(any(np.isclose(gain, b) for b in cfg['bounds']['gain'])),
+        rows=rows, failures=failures, example=dict(observed=test[0].tolist(), predictions=predictions),
+        elapsed_s=time.monotonic()-started, peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+
+
+def predictive_checks(cfg):
+    clean = synthetic_adaptation_curves([2., .35, .32, .32], np.linspace(.1, 6, 8))
+    prediction = predictive_apply(clean, 2., .35, 1., cfg)
+    relative_error = float(np.linalg.norm(prediction-clean[:, 1])/np.linalg.norm(clean[:, 1]))
+    if relative_error > .001:
+        raise AssertionError('Independent analytic forward mismatch')
+    visible = np.ones(300, dtype=bool); visible[100:200] = False
+    altered = clean.copy(); altered[:, 1, ~visible] += 1e6
+    before = predictive_apply(clean, 2., .35, 1., cfg, visible)
+    after = predictive_apply(altered, 2., .35, 1., cfg, visible)
+    if not np.array_equal(before, after):
+        raise AssertionError('Hidden HbR leaked into fitting')
+    doubled = clean.copy(); doubled[:, 1] *= 2
+    gain = predictive_gain(doubled, cfg)
+    if abs(gain-2) > .01:
+        raise AssertionError('Training gain recovery failed')
+    return dict(analytic_forward_relative_error=relative_error,
+        hidden_perturbation_max_error=float(np.max(abs(before-after))), recovered_gain=gain)
+
+
+def run_predictive_separation(args):
+    import fcntl
+    import os
+    import shutil
+    import time
+    import traceback
+    from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
+    cfg = predictive_config(args.predictive_config)
+    check = predictive_checks(cfg)
+    if args.check_only:
+        print(json.dumps(check, indent=2)); return
+    if args.output_dir is None:
+        raise ValueError('Output directory required')
+    out = args.output_dir.resolve()
+    if out.parent != ROOT/cfg['output_namespace']:
+        raise ValueError('Output outside audit namespace')
+    out.mkdir(exist_ok=True)
+    with (out/'run.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        manifest_path = out/'manifest.json'
+        if manifest_path.exists():
+            manifest = json.loads(manifest_path.read_text())
+            if manifest['resolved_config'] != cfg:
+                raise ValueError('Configuration changed')
+        else:
+            if args.stage != 'synthetic':
+                raise ValueError('Synthetic stage must run first')
+            manifest = dict(experiment_id=cfg['experiment_id'], resolved_config=cfg,
+                started_at=time.time(), checks=check, stages={}, command=sys.argv,
+                status='preparing', protected_data_access=False,
+                workers=cfg['resources']['workers'], cpu_affinity=sorted(os.sched_getaffinity(0)))
+            for name in ['experiments/scripts/analyze_hbo_hbr_relationship.py',
+                         str(args.predictive_config.resolve().relative_to(ROOT)),
+                         'tests/test_hbo_hbr_predictive_separation.py']:
+                target = out/'source_snapshot'/name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT/name, target)
+        def save():
+            temp = out/'manifest.tmp'; temp.write_text(json.dumps(manifest, indent=2)); temp.replace(manifest_path)
+        if args.stage == 'report':
+            predictive_report(out, manifest); return
+        if manifest['stages'].get(args.stage, {}).get('status') == 'completed':
+            raise ValueError('Stage already complete; do not rerun retained evidence')
+        jobs = []
+        if args.stage == 'synthetic':
+            for condition in cfg['synthetic']['conditions']:
+                for rep in range(cfg['synthetic']['replicates']):
+                    train, test, truth = predictive_synthetic(condition, rep, cfg)
+                    jobs.append((f'synthetic|{condition}|{rep}', train, test, cfg,
+                        dict(condition=condition, replicate=rep, **truth)))
+        else:
+            if manifest['stages'].get('synthetic', {}).get('status') != 'completed':
+                raise ValueError('Synthetic stage incomplete')
+            parent = ROOT/cfg['parent']
+            if json.loads((parent/'manifest.json').read_text())['status'] != 'completed':
+                raise ValueError('Parent evidence incomplete')
+            frame = pd.read_csv(parent/'pair_inventory.csv', dtype={'subject': str})
+            groups = json.loads((parent/'fit_groups.json').read_text())
+            curves = np.load(parent/'prepared_inputs.npz')['curves']
+            if curves.ndim != 3 or curves.shape[1:] != (2, 300):
+                raise ValueError('Invalid retained tensor')
+            def native(indices):
+                rows = frame.loc[indices]
+                if not (rows.status == 'valid').all() or (rows.curve_index < 0).any():
+                    raise ValueError('Invalid support')
+                y = curves[rows.curve_index.to_numpy()]*rows.native_pair_norm.to_numpy()[:, None, None]
+                y += rows[['native_mean_O', 'native_mean_R']].to_numpy()[:, :, None]
+                # Local offsets use only visible HbR; remove parent full-window centering.
+                y[:, 0] -= y[:, 0].mean(axis=1, keepdims=True)
+                vis = np.ones(300, bool); vis[100:200] = False
+                y[:, 1] -= y[:, 1, vis].mean(axis=1, keepdims=True)
+                return y
+            inventory = {}
+            for key, g in groups.items():
+                if g['sharing'] != 'subject':
+                    continue
+                if set(g['train_indices']) & set(g['test_indices']):
+                    raise ValueError('Train/test overlap')
+                tr, te = frame.loc[g['train_indices']], frame.loc[g['test_indices']]
+                if set(tr.window_index) & set(te.window_index):
+                    raise ValueError('Shared window across fold')
+                jobs.append((key, native(g['train_indices']), native(g['test_indices']), cfg, g))
+                inventory[key] = g
+            if len(jobs) != cfg['expected_measured_groups']:
+                raise ValueError('Changed measured panel')
+            (out/'fit_groups.json').write_text(json.dumps(inventory, indent=2))
+        stage = dict(status='running', total=len(jobs), completed=0, started_at=time.time())
+        manifest['stages'][args.stage] = stage; manifest['status'] = args.stage+'_running'; save()
+        results = out/args.stage; results.mkdir(exist_ok=True)
+        todo = []
+        for i, job in enumerate(jobs):
+            path = results/f'{i:03d}.json'
+            if path.exists():
+                if json.loads(path.read_text())['key'] != job[0]:
+                    raise ValueError('Resume identity mismatch')
+                stage['completed'] += 1
+            else:
+                todo.append((path, job))
+        try:
+            # Bound queued work as well as active numerical-library threads.
+            with ProcessPoolExecutor(max_workers=cfg['resources']['workers']) as pool:
+                iterator = iter(todo); futures = {}
+                def fill():
+                    while len(futures) < cfg['resources']['max_in_flight']:
+                        item = next(iterator, None)
+                        if item is None:
+                            break
+                        path, job = item
+                        futures[pool.submit(predictive_task, job)] = (path, job[0])
+                fill()
+                while futures:
+                    done, _ = wait(futures, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        path, key = futures.pop(future)
+                        try:
+                            result = future.result()
+                        except Exception:
+                            result = dict(key=key, status='failed', error=traceback.format_exc())
+                        temp = path.with_suffix('.tmp'); temp.write_text(json.dumps(result)); temp.replace(path)
+                        stage['completed'] += 1; save()
+                        print(f"{args.stage} {stage['completed']}/{stage['total']} {key}: {result['status']}", flush=True)
+                    fill()
+            stage.update(status='completed', elapsed_s=time.time()-stage['started_at'])
+            manifest['status'] = 'completed' if args.stage == 'measured' else 'synthetic_completed'
+            save()
+            predictive_report(out, manifest)
+        except BaseException:
+            manifest['status'] = 'interrupted_or_failed'; save(); raise
+
+
+def predictive_report(out, manifest):
+    rows, windows, failures = [], [], []
+    for stage in ['synthetic', 'measured']:
+        for path in sorted((out/stage).glob('*.json')):
+            result = json.loads(path.read_text())
+            if result['status'] == 'failed':
+                failures.append(result); continue
+            for fail in result['failures']:
+                failures.append(dict(key=result['key'], **fail))
+            for row in result['rows']:
+                metrics = {k: v for k, v in row.items() if k != 'hidden_nmse_by_window'}
+                rows.append(dict(stage=stage, key=result['key'],
+                    dataset_id=result['info'].get('dataset_id', result['info'].get('condition')),
+                    subject=result['info'].get('subject', str(result['info'].get('replicate'))),
+                    fit_block=result['info'].get('fit_block'),
+                    true_tau=result['info'].get('true_tau'), true_gain=result['info'].get('true_gain'),
+                    gain_at_bound=result['gain_at_bound'], train_count=result['train_count'],
+                    test_count=result['test_count'], **metrics))
+                indices = result['info'].get('test_indices', list(range(result['test_count'])))
+                for index, loss in zip(indices, row['hidden_nmse_by_window']):
+                    windows.append(dict(stage=stage, key=result['key'], method=row['method'],
+                        parent_pair_row=index, hidden_nmse=loss))
+    table = pd.DataFrame(rows); table.to_csv(out/'model_metrics.csv', index=False)
+    pd.DataFrame(windows).to_csv(out/'window_metrics.csv', index=False)
+    (out/'failures.json').write_text(json.dumps(failures, indent=2))
+    summary = table.groupby(['stage', 'dataset_id', 'method'], sort=True).agg(
+        groups=('key', 'size'), hidden_nmse=('hidden_nmse', 'mean'),
+        tau_median=('tau', 'median'), eta_median=('eta', 'median'), gain_median=('gain', 'median'))
+    summary.to_csv(out/'summary.csv')
+    text = '# 训练冻结观测增益下的双 Hb 实测拟合\n\n'
+    text += '探索性线性化双 Hb 动力学对照。观测增益依赖固定参考生理参数，不是独立标定；不替代 C/D 或 teacher 资格。\n\n'
+    text += '训练/留出沿用父运行早晚时间分块和中间间隔。每个被试跨通道共享 tau/eta/gain，E0/alpha 固定。'
+    text += '恢复父运行原坐标后，尺度与评分分母仅从训练数据计算。留出 HbR 的 10–20 秒隐藏，仅可见 HbR 用于三个初态/偏置项。'
+    text += 'HbO 全窗可见；既有全记录离线滤波保持不变，属于处理后特征遮挡，不是原始传感器缺失或未来预测。\n\n'
+    text += 'fixed 固定全部参数；physiology_only 仅拟合 tau/eta；observation_only 仅训练参考增益；'
+    text += 'separated 冻结该增益再拟合 tau/eta；joint_target 同时拟合三者；linear_context 为训练线性 HbO 回归加可见残差插值；'
+    text += 'own_context 仅插值可见 HbR；separated_shift 将 HbO 循环移位半窗。\n\n'
+    text += '主指标是隐藏 HbR MSE/冻结训练 HbR 方差，越低越好，先对窗口均值再对被试与折等权。不同通道不视为独立被试。\n\n'
+    text += '| stage | dataset | method | groups | hidden NMSE | tau median | eta median | gain median |\n'
+    text += '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |\n'
+    for index, row in summary.iterrows():
+        text += '| '+' | '.join([*index, str(int(row.groups)), *[f'{row[k]:.5g}' for k in ['hidden_nmse','tau_median','eta_median','gain_median']]])+' |\n'
+    text += f'\n保留失败记录：{len(failures)}。完整分母和阶段状态见 manifest.json；逐窗口结果见 window_metrics.csv。\n'
+    text += '\n本实验没有独立噪声校准、未知非线性驱动恢复或生理真值。合成条件用于检查算法及参考增益吸收真实生理变化的风险；实测预测改善也不能证明唯一生理分离。未生成 PDF，未检查 WPS。\n'
+    measured = table[table.stage == 'measured']
+    if len(measured):
+        wide = measured.pivot(index='key', columns='method', values='hidden_nmse')
+        paired = measured.pivot(index=['dataset_id', 'subject', 'fit_block'],
+                                columns='method', values='hidden_nmse')
+        subject_delta = (paired.separated-paired.physiology_only).groupby(level=[0, 1]).mean()
+        rng = np.random.default_rng(manifest['resolved_config']['seed'])
+        # Descriptive, stratified subject bootstrap. Both folds stay together.
+        boot = np.zeros(10000)
+        for _, values in subject_delta.groupby(level=0):
+            v = values.to_numpy()
+            boot += rng.choice(v, size=(10000, len(v)), replace=True).mean(axis=1)/4
+        ci = np.quantile(boot, [.025, .975]).tolist()
+        means = wide.mean()
+        result_summary = dict(
+            measured_groups=len(wide), independent_subjects=len(subject_delta),
+            paired_heldout_pair_windows=int(measured[measured.method == 'fixed'].test_count.sum()),
+            method_group_mean_hidden_nmse=means.to_dict(),
+            separated_minus_physiology_only=float(subject_delta.mean()),
+            descriptive_stratified_subject_bootstrap_95_ci=ci,
+            separated_relative_improvement=float(1-means.separated/means.physiology_only),
+            wins={name: int((wide.separated < wide[name]).sum()) for name in wide.columns if name != 'separated'},
+            physiology_boundary_counts={name: int(group.boundary.eq(True).sum())
+                for name, group in measured.groupby('method') if name in ['physiology_only', 'separated', 'joint_target']},
+            gain_at_bound_groups=int(measured[measured.method == 'separated'].gain_at_bound.sum()),
+            fit_failures=len(failures),
+            verdict='limited_predictive_gain_but_linear_baseline_superior_and_physiology_unidentified')
+        (out/'summary.json').write_text(json.dumps(result_summary, indent=2))
+        subject_delta.rename('separated_minus_physiology_only').to_csv(out/'subject_contrasts.csv')
+        lead = ('\n实测结果：24 个被试×折组全部完成，主比较的平均隐藏 NMSE '
+                f'由 {means.physiology_only:.6f} 降至 {means.separated:.6f}，相对改善 '
+                f'{100*result_summary["separated_relative_improvement"]:.2f}%。'
+                f'分层被试 bootstrap 的描述性差值区间为 [{ci[0]:.6f}, {ci[1]:.6f}]，'
+                '不将窗口、通道或两个互换折当作独立被试。'
+                f'线性上下文基线为 {means.linear_context:.6f}，分离模型在全部24组均未胜出；'
+                f'仅 HbR 插值为 {means.own_context:.6f}。'
+                f'生理触界从 {result_summary["physiology_boundary_counts"]["physiology_only"]}/24 降到 '
+                f'{result_summary["physiology_boundary_counts"]["separated"]}/24。'
+                '支持有限预测改善，不支持生理参数已分离或模型已合格。\n\n')
+        text = text.replace('\n\n探索性线性化', '\n'+lead+'探索性线性化', 1)
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        methods = ['fixed', 'physiology_only', 'separated', 'linear_context', 'own_context']
+        labels = ['Fixed', 'Physiology only', 'Frozen gain + physiology', 'Linear + context', 'HbR context only']
+        colors = ['#999999', '#d28b2e', '#1268a6', '#30844d', '#9765a3']
+        fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), layout='constrained')
+        datasets = list(NAMES)
+        for j, (name, label, color) in enumerate(zip(methods, labels, colors)):
+            vals = [summary.loc[('measured', ds, name), 'hidden_nmse'] for ds in datasets]
+            axes[0].bar(np.arange(4)+(j-2)*.15, vals, width=.145, label=label, color=color)
+        axes[0].set_xticks(range(4), [NAMES[d] for d in datasets], rotation=15)
+        axes[0].set_ylabel('Hidden HbR MSE / training HbR variance')
+        axes[0].set_title('Held-out prediction (lower is better)')
+        axes[0].legend(fontsize=8)
+        for ds, frame in paired.groupby(level=0):
+            axes[1].scatter(frame.physiology_only, frame.separated, label=NAMES[ds], alpha=.8)
+        limit = float(max(paired.physiology_only.max(), paired.separated.max()))*1.05
+        axes[1].plot([0, limit], [0, limit], '--', color='gray')
+        axes[1].set(xlabel='Physiology-only NMSE', ylabel='Frozen-gain NMSE', title='24 subject/fold comparisons')
+        axes[1].legend(fontsize=8)
+        fig.savefig(out/'heldout_comparison.png', dpi=220); plt.close(fig)
+        fig, axes = plt.subplots(2, 2, figsize=(11, 6.5), layout='constrained')
+        cases = [json.loads(path.read_text()) for path in sorted((out/'measured').glob('*.json'))]
+        examples = []
+        for ax, ds in zip(axes.flat, datasets):
+            case = next(c for c in cases if c.get('info', {}).get('dataset_id') == ds and 'example' in c)
+            observed = np.array(case['example']['observed'])
+            t = np.arange(300)/10
+            ax.plot(t, observed[1], color='black', label='Observed HbR', lw=1.5)
+            for method, label, color in zip(methods[:4], labels[:4], colors[:4]):
+                ax.plot(t, case['example']['predictions'][method], color=color, label=label, lw=1.)
+            ax.axvspan(10, 20, color='#bbbbbb', alpha=.22, label='Hidden from fit')
+            ax.set(title=NAMES[ds]+' / '+case['info']['subject'], xlabel='Window time (s)', ylabel='Training pair RMS units')
+            examples.append(dict(key=case['key'], parent_pair_row=case['info']['test_indices'][0]))
+        axes.flat[0].legend(fontsize=7, ncol=2)
+        fig.savefig(out/'heldout_examples.png', dpi=220); plt.close(fig)
+        (out/'figure_examples.json').write_text(json.dumps(examples, indent=2))
+        text += '\n![留出预测与配对比较](heldout_comparison.png)\n\n'
+        text += '上图按数据集等权展示相同隐藏目标，右侧每点是被试×折；对角线下方代表分离模型改善。\n\n'
+        text += '![固定选例的曲线](heldout_examples.png)\n\n'
+        text += '每数据集按身份顺序取首组首条留出曲线，非按表现选择；灰带为隐藏 HbR。曲线仅用于示例，结论使用全部留出行。\n'
+    (out/'REPORT.md').write_text(text)
 
 
 if __name__ == '__main__':

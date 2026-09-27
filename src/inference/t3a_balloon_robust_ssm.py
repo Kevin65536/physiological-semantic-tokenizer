@@ -9,10 +9,13 @@ extended-Kalman fixed-interval smoother with Student-t IRLS observation
 updates.  The IRLS/Laplace approximation is a robust engineering posterior,
 not an exact Student-t posterior.
 
-The ``p`` equation uses the minimal ``tau_v=0`` Tak extension required by the
-current contract, ``tau * dp/dt = f - f_out * p / v``.  It is intentionally
-not the alternative ``(f-f_out)*p/v`` linearized form used by the old
-adaptive implementation.
+The current ``tau_v=0`` contract uses the inlet-balance variant
+``tau * dp/dt = f - f_out * p / v``. Tak et al. (2015), Eq. (3), instead
+prints ``tau * dp/dt = (f - f_out) * p / v``:
+https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf
+Both variants preserve ``p = v`` when ``p0 = v0``, but differ for independent
+initial states: the current variant makes ``p - v`` decay for positive
+outflow, whereas the printed equation preserves ``p / v``.
 
 The module-level :func:`fit_balloon` API fits only ``kappa`` and ``tau``.
 Other physiology values remain in :class:`BalloonFixedParameters`; an

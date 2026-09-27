@@ -487,6 +487,14 @@ arrays only. Frozen SSM native inputs and completed campaign evidence stay in pl
 `clean_eeg_fnirs_cache_v2`，二者不可混用。旧缓存不得逆标准化或原地重标成新版本。
 原始采集单位及未核实项仍由 `DATASETS_DESCRIPTION.md` 持有。
 
+2026-09-26 的局部光学修正新增 `physiology_measurement_alignment_v4`，由同一
+`apply_homer2_aligned_contract` 实现，必须显式指定 `motion_method="none"` 或
+`"mne_tddr"`；该方法独占v4的运动处理选择，旧布尔参数只用于v1/v3。
+v4只接受光强/OD入口，保留原生缺失隔离、双波长身份、相对MBLL、滤波与float64边界。
+MNE为公共API的算法对照，none保留输入变化；均不代表真实生理观测或独立物理标定。
+旧导数抑制可能累积非零漂移，只保留其v1/v3回放语义。处理schema升级与cache根目录
+名称独立；已保存的缓存不会因此自动迁移或重标，消费者需记录所用处理身份。
+
 - `UnifiedPhysiologyWindowDataset(output_coordinate="measurement")` 只接受新 producer，
   输出 float64 测量坐标及单位证据、参考、几何、色团角色、真实逐通道支持。
   它不做逐通道 MAD；当前默认切换见上一节；历史调用可显式使用 `legacy_robust`。连续 record 清理为非因果操作，
@@ -792,6 +800,10 @@ REFED 的 HbT 可作同单位下的成分一致性诊断，但不能假设它与
 - 事件前 baseline 是有噪声的观测。令权重 `w` 仅使用允许的可见支持且和为 1，
   则 `C=I-1 w^T` 同时作用于目标、预测均值与噪声。保留由此产生的时间相关及秩损失；
   不把去基线后的首段均值为零当作潜状态/血流确实处于静息的证据。
+  共享驱动若另报 `r_relative=r-c`，需声明参考支持、保留 `c` 和原坐标误差，
+  forward 仍使用 `r_relative+c`；删除 `c` 并强制事件前驱动为零属于新增模型假设。
+  固定其余生理参数时，不能把血流/Hb状态重新归一到1称为不改变模型的基线修复，
+  也不能用去均值后的较小恢复误差替换原坐标指标。
 - 当前第一步仍用 30 s、4 Hz 和 5 s baseline，以隔离修订效果。0.01 Hz 对应约
   100 s 周期，30 s 窗内低频基线与边缘效应需作敏感性检查。将来使用连续长上下文时，
   先由 scope 确定可读支持，再拟合/滤波；不能为了减少边缘效应越过被排除的 trial。
