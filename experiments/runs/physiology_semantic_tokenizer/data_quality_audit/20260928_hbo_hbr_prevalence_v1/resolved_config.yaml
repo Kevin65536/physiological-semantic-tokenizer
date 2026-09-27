@@ -1,0 +1,50 @@
+schema: hbo_hbr_prevalence_v1
+experiment_id: HBO-HBR-PREVALENCE-v1
+output_dir: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1
+cache_root: data/cache/physiology_semantic_clean_v5
+datasets:
+- eeg_fnirs_single_trial
+- simultaneous_eeg_nirs
+- visual_cognitive_motivation
+- refed
+excluded_records:
+- visual_cognitive_motivation|S06|S06_Part1_Probe1
+exclude_reason: S06_Part1_excluded_by_DATA_CONTRACT
+window_s: 30.0
+event_offset_s: -5.0
+minimum_pair_support: 0.95
+tensor:
+- time
+- spatial_channel
+- HbO_HbR
+primary: subject_equal_fraction_of_nonoverlapping_native_windows_with_r_greater_than_0.5
+secondary:
+- negative_r_below_minus_0.5
+- r_greater_than_0
+- r_greater_than_0.8
+- linear_detrend
+- first_difference_1s
+- event_aligned_Single_Trial
+- no_motion_v5
+- Prahl_MBLL_sensitivity
+null: opposite_and_same_direction_synthetic_pairs_and_drift_plus_anticorrelated_oscillation
+baseline: native_released_Hb_or_positive_intensity_to_relative_MBLL_before_temporal_processing
+split: descriptive_full_public_inventory_no_training_selection_or_prediction
+protected_boundary: no_comparison_campaign_or_sealed_targets_accessed
+stopping_rule: all_admitted_records_complete_or_explicit_failure_no_data_dependent_stopping
+seed: 20260928
+bootstrap_subject_replicates: 2000
+optical_sensitivity:
+  wavelengths_nm:
+  - 760.0
+  - 850.0
+  decadic_extinction_M_inv_cm_inv:
+  - - 586.0
+    - 1548.52
+  - - 1058.0
+    - 691.32
+  source: https://omlc.org/spectra/hemoglobin/summary.html
+  source_detector_distance_cm: 3.0
+  partial_pathlength_factor: 6.0
+  interpretation: spectral_mixing_sensitivity_not_individual_absolute_calibration
+model_evidence: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_v1

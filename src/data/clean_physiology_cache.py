@@ -235,7 +235,8 @@ class CleanPhysiologyCacheIndex:
             "record_keys_without_alignment_reports": sorted(record_keys - report_keys),
         }
 
-    def load_record_arrays(self, record: CleanCacheRecord, keys: Iterable[str] | None = None) -> dict[str, np.ndarray]:
+    @staticmethod
+    def load_record_arrays(record: CleanCacheRecord, keys: Iterable[str] | None = None) -> dict[str, np.ndarray]:
         if record.manifest.get("storage") == MEASUREMENT_CACHE_STORAGE:
             paths = record.manifest["arrays"]
             selected = paths if keys is None else keys

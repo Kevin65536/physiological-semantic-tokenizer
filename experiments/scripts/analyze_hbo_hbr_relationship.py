@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Bounded Hb-pair audit and shared-parameter adaptation; no teacher evaluation.
+"""Native Hb direction census and retained bounded Hb diagnostics.
 
-Reuse the dataset-scaling audit's subject/record scope on the current measurement
-loader. Select windows before array access; retain all unsupported pair rows.
+Legacy modes preserve their original config/cache scope. The --prevalence mode
+uses its own public-source contract. Retain unsupported rows; no teacher evaluation.
 """
 from __future__ import annotations
 
@@ -424,6 +424,10 @@ def select_audit_windows(ds, scope):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check-only', action='store_true')
+    parser.add_argument('--prevalence', action='store_true', help='Registered-source Hb direction census')
+    parser.add_argument('--prevalence-config', type=Path, default=ROOT/'experiments/configs/physiology_semantic_tokenizer/hbo_hbr_prevalence_v1.yaml')
+    parser.add_argument('--prevalence-pilot', action='store_true', help='First record of each dataset; separate pilot output')
+    parser.add_argument('--workers', type=int, default=8)
     parser.add_argument('--dynamics', action='store_true', help='Weak differential-constraint audit')
     parser.add_argument('--terms', action='store_true', help='Level/velocity/acceleration distributions and signed energy allocation')
     parser.add_argument('--nonlinear-check', action='store_true', help='Add three synthetic core checks; check-only mode')
@@ -443,6 +447,9 @@ def main():
     parser.add_argument('--adapt-config', type=Path, default=ADAPT_CONFIG)
     parser.add_argument('--resume', action='store_true', help='Resume an existing adaptation run')
     args = parser.parse_args()
+    if args.prevalence:
+        run_prevalence(args)
+        return
     if args.predictive_separation:
         run_predictive_separation(args)
         return
@@ -2969,6 +2976,459 @@ def predictive_report(out, manifest):
         text += '![固定选例的曲线](heldout_examples.png)\n\n'
         text += '每数据集按身份顺序取首组首条留出曲线，非按表现选择；灰带为隐藏 HbR。曲线仅用于示例，结论使用全部留出行。\n'
     (out/'REPORT.md').write_text(text)
+
+
+# The full-public census deliberately has its own contract, not the historical
+# bounded audit's v4 cache or subject restrictions.
+def load_prevalence_config(path):
+    config = yaml.safe_load(Path(path).read_text())
+    if (config['schema'] != 'hbo_hbr_prevalence_v1' or config['window_s'] != 30.
+            or config['tensor'] != ['time', 'spatial_channel', 'HbO_HbR']
+            or set(config['datasets']) != set(NAMES)
+            or not 0 < config['minimum_pair_support'] <= 1):
+        raise ValueError('invalid prevalence contract')
+    return config
+
+
+def prevalence_metrics(values, time_s, minimum_support=.95):
+    """Paired-mask correlations for [time, pair, O/R], preserving invalid rows."""
+    x = np.asarray(values, float)
+    t = np.asarray(time_s, float)
+    if x.ndim != 3 or x.shape[2] != 2 or t.shape != (len(x),) or len(x) < 3:
+        raise ValueError('expected [time>=3, pair, HbO/HbR] and matching clock')
+    if not np.isfinite(t).all() or np.any(np.diff(t) <= 0):
+        raise ValueError('clock must be finite and increasing')
+    mask = np.isfinite(x).all(axis=2)
+    n = mask.sum(axis=0)
+    safe_n = np.maximum(n, 1)
+    z = np.where(mask[..., None], x, 0.)
+    z = np.where(mask[..., None], z - z.sum(axis=0)/safe_n[:, None], 0.)
+    tc = t[:, None] - (t[:, None]*mask).sum(axis=0)/safe_n
+    tc = np.where(mask, tc, 0.)
+    slope = (tc[..., None]*z).sum(axis=0)/np.maximum((tc*tc).sum(axis=0)[:, None], 1e-30)
+    residual = np.where(mask[..., None], z-tc[..., None]*slope, 0.)
+    def corr(a):
+        energy = (a*a).sum(axis=0)
+        den = np.sqrt(energy[:, 0]*energy[:, 1])
+        return np.divide((a[:, :, 0]*a[:, :, 1]).sum(axis=0), den,
+                         out=np.full(a.shape[1], np.nan), where=den > 1e-30), energy
+    rho, energy = corr(z)
+    detrend_rho, residual_energy = corr(residual)
+    # Do not bridge missing data: both 1 s endpoints must be supported.
+    lag = max(1, int(round(1./np.median(np.diff(t)))))
+    if lag < len(x)-2:
+        dm = mask[lag:] & mask[:-lag]
+        dx = np.where(dm[..., None], x[lag:]-x[:-lag], 0.)
+        dx = np.where(dm[..., None], dx-dx.sum(axis=0)/np.maximum(dm.sum(axis=0), 1)[:, None], 0.)
+        drho, _ = corr(dx)
+        increments_same = (x[lag:, :, 0]-x[:-lag, :, 0])*(x[lag:, :, 1]-x[:-lag, :, 1]) > 0
+        same = np.divide((increments_same & dm).sum(axis=0),
+                         np.maximum(dm.sum(axis=0), 1))
+    else:
+        drho = same = np.full(x.shape[1], np.nan)
+    rows = []
+    for c in range(x.shape[1]):
+        status = 'valid'
+        if n[c] < max(3, minimum_support*len(x)):
+            status = 'insufficient_support'
+        elif np.min(energy[c]) <= 1e-24:
+            status = 'low_variance'
+        row = dict(pair_index=c, status=status, valid_points=int(n[c]), samples=len(x))
+        if status == 'valid':
+            # Detrending a pure line has undefined residual correlation.
+            detrended = detrend_rho[c] if np.min(residual_energy[c]/energy[c]) > 1e-12 else np.nan
+            row.update(correlation=float(np.clip(rho[c], -1, 1)),
+                       detrended_correlation=float(np.clip(detrended, -1, 1)),
+                       difference_correlation=float(np.clip(drho[c], -1, 1)),
+                       same_increment_fraction=float(same[c]),
+                       slope_hbr_on_hbo=float(rho[c]*np.sqrt(energy[c, 1]/energy[c, 0])))
+        rows.append(row)
+    return rows
+
+
+def prevalence_checks():
+    t = np.arange(300)/10.
+    signal = np.sin(2*np.pi*t/7.)
+    pair = np.stack((signal, .3*signal), axis=1)[:, None, :]
+    same = prevalence_metrics(pair, t)[0]
+    opposite = prevalence_metrics(pair*np.array([1., -1.]), t)[0]
+    drift = np.stack((t+signal, t-signal), axis=1)[:, None, :]
+    drift_result = prevalence_metrics(drift, t)[0]
+    missing = pair.copy(); missing[:20] = np.nan
+    assert same['correlation'] > .999 and opposite['correlation'] < -.999
+    assert drift_result['correlation'] > .9 and drift_result['detrended_correlation'] < -.999
+    assert prevalence_metrics(missing, t)[0]['status'] == 'insufficient_support'
+    assert prevalence_metrics(np.ones_like(pair), t)[0]['status'] == 'low_variance'
+    scaled = prevalence_metrics(pair*np.array([7., 2.])+[10., -3.], t)[0]
+    assert abs(scaled['correlation']-same['correlation']) < 1e-12
+    return dict(status='passed', same=same, opposite=opposite, drift=drift_result)
+
+
+def prevalence_record(job):
+    import time
+    import resource
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import load_native_fnirs_record
+    from src.data.homer2_preprocessing import modified_beer_lambert
+    record, events, config, output = job
+    started = time.monotonic()
+    path = Path(output)/f'{record.dataset_id}__{record.canonical_subject_id}__{record.record_id}.csv.gz'
+    meta_path = path.with_suffix('.json')
+    if path.exists() and meta_path.exists():
+        return json.loads(meta_path.read_text())
+    native = load_native_fnirs_record(ROOT, record)
+    cached = CleanPhysiologyCacheIndex.load_record_arrays(record, ('fnirs', 'fnirs_supported_channels'))
+    y = np.asarray(cached['fnirs']).reshape(-1, native['values'].shape[1], 2).copy()
+    y[:, ~np.asarray(cached['fnirs_supported_channels']).reshape(-1, 2).all(axis=1)] = np.nan
+    branches = {'native': (native['values'], native['time_s']),
+                'no_motion_v5': (y, np.arange(len(y))/record.sample_rate_hz)}
+    if native['optical_intensity'] is not None:
+        intensity = native['optical_intensity']
+        valid = (intensity > 0) & np.isfinite(intensity)
+        z = np.where(valid, intensity, np.nan)
+        od = -np.log(z/np.nanmedian(z, axis=0, keepdims=True))
+        spec = config['optical_sensitivity']
+        physical, _ = modified_beer_lambert(od, wavelengths_nm=spec['wavelengths_nm'],
+            extinction_coefficients=np.asarray(spec['decadic_extinction_M_inv_cm_inv']),
+            extinction_unit='1/(M cm)', coefficient_log_base='10', coefficient_source=spec['source'])
+        branches['native_prahl'] = (physical, native['time_s'])
+        transform = np.linalg.solve(np.asarray(spec['decadic_extinction_M_inv_cm_inv']),
+                                    np.asarray(native['provenance']['mbll']['extinction_coefficients']))
+        branches['no_motion_v5_prahl'] = (y@transform.T, branches['no_motion_v5'][1])
+    duration = min(t[-1]+np.median(np.diff(t)) for _, t in branches.values())
+    # All branches use the same real-time windows. Drop tails, never pad.
+    windows = [('continuous', i, float(t), 'continuous') for i, t in enumerate(
+        np.arange(0., max(0., duration-config['window_s'])+1e-8, config['window_s']))]
+    boundaries = set()
+    for event in events:
+        bounds = event.get('metadata', {}).get('alignment_support_ms', {}).get('fnirs', [])
+        boundaries.update(float(x)/1000 for x in bounds if x is not None)
+    windows = [w for w in windows if not any(w[2] < b < w[2]+config['window_s'] for b in boundaries)]
+    if record.dataset_id == 'eeg_fnirs_single_trial':
+        for e in events:
+            start = float(e['fnirs_time_ms'])/1000+config['event_offset_s']
+            if start >= 0 and start+config['window_s'] <= duration:
+                windows.append(('event', e['event_index'], start, e['label']))
+    rows = []
+    for branch, (values, times) in branches.items():
+        for window_kind, window_id, start, label in windows:
+            left, right = np.searchsorted(times, [start, start+config['window_s']])
+            for metrics in prevalence_metrics(values[left:right], times[left:right], config['minimum_pair_support']):
+                pair = metrics['pair_index']
+                rows.append(dict(dataset=record.dataset_id, subject=record.canonical_subject_id,
+                    record=record.record_id, branch=branch, window_kind=window_kind,
+                    window_id=window_id, start_s=start, label=label,
+                    pair=record.manifest['measurement']['fnirs_channel_names'][2*pair].removesuffix('_HbO'), **metrics))
+    pd.DataFrame(rows).to_csv(path, index=False, compression='gzip')
+    meta = dict(dataset=record.dataset_id, subject=record.canonical_subject_id, record=record.record_id,
+                path=str(path), rows=len(rows), window_count=len(windows), branches=list(branches),
+                native_provenance=native['provenance'], elapsed_s=time.monotonic()-started,
+                peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024,
+                dropped_concatenation_boundary_windows=sum(any(t < b < t+config['window_s'] for b in boundaries)
+                    for t in np.arange(0., max(0., duration-config['window_s'])+1e-8, config['window_s'])))
+    meta_path.write_text(json.dumps(meta, indent=2))
+    return meta
+
+
+def summarize_prevalence(frame, config):
+    grouping = ['dataset', 'branch', 'window_kind', 'subject']
+    rows = []
+    for keys, g in frame.groupby(grouping, sort=True):
+        good = g[g.status == 'valid']
+        row = dict(zip(grouping, keys), total_pairs=len(g), valid_pairs=len(good),
+                   windows=g[['record', 'window_id']].drop_duplicates().shape[0])
+        for name, column in [('level', 'correlation'), ('detrended', 'detrended_correlation'), ('difference', 'difference_correlation')]:
+            c = good[column].dropna()
+            row.update({name+'_valid_pairs': len(c), name+'_median_r': c.median(),
+                        name+'_positive': (c > 0).mean(), name+'_strong_positive': (c > .5).mean(),
+                        name+'_very_positive': (c > .8).mean(), name+'_strong_negative': (c < -.5).mean()})
+        rows.append(row)
+    subjects = pd.DataFrame(rows)
+    rng = np.random.default_rng(config['seed'])
+    summary = []
+    for keys, group in subjects.groupby(grouping[:3], sort=True):
+        row = dict(zip(grouping[:3], keys), subjects=len(group), total_pairs=int(group.total_pairs.sum()),
+                   valid_pairs=int(group.valid_pairs.sum()), windows=int(group.windows.sum()))
+        for col in group.columns:
+            if col.startswith(('level_', 'detrended_', 'difference_')) and not col.endswith('valid_pairs'):
+                vals = group[col].dropna().to_numpy()
+                row[col] = float(vals.mean())
+                if col.endswith('strong_positive'):
+                    draws = rng.choice(vals, (config['bootstrap_subject_replicates'], len(vals))).mean(axis=1)
+                    row[col+'_ci_low'], row[col+'_ci_high'] = np.quantile(draws, [.025, .975])
+                    row[col+'_subject_min'], row[col+'_subject_max'] = float(vals.min()), float(vals.max())
+        summary.append(row)
+    return subjects, pd.DataFrame(summary)
+
+
+def prevalence_model_association(config, out):
+    """Read retained full-visible validation reconstructions; never refit."""
+    base = ROOT/config['model_evidence']
+    rows = []
+    for path in sorted((base/'cells').glob('*__conditional_trained_gain__full/trajectories.npz')):
+        if not path.parent.name.startswith(('no_motion__subject_', 'mne_tddr__subject_')):
+            continue
+        pipeline = 'no_motion' if path.parent.name.startswith('no_motion') else 'mne_tddr'
+        with np.load(path) as a:
+            target, pred, sd = a['target'], a['prediction'], a['normalizer']
+            for i, trial in enumerate(a['trial_indices']):
+                y = target[i]
+                stats = prevalence_metrics(y[:, 1:][:, None, :], np.arange(len(y))/4.)[0]
+                error = np.sqrt(np.mean((pred[i]-y)**2, axis=0))/sd
+                rows.append(dict(group=path.parent.name, pipeline=pipeline, trial=int(trial),
+                                 correlation=stats['correlation'], detrended_correlation=stats['detrended_correlation'],
+                                 eeg_nrmse=error[0], hbo_nrmse=error[1], hbr_nrmse=error[2]))
+    frame = pd.DataFrame(rows)
+    if not len(frame):
+        raise ValueError('no retained model cases found')
+    if frame.groupby('pipeline').size().to_dict() != {'mne_tddr': 72, 'no_motion': 72}:
+        raise ValueError('retained measured panel must contain 72 identities per pipeline')
+    frame['direction'] = np.where(frame.correlation > .5, 'same', np.where(frame.correlation < -.5, 'opposite', 'weak'))
+    frame.to_csv(out/'model_cases_v2.csv', index=False)
+    frame.groupby(['pipeline', 'direction']).agg(n=('trial', 'size'), hbo_nrmse=('hbo_nrmse', 'median'),
+        hbr_nrmse=('hbr_nrmse', 'median'), eeg_nrmse=('eeg_nrmse', 'median')).to_csv(out/'model_association_v2.csv')
+
+
+def run_prevalence(args):
+    import time
+    from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    config = load_prevalence_config(args.prevalence_config)
+    out = args.output_dir or ROOT/config['output_dir']
+    out.mkdir(parents=True, exist_ok=True)
+    if args.check_only or args.stage == 'synthetic':
+        result = prevalence_checks()
+        (out/'synthetic_summary.json').write_text(json.dumps(result, indent=2))
+        print(json.dumps(result)); return
+    if args.stage == 'report':
+        render_prevalence(out); return
+    if (not (out/'synthetic_summary.json').exists()
+            or json.loads((out/'synthetic_summary.json').read_text()).get('status') != 'passed'):
+        raise ValueError('synthetic execution must precede measured census')
+    resolved = out/'resolved_config.yaml'
+    if resolved.exists() and yaml.safe_load(resolved.read_text()) != config:
+        raise ValueError('refusing to reuse retained rows under a different census contract')
+    index = CleanPhysiologyCacheIndex(ROOT/config['cache_root'])
+    if index.cache_manifest['processing_schema'] != 'physiology_measurement_alignment_v5' or index.cache_manifest['motion_method'] != 'none':
+        raise ValueError('requires explicit v5 no-motion comparison')
+    records = [r for r in index.records if r.dataset_id in config['datasets'] and r.join_key not in config['excluded_records']]
+    if args.prevalence_pilot:
+        records = [next(r for r in records if r.dataset_id == ds) for ds in config['datasets']]
+        output = out/'pilot'
+    else:
+        output = out/'records'
+    output.mkdir(exist_ok=True)
+    if not resolved.exists():
+        resolved.write_text(yaml.safe_dump(config, sort_keys=False))
+    jobs = [(r, index.events_by_join_key.get(r.join_key, []), config, str(output)) for r in records]
+    started = time.monotonic()
+    results = []
+    with ProcessPoolExecutor(max_workers=args.workers) as pool:
+        remaining = iter(jobs)
+        futures = set()
+        while True:
+            while len(futures) < 2*args.workers:
+                job = next(remaining, None)
+                if job is None:
+                    break
+                futures.add(pool.submit(prevalence_record, job))
+            if not futures:
+                break
+            done, futures = wait(futures, return_when=FIRST_COMPLETED)
+            for f in done:
+                result = f.result(); results.append(result)
+                progress = dict(completed=len(results), total=len(jobs), elapsed_s=time.monotonic()-started,
+                                last_record=result['path'])
+                (output/'progress.json').write_text(json.dumps(progress, indent=2))
+                if len(results)%25 == 0 or len(results) == len(jobs):
+                    print(json.dumps(progress), flush=True)
+    (output/'completed_records.json').write_text(json.dumps(results, indent=2))
+    if args.prevalence_pilot:
+        print(json.dumps([dict(dataset=r['dataset'], elapsed_s=r['elapsed_s'], peak_rss_mib=r['peak_rss_mib'], rows=r['rows']) for r in results])); return
+    frame = pd.concat([pd.read_csv(r['path']) for r in results], ignore_index=True)
+    subjects, summary = summarize_prevalence(frame, config)
+    subjects.to_csv(out/'subject_summary.csv', index=False)
+    summary.to_csv(out/'summary.csv', index=False)
+    # Detailed Single-Trial strata distinguish broad subject effects from one ROI.
+    single = frame[(frame.dataset == 'eeg_fnirs_single_trial') & (frame.status == 'valid')].copy()
+    single['task'] = np.where(single.record.str[-2:].astype(int)%2 == 1, 'mental_arithmetic', 'motor_imagery')
+    single['strong_positive'] = single.correlation > .5
+    single['strong_negative'] = single.correlation < -.5
+    single.groupby(['branch', 'window_kind', 'subject', 'task', 'pair']).agg(n=('correlation', 'size'),
+        median_r=('correlation', 'median'), strong_positive=('strong_positive', 'mean'),
+        strong_negative=('strong_negative', 'mean')).to_csv(out/'single_trial_strata.csv')
+    focus = frame[(frame.dataset == 'eeg_fnirs_single_trial') & (frame.subject == 'subject_09') &
+        (frame.record == 'session_01') & (frame.window_kind == 'event') &
+        (frame.window_id == 7) & (frame.pair == 'AF7Fp1')]
+    focus.to_csv(out/'focus_case.csv', index=False)
+    # Preserve explicit condition labels: MA sessions also contain BL events.
+    single[single.window_kind == 'event'].groupby(['branch', 'subject', 'pair', 'label']).agg(
+        n=('correlation', 'size'), median_r=('correlation', 'median'),
+        strong_positive=('strong_positive', 'mean')).reset_index().to_csv(out/'single_trial_conditions.csv', index=False)
+    prevalence_model_association(config, out)
+    (out/'manifest.json').write_text(json.dumps(dict(schema=config['schema'], status='completed',
+        endpoint=config['primary'], records=len(records), elapsed_s=time.monotonic()-started,
+        excluded_records=config['excluded_records'], workers=args.workers,
+        scope='public descriptive census; no model training or protected evaluation',
+        pair_rows=len(frame), status_counts=frame.status.value_counts().to_dict()), indent=2))
+    print(summary[['dataset', 'branch', 'window_kind', 'subjects', 'valid_pairs', 'level_strong_positive', 'level_strong_negative', 'detrended_strong_positive']].to_string(index=False))
+
+
+def render_prevalence(out):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from experiments.scripts.render_shared_driver_reconstruction import export_pdf
+    config = load_prevalence_config(out/'resolved_config.yaml')
+    summary = pd.read_csv(out/'summary.csv')
+    subjects = pd.read_csv(out/'subject_summary.csv')
+    cases = pd.read_csv(out/'model_cases_v2.csv')
+    association = pd.read_csv(out/'model_association_v2.csv')
+    manifest = json.loads((out/'manifest.json').read_text())
+    versions = [int(p.name.removeprefix('report_v')) for p in out.glob('report_v*')
+                if p.is_dir() and p.name.removeprefix('report_v').isdigit()]
+    report = out/f'report_v{1+max(versions, default=0)}'
+    (report/'figures').mkdir(parents=True)
+    order = list(config['datasets'])
+    native = summary[(summary.branch == 'native') & (summary.window_kind == 'continuous')].set_index('dataset').loc[order]
+    filtered = summary[(summary.branch == 'no_motion_v5') & (summary.window_kind == 'continuous')].set_index('dataset').loc[order]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.7))
+    x = np.arange(4)
+    neg, pos = native.level_strong_negative.to_numpy()*100, native.level_strong_positive.to_numpy()*100
+    axes[0].bar(x, neg, color='#277da1', label='Opposite: r < -0.5')
+    axes[0].bar(x, 100-neg-pos, bottom=neg, color='#e0e4e7', label='Weak / intermediate')
+    axes[0].bar(x, pos, bottom=100-pos, color='#d65f50', label='Same: r > 0.5')
+    axes[0].set_title('Native Hb direction, equal subject weights')
+    axes[0].set_ylabel('Pair-window fraction (%)')
+    axes[0].legend(fontsize=7, loc='upper center', bbox_to_anchor=(.5, -.2))
+    for i, ds in enumerate(order):
+        g = subjects[(subjects.dataset == ds)&(subjects.branch == 'native')&(subjects.window_kind == 'continuous')]
+        axes[1].scatter(np.full(len(g), i)-.14, g.level_strong_positive*100, s=12, alpha=.4, color='#d65f50')
+    for offset, values, label, color in [(-.14, native.level_strong_positive, 'Native', '#d65f50'),
+            (0., native.detrended_strong_positive, 'Native, detrended', '#d99d28'),
+            (.14, filtered.level_strong_positive, 'No-motion v5, 0.01-0.2 Hz', '#008b8b')]:
+        axes[1].plot(x+offset, values*100, 'D', color=color, ms=6, label=label)
+    axes[1].set_title('Same direction: processing and subjects')
+    axes[1].set_ylabel('r > 0.5 fraction (%)')
+    axes[1].legend(fontsize=7, loc='upper center', bbox_to_anchor=(.5, -.2))
+    for ax in axes:
+        ax.set_xticks(x, [NAMES[ds] for ds in order]);ax.spines[['top','right']].set_visible(False)
+        ax.grid(axis='y', alpha=.15)
+    fig.tight_layout();fig.savefig(report/'figures/prevalence.png', dpi=240, bbox_inches='tight');plt.close(fig)
+
+    strata = pd.read_csv(out/'single_trial_strata.csv')
+    sub = strata[(strata.branch == 'native') & (strata.window_kind == 'continuous')]
+    # Weight each subject/channel's session strata by actual window count.
+    sub = sub.assign(positive_count=sub.n*sub.strong_positive)
+    heat = sub.groupby(['subject','pair'])[['positive_count','n']].sum()
+    heat = (heat.positive_count/heat.n).unstack('pair')
+    fig, ax = plt.subplots(figsize=(10, 6.4))
+    im = ax.imshow(heat.to_numpy()*100, vmin=0, vmax=100, cmap='YlOrRd', aspect='auto')
+    ax.set_xticks(np.arange(len(heat.columns)), heat.columns, rotation=90, fontsize=7)
+    ax.set_yticks(np.arange(len(heat)), [s.replace('subject_', 'S') for s in heat.index], fontsize=8)
+    ax.set_title('Single-Trial native: same-direction fraction by subject and channel')
+    ax.plot(list(heat.columns).index('AF7Fp1'), list(heat.index).index('subject_09'), 's',
+            ms=10, mfc='none', mec='#00b4d8', mew=2)
+    fig.colorbar(im, ax=ax, label='r > 0.5 (%)')
+    fig.tight_layout();fig.savefig(report/'figures/subject_channel.png', dpi=240,bbox_inches='tight');plt.close(fig)
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.6), sharex=True)
+    real = cases[cases.pipeline == 'no_motion'].copy()
+    real['subject'] = real.group.str.extract('(subject_\\d+)')
+    for subject, color in [('subject_01','#277da1'),('subject_09','#d65f50'),('subject_18','#40916c')]:
+        g = real[real.subject == subject]
+        for ax, component in zip(axes, ['hbo','hbr']):
+            ax.scatter(g.correlation,g[component+'_nrmse'],s=20,alpha=.8,label=subject.replace('subject_', 'S'),color=color)
+            ax.set_ylabel(component.upper()+' NRMSE')
+    for ax in axes:
+        ax.set_xlabel('Observed HbO-HbR r');ax.axvline(.5,ls='--',lw=.8,c='grey');ax.axvline(-.5,ls='--',lw=.8,c='grey')
+        ax.legend(fontsize=8);ax.spines[['top','right']].set_visible(False)
+    fig.suptitle('Retained 72 validation windows: direction and reconstruction error')
+    fig.tight_layout();fig.savefig(report/'figures/model_association.png',dpi=240,bbox_inches='tight');plt.close(fig)
+
+    # Report replay uses retained summary tables, without raw inputs or row caches.
+    focus = pd.read_csv(out/'focus_case.csv')
+    conditions = pd.read_csv(out/'single_trial_conditions.csv')
+    focus_condition = conditions[(conditions.branch=='native')&(conditions.subject=='subject_09')&
+        (conditions.pair=='AF7Fp1')&(conditions.label=='MA')].iloc[0]
+    table = '| 数据集 | 人数 | 有效通道窗口 | 同向 r>0.5 [95% CI] | 反向 r<-0.5 | 去趋势后同向 | v5 带通后同向 |\n|---|---:|---:|---:|---:|---:|---:|\n'
+    for ds in order:
+        a,b=native.loc[ds],filtered.loc[ds]
+        table += f'| {NAMES[ds]} | {int(a.subjects)} | {int(a.valid_pairs):,} | {100*a.level_strong_positive:.2f}% [{100*a.level_strong_positive_ci_low:.2f}, {100*a.level_strong_positive_ci_high:.2f}] | {100*a.level_strong_negative:.2f}% | {100*a.detrended_strong_positive:.2f}% | {100*b.level_strong_positive:.2f}% |\n'
+    focus_table = '| 原始身份的处理路径 | r | 去线性趋势后 r |\n|---|---:|---:|\n'
+    branch_labels = dict(native='原生／近似 MBLL', no_motion_v5='v5 带通／近似 MBLL',
+                         native_prahl='原生／Prahl', no_motion_v5_prahl='v5 带通／Prahl')
+    for r in focus.itertuples():
+        focus_table += f'| {branch_labels[r.branch]} | {r.correlation:.3f} | {r.detrended_correlation:.3f} |\n'
+    association_table = '| 路径 / 关系 | 窗口数 | HbO NRMSE 中位数 | HbR NRMSE 中位数 |\n|---|---:|---:|---:|\n'
+    for r in association.itertuples():
+        pipeline = '无运动校正' if r.pipeline == 'no_motion' else 'MNE TDDR'
+        direction = dict(same='同向', opposite='反向', weak='弱关系')[r.direction]
+        association_table += f'| {pipeline}／{direction} | {r.n} | {r.hbo_nrmse:.3f} | {r.hbr_nrmse:.3f} |\n'
+    text = f'''# HbO/HbR 同向变化：生理解释与原始数据普遍性
+
+2026-09-28 · HBO-HBR-PREVALENCE-v1 · 公共观测统计，不含模型训练或受保护评估
+
+同向变化在生理上合理，且在 Single-Trial 中反复出现；它既不是所有数据集的主导模式，也不能凭方向唯一归因为脑活动或运动伪迹。本次证据支持保留原有反向响应机制，同时优先研究能容纳额外共同成分的观测结构。
+
+### 1. 生理含义和统计口径
+
+设 H=HbO+HbR 为有效测量组织中的总血红蛋白量，S 为血氧饱和度：HbO=SH，HbR=(1−S)H。小变化满足 ΔHbO≈S₀ΔH+H₀ΔS，ΔHbR≈(1−S₀)ΔH−H₀ΔS。总 Hb／血容量变化占主导时两者可同向；氧合变化占主导时更容易反向。这是成分关系，不等于已从相对信号估计出绝对 S 或血容量。
+
+健康人实验观察到姿态、呼吸等系统性活动中的同向变化；不同深度测量也显示浅层共同波动与较深层反向波动的差别。[Yamada 等，2012](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0050271)；[Tufts 原研究说明](https://engineering.tufts.edu/bme/fantini/research/depth-dependence-coherent-hb-and-hbo2-oscillations)。运动也可使相关性变正：[Cui 等，2010](https://pubmed.ncbi.nlm.nih.gov/19945536/)。所以“同向”有多个候选来源，不能据此自动删除信号，也不能直接称为神经血管响应。
+
+覆盖四数据集 103 名被试、786 条记录。按数据合同排除 Visual S06 Part1；REFED 的跨模态空间几何问题不影响本次同一光学通道内的描述统计。原生时间轴上使用连续、不重叠的 30 s 窗口，丢弃不足 30 s 尾段及跨已知拼接边界的窗口。共 {int(native.windows.sum()):,} 个时间窗口、{int(native.total_pairs.sum()):,} 个通道窗口，其中 {int(native.valid_pairs.sum()):,} 个有效；未达 95% 共同支持或近乎恒定的行保留但不进入相关比例。
+
+Single-Trial 从正光强转自然对数 OD，再作现有相对 MBLL，无时间滤波、无运动校正；其余三个数据集直接读取发布 Hb。原生采样率／时钟、通道配对和来源文件由统一数据入口核验。v5 对照仍包含 0.01–0.2 Hz 带通和重采样，“无运动校正”不等于没有预处理。各数据集独立报告，不混合其振幅单位。
+
+r 为窗口内 Pearson 相关，r>0.5 是预先规定的明显同向描述阈值，不是生理分类器或显著性检验。同向不是“同时高于基线”，反向也不自动等于正常神经激活。先计算每名被试的通道窗口比例，再等权汇总；95% 区间来自 2000 次被试 bootstrap，不把通道、时间点和相邻窗口当成独立样本。人口外推、残余自相关和设备系统差异仍有限制。
+
+{table}
+
+![四数据集统计](figures/prevalence.png)
+
+## 2. S09：原始层已经存在，且通道差异大
+
+S09/fold 3/trial 3 对应 subject_09/session_01/event 7、AF7Fp1，原生窗口从 277.96 s 开始。原图保留模型目标的相关系数约 0.853；本次原生及全记录缓存坐标和其处理上下文不同，不能要求逐样本相等。
+
+{focus_table}
+
+该例在滤波前 r=0.822，去掉线性趋势后 r=0.854；两者都说明共同变化不只是一条线性漂移。采用 [Prahl 公开光谱系数](https://omlc.org/spectra/hemoglobin/summary.html) 后原生 r=0.881；系数敏感性不能替代个体路径长度、组织来源或绝对单位校准。Single-Trial 总体明显同向比例也从现有近似 MBLL 的 10.54% 变为 15.27%，v5 从 20.45% 变为 26.92%：比例依赖光学定义，但同向现象并未消失。
+
+Single-Trial 的 29 名被试都出现过明显同向窗口，原生比例范围约 0.14%–37.09%。S09 全通道约 10.05%，并非总体最高；然而 AF7Fp1 的 {int(focus_condition.n)} 个 MA 心算窗口中 {round(focus_condition.n*focus_condition.strong_positive)} 个明显同向（{100*focus_condition.strong_positive:.1f}%）。BL、LMI、RMI 同通道分别为 56.7%、46.7%、56.7%。这更支持研究被试／通道相关的观测混合差异，而非只为单个失败窗口调一个全局参数。窗口均为事件前 5 s 至后 25 s；不是仅截取 10 s 任务段，也不代表 task-minus-rest 激活效应。
+
+![被试和通道异质性](figures/subject_channel.png)
+
+## 3. 与原模型偏差的关系及修改方向
+
+仅回读此前冻结的 conditional_trained_gain/full 重建：每条预处理路径 72 个验证身份，无重新拟合。首次辅助汇总误纳入 72 条合成单元；已在 v2 表显式排除 synthetic，并检验每路径严格 72 条。旧表留存仅供纠错审计；原始数据普遍性统计未受影响。
+
+{association_table}
+
+无运动校正路径的同向组 HbO 中位 NRMSE 0.504，反向组 0.268，与用户观察一致。但同向 22 条中 20 条来自 S09，反向组没有 S09；且 S09 内弱关系组 HbO 中位误差 0.593，高于同向组的 0.531。因此此面板不能独立识别“方向导致误差”，也不能证明所有同向曲线都难拟合。MNE 路径同样存在被试混杂。全目标重建误差不是跨时间预测误差。
+
+![相关方向与原模型误差](figures/model_association.png)
+
+优先方向：保留神经驱动的供血／氧交换支路，测试额外允许 HbO/HbR 同号加载的慢成分及通道相关的观测混合。之前额外共同成分改善重建的结果与本次观察一致，但尚不能命名为确定的头皮、静脉或动脉过程。不要强制把同向曲线改成反向，也不宜用全局 α、E₀ 极端值去吸收所有通道的混合差异。
+
+下一步应比较共同成分的空间同步性、任务锁定性、与原始 OD 突跳及独立生理记录的关系；若无短距离通道或外部生理参照，只能约束候选来源。候选模型在训练部分决定结构和加载，再分别在同向、反向、弱关系组评估留出预测及残差，避免逐验证窗口新增自由曲线只提高重建拟合。
+
+### 4. 证据与边界
+
+主结果：summary.csv；被试层：subject_summary.csv；逐记录行与来源：records/；原始条件分层：single_trial_conditions.csv；困难身份：focus_case.csv；模型辅助关联只使用 model_cases_v2.csv 和 model_association_v2.csv。resolved_config.yaml、source_snapshot、监督运行日志及修正记录保留。本次没有调整正式 SSM，没有删除样本或重新定义原始信号，也没有建立生理来源的因果识别。
+
+图像以 240 dpi PNG 嵌入 PDF，正文／表格保留可选文字。WPS 未安装，未作 WPS 滚动检查。
+'''
+    export_pdf(text, report, ['prevalence', 'subject_channel', 'model_association'],
+               split_images=False, extra_css='table{width:100%;font-size:7pt;}')
+    import fitz
+    doc = fitz.open(report/'REPORT.pdf')
+    verification = dict(pages=len(doc), image_objects=sum(len(p.get_images()) for p in doc),
+                        selectable_characters=sum(len(p.get_text()) for p in doc), wps_checked=False,
+                        bitmap_figures=True)
+    (report/'verification.json').write_text(json.dumps(verification,indent=2))
+    doc.close()
+    print(json.dumps(verification))
 
 
 if __name__ == '__main__':

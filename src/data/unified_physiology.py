@@ -18,6 +18,7 @@ from contextvars import ContextVar
 import csv
 from dataclasses import asdict, dataclass, replace
 from fractions import Fraction
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
@@ -642,6 +643,91 @@ def load_native_eeg_record(project_root: Path, record: CleanCacheRecord) -> Nati
     if record.dataset_id == "visual_cognitive_motivation":
         return _visual_eeg(project_root, record)
     raise KeyError(f"not one of the four raw datasets: {record.dataset_id}")
+
+
+@lru_cache(maxsize=1)
+def _native_fnirs_mat(path: str):
+    # Single-Trial sessions and REFED videos share one source per subject.
+    return loadmat(path, struct_as_record=False, squeeze_me=True)
+
+
+def load_native_fnirs_record(project_root: Path, record: CleanCacheRecord) -> dict[str, Any]:
+    """Read registered source Hb pairs before filtering or motion correction.
+
+    Single-Trial is intensity, so its output is explicitly a relative MBLL
+    estimate. Missing/nonpositive optical support stays missing. Other datasets
+    retain released chromophore units. No scaling or task selection is fitted.
+    """
+    from .registry import REGISTERED_DATASETS
+    from .event_alignment import read_visual_fnirs_csv
+    from .homer2_preprocessing import modified_beer_lambert
+
+    root = (project_root / REGISTERED_DATASETS[record.dataset_id].default_root).resolve()
+    sources = [Path(x['path']) for x in record.manifest['source_files']]
+    sources = [(p if p.is_absolute() else project_root / p).resolve() for p in sources]
+    if not sources or any(not p.is_relative_to(root) for p in sources):
+        raise ValueError('native fNIRS source outside registered dataset root')
+    ds = record.dataset_id
+    metadata = dict(source_paths=[str(p) for p in sources],
+                    native_unit=record.manifest['native_contract']['native_unit'],
+                    transform='released_HbO_HbR_no_project_temporal_processing')
+    optical = None
+    if ds == 'eeg_fnirs_single_trial':
+        path = next(p for p in sources if p.name == 'cnt.mat' and 'NIRS_01-29' in p.parts)
+        session = np.atleast_1d(_native_fnirs_mat(str(path))['cnt'])[int(record.record_id.split('_')[-1])]
+        labels = [str(x) for x in np.atleast_1d(session.clab)]
+        low = [i for i, x in enumerate(labels) if 'lowWL' in x]
+        high = [i for i, x in enumerate(labels) if 'highWL' in x]
+        pair_names = [re.sub(r'(lowWL|highWL).*$', '', labels[i]).strip() for i in low]
+        if pair_names != [re.sub(r'(lowWL|highWL).*$', '', labels[i]).strip() for i in high]:
+            raise ValueError('native wavelength pair identity mismatch')
+        optical = np.stack((session.x[:, low], session.x[:, high]), axis=-1).astype(float)
+        valid = np.isfinite(optical) & (optical > 0)
+        supported = np.where(valid, optical, np.nan)
+        reference = np.nanmedian(supported, axis=0, keepdims=True)
+        od = -np.log(supported / reference)
+        values, mbll = modified_beer_lambert(od, wavelengths_nm=(760., 850.))
+        rate = float(session.fs)
+        times = np.arange(len(values)) / rate
+        names = [f'{p}_{role}' for p in pair_names for role in ('HbO', 'HbR')]
+        metadata.update(transform='positive_intensity_natural_log_OD_relative_MBLL_only',
+                        mbll=mbll, invalid_optical_values=int((~valid).sum()))
+    elif ds == 'simultaneous_eeg_nirs':
+        path = next(p for p in sources if p.parent.name.endswith('-NIRS'))
+        payload = _native_fnirs_mat(str(path))
+        cnt = payload[next(k for k in payload if not k.startswith('__'))]
+        o, r = cnt.oxy, cnt.deoxy
+        if (np.shape(o.x) != np.shape(r.x) or float(o.fs) != float(r.fs)
+                or not np.array_equal(o.clab, r.clab) or str(o.yUnit) != str(r.yUnit)):
+            raise ValueError('released Hb pair clock/identity/unit mismatch')
+        values = np.stack((o.x, r.x), axis=-1).astype(float)
+        rate = float(o.fs)
+        times = np.arange(len(values)) / rate
+        names = [f'{p}_{role}' for p in np.atleast_1d(o.clab) for role in ('HbO', 'HbR')]
+    elif ds == 'refed':
+        path = next(p for p in sources if p.name == 'fNIRS_videos.mat')
+        tensor = np.asarray(_native_fnirs_mat(str(path))[record.base_record_id], dtype=float)
+        values = tensor[:2].transpose(2, 1, 0)
+        rate = float(record.manifest['native_sample_rate_hz'])
+        times = np.arange(len(values)) / rate
+        names = [f'CH{i+1}_{role}' for i in range(values.shape[1]) for role in ('HbO', 'HbR')]
+    elif ds == 'visual_cognitive_motivation':
+        o = read_visual_fnirs_csv(next(p for p in sources if p.name.endswith('_Oxy.csv')), load_signals=True)
+        r = read_visual_fnirs_csv(next(p for p in sources if p.name.endswith('_Deoxy.csv')), load_signals=True)
+        if (o['sample_rate_hz'] != r['sample_rate_hz'] or not np.array_equal(o['clock_s'], r['clock_s'])
+                or o['marks'] != r['marks'] or o['values'].shape != r['values'].shape):
+            raise ValueError('released Hb pair clock/identity mismatch')
+        values = np.stack((o['values'], r['values']), axis=-1)
+        times, rate = o['time_s'], o['sample_rate_hz']
+        names = [f'CH{i+1}_{role}' for i in range(values.shape[1]) for role in ('HbO', 'HbR')]
+        metadata.update(quality_policy=o['quality_policy'], device_metadata=o['device_metadata'])
+    else:
+        raise KeyError(ds)
+    expected = record.manifest['measurement']['fnirs_channel_names']
+    if names != expected or values.ndim != 3 or values.shape[2] != 2:
+        raise ValueError('native/registered Hb channel identity or tensor mismatch')
+    return dict(values=values, time_s=times, sample_rate_hz=rate,
+                channel_names=names, provenance=metadata, optical_intensity=optical)
 
 
 def canonical_label(event: Mapping[str, Any], dataset_id: str) -> dict[str, Any]:

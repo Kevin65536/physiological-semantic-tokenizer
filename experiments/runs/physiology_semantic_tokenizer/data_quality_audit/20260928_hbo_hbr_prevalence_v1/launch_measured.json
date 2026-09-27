@@ -1,0 +1,31 @@
+{
+  "unit": "hbo-hbr-prevalence-measured-20260928-v1",
+  "command": [
+    "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+    "-u",
+    "/SSD_2/pid-mcm-implementation/experiments/scripts/analyze_hbo_hbr_relationship.py",
+    "--prevalence",
+    "--stage",
+    "measured",
+    "--workers",
+    "16"
+  ],
+  "cwd": "/SSD_2/pid-mcm-implementation",
+  "environment": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1"
+  },
+  "workers": 16,
+  "inflight": 32,
+  "affinity": 104,
+  "physical_cores": 52,
+  "user_cpu_quota": 80,
+  "competing_workers": 48,
+  "available_memory_gib": 219,
+  "disk_available_tib": 1.4,
+  "linger": true,
+  "reason": "Pilot 0.17-1.14 seconds/record, ~1 GiB peak RSS/worker; 16 workers leave quota headroom for existing 48-worker model job. fNIRS-only reads, no model fitting.",
+  "timestamp": 1790528379.9056065,
+  "estimated_seconds": 90
+}

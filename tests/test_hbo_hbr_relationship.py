@@ -192,3 +192,112 @@ def test_observation_contract_and_synthetic_checks_do_not_read_parent_data():
     assert result['identical_covariance_score']==7
     cfg['tensor']['samples']=299
     with pytest.raises(AssertionError):observation_checks(cfg)
+
+
+def test_prevalence_recovers_direction_and_separates_drift():
+    from experiments.scripts.analyze_hbo_hbr_relationship import prevalence_checks
+    result = prevalence_checks()
+    assert result['status'] == 'passed'
+
+
+def test_prevalence_vectorized_statistics_match_independent_pairwise_ols():
+    from experiments.scripts.analyze_hbo_hbr_relationship import prevalence_metrics
+    rng = np.random.default_rng(200)
+    t = np.arange(300)/10
+    x = rng.normal(size=(300, 4, 2)) + t[:, None, None]*[.2, .4]
+    x[10:16, 2, 0] = np.nan
+    result = prevalence_metrics(x, t)
+    for channel, row in enumerate(result):
+        valid = np.isfinite(x[:, channel]).all(axis=1)
+        y = x[valid, channel]
+        design = np.column_stack((np.ones(valid.sum()), t[valid]))
+        residual = y - design@np.linalg.lstsq(design, y, rcond=None)[0]
+        assert row['correlation'] == pytest.approx(np.corrcoef(y.T)[0, 1])
+        assert row['detrended_correlation'] == pytest.approx(np.corrcoef(residual.T)[0, 1])
+
+
+def test_prevalence_subjects_receive_equal_weight_and_invalid_stays_excluded():
+    import pandas as pd
+    from experiments.scripts.analyze_hbo_hbr_relationship import summarize_prevalence
+    rows = []
+    for subject, n, r in [('long', 100, .9), ('short', 1, -.9)]:
+        for i in range(n):
+            rows.append(dict(dataset='test', branch='native', window_kind='continuous', subject=subject,
+                record='r', window_id=i, status='valid', correlation=r,
+                detrended_correlation=r, difference_correlation=r))
+    rows.append(dict(rows[-1], status='insufficient_support', correlation=np.nan))
+    subjects, summary = summarize_prevalence(pd.DataFrame(rows), dict(seed=2, bootstrap_subject_replicates=20))
+    assert summary.iloc[0].level_strong_positive == .5
+    assert summary.iloc[0].valid_pairs == 101
+    assert summary.iloc[0].total_pairs == 102
+
+
+def test_native_fnirs_registry_reader_preserves_samples_and_missing_support(tmp_path):
+    from scipy.io import savemat
+    from src.data.clean_physiology_cache import CleanCacheRecord
+    from src.data.unified_physiology import load_native_fnirs_record
+    source = tmp_path/'data/EEG+NIRS Single-Trial/NIRS_01-29/subject 01/cnt.mat'
+    source.parent.mkdir(parents=True)
+    raw = np.column_stack((np.exp(np.sin(np.arange(300)/10)*.05), np.exp(np.cos(np.arange(300)/10)*.04)))
+    raw[15, 0] = 0
+    raw[18, 1] = np.nan
+    savemat(source, {'cnt': dict(x=raw, fs=10., clab=np.array(['AF7Fp1lowWL', 'AF7Fp1highWL'], dtype=object))})
+    manifest = dict(source_files=[dict(path=str(source))], native_contract=dict(native_unit='V'),
+                    measurement=dict(fnirs_channel_names=['AF7Fp1_HbO', 'AF7Fp1_HbR']))
+    record = CleanCacheRecord('eeg_fnirs_single_trial', 'subject 01', 'session_00', 'subject_01',
+        'session_00', 'homer2_wavelength_pair', 'eeg_fnirs_single_trial|subject_01|session_00', 10., tmp_path, manifest)
+    result = load_native_fnirs_record(tmp_path, record)
+    assert result['values'].shape == (300, 1, 2)
+    assert np.isnan(result['values'][[15, 18]]).all()
+    transform = np.asarray(result['provenance']['mbll']['transform'])
+    # Difference identity removes the arbitrary optical reference baseline.
+    expected = (-np.log(raw[1])+np.log(raw[0]))@transform.T
+    assert np.allclose(result['values'][1, 0]-result['values'][0, 0], expected)
+    manifest['measurement']['fnirs_channel_names'].reverse()
+    with pytest.raises(ValueError, match='identity'):
+        load_native_fnirs_record(tmp_path, record)
+
+
+def test_prevalence_contract_and_clock_shapes():
+    from experiments.scripts.analyze_hbo_hbr_relationship import (
+        ROOT, load_prevalence_config, prevalence_metrics)
+    config = load_prevalence_config(ROOT/'experiments/configs/physiology_semantic_tokenizer/hbo_hbr_prevalence_v1.yaml')
+    assert len(config['datasets']) == 4
+    with pytest.raises(ValueError, match='clock'):
+        prevalence_metrics(np.ones((300, 1, 2)), np.zeros(300))
+
+
+def test_prevalence_model_association_excludes_synthetic_cells(tmp_path, monkeypatch):
+    import pandas as pd
+    from experiments.scripts import analyze_hbo_hbr_relationship as audit
+    monkeypatch.setattr(audit, 'ROOT', tmp_path)
+    cells = tmp_path/'retained/cells'
+    t = np.arange(12)/4.
+    target = np.tile(np.column_stack((np.sin(t), np.sin(t), -.3*np.sin(t)))[None], (6, 1, 1))
+    names = [f'{pipeline}__subject_{s:02d}_o{fold}__conditional_trained_gain__full'
+        for pipeline in ('no_motion', 'mne_tddr') for s in (1, 9, 18) for fold in range(4)]
+    names.append('synthetic_g1_slow_r0__conditional_trained_gain__full')
+    for name in names:
+        path = cells/name; path.mkdir(parents=True)
+        np.savez(path/'trajectories.npz', target=target, prediction=target, normalizer=np.ones(3), trial_indices=np.arange(6))
+    out = tmp_path/'out'; out.mkdir()
+    audit.prevalence_model_association(dict(model_evidence='retained'), out)
+    cases = pd.read_csv(out/'model_cases_v2.csv')
+    assert len(cases) == 144
+    assert not cases.group.str.startswith('synthetic').any()
+    assert cases.groupby('pipeline').size().to_dict() == {'mne_tddr': 72, 'no_motion': 72}
+
+
+def test_prevalence_resume_rejects_changed_contract_before_data_index(tmp_path):
+    import json
+    import yaml
+    from types import SimpleNamespace
+    from experiments.scripts.analyze_hbo_hbr_relationship import ROOT, load_prevalence_config, run_prevalence
+    path = ROOT/'experiments/configs/physiology_semantic_tokenizer/hbo_hbr_prevalence_v1.yaml'
+    config = load_prevalence_config(path)
+    config['exclude_reason'] = 'different contract'
+    (tmp_path/'resolved_config.yaml').write_text(yaml.safe_dump(config))
+    (tmp_path/'synthetic_summary.json').write_text(json.dumps(dict(status='passed')))
+    args = SimpleNamespace(prevalence_config=path, output_dir=tmp_path, check_only=False, stage='measured')
+    with pytest.raises(ValueError, match='different census contract'):
+        run_prevalence(args)

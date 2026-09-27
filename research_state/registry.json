@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-27T17:05:38.983401+00:00",
+  "updated_at": "2026-09-27T17:10:27.408766+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1023,6 +1023,36 @@
       "label": "求解器开发验证PPT",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/report_v1/SOLVER_RESULTS.pptx",
       "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_hbr_prevalence_contract",
+      "label": "Hb方向普遍性执行合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/hbo_hbr_prevalence_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.hbo_hbr_prevalence_run",
+      "label": "原生Hb方向普遍性完成记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/manifest.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_hbr_prevalence_summary",
+      "label": "原生Hb方向的被试等权统计",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/summary.csv",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_hbr_prevalence_report",
+      "label": "Hb同向生理解释与普遍性报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/report_v3/REPORT.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.hbo_hbr_prevalence_revision",
+      "label": "辅助模型关联的合成单元排除修正",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/analysis_revision_v2.json",
+      "role": "decision"
     }
   ],
   "records": [
@@ -4039,6 +4069,32 @@
       ],
       "headline": false,
       "next_step": "后续共享β拟合可显式使用quadratic_interpolation并保留基线；共享τ仅软件覆盖，跨数据集及更大面板的性能仍需独立检验。波形形态和参数可辨识性继续由各自诊断判断。"
+    },
+    {
+      "state_id": "main.hbo_hbr_prevalence@2026-09-28.v1",
+      "entity": "main.hbo_hbr_prevalence",
+      "label": "原生HbO/HbR同向普遍性审计",
+      "track": "main",
+      "order": 166,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "descriptive",
+      "summary": "103被试786记录完成原生/发布Hb与v5 none对照；13316个不重叠30s窗口，原生有效通道窗口461768。被试等权r>.5比例：Single-Trial 10.54%、Simultaneous 5.68%、Visual 3.02%、REFED 0.088%；v5为20.45%、12.45%、6.10%、5.68%。S09困难身份原生r=.822、去趋势.854、Prahl系数.881；S09全通道10.05%，AF7Fp1心算20/30同向。已有无校正72验证窗口的同向/反向HbO NRMSE中位数.504/.268，但同向22条中20条为S09，存在被试混杂。辅助模型汇总已修正合成单元误纳入，原生统计未受影响。支持容纳共同观测成分；不能唯一定位生理来源，未改正式SSM。",
+      "evidence_ids": [
+        "e.hbo_hbr_prevalence_contract",
+        "e.hbo_hbr_prevalence_run",
+        "e.hbo_hbr_prevalence_summary",
+        "e.hbo_hbr_prevalence_report",
+        "e.hbo_hbr_prevalence_revision"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-27T17:10:27.408766+00:00",
+      "depends_on": [
+        "main.shared_driver_conditional_optical_gain"
+      ],
+      "headline": false,
+      "next_step": "优先检验通道相关的共同观测成分；用空间同步、原始OD和独立生理参照区分候选来源，并按相关方向分层评价留出预测。"
     }
   ]
 }

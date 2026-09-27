@@ -49,6 +49,21 @@ of the old cache. Method choice and processing boundaries are owned by
 
 ## Main-method evidence
 
+### Native Hb direction prevalence — 2026-09-28
+
+The [completed census](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/manifest.json)
+retains native/released Hb pair statistics, record provenance, subject summaries,
+the executable contract, source snapshots and supervised launch logs. The
+[report](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/report_v3/REPORT.pdf)
+explains the physiology, processing sensitivity, subject/channel variation and
+limits of the retained-model association. Its main numerical source is
+[summary.csv](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/summary.csv).
+Only `model_cases_v2.csv` / `model_association_v2.csv` are valid auxiliary model
+tables; the [revision record](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/analysis_revision_v2.json)
+preserves the correction of synthetic cells mistakenly included in the first
+auxiliary aggregation. Native census statistics were unaffected. Earlier failed
+launch/export evidence stays retained; report v3 is the reviewed delivery.
+
 Shared-driver results using the retained V3 optical motion branch remain dated
 fits to those processed targets. The [same-window motion audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_optical_motion_audit_v1/report_v1/REPORT.pdf)
 identifies algorithm-induced slow drift; those scores cannot establish recovered

@@ -344,6 +344,17 @@ driver/状态误差与初态贡献；具体恢复阈值及未通过时的停止�
 另记录进程CPU时间、墙钟时间、目标与参数/轨迹一致性；固定种子交错提交两臂，以减小机器负载的时间偏差。
 每次运行冻结源代码、命令和资源证据，由持久systemd服务执行；失败与未通过端点照实保留。
 
+HbO/HbR 同向普遍性审计（2026-09-28）复用 `analyze_hbo_hbr_relationship.py --prevalence`，
+合同为 [`hbo_hbr_prevalence_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/hbo_hbr_prevalence_v1.yaml)。
+按中央 v5 索引的公共记录身份，从统一原生 fNIRS 入口读取未作项目时间处理的发布 Hb，
+或 Single-Trial 正光强到相对 MBLL 的最少转换。主要端点为不重叠 30 s 通道窗口中
+Pearson r>0.5 的被试等权比例；同时报告反向、弱关系、缺失、去线性趋势、1 s 差分、
+v5 none 带通及公开光谱系数敏感性。Single-Trial 事件窗口与条件标签为次要分层，
+不混入连续窗口分母。严格保留原生时钟与共同支持，排除合同中的 Visual S06 Part1；
+跨模态几何不作为同一光学通道内描述统计的准入条件。先合成／fixture 检查，再监督试跑、
+全量统计；不训练模型，不使用比较实验的受保护材料。已有 SSM 面板只作辅助关联，
+显式排除合成单元、保留被试混杂，不能从相关方向唯一识别生理来源。
+
 ## Reading guide
 
 This file owns experiment design. It contains bounded diagnostic protocols and
