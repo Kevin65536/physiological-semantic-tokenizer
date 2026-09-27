@@ -387,7 +387,8 @@ New producers use `clean_eeg_fnirs_cache_v2` and
 `unified_physiology_window_v2` and `refed_continuous_va_sequence_v2`.
 The timing-repair namespace is `data/cache/physiology_semantic_clean_v2/`;
 the initial measurement producer used `data/cache/physiology_semantic_clean_v3/`;
-the current complete measurement producer defaults to `data/cache/physiology_semantic_clean_v4/`.
+the no-motion measurement producer uses `data/cache/physiology_semantic_clean_v5/`
+(migration contract below). The preceding v4 root retains its v3 processing identity.
 Its event-index output must explicitly use that same cache root.
 `--overwrite` cannot upgrade an existing v1 cache/index in place. Existing
 configured v1 paths now fail explicitly until a separately requested versioned
@@ -446,9 +447,9 @@ The full real-data audit and visualization commands remain documented in the
 dated audit. Their generated reports are evidence artifacts, not an additional
 source of data-contract authority.
 
-## Default measurement-cache migration — 2026-09-16
+## Measurement-cache migration — 2026-09-16 (historical default)
 
-The active default is now `data/cache/physiology_semantic_clean_v4/`, with
+This migration selected `data/cache/physiology_semantic_clean_v4/`, with
 `physiology_measurement_alignment_v3`, the existing v2 cache container/event
 identity, and `measurement_npy_record_v1` storage. EEG and paired HbO/HbR are
 produced once as float64 `.npy` arrays; the reader memory-maps complete records
@@ -480,6 +481,68 @@ explicit cleanup, retaining their manifests/index/geometry and removal inventory
 in the migration evidence linked from `experiments/RESULTS_INDEX.md`. This
 supersedes the earlier blanket v1 file-retention wording for rebuildable
 arrays only. Frozen SSM native inputs and completed campaign evidence stay in place.
+
+## 无运动校正的通用缓存 — 2026-09-28
+
+本次用户要求重新生成四数据集缓存并切换统一 loader。新根目录为
+`data/cache/physiology_semantic_clean_v5/`，处理身份为
+`physiology_measurement_alignment_v5`、`motion_method="none"`；缓存容器、
+存储布局与事件 schema 沿用 v2 / `measurement_npy_record_v1` / alignment v2。
+旧根目录、冻结实验配置、原始数据和已完成结果保留原身份。
+迁移的命令、资源、完成状态与核验结果由
+[迁移记录](../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/migration.json)
+持有；这次操作是公共数据准备，不包含模型拟合或比较协议的受保护评估。
+
+### 为什么默认选择 none
+
+旧导数抑制令 `d=diff(x)`、`m=median(d)`，重加权后积分
+`d_corrected=m+w*(d-m)`。非对称波形的上升和下降可获得不同权重，原先为零的
+导数和因此不再为零，积分产生累积漂移。它没有实现标准 TDDR 的低/高频分离、
+迭代稳健中心和中心化导数修复，不能用其失败认定 MNE TDDR 同样错误。
+同身份的既有审计重现通过 216/216 次；HbO 晚期减早期为负从旧处理 72/72
+变为无运动校正 47/72。该干预归因于算法改变，不能把剩余下降一概判为伪迹。
+详细结果见[原审计](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_optical_motion_audit_v1/analysis/independent_analysis.json)。
+
+[MNE 1.11.0 实现](https://github.com/mne-tools/mne-python/blob/v1.11.0/mne/preprocessing/nirs/_tddr.py)
+先分离约 0.5 Hz 以下的低频部分，再对低频导数迭代估计稳健中心 `mu` 和 Tukey
+权重，积分 `w*(d-mu)`，恢复均值和未校正的高频部分。其思路是把少数大的导数
+视为运动污染；这有利于抑制突跳和基线位移，却不保证保留所有真实缓慢变化。
+减去导数中心可移除真实斜率，稀疏响应也可能被稳健权重衰减；算法是数据依赖的
+非线性变换，不能简单用一个固定滤波器或常数增益逆转。
+MNE 支持浓度输入，但[官方说明](https://mne.tools/stable/generated/mne.preprocessing.nirs.temporal_derivative_distribution_repair.html)
+优先推荐原始 OD。已发布 Hb 的上游处理未知时，通用入口不再自动重复运动处理。
+
+| 选择 | 保留和代价 | 本项目用途 |
+| --- | --- | --- |
+| none | 运动步骤为恒等映射；保留响应和真实运动污染，既有带通/重采样仍会改变信号 | 通用测量入口，避免预先不可逆地删除待研究动态 |
+| MNE TDDR | 抑制大导数相关的突跳/位移；依赖上下文和导数分布，可能削弱慢响应 | 显式光学对照，需另行检验伪迹减少与响应保持 |
+
+[既有已知真值合成对照](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_optical_v1/optical_controls/results.json)
+在共同 30 s 区间，以相同带通后的真值定义响应增益：无噪声慢响应的 none 为 1，
+MNE 在 30 s 上下文约 0.0309、120 s 上下文接近 0。含阶跃的 120 s 输入中，
+两波长经带通的运动残差 RMS 中位数由 none 的 0.010225/0.006817 OD 降为
+MNE 的约 0.000013/0.000043 OD，但响应增益也仅约 0.0166/0.0702。
+这些刻意构造的敏感性输入说明取舍，不代表实测响应会普遍损失相同比例，
+也不能把两条不同目标上的 SSM 拟合误差直接用于排名。
+
+因此默认 none 是观测保真的工程选择，不是“无伪迹”或生理真值声明。
+运动注记仍是 QC 信息，不能自动变成有效性 mask；研究若需要运动修复，应在
+其已声明的数据支持上显式选择，并同时检验响应保持，不能按模型更容易拟合选择。
+
+### Producer、reader 与版本边界
+
+- 原始 Single-Trial：正强度/原生缺失→自然对数 OD→不作运动校正→相对 MBLL→
+  既有带通与重采样。光学 v5 与显式 v4 none 数值等价；仍不是已标定 µM。
+- REFED、Visual、Simultaneous：从发布 HbO/HbR 起步，只做已有单位处理、带通与
+  重采样。仅有证据的 mmol/L 转为 µM；未知单位保持独立相对组，不重复 OD/MBLL。
+- EEG、时间/事件规则、通道身份、float64 与缺失支持规则保持原合同。
+  `none` 不表示取消所有预处理；双向全记录处理仍不适用于隔离 trial 或严格未来预测。
+- 同一 builder 的 CLI 默认 v5 none；底层历史 v1/v3 和 v4 接口保留明确回放语义。
+  v5 光学输入也可显式选择 `mne_tddr`，必须使用独立根目录；本次仅生产 none。
+  已发布色团的 v5 接口仅接受 none，不把 OD 上的验证外推为 Hb 上的修复资格。
+- manifest 记录处理身份和运动方法；resume/overwrite 不能混入其他处理或运动版本。
+  reader 在数组读取前检查身份一致性，输出携带 fNIRS alignment provenance。
+  当前默认不回退到旧根目录；显式旧路径只保留其旧处理语义，绝不能重标为已修复。
 
 ## 测量坐标实现边界（2026-09-16）
 

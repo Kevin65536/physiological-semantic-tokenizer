@@ -1029,9 +1029,8 @@ class UnifiedPhysiologyWindowDataset:
         if record.manifest.get("storage") == MEASUREMENT_CACHE_STORAGE:
             if self.output_coordinate != "measurement":
                 raise ValueError("Current measurement caches cannot be reinterpreted as legacy robust inputs")
-            from .homer2_preprocessing import MEASUREMENT_ALIGNMENT_SCHEMA
-            if record.manifest.get("processing_schema") != MEASUREMENT_ALIGNMENT_SCHEMA:
-                raise ValueError("Unsupported measurement producer")
+            from .clean_physiology_cache import require_measurement_producer
+            require_measurement_producer(record.manifest)
             meta = record.manifest["measurement"]
             expected_branch = (self.eeg_signal_branch if record.dataset_id == "eeg_fnirs_single_trial"
                                else SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1 if record.dataset_id == "simultaneous_eeg_nirs"
@@ -1053,9 +1052,8 @@ class UnifiedPhysiologyWindowDataset:
             return payload
         coordinate = getattr(self,'output_coordinate','legacy_robust')
         if coordinate == 'measurement':
-            from .homer2_preprocessing import MEASUREMENT_ALIGNMENT_SCHEMA
-            if record.manifest.get('processing_schema') != MEASUREMENT_ALIGNMENT_SCHEMA:
-                raise ValueError('measurement coordinates require a fresh float64 v3 producer; no legacy inverse')
+            from .clean_physiology_cache import require_measurement_producer
+            require_measurement_producer(record.manifest)
         else:
             self._assert_required_single_trial_artifact_cache(record)
         arrays = self.index.load_record_arrays(record, ("homer2_aligned_fnirs", "homer2_channel_names", "processed_valid_mask"))
@@ -1548,6 +1546,7 @@ class UnifiedPhysiologyWindowDataset:
             "preprocessing_state": {
                 "eeg": record_data["eeg_preprocessing_state"],
                 "fnirs": record_data["fnirs_preprocessing_state"],
+                "fnirs_alignment": ref.record.manifest.get('homer2_aligned_contract', {}).get('alignment_state', {}),
             },
         }
 

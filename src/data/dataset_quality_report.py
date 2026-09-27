@@ -24,6 +24,7 @@ import numpy as np
 from scipy.stats import kurtosis as scipy_kurtosis, skew as scipy_skew
 
 from .fnirs_standardization import DATASET_FNIRS_CONTRACTS, FNIRSMeasurementContract
+from .clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from .homer2_preprocessing import DATASET_HOMER2_COMPATIBILITY
 
 
@@ -280,7 +281,7 @@ class DatasetQualityReporter:
         self,
         output_dir: Path,
         *,
-        cache_root: Path | str = PROJECT_ROOT / "data/cache/physiology_semantic_clean_v4",
+        cache_root: Path | str = PROJECT_ROOT / DEFAULT_CLEAN_CACHE_ROOT,
         embed_images: bool = True,
         max_channels: int = 8,
         samples_per_dataset: int = 4,

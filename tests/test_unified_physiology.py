@@ -58,6 +58,7 @@ def test_unified_window_disables_artifact_marking_and_invalidity(coordinate):
         base_record_id="session_01",
         signal_branch="homer2_wavelength_pair",
         join_key="eeg_fnirs_single_trial|subject_01|session_01",
+        manifest={},
     )
     event = {
         "event_type": "trial",

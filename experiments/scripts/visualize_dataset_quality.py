@@ -31,6 +31,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.dataset_quality_report import DatasetQualityReporter
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from src.data.registry import (
     get_dataset_registration,
 )
@@ -90,7 +91,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--cache-root',
-        default=str(PROJECT_ROOT / 'data/cache/physiology_semantic_clean_v4'),
+        default=str(PROJECT_ROOT / DEFAULT_CLEAN_CACHE_ROOT),
         help='Canonical clean-cache root containing signal, event, and geometry sidecars.',
     )
     parser.add_argument(

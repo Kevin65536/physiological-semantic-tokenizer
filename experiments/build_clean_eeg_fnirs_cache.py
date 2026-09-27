@@ -28,6 +28,9 @@ from src.data.fnirs_standardization import DATASET_FNIRS_CONTRACTS, FNIRSMeasure
 from src.data.homer2_preprocessing import (  # noqa: E402
     HOMER2_ALIGNMENT_SCHEMA,
     MEASUREMENT_ALIGNMENT_SCHEMA,
+    MEASUREMENT_ALIGNMENT_V4_SCHEMA,
+    MEASUREMENT_ALIGNMENT_V5_SCHEMA,
+    MEASUREMENT_ALIGNMENT_SCHEMAS,
     apply_homer2_aligned_contract,
     homer2_compatibility_manifest,
 )
@@ -83,8 +86,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--storage", choices=[MEASUREMENT_CACHE_STORAGE, "legacy_npz"], default=MEASUREMENT_CACHE_STORAGE)
     parser.add_argument("--workers", type=int, default=4,
                         help="Independent record producers; size to measured CPU/memory/IO capacity. Use 1 for serial replay.")
-    parser.add_argument("--processing-schema", default=MEASUREMENT_ALIGNMENT_SCHEMA,
-                        choices=[MEASUREMENT_ALIGNMENT_SCHEMA, HOMER2_ALIGNMENT_SCHEMA])
+    parser.add_argument("--processing-schema", default=MEASUREMENT_ALIGNMENT_V5_SCHEMA,
+                        choices=[*sorted(MEASUREMENT_ALIGNMENT_SCHEMAS), HOMER2_ALIGNMENT_SCHEMA])
+    parser.add_argument("--motion-method", choices=['none', 'mne_tddr'],
+                        help="V5 defaults to none; V4 requires an explicit method. MNE is optical-only.")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument('--ssm-training-config',type=Path,
                         help='Build only fresh float64 native inputs and timing for the configured 72-trial SSM revision.')
@@ -340,14 +345,23 @@ def _summarize_array(values: np.ndarray) -> dict[str, Any]:
 
 
 def build_record(record: CleanInputRecord, output_dir: Path, overwrite: bool,
-                 processing_schema: str = MEASUREMENT_ALIGNMENT_SCHEMA, *, native_only: bool = False,
-                 storage: str = "legacy_npz") -> dict[str, Any]:
+                 processing_schema: str = MEASUREMENT_ALIGNMENT_V5_SCHEMA, *, native_only: bool = False,
+                 storage: str = "legacy_npz", motion_method: str | None = None) -> dict[str, Any]:
+    if processing_schema == MEASUREMENT_ALIGNMENT_V5_SCHEMA and motion_method is None:
+        motion_method = 'none'
+    explicit_motion = processing_schema in (MEASUREMENT_ALIGNMENT_V4_SCHEMA, MEASUREMENT_ALIGNMENT_V5_SCHEMA)
+    if native_only and explicit_motion:
+        raise ValueError('Native-only exports require their registered historical processing schema')
+    if explicit_motion and motion_method not in ('none', 'mne_tddr'):
+        raise ValueError('V4/V5 cache production requires an explicit motion method')
+    if not explicit_motion and motion_method is not None:
+        raise ValueError('Legacy processing cannot accept a new motion method')
     subject_dir = output_dir / record.dataset_id / _safe_name(record.subject)
     record_name = _safe_name(record.record_id)
     npz_path = subject_dir / f"{record_name}.npz"
     manifest_path = subject_dir / f"{record_name}.manifest.json"
     if storage == MEASUREMENT_CACHE_STORAGE:
-        if native_only or processing_schema != MEASUREMENT_ALIGNMENT_SCHEMA:
+        if native_only or processing_schema not in MEASUREMENT_ALIGNMENT_SCHEMAS:
             raise ValueError("Complete measurement storage requires the current measurement producer")
         npz_path = subject_dir / record_name
     if npz_path.exists() and manifest_path.exists() and not overwrite:
@@ -355,6 +369,8 @@ def build_record(record: CleanInputRecord, output_dir: Path, overwrite: bool,
         require_current_cache_manifest(manifest)
         if manifest.get('processing_schema') != processing_schema:
             raise ValueError('processing version differs; use a new cache namespace')
+        if manifest.get('motion_method') != motion_method:
+            raise ValueError('motion method differs; use a new cache namespace')
         if bool(manifest.get('native_only', False)) != native_only:
             raise ValueError('native-only and processed caches require separate namespaces')
         if manifest.get('storage', 'legacy_npz') != storage:
@@ -365,6 +381,8 @@ def build_record(record: CleanInputRecord, output_dir: Path, overwrite: bool,
         require_current_cache_manifest(existing)
         if existing.get('processing_schema') != processing_schema:
             raise ValueError('cannot upgrade a retained processing version in place')
+        if existing.get('motion_method') != motion_method:
+            raise ValueError('cannot replace a retained motion method in place')
         if bool(existing.get('native_only', False)) != native_only:
             raise ValueError('cannot replace native-only/processed cache identity in place')
         if existing.get('storage', 'legacy_npz') != storage:
@@ -405,6 +423,7 @@ def build_record(record: CleanInputRecord, output_dir: Path, overwrite: bool,
         entry_stage=record.entry_stage,
         wavelengths_nm=record.wavelengths_nm,
         processing_schema=processing_schema,
+        motion_method=motion_method,
         native_unit=str(record.metadata.get('metadata_unit', 'unknown')),
         unit_evidence=('MAT cnt.yUnit' if record.dataset_id in ('eeg_fnirs_single_trial', 'simultaneous_eeg_nirs')
                        and record.metadata.get('metadata_unit') else ''),
@@ -433,6 +452,7 @@ def build_record(record: CleanInputRecord, output_dir: Path, overwrite: bool,
     manifest = with_canonical_fields({
         "schema": CLEAN_CACHE_SCHEMA,
         "processing_schema": processing_schema,
+        **({'motion_method': motion_method} if explicit_motion else {}),
         "record_npz": str(npz_path.relative_to(PROJECT_ROOT) if npz_path.is_relative_to(PROJECT_ROOT) else npz_path),
         "dataset_id": record.dataset_id,
         "subject": record.subject,
@@ -495,6 +515,8 @@ def build_measurement_record(record, homer2, directory, manifest_path, processin
         os.replace(temporary, directory / f'{key}.npy')
     manifest = dict(row, schema=CLEAN_CACHE_SCHEMA, storage=MEASUREMENT_CACHE_STORAGE,
         processing_schema=processing_schema, record_npz=str(directory.resolve()),
+        **({'motion_method': homer2.state.parameters['motion_method']}
+           if 'motion_method' in homer2.state.parameters else {}),
         arrays={key:f'{key}.npy' for key in arrays}, array_shapes={k:list(v.shape) for k,v in arrays.items()},
         sample_rate_hz=10., native_sample_rate_hz=record.sample_rate_hz,
         native_contract=record.contract.to_dict(), metadata=record.metadata,
@@ -542,20 +564,20 @@ def build_ssm_training_inputs(config_path: Path) -> dict[str, Any]:
     return dict(records=len(records),events=len(events),output_dir=str(destination))
 
 
-def _build_record_job(record, output_dir, overwrite, processing_schema, storage):
+def _build_record_job(record, output_dir, overwrite, processing_schema, storage, motion_method):
     started = time.monotonic()
-    manifest = build_record(record, output_dir, overwrite, processing_schema, storage=storage)
+    manifest = build_record(record, output_dir, overwrite, processing_schema, storage=storage, motion_method=motion_method)
     return manifest, time.monotonic()-started
 
 
-def build_records(records, output_dir, *, overwrite=False, processing_schema=MEASUREMENT_ALIGNMENT_SCHEMA,
-                  storage=MEASUREMENT_CACHE_STORAGE, workers=4):
+def build_records(records, output_dir, *, overwrite=False, processing_schema=MEASUREMENT_ALIGNMENT_V5_SCHEMA,
+                  storage=MEASUREMENT_CACHE_STORAGE, workers=4, motion_method=None):
     """Keep at most two records per worker in flight, including source arrays."""
     if workers < 1:
         raise ValueError('workers must be positive')
     if workers == 1:
         for record in records:
-            yield _build_record_job(record, output_dir, overwrite, processing_schema, storage)
+            yield _build_record_job(record, output_dir, overwrite, processing_schema, storage, motion_method)
         return
     iterator = iter(records)
     with ProcessPoolExecutor(max_workers=workers, mp_context=get_context('spawn')) as pool:
@@ -568,7 +590,7 @@ def build_records(records, output_dir, *, overwrite=False, processing_schema=MEA
                 except StopIteration:
                     exhausted = True
                     break
-                pending.add(pool.submit(_build_record_job, record, output_dir, overwrite, processing_schema, storage))
+                pending.add(pool.submit(_build_record_job, record, output_dir, overwrite, processing_schema, storage, motion_method))
             if pending:
                 done, pending = wait(pending, return_when=FIRST_COMPLETED)
                 for future in done:
@@ -584,8 +606,19 @@ def main() -> None:
     if not output_dir.is_absolute():
         output_dir = PROJECT_ROOT / output_dir
     old_manifest = output_dir / "cache_manifest.json"
-    if old_manifest.exists():
-        require_current_cache_manifest(json.loads(old_manifest.read_text()))
+    previous = json.loads(old_manifest.read_text()) if old_manifest.exists() else None
+    if previous is not None:
+        require_current_cache_manifest(previous)
+    if args.processing_schema == MEASUREMENT_ALIGNMENT_V5_SCHEMA and args.motion_method is None:
+        args.motion_method = 'none'
+    explicit_motion = args.processing_schema in (MEASUREMENT_ALIGNMENT_V4_SCHEMA, MEASUREMENT_ALIGNMENT_V5_SCHEMA)
+    if explicit_motion != (args.motion_method is not None):
+        raise ValueError('V4/V5 requires a motion method; legacy processing must omit it')
+    if (args.processing_schema == MEASUREMENT_ALIGNMENT_V4_SCHEMA or args.motion_method == 'mne_tddr') and args.datasets != ['eeg_fnirs_single_trial']:
+        raise ValueError('V4 and MNE comparison cache production is optical-only; select Single-Trial')
+    if previous is not None:
+        if previous.get('processing_schema') != args.processing_schema or previous.get('motion_method') != args.motion_method:
+            raise ValueError('Processing or motion identity changed; use a new cache root')
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if args.storage == MEASUREMENT_CACHE_STORAGE and args.include_refed_absorbance:
@@ -594,9 +627,12 @@ def main() -> None:
     if old_manifest.exists() and json.loads(old_manifest.read_text()).get('storage', 'legacy_npz') != args.storage:
         raise ValueError('Cache storage changed; use a new root')
     records = [r for r in old_records if r['dataset_id'] not in args.datasets]
-    write_json(old_manifest, dict(schema=CLEAN_CACHE_SCHEMA, storage=args.storage, execution='building', records=records))
+    write_json(old_manifest, dict(schema=CLEAN_CACHE_SCHEMA, storage=args.storage, execution='building',
+        processing_schema=args.processing_schema,
+        **({'motion_method': args.motion_method} if explicit_motion else {}), records=records))
     for manifest, elapsed in build_records(iter_records(args), output_dir, overwrite=args.overwrite,
-            processing_schema=args.processing_schema, storage=args.storage, workers=args.workers):
+            processing_schema=args.processing_schema, storage=args.storage, workers=args.workers,
+            motion_method=args.motion_method):
         records.append(manifest)
         print(json.dumps(dict(record=manifest['join_key'],elapsed_seconds=elapsed)), flush=True)
     records.sort(key=lambda r: (r['dataset_id'], r['canonical_subject_id'], r['record_id']))
@@ -605,6 +641,7 @@ def main() -> None:
         "storage": args.storage,
         "execution": "completed",
         "processing_schema": args.processing_schema,
+        **({'motion_method': args.motion_method} if explicit_motion else {}),
         "homer2_alignment_schema": HOMER2_ALIGNMENT_SCHEMA,
         "output_dir": str(output_dir.relative_to(PROJECT_ROOT) if output_dir.is_relative_to(PROJECT_ROOT) else output_dir),
         "canonical_join_contract": {

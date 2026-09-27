@@ -11,11 +11,12 @@ from typing import Any, Iterable, Mapping
 import numpy as np
 
 from .event_alignment import EVENT_ALIGNMENT_SCHEMA
+from .homer2_preprocessing import MEASUREMENT_ALIGNMENT_SCHEMAS, MEASUREMENT_ALIGNMENT_V5_SCHEMA
 
 
 CLEAN_PHYSIOLOGY_CACHE_INDEX_SCHEMA = "clean_physiology_cache_index_v1"
 CLEAN_CACHE_SCHEMA = "clean_eeg_fnirs_cache_v2"
-DEFAULT_CLEAN_CACHE_ROOT = "data/cache/physiology_semantic_clean_v4"
+DEFAULT_CLEAN_CACHE_ROOT = "data/cache/physiology_semantic_clean_v5"
 MEASUREMENT_CACHE_STORAGE = "measurement_npy_record_v1"
 # Immutable v1 artifacts remain historical evidence, not inputs to the v2 reader.
 DEPRECATED_CACHE_SCHEMAS = frozenset({"clean_eeg_fnirs_cache_v1"})
@@ -30,6 +31,25 @@ def require_current_cache_manifest(manifest: Mapping[str, Any]) -> None:
             "Old caches are retained for historical evidence only. A separate versioned "
             "rebuild is required; this reader never rebuilds automatically."
         )
+    if manifest.get('processing_schema') == MEASUREMENT_ALIGNMENT_V5_SCHEMA:
+        method = manifest.get('motion_method')
+        if method not in ('none', 'mne_tddr'):
+            raise ValueError('V5 cache requires explicit motion provenance')
+        if 'dataset_id' in manifest:
+            state = manifest.get('homer2_aligned_contract', {}).get('alignment_state', {})
+            if (state.get('schema') != MEASUREMENT_ALIGNMENT_V5_SCHEMA
+                    or state.get('parameters', {}).get('motion_method') != method):
+                raise ValueError('V5 record processing and motion provenance disagree')
+        for record in manifest.get('records', []):
+            if (record.get('processing_schema') != MEASUREMENT_ALIGNMENT_V5_SCHEMA
+                    or record.get('motion_method') != method):
+                raise ValueError('V5 cache cannot mix processing versions or motion methods')
+
+
+def require_measurement_producer(manifest: Mapping[str, Any]) -> None:
+    require_current_cache_manifest(manifest)
+    if manifest.get('processing_schema') not in MEASUREMENT_ALIGNMENT_SCHEMAS:
+        raise ValueError('Measurement coordinates require a versioned float64 producer; no legacy inverse')
 
 
 def canonical_subject_id(dataset_id: str, subject: str) -> str:

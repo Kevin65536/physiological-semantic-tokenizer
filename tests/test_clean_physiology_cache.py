@@ -101,6 +101,23 @@ def test_old_cache_is_rejected_before_reading_events_or_signal_arrays(tmp_path):
         CleanPhysiologyCacheIndex(root)
 
 
+def test_v5_mixed_processing_rejected_before_opening_payloads(tmp_path):
+    import pytest
+    from src.data.homer2_preprocessing import MEASUREMENT_ALIGNMENT_V5_SCHEMA
+    root = tmp_path / 'cache'
+    row = dict(processing_schema='physiology_measurement_alignment_v3', motion_method='none')
+    _write_json(root / 'cache_manifest.json', dict(schema=CLEAN_CACHE_SCHEMA,
+        processing_schema=MEASUREMENT_ALIGNMENT_V5_SCHEMA, motion_method='none', records=[row]))
+    with pytest.raises(ValueError, match='cannot mix'):
+        CleanPhysiologyCacheIndex(root)
+    row['processing_schema'] = MEASUREMENT_ALIGNMENT_V5_SCHEMA
+    row['motion_method'] = 'mne_tddr'
+    _write_json(root / 'cache_manifest.json', dict(schema=CLEAN_CACHE_SCHEMA,
+        processing_schema=MEASUREMENT_ALIGNMENT_V5_SCHEMA, motion_method='none', records=[row]))
+    with pytest.raises(ValueError, match='cannot mix'):
+        CleanPhysiologyCacheIndex(root)
+
+
 def test_current_signal_cache_cannot_use_old_event_index(tmp_path):
     import pytest
     root = tmp_path / "cache"

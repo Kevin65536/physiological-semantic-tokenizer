@@ -76,7 +76,8 @@ def test_bounded_simultaneous_signal_and_event_builders_select_same_record(tmp_p
     assert [r.record_id for r in records] == reports == ['cnt_dsr']
 
 
-def test_complete_measurement_cache_roundtrip_never_reopens_native(tmp_path, monkeypatch):
+@pytest.mark.parametrize('version,method', [('v3', None), ('v5', 'none')])
+def test_complete_measurement_cache_roundtrip_never_reopens_native(tmp_path, monkeypatch, version, method):
     from experiments import build_clean_eeg_fnirs_cache as builder
     import src.data.unified_physiology as unified
     from src.data.clean_physiology_cache import MEASUREMENT_CACHE_STORAGE, CLEAN_CACHE_SCHEMA
@@ -95,7 +96,17 @@ def test_complete_measurement_cache_roundtrip_never_reopens_native(tmp_path, mon
     monkeypatch.setattr(unified,'load_native_eeg_record',lambda *a: unified.NativeEEGRecord(
         eeg,200.,tuple(f'E{i}' for i in range(6)),'uV',native_path,unit_evidence='synthetic'))
     root = tmp_path/'cache'
-    row = builder.build_record(record, root, False, storage=MEASUREMENT_CACHE_STORAGE)
+    schema = f'physiology_measurement_alignment_{version}'
+    row = builder.build_record(record, root, False, storage=MEASUREMENT_CACHE_STORAGE,
+                               processing_schema=schema, motion_method=method)
+    if version == 'v5':
+        assert row['motion_method'] == 'none'
+        state = row['homer2_aligned_contract']['alignment_state']
+        assert 'robust_derivative_motion_suppression' not in state['applied_steps']
+        for overwrite in (False, True):
+            with pytest.raises(ValueError, match='motion method'):
+                builder.build_record(record, root, overwrite, storage=MEASUREMENT_CACHE_STORAGE,
+                                     processing_schema=schema, motion_method='mne_tddr')
     (root/'cache_manifest.json').write_text(json.dumps(dict(schema=CLEAN_CACHE_SCHEMA,records=[row])))
     (root/'event_index').mkdir()
     (root/'event_index/event_manifest.json').write_text(json.dumps(dict(event_alignment_schema=EVENT_ALIGNMENT_SCHEMA)))
@@ -120,5 +131,7 @@ def test_bounded_parallel_builder_preserves_record_identity(tmp_path):
     results=list(builder.build_records(iter(records),tmp_path/'out',workers=2,storage='legacy_npz'))
     assert {r['join_key'] for r,_ in results} == {'refed|1|video_1','refed|2|video_1'}
     for row,_ in results:
+        assert row['processing_schema'] == builder.MEASUREMENT_ALIGNMENT_V5_SCHEMA
+        assert row['motion_method'] == 'none'
         with np.load(row['record_npz']) as arrays:
             assert arrays['homer2_aligned_fnirs'].dtype == np.float64

@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-09-17; payload-pruning record retained from
+_Evidence surface updated 2026-09-28; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -22,7 +22,7 @@ use local payloads only when a report explicitly requires them.
 
 The [migration inventory](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_measurement_cache_migration_v4/migration.json)
 records authorized cleanup, retained metadata, cache validation and before/after
-allocated disk usage. The current data default is the v4 measurement cache;
+allocated disk usage. That migration selected the v4 measurement cache;
 model-specific normalization belongs to SSM/tokenizer consumers. Retired general
 v1 and public smoke arrays are rebuildable; preserve their manifests, event and
 geometry metadata in this migration package before deleting those directories.
@@ -35,6 +35,17 @@ cache expansion. Its [validation and 30-second inventory](runs/physiology_semant
 verify new signal/event/geometry coverage and unchanged existing arrays/events.
 Compressed pre-extension indices and manifests preserve the earlier cache inventory;
 the 2026-09-16 migration evidence remains unchanged.
+
+## No-motion cache migration — 2026-09-28
+
+The [migration record](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/migration.json)
+retains the decision sources, exact supervised commands, worker/IO measurements,
+source patch and test results. The [validation](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/validation.json)
+compares the new cache with the previous record inventory, EEG arrays, units,
+support, events, geometry and actual unified/sequence loading. Preserve both
+cache identities and this evidence; this migration does not authorize deletion
+of the old cache. Method choice and processing boundaries are owned by
+[DATA_CONTRACT](../docs/DATA_CONTRACT.md#无运动校正的通用缓存--2026-09-28).
 
 ## Main-method evidence
 

@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-26T13:48:47.249137+00:00",
+  "updated_at": "2026-09-27T16:28:08.380349+00:00",
   "tracks": [
     {
       "id": "main",
@@ -968,6 +968,18 @@
       "id": "e.shared_driver_conditional_optical_gain_full_atlas",
       "label": "两管道全部联合曲线位图图册",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_v1/report_v1/FULL_CURVE_ATLAS.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.motion_cache_v5_migration",
+      "label": "无运动校正缓存迁移与资源记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/migration.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.motion_cache_v5_validation",
+      "label": "四数据集缓存、全窗口与连续目标核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/validation.json",
       "role": "result_summary"
     }
   ],
@@ -3934,6 +3946,29 @@
       ],
       "headline": false,
       "next_step": "先以独立数值诊断检验GN步控制能否消除未收敛尾段振荡，维持目标/阈值/预算与旧失败证据；再检查β–τ的条件恢复及可辨识性，暂不扩张生理参数自由度。"
+    },
+    {
+      "state_id": "main.data_contract@2026-09-28.motion_cache_v5",
+      "entity": "main.data_contract",
+      "label": "统一数据合同",
+      "track": "main",
+      "order": 10,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "统一 loader 与通用 builder 默认切换 v5/none：四数据集787条记录在独立 systemd 服务下重建，移除旧导数抑制。EEG、单位、源身份、形状和支持不变；23312事件及几何/对齐索引一致，19115个30秒通用窗口全部通过，REFED 1952个连续窗口身份一致并核验960个首尾目标。三数据集71名被试局部视图通过；REFED32名被试原有几何单位拒绝保留，未放宽条件。旧缓存和冻结实验身份保留，无模型拟合或受保护评估。",
+      "evidence_ids": [
+        "e.data_contract",
+        "e.motion_cache_v5_migration",
+        "e.motion_cache_v5_validation"
+      ],
+      "supersedes": [
+        "main.data_contract@2026-09-17.all_public_subjects"
+      ],
+      "updated_at": "2026-09-27T16:28:08.380349+00:00",
+      "depends_on": [],
+      "headline": false
     }
   ]
 }

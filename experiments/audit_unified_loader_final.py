@@ -49,6 +49,7 @@ from src.data.unified_physiology import (  # noqa: E402
     UnifiedPhysiologyWindowDataset,
     canonical_label,
 )
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT  # noqa: E402
 
 
 SCHEMA = "unified_loader_final_audit_v1"
@@ -64,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--cache-root",
-        default="data/cache/physiology_semantic_clean_v4",
+        default=DEFAULT_CLEAN_CACHE_ROOT,
         help="Canonical cache used by UnifiedPhysiologyWindowDataset.",
     )
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT))

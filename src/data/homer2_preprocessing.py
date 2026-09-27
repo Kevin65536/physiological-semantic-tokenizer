@@ -18,6 +18,10 @@ from scipy.signal import butter, sosfiltfilt
 HOMER2_ALIGNMENT_SCHEMA = "homer2_alignment_contract_v1"
 MEASUREMENT_ALIGNMENT_SCHEMA = "physiology_measurement_alignment_v3"
 MEASUREMENT_ALIGNMENT_V4_SCHEMA = "physiology_measurement_alignment_v4"
+MEASUREMENT_ALIGNMENT_V5_SCHEMA = "physiology_measurement_alignment_v5"
+MEASUREMENT_ALIGNMENT_SCHEMAS = frozenset({
+    MEASUREMENT_ALIGNMENT_SCHEMA, MEASUREMENT_ALIGNMENT_V4_SCHEMA, MEASUREMENT_ALIGNMENT_V5_SCHEMA,
+})
 
 
 @dataclass(frozen=True)
@@ -390,6 +394,8 @@ def apply_homer2_aligned_contract(
     """Apply the declared branch over exactly the supplied time support.
 
     V4 requires motion_method='none' or 'mne_tddr' on intensity/OD input.
+    V5 additionally admits released chromophores with explicit 'none', without
+    repeating optical conversion or motion correction on an upstream Hb export.
     That method exclusively controls motion correction; the legacy
     motion_correction boolean is unused in V4. V1/V3 retain their original
     boolean behavior and reject a non-None motion_method. V4 retains V3's
@@ -397,28 +403,37 @@ def apply_homer2_aligned_contract(
     """
     compatibility = get_homer2_dataset_compatibility(dataset_id)
     v4 = processing_schema == MEASUREMENT_ALIGNMENT_V4_SCHEMA
-    if processing_schema not in (HOMER2_ALIGNMENT_SCHEMA, MEASUREMENT_ALIGNMENT_SCHEMA, MEASUREMENT_ALIGNMENT_V4_SCHEMA):
+    v5 = processing_schema == MEASUREMENT_ALIGNMENT_V5_SCHEMA
+    explicit_motion = v4 or v5
+    new_measurement = processing_schema in MEASUREMENT_ALIGNMENT_SCHEMAS
+    optical = entry_stage in ('raw_intensity', 'optical_density')
+    if processing_schema not in MEASUREMENT_ALIGNMENT_SCHEMAS | {HOMER2_ALIGNMENT_SCHEMA}:
         raise ValueError("unsupported measurement alignment schema")
-    if v4:
+    if explicit_motion:
         if motion_method not in ('none', 'mne_tddr'):
-            raise ValueError("V4 requires explicit motion_method 'none' or 'mne_tddr'")
-        if entry_stage not in ('raw_intensity', 'optical_density'):
+            raise ValueError("V4/V5 requires explicit motion_method 'none' or 'mne_tddr'")
+        if v4 and not optical:
             raise ValueError('V4 supports only raw_intensity or optical_density')
-        wavelengths = np.asarray(wavelengths_nm, dtype=float)
-        if (wavelengths.shape != (2,) or not np.isfinite(wavelengths).all()
-                or np.any(wavelengths <= 0) or wavelengths[0] >= wavelengths[1]):
-            raise ValueError('V4 requires two finite positive increasing wavelengths')
+        if v5 and not optical and (entry_stage != 'chromophore' or motion_method != 'none'):
+            raise ValueError("V5 released chromophores require motion_method='none'; MNE is an optical-only comparison")
+        if optical:
+            wavelengths = np.asarray(wavelengths_nm, dtype=float)
+            if (wavelengths.shape != (2,) or not np.isfinite(wavelengths).all()
+                    or np.any(wavelengths <= 0) or wavelengths[0] >= wavelengths[1]):
+                raise ValueError('V4/V5 requires two finite positive increasing wavelengths')
         if not np.isfinite(sample_rate_hz) or sample_rate_hz <= 0:
-            raise ValueError('V4 requires finite positive sample rate')
+            raise ValueError('V4/V5 requires finite positive sample rate')
     elif motion_method is not None:
-        raise ValueError('motion_method is only supported by V4')
+        raise ValueError('motion_method is only supported by V4/V5')
     if entry_stage not in ("raw_intensity", "optical_density", "chromophore", "absorbance"):
         raise ValueError("explicit intensity, OD, chromophore or absorbance entry required")
     if entry_stage == "raw_intensity" and dataset_id != "eeg_fnirs_single_trial":
         raise ValueError("released chromophores cannot re-enter intensity/MBLL processing")
     array = _as_float_array(values)
-    if v4 and (array.ndim != 3 or array.shape[-1] != 2 or array.shape[0] < 4 or array.shape[1] < 1):
-        raise ValueError('V4 requires [time>=4, pair>=1, two wavelengths]')
+    if explicit_motion and optical and (array.ndim != 3 or array.shape[-1] != 2 or array.shape[0] < 4 or array.shape[1] < 1):
+        raise ValueError('V4/V5 requires [time>=4, pair>=1, two wavelengths]')
+    if v5 and not optical and (array.ndim != 2 or array.shape[0] < 4 or array.shape[1] < 2 or array.shape[1] % 2):
+        raise ValueError('V5 chromophores require [time>=4, paired HbO/HbR channels]')
     applied: list[str] = []
     skipped: list[str] = []
     missing: list[str] = []
@@ -435,11 +450,11 @@ def apply_homer2_aligned_contract(
         recorded &= np.broadcast_to(supplied,array.shape)
     if entry_stage == 'raw_intensity':
         recorded &= array > 0
-    if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA or v4:
+    if new_measurement:
         working = np.where(recorded,array,np.nan)
         quality['recorded_fraction'] = float(recorded.mean())
         quality['missing_policy'] = 'mask_before_nonlinear_processing; visible_only_interpolation; no_new_measurements'
-    if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA and entry_stage == "chromophore":
+    if new_measurement and entry_stage == "chromophore":
         from .physiology_measurement_adapter import measurement_unit_conversion
         conversion = measurement_unit_conversion(native_unit, quantity="concentration_change",
                                                   evidence=unit_evidence, group=dataset_id)
@@ -448,7 +463,7 @@ def apply_homer2_aligned_contract(
 
     if entry_stage == "raw_intensity":
         od, od_quality = intensity_to_optical_density(
-            working,epsilon=np.finfo(float).tiny if processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA or v4 else 1e-9)
+            working,epsilon=np.finfo(float).tiny if new_measurement else 1e-9)
         working = od
         applied.append("intensity_to_optical_density")
         quality["intensity_to_optical_density"] = od_quality
@@ -456,7 +471,7 @@ def apply_homer2_aligned_contract(
         skipped.append("intensity_to_optical_density")
         missing.append("raw_light_intensity")
 
-    if v4:
+    if explicit_motion:
         working, repaired = _finite_interp(working)
         quality['motion_input_nonfinite_repaired'] = float(repaired)
         quality['motion_method'] = motion_method
@@ -477,8 +492,6 @@ def apply_homer2_aligned_contract(
     # coordinates apply MBLL before linear filtering and remain float64.
     pre_linear = np.array(working, dtype=float, copy=True) if retain_feature_boundary else None
     pre_od = pre_linear.copy() if retain_feature_boundary and entry_stage in ("raw_intensity", "optical_density") else None
-    optical = entry_stage in ("raw_intensity", "optical_density")
-    new_measurement = processing_schema == MEASUREMENT_ALIGNMENT_SCHEMA or v4
     if optical and (array.ndim != 3 or array.shape[-1] != 2):
         raise ValueError("intensity/OD requires [time, pair, two wavelengths]")
     if optical and new_measurement:
@@ -539,8 +552,8 @@ def apply_homer2_aligned_contract(
         parameters={
             "low_hz": float(low_hz),
             "high_hz": float(high_hz),
-            "motion_correction": motion_method != 'none' if v4 else bool(motion_correction),
-            **({"motion_method": motion_method, "legacy_motion_correction_argument": "unused_in_v4"} if v4 else {}),
+            "motion_correction": motion_method != 'none' if explicit_motion else bool(motion_correction),
+            **({"motion_method": motion_method, "legacy_motion_correction_argument": "unused_in_v5" if v5 else "unused_in_v4"} if explicit_motion else {}),
             "wavelengths_nm": [float(item) for item in wavelengths_nm],
             "source_detector_distance_cm": float(source_detector_distance_cm),
             "partial_pathlength_factor": float(partial_pathlength_factor),
