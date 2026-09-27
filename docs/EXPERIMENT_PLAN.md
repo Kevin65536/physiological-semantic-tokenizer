@@ -355,6 +355,31 @@ v5 none 带通及公开光谱系数敏感性。Single-Trial 事件窗口与条�
 全量统计；不训练模型，不使用比较实验的受保护材料。已有 SSM 面板只作辅助关联，
 显式排除合成单元、保留被试混杂，不能从相关方向唯一识别生理来源。
 
+波形机制诊断（2026-09-28）复用入口 `--waveform-diagnostic`，合同为
+[`shared_driver_waveform_diagnostic_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_waveform_diagnostic_v1.yaml)。
+针对已记录的 S09/o3/trial3，先运行匹配动力学、错设κ/τ、静脉黏弹性、
+共同血容量和等总Hb氧交换六个合成控制；再读取条件光学增益父运行中三个被试
+outer=3的两管道精确prepared对象。保持18/6划分、目标、训练SD、观测算子和固定ROI。
+线性无正则SVD筛查逐个改变β、κ、γ、τ、α、E0或静脉黏弹性时间，仅按18条训练
+残差选择网格值；6条验证仅评估条件重建，不把逐验证窗口重拟合driver称为预测。
+另比较joint与Hb-only，检查SVD截断敏感性。线性解保留状态偏离，不能替代非线性可行性。
+
+静脉黏弹性仅在诊断线性化中用 `f_out=v^(1/alpha)+tau_v*dv/dt`，不改写原非线性核心。
+新增的共同血容量与氧交换观测方向分别为 `[P0-Q0,Q0]` 和 `[-Q0,Q0]`，
+各配相同六个预声明慢余弦基，再经原光学/时间算子；该表达能力对照没有独立输入，
+不作为头皮来源或CMRO2异常的独特归因。两管道困难身份另做原目标、去曲率、
+去初态惩罚、去flow惩罚、全去惩罚、Hb-only全去惩罚六臂非线性检验，保持参数冻结、
+物理域、梯度阈值和4/8子步检查。原成功与失败证据只读，未启动新原始数据生产、
+保护评价、完整新SSM训练或teacher资格评定。
+
+固定新增成分比例后仍有残差时，版本化小范围后续合同
+[`shared_driver_waveform_volume_fraction_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_waveform_volume_fraction_v1.yaml)
+沿用相同入口、六组对象、六个慢基和18/6划分，只用训练目标选择新增成分的
+HbR/HbT loading（0.05/0.1/0.2/0.35/0.5）。先通过0.1/0.2/0.35三种已知比例合成恢复，
+再冻结训练选择的比例做逐窗重建；不改变Balloon的Q0或E0。该参数不是独立测得的
+血氧饱和度，不能在没有新观测的情况下确定头皮、动脉或静脉来源。此后续属于
+看过第一轮结果后的探索性诊断，不追溯声称预注册或独立确认。
+
 ## Reading guide
 
 This file owns experiment design. It contains bounded diagnostic protocols and

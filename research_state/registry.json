@@ -971,6 +971,18 @@
       "role": "result_summary"
     },
     {
+      "id": "e.shared_driver_conditional_step_control_contract",
+      "label": "同目标配对求解器合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_conditional_step_control_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.shared_driver_conditional_step_control_pilot",
+      "label": "配对求解器资源及合成pilot",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_pilot_v2/manifest.json",
+      "role": "result_summary"
+    },
+    {
       "id": "e.motion_cache_v5_migration",
       "label": "无运动校正缓存迁移与资源记录",
       "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/migration.json",
@@ -983,15 +995,51 @@
       "role": "result_summary"
     },
     {
-      "id": "e.shared_driver_conditional_step_control_contract",
-      "label": "同目标配对求解器合同",
-      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_conditional_step_control_v2.yaml",
+      "id": "e.shared_driver_waveform_contract",
+      "label": "波形参数与缺失成分诊断合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_waveform_diagnostic_v1.yaml",
       "role": "protocol"
     },
     {
-      "id": "e.shared_driver_conditional_step_control_pilot",
-      "label": "配对求解器资源及合成pilot",
-      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_pilot_v2/manifest.json",
+      "id": "e.shared_driver_waveform_run",
+      "label": "波形诊断完整运行",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_diagnostic_v1/manifest.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_waveform_summary",
+      "label": "波形线性与非线性完整失败分母",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_diagnostic_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_waveform_recheck",
+      "label": "Hb-only失败细积分与粗轨迹保留",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_diagnostic_v1/integration_failure_recheck_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_waveform_report",
+      "label": "波形理论与对照测试位图报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_diagnostic_v1/report_v2/REPORT.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_volume_fraction_contract",
+      "label": "额外血容量成分比例训练检验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_waveform_volume_fraction_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.shared_driver_volume_fraction_run",
+      "label": "额外成分比例合成与实测运行",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_volume_fraction_v1/manifest.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_volume_fraction_summary",
+      "label": "额外成分比例训练选择与逐窗结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_volume_fraction_v1/summary.json",
       "role": "result_summary"
     },
     {
@@ -4020,29 +4068,6 @@
       "next_step": "先以独立数值诊断检验GN步控制能否消除未收敛尾段振荡，维持目标/阈值/预算与旧失败证据；再检查β–τ的条件恢复及可辨识性，暂不扩张生理参数自由度。"
     },
     {
-      "state_id": "main.data_contract@2026-09-28.motion_cache_v5",
-      "entity": "main.data_contract",
-      "label": "统一数据合同",
-      "track": "main",
-      "order": 10,
-      "entity_kind": "engineering",
-      "execution": "completed",
-      "scientific_verdict": "not_applicable",
-      "analysis_intent": "engineering",
-      "summary": "统一 loader 与通用 builder 默认切换 v5/none：四数据集787条记录在独立 systemd 服务下重建，移除旧导数抑制。EEG、单位、源身份、形状和支持不变；23312事件及几何/对齐索引一致，19115个30秒通用窗口全部通过，REFED 1952个连续窗口身份一致并核验960个首尾目标。三数据集71名被试局部视图通过；REFED32名被试原有几何单位拒绝保留，未放宽条件。旧缓存和冻结实验身份保留，无模型拟合或受保护评估。",
-      "evidence_ids": [
-        "e.data_contract",
-        "e.motion_cache_v5_migration",
-        "e.motion_cache_v5_validation"
-      ],
-      "supersedes": [
-        "main.data_contract@2026-09-17.all_public_subjects"
-      ],
-      "updated_at": "2026-09-27T16:28:08.380349+00:00",
-      "depends_on": [],
-      "headline": false
-    },
-    {
       "state_id": "main.shared_driver_conditional_step_control@2026-09-28.v2",
       "entity": "main.shared_driver_conditional_step_control",
       "label": "同目标二次插值求解器配对验证",
@@ -4069,6 +4094,80 @@
       ],
       "headline": false,
       "next_step": "后续共享β拟合可显式使用quadratic_interpolation并保留基线；共享τ仅软件覆盖，跨数据集及更大面板的性能仍需独立检验。波形形态和参数可辨识性继续由各自诊断判断。"
+    },
+    {
+      "state_id": "main.data_contract@2026-09-28.motion_cache_v5",
+      "entity": "main.data_contract",
+      "label": "统一数据合同",
+      "track": "main",
+      "order": 10,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "engineering",
+      "summary": "统一 loader 与通用 builder 默认切换 v5/none：四数据集787条记录在独立 systemd 服务下重建，移除旧导数抑制。EEG、单位、源身份、形状和支持不变；23312事件及几何/对齐索引一致，19115个30秒通用窗口全部通过，REFED 1952个连续窗口身份一致并核验960个首尾目标。三数据集71名被试局部视图通过；REFED32名被试原有几何单位拒绝保留，未放宽条件。旧缓存和冻结实验身份保留，无模型拟合或受保护评估。",
+      "evidence_ids": [
+        "e.data_contract",
+        "e.motion_cache_v5_migration",
+        "e.motion_cache_v5_validation"
+      ],
+      "supersedes": [
+        "main.data_contract@2026-09-17.all_public_subjects"
+      ],
+      "updated_at": "2026-09-27T16:28:08.380349+00:00",
+      "depends_on": [],
+      "headline": false
+    },
+    {
+      "state_id": "main.shared_driver_waveform_diagnostic@2026-09-28.v1",
+      "entity": "main.shared_driver_waveform_diagnostic",
+      "label": "Hb波形偏离的参数与缺失成分诊断",
+      "track": "main",
+      "order": 164,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "六组合成机制控制通过；三被试outer3×两路径的六个线性组与12个困难身份非线性对照全部终态，后者9成功、3失败。S09/o3/trial3的MNE HbO NRMSE .937，分别去曲率、初态或flow惩罚仍约.937；HbO/HbR残差相关.935（无校正.920）。训练单参筛查未解决困难身份；α/E0选至网格.96/.9，S09黏弹性选0。固定比例额外共同血容量方向使MNE线性HbO/HbR .937/.586降至.547/.322，等维氧交换为.922/.333。Hb-only无惩罚出现巨大driver、近零flow及数值/积分失败；原worker失败保留，补充同条件重放记录预算失败和细积分域失败。仅支持探索性结构定位，未建立唯一生理来源或完整SSM修复。",
+      "evidence_ids": [
+        "e.shared_driver_waveform_contract",
+        "e.shared_driver_waveform_run",
+        "e.shared_driver_waveform_summary",
+        "e.shared_driver_waveform_recheck",
+        "e.shared_driver_waveform_report"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-27T16:30:02.150480+00:00",
+      "depends_on": [
+        "main.shared_driver_conditional_optical_gain"
+      ],
+      "headline": false,
+      "next_step": "与额外血容量loading检验合并解释；后续需独立预测或外部生理输入定位来源。"
+    },
+    {
+      "state_id": "main.shared_driver_waveform_volume_fraction@2026-09-28.v1",
+      "entity": "main.shared_driver_waveform_volume_fraction",
+      "label": "额外慢血容量成分的训练比例检验",
+      "track": "main",
+      "order": 165,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "已知比例.1/.2/.35三组合成均恢复；同六组18训练/6验证完成，共18唯一验证窗口、两管道36路径窗口。S09两路径训练均选HbR/HbT额外loading .2；困难身份EEG/HbO/HbR无校正从原非线性.194/.993/.676变为线性新增成分.136/.428/.333，MNE从.181/.937/.580变为.115/.371/.303。同折18窗口的三项<.5计数由14/15增至18/18；HbO均改善，HbR改善15/14条。MNE HbO第二峰在目标时刻由−.136增至1.067（观测1.519），末谷由−.487至−1.813（观测−2.480）；第一峰仍偏低。其他被试比例选网格下端.05。支持独立慢共同成分的表达能力；额外系数逐验证窗口同目标拟合，非预测、非独立血氧饱和度、非头皮/动脉来源证明，未并入正式非线性SSM。",
+      "evidence_ids": [
+        "e.shared_driver_volume_fraction_contract",
+        "e.shared_driver_volume_fraction_run",
+        "e.shared_driver_volume_fraction_summary",
+        "e.shared_driver_waveform_report"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-27T16:30:02.150480+00:00",
+      "depends_on": [
+        "main.shared_driver_waveform_diagnostic"
+      ],
+      "headline": false,
+      "next_step": "优先检验带独立慢血容量成分的非线性候选及跨时段/被试预测；来源归因需要空间或外部生理参照。"
     },
     {
       "state_id": "main.hbo_hbr_prevalence@2026-09-28.v1",

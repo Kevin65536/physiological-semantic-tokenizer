@@ -29,20 +29,34 @@ class SharedDriverDesign:
     input: np.ndarray
 
 
-def build_shared_driver_design(parameters, steps, dt, *, processed_mean_operator=None):
+def build_shared_driver_design(parameters, steps, dt, *, processed_mean_operator=None,
+                               venous_viscoelastic_s=0.):
     """Build time-major [EEG,HbO,HbR] design, columns [r[0:T],initial[5]].
 
     The driver is held constant on [t,t+dt); its last value is observed in
     EEG but cannot influence an earlier vascular state. A supplied processing
     operator acts on the complete canonical mean, before selecting visible
     processed observations. It does not implement raw-sensor masking.
+    The optional linear diagnostic uses f_out=v**(1/alpha)+tau_v*dv/dt.
+    It changes the rest Jacobian only; the nonlinear core remains unchanged.
     """
     parameters.validate()
     if isinstance(steps, bool) or not isinstance(steps, (int, np.integer)) or steps < 3:
         raise ValueError('steps must be an integer of at least three')
     if not np.isfinite(dt) or dt <= 0:
         raise ValueError('dt must be finite and positive')
+    if not np.isfinite(venous_viscoelastic_s) or venous_viscoelastic_s < 0:
+        raise ValueError('venous_viscoelastic_s must be finite and nonnegative')
     j = core.balloon_rhs_jacobian(np.zeros(6), parameters)
+    if venous_viscoelastic_s:
+        tau, alpha = parameters.free.tau, parameters.fixed.alpha
+        fraction = venous_viscoelastic_s/(tau+venous_viscoelastic_s)
+        # Eliminate the implicit outflow before linearizing mass balances.
+        j[3, 2] = 1/(tau+venous_viscoelastic_s)
+        j[3, 3] = -1/(alpha*(tau+venous_viscoelastic_s))
+        for row in (4, 5):
+            j[row, 2] -= fraction/tau
+            j[row, 3] += fraction/(alpha*tau)
     augmented = np.zeros((6, 6))
     augmented[:5, :5], augmented[:5, 5] = j[1:, 1:], j[1:, 0]
     discrete = expm(augmented*dt)
@@ -68,6 +82,76 @@ def build_shared_driver_design(parameters, steps, dt, *, processed_mean_operator
         offset = (operator@canonical_offset.ravel()).reshape(steps, 3)
     return SharedDriverDesign(parameters, int(steps), float(dt), observed,
         canonical, state, offset, canonical_offset, transition, drive)
+
+
+def waveform_component_basis(parameters, steps, dt, mean_operator, mechanism, *, modes=6,
+                             volume_deoxy_fraction=None):
+    """Equal-dimension slow observation perturbations, not new physiology fits.
+
+    Volume changes hold saturation fixed: [HbO,HbR]=[P0-Q0,Q0]*b(t).
+    Exchange holds total Hb fixed: [-Q0,Q0]*b(t). Both use the same six
+    predeclared cosine modes (periods 2*T*dt/k), before the mean operator.
+    No direction or temporal basis is estimated from the target.
+    A supplied volume_deoxy_fraction describes a separate compartment's
+    fixed HbR/HbT loading; it does not change the Balloon's Q0 or E0.
+    """
+    if mechanism not in ('volume', 'exchange'):
+        raise ValueError('unknown waveform mechanism')
+    if not isinstance(modes, int) or not 1 <= modes < steps or dt <= 0:
+        raise ValueError('invalid waveform basis clock or dimension')
+    f = parameters.fixed
+    q = f.Q0
+    if volume_deoxy_fraction is not None:
+        if mechanism != 'volume' or not np.isfinite(volume_deoxy_fraction) or not 0 < volume_deoxy_fraction < 1:
+            raise ValueError('volume fraction must be in (0,1) for volume only')
+        q = f.P0*volume_deoxy_fraction
+    loading = np.array([0., f.P0-q, q] if mechanism == 'volume'
+                       else [0., -f.Q0, f.Q0])
+    basis = np.cos(np.pi*(np.arange(steps)[:, None]+.5)*np.arange(1, modes+1)/steps)
+    canonical = (basis[:, None, :]*loading[None, :, None]).reshape(3*steps, modes)
+    operator = np.asarray(mean_operator, float)
+    if operator.shape != (3*steps, 3*steps) or not np.isfinite(operator).all():
+        raise ValueError('mean operator must be finite [3T,3T]')
+    return operator@canonical
+
+
+def fit_waveform_subspace(target, design, sd, *, visible=None, extra_design=None, rcond=1e-10):
+    """Batch unregularized SVD screen; never a physically qualified estimate.
+
+    Targets [trial,T,3], training SD [3]. Nuisance trajectories are refit to
+    each visible target. A parameter grid must be selected on training trials
+    outside this function; validation reconstruction is not prediction.
+    """
+    y = np.asarray(target, float)
+    scale = np.asarray(sd, float)
+    n = design.steps
+    if y.ndim != 3 or y.shape[1:] != (n, 3):
+        raise ValueError('target must have shape [trial,T,3]')
+    if scale.shape != (3,) or not np.isfinite(scale).all() or np.any(scale <= 0):
+        raise ValueError('sd must be positive finite [3]')
+    mask = np.ones((n, 3), bool) if visible is None else np.asarray(visible)
+    if mask.shape != (n, 3) or mask.dtype != np.bool_ or not mask.any():
+        raise ValueError('visible must be nonempty boolean [T,3]')
+    if not np.isfinite(y[:, mask]).all() or not 0 < rcond < 1:
+        raise ValueError('invalid visible data or rcond')
+    x = design.observation_design
+    if extra_design is not None:
+        extra = np.asarray(extra_design, float)
+        if extra.ndim != 2 or extra.shape[0] != 3*n or not np.isfinite(extra).all():
+            raise ValueError('extra design must be finite [3T,K]')
+        x = np.column_stack((x, extra))
+    w = np.tile(scale, n)[mask.ravel()]
+    u, s, vt = svd(x[mask.ravel()]/w[:, None], full_matrices=False, check_finite=False)
+    keep = s > rcond*s[0]
+    rhs = ((y-design.offset)[:, mask]/w).T
+    coef = (vt[keep].T/s[keep])@(u[:, keep].T@rhs)
+    pred = (x@coef).T.reshape(y.shape)+design.offset
+    vascular = np.einsum('tij,jb->bti', design.state_design, coef[:n+5])
+    excursion = np.max(np.abs(vascular[:, :, 1:]), axis=(1, 2))
+    return dict(prediction=pred, coefficients=coef.T, rank=int(keep.sum()),
+                singular_values=s, max_fractional_excursion=excursion,
+                nrmse=np.sqrt(np.mean(((pred-y)/scale)**2, axis=1)),
+                visible_sse=np.sum(((pred-y)[:, mask]/w)**2, axis=1))
 
 
 def fit_shared_driver(observations, design, *, visible=None, penalty=1.,

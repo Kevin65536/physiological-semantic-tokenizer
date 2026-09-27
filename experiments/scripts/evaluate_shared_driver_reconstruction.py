@@ -2573,6 +2573,281 @@ def conditional_step_control_main(args):
     write_json(path,manifest)
 
 
+def read_waveform_config(path):
+    cfg=yaml.safe_load(Path(path).read_text())
+    filename={'shared_driver_waveform_diagnostic_v1':'shared_driver_waveform_diagnostic_v1.yaml',
+              'shared_driver_waveform_volume_fraction_v1':'shared_driver_waveform_volume_fraction_v1.yaml'}.get(cfg.get('schema'))
+    if filename is None:raise ValueError('unknown waveform schema')
+    expected=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer'/filename
+    if cfg!=yaml.safe_load(expected.read_text()):
+        raise ValueError('waveform diagnostic must use the complete versioned contract')
+    return cfg
+
+
+def waveform_parameters(base, name=None, value=None):
+    if name is None:return base
+    if name=='beta_factor':return replace(base,fixed=replace(base.fixed,neurovascular_gain=base.fixed.neurovascular_gain*value))
+    if name in ('kappa','tau'):return replace(base,free=replace(base.free,**{name:value}))
+    if name=='venous_viscoelastic_s':return base
+    return replace(base,fixed=replace(base.fixed,**{name:value}))
+
+
+def waveform_parent(cfg,root,group):
+    """Exact retained public read boundary, metadata before array access."""
+    parent=Path(root)/cfg['parent_run']
+    manifest=json.loads((parent/'manifest.json').read_text())
+    if manifest.get('execution')!='completed' or manifest.get('experiment_id')!='SSM-SHARED-DRIVER-CONDITIONAL-OPTICAL-GAIN-v1':
+        raise ValueError('waveform parent is not the completed conditional experiment')
+    allowed=[f'{p}__{s}_o3' for p in cfg['optical_pipelines'] for s in cfg['subjects']]
+    if group not in allowed:raise ValueError('waveform group outside declared scope')
+    info=json.loads((parent/'prepared'/f'{group}.json').read_text())
+    m=info['metadata'];validation=[3,7,11,15,19,23];train=[i for i in range(24) if i not in validation]
+    if (info.get('status')!='completed' or m['validation']!=validation or m['train']!=train
+        or info['spec']['group']!=group or m['outer']!=3 or len(m['trials'])!=24
+        or m['fixed_roi']['pair_name']!='AF7Fp1'):
+        raise ValueError('parent identity, ROI or split mismatch')
+    base_cfg=read_conditional_optical_gain_config(parent/'resolved_config.yaml')
+    selection=json.loads((parent/'training'/f'{group}__conditional_trained_gain'/'selection.json').read_text())
+    if selection['status']!='completed':raise ValueError('retained shared parameter unavailable')
+    with np.load(parent/'prepared'/f'{group}.npz',allow_pickle=False) as z:
+        target=z['target'];sd=z['normalizer']
+    if (target.shape!=(24,120,3) or sd.shape!=(3,) or not np.isfinite(target).all()
+        or not np.isfinite(sd).all() or np.any(sd<=0) or not np.allclose(sd,m['normalization_sd'],rtol=1e-12,atol=1e-14)):
+        raise ValueError('parent tensor or training SD mismatch')
+    p=parameters(base_cfg,2.)
+    p=replace(p,fixed=replace(p.fixed,neurovascular_gain=selection['parameter_value']))
+    operator=conditional_prediction_operator(view_operators(base_cfg,'full')[2],info['conditional_mapping'],'conditional_trained_gain')
+    return parent,info,target,sd,p,operator
+
+
+def waveform_linear_group(payload):
+    from src.inference.shared_driver_reconstruction import fit_waveform_subspace,waveform_component_basis
+    cfg,out,root,group=payload;started=time.monotonic()
+    dest=Path(out)/'linear'/group
+    if (dest/'result.json').exists():return json.loads((dest/'result.json').read_text())
+    parent,info,y,sd,p,operator=waveform_parent(cfg,root,group)
+    train=info['metadata']['train'];valid=info['metadata']['validation'];rows=[];profiles=[];saved={}
+    n,dt=120,.25
+    for mode in ('joint','Hb_only'):
+        mask=np.ones((n,3),bool)
+        if mode=='Hb_only':mask[:,0]=False
+        def fit_at(name=None,value=None,extra=None,rcond=1e-10):
+            pp=waveform_parameters(p,name,value)
+            design=build_shared_driver_design(pp,n,dt,processed_mean_operator=operator,
+                venous_viscoelastic_s=value if name=='venous_viscoelastic_s' else 0.)
+            basis=None if extra is None else waveform_component_basis(pp,n,dt,operator,extra,modes=cfg['slow_modes'])
+            return fit_waveform_subspace(y,design,sd,visible=mask,extra_design=basis,rcond=rcond)
+        methods=[('fixed',None,fit_at())]
+        for name,grid in cfg['parameter_grids'].items():
+            fits=[fit_at(name,value) for value in grid]
+            losses=[float(np.mean(f['visible_sse'][train])) for f in fits]
+            selected=int(np.argmin(losses))
+            methods.append((name,float(grid[selected]),fits[selected]))
+            for value,loss,f in zip(grid,losses,fits):
+                profiles.append(dict(group=group,mode=mode,parameter=name,value=value,train_sse=loss,
+                    validation_nrmse=np.sqrt(np.mean(f['nrmse'][valid]**2,axis=0)),
+                    focus_nrmse=f['nrmse'][3],rank=f['rank']))
+        for mechanism in ('volume','exchange'):
+            methods.append(('slow_'+mechanism,None,fit_at(extra=mechanism)))
+        for rcond in cfg['svd_rconds'][1:]:
+            methods.append((f'fixed_rcond{rcond:g}',None,fit_at(rcond=rcond)))
+        for method,value,f in methods:
+            key=mode+'__'+method;saved[key]=f['prediction'][valid]
+            for j in valid:
+                rows.append(dict(group=group,mode=mode,method=method,parameter_value=value,trial=j,
+                    rank=f['rank'],max_fractional_excursion=f['max_fractional_excursion'][j],
+                    **{f'nrmse_{c}':float(f['nrmse'][j,k]) for k,c in enumerate(MODALITIES)}))
+    dest.mkdir(parents=True,exist_ok=True)
+    np.savez_compressed(dest/'predictions.npz',target=y[valid],normalizer=sd,trial_indices=valid,**saved)
+    result=dict(status='completed',group=group,rows=rows,profiles=profiles,
+        seconds=time.monotonic()-started,peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    write_json(dest/'result.json',result);return result
+
+
+def waveform_nonlinear_case(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver,nonlinear_driver_forward
+    cfg,out,root,group,arm=payload;started=time.monotonic();dest=Path(out)/'nonlinear'/f'{group}__{arm}'
+    if (dest/'result.json').exists():return json.loads((dest/'result.json').read_text())
+    parent,info,targets,sd,p,operator=waveform_parent(cfg,root,group)
+    cell=parent/'cells'/f'{group}__conditional_trained_gain__full'
+    with np.load(cell/'trajectories.npz',allow_pickle=False) as z:
+        idx=int(np.flatnonzero(z['trial_indices']==3)[0]);state=z['states'][idx];old=z['prediction'][idx]
+        np.testing.assert_array_equal(z['target'][idx],targets[3])
+    mask=np.ones((120,3),bool)
+    if arm=='Hb_only_no_penalties':mask[:,0]=False
+    options=dict(penalty=.01,initial_penalty=100.,flow_prior_weight=1.)
+    if arm in ('no_curvature','no_penalties','Hb_only_no_penalties'):options['penalty']=0.
+    if arm in ('no_initial_prior','no_penalties','Hb_only_no_penalties'):options['initial_penalty']=0.
+    if arm in ('no_flow_prior','no_penalties','Hb_only_no_penalties'):options['flow_prior_weight']=0.
+    starts=[dict(driver=state[:,0],initial_state=state[0,1:]),dict(driver=np.zeros(120),initial_state=np.r_[0.,np.ones(4)])]
+    result=fit_nonlinear_shared_driver(targets[3],p,.25,mean_operator=operator,sd=sd,visible=mask,
+        starts=starts,max_evaluations=cfg['nonlinear_max_evaluations'],gradient_tolerance=cfg['nonlinear_gradient_tolerance'],
+        substeps=4,flow_prior_log_sd=np.log(2.),**options)
+    if 'prediction' in result:
+        pred=result['prediction']
+        result.update(optimization_status=result['status'],optimization_converged=result['converged'])
+        try:
+            fine=nonlinear_driver_forward(result['driver'],result['initial_state'],p,.25,substeps=8,derivative=False)
+            fine_pred=(operator@fine['canonical_prediction'].ravel()).reshape(120,3)
+            gap=float(np.max(abs(fine_pred-pred)/sd))
+            result['integration_max_difference_training_sd']=gap
+            if gap>cfg['maximum_integration_difference_training_sd']:result.update(status='failed_integration_check',converged=False)
+        except (FloatingPointError,ValueError,OverflowError) as exc:
+            # Retain the coarse trajectory and optimizer failure even if the
+            # independent fine-grid check leaves the physical domain.
+            result.update(status='failed_integration_check',converged=False,
+                integration_max_difference_training_sd=None,integration_error=repr(exc))
+        result['nrmse']=np.sqrt(np.mean(((pred-targets[3])/sd)**2,axis=0))
+        result['retained_nrmse']=np.sqrt(np.mean(((old-targets[3])/sd)**2,axis=0))
+        dest.mkdir(parents=True,exist_ok=True)
+        np.savez_compressed(dest/'trajectory.npz',target=targets[3],normalizer=sd,prediction=pred,states=result['states'],retained=old)
+    result={k:v for k,v in result.items() if k not in ('prediction','canonical_prediction','driver','initial_state','states')}
+    result.update(group=group,arm=arm,trial=3,seconds=time.monotonic()-started,
+        peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    write_json(dest/'result.json',result);return result
+
+
+def waveform_synthetic(cfg):
+    from src.inference.shared_driver_reconstruction import fit_waveform_subspace,waveform_component_basis,nonlinear_driver_forward
+    from src.inference.observation_baselines import conditional_optical_hb_mapping
+    old=read_conditional_optical_gain_config(CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_conditional_optical_gain_v1.yaml')
+    p=parameters(old,2.);n=120;dt=.25;rng=np.random.default_rng(cfg['synthetic']['seed'])
+    mapping=conditional_optical_hb_mapping(40.);operator=conditional_prediction_operator(view_operators(old,'full')[2],mapping,'conditional_fixed_gain')
+    p=replace(p,fixed=replace(p.fixed,neurovascular_gain=mapping['beta_reference']))
+    t=np.arange(n)*dt;driver=.04*(np.sin(.45*t)+.4*np.sin(1.1*t))
+    initial=np.array([0.,1.,1.,1.,1.]);rows=[];checks={}
+    for truth in ('matched','tau4','kappa_low','viscoelastic4','volume','exchange'):
+        pp=waveform_parameters(p,'tau',4.) if truth=='tau4' else waveform_parameters(p,'kappa',.16) if truth=='kappa_low' else p
+        f=nonlinear_driver_forward(driver,initial,pp,dt,substeps=8,derivative=False)
+        y=(operator@f['canonical_prediction'].ravel()).reshape(n,3)
+        if truth=='viscoelastic4':
+            generated=build_shared_driver_design(p,n,dt,processed_mean_operator=operator,venous_viscoelastic_s=4.)
+            y=(generated.observation_design@np.r_[driver,np.zeros(5)]).reshape(n,3)+generated.offset
+        if truth in ('volume','exchange'):
+            basis=waveform_component_basis(p,n,dt,operator,truth,modes=cfg['slow_modes'])
+            coef=cfg['synthetic']['injection_amplitude']*rng.normal(size=cfg['slow_modes'])
+            y=y+(basis@coef).reshape(n,3)
+        sd=np.maximum(np.std(y,axis=0),1e-6);design=build_shared_driver_design(p,n,dt,processed_mean_operator=operator)
+        for method in ('fixed','volume','exchange','tau4','kappa_low','viscoelastic4'):
+            pp=waveform_parameters(p,'tau',4.) if method=='tau4' else waveform_parameters(p,'kappa',.16) if method=='kappa_low' else p
+            d=build_shared_driver_design(pp,n,dt,processed_mean_operator=operator,venous_viscoelastic_s=4. if method=='viscoelastic4' else 0.)
+            extra=waveform_component_basis(p,n,dt,operator,method,modes=cfg['slow_modes']) if method in ('volume','exchange') else None
+            fit=fit_waveform_subspace(y[None],d,sd,extra_design=extra)
+            err=float(np.mean(fit['nrmse']**2));rows.append(dict(truth=truth,method=method,nrmse=fit['nrmse'][0],mean_nmse=err))
+            if method==truth or truth=='matched' and method=='fixed':checks[truth]=err<.001
+    return dict(status='passed' if all(checks.values()) else 'failed',checks=checks,rows=rows,
+        interpretation='known_mechanism_representability_controls_not_unique_attribution_or_independent_replicates')
+
+
+def waveform_volume_fit(cfg,y,sd,p,operator,train,valid):
+    from src.inference.shared_driver_reconstruction import fit_waveform_subspace,waveform_component_basis
+    d=build_shared_driver_design(p,120,.25,processed_mean_operator=operator)
+    profiles=[];fits=[]
+    for fraction in cfg['volume_deoxy_fraction_grid']:
+        basis=waveform_component_basis(p,120,.25,operator,'volume',modes=6,volume_deoxy_fraction=fraction)
+        f=fit_waveform_subspace(y,d,sd,extra_design=basis);fits.append(f)
+        profiles.append(dict(fraction=fraction,training_sse=float(np.mean(f['visible_sse'][train])),
+            validation_nrmse=np.sqrt(np.mean(f['nrmse'][valid]**2,axis=0)),focus_nrmse=f['nrmse'][3]))
+    selected=int(np.argmin([v['training_sse'] for v in profiles]));f= fits[selected]
+    return dict(selected_fraction=cfg['volume_deoxy_fraction_grid'][selected],profiles=profiles,
+                rows=[dict(trial=i,nrmse=f['nrmse'][i],max_fractional_excursion=f['max_fractional_excursion'][i]) for i in valid]), f['prediction'][valid]
+
+
+def waveform_volume_group(payload):
+    cfg,base,out,root,group=payload;start=time.monotonic()
+    _,info,y,sd,p,operator=waveform_parent(base,root,group)
+    result,pred=waveform_volume_fit(cfg,y,sd,p,operator,info['metadata']['train'],info['metadata']['validation'])
+    result.update(group=group,status='completed',seconds=time.monotonic()-start)
+    dest=Path(out)/group;dest.mkdir(parents=True,exist_ok=True)
+    np.savez_compressed(dest/'predictions.npz',prediction=pred,target=y[info['metadata']['validation']],normalizer=sd)
+    write_json(dest/'result.json',result);return result
+
+
+def waveform_volume_main(args,cfg):
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward,waveform_component_basis
+    from src.inference.observation_baselines import conditional_optical_hb_mapping
+    base=read_waveform_config(CODE_ROOT/cfg['base_config']);out=args.run_dir.resolve();root=args.project_root.resolve()
+    if out.parent!=(root/base['output_root']).resolve():raise ValueError('volume output outside owning namespace')
+    if args.phase not in ('synthetic','measured') or args.pilot or not 1<=args.workers<=6:raise ValueError('separate phases and at most six group workers required')
+    out.mkdir(parents=True,exist_ok=True);lock=(out/'controller.lock').open('w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    resolved=out/'resolved_config.yaml'
+    if resolved.exists() and yaml.safe_load(resolved.read_text())!=cfg:raise ValueError('volume resume config mismatch')
+    resolved.write_text(yaml.safe_dump(cfg,sort_keys=False));path=out/'manifest.json';manifest=json.loads(path.read_text()) if path.exists() else {}
+    if args.phase=='measured' and manifest.get('synthetic_status')!='passed':raise ValueError('synthetic recovery must precede measured access')
+    manifest.update(experiment_id=cfg['experiment_id'],execution='running',phase=args.phase,project_root=str(root),controller_pid=os.getpid(),workers=args.workers)
+    write_json(path,manifest)
+    if args.phase=='synthetic':
+        old=read_conditional_optical_gain_config(CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_conditional_optical_gain_v1.yaml')
+        mapping=conditional_optical_hb_mapping(40.);p=parameters(old,2.);p=replace(p,fixed=replace(p.fixed,neurovascular_gain=mapping['beta_reference']))
+        operator=conditional_prediction_operator(view_operators(old,'full')[2],mapping,'conditional_trained_gain')
+        rng=np.random.default_rng(cfg['synthetic_seed']);t=np.arange(120)*.25;results=[]
+        for fraction in cfg['synthetic_true_fractions']:
+            basis=waveform_component_basis(p,120,.25,operator,'volume',volume_deoxy_fraction=fraction)
+            ys=[]
+            for _ in range(24):
+                driver=.04*np.sin(.45*t+rng.uniform(-3,3))+.01*np.sin(1.1*t)
+                f=nonlinear_driver_forward(driver,np.r_[0.,np.ones(4)],p,.25,substeps=8,derivative=False)
+                y=(operator@f['canonical_prediction'].ravel()+basis@(rng.normal(size=6)*.004)).reshape(120,3);ys.append(y)
+            ys=np.array(ys);sd=np.std(ys[:18],axis=(0,1));r,_=waveform_volume_fit(cfg,ys,sd,p,operator,list(range(18)),list(range(18,24)))
+            results.append(dict(true_fraction=fraction,**r))
+        passed=all(r['selected_fraction']==r['true_fraction'] for r in results)
+        write_json(out/'synthetic_summary.json',dict(passed=passed,results=results))
+        manifest.update(execution='synthetic_terminal',synthetic_status='passed' if passed else 'failed');write_json(path,manifest);return
+    parent_manifest=json.loads((root/cfg['diagnostic_parent']/'manifest.json').read_text())
+    if parent_manifest.get('execution')!='completed':raise ValueError('volume followup requires completed diagnostic parent')
+    payloads=[(cfg,base,str(out),str(root),f'{p}__{s}_o3') for p in base['optical_pipelines'] for s in base['subjects']]
+    results=[]
+    for payload,r,error in bounded_nonlinear_work(waveform_volume_group,payloads,args.workers,args.workers):
+        if error:r=dict(group=payload[-1],status='failed_worker',error=error)
+        results.append(r);print(json.dumps({k:r.get(k) for k in ['group','status','selected_fraction','seconds']}),flush=True)
+    write_json(out/'summary.json',dict(expected=6,terminal=len(results),results=results,scientific_verdict='exploratory_loading_screen_only'))
+    manifest.update(execution='completed',summary='summary.json');write_json(path,manifest)
+
+
+def waveform_diagnostic_main(args):
+    cfg=read_waveform_config(args.config)
+    if args.check_only:
+        print(json.dumps(dict(status='passed',groups=6,focus_nonlinear_cells=12 if cfg['schema']=='shared_driver_waveform_diagnostic_v1' else 0,measured_arrays_read=0)));return
+    if cfg['schema']=='shared_driver_waveform_volume_fraction_v1':return waveform_volume_main(args,cfg)
+    if args.phase not in ('synthetic','measured') or args.pilot:raise ValueError('waveform diagnostic requires separate phases and no pilot')
+    root=args.project_root.resolve();out=args.run_dir.resolve()
+    if out.parent!=(root/cfg['output_root']).resolve():raise ValueError('waveform output outside owning namespace')
+    if not 1<=args.workers<=cfg['resources']['max_workers']:raise ValueError('worker limit exceeded')
+    out.mkdir(parents=True,exist_ok=True);resolved=out/'resolved_config.yaml'
+    if resolved.exists() and yaml.safe_load(resolved.read_text())!=cfg:raise ValueError('resume contract mismatch')
+    resolved.write_text(yaml.safe_dump(cfg,sort_keys=False,allow_unicode=True))
+    path=out/'manifest.json';manifest=json.loads(path.read_text()) if path.exists() else {}
+    if args.phase=='measured' and manifest.get('synthetic_status')!='passed':raise ValueError('synthetic checks must pass before measured arrays')
+    lock=(out/'controller.lock').open('w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    manifest.update(experiment_id=cfg['experiment_id'],execution='running',phase=args.phase,
+        project_root=str(root),controller_pid=os.getpid(),workers=args.workers,
+        started_at=manifest.get('started_at',datetime.now(timezone.utc).isoformat()),
+        versions=dict(python=platform.python_version(),numpy=np.__version__,scipy=scipy.__version__),
+        supervisor=os.environ.get('WAVEFORM_SUPERVISOR','unspecified'))
+    write_json(path,manifest)
+    if args.phase=='synthetic':
+        result=waveform_synthetic(cfg);write_json(out/'synthetic_summary.json',result)
+        manifest.update(execution='synthetic_terminal',synthetic_status=result['status']);write_json(path,manifest)
+        print(json.dumps(serial(result)));return
+    groups=[f'{p}__{s}_o3' for p in cfg['optical_pipelines'] for s in cfg['subjects']]
+    for worker,payloads,label in [
+        (waveform_linear_group,[(cfg,str(out),str(root),g) for g in groups],'linear'),
+        (waveform_nonlinear_case,[(cfg,str(out),str(root),f'{p}__subject_09_o3',a) for p in cfg['optical_pipelines'] for a in cfg['nonlinear_arms']],'nonlinear')]:
+        results=[]
+        for payload,result,error in bounded_nonlinear_work(worker,payloads,args.workers,args.workers):
+            if error:result=dict(status='failed_worker',group=payload[3],arm=payload[4] if len(payload)>4 else None,error=error)
+            results.append(result);print(json.dumps({k:result.get(k) for k in ('group','arm','status','seconds','nrmse')} ,default=serial),flush=True)
+            write_json(out/f'{label}_summary.json',dict(expected=len(payloads),terminal=len(results),results=results))
+        manifest[label+'_terminal']=True;write_json(path,manifest)
+    linear=json.loads((out/'linear_summary.json').read_text());nonlinear=json.loads((out/'nonlinear_summary.json').read_text())
+    rows=[r for result in linear['results'] for r in result.get('rows',[])]
+    pd.DataFrame(rows).to_csv(out/'linear_metrics.csv',index=False)
+    write_json(out/'summary.json',dict(linear_groups=len(linear['results']),linear_success=sum(r['status']=='completed' for r in linear['results']),
+        nonlinear_cells=len(nonlinear['results']),nonlinear_success=sum(r['status']=='completed' and r.get('converged',False) for r in nonlinear['results']),
+        scientific_verdict='exploratory_waveform_mechanism_diagnostic_only',parent=cfg['parent_run']))
+    manifest.update(execution='completed',finished_at=datetime.now(timezone.utc).isoformat(),summary='summary.json');write_json(path,manifest)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config',type=Path,default=DEFAULT)
@@ -2590,8 +2865,13 @@ def main():
     ap.add_argument('--fixed-roi-optical-fit',action='store_true')
     ap.add_argument('--conditional-optical-gain-fit',action='store_true')
     ap.add_argument('--conditional-step-control',action='store_true')
+    ap.add_argument('--waveform-diagnostic',action='store_true')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.waveform_diagnostic:
+        if any((args.conditional_step_control,args.conditional_optical_gain_fit,args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None)):
+            ap.error('waveform-diagnostic cannot combine with model modes')
+        return waveform_diagnostic_main(args)
     if args.conditional_step_control:
         if any((args.conditional_optical_gain_fit,args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None)):
             ap.error('conditional-step-control cannot combine with model modes')

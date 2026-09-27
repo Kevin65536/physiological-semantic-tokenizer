@@ -2694,6 +2694,134 @@ def render_conditional_optical_gain(run, out, *, pilot_truth_audit=None, termina
     (out/'export_validation.json').write_text(json.dumps(audit,indent=2))
 
 
+def render_waveform_diagnostic(run,out,volume_run=None):
+    import yaml
+    cfg=yaml.safe_load((run/'resolved_config.yaml').read_text())
+    if json.loads((run/'manifest.json').read_text()).get('execution')!='completed':raise ValueError('diagnostic must be terminal')
+    if out.exists():raise ValueError('choose a fresh versioned report export')
+    out.mkdir(parents=True);(out/'figures').mkdir()
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':10,'axes.unicode_minus':False})
+    frame=pd.read_csv(run/'linear_metrics.csv');joint=frame[frame['mode']=='joint'].copy()
+    nonlinear=json.loads((run/'nonlinear_summary.json').read_text())['results']
+    retry=run/'integration_failure_recheck_v1/summary.json'
+    if retry.exists():
+        replacement=json.loads(retry.read_text())
+        nonlinear=[replacement if r['group']==replacement['group'] and r['arm']==replacement['arm'] else r for r in nonlinear]
+    volumes=[]
+    if volume_run is not None:
+        if json.loads((volume_run/'manifest.json').read_text()).get('execution')!='completed':raise ValueError('volume followup must be terminal')
+        volumes=json.loads((volume_run/'summary.json').read_text())['results']
+    focus=joint[(joint.group.str.contains('subject_09'))&(joint.trial==3)].copy()
+    focus['pipeline']=focus.group.str.split('__').str[0]
+    metrics=['nrmse_'+c for c in COMPONENTS];aggregate=[]
+    for (group,method),part in joint.groupby([joint.group.str.split('__').str[0],'method']):
+        aggregate.append(dict(pipeline=group,method=method,trials=len(part),**dict(zip(metrics,np.sqrt(np.mean(part[metrics].to_numpy()**2,axis=0))))))
+    aggregate=pd.DataFrame(aggregate);aggregate.to_csv(out/'validation_aggregate.csv',index=False)
+    nonrows=[]
+    for r in nonlinear:
+        nonrows.append(dict(pipeline=r['group'].split('__')[0],arm=r['arm'],status=r['status'],
+            **dict(zip(metrics,r.get('nrmse',[np.nan]*3))),integration_difference=r.get('integration_max_difference_training_sd')))
+    nonframe=pd.DataFrame(nonrows);nonframe.to_csv(out/'nonlinear_focus.csv',index=False)
+    figures=[]
+    def save(fig,name):
+        fig.tight_layout();fig.savefig(out/'figures'/f'{name}.png',dpi=240,bbox_inches='tight');plt.close(fig)
+        figures.append(out/'figures'/f'{name}.png')
+        return f'![{name}](figures/{name}.png)'
+    fig,axes=plt.subplots(3,2,figsize=(12,8.2),sharex=True)
+    correlations=[];landmarks=[];volrows=[]
+    for col,pipeline in enumerate(['no_motion','mne_tddr']):
+        group=f'{pipeline}__subject_09_o3';folder=run/'nonlinear'/f'{group}__same_objective'
+        with np.load(folder/'trajectory.npz') as z:
+            sd=z['normalizer'];y=z['target']/sd;pred=z['prediction']/sd
+        residual=y-pred
+        correlations.append(dict(pipeline=pipeline,target_hb_correlation=np.corrcoef(y[:,1:].T)[0,1],residual_hb_correlation=np.corrcoef(residual[:,1:].T)[0,1]))
+        with np.load(run/'linear'/group/'predictions.npz') as z:
+            curves={'原非线性模型':pred,'线性：共同血容量':z['joint__slow_volume'][0]/sd,
+                    '线性：氧交换':z['joint__slow_exchange'][0]/sd}
+        if volume_run is not None:
+            with np.load(volume_run/group/'predictions.npz') as z:curves['线性：训练选成分比例']=z['prediction'][0]/sd
+        colors=['#dc654a','#168a89','#b99122','#745bb1']
+        for j,c in enumerate(COMPONENTS):
+            ax=axes[j,col];t=np.arange(120)*.25;ax.plot(t,y[:,j],color='#243f4a',lw=2.1,label='观测目标')
+            for (label,curve),color in zip(curves.items(),colors):ax.plot(t,curve[:,j],color=color,lw=1.35,label=label,alpha=.95)
+            ax.axhline(0,color='#999',lw=.5);ax.grid(alpha=.18);ax.set_ylabel(c+' / 训练SD')
+            if j==0:ax.set_title(('无运动校正' if pipeline=='no_motion' else 'MNE TDDR')+' · S09 / fold 3 / trial 3')
+            if j==2:ax.set_xlabel('窗内时间（秒；0秒为事件前5秒）')
+        for a,b,label,sign in [(6,12,'第一峰',1),(19,26,'第二峰',1),(26,29.75,'末端谷',-1)]:
+            idx=np.flatnonzero((t>=a)&(t<=b));i=idx[np.argmax(sign*y[idx,1])]
+            for method,curve in {'观测目标':y,**curves}.items():
+                landmarks.append(dict(pipeline=pipeline,feature=label,observed_extremum_time=t[i],method=method,
+                    HbO_at_observed_time=curve[i,1],HbR_at_observed_time=curve[i,2]))
+    axes[0,0].legend(fontsize=8,ncol=2,loc='upper left')
+    fig.suptitle('固定困难身份：成分对照改善波形，但不能确定其生理来源',fontsize=14)
+    fig.subplots_adjust(top=.94)
+    mainfigure=save(fig,'waveform_mechanisms')
+    pd.DataFrame(landmarks).to_csv(out/'focus_landmarks.csv',index=False)
+    pd.DataFrame(correlations).to_csv(out/'focus_correlations.csv',index=False)
+    fig,axes=plt.subplots(2,2,figsize=(11,7),sharex=True)
+    for col,pipeline in enumerate(['no_motion','mne_tddr']):
+        group=f'{pipeline}__subject_09_o3'
+        for arm,label in [('same_objective','原模型'),('no_curvature','去曲率惩罚'),('no_initial_prior','去初态惩罚'),('no_flow_prior','去血流惩罚'),('no_penalties','去全部惩罚')]:
+            with np.load(run/'nonlinear'/f'{group}__{arm}'/'trajectory.npz') as z:
+                y=z['target']/z['normalizer'];pred=z['prediction']/z['normalizer']
+            record=next(r for r in nonlinear if r['group']==group and r['arm']==arm)
+            if record['status']!='completed':label+='（未收敛）'
+            for j in range(2):axes[j,col].plot(np.arange(120)*.25,pred[:,j+1],label=label,lw=1.2,ls='--' if record['status']!='completed' else '-')
+        for j in range(2):
+            axes[j,col].plot(np.arange(120)*.25,y[:,j+1],color='#263d48',lw=2,label='观测目标');axes[j,col].grid(alpha=.2)
+            axes[j,col].set_ylabel(COMPONENTS[j+1]+' / 训练SD')
+        axes[0,col].set_title(pipeline);axes[1,col].set_xlabel('窗内时间（秒）')
+    axes[0,0].legend(fontsize=8,ncol=2);ablationfigure=save(fig,'penalty_ablations')
+    fraction_text=''
+    if volumes:
+        for r in volumes:
+            v=np.array([x['nrmse'] for x in r['rows']]);volrows.append(dict(group=r['group'],selected_fraction=r['selected_fraction'],**dict(zip(metrics,np.sqrt(np.mean(v*v,axis=0))))))
+        fraction_text='## 训练选择额外成分比例\n\n'+table(pd.DataFrame(volrows))+'\n该比例是新增慢成分的有效HbR/HbT观测loading，不是测得的血氧饱和度。六个慢系数在各验证窗口上重新拟合，因此这些结果属于重建，不是独立预测。\n'
+        fraction_focus=[];fraction_aggregate=[]
+        parent=Path(__file__).resolve().parents[2]/cfg['parent_run']
+        for pipeline in ('no_motion','mne_tddr'):
+            before=[];after=[]
+            for r in volumes:
+                if not r['group'].startswith(pipeline):continue
+                old=json.loads((parent/'cells'/f"{r['group']}__conditional_trained_gain__full"/'result.json').read_text())['rows']
+                if [x['trial'] for x in old]!=[x['trial'] for x in r['rows']]:raise ValueError('volume paired identities differ')
+                before.extend([[x[k] for k in metrics] for x in old]);after.extend([x['nrmse'] for x in r['rows']])
+                if 'subject_09' in r['group']:
+                    fraction_focus.append(dict(pipeline=pipeline,selected_fraction=r['selected_fraction'],**dict(zip(metrics,r['rows'][0]['nrmse']))))
+            for label,values in [('retained_nonlinear',before),('train_selected_volume',after)]:
+                values=np.asarray(values)
+                fraction_aggregate.append(dict(pipeline=pipeline,method=label,trials=len(values),all_three_below_05=int(np.all(values<.5,axis=1).sum()),**dict(zip(metrics,np.sqrt(np.mean(values**2,axis=0))))))
+        fraction_text+='\nS09困难身份：\n\n'+table(pd.DataFrame(fraction_focus))+'\n与原非线性模型的同身份汇总（两个模型类别不同）：\n\n'+table(pd.DataFrame(fraction_aggregate))
+        relevant=pd.DataFrame(landmarks)
+        relevant=relevant[(relevant.pipeline=='mne_tddr')&relevant.method.isin(['观测目标','原非线性模型','线性：训练选成分比例'])]
+        fraction_text+='\n在观测HbO极值时刻的振幅核查；不是重新挑选预测极值：\n\n'+table(relevant[['feature','observed_extremum_time','method','HbO_at_observed_time','HbR_at_observed_time']])+'\n第一峰仍偏低，末端HbO谷深也未完全跟随；NRMSE达标不能代替完整形态验收。\n'
+        pd.DataFrame(fraction_aggregate).to_csv(out/'volume_fraction_paired_aggregate.csv',index=False)
+        pd.DataFrame(volrows).to_csv(out/'volume_fraction_groups.csv',index=False)
+    keep=['fixed','beta_factor','kappa','gamma','tau','alpha','E0','venous_viscoelastic_s','slow_volume','slow_exchange']
+    text='# HbO/HbR 波形偏离：参数与缺失成分诊断\n\n2026-09-28。原始困难身份不替换；本报告汇总合成、训练选参线性筛查和精确非线性惩罚对照。\n\n'
+    text+='主要结论：单独松开曲率、初态或血流约束不能恢复S09困难波形。残差以同向Hb变化为主，额外共同血容量方向比等维氧交换方向更能恢复HbO；来源仍不唯一。整体NRMSE与困难窗口形态分别报告。\n\n'
+    text+='## 理论定位\n\n当前 s_dot=βr−κs−γ(f−1)，故β控制输入幅度，κ与γ控制血流滤波；τ和α控制血容量时序，E0控制流量与氧提取的关系。增加β不提供新的时间过程。\n\n'
+    text+='由实现方程在静息点线性化，c=1+(1−E0)ln(1−E0)/E0，慢变化稳态 dq/dp=1−(1−c)/α。默认E0=α=0.32时约−1.561，表示慢血流输入倾向于使总Hb上升而HbR下降。这个稳态方向不是任意瞬态或滤波后曲线必须反相关的定律。\n\n'
+    text+='困难窗口残差的HbO/HbR同向变化因此提示：单一流量—提取耦合不足，或EEG代理未观测到相应驱动。新增共同血容量项保持其自身饱和比例，氧交换项保持总Hb不变；它们仅比较表达能力。原Tak模型还包含静脉黏弹性与光学混合因素，当前核心无前者。本次只在独立线性诊断中加入黏弹性，保留原非线性模型不变。\n\n'
+    text+=table(pd.DataFrame(correlations))+'\n'
+    text+='## 范围与方法\n\n三被试同outer=3，每人18训练/6验证，共18个唯一验证窗口、两种处理路径、36个路径×窗口。两路径不是独立重复。七种参数方向分别按训练SSE选网格，不联合优化；目标和SD均沿用父运行。新增慢成分各使用相同六个预声明余弦基。额外成分降低同目标残差具有自由度优势，等维对照仅部分控制此问题，不建立生理因果归因。\n\n'
+    text+='合成匹配、τ、κ、黏弹性、血容量和氧交换六种控制全部通过；体积分量比例的独立合成恢复另见配套运行。原理测试不能代替真实生理验证。\n\n'
+    text+='## 困难样例的精确非线性对照\n\n'+table(nonframe)+'\n'
+    text+='失败行的NRMSE是最后有效粗积分轨迹的描述，不是成功结果。MNE全去惩罚未达到梯度收敛；两个Hb-only全去惩罚分支都未通过完整数值要求，伴随巨大驱动及近零flow。原failed_worker记录保留，补充重放在integration_failure_recheck_v1记录优化预算失败和细积分物理域失败，未将其改判成功。\n\n'+ablationfigure+'\n\n'
+    text+='## 困难样例：训练选参和等维成分对照\n\n'+table(focus[focus.method.isin(keep)][['pipeline','method','parameter_value',*metrics]])+'\n\n'+mainfigure+'\n\n'
+    text+='S09的α与E0分别选到工程网格上端0.96和0.9，但仍未解决两个Hb波形。此结果不能解释为已测出该被试的α或E0；可能是在补偿模型或观测遗漏。其他参数组合与完整非线性参数扩展尚未检验。S09黏弹性选择0，其他被试可能选择非零，因此不全盘否定该过程。\n\n'
+    text+='## 同折全部验证窗口\n\n'+table(aggregate[aggregate.method.isin(keep)])+'\n各分量为等被试、等session的NMSE均值开方（本面板各组同样6条、每session2条）。仍须查看每个窗口，不能用总体达标掩盖困难身份。\n\n'
+    text+=fraction_text+'\n'
+    text+='## 数值与解释限制\n\njoint线性SVD的1e−10/1e−12/1e−14截断结果一致；Hb-only无惩罚解可用巨大驱动拟合Hb，且明显离开小信号范围，不能当作生理可行性证明。部分单参数线性解也离开小信号范围；完整逐窗幅度见linear_metrics.csv。成分模型仍依赖条件光学映射与窗口滤波，不能区分皮层局部血容量、头皮系统性成分、空间混合、测量串扰或EEG代理遗漏。\n\n'
+    text+='下一步建议先建立含独立额外血容量成分的候选，使用不同时间段或独立被试检验预测与参数稳定性；若要确定来源，再使用短距离通道、空间共同成分或已记录的心电/呼吸等独立信息。尚未执行新的原始数据处理、完整非线性扩展训练或受保护评价。\n\n'
+    text+='## 来源与可复现性\n\n'+f'主运行：{run}。配套比例运行：{volume_run}。原结果不覆盖。源快照、冻结合同、监督器命令、资源检查、完整成功/失败结果均在运行目录。图为240dpi PNG嵌入PDF，文字和表格可搜索；WPS未检查。\n\n'
+    text+='生理模型依据：[Tak et al., 2015](https://pmc.ncbi.nlm.nih.gov/articles/PMC4401444/)；黏弹性出流实现核对：[SPM官方spm_fx_fnirs](https://raw.githubusercontent.com/spm/spm12/main/toolbox/dcm_fnirs/spm_fx_fnirs.m)。头皮任务诱发成分是文献支持的候选来源，但不是本数据已证实的结论：[Kirilina et al., 2012](https://pmc.ncbi.nlm.nih.gov/articles/PMC3348501/)。\n'
+    export_pdf(text,out,figures)
+
+
 def step_control_audit(run):
     """Read every paired start, including failures, without fitting a model."""
     import yaml
@@ -2900,18 +3028,25 @@ def main():
     parser.add_argument("--terminal-input-snapshot", type=Path, help="Frozen terminal manifest/config/summary/metrics for report replay while measured phase proceeds")
     parser.add_argument("--pilot-truth-audit", type=Path, help="Optional retained pilot DC/initial compensation JSON for conditional report background")
     parser.add_argument("--conditional-optical-gain", action="store_true", help="Render terminal conditional optical mapping and gain evidence")
+    parser.add_argument("--step-control", action="store_true", help="Audit and render the complete paired training-only solver comparison")
     parser.add_argument("--fixed-roi-optical", action="store_true", help="Render separate retained optical target sensitivity conditions")
     parser.add_argument("--fixed-roi-initial", action="store_true", help="Render free vs tied initial total-Hb/volume contrast")
     parser.add_argument("--fixed-roi-flow", action="store_true", help="Render fixed ROI log-flow soft regularization diagnostic")
     parser.add_argument("--fixed-roi-tau", action="store_true", help="Render fixed AF7Fp1 shared nonlinear tau diagnostic")
-    parser.add_argument("--step-control", action="store_true", help="Audit and render the complete paired training-only solver comparison")
+    parser.add_argument("--waveform-diagnostic", action="store_true")
+    parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
-    if sum((args.replay, args.nonlinear_fit, args.gain_prior_fit, args.fixed_roi_tau, args.fixed_roi_flow, args.fixed_roi_initial, args.fixed_roi_optical, args.conditional_optical_gain, args.step_control)) > 1:
+    if sum((args.replay, args.nonlinear_fit, args.gain_prior_fit, args.fixed_roi_tau, args.fixed_roi_flow, args.fixed_roi_initial, args.fixed_roi_optical, args.conditional_optical_gain, args.waveform_diagnostic,args.step_control)) > 1:
         parser.error("Choose one report mode")
     if (args.pilot_truth_audit or args.terminal_input_snapshot) and not args.conditional_optical_gain:
         parser.error("--pilot-truth-audit requires --conditional-optical-gain")
+    if args.volume_fraction_run and not args.waveform_diagnostic:
+        parser.error("--volume-fraction-run requires --waveform-diagnostic")
     if args.step_control:
         render_step_control(args.run.resolve(),args.output.resolve())
+        return
+    if args.waveform_diagnostic:
+        render_waveform_diagnostic(args.run.resolve(),args.output.resolve(),args.volume_fraction_run.resolve() if args.volume_fraction_run else None)
         return
     if args.conditional_optical_gain:
         render_conditional_optical_gain(args.run.resolve(),args.output.resolve(),pilot_truth_audit=args.pilot_truth_audit,terminal_input_snapshot=args.terminal_input_snapshot)

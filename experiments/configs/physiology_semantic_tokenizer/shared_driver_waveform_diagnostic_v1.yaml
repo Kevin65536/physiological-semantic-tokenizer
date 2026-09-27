@@ -1,0 +1,45 @@
+schema: shared_driver_waveform_diagnostic_v1
+experiment_id: SSM-SHARED-DRIVER-WAVEFORM-DIAGNOSTIC-v1
+scope: exploratory_reanalysis_of_exact_nonprotected_parent_features
+parent_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_v1
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+subjects: [subject_01, subject_09, subject_18]
+outer_fold: 3
+optical_pipelines: [no_motion, mne_tddr]
+focus: {subject: subject_09, outer: 3, trial: 3}
+tensor: {trials: 24, steps: 120, components: [EEG, HbO, HbR], dt_s: 0.25}
+split: exact_parent_18_train_6_validation
+target: exact_parent_target_and_training_SD_no_new_preprocessing
+mask: full_joint_and_Hb_only_linear_screens_no_sensor_prediction_claim
+baseline: retained_conditional_trained_gain_full_including_failures
+primary: training_selected_single_parameter_linear_profiles_and_validation_waveform_errors
+secondary: nonlinear_fixed_parameter_penalty_and_EEG_removal_on_named_focus_only
+diagnostic: equal_dimension_slow_volume_and_exchange_components_plus_viscoelastic_outflow
+null: fixed_dynamics_and_single_driver_explain_structured_residual_without_extra_process
+parameter_grids:
+  beta_factor: [0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 10.0]
+  kappa: [0.16, 0.32, 0.64, 1.28, 2.56]
+  gamma: [0.08, 0.16, 0.32, 0.64, 1.28]
+  tau: [0.5, 1.0, 2.0, 4.0, 8.0]
+  alpha: [0.16, 0.24, 0.32, 0.48, 0.64, 0.96]
+  E0: [0.1, 0.2, 0.32, 0.5, 0.7, 0.9]
+  venous_viscoelastic_s: [0.0, 0.5, 1.0, 2.0, 4.0, 8.0]
+parameter_grid_interpretation: engineering_stress_ranges_not_population_physiological_ranges
+slow_modes: 6
+svd_rconds: [1.0e-10, 1.0e-12, 1.0e-14]
+nonlinear_arms: [same_objective, no_curvature, no_initial_prior, no_flow_prior, no_penalties, Hb_only_no_penalties]
+nonlinear_max_evaluations: 240
+nonlinear_gradient_tolerance: 0.0001
+integration_substeps: [4, 8]
+maximum_integration_difference_training_sd: 0.005
+synthetic: {seed: 2026092801, steps: 120, dt_s: 0.25, injection_amplitude: 0.004}
+stopping: six_exact_groups_linear_profiles_and_two_focus_pipeline_six_arm_nonlinear_checks_no_adaptive_expansion
+protected_boundary: exact_parent_prepared_and_full_cell_arrays_only_no_raw_or_protected_loaders
+resources: {max_workers: 24, numerical_threads_per_worker: 1, max_seconds: 1800}
+claim_limits:
+  - all_new_scores_are_exploratory_reconstruction_not_independent_prediction_or_teacher_qualification
+  - linear_SVD_screens_may_leave_small_signal_or_physical_domain
+  - same_target_extra_components_test_representability_not_unique_physiological_origin
+  - oxygen_exchange_component_is_a_signed_observation_direction_not_a_full_CMRO2_model
+  - viscoelastic_extension_is_linear_diagnostic_only_not_a_change_to_the_nonlinear_core
+  - no_correction_of_dated_parent_evidence_or_training_selection_from_validation_errors
