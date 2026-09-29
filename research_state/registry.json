@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-27T17:10:27.408766+00:00",
+  "updated_at": "2026-09-27T18:18:18.659679+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1101,6 +1101,42 @@
       "label": "辅助模型关联的合成单元排除修正",
       "path": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/analysis_revision_v2.json",
       "role": "decision"
+    },
+    {
+      "id": "e.physiology_semantics_contract",
+      "label": "固定结构四数据集生理语义检验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.physiology_semantics_summary",
+      "label": "固定结构生理语义实验终态汇总",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.physiology_semantics_manifest",
+      "label": "生理语义实验最终汇总运行身份",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/summarize_manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.physiology_semantics_presentation",
+      "label": "固定结构生理语义实验中文PPT",
+      "path": "docs/report/20260928_ssm_physiology_semantics_v3/SSM_PHYSIOLOGY_SEMANTICS.pptx",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.physiology_semantics_verification",
+      "label": "生理语义数值与数据合同测试",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.physiology_semantics_presentation_verification",
+      "label": "PPT位图、文字与版面核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/presentation_verification_v3.json",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -4194,6 +4230,33 @@
       ],
       "headline": false,
       "next_step": "优先检验通道相关的共同观测成分；用空间同步、原始OD和独立生理参照区分候选来源，并按相关方向分层评价留出预测。"
+    },
+    {
+      "state_id": "main.physiology_semantics@2026-09-28.v1",
+      "entity": "main.physiology_semantics",
+      "label": "固定结构跨数据集生理语义检验",
+      "track": "main",
+      "order": 167,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "固定六状态与单驱动、未增加独立慢共同成分，完成四公开数据集103人786记录的原生审计和三数据集71人22903区域窗联合检验；REFED仅Hb审计。匹配合成τ、β、联合τβ及条件κ通过恢复筛查；197076个收敛解的8子步重放全部合法且达标判定不变。共同后续窗H0达标率为85.55%/84.01%/86.36%，Visual按数据集和区域共享τ增益1.26个百分点（95%配对区间0.33–2.41，Holm p=0.0048）；个体适配无一致增益。被试τ/β重复差异中位约24%–32%，中心Hb补全弱于插值，隐藏EEG仍有巨大误差，不支持稳定个体生理参数或唯一来源分离。57页PPT已作位图与版面核验；同步观测的具体来源仍未确定。",
+      "evidence_ids": [
+        "e.physiology_semantics_contract",
+        "e.physiology_semantics_summary",
+        "e.physiology_semantics_manifest",
+        "e.physiology_semantics_presentation",
+        "e.physiology_semantics_verification",
+        "e.physiology_semantics_presentation_verification"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-09-27T21:53:45.157187+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "由用户依据PPT分项决定放行范围：数值实现与限定条件观测重建可保留；Single/Sim优先固定τ=2 s、β=1，Visual区域共享τ仅为工程候选。个体生理参数、可靠缺失补全与唯一来源分解尚无支持；不默认逐trial估参，不以增加慢共同成分替代疑似数据来源核查。"
     }
   ]
 }

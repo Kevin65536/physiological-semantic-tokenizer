@@ -15,6 +15,20 @@ from scipy.linalg import cho_factor, cho_solve, expm, svd
 from . import t3a_balloon_robust_ssm as core
 
 
+def _information_svd(matrix):
+    """Retain the default decomposition; use QR SVD if divide-and-conquer fails.
+
+    This is only a post-fit nuisance-space diagnostic. It changes neither the
+    fitted objective nor any optimization step. The caller records the driver.
+    """
+    try:
+        u,s,vh=svd(matrix,full_matrices=False,check_finite=False)
+        return u,s,vh,'gesdd'
+    except np.linalg.LinAlgError:
+        u,s,vh=svd(matrix,full_matrices=False,check_finite=True,lapack_driver='gesvd')
+        return u,s,vh,'gesvd_fallback'
+
+
 @dataclass(frozen=True)
 class SharedDriverDesign:
     parameters: core.BalloonParameters
@@ -362,7 +376,8 @@ def _require_nonlinear_domain(vascular, parameters):
 
 
 def nonlinear_driver_forward(driver, initial_physical, parameters, dt, *,
-                             substeps=4, derivative=True, return_flow_jacobian=False):
+                             substeps=4, derivative=True, return_flow_jacobian=False,
+                             numerical_backend='python'):
     """Nonlinear ZOH mean and exact derivatives of the discrete RK4 map.
 
     Jacobian columns are [r[0:T],s0,log(f0),log(v0),log(p0),log(q0)].
@@ -384,6 +399,12 @@ def nonlinear_driver_forward(driver, initial_physical, parameters, dt, *,
     if isinstance(substeps, bool) or not isinstance(substeps, (int, np.integer)) or substeps < 1:
         raise ValueError('substeps must be a positive integer')
     _require_nonlinear_domain(initial, parameters)
+    if numerical_backend == 'numba':
+        from .shared_driver_rk4 import compiled_forward
+        return compiled_forward(r, initial, parameters, dt, substeps, derivative,
+                                return_flow_jacobian)
+    if numerical_backend != 'python':
+        raise ValueError('numerical_backend must be python or numba')
     steps, count = len(r), len(r)+5
     states = np.empty((steps, 6))
     state_derivative = np.zeros((steps, 5, count+2)) if derivative else None
@@ -491,7 +512,8 @@ def _positive_hb_to_legacy(x, steps, parameters):
 def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
                                regularizer, initial_weight, substeps, derivative,
                                parameter_name='tau', flow_prior_weight=0., flow_prior_log_sd=1.,
-                               initial_embedding=None, initial_coordinates='independent_logs'):
+                               initial_embedding=None, initial_coordinates='independent_logs',
+                               numerical_backend='python'):
     """Actual common residual contract for individual and shared-parameter fitting."""
     steps, count = len(y), len(y)+5
     if initial_embedding is not None:
@@ -503,7 +525,8 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
         physical_initial = np.r_[x[steps], np.exp(x[steps+1:])]
     forward = nonlinear_driver_forward(x[:steps], physical_initial, parameters,
                                        dt, substeps=substeps, derivative=derivative,
-                                       return_flow_jacobian=bool(flow_prior_weight))
+                                       return_flow_jacobian=bool(flow_prior_weight),
+                                       numerical_backend=numerical_backend)
     clean = forward['canonical_prediction'].ravel()
     prediction = (operator@clean if operator is not None else clean).reshape(y.shape)
     residual_data = (prediction[mask]-y[mask])/scale[mask]
@@ -522,12 +545,18 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
         ji = np.zeros((5, count))
         ji[:, steps:] = np.sqrt(initial_weight)*np.diag(np.r_[1., physical_initial[1:]])
         jacobian = np.vstack((jdata, regularizer, ji))
-        jt = forward[parameter_name+'_jacobian'].ravel()
-        jt = (operator@jt if operator is not None else jt)[mask.ravel()]/scale[mask]
-        parameter_jacobian = np.r_[jt, np.zeros(len(residual)-len(jt))]
+        names = [parameter_name] if isinstance(parameter_name, str) else list(parameter_name)
+        parameter_columns = []
+        for name in names:
+            jt = forward[name+'_jacobian'].ravel()
+            jt = (operator@jt if operator is not None else jt)[mask.ravel()]/scale[mask]
+            column = np.r_[jt, np.zeros(len(residual)-len(jt))]
+            if flow_prior_weight:
+                column[-steps:] = flow_factor/flow*forward['flow_'+name+'_jacobian']
+            parameter_columns.append(column)
+        parameter_jacobian = parameter_columns[0] if isinstance(parameter_name, str) else np.column_stack(parameter_columns)
         if flow_prior_weight:
             jacobian = np.vstack((jacobian, (flow_factor/flow)[:, None]*forward['flow_jacobian']))
-            parameter_jacobian[-steps:] = flow_factor/flow*forward['flow_'+parameter_name+'_jacobian']
     if derivative and initial_embedding is not None:
         jacobian = jacobian@initial_embedding
     stationarity_jacobian = jacobian
@@ -545,7 +574,8 @@ def fit_nonlinear_shared_driver(observations, parameters, dt, *, mean_operator=N
         sd=None, penalty=1., initial_penalty=1., starts=None, max_evaluations=80,
         visible=None, substeps=4, gradient_tolerance=1e-6, return_jacobian=False,
         driver_amplitude_weight=0., driver_prior_sd=1., flow_prior_weight=0., flow_prior_log_sd=1.,
-        tie_total_hb_to_volume=False, initial_coordinates="independent_logs"):
+        tie_total_hb_to_volume=False, initial_coordinates="independent_logs",
+        numerical_backend='python'):
     """Fixed-parameter nonlinear driver/initial-state fit by damped Gauss--Newton.
 
     ``starts`` contains dictionaries with driver[T] and physical initial_state[5].
@@ -641,7 +671,8 @@ def fit_nonlinear_shared_driver(observations, parameters, dt, *, mean_operator=N
         return _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
             regularizer, initial_weight, substeps, derivative,
             flow_prior_weight=flow_prior_weight, flow_prior_log_sd=flow_prior_log_sd,
-            initial_embedding=embedding, initial_coordinates=initial_coordinates)
+            initial_embedding=embedding, initial_coordinates=initial_coordinates,
+            numerical_backend=numerical_backend)
 
     attempts, candidates = [], []
     for index, start in enumerate(starts):
@@ -801,7 +832,7 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
         information_rcond=1e-10, return_jacobian=False, record_trace=False,
         driver_amplitude_weight=0., driver_prior_sd=1., flow_prior_weight=0., flow_prior_log_sd=1.,
         tie_total_hb_to_volume=False, initial_coordinates="independent_logs",
-        step_control="armijo"):
+        step_control="armijo", numerical_backend='python'):
     """Fit exactly one declared positive shared parameter using block GN.
 
     Arrays are [B,T,3], with one common mean operator. sd accepts [3], [B,3]
@@ -998,7 +1029,8 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
                 try:
                     trials.append(_nonlinear_trial_objective(vectors[trial], current_p, dt, operator,
                         y[trial], mask[trial], scale[trial], regularizers[trial], initial_penalty,
-                        substeps, derivative,parameter_name, flow_prior_weight, flow_prior_log_sd, embedding, initial_coordinates))
+                        substeps, derivative,parameter_name, flow_prior_weight, flow_prior_log_sd, embedding,
+                        initial_coordinates, numerical_backend))
                 except (FloatingPointError, OverflowError, ValueError) as exc:
                     failed_trials[trial] += 1
                     evaluation_failures.append(dict(evaluation=evaluations, trial=trial, derivative=derivative, error=repr(exc)))
@@ -1212,16 +1244,18 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
     valid = all(v['status']=='completed' and e<=1e-10 for v,e in zip(validations,validation_errors))
     information = {}
     for label in ('data_only','nuisance_regularized'):
-        values, ranks = [], []
+        values, ranks, svd_drivers = [], [], []
         for i,trial in enumerate(best['trials']):
             n = int(mask[i].sum()) if label=='data_only' else len(trial['residual'])
             j = (trial['stationarity_jacobian'] if initial_coordinates == 'positive_hb' else trial['jacobian'])[:n]
             b = value*trial['parameter_jacobian'][:n]
-            u,s,_ = svd(j,full_matrices=False,check_finite=False)
+            u,s,_,svd_driver = _information_svd(j)
+            svd_drivers.append(svd_driver)
             keep = s > (information_rcond*s[0] if len(s) else 0.)
             remaining = b-u[:,keep]@(u[:,keep].T@b)
             values.append(float(remaining@remaining)); ranks.append(int(keep.sum()))
-        information[label] = dict(value=float(sum(values)),by_trial=values,nuisance_ranks=ranks)
+        information[label] = dict(value=float(sum(values)),by_trial=values,nuisance_ranks=ranks,
+                                 svd_drivers=svd_drivers)
     information.update(coordinate='log_'+parameter_name,parameter_name=parameter_name,parameter_prior_precision=prior_precision,
         with_parameter_prior=float(information['nuisance_regularized']['value']+prior_precision),
         rank_rtol=float(information_rcond),interpretation='local_squared_residual_information_not_calibrated_CI')
@@ -1275,3 +1309,165 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
                       stationarity_jacobians=[t['stationarity_jacobian'] for t in best['trials']],
                       residual_log_parameter_jacobians=[value*t['parameter_jacobian'] for t in best['trials']])
     return result
+
+
+def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_names,
+        parameter_bounds, sd, mean_operator=None, visible=None, starts=None,
+        penalty=.01, initial_penalty=100., flow_prior_weight=1., flow_prior_log_sd=np.log(2),
+        substeps=4, max_iterations=150, max_evaluations_per_trial=600,
+        gradient_tolerance=1e-5, numerical_backend='numba'):
+    """Small joint-parameter diagnostic with exact block Gauss--Newton steps.
+
+    Uses the same trial residual and physical domain as the scalar solver.
+    Bounds apply to positive log parameters; rejected RK stages reject the
+    proposal, with no clipping of states or substituted residuals. Each start
+    receives a fixed forward-call budget. This supplies an engineering objective
+    and local projected information, not a likelihood or confidence interval.
+    """
+    parameters.validate()
+    names = tuple(parameter_names)
+    if not names or len(set(names)) != len(names) or not set(names) <= {'tau','neurovascular_gain','kappa'}:
+        raise ValueError('distinct supported physiological parameter names required')
+    if 'kappa' in names and numerical_backend != 'numba':
+        raise ValueError('joint kappa tangent requires the validated compiled backend')
+    bounds = np.asarray(parameter_bounds, dtype=float)
+    if bounds.shape != (len(names),2) or not np.isfinite(bounds).all() or np.any(bounds[:,0]<=0) or np.any(bounds[:,1]<=bounds[:,0]):
+        raise ValueError('ordered finite positive bounds per parameter required')
+    y = np.asarray(observations, dtype=float)
+    if y.ndim != 3 or y.shape[0]<1 or y.shape[1]<3 or y.shape[2]!=3:
+        raise ValueError('observations must be [B,T,3]')
+    batch,n,_ = y.shape; count=n+5
+    mask = np.isfinite(y) if visible is None else np.asarray(visible)
+    if mask.shape != y.shape or mask.dtype != bool or not mask.any(axis=(1,2)).all() or not np.isfinite(y[mask]).all():
+        raise ValueError('finite visible observations and boolean mask required')
+    scale = np.asarray(sd,dtype=float)
+    if scale.shape == (3,):scale=np.broadcast_to(scale,y.shape)
+    if scale.shape == (batch,3):scale=np.broadcast_to(scale[:,None,:],y.shape)
+    if scale.shape != y.shape or not np.isfinite(scale).all() or np.any(scale<=0):
+        raise ValueError('positive finite observation scales required')
+    if (not np.isfinite([dt,penalty,initial_penalty,flow_prior_weight,flow_prior_log_sd,gradient_tolerance]).all()
+            or min(dt,flow_prior_log_sd,gradient_tolerance)<=0 or min(penalty,initial_penalty,flow_prior_weight)<0):
+        raise ValueError('invalid objective controls')
+    operator = None if mean_operator is None else np.asarray(mean_operator,dtype=float)
+    if operator is not None and (operator.shape!=(3*n,3*n) or not np.isfinite(operator).all()):
+        raise ValueError('finite common observation operator required')
+    for v,minimum in ((substeps,1),(max_iterations,1),(max_evaluations_per_trial,3)):
+        if isinstance(v,bool) or not isinstance(v,(int,np.integer)) or v<minimum:
+            raise ValueError('positive integer numerical budgets required')
+    regularizer=np.zeros((n-2,count));regularizer[:,:n]=np.sqrt(penalty)*np.diff(np.eye(n),n=2,axis=0)/dt**1.5
+    lower,upper=np.log(bounds).T
+    reference=np.array([getattr(parameters.fixed if name=='neurovascular_gain' else parameters.free,name) for name in names])
+    def at(values):
+        fixed={name:float(v) for name,v in zip(names,values) if name=='neurovascular_gain'}
+        free={name:float(v) for name,v in zip(names,values) if name!='neurovascular_gain'}
+        return replace(parameters,fixed=replace(parameters.fixed,**fixed),free=replace(parameters.free,**free))
+    if starts is None:starts=[dict(parameter_values=reference)]
+    if not len(starts):raise ValueError('at least one start required')
+    attempts,candidates=[],[]
+    for start_index,start in enumerate(starts):
+        values=np.asarray(start['parameter_values'],dtype=float)
+        if values.shape != reference.shape or not np.isfinite(values).all() or np.any(values<bounds[:,0]) or np.any(values>bounds[:,1]):
+            raise ValueError('start values outside declared parameter box')
+        driver=np.asarray(start.get('driver',np.zeros((batch,n))),dtype=float)
+        initial=np.asarray(start.get('initial_state',np.tile(np.r_[0.,np.ones(4)],(batch,1))),dtype=float)
+        if driver.shape!=(batch,n) or initial.shape!=(batch,5) or not np.isfinite(driver).all():
+            raise ValueError('invalid nuisance start shape')
+        for row in initial:_require_nonlinear_domain(row,parameters)
+        x=np.column_stack((driver,initial[:,0],np.log(initial[:,1:])))
+        logp=np.log(values);evaluations=0;rejections=0;damping=1e-3;converged=False
+        def evaluate(xx,zz,derivative):
+            nonlocal evaluations
+            pp=at(np.exp(zz));result=[]
+            for i in range(batch):
+                evaluations+=1
+                if evaluations>max_evaluations_per_trial*batch:
+                    raise RuntimeError('internal evaluation budget overflow')
+                result.append(_nonlinear_trial_objective(xx[i],pp,dt,operator,y[i],mask[i],scale[i],
+                    regularizer,initial_penalty,substeps,derivative,names,flow_prior_weight,
+                    flow_prior_log_sd,numerical_backend=numerical_backend))
+            return result,float(sum(t['objective'] for t in result))
+        try:current,cost=evaluate(x,logp,True)
+        except (FloatingPointError,ValueError,OverflowError) as exc:
+            attempts.append(dict(start=start_index,converged=False,status='failed_domain',error=repr(exc),evaluations=evaluations));continue
+        reason='iteration_budget';scaled=float('inf')
+        for iteration in range(max_iterations+1):
+            values=np.exp(logp);pg=np.zeros(len(names));ph=np.zeros((len(names),len(names)));blocks=[]
+            for t in current:
+                j,r=t['jacobian'],t['residual'];jp=t['parameter_jacobian']*values[None,:]
+                h,g,c=j.T@j,j.T@r,j.T@jp
+                blocks.append((h,g,c));pg+=jp.T@r;ph+=jp.T@jp
+            active=((logp<=lower+1e-12)&(pg>=0))|((logp>=upper-1e-12)&(pg<=0))
+            projected=pg.copy();projected[active]=0
+            scaled=max([float(np.max(abs(projected)/np.sqrt(np.maximum(np.diag(ph),1.))))]+
+                [float(np.max(abs(g)/np.sqrt(np.maximum(np.diag(h),1.)))) for h,g,c in blocks])
+            if scaled<=gradient_tolerance:converged=True;reason='projected_scaled_gradient';break
+            if iteration==max_iterations:break
+            if evaluations+2*batch>max_evaluations_per_trial*batch:reason='evaluation_budget';break
+            try:
+                eliminated=[cho_solve(cho_factor(h+damping*np.diag(np.maximum(np.diag(h),1.)),lower=True),np.column_stack((g,c))) for h,g,c in blocks]
+                schur=ph+damping*np.diag(np.maximum(np.diag(ph),1.))
+                rhs=pg.copy()
+                for (_,_,c),inv in zip(blocks,eliminated):schur-=c.T@inv[:,1:];rhs-=c.T@inv[:,0]
+                dp=np.linalg.solve(schur,-rhs)
+                outward=((logp<=lower+1e-12)&(dp<0))|((logp>=upper-1e-12)&(dp>0))
+                if outward.any():
+                    keep=~outward;dp[:]=0
+                    if keep.any():dp[keep]=np.linalg.solve(schur[np.ix_(keep,keep)],-rhs[keep])
+                dx=np.array([-inv[:,0]-inv[:,1:]@dp for inv in eliminated])
+                directional=float(pg@dp+sum(g@d for (_,g,_),d in zip(blocks,dx)))
+                if not np.isfinite(directional) or directional>=0:raise np.linalg.LinAlgError('non-descent')
+            except np.linalg.LinAlgError:
+                damping*=10
+                if damping>1e14:reason='singular_step';break
+                continue
+            fraction=1.
+            for j in range(len(names)):
+                if dp[j]>0:fraction=min(fraction,(upper[j]-logp[j])/dp[j])
+                elif dp[j]<0:fraction=min(fraction,(lower[j]-logp[j])/dp[j])
+            accepted=False
+            for half in range(20):
+                if evaluations+2*batch>max_evaluations_per_trial*batch:break
+                step=fraction*2.**(-half)
+                candidate_log=np.clip(logp+step*dp,lower,upper) # roundoff at exact parameter bound only
+                try:trial,newcost=evaluate(x+step*dx,candidate_log,False)
+                except (FloatingPointError,ValueError,OverflowError):rejections+=1;continue
+                if newcost<cost and newcost<=cost+2e-4*step*directional:
+                    try:updated,updatedcost=evaluate(x+step*dx,candidate_log,True)
+                    except (FloatingPointError,ValueError,OverflowError):rejections+=1;continue
+                    x+=step*dx;logp=candidate_log;current,cost=updated,updatedcost
+                    damping=max(1e-12,damping/3);accepted=True;break
+            if not accepted:
+                damping*=10
+                if damping>1e14:reason='line_search_failed';break
+        record=dict(start=start_index,converged=converged,status='completed' if converged else 'failed_convergence',
+            convergence_reason=reason,evaluations=evaluations,iterations=iteration,objective=cost,
+            projected_scaled_gradient_inf_norm=scaled,parameter_values=np.exp(logp),domain_rejections=rejections)
+        attempts.append(record);candidates.append((record,x,logp,current))
+    if not candidates:return dict(status='failed_domain',converged=False,starts=attempts,parameter_names=names,parameter_values=None)
+    good=[c for c in candidates if c[0]['converged']]
+    record,x,logp,current=min(good or candidates,key=lambda c:c[0]['objective'])
+    values=np.exp(logp);fitted=at(values);initial=np.array([t['initial'] for t in current])
+    replay=[replay_nonlinear_driver(x[i,:n],initial[i],fitted,dt,substeps=substeps) for i in range(batch)]
+    errors=[float(np.max(abs(v['canonical_prediction']-t['forward']['canonical_prediction'])))
+            if v['status']=='completed' else float('inf') for v,t in zip(replay,current)]
+    valid=max(errors)<=1e-10
+    info={}
+    for label in ('data_only','nuisance_regularized'):
+        matrix=np.zeros((len(names),len(names)));svd_drivers=[]
+        for i,t in enumerate(current):
+            length=int(mask[i].sum()) if label=='data_only' else len(t['residual'])
+            j=t['jacobian'][:length];jp=t['parameter_jacobian'][:length]*values
+            u,s,_,svd_driver=_information_svd(j);u=u[:,s>1e-10*s[0]];svd_drivers.append(svd_driver)
+            remainder=jp-u@(u.T@jp);matrix+=remainder.T@remainder
+        info[label]=dict(matrix=matrix,eigenvalues=np.linalg.eigvalsh(matrix),svd_drivers=svd_drivers)
+    return dict(status=record['status'] if valid else 'failed_replay_validation',
+        converged=bool(record['converged'] and valid),parameter_names=names,parameter_values=values,
+        parameter_bounds=bounds,starts=attempts,selected_start=record['start'],objective=record['objective'],
+        projected_scaled_gradient_inf_norm=record['projected_scaled_gradient_inf_norm'],
+        weighted_data_sse=sum(np.sum(((t['prediction'][mask[i]]-y[i][mask[i]])/scale[i][mask[i]])**2) for i,t in enumerate(current)),
+        flow_prior_cost=sum(t['flow_prior_cost'] for t in current),driver=x[:,:n],initial_state=initial,
+        states=np.array([t['forward']['states'] for t in current]),prediction=np.array([t['prediction'] for t in current]),
+        canonical_prediction=np.array([t['forward']['canonical_prediction'] for t in current]),
+        replay_max_abs_difference=errors,information=info,uncertainty='NOT_ESTIMATED',
+        evaluations=sum(a['evaluations'] for a in attempts)+batch,
+        tau=fitted.free.tau,neurovascular_gain=fitted.fixed.neurovascular_gain,kappa=fitted.free.kappa)

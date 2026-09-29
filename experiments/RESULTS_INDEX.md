@@ -49,6 +49,26 @@ of the old cache. Method choice and processing boundaries are owned by
 
 ## Main-method evidence
 
+### Fixed-structure physiology semantics — 2026-09-28
+
+The [terminal summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/summary.json)
+owns this campaign's numerical conclusions. The requested
+[Chinese presentation](../docs/report/20260928_ssm_physiology_semantics_v3/SSM_PHYSIOLOGY_SEMANTICS.pptx)
+distinguishes matched synthetic recovery, conditional measured reconstruction,
+parameter repeatability, hidden-feature completion and observation-source limits.
+Its [executable contract](configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml)
+keeps the existing dynamics and single driver without an independent slow common
+component. Retain phase source snapshots, native QC and geometry exclusions,
+training coordinates and splits, all parameter fits and failure denominators,
+paired sharing comparisons, nulls, integration replays/refits and negative outcomes.
+
+The [software verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/verification.json)
+and [presentation verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/presentation_verification_v3.json)
+record distinct checks. Preserve the interrupted hierarchy launch, failed technical
+attempts, aggregation corrections, and earlier presentation exports with their
+revision evidence. Presentation v3 is the reviewed delivery; LibreOffice PDF
+previews are internal layout checks, not an additional technical report.
+
 ### Native Hb direction prevalence — 2026-09-28
 
 The [completed census](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1/manifest.json)

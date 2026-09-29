@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Bounded shared-driver linear feasibility screen, synthetic before measured.
+"""Shared-driver reconstruction and fixed-structure physiology diagnostics.
 
-The only measured read boundary is an exact retained projection file. Scales,
-folds and feature processing remain frozen. No teacher or calibrated posterior
-is produced. A durable supervisor owns substantial execution.
+Retained diagnostic modes read exact parent projections. The separately
+versioned physiology-semantics mode uses central public native readers and
+explicit identity/split manifests. No teacher or calibrated posterior is
+produced. A durable supervisor owns substantial execution.
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
 import fcntl
+from functools import lru_cache
 import json
 import os
 from pathlib import Path
@@ -2848,6 +2850,2103 @@ def waveform_diagnostic_main(args):
     manifest.update(execution='completed',finished_at=datetime.now(timezone.utc).isoformat(),summary='summary.json');write_json(path,manifest)
 
 
+def semantics_config(path):
+    cfg = yaml.safe_load(Path(path).read_text())
+    if cfg.get('schema') != 'shared_driver_physiology_semantics_v1':
+        raise ValueError('wrong physiology semantics contract')
+    if (cfg['tensor']['steps'] != 120 or cfg['tensor']['dt_s'] != .25 or
+            cfg['tensor']['state_order'] != ['r', 's', 'f', 'v', 'p', 'q'] or
+            cfg['data']['protected_data'] != 'forbidden' or
+            cfg['data']['cache_root'] != 'data/cache/physiology_semantic_clean_v5' or
+            set(cfg['data']['datasets']) != {'eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation','refed'} or
+            cfg['data']['motion_method'] != 'none' or cfg['splits']['labels_as_model_inputs'] or
+            cfg['report']['format'] != 'pptx'):
+        raise ValueError('physiology semantics tensor, data, model or report contract violated')
+    semantics_parameters(cfg).validate()
+    return cfg
+
+
+def semantics_parameters(cfg, **values):
+    fixed = {k: v for k, v in cfg['fixed'].items() if k not in ('tau', 'kappa')}
+    fixed.update({k: v for k, v in values.items() if k not in ('tau', 'kappa')})
+    return BalloonParameters(fixed=BalloonFixedParameters(**fixed),
+        free=BalloonFreeParameters(tau=values.get('tau', cfg['fixed']['tau']),
+                                  kappa=values.get('kappa', cfg['fixed']['kappa'])))
+
+
+def semantics_solver_options(cfg):
+    s = cfg['solver']
+    return {k: s[k] for k in ('numerical_backend', 'substeps', 'penalty',
+        'initial_penalty', 'flow_prior_weight', 'flow_prior_log_sd', 'gradient_tolerance')}
+
+
+def semantics_anchors(record, geometry):
+    """Select actual channels from metadata only; never use fitted errors."""
+    meta = record.manifest['measurement']
+    eeg = geometry.for_channels(record=record, modality='eeg', channel_names=meta['eeg_channel_names'])
+    hb = geometry.for_channels(record=record, modality='fnirs', channel_names=meta['fnirs_channel_names'][::2])
+    if record.dataset_id == 'refed':
+        return [], 'REFED EEG template is not registered to native Hb geometry'
+    ex = np.array([[r.get(k) if r.get(k) is not None else np.nan for k in ('x','y','z')] for r in eeg])
+    hx = np.array([[r.get(k) if r.get(k) is not None else np.nan for k in ('x','y','z')] for r in hb])
+    if not np.isfinite(ex).all() or not np.isfinite(hx).all():
+        return [], 'incomplete registered geometry'
+    if any(r['coordinate_units'] != 'normalized_head_unit' for r in eeg+hb):
+        return [], 'incompatible geometry units'
+    targets = dict(prefrontal=[-.45,.89,.1], motor=[-.65,0,.72], posterior=[-.15,-.95,.1])
+    if record.dataset_id == 'visual_cognitive_motivation':
+        targets = {k: [v[1],-v[0],v[2]] for k,v in targets.items()}
+    unit = hx/np.linalg.norm(hx, axis=1)[:,None]
+    anchors, used = [], set()
+    for region, target in targets.items():
+        target = np.asarray(target); target = target/np.linalg.norm(target)
+        index = int(np.argmax(unit@target))
+        if float(unit[index]@target) < np.cos(np.deg2rad(50)) or index in used:
+            continue
+        used.add(index)
+        neighbors = np.argsort(np.linalg.norm(ex-hx[index], axis=1))[:6]
+        anchors.append(dict(region=region, hb_pair=index, hb_channel=hb[index]['base_channel_name'],
+            eeg_indices=neighbors.tolist(), eeg_channels=[eeg[i]['channel_name'] for i in neighbors],
+            hb_geometry=hb[index], eeg_geometry=[eeg[i] for i in neighbors],
+            spatial_claim='coarse_template' if record.dataset_id == 'visual_cognitive_motivation' else 'registered_dataset_geometry_not_individual_source_localization'))
+    return anchors, None if anchors else 'no supported regional anchor'
+
+
+def semantics_window_plan(record, events):
+    from src.data.event_alignment import window_within_alignment_support
+    shape = record.manifest['array_shapes']
+    duration_e, duration_h = shape['eeg'][0]/200., shape['fnirs'][0]/10.
+    windows, rejected = [], []
+    if record.dataset_id == 'refed':
+        if not events:
+            return [], [dict(reason='missing_event')]
+        e = events[0]
+        for i, start in enumerate(np.arange(0, min(duration_e, duration_h)-30+1e-6, 30)):
+            windows.append(dict(window=i, eeg_start_s=float(start), hb_start_s=float(start),
+                event_id=e['event_index'], task='emotion_video', condition=e['label'],
+                independent_block=record.base_record_id))
+        return windows, rejected
+    last_end = -float('inf')
+    for event in sorted(events, key=lambda x: x.get('eeg_time_ms') or 0):
+        if event.get('eeg_time_ms') is None or event.get('fnirs_time_ms') is None:
+            continue
+        condition = str(event['metadata'].get('condition_label', event.get('label', 'unknown')))
+        if condition == 'unknown':
+            rejected.append(dict(event_id=event['event_index'], reason='unknown_condition')); continue
+        es, hs = event['eeg_time_ms']/1000.-5., event['fnirs_time_ms']/1000.-5.
+        if (min(es, hs) < 0 or es+30 > duration_e or hs+30 > duration_h or
+                not window_within_alignment_support(event, -5., 30.)):
+            rejected.append(dict(event_id=event['event_index'], reason='clock_or_alignment_support')); continue
+        if record.dataset_id != 'eeg_fnirs_single_trial' and es < last_end:
+            continue  # Dense events: continuous non-overlapping response windows.
+        support = event['metadata'].get('alignment_support_ms', {})
+        block = json.dumps(support, sort_keys=True)
+        windows.append(dict(window=len(windows), eeg_start_s=es, hb_start_s=hs,
+            event_id=event['event_index'], task=event['metadata'].get('task'), condition=condition,
+            independent_block=block, native_session=event['metadata'].get('session_idx'),
+            block_index=event['metadata'].get('block_index')))
+        last_end = es+30
+    return windows, rejected
+
+
+def semantics_inventory(cfg, project_root, out):
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import ChannelGeometryIndex, DEFAULT_ADMISSIBLE_ALIGNMENT_CASES
+    index = CleanPhysiologyCacheIndex(Path(project_root)/cfg['data']['cache_root'])
+    geometry = ChannelGeometryIndex(index.cache_root)
+    records, excluded = [], []
+    for record in index.records:
+        if record.dataset_id not in cfg['data']['datasets']:
+            continue
+        reports = index.reports_by_join_key.get(record.join_key, [])
+        reason = None
+        if record.dataset_id == 'visual_cognitive_motivation' and record.canonical_subject_id == 'S06' and 'Part1' in record.base_record_id:
+            reason = 'retained_S06_Part1_alignment_exclusion'
+        elif not reports or any(r.get('alignment_case') not in DEFAULT_ADMISSIBLE_ALIGNMENT_CASES
+                                or r.get('label_sequence_match') is False for r in reports):
+            reason = 'unverified_alignment'
+        if reason == 'retained_S06_Part1_alignment_exclusion':
+            excluded.append(dict(join_key=record.join_key, reason=reason)); continue
+        anchors, spatial_reason = semantics_anchors(record, geometry)
+        windows, rejected = semantics_window_plan(record, index.events_by_join_key.get(record.join_key, []))
+        if reason:
+            rejected.append(dict(reason=reason, planned_windows=len(windows)))
+            windows = []
+        key = record.join_key.replace('|','__').replace('/','_')
+        repeat_group = record.base_record_id
+        if record.dataset_id == 'visual_cognitive_motivation':
+            repeat_group = record.base_record_id.split('_Probe')[0]
+        records.append(dict(key=key, join_key=record.join_key, dataset=record.dataset_id,
+            subject=record.canonical_subject_id, record=record.base_record_id, repeat_group=repeat_group,
+            anchors=anchors, spatial_unavailable_reason=spatial_reason, windows=windows,
+            rejected_windows=rejected, array_shapes=record.manifest['array_shapes'],
+            source_files=record.manifest['source_files'],
+            eeg_unit=record.manifest['measurement']['eeg_preprocessing_state']['canonical_unit'],
+            hb_unit=record.manifest['measurement']['fnirs_preprocessing_state']['canonical_unit']))
+    result = dict(schema='physiology_semantics_inventory_v1', records=records, excluded=excluded,
+        input_cache=str(index.cache_root), measured_arrays_read=0,
+        subject_counts={ds: len({r['subject'] for r in records if r['dataset']==ds}) for ds in cfg['data']['datasets']},
+        record_counts={ds: sum(r['dataset']==ds for r in records) for ds in cfg['data']['datasets']})
+    write_json(Path(out)/'inventory.json', result)
+    return result
+
+
+def semantics_native_qc(native):
+    from scipy.signal import detrend
+    values = native['values']; rate = native['sample_rate_hz']
+    rows = []
+    for i in range(values.shape[1]):
+        pair = values[:,i]
+        valid = np.isfinite(pair).all(axis=1)
+        x = pair[valid]
+        row = dict(pair=i, support=float(valid.mean()), samples=int(valid.sum()))
+        if len(x) < 30 or min(np.std(x,axis=0)) <= 1e-14:
+            row.update(status='flat_or_insufficient', rho=None); rows.append(row); continue
+        delta = np.diff(x,axis=0); med = np.median(delta,axis=0)
+        mad = np.maximum(1.4826*np.median(abs(delta-med),axis=0), 1e-14)
+        step = max(1, round(rate))
+        diff = x[step:]-x[:-step]
+        row.update(status='supported', rho=float(np.corrcoef(x.T)[0,1]),
+            detrended_rho=float(np.corrcoef(detrend(x,axis=0).T)[0,1]),
+            difference_1s_rho=float(np.corrcoef(diff.T)[0,1]),
+            exact_HbO_HbR_duplicate=bool(np.array_equal(x[:,0],x[:,1])),
+            flat_step_fraction=np.mean(delta==0,axis=0),
+            jump_fraction=np.mean(abs(delta-med)>20*mad,axis=0),
+            extrema_repeat_fraction=[float(max(np.mean(x[:,j]==x[:,j].min()),np.mean(x[:,j]==x[:,j].max()))) for j in range(2)])
+        rows.append(row)
+    finite = np.isfinite(values).all(axis=(0,2)) & (np.std(values,axis=0).min(axis=1)>1e-14)
+    spatial = None
+    if finite.sum()>1:
+        total = values[::max(1,round(rate)),finite].sum(axis=2)
+        c = np.corrcoef(total.T)
+        spatial = float(np.median(c[np.triu_indices(len(c),1)]))
+    result = dict(channels=rows, spatial_total_Hb_median_rho=spatial,
+        native_provenance=native['provenance'], time_strictly_increasing=bool(np.all(np.diff(native['time_s'])>0)),
+        quality_flag_policy='descriptive_only_not_fit_dependent_or_automatic_exclusion')
+    return result
+
+
+def semantics_qc_detail_worker(payload):
+    import hashlib
+    from scipy.signal import coherence,detrend
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import load_native_fnirs_record
+    cfg,root,project_root,spec=payload;path=Path(root)/'qc_detail'/(spec['key']+'.json')
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic()
+    index=CleanPhysiologyCacheIndex(Path(project_root)/cfg['data']['cache_root'])
+    record=next(r for r in index.records if r.join_key==spec['join_key'])
+    native=load_native_fnirs_record(Path(project_root),record);x=native['values'];time_s=native['time_s']
+    flat=x.reshape(len(x),-1);lookup={};duplicates=[]
+    for j in range(flat.shape[1]):
+        column=flat[:,j]
+        if not np.isfinite(column).all() or np.std(column)<=1e-14:continue
+        digest=hashlib.blake2b(np.ascontiguousarray(column).tobytes(),digest_size=16).hexdigest()
+        if digest in lookup and np.array_equal(column,flat[:,lookup[digest]]):
+            duplicates.append([native['channel_names'][lookup[digest]],native['channel_names'][j]])
+        lookup[digest]=j
+    rate=native['sample_rate_hz'];uniform=bool(np.allclose(np.diff(time_s),1/rate,rtol=.001,atol=1e-6))
+    coherences=[]
+    if uniform:
+        for pair in x.transpose(1,0,2):
+            if not np.isfinite(pair).all() or min(np.std(pair,axis=0))<=1e-14:
+                coherences.append(None);continue
+            nperseg=min(round(128*rate),len(pair)//2)
+            f,c=coherence(pair[:,0],pair[:,1],fs=rate,nperseg=nperseg)
+            selected=(f>=.01)&(f<=.2)
+            coherences.append(float(np.mean(c[selected])) if selected.any() else None)
+    total=x[::max(1,round(rate))].sum(axis=2)
+    keep=np.isfinite(total).all(axis=0)&(np.std(total,axis=0)>1e-14)
+    common={}
+    for label,value in [('native',total[:,keep]),('detrended',detrend(total[:,keep],axis=0))]:
+        if value.shape[1]>1:
+            sd=np.std(value,axis=0);good=sd>1e-14
+            c=np.corrcoef(value[:,good].T)
+            common[label]=dict(channels=int(good.sum()),first_component_variance_fraction=float(np.linalg.eigvalsh(c)[-1]/len(c))) if good.sum()>1 else None
+    outside=[w['window'] for w in spec['windows'] if w['hb_start_s']<time_s[0]-1e-9 or w['hb_start_s']+29.9>time_s[-1]+1e-9]
+    result=dict(spec_key=spec['key'],dataset=spec['dataset'],subject=spec['subject'],record=spec['record'],
+        status='completed',exact_nonflat_channel_duplicates=duplicates,coherence_001_02Hz=coherences,
+        native_clock_uniform=uniform,native_time_support=[float(time_s[0]),float(time_s[-1])],
+        windows_outside_native_support=outside,common_HbT_variance=common,
+        full_record_fingerprint=hashlib.blake2b(np.ascontiguousarray(x).tobytes(),digest_size=16).hexdigest(),
+        full_record_shape=list(x.shape),seconds=time.monotonic()-started,
+        interpretation='descriptive data checks; coherence and common variance do not identify a physiological source')
+    write_json(path,result);return result
+
+
+def semantics_prepare_worker(payload):
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import load_native_eeg_record, load_native_fnirs_record
+    from src.inference.observation_baselines import eeg_band_power
+    cfg, root, project_root, spec = payload
+    path = Path(root)/'prepared'/spec['key']/'record.json'
+    if path.exists(): return json.loads(path.read_text())
+    started = time.monotonic()
+    index = CleanPhysiologyCacheIndex(Path(project_root)/cfg['data']['cache_root'])
+    record = next(r for r in index.records if r.join_key == spec['join_key'])
+    native = load_native_fnirs_record(Path(project_root), record)
+    qc = semantics_native_qc(native)
+    prepared, failures = [], []
+    if spec['anchors'] and spec['windows']:
+        eeg = load_native_eeg_record(Path(project_root), record)
+        lookup = {str(name).upper():i for i,name in enumerate(eeg.channel_names)}
+        operator = native_feature_operators(120)
+        for anchor in spec['anchors']:
+            names = [n.upper() for n in anchor['eeg_channels']]
+            if not all(n in lookup for n in names):
+                failures.append(dict(region=anchor['region'], reason='native_EEG_channel_identity')); continue
+            selected = [lookup[n] for n in names]
+            features, hb, identities = [], [], []
+            for window in spec['windows']:
+                start = round(window['eeg_start_s']*eeg.sample_rate_hz)
+                length = round(30*eeg.sample_rate_hz)
+                signal = eeg.values[start:start+length,selected]
+                times = window['hb_start_s']+np.arange(300)/10.
+                pair = native['values'][:,anchor['hb_pair']]
+                h = np.column_stack([np.interp(times,native['time_s'],pair[:,j]) for j in range(2)])
+                if signal.shape[0]!=length or not np.isfinite(signal).all() or not np.isfinite(h).all():
+                    failures.append(dict(region=anchor['region'], window=window['window'], reason='nonfinite_or_native_support')); continue
+                power = eeg_band_power(signal, bands=cfg['tensor']['eeg_bands_hz'],
+                                       sample_rate=eeg.sample_rate_hz,target_rate=4.)
+                if power.shape != (120,6,5) or np.any(power<=0):
+                    failures.append(dict(region=anchor['region'], window=window['window'], reason='invalid_power')); continue
+                logpower = np.log(power).reshape(120,-1)
+                features.append(operator['eeg']@logpower)
+                hb.append(operator['fnirs']@h)
+                identities.append(window)
+            path.parent.mkdir(parents=True,exist_ok=True)
+            if features:
+                np.savez_compressed(path.parent/(anchor['region']+'.npz'),
+                    eeg_features=np.array(features), hb=np.array(hb))
+                prepared.append(dict(**anchor, windows=identities, array_file=anchor['region']+'.npz',
+                    eeg_native_unit=eeg.native_unit, eeg_native_rate=eeg.sample_rate_hz,
+                    native_eeg_source=str(eeg.source_path)))
+    result = dict(spec=spec, qc=qc, prepared=prepared, failures=failures, status='completed',
+        processing='native_window_local_bandpower_and_Hb_none_bandpass_resampling',
+        reference='first_5_seconds_observed_reference_not_latent_rest_or_always_preevent',
+        split_safety='no_temporal_operation_crosses_window_boundary; record grouping prevents overlapping folds',
+        seconds=time.monotonic()-started, peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    write_json(path,result)
+    return result
+
+
+@lru_cache(maxsize=8)
+def semantics_prepared_arrays(path):
+    with np.load(path, allow_pickle=False) as arrays:
+        return arrays['eeg_features'].copy(), arrays['hb'].copy()
+
+
+def semantics_coordinate(refs, out, key, cfg):
+    """Fit one explicit training-only PCA and common Hb gain; keep DC reference."""
+    sx=np.zeros(30);xx=np.zeros((30,30));sh=np.zeros(2);hh=np.zeros(2);count=0
+    for path in sorted({r['array_path'] for r in refs}):
+        selected=[r['array_index'] for r in refs if r['array_path']==path]
+        e,h=semantics_prepared_arrays(path)
+        x=e[selected].reshape(-1,30);v=h[selected].reshape(-1,2)
+        sx+=x.sum(axis=0);xx+=x.T@x;sh+=v.sum(axis=0);hh+=(v*v).sum(axis=0);count+=len(x)
+    if not count:raise ValueError('empty coordinate training partition')
+    covariance=xx/count-np.outer(sx/count,sx/count)
+    eigenvalues,eigenvectors=np.linalg.eigh(covariance);pc=eigenvectors[:,-1]
+    if pc[np.argmax(abs(pc))]<0:pc=-pc
+    variance_h=np.maximum(hh/count-(sh/count)**2,0.)
+    if eigenvalues[-1]<=1e-16 or min(variance_h)<=1e-24:raise ValueError('degenerate training coordinate')
+    eeg_factor=cfg['coordinate']['eeg_training_sd_target']/np.sqrt(eigenvalues[-1])
+    hb_factor=cfg['coordinate']['common_Hb_training_sd_target']/np.sqrt(np.mean(variance_h))
+    coordinate=dict(key=key,pc=pc,eeg_factor=eeg_factor,hb_factor=hb_factor,
+        sd=np.r_[np.sqrt(eigenvalues[-1])*eeg_factor,np.sqrt(variance_h)*hb_factor],
+        training_subjects=sorted({r['subject'] for r in refs}),training_windows=len(refs),
+        training_ids=[r['id'] for r in refs],eeg_channels=refs[0]['eeg_channels'],
+        centering='first_5s_reference_only; covariance_center_used_for_PCA_not_subtracted_from_target',
+        gain_interpretation='effective_in_frozen_dataset_site_fold_gauge_not_absolute_physiology')
+    write_json(Path(out)/'coordinates'/(key+'.json'),coordinate)
+    return coordinate
+
+
+def semantics_target(ref, coordinate):
+    e,h=semantics_prepared_arrays(ref['array_path'])
+    return np.column_stack((e[ref['array_index']]@np.asarray(coordinate['pc'])*coordinate['eeg_factor'],
+                            h[ref['array_index']]*coordinate['hb_factor']))
+
+
+def semantics_balanced_select(refs, limit, seed):
+    """Select records round-robin before windows; selection never reads signals."""
+    rng=np.random.default_rng(seed);groups={}
+    for r in refs:groups.setdefault((r['subject'],r['record']),[]).append(r)
+    keys=sorted(groups);rng.shuffle(keys)
+    for key in keys:rng.shuffle(groups[key])
+    chosen=[]
+    while len(chosen)<limit and any(groups.values()):
+        for key in keys:
+            if groups[key] and len(chosen)<limit:chosen.append(groups[key].pop())
+    return chosen
+
+
+def semantics_cohort(cfg,out):
+    inventory=json.loads((out/'inventory.json').read_text())
+    cohorts=[];unavailable=[]
+    channel_sets={}
+    for spec in inventory['records']:
+        for anchor in spec['anchors']:
+            channel_sets.setdefault((spec['dataset'],anchor['region']),set()).add(tuple(anchor['eeg_channels']))
+    subject_folds={}
+    for ds in cfg['data']['datasets']:
+        subjects=sorted({r['subject'] for r in inventory['records'] if r['dataset']==ds})
+        rng=np.random.default_rng(np.random.SeedSequence([cfg['seed'],21,cfg['data']['datasets'].index(ds)]))
+        rng.shuffle(subjects)
+        subject_folds[ds]={s:i%cfg['splits']['subject_folds'] for i,s in enumerate(subjects)}
+    for spec in inventory['records']:
+        path=out/'prepared'/spec['key']/'record.json'
+        if not path.exists():unavailable.append(dict(key=spec['key'],reason='preparation_failed'));continue
+        record=json.loads(path.read_text())
+        for anchor in record['prepared']:
+            variants=sorted(channel_sets[(spec['dataset'],anchor['region'])])
+            site=anchor['region']+(f'__montage{variants.index(tuple(anchor["eeg_channels"]))}' if len(variants)>1 else '')
+            windows=anchor['windows'];groups=list(dict.fromkeys(w['independent_block'] for w in windows))
+            calibration=windows[:3]
+            end=max((w['eeg_start_s']+30 for w in calibration),default=float('inf'))
+            for i,w in enumerate(windows):
+                repeat_unit=spec['repeat_group']
+                if spec['dataset']=='eeg_fnirs_single_trial':
+                    repeat=int(spec['record'].rsplit('_',1)[-1])//2%2
+                elif spec['dataset']=='simultaneous_eeg_nirs':
+                    repeat=groups.index(w['independent_block'])%2
+                    repeat_unit+='::'+str(groups.index(w['independent_block']))
+                else:
+                    # Preserve both probes of the same EEG Part in the same fold.
+                    import re
+                    match=re.search(r'Part(\d+)',spec['record'],re.I)
+                    repeat=(int(match.group(1))-1)%2 if match else 0
+                channel_qc=record['qc']['channels'][anchor['hb_pair']]
+                cohorts.append(dict(id=f'{spec["key"]}__{site}__w{w["window"]}',key=spec['key'],
+                    dataset=spec['dataset'],subject=spec['subject'],record=spec['record'],site=site,
+                    region=anchor['region'],eeg_channels=anchor['eeg_channels'],hb_channel=anchor['hb_channel'],
+                    array_path=str(path.parent/anchor['array_file']),array_index=i,
+                    subject_fold=subject_folds[spec['dataset']][spec['subject']],repeat_fold=repeat,
+                    repeat_unit=repeat_unit,record_calibration=i<3,record_evaluation=w['eeg_start_s']>=end,
+                    native_rho=channel_qc.get('rho'),quality_burden=float(np.mean(channel_qc.get('jump_fraction',[1,1])))+
+                        float(np.mean(channel_qc.get('flat_step_fraction',[1,1])))+1-channel_qc['support'],**w))
+    # Subjects with only one independent recording can only support disjoint-block repeatability.
+    for ds,subject,site in sorted({(r['dataset'],r['subject'],r['site']) for r in cohorts}):
+        group=[r for r in cohorts if (r['dataset'],r['subject'],r['site'])==(ds,subject,site)]
+        if len({r['repeat_unit'] for r in group})==1:
+            center=(min(r['eeg_start_s'] for r in group)+max(r['eeg_start_s']+30 for r in group))/2
+            for r in group:
+                r['repeat_fold']=0 if r['eeg_start_s']+30<=center else 1 if r['eeg_start_s']>=center else -1
+                r['repeat_kind']='within_record_disjoint_blocks'
+        else:
+            for r in group:r['repeat_kind']='independent_record_or_native_session'
+    write_json(out/'cohort.json',dict(refs=cohorts,unavailable=unavailable,subject_folds=subject_folds))
+    coordinates={}
+    for ds,site in sorted({(r['dataset'],r['site']) for r in cohorts}):
+        group=[r for r in cohorts if (r['dataset'],r['site'])==(ds,site)]
+        for fold in sorted({r['subject_fold'] for r in group}):
+            key=f'{ds}__{site}__outer{fold}'
+            train=[r for r in group if r['subject_fold']!=fold]
+            coordinates[key]=semantics_coordinate(train,out,key,cfg)
+    return cohorts,coordinates
+
+
+def semantics_training_plan(cfg,out,refs):
+    screen=json.loads((out/'synthetic_feature_summary.json').read_text())
+    names=[name for name,row in screen['parameters'].items() if row['passed']]
+    plan=[]
+    for ds,site in sorted({(r['dataset'],r['site']) for r in refs}):
+        group=[r for r in refs if (r['dataset'],r['site'])==(ds,site)]
+        for fold in sorted({r['subject_fold'] for r in group}):
+            key=f'{ds}__{site}__outer{fold}'
+            train=semantics_balanced_select([r for r in group if r['subject_fold']!=fold],
+                    cfg['splits']['training_windows'],cfg['seed']+31+fold)
+            for name in names:
+                plan.append(dict(key=key+'__H1__'+name,coordinate=key,hierarchy='H1_dataset',
+                    parameter=name,train=train,subject=None,record=None,repeat=None))
+        for subject in sorted({r['subject'] for r in group}):
+            own=[r for r in group if r['subject']==subject];fold=own[0]['subject_fold']
+            key=f'{ds}__{site}__outer{fold}'
+            for repeat in (0,1):
+                train=semantics_balanced_select([r for r in own if r['repeat_fold']==repeat],
+                    cfg['splits']['training_windows'],cfg['seed']+41+repeat)
+                if not train:continue
+                for name in names:
+                    for hierarchy in ('H2_subject','H2s_partial_pooling'):
+                        plan.append(dict(key=key+f'__{subject}__rep{repeat}__{hierarchy}__'+name,
+                            coordinate=key,hierarchy=hierarchy,parameter=name,train=train,
+                            subject=subject,record=None,repeat=repeat,parent=key+'__H1__'+name))
+            for record in sorted({r['record'] for r in own}):
+                train=[r for r in own if r['record']==record and r['record_calibration']]
+                if not train:continue
+                for name in names:
+                    plan.append(dict(key=key+f'__{subject}__{record}__H3__'+name,coordinate=key,
+                        hierarchy='H3_record',parameter=name,train=train,subject=subject,
+                        record=record,repeat=None))
+    write_json(out/'training_plan.json',dict(jobs=plan,qualified_parameters=names,
+        primary_baseline='H0 always evaluated; failed synthetic parameter arms not expanded',
+        population_window_sampling='18 identity-selected windows with record round-robin; coordinate scaling uses all permitted training windows'))
+    return plan
+
+
+def semantics_training_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_parameter
+    cfg,root,spec=payload;out=Path(root);path=out/'training'/spec['key']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();coordinate=json.loads((out/'coordinates'/(spec['coordinate']+'.json')).read_text())
+    y=np.array([semantics_target(ref,coordinate) for ref in spec['train']]);name=spec['parameter']
+    starts=[dict(parameter_value=v,driver=np.zeros(y.shape[:2]),
+                 initial_state=np.tile(np.r_[0.,np.ones(4)],(len(y),1))) for v in cfg['parameters'][name]['starts']]
+    prior={}
+    if spec['hierarchy']=='H2s_partial_pooling':
+        parent=json.loads((out/'training'/spec['parent']/'result.json').read_text())
+        if not parent.get('converged'):
+            result=dict(spec=spec,status='unavailable_population_fit',converged=False)
+            write_json(path,result);return result
+        # Prespecified engineering shrinkage range derives only from the parameter box.
+        bounds=cfg['parameters'][name]['bounds']
+        prior=dict(parameter_prior_mean=parent['parameter_value'],parameter_prior_log_sd=np.log(bounds[1]/bounds[0])/4.)
+    result=fit_nonlinear_shared_parameter(y,semantics_parameters(cfg),.25,parameter_name=name,
+        parameter_bounds=cfg['parameters'][name]['bounds'],sd=coordinate['sd'],starts=starts,
+        mean_operator=semantics_model_operator(),max_evaluations=cfg['solver']['max_evaluations_per_trial']*len(y),
+        max_iterations=cfg['solver']['max_iterations'],step_control=cfg['solver']['step_control'],
+        **semantics_solver_options(cfg),**prior)
+    compact=dict(semantics_compact_fit(result),spec=spec,coordinate=coordinate['key'],prior=prior,
+        seconds=time.monotonic()-started,peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    write_json(path,compact)
+    if 'driver' in result:
+        np.savez_compressed(path.with_suffix('.npz'),driver=result['driver'],initial_state=result['initial_state'])
+    return compact
+
+
+def semantics_parameter_candidates(cfg,out,ref,qualified):
+    coordinate=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
+    candidates=[dict(method='H0_fixed',parameter=None,value=None,status='completed',converged=True)]
+    for name in qualified:
+        paths=[('H1_dataset',coordinate+'__H1__'+name)]
+        if ref['repeat_fold'] in (0,1):
+            paths.extend([
+                ('H2_subject',coordinate+f'__{ref["subject"]}__rep{1-ref["repeat_fold"]}__H2_subject__'+name),
+                ('H2s_partial_pooling',coordinate+f'__{ref["subject"]}__rep{1-ref["repeat_fold"]}__H2s_partial_pooling__'+name)])
+        if ref['record_evaluation']:
+            paths.append(('H3_record',coordinate+f'__{ref["subject"]}__{ref["record"]}__H3__'+name))
+        for level,key in paths:
+            path=Path(out)/'training'/key/'result.json'
+            result=json.loads(path.read_text()) if path.exists() else dict(status='unavailable_independent_training',converged=False)
+            candidates.append(dict(method=level+'__'+name,parameter=name,value=result.get('parameter_value'),
+                status=result['status'],converged=result.get('converged',False),training_key=key,
+                at_boundary=result.get('boundary_status') in ('LOWER','UPPER')))
+    return candidates
+
+
+def semantics_fit_metrics(y,fit,sd):
+    prediction=fit['prediction'];residual=y-prediction
+    rmse=np.sqrt(np.mean(residual**2,axis=0))/sd
+    corr=[]
+    for i in range(3):
+        corr.append(float(np.corrcoef(y[:,i],prediction[:,i])[0,1])
+                    if min(np.std(y[:,i]),np.std(prediction[:,i]))>1e-14 else None)
+    amplitude=(np.ptp(prediction,axis=0)-np.ptp(y,axis=0))/sd
+    return dict(nrmse=rmse,all_below_half=bool(np.all(rmse<.5) and fit['converged']),
+        correlation=corr,amplitude_error=amplitude,
+        peak_time_error_s=(np.argmax(prediction,axis=0)-np.argmax(y,axis=0))*.25,
+        trough_time_error_s=(np.argmin(prediction,axis=0)-np.argmin(y,axis=0))*.25,
+        residual_Hb_rho=float(np.corrcoef(residual[:,1:].T)[0,1]) if min(np.std(residual[:,1:],axis=0))>1e-14 else None)
+
+
+def semantics_evaluation_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
+    cfg,root,refs,qualified=payload[:4];out=Path(root)
+    phase=payload[4] if len(payload)>4 else 'measured'
+    first=refs[0];key=first['key']+'__'+first['site'];destination=out/phase/key
+    terminal=destination/'result.json'
+    if terminal.exists():return json.loads(terminal.read_text())
+    coordinate_key=f'{first["dataset"]}__{first["site"]}__outer{first["subject_fold"]}'
+    coordinate=json.loads((out/'coordinates'/(coordinate_key+'.json')).read_text())
+    sd=np.asarray(coordinate['sd']);started=time.monotonic();rows=[]
+    for ref in refs:
+        path=destination/(f'w{ref["window"]}.json')
+        if path.exists():rows.extend(json.loads(path.read_text())['rows']);continue
+        y=semantics_target(ref,coordinate);saved=dict(target=y,sd=sd);window_rows=[]
+        for candidate in semantics_parameter_candidates(cfg,out,ref,qualified):
+            inherited=out/'fixed'/key/(f'w{ref["window"]}.json')
+            if phase=='measured' and candidate['method']=='H0_fixed' and inherited.exists():
+                old=json.loads(inherited.read_text());row=dict(old['rows'][0],inherited_from=str(inherited))
+                with np.load(inherited.with_suffix('.npz'),allow_pickle=False) as a:
+                    if not np.array_equal(y,a['target']) or not np.array_equal(sd,a['sd']):
+                        raise ValueError('fixed baseline target/coordinate identity changed')
+                    for field in a.files:
+                        if field.startswith('H0_fixed__'):saved[field]=a[field].copy()
+                window_rows.append(row);continue
+            row=dict(identity=ref['id'],dataset=ref['dataset'],subject=ref['subject'],record=ref['record'],
+                site=ref['site'],region=ref['region'],window=ref['window'],method=candidate['method'],
+                parameter=candidate['parameter'],parameter_value=candidate['value'],
+                native_rho=ref['native_rho'],quality_burden=ref['quality_burden'],
+                record_evaluation=ref['record_evaluation'],coordinate=coordinate_key,
+                status='failed_training',converged=False,all_below_half=False)
+            if not candidate['converged']:
+                row['training_status']=candidate['status'];window_rows.append(row);continue
+            values={} if candidate['parameter'] is None else {candidate['parameter']:candidate['value']}
+            p=semantics_parameters(cfg,**values)
+            fit=fit_nonlinear_shared_driver(y,p,.25,sd=sd,mean_operator=semantics_model_operator(),
+                starts=None,max_evaluations=cfg['solver']['max_evaluations_per_trial'],
+                **semantics_solver_options(cfg))
+            row.update(status=fit['status'],converged=fit['converged'],
+                evaluations=fit.get('evaluations'),starts=fit['starts'],
+                gradient=fit.get('scaled_gradient_inf_norm'),objective=fit.get('objective'),
+                weighted_data_sse=fit.get('weighted_data_sse'),flow_prior_cost=fit.get('flow_prior_cost'),
+                initial_state_penalty_cost=fit.get('initial_state_penalty_cost'),
+                state_ranges=fit.get('state_ranges'),training_key=candidate.get('training_key'))
+            if 'prediction' in fit:
+                row.update(semantics_fit_metrics(y,fit,sd))
+                method=candidate['method']
+                for field in ('prediction','driver','states','initial_state'):
+                    saved[method+'__'+field]=fit[field]
+            window_rows.append(row)
+        path.parent.mkdir(parents=True,exist_ok=True)
+        np.savez_compressed(path.with_suffix('.npz'),**saved)
+        write_json(path,dict(ref=ref,rows=window_rows,endpoint='conditional_full_observation_reconstruction'))
+        rows.extend(window_rows)
+    result=dict(key=key,status='completed',windows=len(refs),rows=rows,seconds=time.monotonic()-started,
+        nuisance_initialization='same_zero_driver_and_physical_rest_for_all_parameter_methods',
+        peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    write_json(terminal,result);return result
+
+
+def semantics_parallel_stage(cfg,out,stage,worker,payloads,workers,key_fn):
+    started=time.monotonic();failed=[]
+    for k,(payload,result,error) in enumerate(bounded_nonlinear_work(worker,payloads,workers,2*workers),1):
+        key=key_fn(payload)
+        if error:
+            failed.append(key);write_json(out/(stage+'_failures')/(key+'.json'),dict(error=error))
+        progress=dict(stage=stage,completed=k,expected=len(payloads),last_key=key,error=error,
+            elapsed_s=time.monotonic()-started,estimated_remaining_s=(time.monotonic()-started)*(len(payloads)-k)/k)
+        write_json(out/(stage+'_progress.json'),progress);print(json.dumps(progress),flush=True)
+    return failed
+
+
+def semantics_diagnostic_plan(cfg,out):
+    refs=json.loads((out/'cohort.json').read_text())['refs']
+    inventory=json.loads((out/'inventory.json').read_text())['records']
+    rng=np.random.default_rng(np.random.SeedSequence([cfg['seed'],61]))
+    selected={};strata=[];windows=[]
+    for ds in cfg['data']['datasets']:
+        burdens={}
+        for spec in inventory:
+            if spec['dataset']!=ds:continue
+            record=json.loads((out/'prepared'/spec['key']/'record.json').read_text())
+            scores=[1-c['support']+float(np.mean(c.get('jump_fraction',[1,1])))+
+                    float(np.mean(c.get('flat_step_fraction',[1,1]))) for c in record['qc']['channels']]
+            burdens.setdefault(spec['subject'],[]).extend(scores)
+        order=sorted(burdens,key=lambda s:(float(np.mean(burdens[s])),s))
+        selected[ds]=[]
+        for stratum,block in enumerate(np.array_split(order,3)):
+            choice=rng.choice(block,size=min(2,len(block)),replace=False).tolist()
+            selected[ds].extend(choice)
+            strata.extend(dict(dataset=ds,subject=s,stratum=stratum,quality_burden=float(np.mean(burdens[s]))) for s in choice)
+        for subject in selected[ds]:
+            own=[r for r in refs if r['dataset']==ds and r['subject']==subject and r['record_evaluation']]
+            if not own:continue
+            sites=sorted({r['site'] for r in own},key=lambda s:(not s.startswith('prefrontal'),s))
+            site=sites[0]
+            for repeat in (0,1):
+                available=sorted([r for r in own if r['site']==site and r['repeat_fold']==repeat],
+                                 key=lambda r:(r['record'],r['eeg_start_s']))
+                if not available:continue
+                record=available[0]['record'];available=[r for r in available if r['record']==record]
+                for index in sorted(set((0,len(available)//2))):windows.append(available[index])
+    plan=dict(selected_subjects=selected,strata=strata,windows=windows,
+        selection='seeded two subjects per QC-burden tercile; no SSM errors or fitted parameters read',
+        unsupported='REFED remains Hb QC only; no invented cross-modal spatial correspondence')
+    write_json(out/'diagnostic_plan.json',plan);return plan
+
+
+def semantics_missing_mask(mode,n=120):
+    mask=np.ones((n,3),dtype=bool);left=(n-16)//2
+    if mode=='center_EEG':mask[left:left+16,0]=False
+    elif mode=='center_Hb':mask[left:left+16,1:]=False
+    elif mode=='HbO_hidden':mask[:,1]=False
+    elif mode=='HbR_hidden':mask[:,2]=False
+    elif mode=='EEG_hidden':mask[:,0]=False
+    elif mode=='Hb_hidden':mask[:,1:]=False
+    elif mode=='prefix_Hb':mask[40:,1:]=False
+    else:raise ValueError('unknown missing-feature endpoint')
+    return mask
+
+
+def semantics_hidden_scores(prediction,target,mask,sd):
+    scores=[]
+    for j in range(3):
+        hidden=~mask[:,j]
+        scores.append(float(np.sqrt(np.mean((prediction[hidden,j]-target[hidden,j])**2))/sd[j])
+            if hidden.any() and np.isfinite(prediction[hidden,j]).all() else None)
+    return scores
+
+
+def semantics_ridge_completion(train,target,mask,*,cross):
+    """Training-only ridge on identical feature supports; kernel form for small B."""
+    prediction=np.full_like(target,np.nan)
+    for j in range(3):
+        hidden=~mask[:,j]
+        if not hidden.any():continue
+        inputs=mask.copy()
+        if not cross:
+            inputs[:]=False;inputs[:,j]=mask[:,j]
+        if not inputs.any():continue
+        x=train[:,inputs];v=target[inputs]
+        center=x.mean(axis=0);scale=np.maximum(x.std(axis=0),1e-8)
+        z=(x-center)/scale;point=(v-center)/scale
+        # Fixed engineering ridge strength; no heldout values choose it.
+        labels=train[:,hidden,j];mean=labels.mean(axis=0)
+        coefficient=np.linalg.solve(z@z.T/len(z)+np.eye(len(z)),labels-mean)
+        prediction[hidden,j]=point@z.T/len(z)@coefficient+mean
+    return prediction
+
+
+def semantics_missing_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
+    cfg,root,ref=payload;out=Path(root);path=out/'missing'/ref['id']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
+    coordinate=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.asarray(coordinate['sd'])
+    y=semantics_target(ref,coordinate)
+    refs=json.loads((out/'cohort.json').read_text())['refs']
+    library=[r for r in refs if r['dataset']==ref['dataset'] and r['site']==ref['site'] and
+             r['subject']==ref['subject'] and r['repeat_fold']==1-ref['repeat_fold']]
+    if not library:
+        library=[r for r in refs if r['dataset']==ref['dataset'] and r['site']==ref['site'] and r['subject_fold']!=ref['subject_fold']]
+    library=semantics_balanced_select(library,cfg['splits']['training_windows'],cfg['seed']+71)
+    train=np.array([semantics_target(r,coordinate) for r in library])
+    donors=[i for i,r in enumerate(library) if r['task']==ref['task'] and r['condition']==ref['condition']]
+    donor=train[donors[0]] if donors else None
+    spatial=[r for r in refs if r['key']==ref['key'] and r['window']==ref['window'] and r['region']!=ref['region']]
+    spatial_hb=None
+    if spatial:
+        _,hb=semantics_prepared_arrays(spatial[0]['array_path'])
+        spatial_hb=hb[spatial[0]['array_index']]*coordinate['hb_factor']
+    qualified=json.loads((out/'training_plan.json').read_text())['qualified_parameters']
+    candidates=[c for c in semantics_parameter_candidates(cfg,out,ref,qualified)
+                if c['method']=='H0_fixed' or c['method'].startswith('H2_subject__')]
+    rows=[];saved=dict(target=y,sd=sd)
+    for mode in cfg['endpoints']['missing_modes']:
+        mask=semantics_missing_mask(mode)
+        own=np.full_like(y,np.nan)
+        for j in range(3):
+            visible=np.flatnonzero(mask[:,j])
+            if len(visible)>=2:own[:,j]=np.interp(np.arange(120),visible,y[visible,j])
+        baselines=dict(training_template=train.mean(axis=0),own_context=own,
+            ridge_own=semantics_ridge_completion(train,y,mask,cross=False),
+            ridge_cross=semantics_ridge_completion(train,y,mask,cross=True))
+        for name,pred in baselines.items():
+            scores=semantics_hidden_scores(pred,y,mask,sd)
+            available=any(v is not None for v in scores)
+            rows.append(dict(mode=mode,method=name,arm='real',converged=available,
+                status='completed' if available else 'not_applicable_no_visible_same_modality_context',
+                hidden_nrmse=scores))
+            saved[mode+'__'+name]=pred
+        arms=[('real',y.copy(),mask.copy())]
+        other=[1,2] if mode in ('center_EEG','EEG_hidden') else [0]
+        if donor is not None:
+            null=y.copy();null[:,other]=donor[:,other]
+            arms.append(('training_donor',null,mask.copy()))
+        if mode in ('center_EEG','center_Hb'):
+            support=mask.copy();support[-48:,other]=False
+            shifted=y.copy();shifted[:-48,other]=y[48:,other];shifted[-48:,other]=np.nan
+            arms.extend([('real_shift_support',y.copy(),support),('nonwrapping_shift_12s',shifted,support)])
+        if mode=='center_EEG' and spatial_hb is not None:
+            null=y.copy();null[:,1:]=spatial_hb;arms.append(('spatial_Hb_anchor',null,mask.copy()))
+        for candidate in candidates:
+            for arm,data,visible in arms:
+                row=dict(mode=mode,method=candidate['method'],arm=arm,converged=False,
+                    training_key=candidate.get('training_key'),parameter_value=candidate['value'])
+                if not candidate['converged']:
+                    row['status']='failed_training';rows.append(row);continue
+                values={} if candidate['parameter'] is None else {candidate['parameter']:candidate['value']}
+                # Hidden target values never initialize nuisance states or normalization.
+                data=data.copy();data[~visible]=np.nan
+                fit=fit_nonlinear_shared_driver(data,semantics_parameters(cfg,**values),.25,
+                    sd=sd,visible=visible,mean_operator=semantics_model_operator(),
+                    max_evaluations=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
+                row.update(status=fit['status'],converged=fit['converged'],evaluations=fit.get('evaluations'))
+                if 'prediction' in fit:
+                    # Score only the original endpoint; additional support masks are null controls.
+                    row['hidden_nrmse']=semantics_hidden_scores(fit['prediction'],y,mask,sd)
+                    if arm=='real':saved[mode+'__'+candidate['method']]=fit['prediction']
+                rows.append(row)
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
+    result=dict(ref=ref,training_ids=[r['id'] for r in library],donor_id=library[donors[0]]['id'] if donors else None,
+        spatial_donor_id=spatial[0]['id'] if spatial else None,rows=rows,status='completed',
+        endpoint='processed_feature_missing_completion_not_raw_sensor_prediction',seconds=time.monotonic()-started)
+    write_json(path,result);return result
+
+
+def semantics_synthetic_specs(cfg):
+    from itertools import product
+    s = cfg['synthetic']
+    return [dict(tau=t, gain=g, spectrum=f, repeat=r, initial=i,
+                 key=f't{t:g}_g{g:g}_{f}_r{r}_{i}')
+            for t, g, f, r, i in product(s['tau'], s['gain'], s['spectra'],
+                range(s['repeats']), s['initial_conditions'])]
+
+
+@lru_cache(maxsize=3)
+def semantics_model_operator(steps=120):
+    op = native_feature_operators(steps)
+    mean = np.zeros((3*steps,3*steps))
+    mean[0::3,0::3] = op['eeg']
+    mean[1::3,1::3] = mean[2::3,2::3] = op['fnirs']@op['native_interpolation']
+    return mean
+
+
+def semantics_generate(cfg, spec):
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    s, n, dt = cfg['synthetic'], cfg['tensor']['steps'], cfg['tensor']['dt_s']
+    # Pair innovations/noise across physiological truth and initial-state arms.
+    rng = np.random.default_rng(np.random.SeedSequence([cfg['seed'], 11,
+        spec['repeat'], int(spec['spectrum'] == 'mixed')]))
+    p = semantics_parameters(cfg, tau=spec['tau'], neurovascular_gain=spec['gain'],
+                            kappa=spec.get('kappa',cfg['fixed']['kappa']))
+    drivers, states, clean = [], [], []
+    for _ in range(s['train_trials']+s['validation_trials']):
+        r = gaussian_filter1d(rng.normal(size=n), 5.)
+        if spec['spectrum'] == 'mixed':
+            r += .18*gaussian_filter1d(rng.normal(size=n), .7)
+        r = s['driver_sd']*r/r.std()
+        perturbation = rng.normal(size=5)*.015
+        initial = np.r_[0., np.ones(4)] + (perturbation if spec['initial'] == 'nonrest' else 0)
+        forward = nonlinear_driver_forward(r, initial, p, dt, substeps=8,
+                                           derivative=False, numerical_backend='numba')
+        drivers.append(r); states.append(forward['states']); clean.append(forward['canonical_prediction'])
+    clean = np.array(clean)
+    if spec.get('coordinate') == 'processed':
+        operator = semantics_model_operator(n)
+        clean = np.array([(operator@v.ravel()).reshape(n,3) for v in clean])
+    noise_sd = np.std(clean[:s['train_trials']], axis=(0, 1))*s['noise_fraction']
+    y = clean+rng.normal(size=clean.shape)*noise_sd
+    return dict(target=y, clean=clean, driver=np.array(drivers), states=np.array(states),
+                sd=np.std(y[:s['train_trials']], axis=(0, 1)))
+
+
+def semantics_stress_generate(cfg,spec):
+    """Paired observation faults with continuous extra samples for clock shifts."""
+    wide=deepcopy(cfg);wide['tensor']['steps']=168
+    source=semantics_generate(wide,dict(spec,coordinate='canonical'))
+    clean=source['clean'][:,:120].copy();y=source['target'][:,:120].copy()
+    rng=np.random.default_rng(np.random.SeedSequence([cfg['seed'],81,spec['repeat'],int(spec['spectrum']=='mixed')]))
+    scale=np.std(source['clean'][:18,:120],axis=(0,1));kind=spec['stress']
+    common=gaussian_filter1d(rng.normal(size=(len(y),120)),8.,axis=1)
+    common/=np.maximum(common.std(axis=1,keepdims=True),1e-12)
+    if kind=='common_colored':y[:,:,1:]+=.5*common[:,:,None]*np.mean(scale[1:])
+    elif kind=='independent_colored':
+        noise=gaussian_filter1d(rng.normal(size=(len(y),120,2)),8.,axis=1)
+        noise/=np.maximum(noise.std(axis=1,keepdims=True),1e-12)
+        y[:,:,1:]+=.5*noise*scale[1:]
+    elif kind=='drift':y[:,:,1:]+=.5*np.linspace(-1,1,120)[None,:,None]*scale[1:]
+    elif kind=='jump':y[:,60:,1:]+=scale[1:]
+    elif kind=='swapped_Hb':y[:,:,1:]=y[:,:,[2,1]]
+    elif kind=='lag':y[:,:,1:]=source['target'][:,48:168,1:]
+    elif kind!='control':raise ValueError('unknown observation stress')
+    operator=semantics_model_operator()
+    clean=np.array([(operator@v.ravel()).reshape(120,3) for v in clean])
+    y=np.array([(operator@v.ravel()).reshape(120,3) for v in y])
+    return dict(target=y,clean=clean,driver=source['driver'][:,:120],states=source['states'][:,:120],
+                sd=np.std(clean[:18],axis=(0,1)))
+
+
+def semantics_compact_fit(result):
+    excluded = {'driver', 'prediction', 'canonical_prediction', 'initial_state', 'states',
+                'jacobian', 'parameter_jacobian', 'driver_prior_sd'}
+    return {k: v for k, v in result.items() if k not in excluded}
+
+
+def semantics_synthetic_worker(payload):
+    from src.inference.shared_driver_reconstruction import (fit_nonlinear_shared_parameter,
+        fit_nonlinear_shared_driver, nonlinear_driver_forward)
+    cfg, root, spec = payload
+    folder = ('synthetic_stress' if 'stress' in spec else
+              'synthetic_feature' if spec.get('coordinate') == 'processed' else 'synthetic')
+    path = Path(root)/folder/spec['key']/'result.json'
+    if path.exists():
+        return json.loads(path.read_text())
+    started = time.monotonic()
+    arrays = semantics_stress_generate(cfg,spec) if 'stress' in spec else semantics_generate(cfg, spec)
+    ntrain = cfg['synthetic']['train_trials']; n = cfg['tensor']['steps']
+    train, test = arrays['target'][:ntrain], arrays['target'][ntrain:]
+    options = semantics_solver_options(cfg)
+    if spec.get('coordinate') == 'processed':
+        options['mean_operator'] = semantics_model_operator(n)
+    rows, trajectories = [], {}
+    for name, truth in (('tau', spec['tau']), ('neurovascular_gain', spec['gain'])):
+        # Qualification of one parameter with the other physiology fixed to truth.
+        p = semantics_parameters(cfg, tau=spec['tau'], neurovascular_gain=spec['gain'])
+        starts = [dict(parameter_value=value, driver=np.zeros((ntrain, n)),
+                       initial_state=np.tile(np.r_[0., np.ones(4)], (ntrain, 1)))
+                  for value in cfg['parameters'][name]['starts']]
+        result = fit_nonlinear_shared_parameter(train, p, .25, parameter_name=name,
+            parameter_bounds=cfg['parameters'][name]['bounds'], sd=arrays['sd'], starts=starts,
+            max_evaluations=cfg['solver']['max_evaluations_per_trial']*ntrain,
+            max_iterations=cfg['solver']['max_iterations'],
+            step_control=cfg['solver']['step_control'], **options)
+        row = dict(parameter=name, truth=truth, **semantics_compact_fit(result))
+        row['relative_error'] = (abs(result['parameter_value']/truth-1)
+                                 if result['parameter_value'] is not None else None)
+        pfit = semantics_parameters(cfg, tau=result.get('tau', spec['tau']),
+            neurovascular_gain=result.get('neurovascular_gain', spec['gain']))
+        validation = []
+        for i, y in enumerate(test):
+            fit = fit_nonlinear_shared_driver(y, pfit, .25, sd=arrays['sd'],
+                max_evaluations=cfg['solver']['max_evaluations_per_trial'], **options)
+            item = semantics_compact_fit(fit)
+            if 'prediction' in fit:
+                item['nrmse'] = np.sqrt(np.mean((fit['prediction']-y)**2, axis=0))/arrays['sd']
+                item['driver_nrmse'] = np.sqrt(np.mean((fit['driver']-arrays['driver'][ntrain+i])**2))/np.std(arrays['driver'][:ntrain])
+                item['state_rmse'] = np.sqrt(np.mean((fit['states']-arrays['states'][ntrain+i])**2, axis=0))
+                fine = nonlinear_driver_forward(fit['driver'], fit['initial_state'], pfit, .25,
+                    substeps=8, derivative=False, numerical_backend='numba')
+                item['substep_4_8_max_difference'] = float(np.max(abs(fine['canonical_prediction']-fit['canonical_prediction'])))
+                trajectories[name+f'_prediction_{i}'] = fit['prediction']
+            validation.append(item)
+        row['validation'] = validation
+        rows.append(row)
+    result = dict(spec=spec, status='completed', rows=rows, seconds=time.monotonic()-started,
+                  peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path.with_suffix('.npz'), **arrays, **trajectories)
+    write_json(path, result)
+    return result
+
+
+def semantics_observation_math(cfg,out):
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    from src.inference import t3a_balloon_robust_ssm as core
+    from scipy.linalg import expm
+    p=semantics_parameters(cfg);driver=.025*np.sin(np.arange(120)/12)+.01
+    initial=np.array([.01,1.02,1.01,1.03,1.02])
+    baseline=nonlinear_driver_forward(driver,initial,p,.25,numerical_backend='numba',derivative=False)
+    gauges=[]
+    for factor in (.25,1.,4.):
+        alternate=replace(p,fixed=replace(p.fixed,eeg_loading=p.fixed.eeg_loading/factor,
+                                         neurovascular_gain=p.fixed.neurovascular_gain/factor))
+        replay=nonlinear_driver_forward(factor*driver,initial,alternate,.25,numerical_backend='numba',derivative=False)
+        gauges.append(dict(driver_scale=factor,eeg_loading=alternate.fixed.eeg_loading,
+            beta=alternate.fixed.neurovascular_gain,prediction_max_difference=float(np.max(abs(
+                replay['canonical_prediction']-baseline['canonical_prediction']))),
+            vascular_state_max_difference=float(np.max(abs(replay['states'][:,1:]-baseline['states'][:,1:]))),
+            curvature_weight_for_equivalent_objective=cfg['solver']['penalty']/factor**2))
+    h=core.observation_jacobian(np.zeros(6),p)
+    a=core.balloon_rhs_jacobian(np.zeros(6),p)[1:,1:]
+    transition=expm(a*.25)
+    observability=np.vstack([h[:,1:]@np.linalg.matrix_power(transition,k) for k in range(120)])
+    sv=np.linalg.svd(observability,compute_uv=False)
+    y=baseline['canonical_prediction']
+    total=y[:,1]+y[:,2]
+    result=dict(instantaneous_observation_rank=int(np.linalg.matrix_rank(h)),state_count=6,
+        known_input_vascular_linear_observability_rank=int(np.linalg.matrix_rank(observability)),
+        known_input_vascular_singular_values=sv,gauge_examples=gauges,
+        HbT_identity_max_error=float(np.max(abs(total-p.fixed.P0*(baseline['states'][:,4]-1)))),
+        direct_coordinates=['r given fixed EEG loading','p from HbO+HbR given P0','q from HbR given Q0'],
+        dynamically_constrained=['s','f','v'],
+        source_separation='no unique scalp/cortex, arterial/venous or metabolic decomposition from these three observations',
+        temporal_rank_interpretation='local known-input rest linearization; not finite-noise nonlinear identifiability',
+        citations=[dict(title='Raue et al. 2009',url='https://pubmed.ncbi.nlm.nih.gov/19505944/'),
+                   dict(title='Kirilina et al. 2012',url='https://pmc.ncbi.nlm.nih.gov/articles/PMC3348501/'),
+                   dict(title='Arand et al. 2015',url='https://pmc.ncbi.nlm.nih.gov/articles/PMC4335185/')])
+    write_json(out/'observation_math.json',result);return result
+
+
+def semantics_hierarchy_generate(cfg,spec):
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    rng=np.random.default_rng(np.random.SeedSequence([cfg['seed'],91,spec['repeat']]))
+    shape=tuple(cfg['synthetic']['hierarchy_shape']);indices=list(np.ndindex(shape))
+    dataset_effect=np.array([-.45,-.15,.15,.45])
+    subject_effect=rng.normal(0,.25,size=shape[:2])
+    record_effect=rng.normal(0,.25,size=shape[:3])
+    trial_effect=rng.normal(0,.25,size=shape)
+    kind=spec['mechanism'];observations=[];drivers=[];states=[];truth=[];clean=[]
+    op=semantics_model_operator()
+    for ds,subject,record,trial in indices:
+        effect=0.
+        if kind=='dataset':effect=dataset_effect[ds]
+        elif kind=='subject':effect=subject_effect[ds,subject]
+        elif kind=='record':effect=record_effect[ds,subject,record]
+        elif kind=='trial':effect=trial_effect[ds,subject,record,trial]
+        tau=2*np.exp(effect)
+        driver=gaussian_filter1d(rng.normal(size=120),4.)
+        driver=.025*driver/driver.std()
+        initial=np.r_[0.,np.ones(4)]+rng.normal(0,.01,5)
+        forward=nonlinear_driver_forward(driver,initial,semantics_parameters(cfg,tau=tau),.25,
+            substeps=8,numerical_backend='numba',derivative=False)
+        value=forward['canonical_prediction'].copy()
+        if kind=='eeg_gain_only':value[:,0]*=np.exp(2*subject_effect[ds,subject])
+        elif kind=='hb_gain_only':value[:,1:]*=np.exp(2*subject_effect[ds,subject])
+        transformed=(op@value.ravel()).reshape(120,3)
+        noise=.05*np.std(transformed,axis=0)
+        if kind=='noise_only':noise*=np.exp(2*subject_effect[ds,subject])
+        observations.append(transformed+rng.normal(size=transformed.shape)*noise)
+        clean.append(transformed);drivers.append(driver);states.append(forward['states']);truth.append(tau)
+    observations=np.array(observations);train=[i for i,index in enumerate(indices) if index[2]<2]
+    return dict(target=observations,truth_tau=np.array(truth),indices=indices,
+        driver=np.array(drivers),states=np.array(states),clean=np.array(clean),
+        sd=np.std(observations[train],axis=(0,1)))
+
+
+def semantics_hierarchy_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_parameter,fit_nonlinear_shared_driver
+    cfg,root,spec=payload;out=Path(root);path=out/'synthetic_hierarchy'/spec['key']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();a=semantics_hierarchy_generate(cfg,spec);y=a['target'];indices=a['indices']
+    options=semantics_solver_options(cfg);fits={};rows=[];rng=np.random.default_rng(cfg['seed']+101+spec['repeat'])
+    def fit_group(key,ids,prior=None):
+        checkpoint=path.parent/'fits'/(key+'.json')
+        if checkpoint.exists():
+            fits[key]=json.loads(checkpoint.read_text());return fits[key]
+        values=y[ids]
+        starts=[dict(parameter_value=v,driver=np.zeros((len(ids),120)),
+                     initial_state=np.tile(np.r_[0.,np.ones(4)],(len(ids),1))) for v in cfg['parameters']['tau']['starts']]
+        result=fit_nonlinear_shared_parameter(values,semantics_parameters(cfg),.25,parameter_name='tau',
+            parameter_bounds=cfg['parameters']['tau']['bounds'],sd=a['sd'],mean_operator=semantics_model_operator(),
+            starts=starts,max_evaluations=cfg['solver']['max_evaluations_per_trial']*len(ids),
+            max_iterations=cfg['solver']['max_iterations'],step_control=cfg['solver']['step_control'],
+            **options,**(prior or {}))
+        fits[key]=dict(value=result.get('parameter_value'),converged=result['converged'],status=result['status'],
+            boundary=result.get('boundary_status'),train_ids=ids,truth_tau=a['truth_tau'][ids],
+            evaluations=result.get('evaluations'),objective=result.get('objective'),starts=result['starts'],
+            information=result.get('information'))
+        if 'driver' in result:
+            fits[key]['driver_nrmse']=float(np.sqrt(np.mean((result['driver']-a['driver'][ids])**2))/np.std(a['driver'][ids]))
+            fits[key]['state_rmse']=np.sqrt(np.mean((result['states']-a['states'][ids])**2,axis=(0,1)))
+        if key.startswith('H4') and 'prediction' in result:
+            fits[key]['conditional_training_nrmse']=np.sqrt(np.mean((result['prediction']-values)**2,axis=(0,1)))/a['sd']
+        write_json(checkpoint,fits[key])
+        return fits[key]
+    train=[i for i,x in enumerate(indices) if x[2]<2]
+    fit_group('H1_global',sorted(rng.choice(train,18,replace=False).tolist()))
+    for ds in range(4):
+        ids=[i for i,x in enumerate(indices) if x[0]==ds and x[2]<2]
+        parent=fit_group(f'H1_dataset_{ds}',sorted(rng.choice(ids,18,replace=False).tolist()))
+        for subject in range(4):
+            ids=[i for i,x in enumerate(indices) if x[:2]==(ds,subject) and x[2]<2]
+            fit_group(f'H2_subject_{ds}_{subject}',ids)
+            if parent['converged']:
+                fit_group(f'H2s_{ds}_{subject}',ids,dict(parameter_prior_mean=parent['value'],
+                    parameter_prior_log_sd=np.log(16)/4.))
+            for record in range(3):
+                ids=[i for i,x in enumerate(indices) if x[:3]==(ds,subject,record) and x[3]<3]
+                fit_group(f'H3_record_{ds}_{subject}_{record}',ids)
+    for i,index in enumerate(indices):fit_group(f'H4_trial_{i}',[i])
+    # The third record and its last three windows are independent of all H0--H3 calibrations.
+    validation=[i for i,x in enumerate(indices) if x[2]==2 and x[3]>=3]
+    for i in validation:
+        ds,subject,record,trial=indices[i]
+        candidates=[('H0_fixed',dict(value=2.,converged=True)),('H1_global',fits['H1_global']),
+            ('H1_dataset',fits[f'H1_dataset_{ds}']),('H2_subject',fits[f'H2_subject_{ds}_{subject}']),
+            ('H2s_partial_pooling',fits.get(f'H2s_{ds}_{subject}',dict(converged=False))),
+            ('H3_record',fits[f'H3_record_{ds}_{subject}_{record}'])]
+        for method,parent in candidates:
+            checkpoint=path.parent/'validation'/(f'{i}__{method}.json')
+            if checkpoint.exists():rows.append(json.loads(checkpoint.read_text()));continue
+            row=dict(index=i,identity=indices[i],method=method,converged=False,true_tau=a['truth_tau'][i],
+                     estimated_tau=parent.get('value'))
+            if parent['converged']:
+                result=fit_nonlinear_shared_driver(y[i],semantics_parameters(cfg,tau=parent['value']),.25,
+                    sd=a['sd'],mean_operator=semantics_model_operator(),
+                    max_evaluations=cfg['solver']['max_evaluations_per_trial'],**options)
+                row.update(status=result['status'],converged=result['converged'])
+                if 'prediction' in result:row.update(semantics_fit_metrics(y[i],result,a['sd']))
+            write_json(checkpoint,row)
+            rows.append(row)
+    result=dict(spec=spec,status='completed',fits=fits,validation=rows,
+        truth_tau=a['truth_tau'],indices=indices,seconds=time.monotonic()-started,
+        parameter='tau_only_other_physiology_fixed',H4_interpretation='same_trial_conditional_fit_not_independent_prediction')
+    write_json(path,result);return result
+
+
+def semantics_error_quantiles(errors):
+    values=np.asarray(errors,dtype=float)
+    if np.isfinite(values).all():return np.quantile(values,[.5,.9],axis=0)
+    values=np.sort(np.where(np.isfinite(values),values,np.inf),axis=0)
+    output=[]
+    for q in (.5,.9):
+        location=(len(values)-1)*q;left=int(np.floor(location));right=int(np.ceil(location))
+        if left==right:output.append(values[left]);continue
+        with np.errstate(invalid='ignore'):
+            value=values[left]+(values[right]-values[left])*(location-left)
+        output.append(np.where(np.isfinite(values[right]),value,np.inf))
+    return np.array(output)
+
+
+def semantics_synthetic_summary(cfg, out, specs, folder='synthetic'):
+    rows = []
+    for spec in specs:
+        path = out/folder/spec['key']/'result.json'
+        if path.exists():
+            result = json.loads(path.read_text())
+            for row in result.get('rows', []):
+                rows.append(dict(**spec, parameter=row['parameter'], truth=row['truth'],
+                    estimate=row.get('parameter_value'), converged=row.get('converged', False),
+                    relative_error=row.get('relative_error'), boundary=row.get('boundary_status'),
+                    validation_driver_nrmse=np.median([x.get('driver_nrmse', np.nan) for x in row['validation']]),
+                    seconds=result['seconds']))
+    pd.DataFrame(rows).to_csv(out/(folder+'_metrics.csv'), index=False)
+    summary = dict(expected_panels=len(specs), terminal_panels=len({r['key'] for r in rows}), parameters={})
+    for name in ('tau', 'neurovascular_gain'):
+        selected = [r for r in rows if r['parameter'] == name]
+        errors = [r['relative_error'] if r['converged'] and r['relative_error'] is not None
+                  else float('inf') for r in selected]
+        median, p90 = semantics_error_quantiles(errors) if errors else (float('inf'), float('inf'))
+        success = sum(r['converged'] for r in selected)/len(specs)
+        passed = (len(selected) == len(specs) and success >= cfg['gates']['optimizer_success_min']
+            and median <= cfg['gates']['synthetic_median_relative_error_max']
+            and p90 <= cfg['gates']['synthetic_p90_relative_error_max'])
+        summary['parameters'][name] = dict(passed=bool(passed), success_rate=success,
+            median_relative_error=median, p90_relative_error=p90,
+            boundary_count=sum(r['boundary'] in ('LOWER', 'UPPER') for r in selected),
+            median_validation_driver_nrmse=np.nanmedian([r['validation_driver_nrmse'] for r in selected]) if selected else None)
+    write_json(out/(folder+'_summary.json'), summary)
+    return summary
+
+
+def semantics_joint_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_parameters,fit_nonlinear_shared_driver
+    cfg,root,spec=payload;out=Path(root);path=out/'synthetic_joint'/spec['key']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();a=semantics_generate(cfg,dict(spec,coordinate='processed'))
+    count=cfg['synthetic']['train_trials'];names=['tau','neurovascular_gain']
+    starts=[dict(parameter_values=np.array(values)) for values in ((1.,.5),(2.,1.),(4.,2.),(1.,2.),(4.,.5))]
+    fit=fit_nonlinear_shared_parameters(a['target'][:count],semantics_parameters(cfg),.25,
+        parameter_names=names,parameter_bounds=[cfg['parameters'][name]['bounds'] for name in names],
+        sd=a['sd'],mean_operator=semantics_model_operator(),starts=starts,
+        max_iterations=cfg['solver']['max_iterations'],
+        max_evaluations_per_trial=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
+    row=semantics_compact_fit(fit)
+    row['relative_errors']=abs(np.asarray(fit['parameter_values'])/np.array([spec['tau'],spec['gain']])-1) if fit['parameter_values'] is not None else None
+    validation=[]
+    if fit['parameter_values'] is not None:
+        p=semantics_parameters(cfg,**dict(zip(names,fit['parameter_values'])))
+        for i,y in enumerate(a['target'][count:]):
+            v=fit_nonlinear_shared_driver(y,p,.25,sd=a['sd'],mean_operator=semantics_model_operator(),
+                max_evaluations=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
+            item=dict(status=v['status'],converged=v['converged'])
+            if 'driver' in v:
+                item.update(driver_nrmse=float(np.sqrt(np.mean((v['driver']-a['driver'][count+i])**2))/np.std(a['driver'][:count])),
+                            nrmse=np.sqrt(np.mean((v['prediction']-y)**2,axis=0))/a['sd'])
+            validation.append(item)
+    result=dict(spec=spec,**row,validation=validation,seconds=time.monotonic()-started)
+    write_json(path,result);return result
+
+
+def semantics_joint_summary(cfg,out,specs):
+    rows=[]
+    for spec in specs:
+        path=out/'synthetic_joint'/spec['key']/'result.json'
+        if not path.exists():continue
+        r=json.loads(path.read_text());errors=r['relative_errors'] if r.get('converged') else [float('inf')]*2
+        rows.append(dict(**spec,converged=r.get('converged',False),tau_error=errors[0],gain_error=errors[1],
+            estimated_tau=r['parameter_values'][0] if r.get('parameter_values') else None,
+            estimated_gain=r['parameter_values'][1] if r.get('parameter_values') else None))
+    frame=pd.DataFrame(rows);frame.to_csv(out/'synthetic_joint_metrics.csv',index=False)
+    success=sum(r['converged'] for r in rows)/len(specs)
+    quantiles=semantics_error_quantiles([[r['tau_error'],r['gain_error']] for r in rows]) if rows else np.full((2,2),np.inf)
+    passed=len(rows)==len(specs) and success>=cfg['gates']['optimizer_success_min'] and bool(
+        np.all(quantiles[0]<=cfg['gates']['synthetic_median_relative_error_max']) and
+        np.all(quantiles[1]<=cfg['gates']['synthetic_p90_relative_error_max']))
+    summary=dict(expected=len(specs),terminal=len(rows),success_rate=success,median_relative_errors=quantiles[0],
+        p90_relative_errors=quantiles[1],passed=passed,parameter_order=['tau','neurovascular_gain'])
+    write_json(out/'synthetic_joint_summary.json',summary);return summary
+
+
+def semantics_kappa_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_parameters,fit_nonlinear_shared_driver
+    cfg,root,spec=payload;path=Path(root)/'synthetic_kappa'/spec['key']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();a=semantics_generate(cfg,dict(spec,coordinate='processed'))
+    fit=fit_nonlinear_shared_parameters(a['target'][:18],semantics_parameters(cfg),.25,
+        parameter_names=['kappa'],parameter_bounds=[cfg['parameters']['kappa']['bounds']],
+        sd=a['sd'],mean_operator=semantics_model_operator(),
+        starts=[dict(parameter_values=[v]) for v in cfg['parameters']['kappa']['starts']],
+        max_iterations=cfg['solver']['max_iterations'],max_evaluations_per_trial=cfg['solver']['max_evaluations_per_trial'],
+        **semantics_solver_options(cfg))
+    value=fit['parameter_values'][0] if fit['parameter_values'] is not None else None
+    validation=[]
+    if value is not None:
+        for i,target in enumerate(a['target'][18:]):
+            check=fit_nonlinear_shared_driver(target,semantics_parameters(cfg,kappa=value),.25,
+                sd=a['sd'],mean_operator=semantics_model_operator(),
+                max_evaluations=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
+            row=dict(converged=check['converged'],status=check['status'])
+            if 'prediction' in check:
+                row.update(semantics_fit_metrics(target,check,a['sd']),
+                    driver_nrmse=float(np.sqrt(np.mean((check['driver']-a['driver'][18+i])**2))/np.std(a['driver'][:18])))
+            validation.append(row)
+    result=dict(semantics_compact_fit(fit),spec=spec,relative_error=abs(value/spec['kappa']-1) if value is not None else None,
+        validation=validation,seconds=time.monotonic()-started,interpretation='conditional_kappa_recovery_tau_and_gain_fixed_to_truth')
+    write_json(path,result);return result
+
+
+def semantics_joint_fit(cfg,y,sd,*,fixed=None,visible=None,flow_weight=None):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_parameters
+    options=semantics_solver_options(cfg)
+    if flow_weight is not None:options['flow_prior_weight']=flow_weight
+    return fit_nonlinear_shared_parameters(y,semantics_parameters(cfg,**(fixed or {})),.25,
+        parameter_names=['tau','neurovascular_gain'],parameter_bounds=[cfg['parameters'][n]['bounds'] for n in ('tau','neurovascular_gain')],
+        sd=sd,visible=visible,mean_operator=semantics_model_operator(),
+        starts=[dict(parameter_values=v) for v in ([1.,.5],[2.,1.],[4.,2.],[1.,2.],[4.,.5])],
+        max_iterations=cfg['solver']['max_iterations'],max_evaluations_per_trial=cfg['solver']['max_evaluations_per_trial'],**options)
+
+
+def semantics_profile_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_parameter,fit_nonlinear_shared_driver
+    cfg,root,ref=payload;out=Path(root);path=out/'profiles'/ref['id']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();refs=json.loads((out/'cohort.json').read_text())['refs']
+    key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
+    coordinate=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.array(coordinate['sd'])
+    train=[r for r in refs if r['key']==ref['key'] and r['site']==ref['site'] and r['record_calibration']]
+    y=np.array([semantics_target(r,coordinate) for r in train]);rows=[]
+    joint=semantics_joint_fit(cfg,y,sd)
+    grids=dict(tau=[.5,.75,1.,1.5,2.,3.,4.,6.,8.],neurovascular_gain=[.1,.2,.35,.5,1.,2.,3.5,6.,10.])
+    for profiled,grid in grids.items():
+        other='neurovascular_gain' if profiled=='tau' else 'tau'
+        for value in grid:
+            starts=[dict(parameter_value=v,driver=np.zeros(y.shape[:2]),initial_state=np.tile(np.r_[0.,np.ones(4)],(len(y),1))) for v in cfg['parameters'][other]['starts']]
+            fit=fit_nonlinear_shared_parameter(y,semantics_parameters(cfg,**{profiled:value}),.25,
+                parameter_name=other,parameter_bounds=cfg['parameters'][other]['bounds'],sd=sd,
+                mean_operator=semantics_model_operator(),starts=starts,
+                max_evaluations=cfg['solver']['max_evaluations_per_trial']*len(y),max_iterations=cfg['solver']['max_iterations'],
+                step_control=cfg['solver']['step_control'],**semantics_solver_options(cfg))
+            rows.append(dict(profiled=profiled,value=value,reoptimized=[other,'driver','initial'],**semantics_compact_fit(fit)))
+    kappa_path=out/'synthetic_kappa_summary.json'
+    if kappa_path.exists() and json.loads(kappa_path.read_text())['passed']:
+        for value in (.2,.32,.5,.64,.8,1.1,1.5):
+            fit=semantics_joint_fit(cfg,y,sd,fixed=dict(kappa=value))
+            rows.append(dict(profiled='kappa',value=value,reoptimized=['tau','neurovascular_gain','driver','initial'],**semantics_compact_fit(fit)))
+    sensitivities=[]
+    for fixed_name in ('alpha','E0','gamma'):
+        for value in (.2,.5):
+            fit=semantics_joint_fit(cfg,y,sd,fixed={fixed_name:value})
+            sensitivities.append(dict(kind='fixed_parameter',parameter=fixed_name,value=value,**semantics_compact_fit(fit)))
+    for weight in (.1,1.,4.):
+        fit=semantics_joint_fit(cfg,y,sd,flow_weight=weight)
+        sensitivities.append(dict(kind='logflow_penalty',value=weight,**semantics_compact_fit(fit)))
+    target=semantics_target(ref,coordinate);trial=[];trajectories=dict(target=target,sd=sd)
+    prefix_mask=semantics_missing_mask('prefix_Hb')
+    prefix_baselines={name:semantics_hidden_scores(pred,target,prefix_mask,sd) for name,pred in {
+        'training_template':y.mean(axis=0),
+        'ridge_own':semantics_ridge_completion(y,target,prefix_mask,cross=False),
+        'ridge_cross':semantics_ridge_completion(y,target,prefix_mask,cross=True),
+        'last_visible_value':np.repeat(target[39:40],120,axis=0)}.items()}
+    prefix_observed=target.copy();prefix_observed[~prefix_mask]=np.nan
+    prefix_fixed=fit_nonlinear_shared_driver(prefix_observed,semantics_parameters(cfg),.25,sd=sd,
+        visible=prefix_mask,mean_operator=semantics_model_operator(),
+        max_evaluations=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
+    prefix_baselines['H0_fixed']=dict(status=prefix_fixed['status'],converged=prefix_fixed['converged'],
+        hidden_nrmse=semantics_hidden_scores(prefix_fixed['prediction'],target,prefix_mask,sd) if 'prediction' in prefix_fixed else None)
+    for mode in ('same_trial_full','first_10s_feature_calibration'):
+        visible=np.ones((1,120,3),dtype=bool)
+        if mode!='same_trial_full':visible[:,40:]=False
+        masked=target[None].copy();masked[~visible]=np.nan
+        fitted=semantics_joint_fit(cfg,masked,sd,visible=visible)
+        row=dict(mode=mode,parameter_fit=semantics_compact_fit(fitted))
+        if fitted.get('converged'):
+            p=semantics_parameters(cfg,**dict(zip(('tau','neurovascular_gain'),fitted['parameter_values'])))
+            mask=semantics_missing_mask('prefix_Hb') if mode!='same_trial_full' else np.ones_like(target,dtype=bool)
+            observed=target.copy();observed[~mask]=np.nan
+            final=fit_nonlinear_shared_driver(observed,p,.25,sd=sd,visible=mask,mean_operator=semantics_model_operator(),
+                max_evaluations=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
+            row['completion']=semantics_compact_fit(final)
+            if 'prediction' in final:
+                row['completion']['nrmse']=np.sqrt(np.mean((final['prediction']-target)**2,axis=0))/sd
+                row['completion']['hidden_nrmse']=semantics_hidden_scores(final['prediction'],target,mask,sd)
+                trajectories[mode]=final['prediction']
+        trial.append(row)
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**trajectories)
+    result=dict(ref=ref,training_ids=[r['id'] for r in train],joint=semantics_compact_fit(joint),profiles=rows,
+        sensitivity=sensitivities,trial=trial,prefix_baselines=prefix_baselines,status='completed',seconds=time.monotonic()-started,
+        interpretation='nuisance_reoptimized_engineering_objective_profiles_not_likelihood_confidence_intervals',
+        prefix_interpretation='processed_feature_calibration_and_EEG_visible_Hb_completion_not_raw_causal_forecast')
+    write_json(path,result);return result
+
+
+def semantics_context_worker(payload):
+    """One continuous raw support; identical central target across context lengths."""
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import load_native_eeg_record,load_native_fnirs_record
+    from src.data.event_alignment import window_within_alignment_support
+    from src.inference.observation_baselines import eeg_band_power
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
+    cfg,root,project_root,ref=payload;out=Path(root);path=out/'context'/ref['id']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();index=CleanPhysiologyCacheIndex(Path(project_root)/cfg['data']['cache_root'])
+    record=next(r for r in index.records if r.join_key.replace('|','__').replace('/','_')==ref['key'])
+    event=next(e for e in index.events_by_join_key[record.join_key] if e['event_index']==ref['event_id'])
+    if not window_within_alignment_support(event,-50.,120.):
+        result=dict(ref=ref,status='unavailable_alignment_support',rows=[])
+        write_json(path,result);return result
+    eeg=load_native_eeg_record(Path(project_root),record);native=load_native_fnirs_record(Path(project_root),record)
+    es,hs=ref['eeg_start_s']-45,ref['hb_start_s']-45
+    start=round(es*eeg.sample_rate_hz);length=round(120*eeg.sample_rate_hz)
+    if min(es,hs)<0 or start+length>len(eeg.values) or hs<native['time_s'][0] or hs+119.75>native['time_s'][-1]:
+        result=dict(ref=ref,status='unavailable_native_support',rows=[])
+        write_json(path,result);return result
+    prepared=json.loads((out/'prepared'/ref['key']/'record.json').read_text())
+    anchor=next(a for a in prepared['prepared'] if a['region']==ref['region'])
+    lookup={str(n).upper():i for i,n in enumerate(eeg.channel_names)}
+    indices=[lookup[n.upper()] for n in ref['eeg_channels']]
+    power=eeg_band_power(eeg.values[start:start+length,indices],bands=cfg['tensor']['eeg_bands_hz'],sample_rate=eeg.sample_rate_hz,target_rate=4.)
+    pair=native['values'][:,anchor['hb_pair']];times=hs+np.arange(480)/4.
+    hb=np.column_stack([np.interp(times,native['time_s'],pair[:,j]) for j in range(2)])
+    key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
+    coordinate=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.array(coordinate['sd'])
+    features=np.log(power).reshape(480,-1)
+    y=np.column_stack([features@np.array(coordinate['pc'])*coordinate['eeg_factor'],hb*coordinate['hb_factor']])
+    y-=y[:20].mean(axis=0);center=y[180:300].copy();rows=[];saved=dict(target=y,central_target=center,sd=sd)
+    qualified=json.loads((out/'training_plan.json').read_text())['qualified_parameters']
+    candidates=[c for c in semantics_parameter_candidates(cfg,out,ref,qualified) if c['method']=='H0_fixed' or c['method'].startswith('H2_subject')]
+    for seconds in cfg['tensor']['context_s']:
+        n=int(seconds*4);left=(480-n)//2;target=y[left:left+n];central=slice(180-left,300-left)
+        if not np.array_equal(target[central],center):raise ValueError('context endpoint changed')
+        for candidate in candidates:
+            row=dict(seconds=seconds,method=candidate['method'],parameter_value=candidate['value'],converged=False,status='failed_training')
+            if candidate['converged']:
+                values={} if candidate['parameter'] is None else {candidate['parameter']:candidate['value']}
+                fit=fit_nonlinear_shared_driver(target,semantics_parameters(cfg,**values),.25,sd=sd,
+                    max_evaluations=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
+                row.update(semantics_compact_fit(fit))
+                if 'prediction' in fit:
+                    central_fit=dict(prediction=fit['prediction'][central],converged=fit['converged'])
+                    row.update(semantics_fit_metrics(center,central_fit,sd))
+                    row['central_driver_mean']=float(fit['driver'][central].mean())
+                    row['central_state_mean']=fit['states'][central].mean(axis=0)
+                    for field in ('prediction','driver','states','initial_state'):saved[f'{seconds}__{candidate["method"]}__{field}']=fit[field]
+            rows.append(row)
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
+    dt=np.diff(native['time_s'])
+    result=dict(ref=ref,status='completed',rows=rows,seconds=time.monotonic()-started,
+        eeg_support_s=[es,es+120],hb_support_s=[hs,hs+120],native_clock_step_quantiles_s=np.quantile(dt,[0,.01,.5,.99,1]),
+        processing='continuous_120s_logpower_PCA_and_unfiltered_timestamp_interpolated_Hb; common_first5s_reference; nested_slices_identity_mean',
+        interpretation='complete_observation_context_diagnostic; distinct_from_primary_window_filtered_target; no_forecasting_claim')
+    write_json(path,result);return result
+
+
+def semantics_transfer_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
+    cfg,root,ref=payload;out=Path(root);path=out/'transfer'/ref['id']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();plan=json.loads((out/'training_plan.json').read_text())['jobs'];sources={}
+    for spec in plan:
+        if spec['hierarchy']!='H1_dataset' or spec['parameter']!='tau':continue
+        train=spec['train'];ds=train[0]['dataset']
+        if ds==ref['dataset'] or train[0]['region']!=ref['region']:continue
+        fit=json.loads((out/'training'/spec['key']/'result.json').read_text())
+        if fit['converged']:sources.setdefault(ds,[]).append(dict(key=spec['key'],tau=fit['parameter_value']))
+    key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
+    coordinate=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.array(coordinate['sd']);y=semantics_target(ref,coordinate)
+    candidates=[dict(method='H0_fixed',tau=cfg['fixed']['tau'])]
+    own=json.loads((out/'training'/(key+'__H1__tau')/'result.json').read_text())
+    if own['converged']:candidates.append(dict(method='target_H1_tau',tau=own['parameter_value']))
+    for ds,values in sources.items():
+        candidates.append(dict(method='source_'+ds,tau=float(np.exp(np.mean(np.log([v['tau'] for v in values]))))))
+    if sources:
+        candidates.append(dict(method='source_equal_dataset_log_ensemble',tau=float(np.exp(np.mean(np.log([c['tau'] for c in candidates if c['method'].startswith('source_')]))))))
+    rows=[]
+    for candidate in candidates:
+        fit=fit_nonlinear_shared_driver(y,semantics_parameters(cfg,tau=candidate['tau']),.25,sd=sd,
+            mean_operator=semantics_model_operator(),max_evaluations=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
+        row=dict(candidate,status=fit['status'],converged=fit['converged'],all_below_half=False)
+        if 'prediction' in fit:row.update(semantics_fit_metrics(y,fit,sd))
+        rows.append(row)
+    result=dict(ref=ref,rows=rows,sources=sources,status='completed',seconds=time.monotonic()-started,
+        interpretation='calibrated_observation_coordinate_tau_transfer; source_fold_estimates_are_overlapping_ensemble_members_not_independent_repeats',
+        unsupported='strict_zero_shot_amplitude_or_beta_transfer; REFED_cross_modal_geometry',
+        target_calibration_subjects=coordinate['training_subjects'])
+    write_json(path,result);return result
+
+
+def semantics_linear_worker(payload):
+    """Retained linear owner as a same-feature reference, with validity flags intact."""
+    cfg,root,refs=payload;out=Path(root);first=refs[0]
+    key=f'{first["dataset"]}__{first["site"]}__outer{first["subject_fold"]}';path=out/'linear'/key/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();coordinate=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.array(coordinate['sd'])
+    design=build_shared_driver_design(semantics_parameters(cfg),120,.25,processed_mean_operator=semantics_model_operator())
+    rows=[]
+    for ref in refs:
+        target=semantics_target(ref,coordinate)
+        for method,penalty in [('linear_regularized',cfg['solver']['penalty']),('linear_unregularized',0.)]:
+            fit=fit_shared_driver(target,design,observation_scale=sd,penalty=penalty,initial_penalty=cfg['solver']['initial_penalty'])
+            metrics=semantics_fit_metrics(target,dict(prediction=fit['prediction'],converged=True),sd)
+            rows.append(dict(identity=ref['id'],dataset=ref['dataset'],subject=ref['subject'],record=ref['record'],site=ref['site'],region=ref['region'],method=method,
+                converged=True,**metrics,physical_valid=fit['physical_validity']['mathematical_valid'],small_signal_valid=fit['physical_validity']['small_signal_valid'],
+                rank=fit['rank'],effective_df=fit['effective_df'],max_fractional_excursion=fit['physical_validity']['max_fractional_excursion']))
+    result=dict(coordinate=key,status='completed',rows=rows,seconds=time.monotonic()-started,
+        interpretation='same-feature rest-linearized reference; regularized arm shares curvature/initial penalties but has no nonlinear log-flow prior; unregularized arm is a linear-subspace residual bound, not a physical model qualification')
+    write_json(path,result);return result
+
+
+def semantics_precision_worker(payload):
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    cfg,root,refs=payload;out=Path(root);first=refs[0];key=first['key']+'__'+first['site'];path=out/'integration_audit'/key/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    started=time.monotonic();rows=[];operator=semantics_model_operator()
+    for ref in refs:
+        original=out/'measured'/key/(f'w{ref["window"]}.json');data=json.loads(original.read_text())
+        with np.load(original.with_suffix('.npz'),allow_pickle=False) as arrays:
+            y,sd=arrays['target'],arrays['sd']
+            for row in data['rows']:
+                item=dict(identity=ref['id'],dataset=ref['dataset'],subject=ref['subject'],method=row['method'],
+                    converged_4=row['converged'],all_below_half_4=row['all_below_half'],fine_valid=False,all_below_half_8=False)
+                if row['converged']:
+                    method=row['method'];values={} if row['parameter'] is None else {row['parameter']:row['parameter_value']}
+                    try:
+                        fine=nonlinear_driver_forward(arrays[method+'__driver'],arrays[method+'__initial_state'],semantics_parameters(cfg,**values),.25,
+                            substeps=cfg['solver']['validation_substeps'],derivative=False,numerical_backend='numba')
+                        prediction=(operator@fine['canonical_prediction'].ravel()).reshape(120,3)
+                        item.update(fine_valid=True,max_prediction_difference_sd=float(np.max(abs(prediction-arrays[method+'__prediction'])/sd)),
+                            max_state_difference=float(np.max(abs(fine['states']-arrays[method+'__states']))),
+                            nrmse_8=np.sqrt(np.mean((prediction-y)**2,axis=0))/sd,
+                            all_below_half_8=bool(np.all(np.sqrt(np.mean((prediction-y)**2,axis=0))/sd<.5)))
+                    except (FloatingPointError,ValueError,OverflowError) as exc:item['error']=repr(exc)
+                rows.append(item)
+    result=dict(key=key,status='completed',rows=rows,seconds=time.monotonic()-started,
+        interpretation='same fitted driver, initial state and physiology; 8-substep replay without parameter refitting; primary fit remains frozen 4-substep evidence')
+    write_json(path,result);return result
+
+
+def semantics_masked_precision_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
+    cfg,root,ref=payload;out=Path(root);path=out/'masked_integration_audit'/ref['id']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    original=json.loads((out/'missing'/ref['id']/'result.json').read_text())
+    with np.load(out/'missing'/ref['id']/'result.npz',allow_pickle=False) as a:
+        y=a['target'].copy();sd=a['sd'].copy();predictions={k:a[k].copy() for k in a.files if k.startswith(('center_EEG__H','EEG_hidden__H'))}
+    rows=[];saved=dict(target=y,sd=sd);options=semantics_solver_options(cfg);options['substeps']=cfg['solver']['validation_substeps']
+    candidates=[c for c in semantics_parameter_candidates(cfg,out,ref,['tau']) if c['method'] in ('H0_fixed','H2_subject__tau')]
+    for mode in ['center_EEG','EEG_hidden']:
+        mask=semantics_missing_mask(mode);observed=y.copy();observed[~mask]=np.nan
+        for candidate in candidates:
+            old=next(r for r in original['rows'] if r['mode']==mode and r['method']==candidate['method'] and r['arm']=='real')
+            row=dict(mode=mode,method=candidate['method'],converged_4=old['converged'],converged_8=False,nrmse_4=old.get('hidden_nrmse'))
+            if candidate['converged']:
+                values={} if candidate['parameter'] is None else {candidate['parameter']:candidate['value']}
+                fit=fit_nonlinear_shared_driver(observed,semantics_parameters(cfg,**values),.25,sd=sd,visible=mask,
+                    mean_operator=semantics_model_operator(),max_evaluations=cfg['solver']['max_evaluations_per_trial'],**options)
+                row.update(converged_8=fit['converged'],status_8=fit['status'])
+                if 'prediction' in fit:
+                    row['nrmse_8']=semantics_hidden_scores(fit['prediction'],y,mask,sd)
+                    key=mode+'__'+candidate['method'];saved[key]=fit['prediction']
+                    if key in predictions:row['max_prediction_difference_sd']=float(np.max(abs(fit['prediction']-predictions[key])/sd))
+            rows.append(row)
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
+    result=dict(ref=ref,status='completed',rows=rows,interpretation='18 metadata-selected subjects, two EEG masks, two frozen parameter methods; same rest start and visible target, 8-substep refit as a numerical diagnostic; original 4-substep results retained')
+    write_json(path,result);return result
+
+
+def semantics_icc_absolute(values):
+    """Two-way random, single-measure absolute agreement; no clipping of negatives."""
+    x=np.asarray(values,dtype=float)
+    if x.ndim!=2 or x.shape[1]!=2 or len(x)<3 or not np.isfinite(x).all():return None
+    n,k=x.shape;mean=x.mean();row=x.mean(axis=1);column=x.mean(axis=0)
+    msr=k*np.sum((row-mean)**2)/(n-1);msc=n*np.sum((column-mean)**2)/(k-1)
+    mse=np.sum((x-row[:,None]-column[None,:]+mean)**2)/((n-1)*(k-1))
+    denominator=msr+(k-1)*mse+k*(msc-mse)/n
+    return float((msr-mse)/denominator) if denominator>1e-20 else None
+
+
+def semantics_bootstrap_mean(values,seed,repeats=2000):
+    values=np.asarray(values,dtype=float);values=values[np.isfinite(values)]
+    if len(values)<2:return [None,None]
+    rng=np.random.default_rng(seed)
+    return np.quantile(values[rng.integers(len(values),size=(repeats,len(values)))].mean(axis=1),[.025,.975]).tolist()
+
+
+def semantics_training_summary(cfg,out):
+    plan=json.loads((out/'training_plan.json').read_text())['jobs'];rows=[]
+    for job in plan:
+        result=json.loads((out/'training'/job['key']/'result.json').read_text());ref=job['train'][0]
+        starts=[s.get('parameter_value') for s in result.get('starts',[]) if s.get('converged') and s.get('parameter_value') is not None]
+        rows.append(dict(key=job['key'],dataset=ref['dataset'],subject=job['subject'],record=job['record'],site=ref['site'],region=ref['region'],
+            coordinate=job['coordinate'],repeat=job['repeat'],repeat_kind=ref['repeat_kind'],hierarchy=job['hierarchy'],parameter=job['parameter'],
+            task_signature='|'.join(sorted({str(r['task']) for r in job['train']})),
+            value=result.get('parameter_value'),converged=result.get('converged',False),status=result.get('status'),
+            boundary=result.get('boundary_status'),training_windows=len(job['train']),objective=result.get('objective'),
+            start_value_min=min(starts) if starts else None,start_value_max=max(starts) if starts else None))
+    frame=pd.DataFrame(rows);frame.to_csv(out/'training_parameters.csv',index=False)
+    grouped=[]
+    for key,part in frame.groupby(['dataset','hierarchy','parameter']):
+        good=part[part.converged];grouped.append(dict(zip(['dataset','hierarchy','parameter'],key),n=len(part),successes=len(good),
+            success_rate=len(good)/len(part),boundary_rate=part.boundary.isin(['LOWER','UPPER']).mean(),
+            median=good.value.median(),p10=good.value.quantile(.1),p90=good.value.quantile(.9)))
+    pd.DataFrame(grouped).to_csv(out/'training_summary.csv',index=False)
+    pairs=[]
+    for key,part in frame[frame.hierarchy.isin(['H2_subject','H2s_partial_pooling'])].groupby(['dataset','subject','site','coordinate','hierarchy','parameter']):
+        item=dict(zip(['dataset','subject','site','coordinate','hierarchy','parameter'],key));item['repeat_kind']=part.iloc[0].repeat_kind
+        item['task_signature']=' / '.join(sorted(set(part.task_signature)))
+        a=part[part['repeat']==0];b=part[part['repeat']==1]
+        item.update(eligible_pair=len(a)==1 and len(b)==1,successful_pair=False)
+        if len(a)==1 and len(b)==1 and bool(a.iloc[0].converged) and bool(b.iloc[0].converged):
+            x,z=float(a.iloc[0].value),float(b.iloc[0].value)
+            item.update(successful_pair=True,A=x,B=z,symmetric_relative_difference=2*abs(x-z)/(x+z),log_difference=np.log(x/z),
+                boundary_pair=a.iloc[0].boundary in ('LOWER','UPPER') or b.iloc[0].boundary in ('LOWER','UPPER'))
+        pairs.append(item)
+    paired=pd.DataFrame(pairs);paired.to_csv(out/'repeatability_pairs.csv',index=False);summary=[];iccs=[]
+    for key,part in paired.groupby(['dataset','hierarchy','parameter']):
+        good=part[part.successful_pair];subject=good.groupby('subject').symmetric_relative_difference.mean()
+        interior=good[good.boundary_pair.eq(False)]
+        summary.append(dict(zip(['dataset','hierarchy','parameter'],key),expected_pairs=int(part.eligible_pair.sum()),successful_pairs=len(good),
+            subjects=good.subject.nunique(),median_pair_difference=good.symmetric_relative_difference.median(),
+            interior_pairs=len(interior),median_pair_difference_interior=interior.symmetric_relative_difference.median() if len(interior) else None,
+            subject_equal_mean_difference=subject.mean(),subject_mean_difference_CI=semantics_bootstrap_mean(subject,cfg['seed']+211),
+            boundary_pair_fraction=good.boundary_pair.mean(),fraction_pairs_within_20pct=(good.symmetric_relative_difference<=.2).mean()))
+    # Each ICC stratum has the same outer-trained EEG/Hb gauge, site and repeat type.
+    for key,part in paired[paired.successful_pair].groupby(['dataset','site','coordinate','repeat_kind','task_signature','hierarchy','parameter']):
+        values=np.log(part[['A','B']].to_numpy(float));estimate=semantics_icc_absolute(values)
+        rng=np.random.default_rng(cfg['seed']+212);samples=[]
+        if estimate is not None:
+            for _ in range(2000):
+                v=semantics_icc_absolute(values[rng.integers(len(values),size=len(values))])
+                if v is not None:samples.append(v)
+        interval=np.quantile(samples,[.025,.975]).tolist() if len(samples)>=1000 else [None,None]
+        iccs.append(dict(zip(['dataset','site','coordinate','repeat_kind','task_signature','hierarchy','parameter'],key),subjects=len(part),
+            ICC_A1_log_parameter=estimate,lower=interval[0],upper=interval[1],valid_bootstraps=len(samples),
+            within_log_variance=float(np.mean((values[:,0]-values[:,1])**2)/2),between_log_variance=float(np.var(values.mean(axis=1),ddof=1)) if len(values)>1 else None,
+            lower_above_06=interval[0] is not None and interval[0]>=.6))
+    pd.DataFrame(iccs).to_csv(out/'repeatability_icc.csv',index=False)
+    result=dict(groups=grouped,repeatability=summary,icc=iccs,
+        interpretation='independent_record_or_block_repeats; ICC only within identical coordinate/site/repeat type/task support; bootstrap conditions on the frozen outer calibration',
+        limitation='record round-robin does not enforce exactly identical task proportions; calibration PCA/scale uncertainty not refitted; no across-day claim; no confirmatory nested selection of sharing level')
+    write_json(out/'training_summary.json',result);return result
+
+
+def semantics_qc_summary(cfg,out):
+    inventory=json.loads((out/'inventory.json').read_text());rows=[];details=[];fingerprints={};duplicates=[]
+    for spec in inventory['records']:
+        record=json.loads((out/'prepared'/spec['key']/'record.json').read_text());detail=json.loads((out/'qc_detail'/(spec['key']+'.json')).read_text())
+        for channel in record['qc']['channels']:
+            rows.append(dict(dataset=spec['dataset'],subject=spec['subject'],record=spec['record'],**channel))
+        identity=(spec['dataset'],detail['full_record_fingerprint'],tuple(detail['full_record_shape']))
+        if identity in fingerprints:duplicates.append([fingerprints[identity],spec['key']])
+        fingerprints[identity]=spec['key']
+        detail['closure_max']=record['qc'].get('dependent_HbT_closure',{}).get('max_absolute');details.append(detail)
+    frame=pd.DataFrame(rows);frame.to_csv(out/'native_qc_channels.csv',index=False);groups=[]
+    for ds,part in frame.groupby('dataset'):
+        subject=part.assign(positive=part.rho>.5).groupby('subject').agg(positive=('positive','mean'),rho=('rho','median'))
+        d=[r for r in details if r['dataset']==ds]
+        groups.append(dict(dataset=ds,subjects=len(subject),records=len(d),channels=len(part),supported=int((part.status=='supported').sum()),
+            subject_equal_whole_record_positive_rho_gt05=subject.positive.mean(),subject_equal_median_rho=subject.rho.mean(),
+            nonuniform_native_clocks=sum(not r['native_clock_uniform'] for r in d),
+            exact_nonflat_channel_duplicates=sum(len(r['exact_nonflat_channel_duplicates']) for r in d),
+            outside_native_support=sum(len(r['windows_outside_native_support']) for r in d),
+            common_HbT_PC1_fraction_median=np.median([r['common_HbT_variance']['native']['first_component_variance_fraction'] for r in d if r['common_HbT_variance'].get('native')]),
+            dependent_HbT_closure_max=max((r['closure_max'] for r in d if r['closure_max'] is not None),default=None)))
+    result=dict(groups=groups,duplicate_full_records=duplicates,excluded=inventory['excluded'],
+        denominator='native whole-record channel pairs; distinct from earlier 30s window prevalence',
+        source_attribution='QC flags and covariance do not establish corrupted data or a physiological source')
+    write_json(out/'native_qc_summary.json',result);return result
+
+
+def semantics_synthetic_diagnostic_summary(cfg,out):
+    stress=[];hierarchy=[];fitrows=[];state_rows=[]
+    for folder in ['synthetic','synthetic_feature']:
+        for spec in semantics_synthetic_specs(cfg):
+            path=out/folder/spec['key']/'result.json';result=json.loads(path.read_text())
+            with np.load(path.with_suffix('.npz'),allow_pickle=False) as arrays:
+                state_sd=np.std(arrays['states'][:cfg['synthetic']['train_trials']],axis=(0,1))
+            for row in result['rows']:
+                valid=[v for v in row['validation'] if row['converged'] and v['converged'] and 'state_rmse' in v]
+                errors=np.median([np.asarray(v['state_rmse'])/np.maximum(state_sd,1e-14) for v in valid],axis=0) if valid else [None]*6
+                state_rows.append(dict(panel=folder,key=spec['key'],parameter=row['parameter'],validations=len(valid),
+                    **dict(zip(cfg['tensor']['state_order'],errors))))
+    state_frame=pd.DataFrame(state_rows);state_frame.to_csv(out/'synthetic_state_recovery.csv',index=False)
+    state_summary=[]
+    for key,part in state_frame.groupby(['panel','parameter']):
+        state_summary.append(dict(zip(['panel','parameter'],key),panels=len(part),successful_validation_trials=int(part.validations.sum()),
+            planned_validation_trials=len(part)*cfg['synthetic']['validation_trials'],
+            median_state_nrmse=part[cfg['tensor']['state_order']].median().tolist()))
+    for spec in json.loads((out/'synthetic_stress_plan.json').read_text())['specs']:
+        result=json.loads((out/'synthetic_stress'/spec['key']/'result.json').read_text())
+        for row in result['rows']:
+            valid=[v for v in row['validation'] if row['converged'] and v['converged'] and 'nrmse' in v]
+            stress.append(dict(stress=spec['stress'],spectrum=spec['spectrum'],repeat=spec['repeat'],parameter=row['parameter'],
+                converged=row['converged'],value=row.get('parameter_value'),relative_error=row.get('relative_error') if row['converged'] else None,boundary=row.get('boundary_status'),
+                validation_success=len(valid)/6,validation_nrmse=float(np.mean([np.mean(v['nrmse']) for v in valid])) if valid else None,
+                driver_nrmse=float(np.mean([v['driver_nrmse'] for v in valid])) if valid else None,
+                state_rmse=np.mean([v['state_rmse'] for v in valid],axis=0).tolist() if valid else None))
+    pd.DataFrame(stress).to_csv(out/'stress_metrics.csv',index=False)
+    for spec in json.loads((out/'synthetic_hierarchy_plan.json').read_text())['specs']:
+        result=json.loads((out/'synthetic_hierarchy'/spec['key']/'result.json').read_text())
+        for row in result['validation']:
+            hierarchy.append(dict(mechanism=spec['mechanism'],repeat=spec['repeat'],method=row['method'],subject=row['identity'][:2],
+                converged=row['converged'],relative_error=abs(row['estimated_tau']/row['true_tau']-1) if row['converged'] and row.get('estimated_tau') else None,
+                all_below_half=row.get('all_below_half',False),nrmse=float(np.mean(row['nrmse'])) if row.get('converged') and 'nrmse' in row else None))
+        for key,fit in result['fits'].items():
+            fitrows.append(dict(mechanism=spec['mechanism'],repeat=spec['repeat'],key=key,hierarchy=key.rsplit('_',1)[0] if key.startswith('H4') else key.split('_')[0],
+                value=fit.get('value'),truth_mean=float(np.mean(fit['truth_tau'])),converged=fit['converged'],boundary=fit.get('boundary'),
+                driver_nrmse=fit.get('driver_nrmse'),state_rmse=fit.get('state_rmse'),conditional_training_nrmse=fit.get('conditional_training_nrmse')))
+    pd.DataFrame(hierarchy).to_csv(out/'hierarchy_validation.csv',index=False);pd.DataFrame(fitrows).to_csv(out/'hierarchy_parameters.csv',index=False)
+    h=pd.DataFrame(hierarchy);s=pd.DataFrame(stress);summary=[]
+    for key,part in h.groupby(['mechanism','method']):
+        cohorts=part.groupby('repeat').agg(nrmse=('nrmse','mean'),relative_error=('relative_error','median'),success=('converged','mean'),passed=('all_below_half','mean'))
+        summary.append(dict(zip(['mechanism','method'],key),cohorts=len(cohorts),validation_success=cohorts.success.mean(),
+            median_parameter_relative_error=cohorts.relative_error.median(),nrmse=cohorts.nrmse.mean(),pass_rate=cohorts.passed.mean(),
+            nrmse_cohort_CI=semantics_bootstrap_mean(cohorts.nrmse,cfg['seed']+221)))
+    stress_summary=[]
+    for key,part in s.groupby(['stress','parameter']):
+        control=s[(s.stress=='control')&(s.parameter==key[1])]
+        paired=part.merge(control,on=['spectrum','repeat'],suffixes=('','_control'))
+        paired=paired[paired.converged&paired.converged_control]
+        stress_summary.append(dict(zip(['stress','parameter'],key),panels=len(part),success_rate=part.converged.mean(),
+            median_relative_error=part.relative_error.median(),boundary_rate=part.boundary.isin(['LOWER','UPPER']).mean(),
+            driver_nrmse=part.driver_nrmse.mean(),nrmse=part.validation_nrmse.mean(),
+            paired_parameter_shift_median=np.median(abs(paired.value-paired.value_control)/paired.value_control)))
+    allocation=[];f=pd.DataFrame(fitrows)
+    for (kind,repeat),part in f.groupby(['mechanism','repeat']):
+        for prefix in ['H1_dataset_','H2_subject_','H2s_','H3_record_','H4_trial_']:
+            group=part[part.key.str.startswith(prefix)&part.converged].dropna(subset=['value'])
+            if not len(group):continue
+            estimated=np.log(group.value.to_numpy());true=np.log(group.truth_mean.to_numpy())
+            i,j=np.triu_indices(len(group),1);nonzero=abs(true[i]-true[j])>1e-12
+            direction=float(np.mean(np.sign(estimated[i[nonzero]]-estimated[j[nonzero]])==np.sign(true[i[nonzero]]-true[j[nonzero]]))) if nonzero.any() else None
+            allocation.append(dict(mechanism=kind,repeat=int(repeat),hierarchy=prefix.rstrip('_'),fits=len(group),
+                estimated_log_sd=float(np.std(estimated)),true_log_sd=float(np.std(true)),nonzero_true_pair_count=int(nonzero.sum()),direction_retention=direction,
+                median_relative_error=float(np.median(abs(np.exp(estimated-true)-1)))))
+    pd.DataFrame(allocation).to_csv(out/'hierarchy_variation_recovery.csv',index=False)
+    result=dict(stress=stress_summary,hierarchy=summary,variation_recovery=allocation,state_recovery=state_summary,
+        state_recovery_scale='generated training-state SD; median over successful validation trajectories within panel, then median over panels; model-matched latent truth only',
+        interpretation='paired model truth; H4 fits its own target and is not a heldout sharing competitor')
+    write_json(out/'synthetic_diagnostics_summary.json',result);return result
+
+
+def semantics_hierarchical_scores(frame,metrics):
+    """Windows, records, montage variants, regions, then subjects receive equal weight."""
+    keys=['dataset','method','subject','region','site','record']
+    record=frame.groupby(keys,dropna=False)[metrics].mean()
+    site=record.groupby(level=['dataset','method','subject','region','site']).mean()
+    region=site.groupby(level=['dataset','method','subject','region']).mean()
+    return region.groupby(level=['dataset','method','subject']).mean().reset_index()
+
+
+def semantics_block_bootstrap_gain(paired,seed,repeats=2000):
+    """Paired subject/record/120-s block bootstrap, retaining dependent ROI draws."""
+    rng=np.random.default_rng(seed);subject_draws=[]
+    for subject,own in paired.groupby('subject'):
+        time_choices={};record_choices={};site_values={}
+        for (region,site,record),part in own.groupby(['region','site','record']):
+            blocks=part.assign(block=np.floor(part.eeg_start_s/120).astype(int)).groupby('block').delta.agg(['sum','count'])
+            cache_key=(record.split('_Probe')[0],tuple(blocks.index))
+            if cache_key not in time_choices:time_choices[cache_key]=rng.integers(len(blocks),size=(repeats,len(blocks)))
+            choice=time_choices[cache_key]
+            value=blocks['sum'].to_numpy()[choice].sum(axis=1)/blocks['count'].to_numpy()[choice].sum(axis=1)
+            site_values.setdefault((region,site),[]).append((record,value))
+        region_values={}
+        for (region,site),records in site_values.items():
+            records=sorted(records,key=lambda p:p[0]);cache_key=tuple(r[0].split('_Probe')[0] for r in records)
+            if cache_key not in record_choices:record_choices[cache_key]=rng.integers(len(records),size=(repeats,len(records)))
+            values=np.stack([r[1] for r in records],axis=1)
+            selected=values[np.arange(repeats)[:,None],record_choices[cache_key]].mean(axis=1)
+            region_values.setdefault(region,[]).append(selected)
+        subject_draws.append(np.mean([np.mean(v,axis=0) for v in region_values.values()],axis=0))
+    if len(subject_draws)<2:return [None,None]
+    values=np.stack(subject_draws,axis=1);indices=rng.integers(len(subject_draws),size=(repeats,len(subject_draws)))
+    return np.quantile(values[np.arange(repeats)[:,None],indices].mean(axis=1),[.025,.975]).tolist()
+
+
+def semantics_reconstruction_summary(cfg,out):
+    refs=json.loads((out/'cohort.json').read_text())['refs'];lookup={r['id']:r for r in refs};groups={}
+    for ref in refs:groups.setdefault(ref['key']+'__'+ref['site'],[]).append(ref)
+    rows=[]
+    for key,group in groups.items():
+        record=json.loads((out/'measured'/key/'result.json').read_text());scales={}
+        for ref in group:
+            path=out/'measured'/key/(f'w{ref["window"]}.npz')
+            with np.load(path,allow_pickle=False) as a:
+                y=a['target'];sd=a['sd'];scale=np.std(y,axis=0)
+                scales[ref['id']]=dict(local_ratio=sd/np.maximum(scale,1e-14),feature_hb_rho=float(np.corrcoef(y[:,1:].T)[0,1]),
+                    target_local_sd=scale.tolist())
+        for row in record['rows']:
+            ref=lookup[row['identity']];info=scales[ref['id']]
+            value={k:row.get(k) for k in ('identity','dataset','subject','record','site','region','window','method','parameter_value','status','converged','all_below_half','native_rho','quality_burden','record_evaluation','coordinate','training_key','objective','weighted_data_sse','flow_prior_cost','initial_state_penalty_cost')}
+            value.update(repeat_fold=ref['repeat_fold'],repeat_unit=ref['repeat_unit'],eeg_start_s=ref['eeg_start_s'],feature_hb_rho=info['feature_hb_rho'],
+                         residual_Hb_rho=row.get('residual_Hb_rho') if row.get('converged') else None)
+            for j,name in enumerate(MODALITIES):
+                for metric,field in [('nrmse','nrmse'),('correlation','correlation'),('amplitude_error','amplitude_error'),
+                                     ('peak_time_error_s','peak_time_error_s'),('trough_time_error_s','trough_time_error_s')]:
+                    value[f'{metric}_{name}']=row.get(field,[None]*3)[j] if row.get('converged') else None
+                value['local_nrmse_'+name]=value['nrmse_'+name]*info['local_ratio'][j] if value['nrmse_'+name] is not None else None
+            rows.append(value)
+    frame=pd.DataFrame(rows);frame.to_csv(out/'reconstruction_windows.csv',index=False)
+    expected=sum(1+2*(1+(2 if r['repeat_fold'] in (0,1) else 0)+(1 if r['record_evaluation'] else 0)) for r in refs)
+    if len(frame)!=expected:raise ValueError(f'planned reconstruction denominator changed: {len(frame)} != {expected}')
+    metrics=['converged','all_below_half']+[f'{metric}_{m}' for metric in ('nrmse','correlation','local_nrmse') for m in MODALITIES]
+    tables={};subject_tables={}
+    for scope,part in [('all_eligible',frame),('common_later_windows',frame[frame.record_evaluation & frame.repeat_fold.isin([0,1])])]:
+        subjects=semantics_hierarchical_scores(part,metrics);subjects.to_csv(out/(scope+'_subject_scores.csv'),index=False);subject_tables[scope]=subjects
+        aggregate=[]
+        for (ds,method),group in subjects.groupby(['dataset','method']):
+            original=part[(part.dataset==ds)&(part.method==method)]
+            item=dict(dataset=ds,method=method,subjects=len(group),planned_windows=len(original),successes=int(original.converged.sum()),
+                pooled_passes=int(original.all_below_half.sum()),success_rate=group.converged.mean(),pass_rate=group.all_below_half.mean(),
+                pass_rate_subject_CI=semantics_bootstrap_mean(group.all_below_half,cfg['seed']+231))
+            for name in MODALITIES:
+                item['nrmse_'+name]=group['nrmse_'+name].mean()
+                finite=original['nrmse_'+name].dropna()
+                item['window_median_nrmse_'+name]=finite.median() if len(finite) else None
+                item['window_p90_nrmse_'+name]=finite.quantile(.9) if len(finite) else None
+                item['correlation_'+name]=group['correlation_'+name].mean()
+                item['local_nrmse_'+name]=group['local_nrmse_'+name].mean()
+            aggregate.append(item)
+        pd.DataFrame(aggregate).to_csv(out/('reconstruction_'+scope+'.csv'),index=False);tables[scope]=aggregate
+    paired=[];subjects=subject_tables['common_later_windows'];rng=np.random.default_rng(cfg['seed']+232)
+    for ds,part in subjects.groupby('dataset'):
+        pivot=part.pivot(index='subject',columns='method',values='all_below_half');family=[]
+        for method in pivot.columns:
+            if method=='H0_fixed':continue
+            valid=pivot[[method,'H0_fixed']].dropna();delta=valid[method]-valid.H0_fixed
+            random_sign=rng.choice([-1,1],size=(10000,len(delta)))
+            null=(random_sign*delta.to_numpy()).mean(axis=1)
+            p=(1+np.sum(abs(null)>=abs(delta.mean())-1e-14))/(len(null)+1)
+            original=frame[(frame.dataset==ds)&frame.record_evaluation&frame.repeat_fold.isin([0,1])]
+            paired_windows=original[original.method==method].merge(original[original.method=='H0_fixed'][['identity','all_below_half']],on='identity',suffixes=('','_baseline'))
+            paired_windows['delta']=paired_windows.all_below_half.astype(float)-paired_windows.all_below_half_baseline.astype(float)
+            family.append(dict(dataset=ds,method=method,subjects=len(delta),pass_rate_gain=delta.mean(),
+                conditional_subject_CI=semantics_bootstrap_mean(delta,cfg['seed']+233),
+                subject_record_block_CI=semantics_block_bootstrap_gain(paired_windows,cfg['seed']+234),signflip_p=p))
+        order=sorted(range(len(family)),key=lambda i:family[i]['signflip_p']);last=0.
+        for rank,i in enumerate(order):
+            last=max(last,min(1.,family[i]['signflip_p']*(len(order)-rank)));family[i]['holm_p']=last
+        paired.extend(family)
+    pd.DataFrame(paired).to_csv(out/'sharing_paired_comparisons.csv',index=False)
+    regional=[];stratified=[]
+    for region,part in frame.groupby('region'):
+        values=semantics_hierarchical_scores(part,metrics)
+        for (ds,method),own in values.groupby(['dataset','method']):
+            selected=part[(part.dataset==ds)&(part.method==method)]
+            regional.append(dict(dataset=ds,method=method,region=region,subjects=len(own),planned_windows=len(selected),
+                success_rate=own.converged.mean(),pass_rate=own.all_below_half.mean(),
+                **{name:own[name].mean() for name in metrics if name not in ('converged','all_below_half')}))
+    pd.DataFrame(regional).to_csv(out/'reconstruction_regions.csv',index=False)
+    if sum(r['planned_windows'] for r in regional)!=len(frame):raise ValueError('regional denominators do not partition the reconstruction surface')
+    # Reuse the diagnostic selector's pre-fit native QC ordering, without reading residuals.
+    quality={};metadata=pd.DataFrame(refs)
+    for ds,part in metadata.groupby('dataset'):
+        burden=part.groupby('subject').quality_burden.mean()
+        order=sorted(burden.index,key=lambda subject:(burden[subject],subject))
+        for label,subjects in zip(['low','middle','high'],np.array_split(order,3)):
+            quality.update({(ds,subject):label for subject in subjects})
+    later=frame[frame.record_evaluation&frame.repeat_fold.isin([0,1])&frame.method.isin(
+        ['H0_fixed','H2_subject__tau','H2_subject__neurovascular_gain'])].copy()
+    later['quality_stratum']=[quality[(ds,subject)] for ds,subject in zip(later.dataset,later.subject)]
+    for layer,column in [('native_record','native_rho'),('processed_window','feature_hb_rho')]:
+        value=later[column]
+        later['rho_group']=np.select([value<-.5,value<=.5,value<=.8,value>.8],
+            ['rho<-.5','-.5<=rho<=.5','.5<rho<=.8','rho>.8'],default='unavailable')
+        for key,part in later.groupby(['dataset','region','quality_stratum','rho_group']):
+            values=semantics_hierarchical_scores(part,metrics)
+            for method,own in values.groupby('method'):
+                stratified.append(dict(zip(['dataset','region','quality_stratum','rho_group'],key),layer=layer,
+                    method=method,subjects=len(own),planned_windows=int((part.method==method).sum()),
+                    success_rate=own.converged.mean(),pass_rate=own.all_below_half.mean(),
+                    **{name:own[name].mean() for name in metrics if name not in ('converged','all_below_half')}))
+    pd.DataFrame(stratified).to_csv(out/'reconstruction_QC_strata.csv',index=False)
+    from scipy.stats import spearmanr
+    association=[];fixed=frame[frame.method=='H0_fixed'].copy();fixed['Hb_nrmse']=fixed[['nrmse_HbO','nrmse_HbR']].mean(axis=1)
+    record=fixed.groupby(['dataset','subject','site','record']).agg(Hb_nrmse=('Hb_nrmse','mean'),native_rho=('native_rho','first'),feature_hb_rho=('feature_hb_rho','mean'),quality_burden=('quality_burden','first')).reset_index()
+    for key,part in record.groupby(['dataset','subject','site']):
+        good=part.dropna(subset=['Hb_nrmse','native_rho'])
+        if len(good)>=3 and min(good[['Hb_nrmse','native_rho']].std())>1e-12:
+            association.append(dict(zip(['dataset','subject','site'],key),records=len(good),native_rho_vs_Hb_error=float(spearmanr(good.native_rho,good.Hb_nrmse).statistic)))
+    pd.DataFrame(association).to_csv(out/'within_subject_QC_association.csv',index=False)
+    result=dict(planned_regional_windows=len(refs),planned_method_windows=expected,tables=tables,paired=paired,
+        numerical_status_counts=frame.status.value_counts().to_dict(),within_subject_association=association,
+        regional=regional,QC_strata=stratified,
+        QC_strata_interpretation='common later windows; native-record and processed-window correlations are distinct; subject QC-burden thirds are relative descriptive strata, not valid/invalid labels; sparse intersections remain descriptive',
+        aggregation='window -> record -> site -> region -> subject equal weights; common comparison uses later nonoverlapping calibration-held windows',
+        uncertainty='paired gains: subject/record/120s temporal block bootstrap; marginal rates: subject bootstrap; both condition on fitted coordinates/parameters without calibration refitting; no calibrated parameter CI',
+        selection='descriptive external-fold comparison; no nested learned sharing selector, no confirmatory optimal-level claim')
+    write_json(out/'reconstruction_summary.json',result);return result
+
+
+def semantics_completion_summary(cfg,out):
+    plan=json.loads((out/'diagnostic_plan.json').read_text());rows=[]
+    for ref in plan['windows']:
+        result=json.loads((out/'missing'/ref['id']/'result.json').read_text())
+        for row in result['rows']:
+            scores=[v for v in row.get('hidden_nrmse',[]) if v is not None]
+            value=dict(identity=ref['id'],dataset=ref['dataset'],subject=ref['subject'],record=ref['record'],site=ref['site'],region=ref['region'],
+                mode=row['mode'],method=row['method'],arm=row['arm'],status=row.get('status'),converged=row.get('converged',False),
+                applicable=not str(row.get('status','')).startswith('not_applicable'),
+                error=float(np.mean(scores)) if row.get('converged') and scores else None,
+                passed=bool(row.get('converged') and scores and max(scores)<.5))
+            for j,m in enumerate(MODALITIES):value['nrmse_'+m]=row.get('hidden_nrmse',[None]*3)[j] if row.get('converged') else None
+            rows.append(value)
+    frame=pd.DataFrame(rows);frame.to_csv(out/'completion_windows.csv',index=False);summary=[];comparisons=[]
+    for key,part in frame.groupby(['dataset','mode','method','arm']):
+        available=part[part.applicable];subject=available.groupby('subject')[['error','passed','converged']].mean()
+        summary.append(dict(zip(['dataset','mode','method','arm'],key),planned=len(part),applicable=len(available),subjects=len(subject),
+            success_rate=subject.converged.mean(),error=subject.error.mean(),pass_rate=subject.passed.mean(),
+            error_subject_CI=semantics_bootstrap_mean(subject.error,cfg['seed']+241)))
+    for key,part in frame[frame.method.str.startswith('H')].groupby(['dataset','mode','method']):
+        for arm in ('training_donor','nonwrapping_shift_12s','spatial_Hb_anchor'):
+            real='real_shift_support' if arm=='nonwrapping_shift_12s' else 'real'
+            paired=part[part.arm==arm].merge(part[part.arm==real],on=['identity','subject'],suffixes=('_null','_real'))
+            if not len(paired):continue
+            paired['error_advantage']=paired.error_null-paired.error_real
+            paired['pass_advantage']=paired.passed_real.astype(float)-paired.passed_null.astype(float)
+            subjects=paired.groupby('subject')[['error_advantage','pass_advantage']].mean()
+            comparisons.append(dict(zip(['dataset','mode','method'],key),null=arm,planned_pairs=len(paired),subjects=len(subjects),
+                real_error_advantage=subjects.error_advantage.mean(),error_advantage_CI=semantics_bootstrap_mean(subjects.error_advantage,cfg['seed']+242),
+                real_pass_advantage=subjects.pass_advantage.mean()))
+    pd.DataFrame(summary).to_csv(out/'completion_summary.csv',index=False);pd.DataFrame(comparisons).to_csv(out/'completion_null_comparisons.csv',index=False)
+    result=dict(groups=summary,nulls=comparisons,endpoint='processed_feature_completion; not raw_sensor_or_causal_future_prediction',
+        interpretation='mean errors conditional on successful fits; pass/success rates retain failed-training and solver failures; unavailable baselines explicit')
+    write_json(out/'completion_summary.json',result);return result
+
+
+def semantics_profile_summary(cfg,out):
+    selected={}
+    for ref in json.loads((out/'diagnostic_plan.json').read_text())['windows']:selected.setdefault((ref['dataset'],ref['subject']),ref)
+    profiles=[];subjects=[];sensitivity=[];trials=[];context=[];transfer=[]
+    for ref in selected.values():
+        result=json.loads((out/'profiles'/ref['id']/'result.json').read_text());joint=result['joint']
+        bounds=[]
+        for name,value in zip(['tau','neurovascular_gain'],joint.get('parameter_values') or []):
+            lo,hi=np.log(cfg['parameters'][name]['bounds']);v=np.log(value)
+            bounds.append('LOWER' if abs(v-lo)<1e-8 else 'UPPER' if abs(v-hi)<1e-8 else 'INTERIOR')
+        subjects.append(dict(dataset=ref['dataset'],subject=ref['subject'],identity=ref['id'],converged=joint['converged'],
+            tau=joint['parameter_values'][0] if joint.get('parameter_values') is not None else None,
+            gain=joint['parameter_values'][1] if joint.get('parameter_values') is not None else None,
+            boundary=bounds,objective=joint.get('objective')))
+        for row in result['profiles']:
+            value=dict(dataset=ref['dataset'],subject=ref['subject'],identity=ref['id'],profiled=row['profiled'],grid=row['value'],
+                converged=row['converged'],objective=row.get('objective'),weighted_data_sse=row.get('weighted_data_sse'),
+                flow_prior_cost=row.get('flow_prior_cost'),initial_state_penalty_cost=row.get('initial_state_penalty_cost'))
+            profiles.append(value)
+        for row in result['sensitivity']:
+            values=row.get('parameter_values')
+            sensitivity.append(dict(dataset=ref['dataset'],subject=ref['subject'],kind=row['kind'],parameter=row.get('parameter','flow_weight'),value=row['value'],
+                converged=row['converged'],tau=values[0] if values is not None else None,gain=values[1] if values is not None else None,
+                base_tau=joint['parameter_values'][0] if joint['converged'] and joint.get('parameter_values') is not None else None,
+                base_gain=joint['parameter_values'][1] if joint['converged'] and joint.get('parameter_values') is not None else None,objective=row.get('objective')))
+        for row in result['trial']:
+            fitted=row['parameter_fit'];final=row.get('completion',{});error=final.get('hidden_nrmse') if row['mode']!='same_trial_full' else final.get('nrmse')
+            valid=[v for v in (error or []) if v is not None]
+            trials.append(dict(dataset=ref['dataset'],subject=ref['subject'],method=row['mode'],
+                converged=bool(fitted.get('converged') and final.get('converged')),
+                error=np.mean(valid) if fitted.get('converged') and final.get('converged') and valid else None,
+                passed=bool(fitted.get('converged') and final.get('converged') and valid and max(valid)<.5),
+                tau=fitted['parameter_values'][0] if fitted.get('parameter_values') is not None else None,
+                gain=fitted['parameter_values'][1] if fitted.get('parameter_values') is not None else None))
+        for name,value in result['prefix_baselines'].items():
+            error=value.get('hidden_nrmse') if isinstance(value,dict) else value;valid=[v for v in (error or []) if v is not None]
+            success=bool(value.get('converged') and valid) if isinstance(value,dict) else bool(valid)
+            trials.append(dict(dataset=ref['dataset'],subject=ref['subject'],method=name,converged=success,error=np.mean(valid) if success else None,passed=bool(success and max(valid)<.5)))
+        c=json.loads((out/'context'/ref['id']/'result.json').read_text())
+        for row in c['rows']:
+            context.append(dict(dataset=ref['dataset'],subject=ref['subject'],method=row['method'],seconds=row['seconds'],
+                converged=row['converged'],error=np.mean(row['nrmse']) if row.get('converged') and 'nrmse' in row else None,
+                passed=row.get('all_below_half',False),central_driver_mean=row.get('central_driver_mean'),
+                central_state_mean=row.get('central_state_mean'),status=row['status']))
+        t=json.loads((out/'transfer'/ref['id']/'result.json').read_text())
+        for row in t['rows']:
+            transfer.append(dict(dataset=ref['dataset'],subject=ref['subject'],method=row['method'],tau=row['tau'],converged=row['converged'],
+                error=np.mean(row['nrmse']) if row.get('converged') and 'nrmse' in row else None,passed=row.get('all_below_half',False)))
+    for name,rows in [('profiles',profiles),('profile_subjects',subjects),('sensitivity',sensitivity),('trial_calibration',trials),('context',context),('transfer',transfer)]:
+        pd.DataFrame(rows).to_csv(out/(name+'_metrics.csv'),index=False)
+    widths=[];frame=pd.DataFrame(profiles)
+    for key,part in frame.groupby(['dataset','subject','profiled']):
+        good=part[part.converged].dropna(subset=['objective'])
+        if not len(good):continue
+        minimum=good.objective.min();near=good[good.objective<=minimum*1.01+1e-12]
+        widths.append(dict(zip(['dataset','subject','parameter'],key),successful_grid_points=len(good),planned_grid_points=len(part),
+            grid_minimum_value=good.loc[good.objective.idxmin(),'grid'],within_1pct_grid_min=near.grid.min(),within_1pct_grid_max=near.grid.max(),
+            within_1pct_grid_ratio=near.grid.max()/near.grid.min(),
+            grid_minimum_at_endpoint=good.loc[good.objective.idxmin(),'grid'] in (part.grid.min(),part.grid.max())))
+    groups=[]
+    for panel,rows,keys in [('prefix',trials,['dataset','method']),('context',context,['dataset','method','seconds']),('transfer',transfer,['dataset','method'])]:
+        for key,part in pd.DataFrame(rows).groupby(keys):
+            groups.append(dict(panel=panel,**dict(zip(keys,key)),planned=len(part),success_rate=part.converged.mean(),error=part.error.mean(),pass_rate=part.passed.mean()))
+    result=dict(subjects=subjects,profile_widths=widths,groups=groups,
+        profile_rule='1% grid objective contour is exploratory engineering flatness diagnostic, not a confidence interval; all nuisance quantities reoptimized',
+        context='nested common center uses distinct unfiltered Hb diagnostic target; never compare its NRMSE directly against primary filtered target',
+        transfer='target observation calibrated on other target subjects; source-fold tau ensemble only; no strict zero-shot beta/amplitude claim')
+    write_json(out/'profile_diagnostics_summary.json',result);return result
+
+
+def semantics_summary(cfg,out,project_root):
+    required=['prepare','qc_detail','cohort','synthetic','synthetic_feature','synthetic_joint','synthetic_kappa',
+              'synthetic_hierarchy','synthetic_stress','observation_math','training','measured','missing','profiles','diagnostics','integration_audit']
+    manifests={name:json.loads((out/(name+'_manifest.json')).read_text()) for name in required}
+    if any(m['execution']!='completed' for m in manifests.values()):raise ValueError('all planned stages must be terminal before the final summary')
+    training=semantics_training_summary(cfg,out);qc=semantics_qc_summary(cfg,out)
+    synthetic=semantics_synthetic_diagnostic_summary(cfg,out);measured=semantics_reconstruction_summary(cfg,out)
+    completion=semantics_completion_summary(cfg,out);diagnostics=semantics_profile_summary(cfg,out)
+    linear_rows=[]
+    for path in sorted((out/'linear').glob('*/result.json')):
+        for row in json.loads(path.read_text())['rows']:
+            linear_rows.append({k:v for k,v in row.items() if k not in ['nrmse','correlation','amplitude_error','peak_time_error_s','trough_time_error_s']}|
+                {f'nrmse_{m}':row['nrmse'][i] for i,m in enumerate(MODALITIES)})
+    linear_frame=pd.DataFrame(linear_rows);linear_frame.to_csv(out/'linear_reference_windows.csv',index=False)
+    linear_subjects=semantics_hierarchical_scores(linear_frame,['all_below_half','physical_valid','small_signal_valid','effective_df']+['nrmse_'+m for m in MODALITIES])
+    linear_groups=linear_subjects.groupby(['dataset','method']).mean(numeric_only=True).reset_index().to_dict('records')
+    write_json(out/'linear_reference_summary.json',dict(groups=linear_groups,planned=len(linear_frame),interpretation='linear residual screen with separate physical and small-signal validity; objective differs from nonlinear flow-regularized SSM'))
+    precision=[];masked=[]
+    for path in sorted((out/'integration_audit').glob('*/result.json')):precision.extend(json.loads(path.read_text())['rows'])
+    for path in sorted((out/'masked_integration_audit').glob('*/result.json')):
+        value=json.loads(path.read_text());masked.extend(dict(dataset=value['ref']['dataset'],subject=value['ref']['subject'],**row) for row in value['rows'])
+    precision_frame=pd.DataFrame(precision);precision_frame.to_csv(out/'integration_audit_windows.csv',index=False);pd.DataFrame(masked).to_csv(out/'masked_integration_audit.csv',index=False)
+    good=precision_frame[precision_frame.converged_4]
+    precision_summary=dict(planned=len(precision),converged_4=len(good),fine_valid=int(good.fine_valid.sum()),
+        maximum_prediction_difference_sd=good.max_prediction_difference_sd.max(),p99_prediction_difference_sd=good.max_prediction_difference_sd.quantile(.99),
+        pass_indicator_changes=int((precision_frame.all_below_half_4!=precision_frame.all_below_half_8).sum()),masked=masked)
+    write_json(out/'integration_audit_summary.json',precision_summary)
+    inventory=json.loads((out/'inventory.json').read_text());refs=json.loads((out/'cohort.json').read_text())['refs']
+    focus=[];historic=pd.read_csv(Path(project_root)/cfg['data']['native_prevalence_run']/'focus_case.csv')
+    for _,native in historic[(historic.branch=='native')&(historic.window_kind=='event')].iterrows():
+        matched=[r for r in refs if r['dataset']==native.dataset and r['subject']==native.subject and r['record']==native.record and
+                 r['hb_channel']==native.pair and abs(r['hb_start_s']-native.start_s)<1e-4]
+        for ref in matched:
+            path=out/'measured'/(ref['key']+'__'+ref['site'])/(f'w{ref["window"]}.json')
+            fit=json.loads(path.read_text())
+            with np.load(path.with_suffix('.npz'),allow_pickle=False) as arrays:rho=float(np.corrcoef(arrays['target'][:,1:].T)[0,1])
+            focus.append(dict(ref=ref,native_rho=float(native.correlation),native_detrended_rho=float(native.detrended_correlation),
+                feature_rho=rho,rows=fit['rows'],interpretation='same native time/channel as retained difficult case; new window-local processing/PCA/scale, not a paired historical-target improvement'))
+    write_json(out/'historical_focus.json',dict(cases=focus,selection='named historical identity, excluded from random-panel representativeness'))
+    reconstruction_pass={};common_pass={}
+    for ds in sorted({r['dataset'] for r in refs}):
+        options=[r for r in measured['tables']['all_eligible'] if r['dataset']==ds]
+        reconstruction_pass[ds]=[r['method'] for r in options if r['success_rate']>=.95 and r['pass_rate']>=.8]
+        common=[r for r in measured['tables']['common_later_windows'] if r['dataset']==ds]
+        common_pass[ds]=[r['method'] for r in common if r['success_rate']>=.95 and r['pass_rate']>=.8]
+    stable=[r for r in training['repeatability'] if r['hierarchy']=='H2_subject' and r['median_pair_difference']<=.2]
+    result=dict(schema='shared_driver_physiology_semantics_summary_v1',experiment_id=cfg['experiment_id'],execution='completed',
+        completed_at=datetime.now(timezone.utc).isoformat(),source_root=str(CODE_ROOT),
+        project_root=str(Path(project_root).resolve()),
+        scope=dict(native_subjects=inventory['subject_counts'],native_records=inventory['record_counts'],
+            joint_subjects={ds:len({r['subject'] for r in refs if r['dataset']==ds}) for ds in sorted({r['dataset'] for r in refs})},regional_windows=len(refs)),
+        synthetic={name:json.loads((out/(name+'_summary.json')).read_text()) for name in ['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa']},
+        source_files=dict(qc='native_qc_summary.json',training='training_summary.json',reconstruction='reconstruction_summary.json',
+            completion='completion_summary.json',profiles='profile_diagnostics_summary.json',stress_hierarchy='synthetic_diagnostics_summary.json',observation='observation_math.json',linear='linear_reference_summary.json',historical_focus='historical_focus.json',integration='integration_audit_summary.json'),
+        verdict=dict(reconstruction_gate_methods=reconstruction_pass,common_window_gate_methods=common_pass,
+            stable_H2_median_screen_groups=stable,
+            parameter_claim='conditional_model_time_parameter_and_effective_gain_only; no absolute_individual_physiology_release',
+            source_claim='canonical_observation_combinations_and_model_residual; no_unique_cortical_systemic_or_metabolic_separation'),
+        report_format='pptx',limitations=['REFED cross-modal geometry unavailable; Hb QC only',
+            'Full observation validation refits its driver/initial state; reconstruction not prediction',
+            'Missing/prefix tasks at processed-feature level, not raw causal forecasting',
+            'Frozen feature gauges and calibration uncertainty not refitted in bootstrap',
+            'Sharing policy comparisons descriptive; no nested inner-selected one-SE policy evaluated',
+            'H2s shrinkage fixed from search bounds, not tuned on inner folds; H3 uses three calibration windows vs up to eighteen for H1/H2',
+            'Native-to-window-local processing changes target relative to prior whole-record cache reports',
+            'Data covariance and QC flags do not by themselves identify corruption or a physiological source'])
+    write_json(out/'summary.json',result);return result
+
+
+def physiology_semantics_main(args):
+    cfg = semantics_config(args.config)
+    if args.check_only:
+        specs = semantics_synthetic_specs(cfg)
+        semantics_parameters(cfg).validate()
+        print(json.dumps(dict(status='passed', synthetic_panels=len(specs),
+                              measured_arrays_read=0, report_format='pptx')))
+        return
+    if args.run_dir is None or not 1 <= args.workers <= cfg['resources']['max_workers']:
+        raise ValueError('explicit run-dir and bounded workers required')
+    out = args.run_dir.resolve(); out.mkdir(parents=True, exist_ok=True)
+    stage = args.semantics_stage
+    lock = (out/(stage+'_controller.lock')).open('a'); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    resolved = out/'resolved_config.yaml'
+    if resolved.exists() and yaml.safe_load(resolved.read_text()) != cfg:
+        raise ValueError('cannot change resolved campaign contract')
+    if not resolved.exists():
+        resolved.write_text(yaml.safe_dump(cfg, sort_keys=False))
+    stage = args.semantics_stage
+    manifest_path = out/(stage+'_manifest.json')
+    if manifest_path.exists():
+        previous=json.loads(manifest_path.read_text())
+        if previous.get('execution')=='completed':raise ValueError('completed stage evidence is immutable')
+        stamp=previous['started_at'].replace(':','').replace('+','_')
+        retained=out/(stage+'_manifest_attempt_'+stamp+'.json')
+        if not retained.exists():write_json(retained,previous)
+    manifest = dict(experiment_id=cfg['experiment_id'], stage=stage, execution='running',
+        started_at=datetime.now(timezone.utc).isoformat(), source_root=str(CODE_ROOT),
+        project_root=str(args.project_root.resolve()), supervisor=os.environ.get('SSM_SYSTEMD_UNIT'),
+        controller_pid=os.getpid(), workers=args.workers, pilot=args.pilot)
+    write_json(manifest_path, manifest)
+    if stage == 'integration_audit':
+        if json.loads((out/'measured_manifest.json').read_text())['execution']!='completed':raise ValueError('terminal full reconstruction required for immutable replay')
+        groups={}
+        for ref in json.loads((out/'cohort.json').read_text())['refs']:groups.setdefault((ref['key'],ref['site']),[]).append(ref)
+        failures=semantics_parallel_stage(cfg,out,stage,semantics_precision_worker,[(cfg,str(out),refs) for refs in groups.values()],args.workers,lambda p:p[2][0]['key']+'__'+p[2][0]['site'])
+        selected={}
+        for ref in json.loads((out/'diagnostic_plan.json').read_text())['windows']:selected.setdefault((ref['dataset'],ref['subject']),ref)
+        failures.extend(semantics_parallel_stage(cfg,out,'masked_integration_audit',semantics_masked_precision_worker,
+            [(cfg,str(out),ref) for ref in selected.values()],args.workers,lambda p:p[2]['id']))
+        manifest.update(execution='failed' if failures else 'completed',failures=failures,expected_groups=len(groups),masked_subjects=len(selected))
+    elif stage == 'summarize':
+        manifest.update(execution='completed',summary=semantics_summary(cfg,out,args.project_root))
+    elif stage == 'diagnostics':
+        if json.loads((out/'training_manifest.json').read_text())['execution']!='completed':
+            raise ValueError('terminal training required for context and calibrated transfer')
+        plan=json.loads((out/'diagnostic_plan.json').read_text());selected={}
+        for ref in plan['windows']:selected.setdefault((ref['dataset'],ref['subject']),ref)
+        failures=semantics_parallel_stage(cfg,out,'context',semantics_context_worker,
+            [(cfg,str(out),str(args.project_root.resolve()),ref) for ref in selected.values()],args.workers,lambda p:p[3]['id'])
+        failures.extend(semantics_parallel_stage(cfg,out,'transfer',semantics_transfer_worker,
+            [(cfg,str(out),ref) for ref in selected.values()],args.workers,lambda p:p[2]['id']))
+        groups={}
+        for ref in json.loads((out/'cohort.json').read_text())['refs']:
+            groups.setdefault((ref['dataset'],ref['site'],ref['subject_fold']),[]).append(ref)
+        failures.extend(semantics_parallel_stage(cfg,out,'linear',semantics_linear_worker,
+            [(cfg,str(out),refs) for refs in groups.values()],args.workers,lambda p:f'{p[2][0]["dataset"]}__{p[2][0]["site"]}__outer{p[2][0]["subject_fold"]}'))
+        manifest.update(execution='failed' if failures else 'completed',failures=failures,expected_subjects=len(selected))
+    elif stage == 'profiles':
+        joint=json.loads((out/'synthetic_joint_summary.json').read_text())
+        if not joint['passed']:
+            manifest.update(execution='completed',scientific_result='not_expanded_failed_joint_recovery')
+        else:
+            plan=json.loads((out/'diagnostic_plan.json').read_text());selected={}
+            for ref in plan['windows']:selected.setdefault((ref['dataset'],ref['subject']),ref)
+            payloads=[(cfg,str(out),ref) for ref in selected.values()]
+            failures=semantics_parallel_stage(cfg,out,stage,semantics_profile_worker,payloads,args.workers,lambda p:p[2]['id'])
+            manifest.update(execution='failed' if failures else 'completed',failures=failures,expected_profiles=len(payloads))
+    elif stage == 'synthetic_kappa':
+        if not json.loads((out/'synthetic_joint_summary.json').read_text())['passed']:
+            raise ValueError('joint tau/gain recovery required before kappa expansion')
+        specs=[dict(tau=2.,gain=1.,kappa=kappa,spectrum=spectrum,repeat=repeat,initial=initial,
+                    coordinate='processed',key=f'k{kappa:g}_{spectrum}_r{repeat}_{initial}')
+               for kappa in cfg['parameters']['kappa']['starts'] for spectrum in cfg['synthetic']['spectra']
+               for repeat in range(cfg['synthetic']['repeats']) for initial in cfg['synthetic']['initial_conditions']]
+        failures=semantics_parallel_stage(cfg,out,stage,semantics_kappa_worker,
+            [(cfg,str(out),spec) for spec in specs],args.workers,lambda p:p[2]['key'])
+        results=[json.loads((out/'synthetic_kappa'/s['key']/'result.json').read_text()) for s in specs
+                 if (out/'synthetic_kappa'/s['key']/'result.json').exists()]
+        errors=[r['relative_error'] if r['converged'] and r['relative_error'] is not None else float('inf') for r in results]
+        median,p90=semantics_error_quantiles(errors) if errors else (np.inf,np.inf)
+        success=sum(r['converged'] for r in results)/len(specs)
+        passed=len(results)==len(specs) and success>=cfg['gates']['optimizer_success_min'] and median<=.1 and p90<=.25
+        summary=dict(expected=len(specs),terminal=len(results),median_relative_error=median,p90_relative_error=p90,
+                     success_rate=success,passed=bool(passed))
+        write_json(out/'synthetic_kappa_summary.json',summary)
+        manifest.update(execution='failed' if failures else 'completed',summary=summary,failures=failures)
+    elif stage == 'qc_detail':
+        specs=json.loads((out/'inventory.json').read_text())['records']
+        failures=semantics_parallel_stage(cfg,out,stage,semantics_qc_detail_worker,
+            [(cfg,str(out),str(args.project_root.resolve()),spec) for spec in specs],args.workers,lambda p:p[3]['key'])
+        manifest.update(execution='failed' if failures else 'completed',failures=failures,expected_records=len(specs))
+    elif stage == 'synthetic_hierarchy':
+        screen=json.loads((out/'synthetic_feature_summary.json').read_text())
+        if not screen['parameters']['tau']['passed']:
+            manifest.update(execution='completed',scientific_result='not_expanded_failed_tau_recovery')
+        else:
+            specs=[dict(mechanism=mechanism,repeat=repeat,key=f'{mechanism}__r{repeat}')
+                for mechanism in ('global','dataset','subject','record','trial','eeg_gain_only','hb_gain_only','noise_only')
+                for repeat in range(cfg['synthetic']['hierarchy_repeats'])]
+            write_json(out/'synthetic_hierarchy_plan.json',dict(specs=specs,cohort_shape=cfg['synthetic']['hierarchy_shape'],
+                parameter='tau_only_minimal_time_parameter; other_physiology_fixed',
+                validation='third_record_last_three_windows; H4 is same-target descriptive only'))
+            failures=semantics_parallel_stage(cfg,out,stage,semantics_hierarchy_worker,
+                [(cfg,str(out),spec) for spec in specs],args.workers,lambda p:p[2]['key'])
+            manifest.update(execution='failed' if failures else 'completed',failures=failures,expected_cohorts=len(specs))
+    elif stage == 'observation_math':
+        manifest.update(execution='completed',summary=semantics_observation_math(cfg,out))
+    elif stage == 'synthetic_stress':
+        specs=[]
+        for stress in ['control']+cfg['synthetic']['stress']:
+            for spectrum in cfg['synthetic']['spectra']:
+                for repeat in range(cfg['synthetic']['repeats']):
+                    specs.append(dict(tau=2.,gain=1.,spectrum=spectrum,repeat=repeat,initial='nonrest',
+                        coordinate='processed',stress=stress,key=f'{stress}__{spectrum}__r{repeat}'))
+        write_json(out/'synthetic_stress_plan.json',dict(specs=specs,interpretation='known observation faults; model structure unchanged'))
+        failures=semantics_parallel_stage(cfg,out,stage,semantics_synthetic_worker,
+            [(cfg,str(out),spec) for spec in specs],args.workers,lambda p:p[2]['key'])
+        manifest.update(execution='failed' if failures else 'completed',failures=failures,expected_panels=len(specs))
+    elif stage == 'missing':
+        if json.loads((out/'training_manifest.json').read_text())['execution']!='completed':
+            raise ValueError('terminal training required for independent completion')
+        plan=json.loads((out/'diagnostic_plan.json').read_text())
+        payloads=[(cfg,str(out),ref) for ref in plan['windows']]
+        failures=semantics_parallel_stage(cfg,out,stage,semantics_missing_worker,payloads,args.workers,lambda p:p[2]['id'])
+        manifest.update(execution='failed' if failures else 'completed',failures=failures,expected_windows=len(payloads))
+    elif stage == 'synthetic_joint':
+        screen=json.loads((out/'synthetic_feature_summary.json').read_text())
+        if not all(v['passed'] for v in screen['parameters'].values()):
+            manifest.update(execution='completed',scientific_result='not_expanded_failed_scalar_recovery')
+        else:
+            specs=semantics_synthetic_specs(cfg)
+            if args.pilot:specs=specs[:4]
+            payloads=[(cfg,str(out),spec) for spec in specs]
+            failures=semantics_parallel_stage(cfg,out,stage,semantics_joint_worker,payloads,args.workers,lambda p:p[2]['key'])
+            manifest.update(execution='failed' if failures else 'completed',failures=failures,
+                            summary=semantics_joint_summary(cfg,out,specs))
+    elif stage == 'training':
+        refs=json.loads((out/'cohort.json').read_text())['refs']
+        plan=semantics_training_plan(cfg,out,refs)
+        failures=[]
+        for label,jobs in [('population',[j for j in plan if j['hierarchy']=='H1_dataset']),
+                           ('individual',[j for j in plan if j['hierarchy']!='H1_dataset'])]:
+            if args.pilot:jobs=jobs[:min(4,len(jobs))]
+            payloads=[(cfg,str(out),job) for job in jobs]
+            failures.extend(semantics_parallel_stage(cfg,out,stage+'_'+label,semantics_training_worker,
+                payloads,args.workers,lambda p:p[2]['key']))
+        manifest.update(execution='failed' if failures else 'completed',failures=failures,expected_jobs=len(plan))
+    elif stage in ('fixed','measured'):
+        if stage=='measured' and json.loads((out/'training_manifest.json').read_text())['execution']!='completed':
+            raise ValueError('terminal training phase required')
+        refs=json.loads((out/'cohort.json').read_text())['refs']
+        qualified=json.loads((out/'training_plan.json').read_text())['qualified_parameters'] if stage=='measured' else []
+        groups={}
+        for ref in refs:groups.setdefault((ref['key'],ref['site']),[]).append(ref)
+        payloads=[(cfg,str(out),group,qualified,stage) for group in groups.values()]
+        if args.pilot:payloads=payloads[:4]
+        failures=semantics_parallel_stage(cfg,out,stage,semantics_evaluation_worker,payloads,args.workers,
+            lambda p:p[2][0]['key']+'__'+p[2][0]['site'])
+        manifest.update(execution='failed' if failures else 'completed',failures=failures,expected_groups=len(payloads))
+    elif stage == 'cohort':
+        preparation=json.loads((out/'prepare_manifest.json').read_text())
+        if preparation['execution']!='completed':raise ValueError('completed preparation required')
+        refs,coordinates=semantics_cohort(cfg,out)
+        manifest.update(execution='completed',windows=len(refs),coordinates=len(coordinates))
+    elif stage == 'inventory':
+        manifest['summary'] = semantics_inventory(cfg, args.project_root, out)['record_counts']
+        manifest['execution'] = 'completed'
+    elif stage == 'prepare':
+        inventory = json.loads((out/'inventory.json').read_text())
+        specs = inventory['records']
+        if args.pilot:
+            specs = [next(r for r in specs if r['dataset']==ds) for ds in cfg['data']['datasets']]
+        payloads = [(cfg, str(out), str(args.project_root.resolve()), spec) for spec in specs]
+        started = time.monotonic(); failed = []
+        for k, (payload, result, error) in enumerate(bounded_nonlinear_work(
+                semantics_prepare_worker, payloads, args.workers, args.workers*2), 1):
+            if error:
+                failed.append(payload[3]['key'])
+                write_json(out/'prepared'/payload[3]['key']/'failure.json', dict(error=error))
+            progress = dict(stage=stage, completed=k, expected=len(specs), last_key=payload[3]['key'],
+                error=error, elapsed_s=time.monotonic()-started,
+                estimated_remaining_s=(time.monotonic()-started)*(len(specs)-k)/k)
+            write_json(out/'prepare_progress.json', progress); print(json.dumps(progress), flush=True)
+        manifest.update(execution='failed' if failed else 'completed', failed_records=failed,
+                        expected_records=len(specs))
+    elif stage in ('synthetic','synthetic_feature'):
+        specs = semantics_synthetic_specs(cfg)
+        if stage == 'synthetic_feature':
+            specs = [dict(s,coordinate='processed') for s in specs]
+        if args.pilot:
+            specs = [specs[i] for i in (0, 3, 16, 21)]
+        payloads = [(cfg, str(out), spec) for spec in specs]
+        started = time.monotonic()
+        for k, (payload, result, error) in enumerate(bounded_nonlinear_work(
+                semantics_synthetic_worker, payloads, args.workers, args.workers*2), 1):
+            if error:
+                write_json(out/stage/payload[2]['key']/'failure.json', dict(error=error))
+            progress = dict(completed=k, expected=len(specs), last_key=payload[2]['key'],
+                error=error, elapsed_s=time.monotonic()-started,
+                estimated_remaining_s=(time.monotonic()-started)*(len(specs)-k)/k)
+            write_json(out/'progress.json', progress)
+            print(json.dumps(progress), flush=True)
+        summary = semantics_synthetic_summary(cfg, out, specs, stage)
+        manifest['summary'] = summary
+        manifest['execution'] = 'completed' if summary['terminal_panels'] == len(specs) else 'failed'
+    else:
+        raise ValueError('unknown physiology semantics stage')
+    manifest['ended_at'] = datetime.now(timezone.utc).isoformat()
+    write_json(manifest_path, manifest)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config',type=Path,default=DEFAULT)
@@ -2866,8 +4965,28 @@ def main():
     ap.add_argument('--conditional-optical-gain-fit',action='store_true')
     ap.add_argument('--conditional-step-control',action='store_true')
     ap.add_argument('--waveform-diagnostic',action='store_true')
+    ap.add_argument('--physiology-semantics',action='store_true')
+    ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.physiology_semantics:
+        if any((args.waveform_diagnostic, args.conditional_step_control,
+                args.conditional_optical_gain_fit, args.fixed_roi_optical_fit,
+                args.fixed_roi_initial_fit, args.fixed_roi_flow_fit, args.fixed_roi_tau_fit,
+                args.gain_prior_fit, args.nonlinear_fit, args.replay_of is not None)):
+            ap.error('physiology-semantics is a separate versioned contract')
+        try:
+            return physiology_semantics_main(args)
+        except Exception as exc:
+            if args.run_dir is not None:
+                path=args.run_dir.resolve()/(args.semantics_stage+'_manifest.json')
+                if path.exists():
+                    owned=json.loads(path.read_text())
+                    if owned.get('execution')=='running' and owned.get('controller_pid')==os.getpid():
+                        owned.update(execution='failed',error=repr(exc),traceback=traceback.format_exc(),
+                            ended_at=datetime.now(timezone.utc).isoformat())
+                        write_json(path,owned)
+            raise
     if args.waveform_diagnostic:
         if any((args.conditional_step_control,args.conditional_optical_gain_fit,args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None)):
             ap.error('waveform-diagnostic cannot combine with model modes')
