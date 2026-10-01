@@ -1,0 +1,292 @@
+{
+  "run": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1",
+  "slides": [
+    {
+      "slide": 1,
+      "title": "状态空间模型：轨迹恢复与生理语义",
+      "evidence": "summary.json"
+    },
+    {
+      "slide": 2,
+      "title": "核心判断：匹配恢复通过，个体语义尚不成立",
+      "evidence": "summary.json; training_summary.json"
+    },
+    {
+      "slide": 3,
+      "title": "四数据集覆盖与可评估边界",
+      "evidence": "inventory.json; cohort.json"
+    },
+    {
+      "slide": 4,
+      "title": "相同模型，逐级增加证据强度",
+      "evidence": "resolved_config.yaml; diagnostic_plan.json"
+    },
+    {
+      "slide": 5,
+      "title": "本轮检验的是当前重建推断入口",
+      "evidence": "measured_manifest.json; resolved_config.yaml"
+    },
+    {
+      "slide": 6,
+      "title": "参数角色与参考值",
+      "evidence": "resolved_config.yaml; coordinates/*.json"
+    },
+    {
+      "slide": 7,
+      "title": "六种参数分配方式怎样比较？",
+      "evidence": "training_plan.json; diagnostic_plan.json"
+    },
+    {
+      "slide": 8,
+      "title": "高度同向并非本轮新增现象",
+      "evidence": "data_quality_audit/20260928_hbo_hbr_prevalence_v1/summary.csv"
+    },
+    {
+      "slide": 9,
+      "title": "本轮原生质量审计：未发现简单复制错误",
+      "evidence": "native_qc_summary.json; qc_detail/*.json"
+    },
+    {
+      "slide": 10,
+      "title": "模型匹配条件下，参数恢复误差较小",
+      "evidence": "synthetic*_summary.json"
+    },
+    {
+      "slide": 11,
+      "title": "参数恢复通过，不等于完整潜状态恢复",
+      "evidence": "synthetic_summary.json; synthetic_feature_summary.json; observation_math.json"
+    },
+    {
+      "slide": 12,
+      "title": "已知潜状态：匹配条件下逐项检查",
+      "evidence": "synthetic_state_recovery.csv; synthetic_diagnostics_summary.json"
+    },
+    {
+      "slide": 13,
+      "title": "真实参数变化在哪一级，共享方式就面临不同代价",
+      "evidence": "synthetic_diagnostics_summary.json; hierarchy_validation.csv"
+    },
+    {
+      "slide": 14,
+      "title": "参数个体差异是否可能来自观测变化？",
+      "evidence": "hierarchy_variation_recovery.csv; hierarchy_parameters.csv"
+    },
+    {
+      "slide": 15,
+      "title": "观测失配会破坏参数和驱动解释",
+      "evidence": "stress_metrics.csv; synthetic_diagnostics_summary.json"
+    },
+    {
+      "slide": 16,
+      "title": "更细积分核查：保留原始拟合结果",
+      "evidence": "integration_audit_summary.json; masked_integration_audit.csv"
+    },
+    {
+      "slide": 17,
+      "title": "实测拟合的评分与比较规则",
+      "evidence": "reconstruction_summary.json; resolved_config.yaml"
+    },
+    {
+      "slide": 18,
+      "title": "共享层级的全分母达标率",
+      "evidence": "reconstruction_common_later_windows.csv"
+    },
+    {
+      "slide": 19,
+      "title": "区域差异：固定参数的完整覆盖",
+      "evidence": "reconstruction_regions.csv"
+    },
+    {
+      "slide": 20,
+      "title": "分量误差：联合达标之外还要看失败来自哪里",
+      "evidence": "reconstruction_all_eligible.csv"
+    },
+    {
+      "slide": 21,
+      "title": "低幅值窗口：训练 SD 达标也可能保留波形误差",
+      "evidence": "reconstruction_all_eligible.csv"
+    },
+    {
+      "slide": 22,
+      "title": "同特征线性参考：残差与物理有效性分开",
+      "evidence": "linear_reference_summary.json"
+    },
+    {
+      "slide": 23,
+      "title": "适配收益有多大，是否稳定？",
+      "evidence": "sharing_paired_comparisons.csv"
+    },
+    {
+      "slide": 24,
+      "title": "观测层留下的残差仍需独立解释",
+      "evidence": "reconstruction_windows.csv"
+    },
+    {
+      "slide": 25,
+      "title": "逐轨迹查看：接近中位误差的实例",
+      "evidence": "reconstruction_windows.csv; measured/*/w*.npz"
+    },
+    {
+      "slide": 26,
+      "title": "逐轨迹查看：接近 P90 误差的实例",
+      "evidence": "reconstruction_windows.csv; measured/*/w*.npz"
+    },
+    {
+      "slide": 27,
+      "title": "逐轨迹查看：最差成功拟合实例",
+      "evidence": "reconstruction_windows.csv; measured/*/w*.npz"
+    },
+    {
+      "slide": 28,
+      "title": "保留困难例：S09 的同向 Hb 仍未被参数共享解决",
+      "evidence": "historical_focus.json; measured/*/w7.json"
+    },
+    {
+      "slide": 29,
+      "title": "Single-Trial：同步方向与独立 QC 交叉查看",
+      "evidence": "reconstruction_QC_strata.csv"
+    },
+    {
+      "slide": 30,
+      "title": "Simultaneous：同步方向与独立 QC 交叉查看",
+      "evidence": "reconstruction_QC_strata.csv"
+    },
+    {
+      "slide": 31,
+      "title": "Visual：同步方向与独立 QC 交叉查看",
+      "evidence": "reconstruction_QC_strata.csv"
+    },
+    {
+      "slide": 32,
+      "title": "同步方向与拟合困难：先在被试内部比较",
+      "evidence": "within_subject_QC_association.csv"
+    },
+    {
+      "slide": 33,
+      "title": "个体参数：同一规范下的重复差异仍明显",
+      "evidence": "repeatability_pairs.csv"
+    },
+    {
+      "slide": 34,
+      "title": "重复性同时检查收缩与触界的影响",
+      "evidence": "training_summary.json; repeatability_pairs.csv"
+    },
+    {
+      "slide": 35,
+      "title": "ICC 不能绕过观测规范和重复类型",
+      "evidence": "repeatability_icc.csv; training_summary.json"
+    },
+    {
+      "slide": 36,
+      "title": "实际拟合参数分布：τ",
+      "evidence": "training_summary.csv; training_parameters.csv"
+    },
+    {
+      "slide": 37,
+      "title": "实际拟合参数分布：β",
+      "evidence": "training_summary.csv; training_parameters.csv"
+    },
+    {
+      "slide": 38,
+      "title": "参数自由度更局部，触界风险也更高",
+      "evidence": "training_summary.csv"
+    },
+    {
+      "slide": 39,
+      "title": "重新优化其余参数后的目标剖面",
+      "evidence": "profiles_metrics.csv; profiles/*/result.json"
+    },
+    {
+      "slide": 40,
+      "title": "固定常数与惩罚会影响参数估计",
+      "evidence": "sensitivity_metrics.csv"
+    },
+    {
+      "slide": 41,
+      "title": "独立特征补全：中心 4 s 缺失",
+      "evidence": "completion_summary.csv; completion_windows.csv"
+    },
+    {
+      "slide": 42,
+      "title": "独立特征补全：整模态缺失",
+      "evidence": "completion_summary.csv; completion_windows.csv"
+    },
+    {
+      "slide": 43,
+      "title": "独立特征补全：单条 Hb 隐藏",
+      "evidence": "completion_summary.csv; completion_windows.csv"
+    },
+    {
+      "slide": 44,
+      "title": "隐藏 EEG 的错误恢复：逐轨迹可见",
+      "evidence": "completion_windows.csv; missing/*/result.npz"
+    },
+    {
+      "slide": 45,
+      "title": "跨模态信息必须通过配对破坏对照",
+      "evidence": "completion_null_comparisons.csv"
+    },
+    {
+      "slide": 46,
+      "title": "trial 参数是否增加独立补全价值？",
+      "evidence": "trial_calibration_metrics.csv; profiles/*/result.json"
+    },
+    {
+      "slide": 47,
+      "title": "延长上下文：评分目标保持完全相同",
+      "evidence": "context_metrics.csv; context/*/result.json"
+    },
+    {
+      "slide": 48,
+      "title": "跨数据集 τ 迁移：观测坐标先校准",
+      "evidence": "transfer_metrics.csv; transfer/*/result.json"
+    },
+    {
+      "slide": 49,
+      "title": "这里的 EEG 驱动首先是统计观测坐标",
+      "evidence": "coordinates/*.json; resolved_config.yaml"
+    },
+    {
+      "slide": 50,
+      "title": "现有观测层直接约束什么？",
+      "evidence": "observation_math.json; src/inference/t3a_balloon_robust_ssm.py"
+    },
+    {
+      "slide": 51,
+      "title": "β 的生理解释受幅度规范限制",
+      "evidence": "observation_math.json"
+    },
+    {
+      "slide": 52,
+      "title": "当前参数取值方式：工程使用建议",
+      "evidence": "reconstruction_summary.json; training_summary.json"
+    },
+    {
+      "slide": 53,
+      "title": "Visual 的数据集共享 τ：增益小，但有配对支持",
+      "evidence": "sharing_paired_comparisons.csv; training_summary.json"
+    },
+    {
+      "slide": 54,
+      "title": "放行建议分开给：实现、拟合、语义",
+      "evidence": "summary.json; observation_math.json"
+    },
+    {
+      "slide": 55,
+      "title": "本轮边界与设计执行差异",
+      "evidence": "summary.json; resolved_config.yaml"
+    },
+    {
+      "slide": 56,
+      "title": "复现与交付检查",
+      "evidence": "verification.json; *_manifest.json; resource_updates.json"
+    },
+    {
+      "slide": 57,
+      "title": "参考依据与证据定位",
+      "evidence": "observation_math.json; presentation_sources.json"
+    }
+  ],
+  "figures": "PNG at 240 dpi; body text/tables editable",
+  "wps_checked": false
+}

@@ -1,0 +1,211 @@
+{
+  "experiment_id": "SSM-PHYSIOLOGY-SEMANTICS-v1",
+  "stage": "summarize",
+  "execution": "completed",
+  "started_at": "2026-09-27T21:30:20.117861+00:00",
+  "source_root": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/source_snapshots/final_audit_analysis_v2",
+  "project_root": "/SSD_2/pid-mcm-implementation",
+  "supervisor": "ssm-physiology-semantics-v1-summary",
+  "controller_pid": 1762511,
+  "workers": 1,
+  "pilot": false,
+  "summary": {
+    "schema": "shared_driver_physiology_semantics_summary_v1",
+    "experiment_id": "SSM-PHYSIOLOGY-SEMANTICS-v1",
+    "execution": "completed",
+    "completed_at": "2026-09-27T21:31:38.561017+00:00",
+    "source_root": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/source_snapshots/final_audit_analysis_v2",
+    "project_root": "/SSD_2/pid-mcm-implementation",
+    "scope": {
+      "native_subjects": {
+        "eeg_fnirs_single_trial": 29,
+        "simultaneous_eeg_nirs": 26,
+        "visual_cognitive_motivation": 16,
+        "refed": 32
+      },
+      "native_records": {
+        "eeg_fnirs_single_trial": 174,
+        "simultaneous_eeg_nirs": 78,
+        "visual_cognitive_motivation": 54,
+        "refed": 480
+      },
+      "joint_subjects": {
+        "eeg_fnirs_single_trial": 29,
+        "simultaneous_eeg_nirs": 26,
+        "visual_cognitive_motivation": 16
+      },
+      "regional_windows": 22903
+    },
+    "synthetic": {
+      "synthetic": {
+        "expected_panels": 288,
+        "terminal_panels": 288,
+        "parameters": {
+          "tau": {
+            "passed": true,
+            "success_rate": 1.0,
+            "median_relative_error": 0.003435268015551163,
+            "p90_relative_error": 0.009607204594415086,
+            "boundary_count": 0,
+            "median_validation_driver_nrmse": 0.04912050957791025
+          },
+          "neurovascular_gain": {
+            "passed": true,
+            "success_rate": 1.0,
+            "median_relative_error": 0.0017524668767965879,
+            "p90_relative_error": 0.007252620049343828,
+            "boundary_count": 0,
+            "median_validation_driver_nrmse": 0.049021811525441335
+          }
+        }
+      },
+      "synthetic_feature": {
+        "expected_panels": 288,
+        "terminal_panels": 288,
+        "parameters": {
+          "tau": {
+            "passed": true,
+            "success_rate": 1.0,
+            "median_relative_error": 0.0039853488175699,
+            "p90_relative_error": 0.010371016615099916,
+            "boundary_count": 0,
+            "median_validation_driver_nrmse": 0.10725373137130452
+          },
+          "neurovascular_gain": {
+            "passed": true,
+            "success_rate": 1.0,
+            "median_relative_error": 0.004009449944074983,
+            "p90_relative_error": 0.015576847011570328,
+            "boundary_count": 0,
+            "median_validation_driver_nrmse": 0.10428540526808369
+          }
+        }
+      },
+      "synthetic_joint": {
+        "expected": 288,
+        "terminal": 288,
+        "success_rate": 1.0,
+        "median_relative_errors": [
+          0.00650380442367704,
+          0.006527997935525387
+        ],
+        "p90_relative_errors": [
+          0.01960729996632982,
+          0.022857597262516263
+        ],
+        "passed": true,
+        "parameter_order": [
+          "tau",
+          "neurovascular_gain"
+        ]
+      },
+      "synthetic_kappa": {
+        "expected": 96,
+        "terminal": 96,
+        "median_relative_error": 0.0026371405227004763,
+        "p90_relative_error": 0.006883665772739467,
+        "success_rate": 1.0,
+        "passed": true
+      }
+    },
+    "source_files": {
+      "qc": "native_qc_summary.json",
+      "training": "training_summary.json",
+      "reconstruction": "reconstruction_summary.json",
+      "completion": "completion_summary.json",
+      "profiles": "profile_diagnostics_summary.json",
+      "stress_hierarchy": "synthetic_diagnostics_summary.json",
+      "observation": "observation_math.json",
+      "linear": "linear_reference_summary.json",
+      "historical_focus": "historical_focus.json",
+      "integration": "integration_audit_summary.json"
+    },
+    "verdict": {
+      "reconstruction_gate_methods": {
+        "eeg_fnirs_single_trial": [
+          "H0_fixed",
+          "H1_dataset__neurovascular_gain",
+          "H1_dataset__tau",
+          "H2_subject__neurovascular_gain",
+          "H2_subject__tau",
+          "H2s_partial_pooling__neurovascular_gain",
+          "H2s_partial_pooling__tau",
+          "H3_record__neurovascular_gain",
+          "H3_record__tau"
+        ],
+        "simultaneous_eeg_nirs": [
+          "H0_fixed",
+          "H1_dataset__neurovascular_gain",
+          "H1_dataset__tau",
+          "H2_subject__neurovascular_gain",
+          "H2_subject__tau",
+          "H2s_partial_pooling__neurovascular_gain",
+          "H2s_partial_pooling__tau",
+          "H3_record__neurovascular_gain",
+          "H3_record__tau"
+        ],
+        "visual_cognitive_motivation": [
+          "H0_fixed",
+          "H1_dataset__neurovascular_gain",
+          "H1_dataset__tau",
+          "H2_subject__neurovascular_gain",
+          "H2_subject__tau",
+          "H2s_partial_pooling__neurovascular_gain",
+          "H2s_partial_pooling__tau",
+          "H3_record__neurovascular_gain",
+          "H3_record__tau"
+        ]
+      },
+      "common_window_gate_methods": {
+        "eeg_fnirs_single_trial": [
+          "H0_fixed",
+          "H1_dataset__neurovascular_gain",
+          "H1_dataset__tau",
+          "H2_subject__neurovascular_gain",
+          "H2_subject__tau",
+          "H2s_partial_pooling__neurovascular_gain",
+          "H2s_partial_pooling__tau",
+          "H3_record__neurovascular_gain",
+          "H3_record__tau"
+        ],
+        "simultaneous_eeg_nirs": [
+          "H0_fixed",
+          "H1_dataset__neurovascular_gain",
+          "H1_dataset__tau",
+          "H2_subject__neurovascular_gain",
+          "H2_subject__tau",
+          "H2s_partial_pooling__neurovascular_gain",
+          "H2s_partial_pooling__tau",
+          "H3_record__neurovascular_gain",
+          "H3_record__tau"
+        ],
+        "visual_cognitive_motivation": [
+          "H0_fixed",
+          "H1_dataset__neurovascular_gain",
+          "H1_dataset__tau",
+          "H2_subject__neurovascular_gain",
+          "H2_subject__tau",
+          "H2s_partial_pooling__neurovascular_gain",
+          "H2s_partial_pooling__tau",
+          "H3_record__neurovascular_gain",
+          "H3_record__tau"
+        ]
+      },
+      "stable_H2_median_screen_groups": [],
+      "parameter_claim": "conditional_model_time_parameter_and_effective_gain_only; no absolute_individual_physiology_release",
+      "source_claim": "canonical_observation_combinations_and_model_residual; no_unique_cortical_systemic_or_metabolic_separation"
+    },
+    "report_format": "pptx",
+    "limitations": [
+      "REFED cross-modal geometry unavailable; Hb QC only",
+      "Full observation validation refits its driver/initial state; reconstruction not prediction",
+      "Missing/prefix tasks at processed-feature level, not raw causal forecasting",
+      "Frozen feature gauges and calibration uncertainty not refitted in bootstrap",
+      "Sharing policy comparisons descriptive; no nested inner-selected one-SE policy evaluated",
+      "H2s shrinkage fixed from search bounds, not tuned on inner folds; H3 uses three calibration windows vs up to eighteen for H1/H2",
+      "Native-to-window-local processing changes target relative to prior whole-record cache reports",
+      "Data covariance and QC flags do not by themselves identify corruption or a physiological source"
+    ]
+  },
+  "ended_at": "2026-09-27T21:31:38.708824+00:00"
+}

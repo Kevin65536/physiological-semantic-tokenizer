@@ -1,0 +1,23 @@
+{
+  "command": [
+    "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+    "-u",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/source_snapshots/fitting/experiments/scripts/evaluate_shared_driver_reconstruction.py",
+    "--physiology-semantics",
+    "--config",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/source_snapshots/fitting/experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml",
+    "--run-dir",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1",
+    "--project-root",
+    "/SSD_2/pid-mcm-implementation",
+    "--workers",
+    "40",
+    "--semantics-stage",
+    "training"
+  ],
+  "cwd": "/SSD_2/pid-mcm-implementation",
+  "unit": "ssm-physiology-semantics-v1-training",
+  "workers": 40,
+  "numerical_threads": 1,
+  "reason": "40 primary training workers and 8 independent joint-synthetic workers; total 48 below 52 physical cores, measured RSS and synthetic throughput checked"
+}

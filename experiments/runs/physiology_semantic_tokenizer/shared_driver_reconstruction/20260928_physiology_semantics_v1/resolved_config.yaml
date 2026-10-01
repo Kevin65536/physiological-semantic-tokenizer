@@ -1,0 +1,200 @@
+schema: shared_driver_physiology_semantics_v1
+experiment_id: SSM-PHYSIOLOGY-SEMANTICS-v1
+seed: 20260928
+data:
+  cache_root: data/cache/physiology_semantic_clean_v5
+  native_prevalence_run: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1
+  datasets:
+  - eeg_fnirs_single_trial
+  - simultaneous_eeg_nirs
+  - visual_cognitive_motivation
+  - refed
+  excluded:
+  - visual_cognitive_motivation/S06/Part1
+  protected_data: forbidden
+  motion_method: none
+  preparation: split_local_native_features
+  refed_geometry: Hb_only_no_cross_modal_coregistration
+tensor:
+  steps: 120
+  dt_s: 0.25
+  components:
+  - EEG_logpower_PCA
+  - relative_HbO
+  - relative_HbR
+  state_order:
+  - r
+  - s
+  - f
+  - v
+  - p
+  - q
+  eeg_bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+  eeg_neighbors: 6
+  center_steps: 16
+  context_s:
+  - 30
+  - 60
+  - 120
+fixed:
+  alpha: 0.32
+  E0: 0.32
+  gamma: 0.32
+  P0: 1.0
+  Q0: 0.35
+  driver_decay_per_s: 0.45
+  eeg_loading: 1.0
+  neurovascular_gain: 1.0
+  kappa: 0.64
+  tau: 2.0
+parameters:
+  tau:
+    bounds:
+    - 0.5
+    - 8.0
+    starts:
+    - 1.0
+    - 2.0
+    - 4.0
+  neurovascular_gain:
+    bounds:
+    - 0.1
+    - 10.0
+    starts:
+    - 0.5
+    - 1.0
+    - 2.0
+  kappa:
+    bounds:
+    - 0.2
+    - 1.5
+    starts:
+    - 0.32
+    - 0.64
+    - 1.28
+solver:
+  numerical_backend: numba
+  substeps: 4
+  validation_substeps: 8
+  penalty: 0.01
+  initial_penalty: 100.0
+  flow_prior_weight: 1.0
+  flow_prior_log_sd: 0.6931471805599453
+  gradient_tolerance: 1.0e-05
+  max_iterations: 150
+  max_evaluations_per_trial: 600
+  step_control: quadratic_interpolation
+synthetic:
+  tau:
+  - 1.0
+  - 2.0
+  - 4.0
+  gain:
+  - 0.5
+  - 1.0
+  - 2.0
+  spectra:
+  - slow
+  - mixed
+  repeats: 8
+  initial_conditions:
+  - rest
+  - nonrest
+  train_trials: 18
+  validation_trials: 6
+  driver_sd: 0.025
+  noise_fraction: 0.05
+  hierarchy_repeats: 8
+  hierarchy_shape:
+  - 4
+  - 4
+  - 3
+  - 6
+  stress:
+  - common_colored
+  - independent_colored
+  - drift
+  - jump
+  - swapped_Hb
+  - lag
+splits:
+  subject_folds: 5
+  record_repeats: 2
+  training_windows: 18
+  trial_calibration_s: 10
+  labels_as_model_inputs: false
+  overlapping_windows_across_folds: forbidden
+  refed_video_grouping: required
+coordinate:
+  eeg_training_sd_target: 0.025
+  common_Hb_training_sd_target: 0.025
+  per_trial_zscore: forbidden
+  absolute_physiology_calibration: unavailable
+endpoints:
+  primary:
+  - full_observation_reconstruction
+  - heldout_parameter_sharing
+  secondary:
+  - waveform
+  - feature_missing_completion
+  - independent_record_repeatability
+  diagnostic:
+  - parameter_profiles
+  - gauge
+  - observation_rank
+  - context
+  - stress
+  missing_modes:
+  - center_EEG
+  - center_Hb
+  - HbO_hidden
+  - HbR_hidden
+  - EEG_hidden
+  - Hb_hidden
+  baselines:
+  - fixed_parameters
+  - training_template
+  - own_context
+  - ridge_own
+  - ridge_cross
+  nulls:
+  - training_donor
+  - nonwrapping_time_shift
+  - spatial_anchor
+  hierarchy:
+  - H0
+  - H1_dataset
+  - H2_subject
+  - H2s_partial_pooling
+  - H3_record
+  - H4_trial_diagnostic
+  likelihood_intervals: forbidden_engineering_objective
+gates:
+  synthetic_median_relative_error_max: 0.1
+  synthetic_p90_relative_error_max: 0.25
+  optimizer_success_min: 0.95
+  all_component_nrmse_max: 0.5
+  full_denominator_pass_min: 0.8
+  repeat_symmetric_relative_error_median_max: 0.2
+  icc_lower_min: 0.6
+  failed_parameter_branch: stop_semantic_expansion_retain_negative_evidence
+resources:
+  max_workers: 52
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  supervisor: user_systemd
+report:
+  format: pptx
+  output_root: docs/report
+  figures: png
+  language: zh_CN

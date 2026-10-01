@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-09-28; payload-pruning record retained from
+_Evidence surface updated 2026-10-01; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -68,6 +68,30 @@ record distinct checks. Preserve the interrupted hierarchy launch, failed techni
 attempts, aggregation corrections, and earlier presentation exports with their
 revision evidence. Presentation v3 is the reviewed delivery; LibreOffice PDF
 previews are internal layout checks, not an additional technical report.
+
+The Git review package retains the existing summaries, comparison tables,
+completed and interrupted phase records, analysis corrections, software checks,
+and reviewed presentation at their original paths. Start with the terminal
+summary above, then follow these evidence routes:
+
+| Review question | Retained evidence |
+| --- | --- |
+| Matched synthetic recovery and observation mismatch | [State recovery](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/synthetic_state_recovery.csv), [stress and hierarchy summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/synthetic_diagnostics_summary.json) |
+| Reconstruction and paired parameter-sharing comparisons | [Common-window full denominators](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/reconstruction_common_later_windows.csv), [paired comparisons](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/sharing_paired_comparisons.csv), [regional and QC summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/reconstruction_summary.json) |
+| Individual-parameter stability and failed fits | [Training parameters](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/training_parameters.csv), [repeat pairs](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/repeatability_pairs.csv), [task-stratified ICC](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/repeatability_icc.csv) |
+| Missing-feature completion and pairing nulls | [Completion summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/completion_summary.csv), [null comparisons](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/completion_null_comparisons.csv) |
+| Integration precision | [Full-observation and masked replay summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/integration_audit_summary.json) |
+| Exact source and environment used by each phase | [Frozen source identity](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/source_snapshot_identity_git_export_v1.json), [environment](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/environment_snapshot.json), [resolved configuration](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/resolved_config.yaml) |
+
+The source identity maps each phase's recorded file set to the existing Git
+commit or a retained differing source version. Identical differing versions are
+kept once at an original snapshot path; the map gives the replacement path for
+each phase. This is provenance for the dated experiment, not an active launcher
+or a new scientific result. The original evidence bytes and verdicts are unchanged.
+Native/derived arrays, caches, complete reconstruction/prediction tables and
+earlier presentation binaries remain local. Figure bitmaps are embedded in the
+tracked presentation. Historical-focus references to earlier runs remain local
+where their separately indexed evidence has not been released.
 
 ### Native Hb direction prevalence — 2026-09-28
 

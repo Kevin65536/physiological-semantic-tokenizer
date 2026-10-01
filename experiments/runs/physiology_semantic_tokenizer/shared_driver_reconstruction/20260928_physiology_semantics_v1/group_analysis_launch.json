@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+    "-u",
+    "-c",
+    "import sys,json,time\nfrom pathlib import Path\nsys.path.insert(0,sys.argv[1])\nfrom experiments.scripts import evaluate_shared_driver_reconstruction as r\nsource=Path(sys.argv[1]);out=Path(sys.argv[2]);cfg=r.semantics_config(source/'experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml')\nstarted=time.monotonic()\na=r.semantics_synthetic_diagnostic_summary(cfg,out)\nb=r.semantics_training_summary(cfg,out)\nc=r.semantics_profile_summary(cfg,out)\nrecord=dict(source=str(source),seconds=time.monotonic()-started,synthetic_hierarchy_groups=len(a['hierarchy']),state_recovery=a['state_recovery'],icc_groups=len(b['icc']),profile_groups=len(c['groups']),execution='completed')\nr.write_json(out/'group_analysis_completion.json',record)\nprint(json.dumps(r.serial(record),ensure_ascii=False))\n",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/source_snapshots/final_audit_analysis_v2",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1"
+  ],
+  "unit": "ssm-physiology-semantics-v1-group-analysis",
+  "cwd": "/SSD_2/pid-mcm-implementation",
+  "at": "2026-09-27T21:11:41.760134+00:00",
+  "reason": "All 64 synthetic hierarchy cohorts completed; aggregate matched states, stress, repeats and completed diagnostic groups using frozen final analysis. No model fits repeated."
+}

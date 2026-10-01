@@ -1,0 +1,24 @@
+{
+  "at": "2026-09-27T20:35:34.057071+00:00",
+  "targeted_tests": 176,
+  "targeted_result": "passed",
+  "duration_s": 56.12,
+  "command": "OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -m pytest -q tests/test_shared_driver_compiled.py tests/test_shared_driver_physiology_semantics.py tests/test_shared_driver_nonlinear_fit.py tests/test_shared_driver_flow_regularization.py tests/test_shared_driver_step_control.py tests/test_shared_driver_reconstruction.py tests/test_unified_physiology.py tests/test_event_alignment.py tests/test_hbo_hbr_relationship.py",
+  "description": "176 项相关测试全部通过；分析扩展后 15 项针对性复查通过（合计覆盖 177 个不同测试）。默认收集 1113 项、按既有分类排除 11 项。PPT 交付另留核验。",
+  "default_collection": {
+    "collected": 1113,
+    "discovered": 1124,
+    "deselected": 11,
+    "duration_s": 7.85,
+    "exit_code": 0,
+    "log": "final_test_collection_v2.txt"
+  },
+  "post_analysis_tests": {
+    "tests": 15,
+    "result": "passed",
+    "duration_s": 7.28,
+    "command": ".venv/bin/python -m pytest -q tests/test_shared_driver_physiology_semantics.py",
+    "note": "Includes one additional denominator/stratification test after the 176-test suite; overlapping tests are not independent replications."
+  },
+  "unique_targeted_tests": 177
+}
