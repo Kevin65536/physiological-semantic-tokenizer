@@ -1,0 +1,152 @@
+{
+  "run": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1",
+  "slides": [
+    {
+      "slide": 1,
+      "title": "让共享状态更可靠：四臂实验结果",
+      "evidence": "summary.json; measured_summary.csv"
+    },
+    {
+      "slide": 2,
+      "title": "先看核心端点：整段 EEG 隐藏",
+      "evidence": "measured_summary.csv; measured_paired.csv"
+    },
+    {
+      "slide": 3,
+      "title": "结果：改善稳定性，尚不能放行通用语义 teacher",
+      "evidence": "summary.json; measured_summary.csv; null_comparisons.csv"
+    },
+    {
+      "slide": 4,
+      "title": "四臂只改变观测误差与驱动约束",
+      "evidence": "resolved_config.yaml"
+    },
+    {
+      "slide": 5,
+      "title": "模型表达：限制容量，保留分解歧义",
+      "evidence": "source_snapshot/src/inference/shared_driver_reconstruction.py; resolved_config.yaml"
+    },
+    {
+      "slide": 6,
+      "title": "训练与评价分开，失败继续留在分母中",
+      "evidence": "synthetic_calibration.json; calibration/*.json; measured_plan.json"
+    },
+    {
+      "slide": 7,
+      "title": "合成：全观测下的驱动恢复",
+      "evidence": "synthetic_summary.csv; synthetic_metrics.csv"
+    },
+    {
+      "slide": 8,
+      "title": "合成：整段 EEG 隐藏后的驱动恢复",
+      "evidence": "synthetic_summary.csv; synthetic_metrics.csv"
+    },
+    {
+      "slide": 9,
+      "title": "驱动的绝对水平与波形形状必须分开",
+      "evidence": "synthetic_summary.csv"
+    },
+    {
+      "slide": 10,
+      "title": "真实驱动改变时，模型是否跟随？",
+      "evidence": "counterfactual_summary.csv"
+    },
+    {
+      "slide": 11,
+      "title": "合成：直接看误差归属，而不只看完整重建",
+      "evidence": "synthetic_summary.csv"
+    },
+    {
+      "slide": 12,
+      "title": "负结果：稳定的输出仍然可能是错误的",
+      "evidence": "synthetic_reliability.csv; synthetic_metrics.csv"
+    },
+    {
+      "slide": 13,
+      "title": "实测范围与时间处理边界",
+      "evidence": "measured_plan.json; processing_timing_audit.json"
+    },
+    {
+      "slide": 14,
+      "title": "实测：完整重建与物理成分分开",
+      "evidence": "measured_summary.csv"
+    },
+    {
+      "slide": 15,
+      "title": "训练尺度合格，并不等于窗口波形准确",
+      "evidence": "summary.json; measured_summary.csv"
+    },
+    {
+      "slide": 16,
+      "title": "中心 4 s 遮挡：先与自身上下文比较",
+      "evidence": "measured_summary.csv; measured_paired.csv"
+    },
+    {
+      "slide": 17,
+      "title": "整模态缺失：先验是否改善不稳定逆推？",
+      "evidence": "measured_summary.csv"
+    },
+    {
+      "slide": 18,
+      "title": "单条 Hb 隐藏：共同项是否帮助独立补全？",
+      "evidence": "measured_summary.csv"
+    },
+    {
+      "slide": 19,
+      "title": "与 M0 的配对比较：给出被试层区间",
+      "evidence": "measured_paired.csv"
+    },
+    {
+      "slide": 20,
+      "title": "隐藏 EEG 的真实配对信息",
+      "evidence": "null_comparisons.csv"
+    },
+    {
+      "slide": 21,
+      "title": "隐藏 Hb 的真实配对信息",
+      "evidence": "null_comparisons.csv"
+    },
+    {
+      "slide": 22,
+      "title": "teacher 输出：目标值及其适用范围",
+      "evidence": "teacher_summary.csv; measured/*/result.npz"
+    },
+    {
+      "slide": 23,
+      "title": "实例：隐藏 EEG 之后，驱动如何变化？",
+      "evidence": "measured_metrics.csv; measured/*/result.npz"
+    },
+    {
+      "slide": 24,
+      "title": "独立记录 / 分块：检验功能稳定性",
+      "evidence": "repeatability_summary.csv"
+    },
+    {
+      "slide": 25,
+      "title": "参数—轨迹 profile：τ",
+      "evidence": "profile_summary.csv; profile_metrics.csv"
+    },
+    {
+      "slide": 26,
+      "title": "参数—轨迹 profile：增益",
+      "evidence": "profile_summary.csv; profile_metrics.csv"
+    },
+    {
+      "slide": 27,
+      "title": "数值与执行审计",
+      "evidence": "summary.json; resources.json; *_manifest.json; verification.json"
+    },
+    {
+      "slide": 28,
+      "title": "本轮结论应如何使用",
+      "evidence": "summary.json; measured_paired.csv; null_comparisons.csv; synthetic_summary.csv"
+    },
+    {
+      "slide": 29,
+      "title": "证据与复现入口",
+      "evidence": "resolved_config.yaml; launch.json; source_snapshot/; presentation_sources.json"
+    }
+  ],
+  "figures": "PNG at 240 dpi; text and tables editable",
+  "wps_checked": false
+}

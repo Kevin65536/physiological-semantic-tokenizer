@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-09-27T18:18:18.659679+00:00",
+  "updated_at": "2026-10-01T09:04:28.780139+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1137,6 +1137,36 @@
       "label": "PPT位图、文字与版面核验",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1/presentation_verification_v3.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.teacher_robustness_contract",
+      "label": "观测失配与驱动先验四臂合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_teacher_robustness_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.teacher_robustness_summary",
+      "label": "四臂实验结果摘要",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.teacher_robustness_verification",
+      "label": "四臂实验完整性与隔离核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1/verification.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.teacher_robustness_presentation",
+      "label": "四臂实验29页PPT",
+      "path": "docs/report/20261001_ssm_teacher_robustness_v3/SSM_TEACHER_ROBUSTNESS.pptx",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.teacher_robustness_presentation_validation",
+      "label": "PPT与位图PDF交付核验",
+      "path": "docs/report/20261001_ssm_teacher_robustness_v3/export_validation.json",
+      "role": "run_manifest"
     }
   ],
   "records": [
@@ -4257,6 +4287,32 @@
       ],
       "headline": false,
       "next_step": "由用户依据PPT分项决定放行范围：数值实现与限定条件观测重建可保留；Single/Sim优先固定τ=2 s、β=1，Visual区域共享τ仅为工程候选。个体生理参数、可靠缺失补全与唯一来源分解尚无支持；不默认逐trial估参，不以增加慢共同成分替代疑似数据来源核查。"
+    },
+    {
+      "state_id": "main.teacher_robustness@2026-10-01.v1",
+      "entity": "main.teacher_robustness",
+      "label": "观测失配与驱动先验四臂检验",
+      "track": "main",
+      "order": 168,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "完成H0固定的四臂检验：合成4992拟合中4966收敛；三公开数据集18人72窗、7200实测拟合中7193收敛，264个profile均收敛。组合完整重建达标53/72→64/72；隐藏EEG成功解NRMSE中位Single/Sim/Visual为1.096/1.109/1.101（M0为8.431/20.369/12.569），但均高于训练模板，整模态12个错配/时移区间无一全为正。共同成分减少部分失配污染，却使隐藏HbR误差在三数据集均恶化；匹配合成完整驱动误差0.101→0.241、参考后形状误差0.050→0.055。稳健性掩码仍可稳定而错误，不能升级为通用生理teacher。29页PPT与位图PDF完成字体、文字、图像和版面核验；WPS未检查。",
+      "evidence_ids": [
+        "e.teacher_robustness_contract",
+        "e.teacher_robustness_summary",
+        "e.teacher_robustness_verification",
+        "e.teacher_robustness_presentation",
+        "e.teacher_robustness_presentation_validation"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-01T09:04:28.780139+00:00",
+      "depends_on": [
+        "main.physiology_semantics"
+      ],
+      "headline": false,
+      "next_step": "保留受约束观测项、缺失条件下的稳定化先验及候选敏感性输出；优先独立验证参考后驱动功能、时间/观测校准与先验偏差，不将重建或稳定掩码直接视为语义资格，不自动扩展H1/H2或训练tokenizer。"
     }
   ]
 }

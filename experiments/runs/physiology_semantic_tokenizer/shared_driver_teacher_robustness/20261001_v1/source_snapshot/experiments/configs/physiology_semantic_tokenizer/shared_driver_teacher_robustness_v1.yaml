@@ -1,0 +1,63 @@
+schema: shared_driver_teacher_robustness_v1
+experiment_id: SSM-TEACHER-ROBUSTNESS-v1
+seed: 20261001
+source_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1
+artifact_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness
+data_boundary: exact_public_parent_prepared_arrays_and_coordinates_only
+protected_data: forbidden
+arms: [M0, M-observation, M-prior, M-combined]
+parameter_policy: H0_fixed
+tensor: {steps: 120, components: 3, dt_s: 0.25, state_order: [r, s, f, v, p, q]}
+observation:
+  mechanism: volume
+  modes: 4
+  rho: 0.35
+  coefficient_scale_multipliers: [0.5, 1.0, 2.0]
+  scale_source: training_H0_residual_basis_coefficients
+prior:
+  amplitude_weights: [0.01, 0.1, 1.0]
+  scale_source: RMS_of_training_H0_latent_drivers_not_observation_SD
+  mean: 0.0
+calibration:
+  training_windows: 18
+  selection_windows: 6
+  selection_modes: [EEG_hidden, HbO_hidden, center_Hb]
+  selection: separate_arm_mean_hidden_training_scale_NRMSE_failed_cells_penalty_100
+  subject_disjoint: true
+  synthetic_repeats: 4
+synthetic:
+  repeats: 8
+  spectra: [slow, mixed]
+  initial: [rest, nonrest]
+  scenarios: [control, common_basis, common_correlated, common_colored, EEG_gain, Hb_gain, noise, lag_1s, lag_3s, driver_amplitude, driver_shape, physiology_tau, weak_coupling]
+  modes: [full, EEG_hidden, Hb_hidden]
+  canonical_white_noise_SD: [0.00125, 0.00015, 0.00007]
+  common_coefficient_SD: [0.02, 0.015, 0.01, 0.005]
+  colored_common_canonical_SD: 0.025
+measured:
+  panel: unchanged_parent_diagnostic_plan_72_windows_18_subjects
+  modes: [full, center_EEG, center_Hb, HbO_hidden, HbR_hidden, EEG_hidden, Hb_hidden]
+  pairings: [real, wrong_subject, real_shift_support, nonwrapping_shift_12s]
+  baselines: [training_template, own_context, ridge_own, ridge_cross]
+  sensitivity: [EEG_gain_low, EEG_gain_high, Hb_gain_low, Hb_gain_high, lag_minus_one_sample, lag_plus_one_sample, prior_half, prior_double, rho_low, rho_high, training_bootstrap_0, training_bootstrap_1]
+  profile_windows_per_dataset: 2
+  tau_profile: [0.5, 1.0, 2.0, 4.0, 8.0]
+  gain_profile: [0.000001, 0.1, 0.5, 1.0, 2.0, 10.0]
+endpoints:
+  primary: [synthetic_driver_recovery_and_counterfactual_tracking, measured_hidden_completion_vs_M0_and_baselines]
+  secondary: [physical_vs_total_reconstruction, wrong_pair_and_shift_increment, independent_record_or_block_repeatability]
+  diagnostic: [sensitivity_masks, parameter_trajectory_profiles, observation_component_share, processing_and_timing_audit]
+  error_coordinates: [parent_feature_native_units, training_SD, window_local_SD]
+  uncertainty: engineering_sensitivity_not_posterior_probability
+  bootstrap: subject_block_1000_replicates_frozen_coordinates
+  null: true_pair_not_better_than_wrong_subject_or_shift_or_own_context
+  stopping_rule: execute_all_registered_cells_once_with_fixed_budget_retain_every_failure_no_test_tuning
+teacher:
+  coordinate: frozen_parent_PCA_Hb_scale_H0
+  sensitivity_threshold_SD: 0.25
+  near_equivalent_objective_fraction: 0.05
+  outputs: [driver, reference_centered_driver, robustness_mask, observation_residual, physical_prediction, observation_component, coordinate_id, parameter_policy]
+  release: candidate_sensitivity_sidecar_only_no_tokenizer_training
+resources: {max_workers: 52, numerical_threads: 1, in_flight_per_worker: 2, supervisor: user_systemd}
+report: {format: pptx, output_root: docs/report, figures: png, language: zh_CN}

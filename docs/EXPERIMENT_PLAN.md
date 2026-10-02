@@ -33,6 +33,51 @@ teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
 
+## 观测失配与驱动先验的四臂检验（2026-10-01）
+
+`SSM-TEACHER-ROBUSTNESS-v1` 执行用户本次提供的计划，合同为
+[`shared_driver_teacher_robustness_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_teacher_robustness_v1.yaml)。
+沿用现有 runner 的 `--teacher-robustness` 入口，六状态方程、H0、训练坐标、
+预处理与 2026-09-28 QC 预选的 72 窗口/18 被试面板均固定。新观测项属于本轮
+明确请求，不修改下节历史设计或已完成证据。只读该公共 parent 的明确 prepared
+数组、cohort、坐标和元数据，不进入任何比较协议的 protected 数据。
+
+四臂为 M0、M-observation、M-prior、M-combined。观测项沿用 volume 方向，
+固定 HbR 比例 0.35、4 个余弦模式，系数带 proper 二次约束；对每条轨迹精确
+消元，分别保存物理预测、额外成分、完整预测。该项不命名为头皮或脑血容量。
+先验沿用驱动幅度接口，覆盖曲率罚不约束的常数和线性方向；实测尺度来自
+外折训练 H0 潜驱动的 RMS，额外成分尺度来自这些拟合的 Hb 残差系数。
+这些是工程先验，均不称观测噪声或校准后验。每外折另外保留被试不重叠的
+训练内选择窗口，分别选择观测系数尺度倍率和驱动权重，组合臂复用两者；
+不根据外折成绩更换候选或继续调参。已冻结 parent PCA/SD 为所有臂共同条件。
+
+合成先用独立 seed 流选强度，再执行 8 重复×2 频谱×2 初态、13 个配对反事实、
+3 个可见性条件与四臂。观测失配包括基底内/外共同成分、与驱动相关共同成分、
+EEG/Hb 增益、噪声、1/3 s 时移；真实变化包括驱动幅度/形状与 tau 变化。
+另用 1e-6 增益作近零耦合对照，不放宽核心严格正增益域。既报告完整潜驱动
+误差，也报告首 5 s 参考后的驱动误差，避免把离线观测算子的零空间隐藏掉。
+
+实测对同窗口执行 full 与六种特征遮挡，比较训练模板、自身上下文、own/cross
+ridge；错误配对来自外折训练中的不同被试且 task/condition 匹配。非环绕
+12 s 时移与真实配对共用可见支持。原坐标 RMSE（Hb 为 parent 处理后原单位，
+EEG 为 log-power PCA）、训练 SD NRMSE、窗口局部 SD NRMSE 和相关性分列。
+缺失任务属于离线处理后的特征补全，不是原传感器预测；full 会重拟合驱动
+与初态，不是独立预测。时钟审计复用原生事件锚点并检查公共处理算子，不根据
+外折曲线逐窗选时延；没有新增硬件时钟测量。
+
+敏感性覆盖 ±10% 观测校准、±1 样本时移、先验强度、固定共同方向变化与
+训练记录 bootstrap。teacher sidecar 保留目标、逐点敏感性标记、坐标、
+参数策略和未解释残差；缺失条件稳定性单列。0.25 个训练潜驱动尺度的阈值
+是预设工程筛查，不是概率或语义资格。预选每数据集两名被试做参数—轨迹
+profile，每格重拟合驱动、初态和允许的观测项；5% 近等价目标差不是置信区间。
+跨记录/分块只比较可比较的轨迹功能及敏感性，不把不同任务的瞬时轨迹当重测真值。
+
+所有已登记单元在固定预算下执行，失败保留分母，不根据结果扩大预算。先
+synthetic/software，再读取上述公共面板；由 user systemd、单线程数值库、
+受限 in-flight 队列执行。结果进入独立的 `shared_driver_teacher_robustness`
+命名空间，最终 PPT 写入 `docs/report/`；本轮不训练 tokenizer，不自动发布
+个体生理参数，不启动下一轮 H1/H2 或生理状态扩展。
+
 ## 固定结构的跨数据集生理语义检验（2026-09-28 设计）
 
 设计标识：`SSM-PHYSIOLOGY-SEMANTICS-v1`。本节回应用户在复核当前能力后提出的

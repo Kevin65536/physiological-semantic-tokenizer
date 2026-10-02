@@ -18,6 +18,27 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Conditional teacher robustness — 2026-10-01
+
+The [four-arm contract](configs/physiology_semantic_tokenizer/shared_driver_teacher_robustness_v1.yaml)
+and [owning protocol](../docs/EXPERIMENT_PLAN.md#观测失配与驱动先验的四臂检验2026-10-01)
+define the fixed-H0 observation/prior comparison. Retain the
+[run summary](runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1/summary.json),
+resolved configuration, source snapshot, supervised launch and resource records,
+calibration identities, all task records (including numerical failures), paired
+endpoint tables, and teacher sensitivity/decomposition sidecars. The
+[verification](runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1/verification.json)
+checks record completeness, training separation, wrong-subject identities and
+prediction decomposition. The public parent arrays and frozen coordinates remain
+at their original 2026-09-28 evidence paths.
+
+The [PPT](../docs/report/20261001_ssm_teacher_robustness_v3/SSM_TEACHER_ROBUSTNESS.pptx)
+and [companion PDF](../docs/report/20261001_ssm_teacher_robustness_v3/SSM_TEACHER_ROBUSTNESS.pdf)
+are communication exports; per-slide sources and export validation accompany
+them. Earlier v1/v2 exports retain their font/layout failure records and are not
+the delivered version. These artifacts do not confer tokenizer or physiological
+teacher qualification.
+
 ## Measurement cache migration — 2026-09-16
 
 The [migration inventory](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_measurement_cache_migration_v4/migration.json)
