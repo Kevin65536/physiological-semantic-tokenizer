@@ -1,0 +1,63 @@
+{
+  "tested_tree": "8b020706d1931807c5fd56d95d6cf428553455b1",
+  "started_at": "2026-10-02T16:58:32.034001+00:00",
+  "isolated_staged_checkout": true,
+  "commands": [
+    {
+      "name": "targeted_tests",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_shared_driver_attribution.py",
+        "tests/test_shared_driver_teacher_robustness.py",
+        "tests/test_shared_driver_nonlinear_fit.py",
+        "tests/test_project_state.py"
+      ],
+      "exit_code": 0,
+      "log": "targeted_tests.txt",
+      "tail": [
+        ".......................................................................  [100%]",
+        "71 passed in 27.53s"
+      ]
+    },
+    {
+      "name": "test_collection",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "--collect-only",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log": "test_collection.txt",
+      "tail": [
+        "tests/test_unified_physiology.py::test_window_crossing_unverified_session_gap_is_rejected_before_signal_read",
+        "",
+        "1183/1194 tests collected (11 deselected) in 7.73s"
+      ]
+    },
+    {
+      "name": "contract_check",
+      "command": [
+        ".venv/bin/python",
+        "experiments/scripts/evaluate_shared_driver_reconstruction.py",
+        "--component-attribution",
+        "--config",
+        "experiments/configs/physiology_semantic_tokenizer/shared_driver_attribution_v1.yaml",
+        "--check-only"
+      ],
+      "exit_code": 0,
+      "log": "contract_check_explicit_config.txt"
+    }
+  ],
+  "finished_at": "2026-10-02T17:00:39.165667+00:00",
+  "status": "passed",
+  "initial_contract_check": {
+    "log": "contract_check.txt",
+    "exit_code": 1,
+    "cause": "Review invocation omitted --config and selected the historical default contract; rejected by attribution identity boundary. No code or evidence changes required."
+  }
+}

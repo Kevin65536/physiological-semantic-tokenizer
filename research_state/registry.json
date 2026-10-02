@@ -1169,6 +1169,42 @@
       "role": "run_manifest"
     },
     {
+      "id": "e.component_attribution_contract",
+      "label": "结构性成分归属实验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_attribution_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.component_attribution_launch",
+      "label": "归属实验持久化运行记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.component_attribution_summary",
+      "label": "归属实验分阶段结果与完整分母",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.component_attribution_verification",
+      "label": "归属实验隔离、分解与历史重放核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1/verification.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.component_attribution_presentation",
+      "label": "结构性成分归属35页PPT",
+      "path": "docs/report/20261002_ssm_component_attribution_v3/SSM_COMPONENT_ATTRIBUTION.pptx",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.component_attribution_presentation_validation",
+      "label": "PPT与位图PDF交付核验",
+      "path": "docs/report/20261002_ssm_component_attribution_v3/export_validation.json",
+      "role": "run_manifest"
+    },
+    {
       "id": "e.shared_driver_modes_contract",
       "label": "区域与谱模式共享驱动诊断合同",
       "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_modes_v1.yaml",
@@ -4349,6 +4385,33 @@
       ],
       "headline": false,
       "next_step": "保留受约束观测项、缺失条件下的稳定化先验及候选敏感性输出；优先独立验证参考后驱动功能、时间/观测校准与先验偏差，不将重建或稳定掩码直接视为语义资格，不自动扩展H1/H2或训练tokenizer。"
+    },
+    {
+      "state_id": "main.component_attribution@2026-10-02.v1",
+      "entity": "main.component_attribution",
+      "label": "结构性成分归属与分级语义检验",
+      "track": "main",
+      "order": 169,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "完成四组公共开发检验：18人72窗；合成8352拟合中8308收敛，失败完整保留。训练方向相对固定方向仅2/6单Hb端点区间全正，仍有端点弱于M0；独立区域补全受限共同项仅Single小幅获益，直接空间ridge在Single/Sim获益。合成基底内共同项驱动误差中位0.304→0.132，但真实τ变化约20%被固定共同项吸收；EOG相对零基线无明确收益。6个合成typed-token原型改善已见监督目标，却在EEG增益、τ与交换样条件产生错误语义。407项证据核验通过；35页中文PPT及位图PDF完成文字、图像与版面核验，WPS未检查。来源仍未定，不构成实测teacher或通用tokenizer资格。",
+      "evidence_ids": [
+        "e.component_attribution_contract",
+        "e.component_attribution_launch",
+        "e.component_attribution_summary",
+        "e.component_attribution_verification",
+        "e.component_attribution_presentation",
+        "e.component_attribution_presentation_validation"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-02T13:55:31.634447+00:00",
+      "depends_on": [
+        "main.teacher_robustness"
+      ],
+      "headline": false,
+      "next_step": "依据失败端点检验空间观测约束和成分提取方式；将真实动力学与观测校准反事实纳入后续原型监督，再用新的独立生成种子评价。升级来源语义需独立来源测量，当前保留条件形态及分项关系语义，不自动扩大实测训练、VQ或受保护评估。"
     },
     {
       "state_id": "main.shared_driver_modes@2026-10-02.v1",

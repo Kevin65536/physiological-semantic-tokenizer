@@ -5425,13 +5425,14 @@ def robustness_group_summary(frame, keys, metrics):
     return pd.DataFrame(rows)
 
 
-def robustness_paired(frame, keys, *, control='M0', value='total_nrmse', cluster='subject', seed=20261001):
+def robustness_paired(frame, keys, *, control='M0', value='total_nrmse', cluster='subject', seed=20261001,
+                      arms=ROBUSTNESS_ARMS):
     rows=[]
     for group_values,group in frame.groupby(keys,sort=True):
         if not isinstance(group_values,tuple):group_values=(group_values,)
         identity='id' if 'id' in group else 'key'
         reference=group[group.arm==control].set_index(identity)
-        for arm in ROBUSTNESS_ARMS:
+        for arm in arms:
             if arm==control:continue
             candidate=group[group.arm==arm].set_index(identity)
             ids=reference.index.intersection(candidate.index)
@@ -5624,6 +5625,1014 @@ def robustness_main(args):
     finally:write_json(manifest,state)
 
 
+ATTRIBUTION_ARMS = ('M0', 'D-fixed', 'D-trained', 'D-exchange')
+
+
+def attribution_config(path):
+    cfg = yaml.safe_load(Path(path).read_text())
+    if (cfg.get('schema') != 'shared_driver_attribution_v1'
+            or cfg['source_run'] != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1'
+            or cfg['robustness_run'] != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1'
+            or cfg['source_config'] != 'experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml'
+            or cfg['robustness_config'] != 'experiments/configs/physiology_semantic_tokenizer/shared_driver_teacher_robustness_v1.yaml'
+            or cfg['protected_data'] != 'forbidden'
+            or cfg['data_boundary'] != 'public_parent_panel_training_and_synchronous_regions_plus_registered_EOG'
+            or cfg['direction']['arms'] != list(ATTRIBUTION_ARMS)
+            or cfg['tensor'] != dict(steps=120, components=3, dt_s=.25, state_order=['r','s','f','v','p','q'])):
+        raise ValueError('attribution identity, tensor or data boundary violated')
+    if (cfg['direction']['modes'] != 4 or cfg['direction']['fixed_rho'] != .35
+            or cfg['direction']['rho_candidates'] != [.1,.2,.35,.5,.65,.8,.9]
+            or cfg['prototype']['scope'] != 'synthetic_only_continuous_typed_tokens_no_VQ_no_measured_training'
+            or cfg['anchors']['dataset'] != 'simultaneous_eeg_nirs'):
+        raise ValueError('unregistered direction or prototype contract')
+    return cfg
+
+
+def attribution_basis(cfg, arm, calibration):
+    from src.inference.shared_driver_attribution import equal_capacity_hb_basis
+    rho = calibration.get('selected_rho', .35) if arm == 'D-trained' else .35
+    return equal_capacity_hb_basis(semantics_model_operator(), modes=cfg['direction']['modes'],
+        rho=rho, exchange=arm == 'D-exchange')
+
+
+def attribution_fit(cfg, base, target, sd, calibration, arm, visible=None, *,
+                    parameters=None, jacobian=False, fixed_component=None):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
+    options = semantics_solver_options(base)
+    if arm == 'D-combined':
+        options.update(driver_amplitude_weight=calibration['prior_weight'], driver_prior_sd=calibration['driver_sd'])
+    if arm not in ('M0', 'oracle') and fixed_component is None:
+        key = arm if arm != 'D-combined' else 'D-fixed'
+        options.update(observation_basis=attribution_basis(cfg, key, calibration),
+            observation_coefficient_sd=np.asarray(calibration['direction_scales'][key])*calibration['coefficient_multiplier'])
+    mask = np.ones_like(target, bool) if visible is None else np.asarray(visible, bool)
+    y = np.array(target, copy=True)
+    if fixed_component is not None:y -= fixed_component
+    y[~mask] = np.nan
+    fit = fit_nonlinear_shared_driver(y, parameters or semantics_parameters(base), .25,
+        mean_operator=semantics_model_operator(), sd=sd, visible=mask, return_jacobian=jacobian,
+        max_evaluations=base['solver']['max_evaluations_per_trial'], **options)
+    if fixed_component is not None and 'prediction' in fit:
+        fit['observation_component'] = fixed_component
+        fit['prediction'] = fit['physical_prediction']+fixed_component
+    return fit
+
+
+def attribution_synthetic_case(cfg, base, repeat, spectrum, initial, scenario, *, calibration=False):
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    from src.inference.shared_driver_attribution import equal_capacity_hb_basis
+    old = robustness_config(CODE_ROOT/cfg['robustness_config'])
+    old['seed'] = cfg['seed']
+    custom = scenario in ('common_rho070', 'common_exchange', 'physiology_kappa', 'unmodeled_dynamics')
+    case = robustness_synthetic_case(old, base, repeat, spectrum, initial,
+        'control' if custom else scenario, calibration=calibration)
+    if not custom:return case
+    op = semantics_model_operator()
+    if scenario in ('common_rho070', 'common_exchange'):
+        rng = np.random.default_rng(np.random.SeedSequence([cfg['seed'], 501 if calibration else 601,
+            repeat, int(spectrum == 'mixed'), int(initial == 'nonrest')]))
+        basis = equal_capacity_hb_basis(op, rho=.7, exchange=scenario == 'common_exchange')
+        component = (basis@(rng.normal(size=4)*[.02,.015,.01,.005])).reshape(120,3)
+        case['target'] += component;case['observation_truth'] = component
+    else:
+        driver = case['driver']
+        parameters = semantics_parameters(base, **({'kappa':1.28} if scenario == 'physiology_kappa' else {}))
+        if scenario == 'unmodeled_dynamics':
+            delayed = np.r_[np.repeat(driver[0],8),driver[:-8]]
+            driver = .65*driver+.35*delayed
+        forward = nonlinear_driver_forward(driver, case['states'][0,1:], parameters, .25,
+            derivative=False, substeps=8, numerical_backend='numba')
+        physical = (op@forward['canonical_prediction'].ravel()).reshape(120,3)
+        if scenario == 'unmodeled_dynamics':physical[:,0] = case['physical_truth'][:,0]
+        case['target'] += physical-case['physical_truth'];case['physical_truth'] = physical
+        case['states'] = forward['states']
+    return case
+
+
+def attribution_direction_select_worker(payload):
+    cfg, base, cal, rho, repeat = payload
+    c = dict(cal, selected_rho=rho)
+    rows = []
+    for scenario in ('control','common_basis','common_correlated'):
+        case = attribution_synthetic_case(cfg,base,repeat,'slow','rest',scenario,calibration=True)
+        for mode in cfg['direction']['selection_modes']:
+            mask = semantics_missing_mask(mode)
+            fit = attribution_fit(cfg,base,case['target'],cal['sd'],c,'D-trained',mask)
+            rows.append(dict(rho=rho,repeat=repeat,scenario=scenario,mode=mode,
+                **robustness_metrics(fit,case['target'],cal['sd'],mask)))
+    return rows
+
+
+def attribution_synthetic_calibration(cfg, base, out, workers, project_root):
+    old = json.loads((Path(project_root)/cfg['robustness_run']/'synthetic_calibration.json').read_text())
+    cases = [attribution_synthetic_case(cfg,base,i,'slow','rest','control',calibration=True)
+        for i in range(cfg['synthetic']['training_repeats'])]
+    # Fit no statistics on evaluation seeds; retain old regularization strengths.
+    cal = dict(driver_sd=float(np.sqrt(np.mean([c['driver']**2 for c in cases]))),
+        sd=np.std(np.concatenate([c['target'] for c in cases]),axis=0),
+        direction_scales={a:[.02,.015,.01,.005] for a in ATTRIBUTION_ARMS if a!='M0'},
+        prior_weight=old['prior_weight'], coefficient_multiplier=old['coefficient_multiplier'],
+        selected_rho=.35, training_seed_stream=101, evaluation_seed_stream=201,
+        interpretation='training_generator_scale_with_parent_regularization_no_test_selection')
+    payloads = [(cfg,base,cal,rho,i) for rho in cfg['direction']['rho_candidates']
+        for i in range(cfg['synthetic']['training_repeats'])]
+    rows = []
+    for _, result, error in bounded_nonlinear_work(attribution_direction_select_worker,payloads,workers,2*workers):
+        if error:raise RuntimeError(error)
+        rows.extend(result)
+    selected, ranking = robustness_select([(rho,[r for r in rows if r['rho']==rho])
+        for rho in cfg['direction']['rho_candidates']], 'total_nrmse')
+    cal.update(selected_rho=selected,selection_scores=ranking)
+    write_json(out/'synthetic_calibration.json',cal)
+    pd.DataFrame(rows).to_csv(out/'synthetic_calibration_scores.csv',index=False)
+
+
+def attribution_synthetic_worker(payload):
+    cfg, base, root, spec = payload;out=Path(root);path=out/'synthetic'/spec['key']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    start=time.monotonic();cal=json.loads((out/'synthetic_calibration.json').read_text());sd=np.array(cal['sd'])
+    rows=[];saved={};fits={};cases={}
+    for scenario in cfg['synthetic']['scenarios']:
+        case=attribution_synthetic_case(cfg,base,spec['repeat'],spec['spectrum'],spec['initial'],scenario)
+        cases[scenario]=case
+        for mode in cfg['synthetic']['modes']:
+            mask=np.ones((120,3),bool) if mode=='full' else semantics_missing_mask(mode)
+            arms=cfg['synthetic']['arms']+(['oracle'] if scenario in cfg['synthetic']['physiological_oracle'] else [])
+            for arm in arms:
+                parameters=semantics_parameters(base,**({'tau':4.} if scenario=='physiology_tau' else {'kappa':1.28})) if arm=='oracle' else None
+                fit=attribution_fit(cfg,base,case['target'],sd,cal,arm,mask,parameters=parameters)
+                fits[scenario,mode,arm]=fit
+                row=robustness_metrics(fit,case['target'],sd,mask,driver=case['driver'],driver_sd=cal['driver_sd'])
+                if 'prediction' in fit:
+                    row.update(physical_truth_nrmse=float(np.sqrt(np.mean(((fit['physical_prediction']-case['physical_truth'])/sd)**2))),
+                        component_truth_nrmse=float(np.sqrt(np.mean(((fit['observation_component']-case['observation_truth'])/sd)**2))))
+                    for name in ('driver','prediction','physical_prediction','observation_component'):
+                        saved[f'{scenario}__{mode}__{arm}__{name}']=fit[name]
+                rows.append(dict(**spec,scenario=scenario,mode=mode,arm=arm,**row))
+        for name in ('driver','target','physical_truth','observation_truth','states'):
+            saved[f'{scenario}__truth__{name}']=case[name]
+    contrasts=[]
+    for mode in cfg['synthetic']['modes']:
+        for arm in cfg['synthetic']['arms']:
+            reference=fits['control',mode,arm]
+            for scenario in cfg['synthetic']['scenarios']:
+                fit=fits[scenario,mode,arm];case=cases[scenario]
+                row=dict(**spec,mode=mode,arm=arm,scenario=scenario,
+                    converged=bool(reference['converged'] and fit['converged']))
+                if 'driver' in reference and 'driver' in fit:
+                    change=fit['driver']-reference['driver'];truth=case['driver']-cases['control']['driver']
+                    physical_delta=case['physical_truth']-cases['control']['physical_truth']
+                    extra_delta=case['observation_truth']-cases['control']['observation_truth']
+                    signal_delta=physical_delta+extra_delta
+                    row.update(driver_change_error_SD=float(np.sqrt(np.mean((change-truth)**2)))/cal['driver_sd'],
+                        driver_estimated_change_SD=float(np.sqrt(np.mean(change**2)))/cal['driver_sd'],
+                        driver_truth_change_SD=float(np.sqrt(np.mean(truth**2)))/cal['driver_sd'])
+                    for field,true in [('physical_prediction',physical_delta),('observation_component',extra_delta)]:
+                        estimated=fit[field]-reference[field]
+                        row[field+'_change_error_SD']=float(np.sqrt(np.mean(((estimated-true)/sd)**2)))
+                        denominator=float(np.sum((signal_delta/sd)**2))
+                        row[field+'_projection_fraction']=float(np.sum((estimated/sd)*(signal_delta/sd))/denominator) if denominator>1e-12 else None
+                    residual_delta=(case['target']-fit['prediction'])-(cases['control']['target']-reference['prediction'])
+                    denominator=float(np.sum((signal_delta/sd)**2))
+                    row['residual_projection_fraction']=float(np.sum((residual_delta/sd)*(signal_delta/sd))/denominator) if denominator>1e-12 else None
+                contrasts.append(row)
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
+    result=dict(status='completed',spec=spec,rows=rows,contrasts=contrasts,seconds=time.monotonic()-start,
+        peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    write_json(path,result);return result
+
+
+def attribution_parent(cfg, project_root, out):
+    old = robustness_config(CODE_ROOT/cfg['robustness_config'])
+    parent, refs, panel, coordinates = robustness_parent_inputs(old, project_root, out)
+    previous = Path(project_root)/cfg['robustness_run']
+    if json.loads((previous/'summary.json').read_text())['execution'] != 'completed':
+        raise ValueError('previous robustness evidence is not terminal')
+    previous_panel = json.loads((previous/'measured_plan.json').read_text())['windows']
+    if [r['id'] for r in panel] != [r['id'] for r in previous_panel]:
+        raise ValueError('paired panel differs from retained robustness panel')
+    return parent, previous, refs, panel, coordinates
+
+
+def attribution_donors(ref, refs):
+    return sorted([r for r in refs if r['key']==ref['key'] and r['window']==ref['window']
+        and r['site']!=ref['site'] and r['hb_channel']!=ref['hb_channel']
+        and abs(r['eeg_start_s']-ref['eeg_start_s'])<1e-6
+        and abs(r['hb_start_s']-ref['hb_start_s'])<1e-6],key=lambda r:r['id'])
+
+
+def attribution_spatial_inputs(cfg, base, parent, refs, ref, coordinate, calibration):
+    """Never inspect the target Hb: donors are distinct, synchronous Hb pairs."""
+    from src.inference.shared_driver_attribution import project_component
+    donors=attribution_donors(ref,refs);raw=[];residuals=[];records=[]
+    for donor in donors:
+        outer=coordinate['key'].rsplit('__outer',1)[1]
+        key=f'{donor["dataset"]}__{donor["site"]}__outer{outer}'
+        coord=json.loads((parent/'coordinates'/(key+'.json')).read_text())
+        if ref['subject'] not in coordinate['training_subjects'] and ref['subject'] in coord['training_subjects']:
+            raise ValueError('spatial donor coordinate leaked held-out subject')
+        target=semantics_target(donor,coord)
+        fit=attribution_fit(cfg,base,target,coord['sd'],calibration,'M0')
+        records.append(dict(id=donor['id'],converged=fit['converged'],status=fit['status']))
+        if 'physical_prediction' not in fit:continue
+        ratio=coordinate['hb_factor']/coord['hb_factor']
+        raw.append(target[:,1:]*ratio)
+        residual=np.zeros_like(target);residual[:,1:]=(target[:,1:]-fit['physical_prediction'][:,1:])*ratio
+        residuals.append(residual)
+    available=bool(donors and len(raw)==len(donors) and all(r['converged'] for r in records))
+    result=dict(available=available,donors=records,components={})
+    if not available:return result
+    result['raw_Hb']=np.mean(raw,axis=0)
+    residual=np.mean(residuals,axis=0)
+    for arm in ATTRIBUTION_ARMS[1:]:
+        basis=attribution_basis(cfg,arm,calibration)
+        coefficients=project_component(residual,basis,coordinate['sd'],
+            np.array(calibration['direction_scales'][arm])*calibration['coefficient_multiplier'])
+        result['components'][arm]=(basis@coefficients).reshape(120,3)
+    return result
+
+
+def attribution_calibration_worker(payload):
+    from src.inference.shared_driver_attribution import project_component, equal_capacity_hb_basis, fit_standardized_ridge
+    cfg,base,root,project_root,refs,key=payload;out=Path(root);path=out/'calibration'/(key+'.json')
+    if path.exists():return json.loads(path.read_text())
+    start=time.monotonic();parent=Path(project_root)/cfg['source_run'];previous=Path(project_root)/cfg['robustness_run']
+    coord=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.array(coord['sd'])
+    old=json.loads((previous/'calibration'/(key+'.json')).read_text())
+    lookup={r['id']:r for r in refs};training=[lookup[x] for x in old['training_ids']]
+    selection=[lookup[x] for x in old['selection_ids']]
+    if {r['subject'] for r in training}&{r['subject'] for r in selection}:
+        raise ValueError('inner subject leakage')
+    ys=[];full=[];hidden=[];fit_records=[]
+    for ref in training:
+        y=semantics_target(ref,coord)
+        f=attribution_fit(cfg,base,y,sd,{},'M0')
+        h=attribution_fit(cfg,base,y,sd,{},'M0',semantics_missing_mask('Hb_hidden'))
+        ys.append(y);full.append(f);hidden.append(h)
+        fit_records.append(dict(id=ref['id'],full_converged=f['converged'],hidden_converged=h['converged']))
+    successful=[i for i,f in enumerate(full) if f['converged']]
+    if len(successful)<3:raise ValueError('insufficient calibration fits')
+    def scale_for(basis):
+        coeff=[project_component(ys[i]-full[i]['physical_prediction'],basis,sd) for i in successful]
+        return np.maximum(np.sqrt(np.mean(np.asarray(coeff)**2,axis=0)),sd.mean()*1e-6)
+    cal=dict(key=key,driver_sd=old['driver_sd'],prior_weight=old['prior_weight'],
+        coefficient_multiplier=old['coefficient_multiplier'],selected_rho=.35,
+        direction_scales={'D-fixed':old['coefficient_sd']},training_ids=old['training_ids'],
+        selection_ids=old['selection_ids'],training_subjects=old['training_subjects'],
+        selection_subjects=old['selection_subjects'],training_records=fit_records,
+        coordinate_id=key,selection_coordinate='frozen_parent_outer_training_PCA_scale',
+        selection_claim='conditional_on_parent_coordinate_not_refitted_inner_nested_validation')
+    candidate_scales={};scores=[]
+    for rho in cfg['direction']['rho_candidates']:
+        basis=equal_capacity_hb_basis(semantics_model_operator(),rho=rho)
+        candidate_scales[str(rho)]=scale_for(basis)
+        candidate=deepcopy(cal);candidate['selected_rho']=rho
+        candidate['direction_scales']['D-trained']=candidate_scales[str(rho)]
+        for ref in selection:
+            y=semantics_target(ref,coord)
+            for mode in cfg['direction']['selection_modes']:
+                mask=semantics_missing_mask(mode)
+                fit=attribution_fit(cfg,base,y,sd,candidate,'D-trained',mask)
+                scores.append(dict(id=ref['id'],rho=rho,mode=mode,
+                    **robustness_metrics(fit,y,sd,mask)))
+    rho,ranking=robustness_select([(rho,[r for r in scores if r['rho']==rho])
+        for rho in cfg['direction']['rho_candidates']],'total_nrmse')
+    cal.update(selected_rho=rho,direction_selection_scores=ranking,candidate_coefficient_scales=candidate_scales)
+    cal['direction_scales']['D-trained']=candidate_scales[str(rho)]
+    cal['direction_scales']['D-exchange']=scale_for(attribution_basis(cfg,'D-exchange',cal))
+    train_components=[];spatial=[];components_full={a:[] for a in ATTRIBUTION_ARMS[1:]}
+    for i,ref in enumerate(training):
+        item=attribution_spatial_inputs(cfg,base,parent,refs,ref,coord,cal);spatial.append(item)
+        if full[i]['converged']:
+            for arm in ATTRIBUTION_ARMS[1:]:
+                basis=attribution_basis(cfg,arm,cal)
+                c=project_component(ys[i]-full[i]['physical_prediction'],basis,sd,
+                    np.array(cal['direction_scales'][arm])*cal['coefficient_multiplier'])
+                components_full[arm].append((basis@c).reshape(120,3))
+    cal['spatial_loading']={};cal['ar_coefficient']={}
+    usable=[i for i in range(len(training)) if spatial[i]['available'] and hidden[i]['converged']]
+    if len(usable)<3:raise ValueError('insufficient independent spatial training support')
+    for arm in ATTRIBUTION_ARMS[1:]:
+        x=np.concatenate([spatial[i]['components'][arm][:,1:]/sd[1:] for i in usable])
+        y=np.concatenate([(ys[i]-hidden[i]['physical_prediction'])[:,1:]/sd[1:] for i in usable])
+        cal['spatial_loading'][arm]=float(np.clip(np.sum(x*y)/(np.sum(x*x)+1e-12),
+            *cfg['measured']['spatial']['loading_bounds']))
+        c=np.array(components_full[arm])[:,:,1:]
+        cal['ar_coefficient'][arm]=float(np.clip(np.sum(c[:,1:]*c[:,:-1])/(np.sum(c[:,:-1]**2)+1e-12),
+            *cfg['measured']['temporal']['ar_coefficient_bounds']))
+    x=np.concatenate([spatial[i]['raw_Hb'] for i in usable]);y=np.concatenate([ys[i][:,1:] for i in usable])
+    cal['spatial_ridge']=fit_standardized_ridge(x,y,cfg['measured']['spatial']['ridge_weight'])
+    cal['spatial_training_ids']=[training[i]['id'] for i in usable]
+    cal['spatial_training_records']=[dict(id=r['id'],available=s['available'],donors=s['donors']) for r,s in zip(training,spatial)]
+    cal['training_template']=np.mean(ys,axis=0)
+    cal.update(status='completed',seconds=time.monotonic()-start)
+    write_json(path,cal);write_json(out/'calibration_scores'/(key+'.json'),scores)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    np.savez_compressed(path.with_suffix('.npz'),targets=np.array(ys),
+        **{a:np.array(v) for a,v in components_full.items()})
+    return cal
+
+
+def attribution_measured_worker(payload):
+    from src.inference.shared_driver_attribution import predict_standardized_ridge
+    cfg,base,root,project_root,refs,ref=payload;out=Path(root);path=out/'measured'/ref['id']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    start=time.monotonic();parent=Path(project_root)/cfg['source_run']
+    key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
+    coord=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.array(coord['sd'])
+    cal=json.loads((out/'calibration'/(key+'.json')).read_text());y=semantics_target(ref,coord)
+    rows=[];saved=dict(target=y,sd=sd);fits={}
+    for mode in cfg['measured']['modes']:
+        mask=np.ones((120,3),bool) if mode=='full' else semantics_missing_mask(mode)
+        for arm in ATTRIBUTION_ARMS:
+            fit=attribution_fit(cfg,base,y,sd,cal,arm,mask);fits[mode,arm]=fit
+            row=robustness_metrics(fit,y,sd,mask)
+            rows.append(dict(mode=mode,arm=arm,pairing='real',**row))
+            if 'driver' in fit:
+                for name in ('driver','prediction','physical_prediction','observation_component'):
+                    saved[f'{mode}__{arm}__{name}']=fit[name]
+    donor=attribution_spatial_inputs(cfg,base,parent,refs,ref,coord,cal)
+    candidates=[r for r in refs if r['id'] in set(cal['training_ids'])
+        and r['task']==ref['task'] and r['condition']==ref['condition'] and r['subject']!=ref['subject']]
+    wrong_ref=min(candidates,key=lambda r:r['id']) if candidates else None
+    wrong=attribution_spatial_inputs(cfg,base,parent,refs,wrong_ref,coord,cal) if wrong_ref else None
+    physical=fits['Hb_hidden','M0']
+    mask=semantics_missing_mask('Hb_hidden')
+    if donor['available'] and 'prediction' in physical:
+        for pairing,item in [('real',donor),('wrong_subject',wrong),('real_shift_support',donor),('nonwrapping_shift_12s',donor)]:
+            if not item or not item['available']:continue
+            endpoint=mask.copy()
+            if 'shift' in pairing:endpoint[-48:,1:]=True
+            for arm in ATTRIBUTION_ARMS[1:]:
+                component=item['components'][arm].copy()*cal['spatial_loading'][arm]
+                if pairing=='nonwrapping_shift_12s':component[:-48]=component[48:]
+                pred=physical['prediction']+component
+                fit=dict(physical,prediction=pred,observation_component=component)
+                rows.append(dict(mode='hidden_channel',arm=arm,pairing=pairing,**robustness_metrics(fit,y,sd,endpoint)))
+                if pairing=='real':saved[f'hidden_channel__{arm}__prediction']=pred
+            raw=item['raw_Hb'].copy()
+            if pairing=='nonwrapping_shift_12s':raw[:-48]=raw[48:]
+            for arm,pred_h in [('spatial_ridge',predict_standardized_ridge(cal['spatial_ridge'],raw)),
+                               ('training_template',np.array(cal['training_template'])[:,1:]),
+                               ('M0',physical['prediction'][:,1:])]:
+                pred=physical['prediction'].copy();pred[:,1:]=pred_h
+                fit=dict(physical,prediction=pred,observation_component=pred-physical['prediction'])
+                rows.append(dict(mode='hidden_channel',arm=arm,pairing=pairing,**robustness_metrics(fit,y,sd,endpoint)))
+                if pairing=='real':saved[f'hidden_channel__{arm}__prediction']=pred
+    else:
+        for arm in list(ATTRIBUTION_ARMS)+['spatial_ridge','training_template']:
+            rows.append(dict(mode='hidden_channel',arm=arm,pairing='real',converged=False,status='donor_or_physical_unavailable'))
+    # This holds out processed Hb features; upstream offline filters prevent a causal claim.
+    prefix=cfg['measured']['temporal']['prefix_steps'];mask=np.ones((120,3),bool);mask[prefix:,1:]=False
+    for arm in ATTRIBUTION_ARMS[1:]:
+        fit=attribution_fit(cfg,base,y,sd,cal,arm,mask)
+        if 'prediction' not in fit:
+            rows.append(dict(mode='suffix_Hb',arm=arm,pairing='cosine_extrapolation',converged=False,status=fit['status']));continue
+        component=fit['observation_component']
+        for method in ['cosine_extrapolation','AR1','zero','persistence']:
+            c=component.copy()
+            if method=='zero':c[prefix:]=0.
+            if method=='persistence':c[prefix:]=c[prefix-1]
+            if method=='AR1':c[prefix:]=c[prefix-1]*cal['ar_coefficient'][arm]**np.arange(1,121-prefix)[:,None]
+            alternative=dict(fit,observation_component=c,prediction=fit['physical_prediction']+c)
+            rows.append(dict(mode='suffix_Hb',arm=arm,pairing=method,**robustness_metrics(alternative,y,sd,mask)))
+    result=dict(status='completed',ref=ref,coordinate_id=key,selected_rho=cal['selected_rho'],rows=rows,
+        spatial_donors=donor['donors'],spatial_available=donor['available'],
+        wrong_donor_id=wrong_ref['id'] if wrong_ref else None,wrong_donor_available=bool(wrong and wrong['available']),
+        seconds=time.monotonic()-start,peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
+    write_json(path,result);return result
+
+
+def attribution_audit_worker(payload):
+    from src.inference.shared_driver_attribution import hb_diagnostic_coordinates, component_change_metrics
+    cfg,base,root,project_root,ref=payload;out=Path(root);path=out/'audit'/ref['id']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    previous=Path(project_root)/cfg['robustness_run'];record=json.loads((previous/'measured'/ref['id']/'result.json').read_text())
+    arrays=np.load(previous/'measured'/ref['id']/'result.npz',allow_pickle=False)
+    key=record['coordinate_id'];y=arrays['target'];sd=arrays['sd']
+    cal=json.loads((previous/'calibration'/(key+'.json')).read_text());old=robustness_config(CODE_ROOT/cfg['robustness_config'])
+    metrics={(r['mode'],r['arm']):r for r in record['rows'] if r['pairing']=='real'}
+    row={k:ref[k] for k in ('id','dataset','subject','record','site','native_rho','quality_burden')}
+    row['converged']=all(metrics['full',a]['converged'] for a in ('M0','M-observation'))
+    row['full_gain']=metrics['full','M0'].get('total_nrmse',np.nan)-metrics['full','M-observation'].get('total_nrmse',np.nan)
+    for mode in ('HbO_hidden','HbR_hidden'):
+        row[mode+'_harm']=metrics[mode,'M-observation'].get('total_nrmse',np.nan)-metrics[mode,'M0'].get('total_nrmse',np.nan)
+        row[mode+'_pair_converged']=all(metrics[mode,a]['converged'] for a in ('M0','M-observation'))
+    row['single_Hb_harm']=np.mean([row[m+'_harm'] for m in ('HbO_hidden','HbR_hidden')])
+    row['processed_rho']=float(np.corrcoef(y[:,1],y[:,2])[0,1])
+    diagnostic=hb_diagnostic_coordinates(y[:,1:]);energy=np.mean(diagnostic**2,axis=0)
+    row['HbT_energy_fraction']=float(energy[0]/max(energy.sum(),1e-16))
+    component=arrays['full__M-observation__observation_component']
+    row['component_strength']=float(np.sqrt(np.mean((component[:,1:]/sd[1:])**2)))
+    training=np.load(out/'calibration'/(key+'.npz'),allow_pickle=False)['targets']
+    diagnostic_scale=hb_diagnostic_coordinates(training[:,:,1:]).std(axis=(0,1))
+    for j,name in enumerate(('HbT','HbX')):
+        for arm in ('M0','M-observation'):
+            error=hb_diagnostic_coordinates(arrays[f'full__{arm}__prediction'][:,1:]-y[:,1:])
+            row[name+'_'+arm+'_nrmse']=float(np.sqrt(np.mean(error[:,j]**2))/max(diagnostic_scale[j],1e-12))
+        row[name+'_gain']=row[name+'_M0_nrmse']-row[name+'_M-observation_nrmse']
+    sensitivities=[];saved={}
+    for arm in cfg['audit']['sensitivity_arms']:
+        reference={name:arrays[f'full__{arm}__{name}'] for name in ('driver','prediction','physical_prediction','observation_component')}
+        reference['converged']=metrics['full',arm]['converged']
+        for variant in old['measured']['sensitivity']:
+            data=y.copy();mask=np.ones_like(y,bool);options={};c=deepcopy(cal)
+            if variant.startswith('EEG_gain'):data[:,0]/=.9 if variant.endswith('low') else 1.1
+            if variant.startswith('Hb_gain'):data[:,1:]/=.9 if variant.endswith('low') else 1.1
+            if variant=='lag_minus_one_sample':data[1:,1:]=y[:-1,1:];mask[0,1:]=False
+            if variant=='lag_plus_one_sample':data[:-1,1:]=y[1:,1:];mask[-1,1:]=False
+            if variant.startswith('prior_'):options['prior_weight']=cal['prior_weight']*(.5 if variant=='prior_half' else 2.)
+            if variant.startswith('rho_'):options['rho']=.25 if variant=='rho_low' else .45
+            if variant.startswith('training_bootstrap'):c.update(cal['bootstrap_scales'][int(variant[-1])])
+            fit=robustness_fit(old,base,data,sd,c,arm,mask,**options)
+            sensitivities.append(dict(arm=arm,variant=variant,converged=bool(fit['converged'] and reference['converged']),
+                loading_rho=options.get('rho',.35),**component_change_metrics(reference,fit,sd,cal['driver_sd'])))
+            if 'driver' in fit:
+                for name in ('driver','physical_prediction','observation_component'):
+                    saved[f'{arm}__{variant}__{name}']=fit[name]
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
+    result=dict(status='completed',ref=ref,audit=row,sensitivity=sensitivities,
+        diagnostic_scale=diagnostic_scale,diagnostic_scale_source='same_parent_calibration_training_windows',
+        quality_scope='native_rho_and_quality_are_record_channel_statistics_not_window_truth')
+    write_json(path,result);return result
+
+
+def attribution_profile_worker(payload):
+    from src.inference.shared_driver_attribution import subspace_overlap, component_change_metrics
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    cfg,base,root,ref=payload;out=Path(root);path=out/'profiles'/ref['id']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
+    coord=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.array(coord['sd'])
+    cal=json.loads((out/'calibration'/(key+'.json')).read_text());y=semantics_target(ref,coord)
+    rows=[];overlaps=[];saved={};op=semantics_model_operator()
+    for arm in ATTRIBUTION_ARMS[1:]:
+        fit=attribution_fit(cfg,base,y,sd,cal,arm,jacobian=True)
+        if 'canonical_jacobian' not in fit:
+            overlaps.append(dict(arm=arm,converged=False,status=fit['status']));continue
+        basis=attribution_basis(cfg,arm,cal);j=op@fit['canonical_jacobian']
+        overlap=subspace_overlap(j,basis,sd)
+        # Physiological tangents are reported separately from the fixed-H0 free coordinates.
+        derivatives=[]
+        for parameter,value in [('tau',base['fixed']['tau']),('kappa',base['fixed']['kappa']),('neurovascular_gain',base['fixed']['neurovascular_gain'])]:
+            predictions=[]
+            for sign in (-1,1):
+                p=semantics_parameters(base,**{parameter:value*np.exp(sign*1e-4)})
+                f=nonlinear_driver_forward(fit['driver'],fit['initial_state'],p,.25,substeps=4,derivative=False,numerical_backend='numba')
+                predictions.append(op@f['canonical_prediction'].ravel())
+            derivatives.append((predictions[1]-predictions[0])/2e-4)
+        expanded=subspace_overlap(np.column_stack([j]+derivatives),basis,sd)
+        overlaps.append(dict(arm=arm,converged=fit['converged'],fixed_H0=overlap,with_parameter_tangents=expanded))
+        cs=np.asarray(cal['direction_scales'][arm])*cal['coefficient_multiplier']
+        direction=np.array(overlap['coefficient_direction'])*np.sqrt(240)
+        for offset in cfg['audit']['overlap_offsets_SD']:
+            coefficients=fit['observation_coefficients']+offset*direction
+            component=(basis@coefficients).reshape(120,3)
+            alternative=attribution_fit(cfg,base,y,sd,cal,arm,fixed_component=component)
+            objective=alternative.get('objective',np.nan)+float(np.sum((coefficients/cs)**2))
+            fraction=(objective-fit['objective'])/max(fit['objective'],1e-12)
+            rows.append(dict(arm=arm,offset_SD=offset,converged=bool(fit['converged'] and alternative['converged']),
+                objective=objective,reference_objective=fit['objective'],objective_fraction=fraction,
+                near_equivalent=bool(fit['converged'] and alternative['converged'] and fraction<=cfg['audit']['near_equivalent_objective_fraction']),
+                **component_change_metrics(fit,alternative,sd,cal['driver_sd'])))
+            if 'driver' in alternative:
+                for name in ('driver','prediction','physical_prediction','observation_component'):
+                    saved[f'{arm}__{offset}__{name}']=alternative[name]
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
+    result=dict(status='completed',ref=ref,rows=rows,overlaps=overlaps,
+        interpretation='fixed_component_displacement_then_physical_refit_proper_component_cost_retained_not_confidence_interval')
+    write_json(path,result);return result
+
+
+def attribution_anchor_prepare_worker(payload):
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import load_native_eeg_record
+    cfg,base,root,project_root,refs=payload;out=Path(root);key=refs[0]['key'];path=out/'auxiliary'/key/'record.json'
+    if path.exists():return json.loads(path.read_text())
+    if any(r['dataset']!='simultaneous_eeg_nirs' or r['key']!=key for r in refs):
+        raise ValueError('auxiliary scope is one registered public Simultaneous record')
+    index=CleanPhysiologyCacheIndex(Path(project_root)/base['data']['cache_root'])
+    join=f"simultaneous_eeg_nirs|{refs[0]['subject']}|{refs[0]['record']}"
+    record=next(r for r in index.records if r.join_key==join)
+    native=load_native_eeg_record(Path(project_root),record)
+    if native.auxiliary_values is None or not native.auxiliary_channel_names:
+        raise ValueError('registered EOG unavailable')
+    width=round(native.sample_rate_hz*.25)
+    if abs(width-native.sample_rate_hz*.25)>1e-8:raise ValueError('nonintegral EOG bins')
+    path.parent.mkdir(parents=True,exist_ok=True);rows=[]
+    for ref in refs:
+        start=round(ref['eeg_start_s']*native.sample_rate_hz)
+        values=native.auxiliary_values[start:start+120*width]
+        if values.shape!=(120*width,len(native.auxiliary_channel_names)) or not np.isfinite(values).all():
+            rows.append(dict(id=ref['id'],status='missing_EOG_support'));continue
+        envelope=np.log(np.maximum(np.mean(values.reshape(120,width,-1)**2,axis=1),1e-12))
+        envelope=native_feature_operators(120)['eeg']@envelope
+        features=[]
+        for lag in cfg['anchors']['lags_s']:
+            shift=round(lag/.25);v=envelope.copy()
+            if shift:v[shift:]=envelope[:-shift];v[:shift]=np.nan
+            features.append(v)
+        np.savez_compressed(path.parent/(ref['id']+'.npz'),features=np.concatenate(features,axis=1))
+        rows.append(dict(id=ref['id'],status='completed',start_sample=start,eeg_start_s=ref['eeg_start_s']))
+    result=dict(status='completed',key=key,join_key=join,rows=rows,auxiliary_names=native.auxiliary_channel_names,
+        source_path=str(native.source_path),native_unit=native.native_unit,sample_rate=native.sample_rate_hz,
+        target='EOG association only; neither short-separation Hb nor an autonomic source measurement')
+    write_json(path,result);return result
+
+
+def attribution_anchor_worker(payload):
+    from src.inference.shared_driver_attribution import fit_standardized_ridge, predict_standardized_ridge
+    cfg,base,root,refs,panel,key=payload;out=Path(root);path=out/'anchors'/(key+'.json')
+    if path.exists():return json.loads(path.read_text())
+    coord=json.loads((out/'coordinates'/(key+'.json')).read_text());cal=json.loads((out/'calibration'/(key+'.json')).read_text())
+    lookup={r['id']:r for r in refs};training=[lookup[x] for x in cal['training_ids']]
+    valid_start=round(max(cfg['anchors']['lags_s'])/.25);support=np.arange(120)>=valid_start
+    def features(ref):
+        return np.load(out/'auxiliary'/ref['key']/(ref['id']+'.npz'),allow_pickle=False)['features']
+    xs=[];cs=[];fit_rows=[];available=[]
+    for ref in training:
+        y=semantics_target(ref,coord);fit=attribution_fit(cfg,base,y,coord['sd'],cal,'D-fixed')
+        fit_rows.append(dict(id=ref['id'],converged=fit['converged']))
+        if not fit['converged']:continue
+        x=features(ref);c=fit['observation_component'][:,1:].sum(axis=1,keepdims=True)
+        xs.append(x[support]);cs.append(c[support]);available.append(ref)
+    if len(xs)<3:raise ValueError('insufficient EOG training targets')
+    scale=max(float(np.std(np.concatenate(cs))),1e-10)
+    model=fit_standardized_ridge(np.concatenate(xs),np.concatenate(cs),cfg['anchors']['ridge_weight'])
+    rows=[];saved={}
+    selected=[r for r in panel if f'{r["dataset"]}__{r["site"]}__outer{r["subject_fold"]}'==key]
+    for ref in selected:
+        arrays=np.load(out/'measured'/ref['id']/'result.npz',allow_pickle=False)
+        result=json.loads((out/'measured'/ref['id']/'result.json').read_text())
+        successful=all(next(row for row in result['rows'] if row['mode']==mode and row['arm']==arm and row['pairing']=='real')['converged']
+            for mode,arm in [('full','D-fixed'),('Hb_hidden','M0')])
+        c=arrays['full__D-fixed__observation_component'][:,1:].sum(axis=1)
+        y=arrays['target'];physical=arrays['Hb_hidden__M0__prediction'];sd=arrays['sd']
+        wrongs=[r for r in available if r['task']==ref['task'] and r['condition']==ref['condition'] and r['subject']!=ref['subject']]
+        wrong=min(wrongs,key=lambda r:r['id']) if wrongs else None
+        for pairing,feature_ref in [('real',ref),('wrong_subject',wrong),('zero',ref),('training_mean',ref)]:
+            if feature_ref is None:continue
+            predicted=predict_standardized_ridge(model,features(feature_ref)[support]).ravel()
+            if pairing=='zero':predicted[:]=0.
+            if pairing=='training_mean':predicted[:]=np.asarray(model['target_mean']).item()
+            completion=physical[support,1:]+predicted[:,None]*[.65,.35]
+            rows.append(dict(id=ref['id'],subject=ref['subject'],dataset=ref['dataset'],key=key,
+                pairing=pairing,converged=successful,donor_id=feature_ref['id'],
+                component_nrmse=float(np.sqrt(np.mean((predicted-c[support])**2)))/scale,
+                component_correlation=float(np.corrcoef(predicted,c[support])[0,1]) if np.std(predicted)>1e-12 and np.std(c[support])>1e-12 else None,
+                hidden_Hb_nrmse=float(np.sqrt(np.mean(((completion-y[support,1:])/sd[1:])**2)))))
+            saved[f'{ref["id"]}__{pairing}']=predicted
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
+    result=dict(status='completed',key=key,model=model,training_target_scale=scale,
+        training_fit_records=fit_rows,training_ids=[r['id'] for r in available],rows=rows,
+        source_status='unresolved_EOG_predictability_is_association_not_causal_origin')
+    write_json(path,result);return result
+
+
+def attribution_prototype_data_worker(payload):
+    cfg,base,split,index=payload
+    stream={'train':10000,'validation':20000,'test':30000}[split]
+    scenarios=cfg['prototype']['test_interventions' if split=='test' else 'train_interventions']
+    ys=[];targets=[];labels=[]
+    # Project true structured total Hb into the same processed cosine coordinate.
+    time=np.cos(np.pi*(np.arange(120)[:,None]+.5)*np.arange(1,5)/120)
+    basis=semantics_model_operator()[1::3,1::3]@time
+    for scenario in scenarios:
+        case=attribution_synthetic_case(cfg,base,stream+index,
+            'slow' if index%2==0 else 'mixed','rest' if index%4<2 else 'nonrest',scenario,calibration=True)
+        r=case['driver']-np.mean(case['driver'][:20])
+        neural=r.reshape(cfg['prototype']['driver_patches'],-1).mean(axis=1)
+        hbtotal=case['observation_truth'][:,1:].sum(axis=1)
+        morphology=np.linalg.lstsq(basis,hbtotal,rcond=1e-10)[0]
+        ys.append(case['target']);targets.append(np.r_[neural,morphology]);labels.append(scenario)
+    return dict(values=np.array(ys),targets=np.array(targets),scenarios=labels,index=index,split=split)
+
+
+def attribution_prototype_prepare(cfg, base, out, workers):
+    collected={split:[] for split in ('train','validation','test')}
+    payloads=[(cfg,base,split,i) for split in collected for i in range(cfg['prototype'][split+'_seeds'])]
+    for _,result,error in bounded_nonlinear_work(attribution_prototype_data_worker,payloads,workers,2*workers):
+        if error:raise RuntimeError(error)
+        collected[result['split']].append(result)
+    arrays={}
+    for split,records in collected.items():
+        records.sort(key=lambda r:r['index'])
+        arrays[split+'_values']=np.concatenate([r['values'] for r in records])
+        arrays[split+'_targets']=np.concatenate([r['targets'] for r in records])
+        arrays[split+'_scenarios']=np.array([s for r in records for s in r['scenarios']])
+        arrays[split+'_identities']=np.array([r['index'] for r in records for _ in r['scenarios']])
+    arrays['input_mean']=arrays['train_values'].mean(axis=(0,1))
+    arrays['input_scale']=np.maximum(arrays['train_values'].std(axis=(0,1)),1e-8)
+    arrays['target_mean']=arrays['train_targets'].mean(axis=0)
+    arrays['target_scale']=np.maximum(arrays['train_targets'].std(axis=0),1e-8)
+    np.savez_compressed(out/'prototype_data.npz',**arrays)
+    write_json(out/'prototype_data.json',dict(schema='typed_component_synthetic_data_v1',
+        split_seed_offsets={'train':10000,'validation':20000,'test':30000},
+        shapes={k:v.shape for k,v in arrays.items()},normalization='training_only',
+        truth='known_generator_driver_and_structured_HbT_projection_not_measured_teacher',
+        input_ownership='EEG_only_driver_encoder_Hb_only_morphology_encoder'))
+
+
+def attribution_prototype_worker(payload):
+    import torch
+    from src.tokenizers.typed_component_prototype import TypedComponentPrototype
+    from src.inference.shared_driver_attribution import fit_standardized_ridge, predict_standardized_ridge
+    cfg,root,seed,arm=payload;out=Path(root);path=out/'prototype'/f'{arm}_s{seed}'/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    start=time.monotonic();torch.set_num_threads(1);torch.manual_seed(seed);np.random.seed(seed)
+    data=np.load(out/'prototype_data.npz',allow_pickle=False);p=cfg['prototype']
+    x={s:torch.tensor((data[s+'_values']-data['input_mean'])/data['input_scale'],dtype=torch.float32)
+        for s in ('train','validation','test')}
+    y={s:torch.tensor((data[s+'_targets']-data['target_mean'])/data['target_scale'],dtype=torch.float32)
+        for s in ('train','validation','test')}
+    typed=arm=='typed_supervision'
+    model=TypedComponentPrototype(width=p['hidden_width'],driver_patches=p['driver_patches'],
+        morphology_modes=p['morphology_modes'],observation_dimensions=p['observation_dimensions'],detach_semantic=typed)
+    optimizer=torch.optim.Adam(model.parameters(),lr=p['learning_rate'])
+    history=[];best=None;best_score=float('inf');best_epoch=None
+    for epoch in range(p['epochs']):
+        model.train();total=0.
+        permutation=torch.randperm(len(x['train']))
+        for indices in permutation.split(p['batch_size']):
+            output=model(x['train'][indices]);loss=torch.mean((output['reconstruction']-x['train'][indices])**2)
+            if typed:loss=loss+torch.mean((output['semantic']-y['train'][indices])**2)
+            optimizer.zero_grad();loss.backward();optimizer.step();total+=float(loss.detach())*len(indices)
+        model.eval()
+        with torch.no_grad():
+            output=model(x['validation']);validation=torch.mean((output['reconstruction']-x['validation'])**2)
+            if typed:validation=validation+torch.mean((output['semantic']-y['validation'])**2)
+            score=float(validation)
+        history.append(dict(epoch=epoch+1,train_loss=total/len(x['train']),validation_loss=score))
+        if score<best_score:
+            best_score=score;best_epoch=epoch+1;best={k:v.detach().clone() for k,v in model.state_dict().items()}
+    model.load_state_dict(best);model.eval()
+    with torch.no_grad():
+        train={k:v.numpy() for k,v in model(x['train']).items()}
+        test={k:v.numpy() for k,v in model(x['test']).items()}
+    neural=p['driver_patches'];probes={}
+    prediction=test['semantic'].copy()
+    if not typed:
+        for name,part in [('neural',slice(0,neural)),('morphology',slice(neural,None))]:
+            probe=fit_standardized_ridge(train['semantic'][:,part],y['train'].numpy()[:,part],.01)
+            prediction[:,part]=predict_standardized_ridge(probe,test['semantic'][:,part]);probes[name]=probe
+    rows=[];contrasts=[];truth=y['test'].numpy();identity=data['test_identities'];scenarios=data['test_scenarios']
+    obs_scale=np.maximum(np.std(train['observation'],axis=0),1e-8)
+    for index in sorted(set(identity)):
+        controls=np.flatnonzero((identity==index)&(scenarios=='control'))
+        control=int(controls[0])
+        for i in np.flatnonzero(identity==index):
+            row=dict(seed=seed,arm=arm,identity=int(index),scenario=str(scenarios[i]),
+                neural_nrmse=float(np.sqrt(np.mean((prediction[i,:neural]-truth[i,:neural])**2))),
+                morphology_nrmse=float(np.sqrt(np.mean((prediction[i,neural:]-truth[i,neural:])**2))),
+                reconstruction_nrmse=float(np.sqrt(np.mean((test['reconstruction'][i]-x['test'][i].numpy())**2))))
+            rows.append(row)
+            contrasts.append(dict(seed=seed,arm=arm,identity=int(index),scenario=str(scenarios[i]),
+                neural_change_SD=float(np.sqrt(np.mean((prediction[i,:neural]-prediction[control,:neural])**2))),
+                morphology_change_SD=float(np.sqrt(np.mean((prediction[i,neural:]-prediction[control,neural:])**2))),
+                neural_change_error_SD=float(np.sqrt(np.mean(((prediction[i]-prediction[control])-(truth[i]-truth[control]))[:neural]**2))),
+                morphology_change_error_SD=float(np.sqrt(np.mean(((prediction[i]-prediction[control])-(truth[i]-truth[control]))[neural:]**2))),
+                observation_change_SD=float(np.sqrt(np.mean(((test['observation'][i]-test['observation'][control])/obs_scale)**2))),
+                neural_truth_change_SD=float(np.sqrt(np.mean((truth[i,:neural]-truth[control,:neural])**2))),
+                morphology_truth_change_SD=float(np.sqrt(np.mean((truth[i,neural:]-truth[control,neural:])**2)))))
+    path.parent.mkdir(parents=True,exist_ok=True)
+    torch.save(dict(state_dict=best,config=p,input_mean=data['input_mean'],input_scale=data['input_scale'],
+        target_mean=data['target_mean'],target_scale=data['target_scale']),path.parent/'model.pt')
+    np.savez_compressed(path.with_suffix('.npz'),prediction=prediction,truth=truth,**test)
+    result=dict(status='completed',seed=seed,arm=arm,selected_epoch=best_epoch,validation_loss=best_score,
+        history=history,rows=rows,contrasts=contrasts,probes=probes,token_metadata=model.token_metadata(),
+        parameter_count=sum(v.numel() for v in model.parameters()),seconds=time.monotonic()-start,
+        interpretation='synthetic_continuous_prototype_only_no_measured_semantic_qualification')
+    write_json(path,result);return result
+
+
+def attribution_pilot_worker(payload):
+    cfg,base,index=payload;start=time.monotonic();cpu=time.process_time()
+    case=attribution_synthetic_case(cfg,base,index,'mixed','nonrest','common_rho070',calibration=True)
+    cal=dict(driver_sd=.025,prior_weight=.1,coefficient_multiplier=1.,selected_rho=.35,
+        direction_scales={a:[.02,.015,.01,.005] for a in ATTRIBUTION_ARMS[1:]})
+    sd=np.maximum(case['target'].std(axis=0),1e-5);rows=[]
+    for mode in ('full','HbR_hidden'):
+        mask=np.ones((120,3),bool) if mode=='full' else semantics_missing_mask(mode)
+        for arm in ATTRIBUTION_ARMS:
+            clock=time.monotonic();fit=attribution_fit(cfg,base,case['target'],sd,cal,arm,mask)
+            rows.append(dict(mode=mode,arm=arm,seconds=time.monotonic()-clock,
+                **robustness_metrics(fit,case['target'],sd,mask)))
+    return dict(index=index,rows=rows,wall_s=time.monotonic()-start,cpu_s=time.process_time()-cpu,
+        peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+
+
+def attribution_associations(frame, seed):
+    from scipy.stats import spearmanr
+    rows=[]
+    features=['native_rho','processed_rho','HbT_energy_fraction','quality_burden','component_strength','single_Hb_harm']
+    for dataset,group in frame.groupby('dataset'):
+        for feature in features:
+            g=group[group.converged].dropna(subset=['full_gain',feature])
+            if feature=='single_Hb_harm':g=g[g.HbO_hidden_pair_converged & g.HbR_hidden_pair_converged]
+            rho=float(spearmanr(g.full_gain,g[feature]).statistic) if len(g)>2 else np.nan
+            rng=np.random.default_rng(seed);subjects=sorted(set(g.subject));draw=[]
+            for _ in range(1000):
+                if not subjects:break
+                indices=np.concatenate([np.flatnonzero(g.subject.to_numpy()==s) for s in rng.choice(subjects,len(subjects))])
+                a=g.full_gain.to_numpy()[indices];b=g[feature].to_numpy()[indices]
+                if np.std(a)>1e-12 and np.std(b)>1e-12:draw.append(float(spearmanr(a,b).statistic))
+            interval=np.quantile(draw,[.025,.975]) if draw else [np.nan,np.nan]
+            rows.append(dict(dataset=dataset,feature=feature,spearman=rho,ci_low=interval[0],ci_high=interval[1],
+                windows=len(g),subjects=len(subjects),interval='resample_subject_blocks_exploratory_QC_selected_panel'))
+    return pd.DataFrame(rows)
+
+
+def attribution_summarize(cfg, out, project_root):
+    missing=[]
+    def read(path):
+        if not path.exists():missing.append(str(path.relative_to(out)));return None
+        return json.loads(path.read_text())
+    def table(records, field, identity=None):
+        rows=[]
+        for record in records:
+            if record is None:continue
+            common={k:record['ref'][k] for k in ('id','dataset','subject','record','site')} if identity=='ref' else {}
+            rows.extend([dict(common,**r) for r in record[field]])
+        return pd.DataFrame(rows)
+    syn_specs=json.loads((out/'synthetic_plan.json').read_text())
+    syn_records=[read(out/'synthetic'/s['key']/'result.json') for s in syn_specs]
+    panel=json.loads((out/'measured_plan.json').read_text())['windows']
+    measured_records=[read(out/'measured'/r['id']/'result.json') for r in panel]
+    audit_records=[read(out/'audit'/r['id']/'result.json') for r in panel]
+    profile_plan=json.loads((out/'profile_plan.json').read_text())
+    profile_records=[read(out/'profiles'/r['id']/'result.json') for r in profile_plan]
+    anchor_keys=json.loads((out/'anchor_plan.json').read_text())['coordinate_keys']
+    anchor_records=[read(out/'anchors'/(key+'.json')) for key in anchor_keys]
+    prototype_records=[read(out/'prototype'/f'{arm}_s{seed}'/'result.json')
+        for arm in cfg['prototype']['arms'] for seed in cfg['prototype']['optimization_seeds']]
+    syn=table(syn_records,'rows');syn.to_csv(out/'synthetic_metrics.csv',index=False)
+    robustness_group_summary(syn,['scenario','mode','arm'],['driver_nrmse','centered_driver_nrmse',
+        'physical_truth_nrmse','component_truth_nrmse','total_nrmse']).to_csv(out/'synthetic_summary.csv',index=False)
+    pd.DataFrame(robustness_paired(syn,['scenario','mode'],value='driver_nrmse',cluster='repeat',seed=cfg['seed'],
+        arms=cfg['synthetic']['arms']+['oracle'])).to_csv(out/'synthetic_paired.csv',index=False)
+    contrasts=table(syn_records,'contrasts');contrasts.to_csv(out/'counterfactual_metrics.csv',index=False)
+    robustness_group_summary(contrasts,['scenario','mode','arm'],['driver_change_error_SD','driver_estimated_change_SD',
+        'driver_truth_change_SD','physical_prediction_change_error_SD','observation_component_change_error_SD',
+        'physical_prediction_projection_fraction','observation_component_projection_fraction','residual_projection_fraction']).to_csv(out/'counterfactual_summary.csv',index=False)
+    meas=table(measured_records,'rows','ref');meas.to_csv(out/'measured_metrics.csv',index=False)
+    robustness_group_summary(meas,['dataset','mode','pairing','arm'],['total_nrmse','physical_nrmse',
+        'component_rms_training_SD']).to_csv(out/'measured_summary.csv',index=False)
+    real=meas[meas.pairing=='real'];paired=[]
+    for control in ('M0','D-fixed','spatial_ridge','training_template'):
+        paired.extend(robustness_paired(real,['dataset','mode'],control=control,seed=cfg['seed'],
+            arms=list(ATTRIBUTION_ARMS)+['spatial_ridge','training_template']))
+    pd.DataFrame(paired).to_csv(out/'measured_paired.csv',index=False)
+    nulls=[]
+    for control,arm in [('wrong_subject','real'),('nonwrapping_shift_12s','real_shift_support')]:
+        frame=meas[meas['mode']=='hidden_channel'].rename(columns={'arm':'method','pairing':'arm'})
+        nulls.extend(robustness_paired(frame,['dataset','method'],control=control,arms=[arm],seed=cfg['seed']))
+    pd.DataFrame(nulls).to_csv(out/'spatial_nulls.csv',index=False)
+    temporal=meas[meas['mode']=='suffix_Hb'].rename(columns={'arm':'method','pairing':'arm'})
+    pd.DataFrame(robustness_paired(temporal,['dataset','method'],control='zero',
+        arms=['AR1','persistence','cosine_extrapolation'],seed=cfg['seed'])).to_csv(out/'temporal_paired.csv',index=False)
+    audit=pd.DataFrame([r['audit'] for r in audit_records if r]);audit.to_csv(out/'audit_metrics.csv',index=False)
+    attribution_associations(audit,cfg['seed']).to_csv(out/'audit_associations.csv',index=False)
+    sensitivity=table(audit_records,'sensitivity','ref');sensitivity.to_csv(out/'component_sensitivity.csv',index=False)
+    robustness_group_summary(sensitivity,['dataset','arm'],['driver_change_SD','physical_change_SD',
+        'component_change_SD','component_shape_cosine']).to_csv(out/'sensitivity_summary.csv',index=False)
+    profiles=table(profile_records,'rows','ref');profiles.to_csv(out/'confounding_profiles.csv',index=False)
+    overlap_rows=[]
+    for record in profile_records:
+        if not record:continue
+        for row in record['overlaps']:
+            for family in ('fixed_H0','with_parameter_tangents'):
+                if family not in row:continue
+                values=row[family]
+                overlap_rows.append(dict(id=record['ref']['id'],dataset=record['ref']['dataset'],arm=row['arm'],
+                    family=family,converged=row['converged'],maximum_cosine=max(values['principal_cosines']),
+                    minimum_cosine=min(values['principal_cosines']),physical_rank=values['physical_rank'],
+                    component_rank=values['component_rank']))
+    pd.DataFrame(overlap_rows).to_csv(out/'jacobian_overlap.csv',index=False)
+    anchors=table(anchor_records,'rows');anchors.to_csv(out/'anchor_metrics.csv',index=False)
+    ap=[]
+    for control in ('zero','training_mean','wrong_subject'):
+        for metric in ('component_nrmse','hidden_Hb_nrmse'):
+            ap.extend(robustness_paired(anchors.rename(columns={'pairing':'arm'}),['dataset'],
+                control=control,value=metric,arms=['real'],seed=cfg['seed']))
+    pd.DataFrame(ap).to_csv(out/'anchor_paired.csv',index=False)
+    proto=table(prototype_records,'rows');proto.to_csv(out/'prototype_metrics.csv',index=False)
+    pc=table(prototype_records,'contrasts');pc.to_csv(out/'prototype_contrasts.csv',index=False)
+    proto.groupby(['scenario','arm','seed'])[['neural_nrmse','morphology_nrmse','reconstruction_nrmse']].mean().reset_index().to_csv(out/'prototype_summary.csv',index=False)
+    pc.groupby(['scenario','arm','seed']).mean(numeric_only=True).reset_index().to_csv(out/'prototype_intervention_summary.csv',index=False)
+    previous=Path(project_root)/cfg['robustness_run']
+    reliability=pd.read_csv(previous/'synthetic_reliability.csv')
+    summary=dict(schema='shared_driver_attribution_summary_v1',experiment_id=cfg['experiment_id'],
+        execution='completed' if not missing else 'completed_with_task_failures',missing_task_records=missing,
+        synthetic=dict(cases=len(syn_specs),fits=len(syn),converged=int(syn.converged.sum())),
+        measured=dict(windows=len(panel),subjects=len({(r['dataset'],r['subject']) for r in panel}),
+            rows=len(meas),converged=int(meas.converged.sum()),spatial_available=sum(bool(r and r['spatial_available']) for r in measured_records)),
+        audit=dict(windows=len(audit),sensitivity_fits=len(sensitivity),
+            previous_false_reassurance_max=float(reliability.false_reassurance_fraction.max())),
+        confounding=dict(profile_fits=len(profiles),near_equivalent_rows=int(profiles.near_equivalent.sum())),
+        anchors=dict(coordinates=len(anchor_keys),rows=len(anchors),source_status='unresolved'),
+        prototype=dict(models=len(prototype_records),test_rows=len(proto),scope=cfg['prototype']['scope']),
+        endpoint_files=['audit_metrics.csv','audit_associations.csv','component_sensitivity.csv','measured_paired.csv',
+            'spatial_nulls.csv','temporal_paired.csv','synthetic_summary.csv','counterfactual_summary.csv',
+            'jacobian_overlap.csv','confounding_profiles.csv','anchor_paired.csv','prototype_summary.csv','prototype_intervention_summary.csv'],
+        claim_boundary='exploratory_public_development_and_known_truth_synthetic; no_unique_source_or_measured_tokenizer_qualification',
+        finished_at=datetime.now(timezone.utc).isoformat())
+    write_json(out/'summary.json',summary)
+    return summary
+
+
+def attribution_verify(cfg, out, project_root):
+    """Read-only evidence checks; this does not authorize or rerun any experiment."""
+    summary=json.loads((out/'summary.json').read_text())
+    if summary['execution']!='completed':raise ValueError('cannot verify incomplete task records')
+    previous=Path(project_root)/cfg['robustness_run'];parent=Path(project_root)/cfg['source_run']
+    refs=json.loads((parent/'cohort.json').read_text())['refs'];lookup={r['id']:r for r in refs}
+    panel=json.loads((out/'measured_plan.json').read_text())['windows']
+    checks=[];failures=[];maximum_decomposition=0.;maximum_parent_difference=0.;hidden_component_maximum=0.
+    def check(name,passed,**details):
+        record=dict(name=name,passed=bool(passed),**details);checks.append(record)
+        if not passed:failures.append(record)
+    specifications=json.loads((out/'synthetic_plan.json').read_text())
+    expected_per_case=len(cfg['synthetic']['scenarios'])*len(cfg['synthetic']['modes'])*len(cfg['synthetic']['arms'])+len(cfg['synthetic']['physiological_oracle'])*len(cfg['synthetic']['modes'])
+    synthetic_failures=[]
+    for spec in specifications:
+        result=json.loads((out/'synthetic'/spec['key']/'result.json').read_text())
+        check('synthetic_task_denominator',len(result['rows'])==expected_per_case,key=spec['key'],rows=len(result['rows']))
+        with np.load(out/'synthetic'/spec['key']/'result.npz',allow_pickle=False) as arrays:
+            for row in result['rows']:
+                prefix=f"{row['scenario']}__{row['mode']}__{row['arm']}__"
+                if not row['converged']:synthetic_failures.append({k:row[k] for k in ('key','scenario','mode','arm','status')})
+                if prefix+'prediction' in arrays:
+                    delta=float(np.max(abs(arrays[prefix+'prediction']-arrays[prefix+'physical_prediction']-arrays[prefix+'observation_component'])))
+                    maximum_decomposition=max(maximum_decomposition,delta)
+    coverage=[];fit_failures=[]
+    for ref in panel:
+        record=json.loads((out/'measured'/ref['id']/'result.json').read_text())
+        core=[r for r in record['rows'] if r['mode'] in cfg['measured']['modes']]
+        check('measured_direction_denominator',len(core)==len(cfg['measured']['modes'])*len(ATTRIBUTION_ARMS),id=ref['id'],rows=len(core))
+        for row in core:
+            if not row['converged']:fit_failures.append(dict(id=ref['id'],**row))
+        with np.load(out/'measured'/ref['id']/'result.npz',allow_pickle=False) as arrays, np.load(previous/'measured'/ref['id']/'result.npz',allow_pickle=False) as old:
+            for mode in cfg['measured']['modes']:
+                for arm in ATTRIBUTION_ARMS:
+                    prefix=f'{mode}__{arm}__'
+                    if prefix+'prediction' not in arrays:continue
+                    delta=float(np.max(abs(arrays[prefix+'prediction']-arrays[prefix+'physical_prediction']-arrays[prefix+'observation_component'])))
+                    maximum_decomposition=max(maximum_decomposition,delta)
+                    if mode=='Hb_hidden':hidden_component_maximum=max(hidden_component_maximum,float(np.max(abs(arrays[prefix+'observation_component']))))
+                for arm,oldarm in [('M0','M0'),('D-fixed','M-observation')]:
+                    prefix=f'{mode}__{arm}__prediction';oldkey=f'{mode}__{oldarm}__prediction'
+                    if prefix in arrays and oldkey in old:
+                        maximum_parent_difference=max(maximum_parent_difference,float(np.max(abs(arrays[prefix]-old[oldkey]))))
+        for d in record['spatial_donors']:
+            donor=lookup[d['id']]
+            check('spatial_target_exclusion',donor['id']!=ref['id'] and donor['hb_channel']!=ref['hb_channel']
+                and donor['key']==ref['key'] and donor['window']==ref['window'],id=ref['id'],donor_id=donor['id'])
+        wrong=lookup[record['wrong_donor_id']] if record['wrong_donor_id'] else None
+        if wrong:
+            check('spatial_null_subject_task_match',wrong['subject']!=ref['subject'] and wrong['task']==ref['task']
+                and wrong['condition']==ref['condition'],id=ref['id'],donor_id=wrong['id'])
+        coverage.append(dict(id=ref['id'],dataset=ref['dataset'],subject=ref['subject'],
+            real_available=record['spatial_available'],wrong_available=record['wrong_donor_available']))
+    check('physical_plus_component_equals_prediction',maximum_decomposition<1e-12,max_abs=maximum_decomposition)
+    check('fixed_baselines_match_retained_parent',maximum_parent_difference<1e-10,max_abs=maximum_parent_difference)
+    check('no_self_component_when_all_Hb_hidden',hidden_component_maximum==0.,max_abs=hidden_component_maximum)
+    cal_rows=[]
+    for path in sorted((out/'calibration').glob('*.json')):
+        cal=json.loads(path.read_text());coord=json.loads((out/'coordinates'/(cal['key']+'.json')).read_text())
+        train={lookup[x]['subject'] for x in cal['training_ids']};selection={lookup[x]['subject'] for x in cal['selection_ids']}
+        evaluation={r['subject'] for r in panel if f'{r["dataset"]}__{r["site"]}__outer{r["subject_fold"]}'==cal['key']}
+        check('training_selection_evaluation_disjoint',not (train&selection or train&evaluation or selection&evaluation),key=cal['key'])
+        check('coordinate_excludes_evaluation',not evaluation&set(coord['training_subjects']),key=cal['key'])
+        check('spatial_training_subset',set(cal['spatial_training_ids']).issubset(cal['training_ids']),key=cal['key'])
+        outer=cal['key'].rsplit('__outer',1)[1]
+        for target in [lookup[x] for x in cal['training_ids']]+[r for r in panel if r['subject'] in evaluation and r['dataset']==lookup[cal['training_ids'][0]]['dataset']]:
+            for donor in attribution_donors(target,refs):
+                key=f'{donor["dataset"]}__{donor["site"]}__outer{outer}'
+                coordinate=json.loads((parent/'coordinates'/(key+'.json')).read_text())
+                if evaluation&set(coordinate['training_subjects']):raise ValueError('donor coordinate outer-fold leakage')
+        cal_rows.append(dict(key=cal['key'],selected_rho=cal['selected_rho'],training_windows=len(cal['training_ids']),
+            selection_windows=len(cal['selection_ids']),spatial_training_windows=len(cal['spatial_training_ids'])))
+    anchor_plan=json.loads((out/'anchor_plan.json').read_text());allowed={r['id'] for r in anchor_plan['refs']}
+    aux=[]
+    for path in sorted((out/'auxiliary').glob('*/record.json')):
+        record=json.loads(path.read_text());check('auxiliary_exact_public_scope',all(r['id'] in allowed for r in record['rows'])
+            and record['join_key'].startswith('simultaneous_eeg_nirs|'),key=record['key'])
+        aux.append(dict(key=record['key'],source_path=record['source_path'],channels=record['auxiliary_names'],
+            unit=record['native_unit'],sample_rate=record['sample_rate'],windows=len(record['rows'])))
+    prototypes=[]
+    for seed in cfg['prototype']['optimization_seeds']:
+        for arm in cfg['prototype']['arms']:
+            result=json.loads((out/'prototype'/f'{arm}_s{seed}'/'result.json').read_text())
+            history=result['history'];best=min(history,key=lambda r:r['validation_loss'])
+            check('prototype_validation_only_selection',result['selected_epoch']==best['epoch'] and len(history)==cfg['prototype']['epochs'],seed=seed,arm=arm)
+            check('prototype_full_test_denominator',len(result['rows'])==cfg['prototype']['test_seeds']*len(cfg['prototype']['test_interventions']),seed=seed,arm=arm)
+            prototypes.append(dict(seed=seed,arm=arm,selected_epoch=result['selected_epoch'],parameter_count=result['parameter_count']))
+    with np.load(out/'prototype_data.npz',allow_pickle=False) as arrays:
+        check('prototype_training_normalization',np.allclose(arrays['input_mean'],arrays['train_values'].mean(axis=(0,1)))
+            and np.allclose(arrays['target_mean'],arrays['train_targets'].mean(axis=0)))
+        check('prototype_independent_draws',not np.array_equal(arrays['train_values'][0],arrays['validation_values'][0])
+            and not np.array_equal(arrays['train_values'][0],arrays['test_values'][0]))
+    check('all_declared_tasks_present',not summary['missing_task_records'])
+    pd.DataFrame(coverage).to_csv(out/'spatial_coverage.csv',index=False)
+    result=dict(schema='shared_driver_attribution_verification_v1',status='passed' if not failures else 'failed',
+        checked_at=datetime.now(timezone.utc).isoformat(),source_root=str(CODE_ROOT),checks=checks,failures=failures,
+        synthetic_numerical_failures=synthetic_failures,measured_core_numerical_failures=fit_failures,
+        calibrations=cal_rows,auxiliary_inventory=aux,prototype_models=prototypes,
+        auxiliary_source_limits=dict(Single_Trial='original_document_mentions_ECG_and_respiration_acquisition; not_read_in_this_scope; current_EOG_auxiliary_loader_does_not_establish_their_availability',
+            Simultaneous='actual_HEOG_VEOG_read; original_document_all_Hb_distances_30mm_no_short_separation',
+            Visual='graphical_template_no_exact_source_detector_distances'),
+        limitations=['QC_selected_small_public_development_panel','bootstrap_conditional_on_frozen_coordinate',
+            'null_missing_support_reported_separately','synthetic_generator_scope_limits_mechanism_claims',
+            'no_native_causal_or_cross_window_continuity_claim','prototype_not_measured_teacher_qualification'])
+    write_json(out/'verification.json',result)
+    if failures:raise ValueError(f'{len(failures)} attribution verification checks failed')
+    return result
+
+
+def attribution_main(args):
+    cfg=attribution_config(args.config);base=semantics_config(CODE_ROOT/cfg['source_config'])
+    if args.check_only:
+        print(json.dumps(dict(status='contract_valid',experiment_id=cfg['experiment_id'],measured_arrays_read=0,
+            groups=['attribution_audit','direction_spatial','counterfactuals','anchors_typed_prototype'])));return
+    if args.run_dir is None:raise ValueError('--run-dir required')
+    out=args.run_dir.resolve();expected=(args.project_root/cfg['artifact_root']).resolve()
+    if out.parent!=expected:raise ValueError('run must be direct child of attribution root')
+    if not 1<=args.workers<=cfg['resources']['max_workers']:raise ValueError('worker bound')
+    out.mkdir(parents=True,exist_ok=True)
+    lock=(out/'controller.lock').open('w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    resolved=out/'resolved_config.yaml'
+    if resolved.exists() and yaml.safe_load(resolved.read_text())!=cfg:raise ValueError('immutable attribution config mismatch')
+    if not resolved.exists():resolved.write_text(yaml.safe_dump(cfg,sort_keys=False))
+    stage=args.attribution_stage;manifest=out/(stage+'_manifest.json')
+    if manifest.exists() and json.loads(manifest.read_text()).get('execution')=='completed':
+        print('Already completed:',stage);return
+    state=dict(experiment_id=cfg['experiment_id'],stage=stage,execution='running',controller_pid=os.getpid(),
+        workers=args.workers,started_at=datetime.now(timezone.utc).isoformat(),source_root=str(CODE_ROOT))
+    write_json(manifest,state)
+    try:
+        failures=[]
+        if stage=='pilot':
+            records=[];start=time.monotonic()
+            for _,result,error in bounded_nonlinear_work(attribution_pilot_worker,[(cfg,base,i) for i in range(8)],min(args.workers,8),16):
+                if error:raise RuntimeError(error)
+                records.append(result)
+            write_json(out/'pilot.json',dict(records=records,wall_s=time.monotonic()-start))
+        elif stage=='synthetic_calibration':
+            attribution_synthetic_calibration(cfg,base,out,args.workers,args.project_root)
+        elif stage=='synthetic':
+            specs=[dict(repeat=i,spectrum=s,initial=a,key=f'{s}_{a}_r{i}') for i in range(cfg['synthetic']['repeats'])
+                for s in cfg['synthetic']['spectra'] for a in cfg['synthetic']['initial']]
+            write_json(out/'synthetic_plan.json',specs)
+            failures=semantics_parallel_stage(cfg,out,stage,attribution_synthetic_worker,
+                [(cfg,base,str(out),s) for s in specs],args.workers,lambda p:p[-1]['key'])
+        elif stage=='prototype_data':attribution_prototype_prepare(cfg,base,out,args.workers)
+        elif stage=='prototype':
+            payloads=[(cfg,str(out),seed,arm) for seed in cfg['prototype']['optimization_seeds'] for arm in cfg['prototype']['arms']]
+            failures=semantics_parallel_stage(cfg,out,stage,attribution_prototype_worker,payloads,min(args.workers,len(payloads)),lambda p:f'{p[-1]}_s{p[-2]}')
+        elif stage=='summarize':attribution_summarize(cfg,out,args.project_root)
+        elif stage=='verify':attribution_verify(cfg,out,args.project_root)
+        else:
+            if json.loads((out/'synthetic_manifest.json').read_text()).get('execution')!='completed':
+                raise ValueError('complete synthetic execution before measured input')
+            parent,previous,refs,panel,coordinates=attribution_parent(cfg,args.project_root,out)
+            if stage=='calibration':
+                payloads=[(cfg,base,str(out),str(args.project_root),refs,key) for key in coordinates]
+                failures=semantics_parallel_stage(cfg,out,stage,attribution_calibration_worker,payloads,args.workers,lambda p:p[-1])
+            elif stage=='measured':
+                payloads=[(cfg,base,str(out),str(args.project_root),refs,ref) for ref in panel]
+                failures=semantics_parallel_stage(cfg,out,stage,attribution_measured_worker,payloads,args.workers,lambda p:p[-1]['id'])
+            elif stage=='audit':
+                payloads=[(cfg,base,str(out),str(args.project_root),ref) for ref in panel]
+                failures=semantics_parallel_stage(cfg,out,stage,attribution_audit_worker,payloads,args.workers,lambda p:p[-1]['id'])
+            elif stage=='profiles':
+                selected=json.loads((previous/'profile_plan.json').read_text());write_json(out/'profile_plan.json',selected)
+                failures=semantics_parallel_stage(cfg,out,stage,attribution_profile_worker,
+                    [(cfg,base,str(out),ref) for ref in selected],args.workers,lambda p:p[-1]['id'])
+            elif stage in ('auxiliary','anchors'):
+                keys=[key for key in coordinates if key.startswith('simultaneous_eeg_nirs__')]
+                ids={r['id'] for r in panel if r['dataset']=='simultaneous_eeg_nirs'}
+                for key in keys:ids.update(json.loads((out/'calibration'/(key+'.json')).read_text())['training_ids'])
+                selected=[r for r in refs if r['id'] in ids]
+                write_json(out/'anchor_plan.json',dict(coordinate_keys=keys,refs=selected,
+                    short_separation='not_available_all_Simultaneous_channels_documented_30mm',
+                    source_status='unresolved_EOG_is_ocular_association_anchor_only'))
+                if stage=='auxiliary':
+                    groups={}
+                    for ref in selected:groups.setdefault(ref['key'],[]).append(ref)
+                    payloads=[(cfg,base,str(out),str(args.project_root),group) for group in groups.values()]
+                    failures=semantics_parallel_stage(cfg,out,stage,attribution_anchor_prepare_worker,payloads,min(args.workers,8),lambda p:p[-1][0]['key'])
+                else:
+                    failures=semantics_parallel_stage(cfg,out,stage,attribution_anchor_worker,
+                        [(cfg,base,str(out),refs,panel,key) for key in keys],args.workers,lambda p:p[-1])
+            else:raise ValueError('unknown attribution stage')
+        state.update(execution='completed' if not failures else 'completed_with_task_failures',task_failures=failures,
+            finished_at=datetime.now(timezone.utc).isoformat())
+    except Exception as exc:
+        state.update(execution='failed',error=repr(exc),traceback=traceback.format_exc());raise
+    finally:write_json(manifest,state)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config',type=Path,default=DEFAULT)
@@ -5644,10 +6653,19 @@ def main():
     ap.add_argument('--waveform-diagnostic',action='store_true')
     ap.add_argument('--physiology-semantics',action='store_true')
     ap.add_argument('--teacher-robustness',action='store_true')
+    ap.add_argument('--component-attribution',action='store_true')
+    ap.add_argument('--attribution-stage',choices=['pilot','synthetic_calibration','synthetic','calibration','measured','audit',
+        'profiles','auxiliary','anchors','prototype_data','prototype','summarize','verify'],default='pilot')
     ap.add_argument('--robustness-stage',choices=['pilot','synthetic_calibration','synthetic','calibration','measured','profiles','summarize'],default='pilot')
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.component_attribution:
+        if any((args.teacher_robustness,args.physiology_semantics,args.waveform_diagnostic,args.conditional_step_control,
+                args.conditional_optical_gain_fit,args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,
+                args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None)):
+            ap.error('component attribution is a separate versioned contract')
+        return attribution_main(args)
     if args.teacher_robustness:
         if any((args.physiology_semantics,args.waveform_diagnostic,args.conditional_step_control,
                 args.conditional_optical_gain_fit,args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,

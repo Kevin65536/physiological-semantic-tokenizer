@@ -1,0 +1,98 @@
+schema: shared_driver_attribution_v1
+experiment_id: SSM-COMPONENT-ATTRIBUTION-v1
+seed: 20261002
+source_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml
+robustness_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_teacher_robustness_v1.yaml
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1
+robustness_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1
+artifact_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution
+data_boundary: public_parent_panel_training_and_synchronous_regions_plus_registered_EOG
+protected_data: forbidden
+parameter_policy: H0_fixed_with_truth_parameter_oracle_synthetic_only
+tensor: {steps: 120, components: 3, dt_s: 0.25, state_order: [r, s, f, v, p, q]}
+direction:
+  modes: 4
+  fixed_rho: 0.35
+  rho_candidates: [0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 0.9]
+  arms: [M0, D-fixed, D-trained, D-exchange]
+  norm: same_Euclidean_Hb_loading_as_fixed
+  coefficient_scale: training_H0_residual_projection_per_direction
+  coefficient_multiplier: frozen_parent_training_selected_value
+  selection_modes: [HbO_hidden, HbR_hidden, center_Hb]
+  selection: mean_hidden_training_SD_NRMSE_failure_penalty_100
+  split: frozen_parent_training_and_subject_disjoint_inner_selection
+audit:
+  panel: unchanged_72_windows_18_subjects
+  coordinates: [HbT, HbX_rho035]
+  associations: [native_rho, processed_rho, HbT_energy_fraction, quality_burden, component_strength, single_Hb_harm]
+  sensitivity_arms: [M-observation, M-combined]
+  sensitivity_variants: parent_all_12
+  profile_windows_per_dataset: 2
+  overlap_offsets_SD: [-0.5, -0.25, 0.0, 0.25, 0.5]
+  near_equivalent_objective_fraction: 0.05
+measured:
+  modes: [full, HbO_hidden, HbR_hidden, center_Hb, Hb_hidden, EEG_hidden]
+  spatial:
+    donors: all_other_prepared_regions_same_record_and_native_window
+    component: one_shared_scalar_from_mean_donor_H0_residual_projection
+    loading_bounds: [0.0, 2.0]
+    training_windows: 18
+    baselines: [EEG_only_M0, training_template, spatial_ridge]
+    nulls: [wrong_training_subject_task_condition_matched, nonwrapping_shift_12s]
+    ridge_weight: 0.1
+  temporal:
+    prefix_steps: 80
+    ar_coefficient_bounds: [0.0, 0.995]
+    baselines: [zero, persistence, cosine_extrapolation]
+    interpretation: offline_processed_feature_suffix_completion_not_causal_native_forecast
+synthetic:
+  repeats: 8
+  spectra: [slow, mixed]
+  initial: [rest, nonrest]
+  scenarios: [control, common_basis, common_correlated, common_colored, common_rho070, common_exchange, EEG_gain, Hb_gain, noise, lag_1s, lag_3s, driver_amplitude, driver_shape, physiology_tau, physiology_kappa, unmodeled_dynamics, weak_coupling]
+  modes: [full, EEG_hidden, Hb_hidden]
+  arms: [M0, D-fixed, D-trained, D-exchange, D-combined]
+  training_repeats: 8
+  calibration_seed_stream: 101
+  evaluation_seed_stream: 201
+  physiological_oracle: [physiology_tau, physiology_kappa]
+  unmodeled_dynamics: Hb_from_0.65_driver_plus_0.35_driver_delayed_2s_EEG_unchanged
+anchors:
+  dataset: simultaneous_eeg_nirs
+  panel: unchanged_24_windows_and_parent_calibration_training_records
+  reader: src.data.unified_physiology.load_native_eeg_record
+  signal: EOG_log_mean_square_envelope
+  lags_s: [0.0, 1.0, 2.0]
+  ridge_weight: 10.0
+  null: wrong_training_subject_task_condition_matched
+  target: conditional_D_fixed_component_not_source_truth
+  source_status: unresolved
+prototype:
+  scope: synthetic_only_continuous_typed_tokens_no_VQ_no_measured_training
+  train_seeds: 256
+  validation_seeds: 64
+  test_seeds: 128
+  optimization_seeds: [11, 22, 33]
+  epochs: 160
+  batch_size: 64
+  learning_rate: 0.001
+  hidden_width: 128
+  driver_patches: 12
+  morphology_modes: 4
+  observation_dimensions: 8
+  arms: [typed_supervision, reconstruction_only]
+  train_interventions: [control, common_basis, common_correlated, EEG_gain, Hb_gain, noise, driver_amplitude, driver_shape]
+  test_interventions: [control, common_basis, common_correlated, common_colored, common_exchange, EEG_gain, Hb_gain, noise, lag_1s, driver_amplitude, driver_shape, physiology_tau, unmodeled_dynamics]
+  semantic_targets: reference_centered_driver_patch_means_and_HbT_cosine_projection
+  observation_reconstruction: decoder_with_detached_semantic_tokens
+  selection: validation_objective_only_no_test_tuning
+endpoints:
+  primary: [paired_hidden_Hb_and_spatial_completion, synthetic_true_change_attribution]
+  secondary: [component_sensitivity, heldout_EOG_anchor_prediction, typed_token_interventions]
+  diagnostic: [HbT_HbX_audit, Jacobian_subspace_overlap, constrained_component_profiles, offline_AR_suffix]
+  uncertainty: subject_block_1000_bootstrap_frozen_coordinates_not_population_confirmation
+  null: no_positive_hidden_gain_or_true_pair_advantage_over_matched_null
+  failures: full_denominator_and_paired_common_success_both_retained
+  stopping_rule: all_declared_cells_once_fixed_budget_no_test_tuning
+resources: {max_workers: 48, numerical_threads: 1, in_flight_per_worker: 2, supervisor: user_systemd}
+report: {format: pptx, output_root: docs/report, figures: png, language: zh_CN}

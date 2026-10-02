@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-02; payload-pruning record retained from
+_Evidence surface updated 2026-10-03; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -48,6 +48,47 @@ retained snapshot file. Full prediction/state arrays, prepared signals and page
 previews remain local; original cell metrics and failure denominators are in the
 retained CSVs. Parent prepared arrays and historical results retain their original
 identities.
+
+## Structured-component attribution — 2026-10-02
+
+The [four-group contract](configs/physiology_semantic_tokenizer/shared_driver_attribution_v1.yaml)
+and [owning protocol](../docs/EXPERIMENT_PLAN.md#结构性成分归属与分级语义检验2026-10-02)
+define the attribution audit, equal-capacity direction and independent-region
+completion, known-truth counterfactuals, EOG anchor check, and finite synthetic
+typed-token prototype. The
+[terminal summary](runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1/summary.json)
+indexes their numerical endpoint tables. Retain the resolved contract, original
+fitting source snapshot, supervised launch/resource records, frozen calibration
+identities, all task records and failures, decomposition arrays, prototype
+selection evidence, and the separate post-run verification/report source snapshot.
+The [verification](runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1/verification.json)
+checks complete denominators, exact parent prediction replay, decomposition,
+training/evaluation separation, spatial target exclusion and EOG source identity.
+Spatial and null support are reported separately; original parent evidence stays
+at its existing paths.
+
+The [Chinese PPT](../docs/report/20261002_ssm_component_attribution_v3/SSM_COMPONENT_ATTRIBUTION.pptx)
+and [bitmap-figure PDF](../docs/report/20261002_ssm_component_attribution_v3/SSM_COMPONENT_ATTRIBUTION.pdf)
+are communication exports with per-slide sources and
+[export validation](../docs/report/20261002_ssm_component_attribution_v3/export_validation.json).
+Earlier exports retain their layout-revision evidence. Source semantics remain
+unresolved; the synthetic continuous-token prototype does not establish measured
+teacher, tokenizer or VQ qualification.
+
+The Git review package retains the endpoint CSVs (including failed fits), plans,
+stage manifests, training coordinates/calibration choices, prototype selection
+records, software/evidence checks, supervised launch logs, and exact fitting and
+report source snapshots. The
+[source bundle](runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1/source_bundle_git_v1.tar.gz)
+preserves the original snapshot, report sources, launch patch and request bytes;
+extracting it in the run directory restores their recorded paths. The delivered PPT embeds its
+figure bitmaps; the companion PDF and both exports' source/validation records
+are tracked. Original task arrays, derived auxiliary signals, prototype weights,
+generated training batches, and earlier presentation binaries remain local.
+Earlier export validation records retain the layout failures. This selection
+does not delete or rewrite the local experiment evidence. The
+[commit checks](runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1/git_review_20261003_v1/verification_v2.json)
+record tests and contract validation against an isolated staged checkout.
 
 ## Conditional teacher robustness — 2026-10-01
 

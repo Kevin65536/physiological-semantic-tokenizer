@@ -1,0 +1,182 @@
+{
+  "run": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1",
+  "slides": [
+    {
+      "slide": 1,
+      "title": "结构性成分应如何归属",
+      "evidence": "summary.json; measured_paired.csv"
+    },
+    {
+      "slide": 2,
+      "title": "四组问题，四类独立证据",
+      "evidence": "resolved_config.yaml; summary.json"
+    },
+    {
+      "slide": 3,
+      "title": "一个物理核心，一个额外 Hb 方向",
+      "evidence": "resolved_config.yaml; src/inference/shared_driver_attribution.py"
+    },
+    {
+      "slide": 4,
+      "title": "实测比较的身份与边界",
+      "evidence": "measured_plan.json; calibration/*.json; resolved_config.yaml"
+    },
+    {
+      "slide": 5,
+      "title": "第一组：重建收益与单条 Hb 损害同窗检查",
+      "evidence": "audit_metrics.csv"
+    },
+    {
+      "slide": 6,
+      "title": "归属关联的强弱与不确定性",
+      "evidence": "audit_associations.csv"
+    },
+    {
+      "slide": 7,
+      "title": "HbT 与 HbX：收益落在哪个诊断坐标",
+      "evidence": "audit_metrics.csv; audit/*/result.json"
+    },
+    {
+      "slide": 8,
+      "title": "驱动稳定，不能替代共同项稳定",
+      "evidence": "component_sensitivity.csv; sensitivity_summary.csv"
+    },
+    {
+      "slide": 9,
+      "title": "局部混淆：物理变化与共同项可相互补偿",
+      "evidence": "jacobian_overlap.csv; confounding_profiles.csv"
+    },
+    {
+      "slide": 10,
+      "title": "第二组：训练记录选择的同向 loading",
+      "evidence": "calibration/*.json; calibration_scores/*.json"
+    },
+    {
+      "slide": 11,
+      "title": "单条 Hb 补全：方向改变是否带来独立收益",
+      "evidence": "measured_paired.csv"
+    },
+    {
+      "slide": 12,
+      "title": "完整拟合与缺失任务必须分列",
+      "evidence": "measured_paired.csv"
+    },
+    {
+      "slide": 13,
+      "title": "隐藏 Hb 的实际曲线：固定、训练与竞争方向",
+      "evidence": "measured_plan.json; measured/*/result.npz"
+    },
+    {
+      "slide": 14,
+      "title": "独立通道补全的输入边界",
+      "evidence": "resolved_config.yaml; measured/*/result.json"
+    },
+    {
+      "slide": 15,
+      "title": "其他区域能否帮助预测目标 Hb",
+      "evidence": "measured_paired.csv; measured_metrics.csv"
+    },
+    {
+      "slide": 16,
+      "title": "空间信息存在，当前共同项的利用仍不足",
+      "evidence": "measured_paired.csv"
+    },
+    {
+      "slide": 17,
+      "title": "空间增量还必须胜过错配与时移",
+      "evidence": "spatial_nulls.csv"
+    },
+    {
+      "slide": 18,
+      "title": "受限 AR(1)：只作离线后缀补全检验",
+      "evidence": "temporal_paired.csv; calibration/*.json"
+    },
+    {
+      "slide": 19,
+      "title": "第三组：17 类配对反事实",
+      "evidence": "synthetic_plan.json; synthetic_summary.csv; resolved_config.yaml"
+    },
+    {
+      "slide": 20,
+      "title": "完整观测下的驱动恢复",
+      "evidence": "synthetic_summary.csv"
+    },
+    {
+      "slide": 21,
+      "title": "EEG 缺失时的驱动恢复",
+      "evidence": "synthetic_summary.csv"
+    },
+    {
+      "slide": 22,
+      "title": "真实变化被共同项吸收了多少",
+      "evidence": "counterfactual_summary.csv"
+    },
+    {
+      "slide": 23,
+      "title": "保留真实驱动变化：稳定化与幅度偏差",
+      "evidence": "counterfactual_summary.csv"
+    },
+    {
+      "slide": 24,
+      "title": "真值参数 oracle 帮助定位动力学失配",
+      "evidence": "synthetic_summary.csv"
+    },
+    {
+      "slide": 25,
+      "title": "第四组：可用锚点与尚未获得的来源证据",
+      "evidence": "anchor_plan.json; auxiliary/*/record.json; docs/DATASETS_DESCRIPTION.md"
+    },
+    {
+      "slide": 26,
+      "title": "EOG 锚定：预测条件成分与隐藏 Hb",
+      "evidence": "anchor_paired.csv; anchor_metrics.csv"
+    },
+    {
+      "slide": 27,
+      "title": "有限原型：神经语义与 Hb 形态分别拥有输入",
+      "evidence": "src/tokenizers/typed_component_prototype.py; prototype_data.json"
+    },
+    {
+      "slide": 28,
+      "title": "训练与评价严格分开",
+      "evidence": "prototype_data.json; prototype/*/result.json"
+    },
+    {
+      "slide": 29,
+      "title": "原型保留的语义是否与干预方向一致",
+      "evidence": "prototype_intervention_summary.csv"
+    },
+    {
+      "slide": 30,
+      "title": "原型泛化：已见干预与未见机制分开看",
+      "evidence": "prototype_summary.csv"
+    },
+    {
+      "slide": 31,
+      "title": "原型的失败面需要进入下一轮目标",
+      "evidence": "prototype_intervention_summary.csv; prototype_summary.csv"
+    },
+    {
+      "slide": 32,
+      "title": "按证据层级使用本轮结果",
+      "evidence": "measured_paired.csv; spatial_nulls.csv; counterfactual_summary.csv; anchor_paired.csv"
+    },
+    {
+      "slide": 33,
+      "title": "执行完整性与失败证据",
+      "evidence": "summary.json; verification.json; resources.json; *_manifest.json"
+    },
+    {
+      "slide": 34,
+      "title": "下一步由失败面决定",
+      "evidence": "summary.json; measured_paired.csv; counterfactual_summary.csv; prototype_summary.csv"
+    },
+    {
+      "slide": 35,
+      "title": "事实源与复现入口",
+      "evidence": "resolved_config.yaml; launch.json; source_snapshot/; presentation_sources.json"
+    }
+  ],
+  "figures": "PNG 240 dpi; editable body text and tables",
+  "wps_checked": false
+}

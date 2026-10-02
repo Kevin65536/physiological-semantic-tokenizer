@@ -3266,6 +3266,425 @@ def render_teacher_robustness(run, out):
     print(json.dumps(dict(presentation=str(path),slides=len(deck.slides)),ensure_ascii=False))
 
 
+def render_component_attribution(run, out):
+    """Chinese slide report, with editable text and bitmap scientific figures."""
+    import yaml
+    from pptx import Presentation
+    from pptx.dml.color import RGBColor
+    from pptx.util import Inches, Pt
+    from pptx.enum.text import MSO_ANCHOR
+    from PIL import Image
+    from matplotlib.patches import FancyBboxPatch
+    summary=json.loads((run/'summary.json').read_text())
+    if summary['execution']!='completed':raise ValueError('report requires complete attribution task records')
+    if json.loads((run/'verification.json').read_text())['status']!='passed':
+        raise ValueError('attribution evidence verification must pass before export')
+    filename='SSM_COMPONENT_ATTRIBUTION.pptx'
+    if (out/filename).exists():raise ValueError('preserve old presentation; use a versioned export')
+    out.mkdir(parents=True,exist_ok=True);figures=out/'figures';figures.mkdir(exist_ok=True)
+    cfg=yaml.safe_load((run/'resolved_config.yaml').read_text())
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if not font.exists():raise ValueError('CJK font required')
+    font_manager.fontManager.addfont(str(font))
+    plt.rcParams.update({'font.family':font_manager.FontProperties(fname=str(font)).get_name(),
+        'font.size':11,'axes.titlesize':13,'axes.spines.top':False,'axes.spines.right':False,
+        'figure.facecolor':'white','savefig.facecolor':'white','axes.unicode_minus':False})
+    datasets=['eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation']
+    dsname=dict(zip(datasets,['Single-Trial','Simultaneous','Visual']))
+    arms=['M0','D-fixed','D-trained','D-exchange']
+    colors={'M0':'#718297','D-fixed':'#C88937','D-trained':'#008F87','D-exchange':'#7771AE',
+        'D-combined':'#B74D5D','spatial_ridge':'#3880AC','training_template':'#B3BBC2','oracle':'#292D37'}
+    labels={'M0':'原模型','D-fixed':'固定同向','D-trained':'训练同向','D-exchange':'交换样',
+        'D-combined':'共同项+先验','spatial_ridge':'空间 ridge','training_template':'训练模板','oracle':'真值参数'}
+    mode_labels={'full':'完整重建','HbO_hidden':'隐藏 HbO','HbR_hidden':'隐藏 HbR','center_Hb':'中心 Hb 缺失',
+        'Hb_hidden':'整段 Hb 缺失','EEG_hidden':'整段 EEG 缺失','hidden_channel':'独立目标通道'}
+    scenario_labels={'control':'匹配对照','common_basis':'基底内共同项','common_correlated':'驱动相关共同项',
+        'common_colored':'有色共同项','common_rho070':'共同方向 ρ=0.70','common_exchange':'交换样共同项',
+        'EEG_gain':'EEG 增益','Hb_gain':'Hb 增益','noise':'噪声增强','lag_1s':'Hb 偏移 1 s','lag_3s':'Hb 偏移 3 s',
+        'driver_amplitude':'真实驱动幅度','driver_shape':'真实驱动形状','physiology_tau':'真实 τ 改变',
+        'physiology_kappa':'真实 κ 改变','unmodeled_dynamics':'未建模动力学','weak_coupling':'近零耦合'}
+    frames={name:pd.read_csv(run/(name+'.csv')) for name in ['audit_metrics','audit_associations','component_sensitivity',
+        'jacobian_overlap','confounding_profiles','measured_metrics','measured_summary','measured_paired','spatial_nulls',
+        'temporal_paired','synthetic_summary','counterfactual_summary','anchor_paired','anchor_metrics',
+        'prototype_summary','prototype_intervention_summary']}
+    deck=Presentation();deck.slide_width=Inches(13.333);deck.slide_height=Inches(7.5);sources=[]
+    def text(slide,value,x,y,w,h,size=20,color='20384D',bold=False):
+        shape=slide.shapes.add_textbox(Inches(x),Inches(y),Inches(w),Inches(h));tf=shape.text_frame
+        tf.word_wrap=True;tf.margin_left=0;tf.margin_right=0;tf.margin_top=0;tf.margin_bottom=0
+        for i,line in enumerate(str(value).split('\n')):
+            p=tf.paragraphs[0] if i==0 else tf.add_paragraph();p.text=line;p.space_after=Pt(10)
+            for r in p.runs:
+                r.font.name='Noto Sans CJK SC';r.font.size=Pt(size);r.font.bold=bold;r.font.color.rgb=RGBColor.from_string(color)
+        return shape
+    def slide(title,subtitle,evidence):
+        s=deck.slides.add_slide(deck.slide_layouts[6]);s.background.fill.solid();s.background.fill.fore_color.rgb=RGBColor.from_string('F6F8FA')
+        text(s,title,.58,.30,12.2,.65,29,bold=True)
+        text(s,subtitle,.60,1.10,12.05,.55,16,color='5C7286')
+        text(s,f'2026.10.02  /  结构性成分归属与分级语义  /  {len(deck.slides):02}',.6,7.14,11.9,.22,10,color='7890A2')
+        s.notes_slide.notes_text_frame.text=f'事实源：{run}\n证据：{evidence}\n所有实测端点为公共开发诊断，区间条件于冻结训练对象。失败保留分母。来源未定，不等于噪声或已识别生理机制。'
+        sources.append(dict(slide=len(deck.slides),title=title,evidence=evidence));return s
+    def table_on(s,headers,rows,widths=None,y=1.9,size=17):
+        from PIL import ImageFont
+        height=min(4.65,.50*(len(rows)+1))
+        shape=s.shapes.add_table(len(rows)+1,len(headers),Inches(.65),Inches(y),Inches(12.0),Inches(height))
+        table=shape.table
+        if widths:
+            for column,width in zip(table.columns,widths):column.width=Inches(width)
+        for i,row in enumerate([headers]+rows):
+            row_size=float(size)
+            available_height=height*72/(len(rows)+1)-6.
+            while row_size>11:
+                pil_font=ImageFont.truetype(str(font),round(row_size*4))
+                lines=[]
+                for j,value in enumerate(row):
+                    available_width=table.columns[j].width/914400*72-.18*72
+                    count=0
+                    for paragraph in str(value).split('\n'):
+                        line='';count+=1
+                        for character in paragraph:
+                            if pil_font.getlength(line+character)/4>available_width and line:
+                                count+=1;line=character
+                            else:line+=character
+                    lines.append(count)
+                if max(lines)*row_size*1.12<=available_height:break
+                row_size-=.5
+            for j,value in enumerate(row):
+                cell=table.cell(i,j);cell.text=str(value);cell.margin_left=Inches(.11);cell.margin_right=Inches(.07)
+                cell.margin_top=Inches(.025);cell.margin_bottom=Inches(.025)
+                cell.vertical_anchor=MSO_ANCHOR.MIDDLE;cell.fill.solid()
+                cell.fill.fore_color.rgb=RGBColor.from_string('20384D' if i==0 else ('FFFFFF' if i%2 else 'E9F0F4'))
+                for p in cell.text_frame.paragraphs:
+                    p.space_before=Pt(0);p.space_after=Pt(0);p.line_spacing=1.
+                    for r in p.runs:r.font.name='Noto Sans CJK SC';r.font.size=Pt(row_size);r.font.bold=i==0;r.font.color.rgb=RGBColor.from_string('FFFFFF' if i==0 else '20384D')
+        return table
+    def note(s,value):text(s,value,.7,6.68,11.95,.40,13,color='526E81')
+    def picture(s,fig,name,y=1.82,h=4.67):
+        path=figures/(name+'.png');fig.savefig(path,dpi=240,bbox_inches='tight');plt.close(fig)
+        with Image.open(path) as im:w0,h0=im.size
+        width=min(12.0,h*w0/h0);height=width*h0/w0
+        s.shapes.add_picture(str(path),Inches((13.333-width)/2),Inches(y),width=Inches(width),height=Inches(height))
+        return path
+    def fmt(value,d=3):return f'{float(value):.{d}f}' if pd.notna(value) else '—'
+    def ci(row):return f"{fmt(row.mean_gain)} [{fmt(row.ci_low)}, {fmt(row.ci_high)}]"
+    def matched(frame,**filters):
+        for key,value in filters.items():frame=frame[frame[key]==value]
+        if len(frame)!=1:raise ValueError(f'expected one summary row: {filters}, found {len(frame)}')
+        return frame.iloc[0]
+    def gain_chart(frame,methods,panels,group_column='mode',control='M0'):
+        fig,axes=plt.subplots(len(panels),3,figsize=(12,3.7 if len(panels)==1 else 2.2*len(panels)),squeeze=False)
+        for i,(panel,title) in enumerate(panels):
+            for j,ds in enumerate(datasets):
+                ax=axes[i,j]
+                for k,arm in enumerate(methods):
+                    q=frame[(frame.dataset==ds)&(frame[group_column]==panel)&(frame.arm==arm)&(frame.control==control)]
+                    if q.empty:continue
+                    r=q.iloc[0]
+                    ax.errorbar(k,r.mean_gain,yerr=np.array([[max(0,r.mean_gain-r.ci_low)],[max(0,r.ci_high-r.mean_gain)]]),
+                        fmt='o',capsize=4,color=colors.get(arm,'#3880AC'),markersize=7)
+                ax.axhline(0,color='#718297',lw=1);ax.set_xticks(range(len(methods)),[labels.get(a,a) for a in methods],rotation=15)
+                ax.set_title(dsname[ds]+' / '+title);ax.grid(axis='y',alpha=.2)
+                if j==0:ax.set_ylabel('配对 NRMSE 收益\n正数为改善')
+                if panel=='hidden_channel':
+                    q=matched(frame,dataset=ds,mode=panel,arm='D-trained',control=control)
+                    ax.text(.03,.96,f'训练同向：{q.mean_gain:+.4f}\n[{q.ci_low:.4f}, {q.ci_high:.4f}]',
+                        transform=ax.transAxes,va='top',fontsize=10,bbox=dict(fc='white',alpha=.9,ec='none'))
+        fig.tight_layout();return fig
+    paired=frames['measured_paired'];main=paired[(paired.control=='D-fixed')&(paired.arm=='D-trained')&paired['mode'].isin(['HbO_hidden','HbR_hidden'])]
+    spatial=paired[(paired.control=='M0')&(paired.arm=='D-trained')&(paired['mode']=='hidden_channel')]
+    s=slide('结构性成分应如何归属','四组实验结果：从条件拟合走向可检验的成分性质','summary.json; measured_paired.csv')
+    text(s,'先保留结构，再按独立证据赋予语义',.8,2.02,11.7,.8,34,color='008F87',bold=True)
+    text(s,f"方向选择：6 个单条 Hb 端点中，{int((main.ci_low>0).sum())} 个优于原固定方向，但仍未全面优于 M0。\n独立通道：受限共同项仅 1/3 小幅获益，直接空间 ridge 则在 2/3 获益。\n真实动力学仍可能进入额外项；原型在未见机制下仍会产生错误形态语义。",.82,3.23,11.65,2.45,24)
+    note(s,f"实测 {summary['measured']['subjects']} 人 / {summary['measured']['windows']} 窗；合成 {summary['synthetic']['fits']} 次拟合；原型 {summary['prototype']['models']} 个模型。")
+    s=slide('四组问题，四类独立证据','模型拟合、可预测性、来源和语义资格分别评价','resolved_config.yaml; summary.json')
+    table_on(s,['实验组','检验对象','最关键的证据'],[
+        ['1  归属审计','拟合收益、补全损害与分量稳定性','同窗配对；HbT/HbX；扰动与局部混淆'],
+        ['2  方向与空间','同容量方向、目标 Hb 通道补全','训练选方向；其他区域预测；匹配 null'],
+        ['3  真实变化','真实变化的成分归属','真值、成分变化、参数 oracle'],
+        ['4  锚定与原型','EOG 独立关系、token 干预响应','来源状态；独立生成种子；同容量对照']],widths=[2.0,4.8,5.2],size=18)
+    note(s,'所有实验均固定预算；没有根据外折结果继续调参或扩大面板。')
+    s=slide('一个物理核心，一个额外 Hb 方向','额外项可以表达结构失配；空间共同性与来源语义仍须检验','resolved_config.yaml; src/inference/shared_driver_attribution.py')
+    fig,ax=plt.subplots(figsize=(12,4));ax.set(xlim=(0,12),ylim=(0,4));ax.axis('off')
+    boxes=[(.1,1.35,3.0,1.5,'H0 六状态物理核心\nr、s、f、v、p、q','#DFEAF1'),(4.2,2.0,3.2,1.1,'物理 Hb 预测\nH(x)','#DFEAF1'),
+        (4.2,.35,3.2,1.1,'结构性成分\nb × 4 个时间基函数','#E5ECE1'),(8.5,1.35,3.2,1.5,'完整观测\nH(x) + b c(t) + 残差','#E3F1ED')]
+    for x,y,w,h,label,color in boxes:
+        ax.add_patch(FancyBboxPatch((x,y),w,h,boxstyle='round,pad=.1',fc=color,ec='none'));ax.text(x+w/2,y+h/2,label,ha='center',va='center',fontsize=17)
+    for a,b in [((3.2,2.2),(4.0,2.55)),((7.55,2.55),(8.3,2.2)),((7.55,.9),(8.3,1.7))]:
+        ax.annotate('',xy=b,xytext=a,arrowprops=dict(arrowstyle='->',color='#607D8B',lw=2))
+    picture(s,fig,'decomposition');note(s,'固定方向 [0.65,0.35]；训练同向与反向交换样均保持四维时间容量和相同 loading 范数。')
+    s=slide('实测比较的身份与边界','三公开数据集沿用同一 QC 预选面板；所有标定只来自训练身份','measured_plan.json; calibration/*.json; resolved_config.yaml')
+    table_on(s,['数据集','面板','幅度 / 几何','独立单元'],[
+        ['Single-Trial','6 人 / 24 窗','相对 Hb；原数据几何','被试；原 session'],
+        ['Simultaneous','6 人 / 24 窗','发布浓度；30 mm 源探距','被试；原任务 / block'],
+        ['Visual','6 人 / 24 窗','Hb 单位未核定；模板几何','被试；Part / Probe']],widths=[2.2,2.0,4.8,3.0],size=18)
+    text(s,'主误差：冻结训练 SD 的 NRMSE，越低越好。\n区间：被试块 bootstrap，条件于固定训练坐标；每数据集只有 6 名评价被试。\n隐藏任务发生在离线处理后的特征层；完整观测拟合允许使用当前窗口。',.8,4.5,11.7,1.7,20)
+    s=slide('第一组：重建收益与单条 Hb 损害同窗检查','每点一个窗口；横轴正数代表完整拟合改善，纵轴正数代表补全恶化','audit_metrics.csv')
+    audit=frames['audit_metrics'];fig,axes=plt.subplots(1,3,figsize=(12,4))
+    for ax,ds in zip(axes,datasets):
+        group=audit[(audit.dataset==ds)&audit.converged& audit.HbO_hidden_pair_converged&audit.HbR_hidden_pair_converged]
+        ax.scatter(group.full_gain,group.single_Hb_harm,c=group.component_strength,cmap='viridis',s=45,edgecolors='white')
+        ax.axhline(0,color='#718297',lw=1);ax.axvline(0,color='#718297',lw=1)
+        ax.set_title(dsname[ds]);ax.set_xlabel('完整重建 NRMSE 收益');ax.grid(alpha=.15)
+    axes[0].set_ylabel('隐藏 HbO/HbR 平均损害');fig.tight_layout();picture(s,fig,'audit_gain_harm')
+    note(s,'颜色表示共同项强度；这类关联是归属线索，不能单独证明伪迹或某种生理来源。')
+    s=slide('归属关联的强弱与不确定性','Spearman 相关；重采样完整被试块，保留同被试窗口依赖','audit_associations.csv')
+    assoc=frames['audit_associations'];features=cfg['audit']['associations'];feature_cols=['native_rho','processed_rho','HbT_energy_fraction','quality_burden','component_strength','single_Hb_harm']
+    feature_names=['原生记录同步','处理窗内同步','HbT 能量占比','记录质量负担','共同项强度','单条 Hb 损害']
+    rows=[]
+    for name,label in zip(feature_cols,feature_names):
+        row=[label]
+        for ds in datasets:
+            q=matched(assoc,dataset=ds,feature=name);row.append(f'{fmt(q.spearman,2)} [{fmt(q.ci_low,2)}, {fmt(q.ci_high,2)}]')
+        rows.append(row)
+    table_on(s,['与完整收益的关联']+[dsname[d] for d in datasets],rows,widths=[3.,3.,3.,3.],size=17)
+    note(s,'native_rho 和质量统计来自记录级通道审计；不能当作逐窗真值或可靠性概率。')
+    s=slide('HbT 与 HbX：收益落在哪个诊断坐标','HbT = HbO + HbR；HbX = 0.35 HbO − 0.65 HbR','audit_metrics.csv; audit/*/result.json')
+    rows=[]
+    for ds in datasets:
+        g=audit[(audit.dataset==ds)&audit.converged]
+        rows.append([dsname[ds],fmt(g['HbT_M0_nrmse'].mean()),fmt(g['HbT_M-observation_nrmse'].mean()),
+            fmt(g['HbX_M0_nrmse'].mean()),fmt(g['HbX_M-observation_nrmse'].mean())])
+    table_on(s,['数据集','HbT：M0','HbT：共同项','HbX：M0','HbX：共同项'],rows,widths=[3.,2.25,2.25,2.25,2.25],size=18)
+    text(s,'共同项本身在 HbX 中严格相消，但重新拟合的物理部分仍可改变 HbX。\n坐标保留 HbO/HbR 相对幅度；分母由原校准训练窗计算。\n总 Hb 不自动等于皮层血容量，差分坐标不等于真实血氧饱和度。',.8,4.4,11.7,1.8,21)
+    s=slide('驱动稳定，不能替代共同项稳定','原 12 种校准、时移、先验、方向与训练 bootstrap 扰动','component_sensitivity.csv; sensitivity_summary.csv')
+    sensitivity=frames['component_sensitivity'];fig,axes=plt.subplots(1,3,figsize=(12,3.7))
+    metrics=[('driver_change_SD','驱动变化 / 驱动训练尺度'),('physical_change_SD','物理 Hb 变化 / Hb 训练尺度'),('component_change_SD','共同项变化 / Hb 训练尺度')]
+    for ax,(metric,title) in zip(axes,metrics):
+        for j,arm in enumerate(['M-observation','M-combined']):
+            vals=[]
+            for ds in datasets:
+                g=sensitivity[(sensitivity.dataset==ds)&(sensitivity.arm==arm)&sensitivity.converged];vals.append(g[metric].quantile(.9))
+            ax.bar(np.arange(3)+(j-.5)*.34,vals,.32,label='共同项' if j==0 else '共同项+先验',color=['#C88937','#B74D5D'][j])
+        ax.set_xticks(range(3),['Single','Sim','Visual']);ax.set_title(title);ax.grid(axis='y',alpha=.2)
+    axes[0].legend(fontsize=10);fig.tight_layout();picture(s,fig,'component_sensitivity')
+    note(s,f"图为成功配对扰动的 P90；旧合成 mask 的最大 false reassurance fraction = {fmt(summary['audit']['previous_false_reassurance_max'])}，仍不能解释为正确概率。")
+    s=slide('局部混淆：物理变化与共同项可相互补偿','观察 Jacobian 子空间，再沿重叠方向固定共同项并重拟合物理部分','jacobian_overlap.csv; confounding_profiles.csv')
+    overlap=frames['jacobian_overlap'];profiles=frames['confounding_profiles'];rows=[]
+    for arm in arms[1:]:
+        g=overlap[(overlap.arm==arm)&(overlap.family=='fixed_H0')&overlap.converged]
+        q=profiles[(profiles.arm==arm)&profiles.near_equivalent&(profiles.offset_SD!=0)]
+        rows.append([labels[arm],fmt(g.maximum_cosine.median(),4),fmt(g.minimum_cosine.median(),4),str(len(q)),
+            fmt(q.driver_change_SD.max()) if len(q) else '—',fmt(q.component_change_SD.max()) if len(q) else '—'])
+    table_on(s,['方向','最大重叠余弦','最小重叠余弦','非零近等价格','驱动最大变化','共同项最大变化'],rows,
+        widths=[1.8,2.0,2.0,1.9,2.15,2.15],size=16)
+    text(s,'6 个预选窗口；共同项偏移 ±0.25 / ±0.50 Hb 训练尺度。\n近等价 = 完整工程目标上升不超过 5%，含系数惩罚；不是统计置信域。\n局部几何不能唯一裁定真实来源；未使用硬正交去强制分解。',.8,4.3,11.7,1.8,20)
+    s=slide('第二组：训练记录选择的同向 loading','四个余弦模式和 loading 范数固定；方向不随评价窗口改变','calibration/*.json; calibration_scores/*.json')
+    calibrations=[json.loads(p.read_text()) for p in sorted((run/'calibration').glob('*.json'))]
+    rows=[]
+    for c in calibrations:
+        ds=next(d for d in datasets if c['key'].startswith(d));suffix=c['key'][len(ds)+2:]
+        rows.append([dsname[ds],suffix,fmt(c['selected_rho'],2),f"{len(c['training_ids'])} / {len(c['selection_ids'])}",
+            fmt(c['spatial_loading']['D-trained'],2)])
+    table_on(s,['数据集','区域 / 外折','选择 ρ','训练 / 内选择窗','独立通道 loading'],rows,widths=[2.25,3.6,1.5,2.3,2.35],size=13)
+    note(s,'PCA/SD 复用 parent 外折训练坐标；方向选择条件于该坐标，不宣称全流程重新嵌套验证。')
+    s=slide('单条 Hb 补全：方向改变是否带来独立收益','与固定同向方案配对比较；正值为 NRMSE 下降','measured_paired.csv')
+    picture(s,gain_chart(paired,['D-trained','D-exchange'],[('HbO_hidden','隐藏 HbO'),('HbR_hidden','隐藏 HbR')],control='D-fixed'),'single_Hb_direction')
+    note(s,'误差条为被试块 95% bootstrap 区间；比较的是隐藏观测，而非完整拟合误差。')
+    s=slide('完整拟合与缺失任务必须分列','训练同向方案相对 M0；完整重建不能替代隐藏端点','measured_paired.csv')
+    rows=[]
+    for mode in cfg['measured']['modes']:
+        row=[mode_labels[mode]]
+        for ds in datasets:row.append(ci(matched(paired,dataset=ds,mode=mode,arm='D-trained',control='M0')))
+        rows.append(row)
+    table_on(s,['端点']+[dsname[d] for d in datasets],rows,widths=[2.4,3.2,3.2,3.2],size=15)
+    note(s,'各格为被试平均配对收益及区间；整段 Hb 隐藏时，自身条件共同项没有独立输入。')
+    panel=json.loads((run/'measured_plan.json').read_text())['windows']
+    s=slide('隐藏 Hb 的实际曲线：固定、训练与竞争方向','每数据集按原面板身份排序取首窗；不按拟合好坏选择示例','measured_plan.json; measured/*/result.npz')
+    fig,axes=plt.subplots(2,3,figsize=(12,5.0));time_s=np.arange(120)*.25
+    for j,ds in enumerate(datasets):
+        ref=min([r for r in panel if r['dataset']==ds],key=lambda r:r['id']);a=np.load(run/'measured'/ref['id']/'result.npz')
+        for i,(mode,component) in enumerate([('HbO_hidden',1),('HbR_hidden',2)]):
+            ax=axes[i,j];ax.plot(time_s,a['target'][:,component]/a['sd'][component],color='#172D3C',lw=2,label='隐藏真值')
+            for arm in arms:ax.plot(time_s,a[f'{mode}__{arm}__prediction'][:,component]/a['sd'][component],color=colors[arm],lw=1.2,label=labels[arm])
+            ax.set_title(f"{dsname[ds]} / {ref['subject']} / {'HbO' if i==0 else 'HbR'}");ax.grid(alpha=.15)
+            if i==1:ax.set_xlabel('时间 / s')
+            if j==0:ax.set_ylabel('训练尺度坐标')
+    axes[0,0].legend(fontsize=8,ncol=2);fig.tight_layout();picture(s,fig,'hidden_Hb_examples')
+    note(s,'模型只读取另一条 Hb 与 EEG；目标曲线仅用于评分。幅度分母对所有方案相同。')
+    s=slide('独立通道补全的输入边界','目标 HbO/HbR 整段隐藏；目标 EEG 和其他区域的观测可见','resolved_config.yaml; measured/*/result.json')
+    fig,ax=plt.subplots(figsize=(12,4));ax.set(xlim=(0,12),ylim=(0,4));ax.axis('off')
+    for x,y,w,h,label,color in [(.15,2.3,3.3,1.1,'其他同步区域 Hb + EEG\n分别拟合 H0 残差','#DFEAF1'),
+        (.15,.5,3.3,1.1,'目标区域 EEG\nHb 对完全隐藏','#DFEAF1'),(4.4,2.3,3.1,1.1,'投影到一个共享方向\n取其他区域均值','#E5ECE1'),
+        (4.4,.5,3.1,1.1,'目标物理 Hb 预测\n仅由可见 EEG 约束','#E5ECE1'),(8.5,1.4,3.1,1.3,'训练冻结空间 loading\n生成目标 Hb 预测','#E3F1ED')]:
+        ax.add_patch(FancyBboxPatch((x,y),w,h,boxstyle='round,pad=.08',fc=color,ec='none'));ax.text(x+w/2,y+h/2,label,ha='center',va='center',fontsize=15)
+    for a,b in [((3.6,2.85),(4.2,2.85)),((3.6,1.05),(4.2,1.05)),((7.6,2.85),(8.3,2.25)),((7.6,1.05),(8.3,1.85))]:
+        ax.annotate('',xy=b,xytext=a,arrowprops=dict(arrowstyle='->',lw=2,color='#607D8B'))
+    picture(s,fig,'spatial_information');note(s,'目标 Hb 不参与当前窗口系数、尺度或 loading 拟合；不同区域的 outer 坐标使用同一被试折。')
+    s=slide('其他区域能否帮助预测目标 Hb','与 EEG-only M0 配对；完整目标 Hb 对未进入推断','measured_paired.csv; measured_metrics.csv')
+    picture(s,gain_chart(paired,['D-fixed','D-trained','D-exchange','spatial_ridge'],[('hidden_channel','独立通道')]),'spatial_gain',h=4.3)
+    note(s,'空间 ridge 是直接从其他区域 Hb 预测的训练基线；共同项改善不自动证明其来源。')
+    s=slide('空间信息存在，当前共同项的利用仍不足','直接空间 ridge 与受限共同项均使用训练对象，目标 Hb 同样整段隐藏','measured_paired.csv')
+    rows=[]
+    for ds in datasets:
+        rows.append([dsname[ds],ci(matched(paired,dataset=ds,mode='hidden_channel',arm='D-trained',control='M0')),
+            ci(matched(paired,dataset=ds,mode='hidden_channel',arm='spatial_ridge',control='M0'))])
+    table_on(s,['数据集','训练同向共同项 vs M0','直接空间 ridge vs M0'],rows,widths=[2.4,4.8,4.8],size=17)
+    text(s,'Single-Trial 与 Simultaneous 的其他区域包含可用预测信息。\n把其他区域压成“先拟合 H0 残差，再提取一个共同方向”会损失部分信息。\n这提示优先检验空间观测约束和成分提取方式；尚不能据此命名信号来源。',.8,4.4,11.7,1.8,21)
+    s=slide('空间增量还必须胜过错配与时移','真实同步输入与任务匹配错被试 / 非环绕 12 s 移位比较','spatial_nulls.csv')
+    nulls=frames['spatial_nulls'];rows=[]
+    for ds in datasets:
+        for method in ('D-trained','spatial_ridge'):
+            row=[dsname[ds],labels[method]]
+            for control in ('wrong_subject','nonwrapping_shift_12s'):
+                g=nulls[(nulls.dataset==ds)&(nulls.method==method)&(nulls.control==control)]
+                row.append(ci(g.iloc[0])+f"\n支持 {int(g.iloc[0].common_success)}/24 窗" if len(g) else '无匹配支持')
+            rows.append(row)
+    table_on(s,['数据集','方案','真实 − 错配优势','真实 − 时移优势'],rows,widths=[2.3,2.,3.85,3.85],size=14)
+    note(s,'优势 = null 误差 − 真实输入误差；移位双方使用同一 18 s 评分支持，未环绕补值。')
+    s=slide('受限 AR(1)：只作离线后缀补全检验','前 20 s Hb 可见，后 10 s 隐藏；EEG 保持可见','temporal_paired.csv; calibration/*.json')
+    temporal=frames['temporal_paired'];rows=[]
+    for ds in datasets:
+        row=[dsname[ds]]
+        for arm in ('AR1','persistence','cosine_extrapolation'):
+            row.append(ci(matched(temporal,dataset=ds,method='D-trained',arm=arm,control='zero')))
+        rows.append(row)
+    table_on(s,['数据集','AR(1) vs 零共同项','保持 vs 零共同项','余弦外推 vs 零共同项'],rows,widths=[2.25,3.25,3.25,3.25],size=16)
+    text(s,'AR 系数仅由训练记录估计，并限制在 [0,0.995]；不增加逐点过程噪声。\n本实验没有证明原生跨窗口连续状态：上游离线滤波和局部参考仍在。\n这一步衡量受约束时间延续是否有用，而不是给 AR 状态赋予解剖名称。',.8,4.3,11.7,1.8,20)
+    s=slide('第三组：17 类配对反事实','同一驱动与噪声种子配对；额外成分、物理真值和残差分别记录','synthetic_plan.json; synthetic_summary.csv; resolved_config.yaml')
+    table_on(s,['变化类别','干预','定位问题'],[
+        ['结构性成分','同向 / 有色 / 相关 / 方向错配 / 交换样','是否保护物理状态，是否误定方向'],
+        ['观测条件','EEG/Hb 增益、噪声、1/3 s 时间偏移','神经语义是否被观测变化污染'],
+        ['真实驱动','幅度 ×1.5、形状改变','稳定化是否压缩真实变化'],
+        ['真实动力学','τ、κ、Hb 快慢驱动混合','变化进入物理、额外项还是残差'],
+        ['负对照','匹配对照、近零耦合','没有额外成分时是否产生误归属']],widths=[2.2,5.,4.8],size=17)
+    note(s,f"32 条独立生成条件块；{summary['synthetic']['converged']}/{summary['synthetic']['fits']} 次拟合收敛，oracle 仅用于 τ/κ 合成定位。")
+    syn=frames['synthetic_summary']
+    for mode,title in [('full','完整观测下的驱动恢复'),('EEG_hidden','EEG 缺失时的驱动恢复')]:
+        s=slide(title,'数值为驱动真值 NRMSE 中位数；颜色为 log10 误差，仅便于比较数量级','synthetic_summary.csv')
+        scenarios=cfg['synthetic']['scenarios'];methods=cfg['synthetic']['arms']
+        values=np.array([[matched(syn,scenario=sc,mode=mode,arm=a).driver_nrmse_median for a in methods] for sc in scenarios])
+        fig,axes=plt.subplots(1,2,figsize=(12.3,4.7));logged=np.log10(np.maximum(values,1e-4))
+        for ax,indices in zip(axes,[list(range(9)),list(range(9,len(scenarios)))]):
+            ax.imshow(logged[indices],aspect='auto',cmap='YlOrRd',vmin=logged.min(),vmax=logged.max())
+            ax.set_xticks(range(len(methods)),[labels[a] for a in methods],rotation=20,ha='right',fontsize=10)
+            ax.set_yticks(range(len(indices)),[scenario_labels[scenarios[i]] for i in indices],fontsize=11)
+            for row,i in enumerate(indices):
+                for j in range(len(methods)):
+                    dark=(logged[i,j]-logged.min())/max(logged.max()-logged.min(),1e-10)>.68
+                    ax.text(j,row,fmt(values[i,j],2),ha='center',va='center',fontsize=10,color='white' if dark else 'black')
+        fig.tight_layout();picture(s,fig,'synthetic_'+mode)
+        note(s,'完整驱动含水平误差；参考后的形状误差在底层表中单列，不能用中心化误差替代绝对误差。')
+    s=slide('真实变化被共同项吸收了多少','对真实观测变化的有符号投影；负值和大于 1 的值代表补偿，不是概率','counterfactual_summary.csv')
+    contrast=frames['counterfactual_summary'];scenarios=['common_basis','common_correlated','driver_amplitude','driver_shape','physiology_tau','physiology_kappa','unmodeled_dynamics']
+    methods=cfg['synthetic']['arms'];metric='observation_component_projection_fraction_median'
+    values=np.array([[matched(contrast,scenario=sc,mode='full',arm=a)[metric] for a in methods] for sc in scenarios])
+    fig,ax=plt.subplots(figsize=(11,4.4));limit=max(1.,float(np.nanmax(abs(values))));im=ax.imshow(values,aspect='auto',cmap='RdBu_r',vmin=-limit,vmax=limit)
+    ax.set_xticks(range(len(methods)),[labels[a] for a in methods]);ax.set_yticks(range(len(scenarios)),[scenario_labels[x] for x in scenarios])
+    for i in range(len(scenarios)):
+        for j in range(len(methods)):ax.text(j,i,fmt(values[i,j],2),ha='center',va='center',fontsize=12,
+            color='white' if abs(values[i,j])>.6*limit else 'black')
+    fig.colorbar(im,ax=ax,label='共同项投影份额');fig.tight_layout();picture(s,fig,'component_absorption')
+    note(s,'前两行的额外成分是真值；驱动、τ/κ 与动力学变化属于物理真值，进入共同项意味着归属偏差。')
+    s=slide('保留真实驱动变化：稳定化与幅度偏差','比较真实变化大小和估计变化；驱动训练尺度固定','counterfactual_summary.csv')
+    rows=[]
+    for mode in ('full','EEG_hidden'):
+        for arm in ('M0','D-fixed','D-combined'):
+            r=matched(contrast,scenario='driver_amplitude',mode=mode,arm=arm)
+            rows.append([mode_labels[mode],labels[arm],fmt(r.driver_truth_change_SD_median),
+                fmt(r.driver_estimated_change_SD_median),fmt(r.driver_change_error_SD_median)])
+    table_on(s,['可见条件','方案','真实变化 / SD','估计变化 / SD','变化误差 / SD'],rows,widths=[2.2,2.6,2.4,2.4,2.4],size=17)
+    note(s,'大幅降低缺失条件的驱动波动，不等于保留了真实变化；两者须同时报告。')
+    s=slide('真值参数 oracle 帮助定位动力学失配','oracle 使用生成器 τ/κ，不在实测端开放自由参数','synthetic_summary.csv')
+    rows=[]
+    for scenario in ('physiology_tau','physiology_kappa'):
+        for arm in ('M0','D-fixed','D-trained','oracle'):
+            r=matched(syn,scenario=scenario,mode='full',arm=arm)
+            rows.append([scenario_labels[scenario],labels[arm],fmt(r.driver_nrmse_median),fmt(r.physical_truth_nrmse_median),fmt(r.component_truth_nrmse_median)])
+    table_on(s,['生成变化','方案','驱动误差','物理真值误差','额外成分误差'],rows,widths=[2.5,2.5,2.3,2.35,2.35],size=16)
+    note(s,'参数变化与结构性成分不是同一语义；良好重建仍可能对应错误分配。')
+    s=slide('第四组：可用锚点与尚未获得的来源证据','核对原始文档、统一 loader 和本次实际读到的辅助记录','anchor_plan.json; auxiliary/*/record.json; docs/DATASETS_DESCRIPTION.md')
+    auxrecords=[json.loads(p.read_text()) for p in sorted((run/'auxiliary').glob('*/record.json'))]
+    names=sorted({name for r in auxrecords for name in r['auxiliary_names']})
+    table_on(s,['数据集','本轮可用证据','来源解释边界'],[
+        ['Single-Trial','空间几何；文档描述 ECG/呼吸','ECG/呼吸未读；采集描述不代表可用锚点'],
+        ['Simultaneous',f"{len(auxrecords)} 条记录；"+'/'.join(names),'EOG 眼动参考；Hb 源探距 30 mm'],
+        ['Visual','模板几何与同步其他区域','没有精确源探距或已核实短距离测量']],widths=[2.2,4.3,5.5],size=17)
+    text(s,'空间广泛 ≠ 浅表来源；眼动相关 ≠ 系统性血容量。\n本轮可以验证关系语义，来源仍统一标记 unresolved。',.8,4.75,11.7,1.4,23,color='008F87')
+    s=slide('EOG 锚定：预测条件成分与隐藏 Hb','训练 ridge 使用 0/1/2 s EOG envelope；评价被试不参与拟合','anchor_paired.csv; anchor_metrics.csv')
+    anchor=frames['anchor_paired'];rows=[]
+    for metric,title in [('component_nrmse','条件共同项'),('hidden_Hb_nrmse','隐藏 Hb')]:
+        for control,label in [('zero','零共同项'),('training_mean','训练均值'),('wrong_subject','任务匹配错被试')]:
+            q=anchor[(anchor.metric==metric)&(anchor.control==control)]
+            if len(q):rows.append([title,label,ci(q.iloc[0]),f"{int(q.iloc[0].common_success)}/24 窗"])
+    table_on(s,['评价目标','比较基线','真实 EOG 配对收益 [95% CI]','可用配对 / 全面板'],rows,widths=[2.0,2.9,4.6,2.5],size=16)
+    note(s,'被预测的共同项仍是模型条件估计；即使可预测，也不能直接证明 Hb 变化由眼动或浅表组织产生。')
+    s=slide('有限原型：神经语义与 Hb 形态分别拥有输入','连续 typed tokens；不训练 VQ，不把全部语义混称神经驱动','src/tokenizers/typed_component_prototype.py; prototype_data.json')
+    fig,ax=plt.subplots(figsize=(12,4.2));ax.set(xlim=(0,12),ylim=(0,4.2));ax.axis('off')
+    boxes=[(.1,2.65,2.0,.9,'EEG 特征','#DFEAF1'),(.1,.65,2.0,.9,'HbO/HbR 特征','#DFEAF1'),
+        (3.2,2.65,4.0,.9,'12 个参考后驱动片段均值\nEEG-only semantic encoder','#E3F1ED'),
+        (3.2,.65,4.0,.9,'4 个结构性 HbT 投影系数\nHb-only semantic encoder','#E3F1ED'),
+        (8.35,1.6,3.3,1.2,'独立 observation 编码器\n+ 停止梯度语义条件\n成对重建 decoder','#EAE7F2')]
+    for x,y,w,h,label,color in boxes:
+        ax.add_patch(FancyBboxPatch((x,y),w,h,boxstyle='round,pad=.08',fc=color,ec='none'));ax.text(x+w/2,y+h/2,label,ha='center',va='center',fontsize=14)
+    for a,b in [((2.2,3.1),(3.,3.1)),((2.2,1.1),(3.,1.1)),((7.3,3.1),(8.2,2.6)),((7.3,1.1),(8.2,1.8))]:
+        ax.annotate('',xy=b,xytext=a,arrowprops=dict(arrowstyle='->',lw=2,color='#607D8B'))
+    picture(s,fig,'typed_prototype');note(s,'神经 token 不受 Hb 改动是输入结构保证；对 EEG 扰动的稳定性仍必须实测，不能拿结构保证冒充学习证据。')
+    s=slide('训练与评价严格分开','已知真值合成监督，对照为同容量重建训练与训练内线性探针','prototype_data.json; prototype/*/result.json')
+    p=cfg['prototype'];rows=[['训练',str(p['train_seeds']),str(p['train_seeds']*len(p['train_interventions'])),'固定生成干预；训练统计量'],
+        ['选择',str(p['validation_seeds']),str(p['validation_seeds']*len(p['train_interventions'])),'选择验证目标最小的 epoch'],
+        ['评价',str(p['test_seeds']),str(p['test_seeds']*len(p['test_interventions'])),'包含未见方向、动力学与时移'],
+        ['优化重复','3','2 方案 × 3 种子','固定 160 epochs；CPU 单线程']]
+    table_on(s,['分区','独立生成种子','窗口 / 模型','用途'],rows,widths=[2.,2.2,2.8,5.],size=18)
+    text(s,'监督目标：生成器真驱动与真实结构性 HbT 的投影。\n元数据：semantic_type / source_status / coordinate_id / support_mask。\n这些目标的可学习性不等于实测 teacher、来源分离或下游任务资格。',.8,4.9,11.7,1.3,20)
+    proto=frames['prototype_summary'];interventions=frames['prototype_intervention_summary']
+    s=slide('原型保留的语义是否与干预方向一致','值为 3 个优化种子的平均变化 / 变化误差；语义尺度来自训练真值','prototype_intervention_summary.csv')
+    rows=[]
+    for scenario in ['EEG_gain','Hb_gain','noise','driver_amplitude','driver_shape','common_basis','common_correlated']:
+        g=interventions[(interventions.arm=='typed_supervision')&(interventions.scenario==scenario)].mean(numeric_only=True)
+        rows.append([scenario_labels[scenario],fmt(g.neural_truth_change_SD),fmt(g.neural_change_SD),
+            fmt(g.morphology_truth_change_SD),fmt(g.morphology_change_SD),fmt(g.observation_change_SD)])
+    table_on(s,['干预','神经真变化','神经估计变化','形态真变化','形态估计变化','观测表示变化'],rows,
+        widths=[2.8,1.8,1.95,1.8,1.95,1.7],size=15)
+    note(s,'observation 数值用自身训练 latent SD 归一化，与语义误差不是同一物理量；不能直接当作成分能量份额。')
+    s=slide('原型泛化：已见干预与未见机制分开看','typed supervision 与同容量 reconstruction-only + 训练探针比较','prototype_summary.csv')
+    scenarios=['control','EEG_gain','Hb_gain','common_basis','common_correlated','common_colored','common_exchange','physiology_tau','unmodeled_dynamics']
+    rows=[]
+    for scenario in scenarios:
+        row=[scenario_labels[scenario]]
+        for arm in ('typed_supervision','reconstruction_only'):
+            g=proto[(proto.scenario==scenario)&(proto.arm==arm)]
+            row.extend([fmt(g.neural_nrmse.mean()),fmt(g.morphology_nrmse.mean())])
+        rows.append(row)
+    table_on(s,['评价条件','监督：神经','监督：形态','重建探针：神经','重建探针：形态'],rows,
+        widths=[3.,2.2,2.2,2.3,2.3],size=15)
+    note(s,'交换样成分的 HbT 真值为零；本原型只声明 HbT 形态 token，不覆盖全部氧合分配语义。')
+    s=slide('原型的失败面需要进入下一轮目标','已知真值能改善学习；仍不能保证对未见机制正确归属','prototype_intervention_summary.csv; prototype_summary.csv')
+    rows=[]
+    for scenario,title in [('EEG_gain','EEG 增益 → 神经语义'),('physiology_tau','真实 τ 改变 → HbT 形态'),('common_exchange','交换样成分 → HbT 形态')]:
+        g=interventions[(interventions.arm=='typed_supervision')&(interventions.scenario==scenario)].mean(numeric_only=True)
+        field='neural' if scenario=='EEG_gain' else 'morphology'
+        rows.append([title,fmt(g[field+'_truth_change_SD']),fmt(g[field+'_change_SD']),
+            '应不变但出现变化' if g[field+'_truth_change_SD']<1e-8 else '需检查幅度偏差'])
+    table_on(s,['干预与被污染的语义','真实变化 / SD','估计变化 / SD','判读'],rows,widths=[4.6,2.15,2.15,3.1],size=17)
+    text(s,'模型对“已见过的成分定义”学得更好，不代表它已识别所有竞争机制。\n下一版监督需要加入这些失败反事实，再用新的独立生成种子评价；\n本轮保留负结果，不以补训后成绩覆盖当前评价。',.8,4.4,11.7,1.8,21)
+    s=slide('按证据层级使用本轮结果','形态、关系、机制一致性和来源四层分别准入','measured_paired.csv; spatial_nulls.csv; counterfactual_summary.csv; anchor_paired.csv')
+    table_on(s,['层级','本轮可交付对象','仍需保留的限制'],[
+        ['形态','低频同向模式、HbT/HbX 与 loading','依赖幅度合同和观察条件；未定部分继续保留'],
+        ['关系','其他区域 / EOG 的独立预测与 null 结果','按数据集和端点使用；不能统一升级所有窗口'],
+        ['机制一致性','参数、真实驱动与未建模响应的分配反事实','合成生成机制有条件；实测没有真分量标签'],
+        ['来源','统一 unresolved 标记','没有独立短距离 / 外周生理因果锚定'],
+        ['tokenizer','合成连续 typed-token 原型及干预验证','未训练实测模型；未获得通用生理语义资格']],widths=[1.8,5.3,4.9],size=16)
+    s=slide('执行完整性与失败证据','计算完成、数值收敛和科学支持是三个不同判断','summary.json; verification.json; resources.json; *_manifest.json')
+    resources=json.loads((run/'resources.json').read_text())
+    table_on(s,['检查','结果'],[
+        ['合成拟合',f"{summary['synthetic']['converged']} / {summary['synthetic']['fits']} 收敛；失败保留原身份"],
+        ['实测评分记录',f"{summary['measured']['converged']} / {summary['measured']['rows']} 可用；含空间和时间比较"],
+        ['敏感性 / 混淆 profile',f"{summary['audit']['sensitivity_fits']} 次扰动；{summary['confounding']['profile_fits']} 次条件重拟合"],
+        ['原型训练',f"{summary['prototype']['models']} 个模型；{summary['prototype']['test_rows']} 条评价记录"],
+        ['资源与运行',f"user systemd；最多 {resources['workers']} 进程；源码快照与阶段日志留存"],
+        ['交付格式','中文可编辑 PPT；图为 240 dpi PNG；附 PDF 与逐页事实源']],widths=[3.2,8.8],size=18)
+    s=slide('下一步由失败面决定','保留未解释信息，同时收紧每一种 token 的解释范围','summary.json; measured_paired.csv; counterfactual_summary.csv; prototype_summary.csv')
+    text(s,'1  对方向选择有效的端点继续验证；对独立补全失败的成分保留条件补偿身份。\n2  对参数 / 动力学被共同项吸收的情形，先引入竞争生成机制或独立观测约束。\n3  对原型中的神经、Hb 形态和 observation 分别检查干预响应，保留来源未定标记。\n4  若要升级来源语义，优先补足短距离或外周生理记录及独立重复，避免只扩大模型。',.8,1.98,11.7,3.9,24)
+    note(s,'本轮没有启动新的受保护 campaign、实测 tokenizer 训练、VQ 或外部发布。')
+    s=slide('事实源与复现入口','实验结果由运行记录持有；本 PPT 是可追溯的沟通导出','resolved_config.yaml; launch.json; source_snapshot/; presentation_sources.json')
+    text(s,'合同：shared_driver_attribution_v1.yaml\n入口：evaluate_shared_driver_reconstruction.py --component-attribution\n结果：归属审计、隐藏补全、反事实、EOG、原型五类表\n逐窗分解与合成真值：各阶段 result.json / result.npz\n运行身份：'+run.name,.8,1.98,11.7,3.1,23)
+    text(s,'参考：Gagnon et al., NeuroImage 2011（独立短距离观测约束）\nhttps://pubmed.ncbi.nlm.nih.gov/21385616/\nLocatello et al., ICML 2019（重建本身不足以指定解耦语义）',.8,5.35,11.7,1.05,15,color='526E81')
+    s.notes_slide.notes_text_frame.text+='\nhttps://research.google/pubs/challenging-common-assumptions-in-the-unsupervised-learning-of-disentangled-representations/'
+    deck.save(out/filename)
+    (out/'presentation_sources.json').write_text(json.dumps(dict(run=str(run),slides=sources,
+        figures='PNG 240 dpi; editable body text and tables',wps_checked=False),ensure_ascii=False,indent=2)+'\n')
+    print(json.dumps(dict(presentation=str(out/filename),slides=len(deck.slides)),ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
@@ -3283,8 +3702,12 @@ def main():
     parser.add_argument("--fixed-roi-tau", action="store_true", help="Render fixed AF7Fp1 shared nonlinear tau diagnostic")
     parser.add_argument("--waveform-diagnostic", action="store_true")
     parser.add_argument("--teacher-robustness", action="store_true")
+    parser.add_argument("--component-attribution", action="store_true")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.component_attribution:
+        render_component_attribution(args.run.resolve(),args.output.resolve())
+        return
     if args.teacher_robustness:
         render_teacher_robustness(args.run.resolve(),args.output.resolve())
         return
