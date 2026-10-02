@@ -18,6 +18,34 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Git retention update — 2026-10-03
+
+This update removes 165 historical run files (130.8 MiB of uncompressed
+tracked content) from the Git reading surface. Their original local files remain
+unchanged, and their previous tracked copies remain available at commit
+`87402efbeb3dd6ebd6104d0f9a6629b696c5971d`. The later reports and consolidated
+stage reviews below own the reading routes; this changes storage, not numerical
+results or scientific verdicts.
+
+| Historical group | Retained in Git | Retained locally for audit/replay |
+| --- | --- | --- |
+| Step5A / Step5, 2026-09-07–09 | Stage summaries and reviews, manifests, resolved contracts, failure diagnostics, registered observation-repair evidence and report-linked sources/images | Unreferenced runner/inference copies, unresolved U3 numerical grids and redundant standalone figures |
+| Overnight N1–N7 / observation v3, 2026-09-09–11 | Markdown/PDF reports, their bitmap figures, the report-linked N7 atlas, aggregate comparisons, manifests, source/continuation identities and verification records | Self-contained HTML, vector originals, the duplicate v3 atlas, task/status ledgers and detailed per-fit/truth tables |
+| Hb calibration v1/v2 and pilots, 2026-09-18/24 | Final reports, figures, summaries, paired effects, failure tables, manifests and source audit | Pilot metric tables, compressed task records, source copies and detailed parameter/profile records |
+
+All previously tracked registry evidence paths and all images embedded by the
+retained Markdown reports remain tracked. The frozen v3 report's four appendix
+links to `fit_status.csv`, `synthetic_state_truth.csv`,
+`missing_support_truth.csv` and `processed_visible_truth.csv` now require the
+local evidence or the historical Git copies. Historical report bytes are unchanged.
+The full-tree Git history is retained; this pruning reduces a future checkout's
+files, not an existing clone's object history. Recent shared-driver evidence,
+protected comparison packages and sealed R-series material keep their boundaries.
+
+Generated runs are ignored as one directory. Add any newly selected evidence by
+explicit file path with `git add -f -- <file>` and describe its reading route here;
+adding another run does not require another `.gitignore` exception list.
+
 ## Regional spectral shared drivers — 2026-10-02
 
 The [mode-driver contract](configs/physiology_semantic_tokenizer/shared_driver_modes_v1.yaml)
@@ -230,8 +258,8 @@ physiology. The optical observation contrast retains separate targets and scales
 | Training-frozen observation gain and real Hb prediction | [Report](runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_predictive_separation_v1/REPORT.md), [manifest](runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_predictive_separation_v1/manifest.json), [contract](configs/physiology_semantic_tokenizer/hbo_hbr_predictive_separation_v1.yaml) | Retain blocked identities, synthetic controls, frozen training gains and physiology, hidden-HbR per-window errors, supervisor and source snapshots. Reference-anchored gain is not independent calibration; no C/D or teacher qualification. |
 | Hb observation-layer and metric separation | [Report](runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_observation_v1/REPORT.md), [manifest](runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_observation_v1/manifest.json), [contract](configs/physiology_semantic_tokenizer/hbo_hbr_observation_v1.yaml) | Retain shared-gain profiles, paired metric/repair costs, exact gain aliases, synthetic independent-noise calibration and total-whitening negative control. Conditional effective-parameter recovery does not establish unique measured physiology or qualify the six-state model. |
 | Hb-pair dynamic constraints and shared parameter adaptation | [Fixed-parameter dynamics](runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_dynamics_v1/REPORT.md), [term decomposition](runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_terms_v1/REPORT.md), [adaptation report with smooth-repair sensitivity](runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_adaptation_v1/REPORT_v2.md), [adaptation manifest](runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_adaptation_v1/manifest.json), [adaptation contract](configs/physiology_semantic_tokenizer/hbo_hbr_adaptation_v1.yaml), [boundary-mechanism report](runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_boundary_v1/REPORT.md), [boundary manifest](runs/physiology_semantic_tokenizer/data_quality_audit/20260918_hbo_hbr_boundary_v1/manifest.json), [boundary contract](configs/physiology_semantic_tokenizer/hbo_hbr_boundary_v1.yaml) | Retain window/split identities, heldout metrics, parameter equivalence and bounds, conditional corrections, profiles, synthetic perturbation controls and source snapshots. Original discrete projections and v1 exports remain evidence; smooth v2 export identifies quadrature artifacts. Descriptive necessary-constraint diagnostics, not a complete stochastic-model rejection or unique physiological attribution. |
-| SSM observation-contract v3 diagnostics | [Chinese visual report](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.md), [PDF](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.pdf), [self-contained HTML](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.html), [summary](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/summary.json), [continuation identity](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/continuation.json), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml) | Temporal mean/covariance ablations, independent gain/Q panels, measured failures and technical continuation; synthetic recovery evidence does not establish measured teacher qualification |
-| SSM overnight N1–N7 diagnostics | [Chinese visual report](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.md), [full PDF](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.pdf), [self-contained HTML](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.html), [vector figure atlas](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/FIGURES.pdf), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml) | Complete task denominators, failure evidence, synthetic/measurement boundaries and G/W ablations; exploratory evidence without teacher qualification |
+| SSM observation-contract v3 diagnostics | [Chinese visual report](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.md), [PDF](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/analysis_20260911_v2/REPORT.pdf), HTML export (local), [summary](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/summary.json), [continuation identity](runs/physiology_semantic_tokenizer/ssm_overnight/20260911_observation_contract_v3_continuation_v1/continuation.json), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v3.yaml) | Temporal mean/covariance ablations, independent gain/Q panels, measured failures and technical continuation; synthetic recovery evidence does not establish measured teacher qualification |
+| SSM overnight N1–N7 diagnostics | [Chinese visual report](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.md), [full PDF](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/REPORT.pdf), HTML export (local), [vector figure atlas](runs/physiology_semantic_tokenizer/ssm_overnight/20260910_overnight_n7_v1/analysis_20260910_v2/FIGURES.pdf), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v2.yaml) | Complete task denominators, failure evidence, synthetic/measurement boundaries and G/W ablations; exploratory evidence without teacher qualification |
 | SSM overnight N1–N6 predecessor | [retained automatic report](runs/physiology_semantic_tokenizer/ssm_overnight/20260909_overnight_v2_verified/OVERNIGHT_REPORT.md), [manifest](runs/physiology_semantic_tokenizer/ssm_overnight/20260909_overnight_v2_verified/manifest.json), [contract](configs/physiology_semantic_tokenizer/ssm_overnight_v1.yaml) | Original evidence and numerical comparison source for the N7 extension; repeated inputs/seeds are not independent replications |
 | Step5 flow-domain and mask-specific observation repair | [`20260909_observation_repair_v2_verified/summary.md`](runs/physiology_semantic_tokenizer/step5/20260909_observation_repair_v2_verified/summary.md), [update histories and drift roots](runs/physiology_semantic_tokenizer/step5/20260909_observation_repair_v2_verified/replay.json), [contract](configs/physiology_semantic_tokenizer/step5_observation_repair_v2.yaml) | matrix-exponential drift-domain classification and visible-only interpolation operators; synthetic full/center/whole-modality comparison; nonlinear temporal qualification remains a prerequisite to a new measured comparison |
 | Step5 observation contract repair and regression (retained v1) | [`20260908_observation_repair_v1/summary.md`](runs/physiology_semantic_tokenizer/step5/20260908_observation_repair_v1/summary.md), [numerical compatibility and refined replay](runs/physiology_semantic_tokenizer/step5/20260908_observation_repair_v1/verification_review.json), [contract](configs/physiology_semantic_tokenizer/step5_observation_repair_v1.yaml) | log-domain extraction repair, known-scale invariance on reused and independent synthetic inputs, explicitly approximate temporal reference, identical-input failure continuation and same-fold fixed SSM/linear control; numerical corrections work, measured teacher remains unqualified |
@@ -264,13 +292,13 @@ replacing their original identities.
 
 ### Overnight evidence snapshot — 2026-09-10
 
-The published package retains reader-facing visual reports, aggregate metric
-views, run manifests, resolved configurations, software pilots, candidate-rule
-summaries and source identities. The Markdown report displays its core figures
-on GitHub; download the self-contained HTML for expandable detailed figures.
-The PDF uses a compact narrative layout and links to the complete figure atlas.
-Every figure has a caption describing its contents, reading conventions and
-conclusion.
+The Git package retains Markdown/PDF visual reports, their bitmap figures,
+aggregate metric views, run manifests, resolved configurations, software pilots,
+candidate-rule summaries and source identities. The Markdown reports display
+their figures on GitHub; the N7 report-linked figure atlas also remains tracked.
+Self-contained HTML, vector originals, the duplicate v3 atlas and detailed
+per-fit/truth tables are local after the 2026-10-03 retention update above.
+The frozen reports and their scientific conclusions are unchanged.
 
 Per-task/per-trial tables, their compressed copies, task/status ledgers,
 selection records, native inputs and prepared arrays remain local. They are not
@@ -283,10 +311,11 @@ artifacts without making them part of the published surface.
 ### Step5A0 evidence snapshot — 2026-09-07
 
 The Git evidence package retains the stage summaries, manifests, resolved
-configurations, frozen runner/inference snapshots, failure diagnostics and
-key figures in their original run paths. Per-case arrays, prepared measured
-inputs and full numerical grids remain local generated payloads; references
-to those payloads in manifests identify the local audit/replay surface.
+configurations, failure diagnostics, report-linked sources and key figures in
+their original run paths. Unreferenced frozen runner/inference copies and
+superseded diagnostic grids are local after the 2026-10-03 retention update.
+Per-case arrays, prepared measured inputs and full numerical grids also remain
+local; manifest references identify that audit/replay surface.
 
 The staged continuation adds a separate
 [`Step5A0 joint-inference/calibration report`](runs/physiology_semantic_tokenizer/step5/20260907_a0_calibration_v1/summary.md)
