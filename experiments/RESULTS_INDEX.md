@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-01; payload-pruning record retained from
+_Evidence surface updated 2026-10-02; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -17,6 +17,37 @@ Some run and checkpoint paths below point to local Git-ignored artifacts that re
 useful in this workspace but are not part of the tracked paper record. For manuscript
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
+
+## Regional spectral shared drivers — 2026-10-02
+
+The [mode-driver contract](configs/physiology_semantic_tokenizer/shared_driver_modes_v1.yaml)
+and [owning protocol](../docs/EXPERIMENT_PLAN.md#区域与谱模式共享驱动检验2026-10-02)
+define fixed regional broadband/spectral coordinates, the training-selected
+vascular readout, and equal-temporal-capacity reconstruction and hidden-feature
+comparisons. The [terminal summary](runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/summary.json)
+indexes the numerical evidence. Retain the resolved contract, separate pilot and
+formal source snapshots, supervised launch/resource/completion records, fixed
+window and calibration identities, all cell records including failures and
+unavailable matched donors, and full-observation decomposition arrays.
+
+Use the [common-success paired comparisons](runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/measured_paired.csv)
+and [pairing nulls](runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/pairing_nulls.csv)
+for gains; successful-arm marginal means are descriptive and can have different
+denominators. [Synthetic recovery](runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/synthetic_summary.csv)
+separates reference-centered modes, vascular input, and observation mismatch.
+The [verification](runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/verification.json)
+checks identities, failure denominators, numerical metrics, and decompositions.
+The [Chinese bitmap-figure PDF](runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/report_v2/REPORT.pdf)
+is a communication export with a retained renderer source and
+[export validation](runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/report_v2/render_validation.json).
+The Git review package retains the metric and comparison tables, calibration
+identities, launch/configuration and verification records, and the reviewed PDF.
+The [source identity map](runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/source_snapshot_identity_git_export_v1.json)
+resolves each pilot/formal source file to its recorded Git base or an unchanged
+retained snapshot file. Full prediction/state arrays, prepared signals and page
+previews remain local; original cell metrics and failure denominators are in the
+retained CSVs. Parent prepared arrays and historical results retain their original
+identities.
 
 ## Conditional teacher robustness — 2026-10-01
 

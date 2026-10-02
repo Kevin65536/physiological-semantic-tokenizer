@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-01T09:04:28.780139+00:00",
+  "updated_at": "2026-10-02T14:43:09.356754+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1167,6 +1167,42 @@
       "label": "PPT与位图PDF交付核验",
       "path": "docs/report/20261001_ssm_teacher_robustness_v3/export_validation.json",
       "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_modes_contract",
+      "label": "区域与谱模式共享驱动诊断合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_modes_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.shared_driver_modes_launch",
+      "label": "区域与谱模式持久化执行与资源证据",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_modes_summary",
+      "label": "区域谱模式完整分母与结果表",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_modes_verification",
+      "label": "区域谱模式独立结果核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_modes_report",
+      "label": "区域谱模式中文位图报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/report_v2/REPORT.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_modes_report_validation",
+      "label": "区域谱模式PDF图像与文字核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1/report_v2/render_validation.json",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -4313,6 +4349,33 @@
       ],
       "headline": false,
       "next_step": "保留受约束观测项、缺失条件下的稳定化先验及候选敏感性输出；优先独立验证参考后驱动功能、时间/观测校准与先验偏差，不将重建或稳定掩码直接视为语义资格，不自动扩展H1/H2或训练tokenizer。"
+    },
+    {
+      "state_id": "main.shared_driver_modes@2026-10-02.v1",
+      "entity": "main.shared_driver_modes",
+      "label": "区域与谱模式共享驱动检验",
+      "track": "main",
+      "order": 170,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "完成三公开数据集18人72原窗、216区域窗的五臂比较。合成560/560收敛；实测9288项中9111收敛，135项耗尽求解预算、42项缺少匹配供体。共同成功、被试等权的R1→R2全观测EEG NRMSE为1.005→0.968、0.953→0.932、0.910→0.887；隐藏Hb为1.031→0.984、0.933→0.883、2.023→1.952，但均弱于训练模板和独立驱动参照。九个数据集×区域无一同时稳定通过三类配对null，gamma跨折换号。匹配合成可恢复参考后模式，谱方向或独立Hb失配破坏恢复；另有同一窗口四份收敛full解的q逼近零，数值收敛不等于生理合理。只支持有限区域谱表示改进，不支持确定空间来源或生理teacher。",
+      "evidence_ids": [
+        "e.shared_driver_modes_contract",
+        "e.shared_driver_modes_launch",
+        "e.shared_driver_modes_summary",
+        "e.shared_driver_modes_verification",
+        "e.shared_driver_modes_report",
+        "e.shared_driver_modes_report_validation"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-02T14:43:09.356754+00:00",
+      "depends_on": [
+        "main.teacher_robustness"
+      ],
+      "headline": false,
+      "next_step": "保留两维连续谱表示及本轮负结果。后续新设计优先用仅衰减宽频血管读出、b不驱动Hb的匹配对照区分gamma收益，再检验固定短Hb校准前缀对基准与初态的作用；采用独立评价身份，不自动升维、训练tokenizer或开启受保护评估。"
     }
   ]
 }

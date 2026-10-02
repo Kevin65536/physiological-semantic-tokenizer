@@ -1,0 +1,136 @@
+{
+  "schema": "shared_driver_modes_verification_v1",
+  "status": "passed",
+  "execution": "completed",
+  "verification_mode": "independent_read_only_completed_run_no_refit",
+  "verified_at": "2026-10-02T14:44:38.148Z",
+  "run": "experiments/runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1",
+  "counts_and_full_arrays": {
+    "manifest_execution": "completed",
+    "workers": 48,
+    "threads": 1,
+    "supervisor": "2402523",
+    "calibration_records": 36,
+    "calibration_selection_records": 2160,
+    "measured_expected": 9288,
+    "measured_recorded": 9288,
+    "measured_status": {
+      "completed": 9111,
+      "failed_numerical": 135,
+      "matched_donor_unavailable": 42
+    },
+    "failure_reasons": {
+      "evaluation_budget": 135,
+      "null": 42
+    },
+    "synthetic_expected": 560,
+    "synthetic_recorded": 560,
+    "synthetic_converged": 560,
+    "retained_measured_full_npz": 1080,
+    "retained_synthetic_full_npz": 35,
+    "max_prediction_decomposition_abs_error": 0,
+    "max_full_metric_abs_error": 0,
+    "min_retained_fvpq": 5.51506615824223e-304,
+    "max_retained_hbr_minus_hbt": -1.0135948669276473e-7
+  },
+  "summary_and_pairing": {
+    "summary_rows_checked": 558,
+    "paired_arm_rows_checked": 2844,
+    "paired_null_rows_checked": 144,
+    "max_subject_equal_summary_metric_abs_error": 1.3322676295501878e-15,
+    "max_paired_gain_abs_error": 4.440892098500626e-16,
+    "common_support_component_checks": 104645,
+    "zero_common_success_comparison_rows": 306,
+    "zero_planned_pair_placeholder_rows": 306,
+    "issues_count": 0,
+    "issues": []
+  },
+  "state_boundary_diagnostic": {
+    "full_measured_npz": 1080,
+    "successful_full_measured_npz": 1060,
+    "near_zero_threshold": 1e-8,
+    "successful_full_npz_with_any_fvpq_below_threshold": 4,
+    "near_zero_successful_npz_by_state": {
+      "f": 0,
+      "v": 0,
+      "p": 0,
+      "q": 4
+    },
+    "near_zero_successful_npz_by_arm": {
+      "R0_PCA_refit": 1,
+      "R1_broadband": 1,
+      "R2_zero": 1,
+      "R2_selected": 1
+    },
+    "near_zero_successful_npz_by_dataset": {
+      "eeg_fnirs_single_trial": 4
+    },
+    "successful_full_state_minima": {
+      "f": {
+        "value": 0.4561878828856875,
+        "id": "visual_cognitive_motivation__S16__S16_Part2_Probe1__posterior__montage0__w22",
+        "arm": "R0_PCA_refit",
+        "dataset": "visual_cognitive_motivation",
+        "region": "posterior",
+        "step": 101
+      },
+      "v": {
+        "value": 0.6688524686376391,
+        "id": "eeg_fnirs_single_trial__subject_05__session_02__prefrontal__w12",
+        "arm": "R2_zero",
+        "dataset": "eeg_fnirs_single_trial",
+        "region": "prefrontal",
+        "step": 0
+      },
+      "p": {
+        "value": 0.793115234792929,
+        "id": "visual_cognitive_motivation__S16__S16_Part2_Probe1__posterior__montage0__w22",
+        "arm": "R1_broadband",
+        "dataset": "visual_cognitive_motivation",
+        "region": "posterior",
+        "step": 103
+      },
+      "q": {
+        "value": 6.3148468788716434e-260,
+        "id": "eeg_fnirs_single_trial__subject_28__session_00__motor__w4",
+        "arm": "R2_zero",
+        "dataset": "eeg_fnirs_single_trial",
+        "region": "motor",
+        "step": 0
+      }
+    }
+  },
+  "checks": {
+    "resolved_config_matches_executed_snapshot_after_runner_serialization": true,
+    "training_selection_outer_evaluation_subjects_disjoint": true,
+    "all_36_calibration_identity_lists_equal_plan": true,
+    "calibration_selection_gamma_scores_recomputed": true,
+    "expected_measured_and_synthetic_cells_present": true,
+    "retained_full_shapes_and_finite_arrays": true,
+    "physical_plus_component_equals_prediction": true,
+    "full_EEG_Hb_HbO_HbR_native_and_physical_metrics_independently_recomputed": true,
+    "physical_Hb_nrmse_square_inside_mean_verified_by_snapshot_AST": true,
+    "all_retained_full_fvpq_positive_and_absolute_Hb_balance_valid": true,
+    "all_reported_summary_subject_equal_metrics_recomputed": true,
+    "all_reported_paired_finite_common_success_denominators_and_point_estimates_recomputed": true,
+    "paired_common_score_point_counts_equal": true,
+    "expected_endpoint_score_counts_checked": true,
+    "baseline_rows_do_not_inherit_model_physical_common_or_objective_metrics": true
+  },
+  "support": {
+    "measured_rows_with_score_support_checked": 9246,
+    "expected_endpoint_count_errors": 0,
+    "baseline_csv_rows": 4104,
+    "measured_csv_total_rows": 13392
+  },
+  "limitations": [
+    "No raw parent arrays were reread and no fit was run.",
+    "Full saved trajectories were checked: 1080 measured plus 35 synthetic files; non-full endpoint scores were checked through records, expected support and frozen scoring source.",
+    "Mathematical positivity is not physiological plausibility. Four converged measured full fits have q below 1e-8, from one native motor window across four arms.",
+    "The smallest all-retained f/v/p/q value, including nonconverged full fits, is 5.51506615824223e-304; the minimum among successful full fits is q=6.3148468788716434e-260.",
+    "Confidence-interval resampling was not rerun; point estimates, finite paired denominators, subject grouping and score support were independently verified.",
+    "306 paired-table rows are explicit zero-planned-pair placeholders with zero common success and blank gain/intervals; they do not add observed evidence."
+  ],
+  "issues": [],
+  "issues_count": 0
+}
