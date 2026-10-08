@@ -1,0 +1,3188 @@
+{
+  "schema": "semantic_response_synthetic_waveform_report_v1",
+  "report_date": "2026-10-03",
+  "execution": "completed_read_only_frozen_inference",
+  "figures": [
+    {
+      "key": "syn_wave_01_baseline_wide_v2",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_01_baseline_wide_v2.png",
+      "title": "合成基线：输入与独立语义",
+      "caption": "预定 evaluation/0 基线，未按评分挑选。频带是有效基线相对 log-power 坐标，不是原始电压；源语义为首20点参考后的单位RMS形状与ln(RMS幅值)。各编码器只读自身模态。阴影为在selection冻结温度后给出的95%点边际预测区间，不是整条轨迹的联合可信带。Hb完整重建来自非线性D(S均值,O)，不能拆成可加的semantic Hb与observation Hb。",
+      "source": {
+        "prepared": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.npz",
+        "prepared_metadata": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.json",
+        "resolved_config": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/resolved_tokenizer_config.json",
+        "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+        "reader": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+        "generator": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+        "model": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+        "existing_evaluation_record": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/evaluation/distribution_randomized_generator/seed_101/record.json"
+      },
+      "stats": {
+        "baseline": {
+          "scenario": "baseline",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/baseline/control",
+            "semantic_response_synthetic_v1/evaluation/0/baseline/intervention"
+          ],
+          "retained_row_indices": [
+            0,
+            1
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.0,
+            "hb": 0.0
+          },
+          "bitwise_identical_inputs": {
+            "eeg": true,
+            "hb": true
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.0,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.03476537764072418
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                0.9583333333333334
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.06123137101531029
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        }
+      },
+      "statsmanifest": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/synthetic_waveform_provenance.json"
+    },
+    {
+      "key": "syn_wave_02_shape_vs_eeg_gain_wide_v2",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_02_shape_vs_eeg_gain_wide_v2.png",
+      "title": "形状变化还是读出尺度变化？",
+      "caption": "两行使用同一基础轨迹与配对噪声。上行真shape改变但参考RMS幅值固定；下行仅EEG共同log-power坐标增益乘1.8，Hb和真shape均保持不变。右列直接画干预减控制的shape：非零估计且真值为零表示该个案的虚假语义变化。图中没有对差分画95%区间，因为模型未提供两次预测或时间点之间的协方差。",
+      "source": {
+        "prepared": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.npz",
+        "prepared_metadata": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.json",
+        "resolved_config": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/resolved_tokenizer_config.json",
+        "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+        "reader": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+        "generator": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+        "model": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+        "existing_evaluation_record": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/evaluation/distribution_randomized_generator/seed_101/record.json"
+      },
+      "stats": {
+        "true_a_shape": {
+          "scenario": "true_a_shape",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/true_a_shape/control",
+            "semantic_response_synthetic_v1/evaluation/0/true_a_shape/intervention"
+          ],
+          "retained_row_indices": [
+            4,
+            5
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.001423623994924128,
+            "hb": 0.007367355283349752
+          },
+          "bitwise_identical_inputs": {
+            "eeg": false,
+            "hb": false
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.3000614643096924,
+          "truth_log_amplitude_delta": -4.440892098500626e-16,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.3099946975708008,
+              "estimated_log_amplitude_delta": -0.04600882530212402,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.029992282390594482
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                0.8833333333333333
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -4.092040538787842,
+                  -3.0011796951293945
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.3073807656764984,
+              "estimated_log_amplitude_delta": -0.04172635078430176,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.07196515053510666
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                0.95
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.9752402305603027,
+                  -3.0460891723632812
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        },
+        "feature_gain_only": {
+          "scenario": "feature_gain_only",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/feature_gain_only/control",
+            "semantic_response_synthetic_v1/evaluation/0/feature_gain_only/intervention"
+          ],
+          "retained_row_indices": [
+            6,
+            7
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.004172418266534805,
+            "hb": 0.0
+          },
+          "bitwise_identical_inputs": {
+            "eeg": false,
+            "hb": true
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.0,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.017470555379986763,
+              "estimated_log_amplitude_delta": 0.37532973289489746,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.032741643488407135
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -3.6068971157073975,
+                  -2.643646001815796
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.06123137101531029
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        }
+      },
+      "statsmanifest": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/synthetic_waveform_provenance.json"
+    },
+    {
+      "key": "syn_wave_03a_amplitude_inputs_wide",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_03a_amplitude_inputs_wide.png",
+      "title": "幅值与增益：实际输入波形",
+      "caption": "真驱动×2使ln(RMS)改变ln2≈0.693；两种读出增益干预的真幅值均不变。图用实际α与HbO/HbR输入展示变化，再比较控制/干预的真log幅值及两个独立编码器的95%边际预测区间。EEG gain只乘有效log-power共同读出项，Hb gain只乘物理Hb均值响应；都不是人体绝对增益恢复。",
+      "source": {
+        "prepared": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.npz",
+        "prepared_metadata": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.json",
+        "resolved_config": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/resolved_tokenizer_config.json",
+        "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+        "reader": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+        "generator": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+        "model": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+        "existing_evaluation_record": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/evaluation/distribution_randomized_generator/seed_101/record.json"
+      },
+      "stats": {
+        "true_a_amplitude": {
+          "scenario": "true_a_amplitude",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/true_a_amplitude/control",
+            "semantic_response_synthetic_v1/evaluation/0/true_a_amplitude/intervention"
+          ],
+          "retained_row_indices": [
+            2,
+            3
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.005215522833168507,
+            "hb": 0.024924779310822487
+          },
+          "bitwise_identical_inputs": {
+            "eeg": false,
+            "hb": false
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.693147180559945,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.023218629881739616,
+              "estimated_log_amplitude_delta": 0.4398794174194336,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.03448038175702095
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -3.5677599906921387,
+                  -2.5536837577819824
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.046959586441516876,
+              "estimated_log_amplitude_delta": 0.5203042030334473,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.057211559265851974
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.430764675140381,
+                  -2.466503620147705
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        },
+        "feature_gain_only": {
+          "scenario": "feature_gain_only",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/feature_gain_only/control",
+            "semantic_response_synthetic_v1/evaluation/0/feature_gain_only/intervention"
+          ],
+          "retained_row_indices": [
+            6,
+            7
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.004172418266534805,
+            "hb": 0.0
+          },
+          "bitwise_identical_inputs": {
+            "eeg": false,
+            "hb": true
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.0,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.017470555379986763,
+              "estimated_log_amplitude_delta": 0.37532973289489746,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.032741643488407135
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -3.6068971157073975,
+                  -2.643646001815796
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.06123137101531029
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        },
+        "Hb_gain_only": {
+          "scenario": "Hb_gain_only",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/Hb_gain_only/control",
+            "semantic_response_synthetic_v1/evaluation/0/Hb_gain_only/intervention"
+          ],
+          "retained_row_indices": [
+            8,
+            9
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.0,
+            "hb": 0.016850747168064117
+          },
+          "bitwise_identical_inputs": {
+            "eeg": true,
+            "hb": false
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.0,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.03476537764072418
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                0.9583333333333334
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.05927759408950806,
+              "estimated_log_amplitude_delta": 0.3667285442352295,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.07198145985603333
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                0.9333333333333333
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.572793483734131,
+                  -2.6316261291503906
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        }
+      },
+      "statsmanifest": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/synthetic_waveform_provenance.json"
+    },
+    {
+      "key": "syn_wave_03b_amplitude_intervals_wide",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_03b_amplitude_intervals_wide.png",
+      "title": "幅值与增益：语义输出区间",
+      "caption": "真驱动×2使ln(RMS)改变ln2≈0.693；两种读出增益干预的真幅值均不变。图用实际α与HbO/HbR输入展示变化，再比较控制/干预的真log幅值及两个独立编码器的95%边际预测区间。EEG gain只乘有效log-power共同读出项，Hb gain只乘物理Hb均值响应；都不是人体绝对增益恢复。",
+      "source": {
+        "prepared": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.npz",
+        "prepared_metadata": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.json",
+        "resolved_config": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/resolved_tokenizer_config.json",
+        "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+        "reader": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+        "generator": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+        "model": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+        "existing_evaluation_record": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/evaluation/distribution_randomized_generator/seed_101/record.json"
+      },
+      "stats": {
+        "true_a_amplitude": {
+          "scenario": "true_a_amplitude",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/true_a_amplitude/control",
+            "semantic_response_synthetic_v1/evaluation/0/true_a_amplitude/intervention"
+          ],
+          "retained_row_indices": [
+            2,
+            3
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.005215522833168507,
+            "hb": 0.024924779310822487
+          },
+          "bitwise_identical_inputs": {
+            "eeg": false,
+            "hb": false
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.693147180559945,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.023218629881739616,
+              "estimated_log_amplitude_delta": 0.4398794174194336,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.03448038175702095
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -3.5677599906921387,
+                  -2.5536837577819824
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.046959586441516876,
+              "estimated_log_amplitude_delta": 0.5203042030334473,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.057211559265851974
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.430764675140381,
+                  -2.466503620147705
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        },
+        "feature_gain_only": {
+          "scenario": "feature_gain_only",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/feature_gain_only/control",
+            "semantic_response_synthetic_v1/evaluation/0/feature_gain_only/intervention"
+          ],
+          "retained_row_indices": [
+            6,
+            7
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.004172418266534805,
+            "hb": 0.0
+          },
+          "bitwise_identical_inputs": {
+            "eeg": false,
+            "hb": true
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.0,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.017470555379986763,
+              "estimated_log_amplitude_delta": 0.37532973289489746,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.032741643488407135
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -3.6068971157073975,
+                  -2.643646001815796
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.06123137101531029
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        },
+        "Hb_gain_only": {
+          "scenario": "Hb_gain_only",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/Hb_gain_only/control",
+            "semantic_response_synthetic_v1/evaluation/0/Hb_gain_only/intervention"
+          ],
+          "retained_row_indices": [
+            8,
+            9
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.0,
+            "hb": 0.016850747168064117
+          },
+          "bitwise_identical_inputs": {
+            "eeg": true,
+            "hb": false
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.0,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.03476537764072418
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                0.9583333333333334
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.05927759408950806,
+              "estimated_log_amplitude_delta": 0.3667285442352295,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.07198145985603333
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                0.9333333333333333
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.572793483734131,
+                  -2.6316261291503906
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        }
+      },
+      "statsmanifest": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/synthetic_waveform_provenance.json"
+    },
+    {
+      "key": "syn_wave_04_exact_joint_alias_wide_v2",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_04_exact_joint_alias_wide_v2.png",
+      "title": "完全相同输入的不可辨识反例",
+      "caption": "冻结生成器显式构造a×2、EEG共同读出增益×1/2及Hb观测项精确补偿。全30个EEG通道和双Hb通道输入差MAE都为0，mask相同，两分支全部导出输出逐位相同，而真log幅值差为ln2。这是确定性的不可辨识构造；它不能通过网络容量解决，也不能因不符合普通噪声分布而从评价分母删除。该个案的区间是否覆盖两个幅值仅为局部演示。",
+      "source": {
+        "prepared": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.npz",
+        "prepared_metadata": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.json",
+        "resolved_config": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/resolved_tokenizer_config.json",
+        "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+        "reader": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+        "generator": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+        "model": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+        "existing_evaluation_record": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/evaluation/distribution_randomized_generator/seed_101/record.json"
+      },
+      "stats": {
+        "exact_joint_alias": {
+          "scenario": "exact_joint_alias",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/exact_joint_alias/control",
+            "semantic_response_synthetic_v1/evaluation/0/exact_joint_alias/intervention"
+          ],
+          "retained_row_indices": [
+            38,
+            39
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.0,
+            "hb": 0.0
+          },
+          "bitwise_identical_inputs": {
+            "eeg": true,
+            "hb": true
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.693147180559945,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.03476537764072418
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                0.9583333333333334
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                false
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.06123137101531029
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                false
+              ]
+            }
+          }
+        }
+      },
+      "statsmanifest": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/synthetic_waveform_provenance.json"
+    },
+    {
+      "key": "syn_wave_05_ood_impulse_wide_v2",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_05_ood_impulse_wide_v2.png",
+      "title": "分布外脉冲暴露形状失败",
+      "caption": "保留的non_dct_impulse干预在索引29/43/64/83加入短脉冲，真源仍在token聚合前定义且RMS幅值保持固定。模型只有离线卷积上下文，训练source族为慢DCT脉冲；Hb动力学会平滑尖峰。完整观测重建较平滑或贴近输入，不保证尖峰shape恢复。阴影仅为selection校准后的点边际预测区间；本图的120点覆盖比例不能代表整个OOD场景或独立样本覆盖率。",
+      "source": {
+        "prepared": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.npz",
+        "prepared_metadata": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.json",
+        "resolved_config": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/resolved_tokenizer_config.json",
+        "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+        "reader": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+        "generator": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+        "model": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+        "existing_evaluation_record": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/evaluation/distribution_randomized_generator/seed_101/record.json"
+      },
+      "stats": {
+        "non_dct_impulse": {
+          "scenario": "non_dct_impulse",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/non_dct_impulse/control",
+            "semantic_response_synthetic_v1/evaluation/0/non_dct_impulse/intervention"
+          ],
+          "retained_row_indices": [
+            16,
+            17
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.005922503769397736,
+            "hb": 0.022041894495487213
+          },
+          "bitwise_identical_inputs": {
+            "eeg": false,
+            "hb": false
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 1.3790744543075562,
+          "truth_log_amplitude_delta": 0.0,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.9276583194732666,
+              "estimated_log_amplitude_delta": -0.6099648475646973,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.5164306163787842
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                0.39166666666666666
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -4.275298595428467,
+                  -3.945833683013916
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                false
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.6724743247032166,
+              "estimated_log_amplitude_delta": -0.8921704292297363,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.6134157776832581
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                0.7166666666666667
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -4.539799690246582,
+                  -4.182417869567871
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                false
+              ]
+            }
+          }
+        }
+      },
+      "statsmanifest": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/synthetic_waveform_provenance.json"
+    },
+    {
+      "key": "syn_wave_06_tau_response_wide_v2",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_06_tau_response_wide_v2.png",
+      "title": "动力学变化会被归入驱动吗？",
+      "caption": "保留tau_change场景使τ从1.7764s乘1.6到2.8423s，κ=0.5288在该对中固定；本轮没有独立κ-change评价场景。真驱动、EEG、共同Hb项及配对噪声保持不变。右下由生成器真物理响应验证Hb差异来源，左下和中下显示编码器语义输出是否随动力学变化移动。网络没有显式τ/κ估计头，因此语义改变不能被解释成已分离恢复的血管参数。",
+      "source": {
+        "prepared": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.npz",
+        "prepared_metadata": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.json",
+        "resolved_config": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/resolved_tokenizer_config.json",
+        "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+        "reader": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+        "generator": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+        "model": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+        "existing_evaluation_record": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/evaluation/distribution_randomized_generator/seed_101/record.json"
+      },
+      "stats": {
+        "tau_change": {
+          "scenario": "tau_change",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/tau_change/control",
+            "semantic_response_synthetic_v1/evaluation/0/tau_change/intervention"
+          ],
+          "retained_row_indices": [
+            12,
+            13
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.0,
+            "hb": 0.0030409565661102533
+          },
+          "bitwise_identical_inputs": {
+            "eeg": true,
+            "hb": false
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.0,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 2.8422992192040546
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.03476537764072418
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                0.9583333333333334
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.02267414890229702,
+              "estimated_log_amplitude_delta": -0.014455795288085938,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.06922491639852524
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                1.0
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -3.9067986011505127,
+                  -3.0599896907806396
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          }
+        }
+      },
+      "statsmanifest": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/synthetic_waveform_provenance.json"
+    },
+    {
+      "key": "syn_wave_07_correlated_hb_wide_v2",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_07_correlated_hb_wide_v2.png",
+      "title": "共同Hb项的语义归属边界",
+      "caption": "干预把共同Hb项幅值增加0.008，并将其与规定驱动的参考RMS归一化内积设为0.85；该合同量不是全窗Pearson相关（本例Pearson为0.883）。真a、EEG与血管物理响应未变。上排左两图是生成器真值提供的物理响应、附加Hb项与噪声，三者在观测坐标闭合。上排右图是网络完整重建；非线性decoder拼接S均值与O代码，所以semantic decode + observation latent不是两条可相加的物理Hb成分。右下相关只是已知生成构造，不足以在实测中唯一识别来源；语义输出移动仅显示该个案的归属敏感性。",
+      "source": {
+        "prepared": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.npz",
+        "prepared_metadata": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.json",
+        "resolved_config": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/resolved_tokenizer_config.json",
+        "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+        "reader": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+        "generator": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+        "model": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+        "existing_evaluation_record": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/evaluation/distribution_randomized_generator/seed_101/record.json"
+      },
+      "stats": {
+        "correlated_Hb_component": {
+          "scenario": "correlated_Hb_component",
+          "base_id": "semantic_response_synthetic_v1/evaluation/0",
+          "case_ids": [
+            "semantic_response_synthetic_v1/evaluation/0/correlated_Hb_component/control",
+            "semantic_response_synthetic_v1/evaluation/0/correlated_Hb_component/intervention"
+          ],
+          "retained_row_indices": [
+            24,
+            25
+          ],
+          "mean_absolute_input_difference": {
+            "eeg": 0.0,
+            "hb": 0.003685145638883114
+          },
+          "bitwise_identical_inputs": {
+            "eeg": true,
+            "hb": false
+          },
+          "bitwise_identical_input_masks": {
+            "eeg": true,
+            "hb": true
+          },
+          "truth_shape_delta_RMS": 0.0,
+          "truth_log_amplitude_delta": 0.0,
+          "truth_parameter_control": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "truth_parameter_intervention": {
+            "kappa": 0.5287906662920887,
+            "tau": 1.776437012002534
+          },
+          "interpretation": "preselected_single_case_not_scenario_aggregate",
+          "modalities": {
+            "eeg": {
+              "estimated_shape_delta_RMS": 0.0,
+              "estimated_log_amplitude_delta": 0.0,
+              "all_exported_outputs_bitwise_identical": true,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": true,
+                "shape_log_sd": true,
+                "log_amplitude_mean": true,
+                "log_amplitude_log_sd": true,
+                "observation_code": true,
+                "reconstruction": true,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": true,
+                "shape_sd": true,
+                "log_amplitude_sd": true,
+                "reconstruction_observation_coordinate": true
+              },
+              "shape_MAE_control_intervention": [
+                0.03476537764072418,
+                0.03476537764072418
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                0.9583333333333334,
+                0.9583333333333334
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ],
+                [
+                  -4.030062198638916,
+                  -2.9711403846740723
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            },
+            "hb": {
+              "estimated_shape_delta_RMS": 0.26586002111434937,
+              "estimated_log_amplitude_delta": -0.1833486557006836,
+              "all_exported_outputs_bitwise_identical": false,
+              "outputs_bitwise_equal_by_key": {
+                "shape_mean": false,
+                "shape_log_sd": false,
+                "log_amplitude_mean": false,
+                "log_amplitude_log_sd": false,
+                "observation_code": false,
+                "reconstruction": false,
+                "time_support": true,
+                "channel_support": true,
+                "log_amplitude_standardized_mean": false,
+                "shape_sd": false,
+                "log_amplitude_sd": false,
+                "reconstruction_observation_coordinate": false
+              },
+              "shape_MAE_control_intervention": [
+                0.06123137101531029,
+                0.20147399604320526
+              ],
+              "shape_95_point_marginal_case_coverage": [
+                1.0,
+                0.5416666666666666
+              ],
+              "log_amplitude_95_intervals_control_intervention": [
+                [
+                  -3.917144536972046,
+                  -3.0207321643829346
+                ],
+                [
+                  -4.10614013671875,
+                  -3.1984336376190186
+                ]
+              ],
+              "log_amplitude_95_case_covered_control_intervention": [
+                true,
+                true
+              ]
+            }
+          },
+          "true_component_source_Pearson_correlation": 0.8829964900223256,
+          "true_component_source_reference_RMS_inner_product": 0.8499999988262779
+        }
+      },
+      "statsmanifest": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/synthetic_waveform_provenance.json"
+    }
+  ],
+  "source": {
+    "prepared": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.npz",
+    "prepared_metadata": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/prepared/randomized/evaluation.json",
+    "resolved_config": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/resolved_tokenizer_config.json",
+    "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+    "reader": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+    "generator": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+    "model": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+    "existing_evaluation_record": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/evaluation/distribution_randomized_generator/seed_101/record.json"
+  },
+  "frozen_inference": {
+    "base_id": "semantic_response_synthetic_v1/evaluation/0",
+    "base_index": 0,
+    "arm": "distribution_randomized_generator",
+    "seed": 101,
+    "generator_seed": 20261002,
+    "config_identity": "9a080dcd51d20f9e97952073dc2f964034e311f78a00a1b40db6214634c0eb0e",
+    "calibration": {
+      "eeg": {
+        "shape": 1.3044224977493286,
+        "amplitude": 1.0029298708213354,
+        "kind": "selection_marginal_temperature",
+        "partition": "selection",
+        "records": 2048
+      },
+      "hb": {
+        "shape": 1.0670430660247803,
+        "amplitude": 1.1098437190628314,
+        "kind": "selection_marginal_temperature",
+        "partition": "selection",
+        "records": 2048
+      }
+    },
+    "amplitude_training_mean": -3.6703235701274397,
+    "amplitude_training_scale": 0.44022013875619104,
+    "reader_source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/train_semantic_response_tokenizer.py",
+    "model_runtime_source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/tokenizers/semantic_response_tokenizer.py",
+    "generator_source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/src/inference/semantic_response_synthetic.py",
+    "selected_checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/distribution_randomized_generator/seed_101/selected.pt",
+    "checkpoint_options": {
+      "width": 64,
+      "observation_dimensions": 8,
+      "learning_rate": 0.001,
+      "epochs": 160,
+      "patience": 20,
+      "batch_size": 64,
+      "seeds": [
+        101,
+        202,
+        303
+      ],
+      "reconstruction_weight": 1.0,
+      "source_weight": 1.0,
+      "amplitude_weight": 0.25,
+      "ridge_alpha": 1.0,
+      "reference_steps": 20,
+      "patches": 12,
+      "train_scenarios": [
+        "baseline",
+        "true_a_amplitude",
+        "true_a_shape",
+        "feature_gain_only",
+        "Hb_gain_only",
+        "common_Hb",
+        "tau_change",
+        "initial_change"
+      ],
+      "evaluation_scenarios": [
+        "baseline",
+        "true_a_amplitude",
+        "true_a_shape",
+        "feature_gain_only",
+        "Hb_gain_only",
+        "common_Hb",
+        "tau_change",
+        "initial_change",
+        "non_dct_impulse",
+        "ou_drive",
+        "time_varying_feature_gain",
+        "rotated_spectral_mixture",
+        "correlated_Hb_component",
+        "input_lowpass",
+        "viscoelastic_outflow",
+        "alternative_hrf",
+        "independent_Hb_drive",
+        "no_coupling",
+        "exact_eeg_alias",
+        "exact_joint_alias"
+      ],
+      "arms": [
+        "observation_only",
+        "point_restricted",
+        "point_randomized",
+        "distribution_randomized"
+      ],
+      "base_counts": {
+        "train": 512,
+        "selection": 128,
+        "evaluation": 256
+      },
+      "observation_dim": 8,
+      "encoder_boundary": "each_modality_only_own_signal_support_no_other_modality_or_truth",
+      "semantic_target": "reference_centered_unit_RMS_common_driver_shape_and_log_RMS_amplitude",
+      "observation_target": "full_own_modality_observation",
+      "capacity_control": "identical_networks_observation_only_shape_amplitude_heads_learn_reconstruction",
+      "semantic_reconstruction_gradient": "detach_for_semantically_supervised_arms",
+      "split": "base_identity_all_counterfactual_variants_together",
+      "evaluation_family": "randomized_common_identical_cases_for_all_four_arms",
+      "measured_primary": "frozen_means_and_observation_vs_entire_capacity_matched_observation_only_features",
+      "source_increment": "same_frozen_supervised_observation_O_vs_O_plus_source_S",
+      "measured_target_Hb_input": "visible_prefix_only_never_scored_suffix_zero_prefix_excludes_target_Hb_tokens",
+      "measured_context_input": "full_local_EEG_and_other_region_Hb_allowed",
+      "measured_vs_synthetic": "prefix_masked_measured_probe_separate_from_full_Hb_synthetic_recovery",
+      "uncertainty_features": "secondary_only",
+      "data_counts": {
+        "train": 512,
+        "selection": 128,
+        "evaluation": 256
+      },
+      "generator_seed": 20261002
+    },
+    "replay_checks": [
+      {
+        "scenario": "baseline",
+        "variant": "control",
+        "retained_row_index": 0,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "baseline",
+        "variant": "intervention",
+        "retained_row_index": 1,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "true_a_amplitude",
+        "variant": "control",
+        "retained_row_index": 2,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "true_a_amplitude",
+        "variant": "intervention",
+        "retained_row_index": 3,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "true_a_shape",
+        "variant": "control",
+        "retained_row_index": 4,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "true_a_shape",
+        "variant": "intervention",
+        "retained_row_index": 5,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "feature_gain_only",
+        "variant": "control",
+        "retained_row_index": 6,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "feature_gain_only",
+        "variant": "intervention",
+        "retained_row_index": 7,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "Hb_gain_only",
+        "variant": "control",
+        "retained_row_index": 8,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "Hb_gain_only",
+        "variant": "intervention",
+        "retained_row_index": 9,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "tau_change",
+        "variant": "control",
+        "retained_row_index": 12,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "tau_change",
+        "variant": "intervention",
+        "retained_row_index": 13,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "non_dct_impulse",
+        "variant": "control",
+        "retained_row_index": 16,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "non_dct_impulse",
+        "variant": "intervention",
+        "retained_row_index": 17,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "correlated_Hb_component",
+        "variant": "control",
+        "retained_row_index": 24,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "correlated_Hb_component",
+        "variant": "intervention",
+        "retained_row_index": 25,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "exact_joint_alias",
+        "variant": "control",
+        "retained_row_index": 38,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 0.0
+      },
+      {
+        "scenario": "exact_joint_alias",
+        "variant": "intervention",
+        "retained_row_index": 39,
+        "bitwise_float32_replay_max_absolute_difference": {
+          "eeg": 0.0,
+          "hb": 0.0,
+          "source_shape": 0.0,
+          "a": 0.0
+        },
+        "generative_Hb_additive_closure_max_abs": 2.7755575615628914e-17
+      }
+    ],
+    "inference_rows": 18,
+    "inference_device": "cpu",
+    "inference_threads": 1
+  },
+  "case_selection": {
+    "rule": "first_base_in_retained_evaluation_order_before_scores",
+    "base_id": "semantic_response_synthetic_v1/evaluation/0",
+    "scenarios": [
+      "baseline",
+      "true_a_shape",
+      "feature_gain_only",
+      "true_a_amplitude",
+      "Hb_gain_only",
+      "exact_joint_alias",
+      "non_dct_impulse",
+      "tau_change",
+      "correlated_Hb_component"
+    ],
+    "score_based_selection": false,
+    "all_counterfactual_variants_same_base": true
+  },
+  "case_stats": {
+    "baseline": {
+      "scenario": "baseline",
+      "base_id": "semantic_response_synthetic_v1/evaluation/0",
+      "case_ids": [
+        "semantic_response_synthetic_v1/evaluation/0/baseline/control",
+        "semantic_response_synthetic_v1/evaluation/0/baseline/intervention"
+      ],
+      "retained_row_indices": [
+        0,
+        1
+      ],
+      "mean_absolute_input_difference": {
+        "eeg": 0.0,
+        "hb": 0.0
+      },
+      "bitwise_identical_inputs": {
+        "eeg": true,
+        "hb": true
+      },
+      "bitwise_identical_input_masks": {
+        "eeg": true,
+        "hb": true
+      },
+      "truth_shape_delta_RMS": 0.0,
+      "truth_log_amplitude_delta": 0.0,
+      "truth_parameter_control": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "truth_parameter_intervention": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "interpretation": "preselected_single_case_not_scenario_aggregate",
+      "modalities": {
+        "eeg": {
+          "estimated_shape_delta_RMS": 0.0,
+          "estimated_log_amplitude_delta": 0.0,
+          "all_exported_outputs_bitwise_identical": true,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": true,
+            "shape_log_sd": true,
+            "log_amplitude_mean": true,
+            "log_amplitude_log_sd": true,
+            "observation_code": true,
+            "reconstruction": true,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": true,
+            "shape_sd": true,
+            "log_amplitude_sd": true,
+            "reconstruction_observation_coordinate": true
+          },
+          "shape_MAE_control_intervention": [
+            0.03476537764072418,
+            0.03476537764072418
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            0.9583333333333334,
+            0.9583333333333334
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ],
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        },
+        "hb": {
+          "estimated_shape_delta_RMS": 0.0,
+          "estimated_log_amplitude_delta": 0.0,
+          "all_exported_outputs_bitwise_identical": true,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": true,
+            "shape_log_sd": true,
+            "log_amplitude_mean": true,
+            "log_amplitude_log_sd": true,
+            "observation_code": true,
+            "reconstruction": true,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": true,
+            "shape_sd": true,
+            "log_amplitude_sd": true,
+            "reconstruction_observation_coordinate": true
+          },
+          "shape_MAE_control_intervention": [
+            0.06123137101531029,
+            0.06123137101531029
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            1.0,
+            1.0
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ],
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        }
+      }
+    },
+    "true_a_shape": {
+      "scenario": "true_a_shape",
+      "base_id": "semantic_response_synthetic_v1/evaluation/0",
+      "case_ids": [
+        "semantic_response_synthetic_v1/evaluation/0/true_a_shape/control",
+        "semantic_response_synthetic_v1/evaluation/0/true_a_shape/intervention"
+      ],
+      "retained_row_indices": [
+        4,
+        5
+      ],
+      "mean_absolute_input_difference": {
+        "eeg": 0.001423623994924128,
+        "hb": 0.007367355283349752
+      },
+      "bitwise_identical_inputs": {
+        "eeg": false,
+        "hb": false
+      },
+      "bitwise_identical_input_masks": {
+        "eeg": true,
+        "hb": true
+      },
+      "truth_shape_delta_RMS": 0.3000614643096924,
+      "truth_log_amplitude_delta": -4.440892098500626e-16,
+      "truth_parameter_control": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "truth_parameter_intervention": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "interpretation": "preselected_single_case_not_scenario_aggregate",
+      "modalities": {
+        "eeg": {
+          "estimated_shape_delta_RMS": 0.3099946975708008,
+          "estimated_log_amplitude_delta": -0.04600882530212402,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.03476537764072418,
+            0.029992282390594482
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            0.9583333333333334,
+            0.8833333333333333
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ],
+            [
+              -4.092040538787842,
+              -3.0011796951293945
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        },
+        "hb": {
+          "estimated_shape_delta_RMS": 0.3073807656764984,
+          "estimated_log_amplitude_delta": -0.04172635078430176,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.06123137101531029,
+            0.07196515053510666
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            1.0,
+            0.95
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ],
+            [
+              -3.9752402305603027,
+              -3.0460891723632812
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        }
+      }
+    },
+    "feature_gain_only": {
+      "scenario": "feature_gain_only",
+      "base_id": "semantic_response_synthetic_v1/evaluation/0",
+      "case_ids": [
+        "semantic_response_synthetic_v1/evaluation/0/feature_gain_only/control",
+        "semantic_response_synthetic_v1/evaluation/0/feature_gain_only/intervention"
+      ],
+      "retained_row_indices": [
+        6,
+        7
+      ],
+      "mean_absolute_input_difference": {
+        "eeg": 0.004172418266534805,
+        "hb": 0.0
+      },
+      "bitwise_identical_inputs": {
+        "eeg": false,
+        "hb": true
+      },
+      "bitwise_identical_input_masks": {
+        "eeg": true,
+        "hb": true
+      },
+      "truth_shape_delta_RMS": 0.0,
+      "truth_log_amplitude_delta": 0.0,
+      "truth_parameter_control": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "truth_parameter_intervention": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "interpretation": "preselected_single_case_not_scenario_aggregate",
+      "modalities": {
+        "eeg": {
+          "estimated_shape_delta_RMS": 0.017470555379986763,
+          "estimated_log_amplitude_delta": 0.37532973289489746,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.03476537764072418,
+            0.032741643488407135
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            0.9583333333333334,
+            1.0
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ],
+            [
+              -3.6068971157073975,
+              -2.643646001815796
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        },
+        "hb": {
+          "estimated_shape_delta_RMS": 0.0,
+          "estimated_log_amplitude_delta": 0.0,
+          "all_exported_outputs_bitwise_identical": true,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": true,
+            "shape_log_sd": true,
+            "log_amplitude_mean": true,
+            "log_amplitude_log_sd": true,
+            "observation_code": true,
+            "reconstruction": true,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": true,
+            "shape_sd": true,
+            "log_amplitude_sd": true,
+            "reconstruction_observation_coordinate": true
+          },
+          "shape_MAE_control_intervention": [
+            0.06123137101531029,
+            0.06123137101531029
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            1.0,
+            1.0
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ],
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        }
+      }
+    },
+    "true_a_amplitude": {
+      "scenario": "true_a_amplitude",
+      "base_id": "semantic_response_synthetic_v1/evaluation/0",
+      "case_ids": [
+        "semantic_response_synthetic_v1/evaluation/0/true_a_amplitude/control",
+        "semantic_response_synthetic_v1/evaluation/0/true_a_amplitude/intervention"
+      ],
+      "retained_row_indices": [
+        2,
+        3
+      ],
+      "mean_absolute_input_difference": {
+        "eeg": 0.005215522833168507,
+        "hb": 0.024924779310822487
+      },
+      "bitwise_identical_inputs": {
+        "eeg": false,
+        "hb": false
+      },
+      "bitwise_identical_input_masks": {
+        "eeg": true,
+        "hb": true
+      },
+      "truth_shape_delta_RMS": 0.0,
+      "truth_log_amplitude_delta": 0.693147180559945,
+      "truth_parameter_control": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "truth_parameter_intervention": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "interpretation": "preselected_single_case_not_scenario_aggregate",
+      "modalities": {
+        "eeg": {
+          "estimated_shape_delta_RMS": 0.023218629881739616,
+          "estimated_log_amplitude_delta": 0.4398794174194336,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.03476537764072418,
+            0.03448038175702095
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            0.9583333333333334,
+            1.0
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ],
+            [
+              -3.5677599906921387,
+              -2.5536837577819824
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        },
+        "hb": {
+          "estimated_shape_delta_RMS": 0.046959586441516876,
+          "estimated_log_amplitude_delta": 0.5203042030334473,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.06123137101531029,
+            0.057211559265851974
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            1.0,
+            1.0
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ],
+            [
+              -3.430764675140381,
+              -2.466503620147705
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        }
+      }
+    },
+    "Hb_gain_only": {
+      "scenario": "Hb_gain_only",
+      "base_id": "semantic_response_synthetic_v1/evaluation/0",
+      "case_ids": [
+        "semantic_response_synthetic_v1/evaluation/0/Hb_gain_only/control",
+        "semantic_response_synthetic_v1/evaluation/0/Hb_gain_only/intervention"
+      ],
+      "retained_row_indices": [
+        8,
+        9
+      ],
+      "mean_absolute_input_difference": {
+        "eeg": 0.0,
+        "hb": 0.016850747168064117
+      },
+      "bitwise_identical_inputs": {
+        "eeg": true,
+        "hb": false
+      },
+      "bitwise_identical_input_masks": {
+        "eeg": true,
+        "hb": true
+      },
+      "truth_shape_delta_RMS": 0.0,
+      "truth_log_amplitude_delta": 0.0,
+      "truth_parameter_control": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "truth_parameter_intervention": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "interpretation": "preselected_single_case_not_scenario_aggregate",
+      "modalities": {
+        "eeg": {
+          "estimated_shape_delta_RMS": 0.0,
+          "estimated_log_amplitude_delta": 0.0,
+          "all_exported_outputs_bitwise_identical": true,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": true,
+            "shape_log_sd": true,
+            "log_amplitude_mean": true,
+            "log_amplitude_log_sd": true,
+            "observation_code": true,
+            "reconstruction": true,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": true,
+            "shape_sd": true,
+            "log_amplitude_sd": true,
+            "reconstruction_observation_coordinate": true
+          },
+          "shape_MAE_control_intervention": [
+            0.03476537764072418,
+            0.03476537764072418
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            0.9583333333333334,
+            0.9583333333333334
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ],
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        },
+        "hb": {
+          "estimated_shape_delta_RMS": 0.05927759408950806,
+          "estimated_log_amplitude_delta": 0.3667285442352295,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.06123137101531029,
+            0.07198145985603333
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            1.0,
+            0.9333333333333333
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ],
+            [
+              -3.572793483734131,
+              -2.6316261291503906
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        }
+      }
+    },
+    "exact_joint_alias": {
+      "scenario": "exact_joint_alias",
+      "base_id": "semantic_response_synthetic_v1/evaluation/0",
+      "case_ids": [
+        "semantic_response_synthetic_v1/evaluation/0/exact_joint_alias/control",
+        "semantic_response_synthetic_v1/evaluation/0/exact_joint_alias/intervention"
+      ],
+      "retained_row_indices": [
+        38,
+        39
+      ],
+      "mean_absolute_input_difference": {
+        "eeg": 0.0,
+        "hb": 0.0
+      },
+      "bitwise_identical_inputs": {
+        "eeg": true,
+        "hb": true
+      },
+      "bitwise_identical_input_masks": {
+        "eeg": true,
+        "hb": true
+      },
+      "truth_shape_delta_RMS": 0.0,
+      "truth_log_amplitude_delta": 0.693147180559945,
+      "truth_parameter_control": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "truth_parameter_intervention": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "interpretation": "preselected_single_case_not_scenario_aggregate",
+      "modalities": {
+        "eeg": {
+          "estimated_shape_delta_RMS": 0.0,
+          "estimated_log_amplitude_delta": 0.0,
+          "all_exported_outputs_bitwise_identical": true,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": true,
+            "shape_log_sd": true,
+            "log_amplitude_mean": true,
+            "log_amplitude_log_sd": true,
+            "observation_code": true,
+            "reconstruction": true,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": true,
+            "shape_sd": true,
+            "log_amplitude_sd": true,
+            "reconstruction_observation_coordinate": true
+          },
+          "shape_MAE_control_intervention": [
+            0.03476537764072418,
+            0.03476537764072418
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            0.9583333333333334,
+            0.9583333333333334
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ],
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            false
+          ]
+        },
+        "hb": {
+          "estimated_shape_delta_RMS": 0.0,
+          "estimated_log_amplitude_delta": 0.0,
+          "all_exported_outputs_bitwise_identical": true,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": true,
+            "shape_log_sd": true,
+            "log_amplitude_mean": true,
+            "log_amplitude_log_sd": true,
+            "observation_code": true,
+            "reconstruction": true,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": true,
+            "shape_sd": true,
+            "log_amplitude_sd": true,
+            "reconstruction_observation_coordinate": true
+          },
+          "shape_MAE_control_intervention": [
+            0.06123137101531029,
+            0.06123137101531029
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            1.0,
+            1.0
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ],
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            false
+          ]
+        }
+      }
+    },
+    "non_dct_impulse": {
+      "scenario": "non_dct_impulse",
+      "base_id": "semantic_response_synthetic_v1/evaluation/0",
+      "case_ids": [
+        "semantic_response_synthetic_v1/evaluation/0/non_dct_impulse/control",
+        "semantic_response_synthetic_v1/evaluation/0/non_dct_impulse/intervention"
+      ],
+      "retained_row_indices": [
+        16,
+        17
+      ],
+      "mean_absolute_input_difference": {
+        "eeg": 0.005922503769397736,
+        "hb": 0.022041894495487213
+      },
+      "bitwise_identical_inputs": {
+        "eeg": false,
+        "hb": false
+      },
+      "bitwise_identical_input_masks": {
+        "eeg": true,
+        "hb": true
+      },
+      "truth_shape_delta_RMS": 1.3790744543075562,
+      "truth_log_amplitude_delta": 0.0,
+      "truth_parameter_control": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "truth_parameter_intervention": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "interpretation": "preselected_single_case_not_scenario_aggregate",
+      "modalities": {
+        "eeg": {
+          "estimated_shape_delta_RMS": 0.9276583194732666,
+          "estimated_log_amplitude_delta": -0.6099648475646973,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.03476537764072418,
+            0.5164306163787842
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            0.9583333333333334,
+            0.39166666666666666
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ],
+            [
+              -4.275298595428467,
+              -3.945833683013916
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            false
+          ]
+        },
+        "hb": {
+          "estimated_shape_delta_RMS": 0.6724743247032166,
+          "estimated_log_amplitude_delta": -0.8921704292297363,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.06123137101531029,
+            0.6134157776832581
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            1.0,
+            0.7166666666666667
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ],
+            [
+              -4.539799690246582,
+              -4.182417869567871
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            false
+          ]
+        }
+      }
+    },
+    "tau_change": {
+      "scenario": "tau_change",
+      "base_id": "semantic_response_synthetic_v1/evaluation/0",
+      "case_ids": [
+        "semantic_response_synthetic_v1/evaluation/0/tau_change/control",
+        "semantic_response_synthetic_v1/evaluation/0/tau_change/intervention"
+      ],
+      "retained_row_indices": [
+        12,
+        13
+      ],
+      "mean_absolute_input_difference": {
+        "eeg": 0.0,
+        "hb": 0.0030409565661102533
+      },
+      "bitwise_identical_inputs": {
+        "eeg": true,
+        "hb": false
+      },
+      "bitwise_identical_input_masks": {
+        "eeg": true,
+        "hb": true
+      },
+      "truth_shape_delta_RMS": 0.0,
+      "truth_log_amplitude_delta": 0.0,
+      "truth_parameter_control": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "truth_parameter_intervention": {
+        "kappa": 0.5287906662920887,
+        "tau": 2.8422992192040546
+      },
+      "interpretation": "preselected_single_case_not_scenario_aggregate",
+      "modalities": {
+        "eeg": {
+          "estimated_shape_delta_RMS": 0.0,
+          "estimated_log_amplitude_delta": 0.0,
+          "all_exported_outputs_bitwise_identical": true,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": true,
+            "shape_log_sd": true,
+            "log_amplitude_mean": true,
+            "log_amplitude_log_sd": true,
+            "observation_code": true,
+            "reconstruction": true,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": true,
+            "shape_sd": true,
+            "log_amplitude_sd": true,
+            "reconstruction_observation_coordinate": true
+          },
+          "shape_MAE_control_intervention": [
+            0.03476537764072418,
+            0.03476537764072418
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            0.9583333333333334,
+            0.9583333333333334
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ],
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        },
+        "hb": {
+          "estimated_shape_delta_RMS": 0.02267414890229702,
+          "estimated_log_amplitude_delta": -0.014455795288085938,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.06123137101531029,
+            0.06922491639852524
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            1.0,
+            1.0
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ],
+            [
+              -3.9067986011505127,
+              -3.0599896907806396
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        }
+      }
+    },
+    "correlated_Hb_component": {
+      "scenario": "correlated_Hb_component",
+      "base_id": "semantic_response_synthetic_v1/evaluation/0",
+      "case_ids": [
+        "semantic_response_synthetic_v1/evaluation/0/correlated_Hb_component/control",
+        "semantic_response_synthetic_v1/evaluation/0/correlated_Hb_component/intervention"
+      ],
+      "retained_row_indices": [
+        24,
+        25
+      ],
+      "mean_absolute_input_difference": {
+        "eeg": 0.0,
+        "hb": 0.003685145638883114
+      },
+      "bitwise_identical_inputs": {
+        "eeg": true,
+        "hb": false
+      },
+      "bitwise_identical_input_masks": {
+        "eeg": true,
+        "hb": true
+      },
+      "truth_shape_delta_RMS": 0.0,
+      "truth_log_amplitude_delta": 0.0,
+      "truth_parameter_control": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "truth_parameter_intervention": {
+        "kappa": 0.5287906662920887,
+        "tau": 1.776437012002534
+      },
+      "interpretation": "preselected_single_case_not_scenario_aggregate",
+      "modalities": {
+        "eeg": {
+          "estimated_shape_delta_RMS": 0.0,
+          "estimated_log_amplitude_delta": 0.0,
+          "all_exported_outputs_bitwise_identical": true,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": true,
+            "shape_log_sd": true,
+            "log_amplitude_mean": true,
+            "log_amplitude_log_sd": true,
+            "observation_code": true,
+            "reconstruction": true,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": true,
+            "shape_sd": true,
+            "log_amplitude_sd": true,
+            "reconstruction_observation_coordinate": true
+          },
+          "shape_MAE_control_intervention": [
+            0.03476537764072418,
+            0.03476537764072418
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            0.9583333333333334,
+            0.9583333333333334
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ],
+            [
+              -4.030062198638916,
+              -2.9711403846740723
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        },
+        "hb": {
+          "estimated_shape_delta_RMS": 0.26586002111434937,
+          "estimated_log_amplitude_delta": -0.1833486557006836,
+          "all_exported_outputs_bitwise_identical": false,
+          "outputs_bitwise_equal_by_key": {
+            "shape_mean": false,
+            "shape_log_sd": false,
+            "log_amplitude_mean": false,
+            "log_amplitude_log_sd": false,
+            "observation_code": false,
+            "reconstruction": false,
+            "time_support": true,
+            "channel_support": true,
+            "log_amplitude_standardized_mean": false,
+            "shape_sd": false,
+            "log_amplitude_sd": false,
+            "reconstruction_observation_coordinate": false
+          },
+          "shape_MAE_control_intervention": [
+            0.06123137101531029,
+            0.20147399604320526
+          ],
+          "shape_95_point_marginal_case_coverage": [
+            1.0,
+            0.5416666666666666
+          ],
+          "log_amplitude_95_intervals_control_intervention": [
+            [
+              -3.917144536972046,
+              -3.0207321643829346
+            ],
+            [
+              -4.10614013671875,
+              -3.1984336376190186
+            ]
+          ],
+          "log_amplitude_95_case_covered_control_intervention": [
+            true,
+            true
+          ]
+        }
+      },
+      "true_component_source_Pearson_correlation": 0.8829964900223256,
+      "true_component_source_reference_RMS_inner_product": 0.8499999988262779
+    }
+  },
+  "uncertainty_contract": {
+    "continuous": "selection_calibrated_Gaussian_predictive_point_marginals",
+    "level": 0.95,
+    "joint_trajectory_band": false,
+    "counterfactual_difference_intervals": false,
+    "case_coverage_interpretation": "120_dependent_points_in_one_preselected_case_not_population_coverage"
+  },
+  "model_observation_contract": {
+    "decoder": "D(concat(own_source_mean, own_observation_code))",
+    "semantic_reconstruction_gradient": "detached_for_semantically_supervised_arms",
+    "reconstruction_target": "complete_own_modality_observation_in_train_normalized_coordinate",
+    "physical_additive_semantic_observation_decomposition": false,
+    "displayed_reconstruction": "inverse_transform_of_same_frozen_training_normalizer",
+    "generative_Hb_decomposition": "truth_Hb_gain_times_physical_response_plus_processed_common_component_plus_paired_noise"
+  },
+  "scientific_boundary": "generator_conditional_synthetic_cases_no_measured_or_unique_physiological_source_qualification",
+  "writes_to_evidence_run": false,
+  "fitting_or_training_performed": false,
+  "raster_export": {
+    "format": "PNG",
+    "dpi": 220,
+    "normal_figure_inches": [
+      12,
+      5.1
+    ],
+    "amplitude_figure_inches": [
+      12,
+      5.1
+    ],
+    "amplitude_label_font_pt": 12,
+    "amplitude_label_font_pt_in_4_72_inch_slide_frame": 11.105882352941178,
+    "wide_v2_minimum_font_pt": 12,
+    "wide_v2_minimum_font_pt_in_4_72_inch_slide_frame": 11.105882352941178,
+    "wide_v2_source_annotation": "notes_and_manifest_only",
+    "wide_v2_legend": "figure_level_shared_top"
+  },
+  "retained_previous_draft_figures": [
+    "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_01_baseline.png",
+    "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_02_shape_vs_eeg_gain.png",
+    "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_03_amplitude_vs_gains.png",
+    "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_04_exact_joint_alias.png",
+    "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_05_ood_impulse.png",
+    "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_06_tau_response.png",
+    "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/syn_wave_07_correlated_hb.png"
+  ]
+}

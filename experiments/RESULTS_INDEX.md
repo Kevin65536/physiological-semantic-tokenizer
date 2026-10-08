@@ -18,6 +18,23 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Git retention update — 2026-10-08
+
+The response-discovery and strengthening suites retain their executable contracts,
+implementation and tests together with the following selected evidence in Git.
+All newly registered evidence paths and the final response report's 57 source PNGs
+are included. Existing dated evidence files are retained without modification.
+
+| Suite | Retained in Git | Retained locally for audit/replay |
+| --- | --- | --- |
+| Response discovery, 2026-10-02 | Resolved contract, metadata split and plan, calibration, source snapshots/identities, launch/completion and failure logs, aggregate SSM comparisons/nulls, tokenizer summaries and paired changes, public-probe records/selection, final v2 PPT/PDF and figure provenance | Per-cell SSM tables/records/arrays, synthetic tokenizer per-example records, prepared/feature/mode caches, selected encoder weights and resumable optimizer checkpoints, pilot payloads and earlier report exports |
+| Strengthening, 2026-10-03 v1/v2/v3 | Prelaunch failure record, original and correction source/launch identities, input/split/calibration records, original summaries/decisions, v3 measured and aggregate synthetic tables, response/spatial/profile/risk comparisons, correction record and verification | Per-task training/evaluation/profile payloads and full synthetic metric tables; v3 still refers to the retained local v2 arrays |
+| Continuous-state S3, 2026-10-03 | Frozen contract/source, scales, pilot/launch/completion records, all terminal task JSON, state/profile/paired tables and verification | Continuous truth and fitted trajectory arrays and compiled caches |
+
+A checkout supports review of the reported comparisons and failure denominators;
+replaying individual fits or regenerating all report panels requires the local
+payloads listed above. These payloads remain unchanged on disk.
+
 ## Git retention update — 2026-10-03
 
 This update removes 165 historical run files (130.8 MiB of uncompressed
@@ -45,6 +62,81 @@ protected comparison packages and sealed R-series material keep their boundaries
 Generated runs are ignored as one directory. Add any newly selected evidence by
 explicit file path with `git add -f -- <file>` and describe its reading route here;
 adding another run does not require another `.gitignore` exception list.
+
+## Finite response and independent observations — 2026-10-03
+
+The [strengthening contract](configs/physiology_semantic_tokenizer/ssm_strengthening_v1.yaml)
+and [owning protocol](../docs/EXPERIMENT_PLAN.md#有限响应适配与独立观测约束2026-10-03)
+define response selection, cross-fitted spatial residual readouts, mechanism
+controls and the development factorial. Use the
+[versioned evaluation summary](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v3/summary.json),
+[paired endpoints](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v3/paired_hidden_metrics.csv),
+[decision](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v3/decision.json)
+and [verification](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v3/verification.json).
+The [correction record](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v3/correction.json)
+explains why raw-observation ridge predictions must not inherit SSM fit failures.
+This version reuses all other fitted results and their original arrays; it does
+not represent another training campaign.
+
+Keep the [original fit run](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v2/run_manifest.json)
+with its frozen sources, input hashes, training/selection identities, calibration
+objects, terminal task records, decomposition/profile arrays, resource pilot and
+supervisor logs. The v3 array paths depend explicitly on v2. Retain the
+[prelaunch failure](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v1/run_manifest.json)
+and its validation/source record; that version launched no scientific fits.
+Response curves, spatial maps, mechanism attribution, null comparisons,
+confounding profiles and risk/coverage tables accompany the v3 summary.
+
+The separately versioned [continuous-state contract](configs/physiology_semantic_tokenizer/ssm_state_continuity_v1.yaml)
+has its own [summary](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_s3_v1/summary.json),
+[state comparisons](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_s3_v1/state_continuity.csv),
+[restricted profiles](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_s3_v1/confounding_profiles.csv)
+and [verification](runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_s3_v1/verification.json).
+Retain its continuous truth/fit arrays, training scales, source identity,
+validation and supervised launch. The phase-one decision's S3 field describes
+that run's scope; this separate synthetic S3 run is indexed here and in the
+registry. It uses future context for offline smoothing, with no continuous
+measured-data confirmation. The reused public panel remains development evidence;
+neither run authorizes fresh/protected evaluation or physical-teacher promotion.
+
+## Response dynamics and continuous semantics — 2026-10-02 run
+
+The [response contract](configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml)
+and [owning protocol](../docs/EXPERIMENT_PLAN.md#响应动力学与连续语义原型2026-10-02)
+define the EEG-only response comparisons, synthetic counterfactuals, independent
+modality encoders and frozen public readouts. The
+[terminal summary](runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/summary.json)
+and [verification](runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/verification.json)
+index execution and denominators. Retain the resolved contract, metadata split,
+per-cell records, calibration choices, supervised launch/resource records, failed
+training-resume logs, and immutable preparation/training/analysis source snapshots.
+
+Use the [dataset-equal paired comparisons](runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/dataset_equal_comparisons.csv)
+and [primary null family](runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/primary_null_specificity.csv)
+for measured SSM endpoints. The
+[synthetic counterfactual table](runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/synthetic_counterfactual_response.csv)
+preserves paired mechanism responses. The
+[tokenizer summary](runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/summary.json)
+contains every fit, synthetic evaluation and public-probe record; the
+[scenario/variant table](runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/scenario_variant_seed_summary.csv)
+keeps intervention and control separate and labels optimization seeds as repeats
+of the same evaluation identities. Per-model `paired_changes.csv` retains false
+and true semantic changes. Public-probe `records.csv`, `selection.json` and
+`record.json` retain the common-context, O→O+S and equal-capacity comparisons.
+
+The dated [detailed presentation](../docs/report/20261003_semantic_response_discovery_v1/SSM_SEMANTIC_RESPONSE_REPORT_v2.pptx)
+and [bitmap-figure PDF](../docs/report/20261003_semantic_response_discovery_v1/SSM_SEMANTIC_RESPONSE_REPORT_v2.pdf)
+connect the discussion, frozen design, aggregate results, native waveforms and
+conditional component plots. The [export validation](../docs/report/20261003_semantic_response_discovery_v1/export_validation.json)
+and per-slide source manifest accompany the communication export; the run records
+remain the scientific evidence owner.
+
+Keep selected encoder checkpoints for frozen representation reuse and probe
+reproduction. Versioned `features/batch_v2` adds reversible training-gain
+provenance without overwriting the earlier feature batches. Reconstructed units
+refer to parent prepared coordinates, not raw native waveforms. This is exposed
+public-cohort development evidence; synthetic recovery does not confer measured
+physiological semantics, teacher qualification or VQ promotion.
 
 ## Regional spectral shared drivers — 2026-10-02
 

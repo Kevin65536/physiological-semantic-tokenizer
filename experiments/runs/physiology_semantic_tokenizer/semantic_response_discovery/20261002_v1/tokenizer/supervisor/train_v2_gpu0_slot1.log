@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py", line 1146, in <module>
+    main()
+  File "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py", line 1136, in main
+    fit(args.output, arm, seed, options, identity, device, pilot=args.stage == "pilot")
+  File "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py", line 414, in fit
+    torch.cuda.set_rng_state_all(checkpoint["cuda_rng"])
+  File "/SSD_2/pid-mcm-implementation/.venv/lib/python3.12/site-packages/torch/cuda/random.py", line 89, in set_rng_state_all
+    set_rng_state(state, i)
+  File "/SSD_2/pid-mcm-implementation/.venv/lib/python3.12/site-packages/torch/cuda/random.py", line 79, in set_rng_state
+    _lazy_call(cb)
+  File "/SSD_2/pid-mcm-implementation/.venv/lib/python3.12/site-packages/torch/cuda/__init__.py", line 355, in _lazy_call
+    callable()
+  File "/SSD_2/pid-mcm-implementation/.venv/lib/python3.12/site-packages/torch/cuda/random.py", line 77, in cb
+    default_generator.set_state(new_state)
+TypeError: RNG state must be a torch.ByteTensor

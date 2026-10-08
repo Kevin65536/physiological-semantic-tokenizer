@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-10-02T16:25:54.059791+00:00",
+  "commands": [
+    [
+      "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/evaluate_semantic_response_discovery.py",
+      "--config",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+      "--project-root",
+      "/SSD_2/pid-mcm-implementation",
+      "--run-root",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1",
+      "--stage",
+      "export-features",
+      "--workers",
+      "1"
+    ],
+    [
+      "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/evaluate_semantic_response_discovery.py",
+      "--config",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+      "--project-root",
+      "/SSD_2/pid-mcm-implementation",
+      "--run-root",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1",
+      "--stage",
+      "summarize",
+      "--workers",
+      "1"
+    ]
+  ],
+  "systemd_argv": [
+    "systemd-run",
+    "--user",
+    "--unit",
+    "pid-semantic-response-analysis-export-20261002",
+    "--property=WorkingDirectory=/SSD_2/pid-mcm-implementation",
+    "--property=StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/supervisor/analysis_export.log",
+    "--property=StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/supervisor/analysis_export.log",
+    "--property=RemainAfterExit=yes",
+    "--property=CPUAccounting=yes",
+    "--property=MemoryAccounting=yes",
+    "--setenv=OMP_NUM_THREADS=1",
+    "--setenv=OPENBLAS_NUM_THREADS=1",
+    "--setenv=MKL_NUM_THREADS=1",
+    "--setenv=NUMEXPR_NUM_THREADS=1",
+    "--setenv=PYTHONUNBUFFERED=1",
+    "--setenv=SYSTEMD_UNIT=pid-semantic-response-analysis-export-20261002.service",
+    "/bin/bash",
+    "-c",
+    "set -e\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/evaluate_semantic_response_discovery.py --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --project-root /SSD_2/pid-mcm-implementation --run-root /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1 --stage export-features --workers 1\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/scripts/evaluate_semantic_response_discovery.py --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_analysis_v1/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --project-root /SSD_2/pid-mcm-implementation --run-root /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1 --stage summarize --workers 1"
+  ],
+  "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/supervisor/analysis_export.log",
+  "unit": "pid-semantic-response-analysis-export-20261002.service",
+  "purpose": "versioned_gain_provenance_export_and_counterfactual_aggregation_repair_no_SSM_refit"
+}

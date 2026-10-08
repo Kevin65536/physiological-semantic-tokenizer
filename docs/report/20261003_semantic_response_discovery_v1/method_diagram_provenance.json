@@ -1,0 +1,47 @@
+{
+  "figures": [
+    {
+      "key": "method_evidence_chain",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/method_evidence_chain.png",
+      "title": "讨论如何转化为实验，而不是直接转化为结论",
+      "caption": "本报告把讨论、具体实现、对照端点和科学判读逐一对应；历史结果只作为动机。",
+      "source": "docs/METHOD_RATIONALE.md; docs/EXPERIMENT_PLAN.md; frozen run summary.json"
+    },
+    {
+      "key": "method_raw_lineage",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/method_raw_lineage.png",
+      "title": "成分分离必须回到同一窗口与同一观测坐标",
+      "caption": "EEG 的模式贡献可在 log-power 特征中相加，不能直接与高频原始电压相加。",
+      "source": "docs/DATA_CONTRACT.md; parent prepared record identities; unified_physiology.py"
+    },
+    {
+      "key": "method_visibility",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/method_visibility.png",
+      "title": "同一时间轴上区分可见、隐藏和评分支持",
+      "caption": "前缀 40 = 10 s；零前缀不用目标 Hb token。parent 非因果处理与全窗 EEG 仍使端点属于离线补全。",
+      "source": "semantic_response_discovery_v1.yaml: measured; public_encoding_view; public_raw_context"
+    },
+    {
+      "key": "method_ssm_inference",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/method_ssm_inference.png",
+      "title": "新推断制度：先定 EEG 驱动，再用 Hb 前缀校准",
+      "caption": "与历史全窗联合拟合的可见信息不同，因此历史重建数字不能直接当作本轮同条件基线。",
+      "source": "src/inference/semantic_response_ssm.py; frozen evaluation runner"
+    },
+    {
+      "key": "method_tokenizer",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/method_tokenizer.png",
+      "title": "semantic–observation 原型：输入独立，输出职责明确",
+      "caption": "解码器是非线性联合解码；S 与 O 不是可直接相加的“神经波形”和“噪声波形”。",
+      "source": "src/tokenizers/semantic_response_tokenizer.py: _ModalityBranch / response_loss"
+    },
+    {
+      "key": "method_public_probe",
+      "path": "/SSD_2/pid-mcm-implementation/docs/report/20261003_semantic_response_discovery_v1/figures/method_public_probe.png",
+      "title": "实测探针同时控制可见上下文和表征总容量",
+      "caption": "context_raw 只是“未编码的 prepared 上下文”，并不是原生 EEG 电压或原始光强。",
+      "source": "train_semantic_response_tokenizer.py: probe / fit_public_probe; public_probes/*/selection.json"
+    }
+  ],
+  "schema": "semantic_response_method_diagrams_v1"
+}

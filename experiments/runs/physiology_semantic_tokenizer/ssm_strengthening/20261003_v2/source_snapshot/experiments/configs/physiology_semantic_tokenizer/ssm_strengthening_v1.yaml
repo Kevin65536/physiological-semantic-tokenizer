@@ -1,0 +1,89 @@
+schema: ssm_strengthening_v1
+experiment_id: SSM-STRENGTHEN-v1
+seed: 20261003
+artifact_root: experiments/runs/physiology_semantic_tokenizer/ssm_strengthening
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1
+attribution_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1
+source_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml
+data_boundary: exact_public_parent_panel_training_selection_and_synchronous_donors
+protected_data: forbidden
+scope: phase1_S0_S1_S2_fixed_S4_and_development_factorial
+tensor: {steps: 120, dt_s: 0.25, components: [EEG_logpower_PCA, relative_HbO, relative_HbR], state_order: [r, s, f, v, p, q]}
+response:
+  tau_s: [1.0, 2.0, 4.0]
+  kappa: [0.32, 0.64, 1.28]
+  families: [H0, Htau, Hkappa, Htau_kappa]
+  selection_modes: [HbO_hidden, HbR_hidden, center_Hb]
+  selection: subject_equal_hidden_training_SD_NRMSE_over_B0_and_BC_failure_penalty_100
+  tie_break: H0_then_fewer_changed_parameters_then_candidate_order
+  level: dataset_target_region_outer_fold
+  crossfit_folds: 3
+  crossfit_selection: complementary_training_subjects_B0_hidden_scores
+  evaluation_parameters: frozen_no_window_selection
+  causal_readout: deferred_until_response_library_failure_review
+observation:
+  modes: 4
+  rho: 0.35
+  ranks: [1, 2]
+  ridge_weights: [0.1, 1.0, 10.0]
+  donor_order: sorted_unique_site_and_distinct_Hb_pair
+  donor_residual: observed_minus_full_donor_physical_fit
+  target_training_residual: observed_minus_EEG_only_prediction_with_crossfit_response
+  temporal_support: processed_first_four_cosines_shared_projector
+  mapping: no_intercept_training_RMS_scaled_reduced_rank_ridge
+  selection: independent_Hb_pair_prediction_on_inner_selection
+  soft_correction: deferred_until_independent_prediction_and_attribution_pass
+  missing_donors: retain_failure_no_target_fallback
+synthetic:
+  train_repeats: 8
+  selection_repeats: 4
+  evaluation_repeats: 8
+  seed_streams: {train: 1101, selection: 1201, evaluation: 1301, pilot: 1401}
+  spectra: [slow, mixed]
+  initial: [rest, nonrest]
+  populations: {H0: [2.0, 0.64], Htau: [4.0, 0.64], Hkappa: [2.0, 1.28], Htau_kappa: [4.0, 1.28]}
+  training_scenarios: [shared_neural_only, common_colored, common_correlated]
+  scenarios: [shared_neural_only, common_colored, common_correlated, global_component_only, target_neural_only, donor_contamination, driver_amplitude, driver_amplitude_gain]
+  modes: [full, Hb_hidden, EEG_hidden]
+  driver_sd: 0.025
+  canonical_noise_sd: [0.00125, 0.00015, 0.00007]
+  common_sd: 0.025
+  coefficient_sd: [0.02, 0.015, 0.01, 0.005]
+  coefficient_multiplier: 2.0
+  oracles: [true_response, true_component, both]
+measured:
+  panel: unchanged_72_windows_18_subjects_development_only
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation]
+  coordinates: frozen_parent_outer_PCA_SD_conditional_not_fully_nested
+  training_windows: 18
+  selection_windows: 6
+  modes: [full, HbO_hidden, HbR_hidden, center_Hb, Hb_hidden, EEG_hidden]
+  baselines: [B0, BC, D-trained, S-mean, spatial_ridge, training_template]
+  nulls: [wrong_training_subject_task_condition_matched, nonwrapping_shift_12s]
+  shift_steps: 48
+  fitting_scope: offline_processed_feature_completion_not_native_causal_prediction
+profiles:
+  groups: [driver, initial, response, all]
+  offsets_sd: [-0.5, -0.25, 0.0, 0.25, 0.5]
+  near_objective_fraction: 0.05
+  measured_windows_per_dataset: 2
+  synthetic_repeat: 0
+  modes: [full, center_Hb]
+  interpretation: engineering_profiles_not_confidence_intervals
+  state_continuity_trigger: initial_data_overlap_ge_0.95_near_component_change_ge_0.25_SD_initial_tangent_RMS_share_over_half
+risk:
+  index: EEG_only_physical_Hb_difference_H0_vs_selected_response
+  calibration: selection_seed_median_sensitivity_only
+  error_threshold_sd: 0.25
+  coverages: [0.25, 0.5, 0.75, 1.0]
+  interpretation: finite_candidate_sensitivity_screen_requires_independent_truth_validation_not_posterior
+gates:
+  hidden_relative_improvement_min: 0.05
+  synthetic_error_increase_max_sd: 0.02
+  failure_rate_increase_max: 0.01
+  bootstrap_repeats: 1000
+  numerical_failure_penalty: 100.0
+  attribution: physical_driver_component_separately_and_true_change_signed_projections
+  confirmation: requires_new_identity_inventory_and_frozen_candidate_no_automatic_parent_reuse
+  stopping: all_phase1_cells_once_fixed_budget_no_retry_to_replace_failures_no_test_tuning
+resources: {max_workers: 48, numerical_threads: 1, in_flight_per_worker: 2, supervisor: user_systemd, task_timeout_s: 1800}

@@ -1,0 +1,2156 @@
+{
+  "timestamp": "2026-10-02T15:59:32.906163+00:00",
+  "source_snapshot": "source_snapshot_training_v2",
+  "operational_resource_amendment": "Supersedes nominal GPU_policy one_training_process_per_GPU only for scheduling after measured throughput. Frozen scientific configuration, twelve fits, model, loss, data, seeds,160epoch budget and selection unchanged; no evaluation results used.",
+  "previous_units_stopped": [
+    "pid-semantic-response-tokenizer-train-gpu0-20261002.service",
+    "pid-semantic-response-tokenizer-train-gpu1-20261002.service"
+  ],
+  "checkpoint_resume": [
+    {
+      "arm": "point_restricted_generator",
+      "seed": 101,
+      "last_complete_epoch": 117,
+      "status_before_resume": "complete",
+      "record_before_resume": {
+        "status": "complete",
+        "arm": "point_restricted_generator",
+        "seed": 101,
+        "pilot": false,
+        "config_identity": "9a080dcd51d20f9e97952073dc2f964034e311f78a00a1b40db6214634c0eb0e",
+        "device": "cuda:0",
+        "train_records": 8192,
+        "selection_records": 2048,
+        "train_base_ids": 512,
+        "selection_base_ids": 128,
+        "parameter_count": 458168,
+        "mean_bottleneck_per_modality": 1081,
+        "uncertainty_head_parameters_present_all_arms": true,
+        "epochs_budget": 160,
+        "amplitude_normalization": {
+          "mean": -3.6703235701274397,
+          "scale": 0.44022013875619104,
+          "partition": "train"
+        },
+        "metadata": {
+          "schema": "semantic_response_tokenizer_v1",
+          "continuous": true,
+          "source_coordinate": "synthetic_reference_centered_shape_and_train_standardized_log_amplitude",
+          "source_status": "generator_conditional_measured_physiology_unqualified",
+          "encoder_context": "offline_bidirectional_window",
+          "modality_inputs": {
+            "eeg": "own_30_features_and_mask",
+            "hb": "own_HbO_HbR_and_mask"
+          },
+          "decoder_condition": "own_source_mean_and_own_observation_code",
+          "reconstruction_gradient_to_source": false,
+          "patches": 12,
+          "aggregation": "mean_of_directly_supported_continuous_predictions",
+          "uncertainty": "none",
+          "network_log_SD_bounds": [
+            -8.0,
+            4.0
+          ],
+          "patch_uncertainty": "perfect_positive_correlation_SD_upper_bound_not_calibrated_interval",
+          "qualified_for_measured_physiology": false
+        },
+        "selection_endpoint": "frozen_semantic_proper_loss_plus_own_reconstruction",
+        "completed_epochs": 117,
+        "best_selection_loss": 0.08423449820838869,
+        "elapsed_s": 511.14124145405367,
+        "history": [
+          {
+            "epoch": 1,
+            "train_loss": 0.5129490685649216,
+            "selection_loss": 0.16710330871865153,
+            "elapsed_s": 4.5759356170892715
+          },
+          {
+            "epoch": 2,
+            "train_loss": 0.15792151622008532,
+            "selection_loss": 0.14342005690559745,
+            "elapsed_s": 4.211303122807294
+          },
+          {
+            "epoch": 3,
+            "train_loss": 0.13625780050642788,
+            "selection_loss": 0.12410509027540684,
+            "elapsed_s": 4.131252225954086
+          },
+          {
+            "epoch": 4,
+            "train_loss": 0.12042667472269386,
+            "selection_loss": 0.11320650787092745,
+            "elapsed_s": 4.156941942870617
+          },
+          {
+            "epoch": 5,
+            "train_loss": 0.11248716508271173,
+            "selection_loss": 0.10951781901530921,
+            "elapsed_s": 4.122914847917855
+          },
+          {
+            "epoch": 6,
+            "train_loss": 0.10739202843979001,
+            "selection_loss": 0.10599246015772223,
+            "elapsed_s": 4.180059096775949
+          },
+          {
+            "epoch": 7,
+            "train_loss": 0.104671734967269,
+            "selection_loss": 0.10605066525749862,
+            "elapsed_s": 4.0967058152891695
+          },
+          {
+            "epoch": 8,
+            "train_loss": 0.10253128060139716,
+            "selection_loss": 0.10319577087648213,
+            "elapsed_s": 4.1365139172412455
+          },
+          {
+            "epoch": 9,
+            "train_loss": 0.1018651679623872,
+            "selection_loss": 0.1027747408952564,
+            "elapsed_s": 4.134761217981577
+          },
+          {
+            "epoch": 10,
+            "train_loss": 0.0994327055523172,
+            "selection_loss": 0.10035219392739236,
+            "elapsed_s": 4.128779529128224
+          },
+          {
+            "epoch": 11,
+            "train_loss": 0.0985544536379166,
+            "selection_loss": 0.09970920090563595,
+            "elapsed_s": 4.136106685735285
+          },
+          {
+            "epoch": 12,
+            "train_loss": 0.09759974759072065,
+            "selection_loss": 0.09816672932356596,
+            "elapsed_s": 4.179147091228515
+          },
+          {
+            "epoch": 13,
+            "train_loss": 0.0974219519412145,
+            "selection_loss": 0.09705861611291766,
+            "elapsed_s": 4.182460165116936
+          },
+          {
+            "epoch": 14,
+            "train_loss": 0.09636168257566169,
+            "selection_loss": 0.09694003872573376,
+            "elapsed_s": 4.129648256115615
+          },
+          {
+            "epoch": 15,
+            "train_loss": 0.0962617794284597,
+            "selection_loss": 0.0968917382415384,
+            "elapsed_s": 4.110699787270278
+          },
+          {
+            "epoch": 16,
+            "train_loss": 0.09535103593952954,
+            "selection_loss": 0.09407296683639288,
+            "elapsed_s": 4.103701174259186
+          },
+          {
+            "epoch": 17,
+            "train_loss": 0.09479828330222517,
+            "selection_loss": 0.09242878691293299,
+            "elapsed_s": 4.210069980937988
+          },
+          {
+            "epoch": 18,
+            "train_loss": 0.09472644346533343,
+            "selection_loss": 0.09615368931554258,
+            "elapsed_s": 4.195138223003596
+          },
+          {
+            "epoch": 19,
+            "train_loss": 0.09591471072053537,
+            "selection_loss": 0.0950774543453008,
+            "elapsed_s": 4.362008757889271
+          },
+          {
+            "epoch": 20,
+            "train_loss": 0.09445875411620364,
+            "selection_loss": 0.09495766717009246,
+            "elapsed_s": 4.373729116283357
+          },
+          {
+            "epoch": 21,
+            "train_loss": 0.09311480907490477,
+            "selection_loss": 0.09292401559650898,
+            "elapsed_s": 4.3394435928203166
+          },
+          {
+            "epoch": 22,
+            "train_loss": 0.0927962483256124,
+            "selection_loss": 0.093704764964059,
+            "elapsed_s": 4.347155114635825
+          },
+          {
+            "epoch": 23,
+            "train_loss": 0.09370281739393249,
+            "selection_loss": 0.0941749035846442,
+            "elapsed_s": 4.332508397754282
+          },
+          {
+            "epoch": 24,
+            "train_loss": 0.09356849605683237,
+            "selection_loss": 0.09306597174145281,
+            "elapsed_s": 4.323021580930799
+          },
+          {
+            "epoch": 25,
+            "train_loss": 0.09256700449623168,
+            "selection_loss": 0.09157011401839554,
+            "elapsed_s": 4.411013134755194
+          },
+          {
+            "epoch": 26,
+            "train_loss": 0.09166077739791945,
+            "selection_loss": 0.09236223972402513,
+            "elapsed_s": 4.345562137197703
+          },
+          {
+            "epoch": 27,
+            "train_loss": 0.0911828235257417,
+            "selection_loss": 0.09328700019977987,
+            "elapsed_s": 4.419649813789874
+          },
+          {
+            "epoch": 28,
+            "train_loss": 0.09221785387489945,
+            "selection_loss": 0.0923556515481323,
+            "elapsed_s": 4.46632681414485
+          },
+          {
+            "epoch": 29,
+            "train_loss": 0.09151315118651837,
+            "selection_loss": 0.0928936735726893,
+            "elapsed_s": 4.340583985671401
+          },
+          {
+            "epoch": 30,
+            "train_loss": 0.09691261328407563,
+            "selection_loss": 0.09991318639367819,
+            "elapsed_s": 4.215291850734502
+          },
+          {
+            "epoch": 31,
+            "train_loss": 0.09196869994048029,
+            "selection_loss": 0.09516556118614972,
+            "elapsed_s": 4.364739877171814
+          },
+          {
+            "epoch": 32,
+            "train_loss": 0.09048913884907961,
+            "selection_loss": 0.09559307410381734,
+            "elapsed_s": 4.362309006974101
+          },
+          {
+            "epoch": 33,
+            "train_loss": 0.0905776560830418,
+            "selection_loss": 0.09091354277916253,
+            "elapsed_s": 4.414334600791335
+          },
+          {
+            "epoch": 34,
+            "train_loss": 0.0915184275363572,
+            "selection_loss": 0.09253619331866503,
+            "elapsed_s": 4.3230173867195845
+          },
+          {
+            "epoch": 35,
+            "train_loss": 0.09064800193300471,
+            "selection_loss": 0.09244559449143708,
+            "elapsed_s": 4.387054821010679
+          },
+          {
+            "epoch": 36,
+            "train_loss": 0.08977485430659726,
+            "selection_loss": 0.09194846614263952,
+            "elapsed_s": 4.371669956017286
+          },
+          {
+            "epoch": 37,
+            "train_loss": 0.0896642820443958,
+            "selection_loss": 0.09214483643881977,
+            "elapsed_s": 4.335006663110107
+          },
+          {
+            "epoch": 38,
+            "train_loss": 0.08942233206471428,
+            "selection_loss": 0.09195476933382452,
+            "elapsed_s": 4.358359003905207
+          },
+          {
+            "epoch": 39,
+            "train_loss": 0.0896163668949157,
+            "selection_loss": 0.09040262899361551,
+            "elapsed_s": 4.503176487982273
+          },
+          {
+            "epoch": 40,
+            "train_loss": 0.08898803050396964,
+            "selection_loss": 0.09103504824452102,
+            "elapsed_s": 4.413175429217517
+          },
+          {
+            "epoch": 41,
+            "train_loss": 0.08941953559406102,
+            "selection_loss": 0.09027791349217296,
+            "elapsed_s": 4.484286728315055
+          },
+          {
+            "epoch": 42,
+            "train_loss": 0.08911736894515343,
+            "selection_loss": 0.09192037000320852,
+            "elapsed_s": 4.43303573038429
+          },
+          {
+            "epoch": 43,
+            "train_loss": 0.08881810563616455,
+            "selection_loss": 0.08982349815778434,
+            "elapsed_s": 4.4847021088935435
+          },
+          {
+            "epoch": 44,
+            "train_loss": 0.08919826653436758,
+            "selection_loss": 0.0923201683908701,
+            "elapsed_s": 4.413134280126542
+          },
+          {
+            "epoch": 45,
+            "train_loss": 0.08870585082331672,
+            "selection_loss": 0.09145548264496028,
+            "elapsed_s": 4.315806086640805
+          },
+          {
+            "epoch": 46,
+            "train_loss": 0.08928586257388815,
+            "selection_loss": 0.09011500142514706,
+            "elapsed_s": 4.3010179358534515
+          },
+          {
+            "epoch": 47,
+            "train_loss": 0.08762026549084112,
+            "selection_loss": 0.08820433216169477,
+            "elapsed_s": 4.335669768042862
+          },
+          {
+            "epoch": 48,
+            "train_loss": 0.08856438187649474,
+            "selection_loss": 0.08974037109874189,
+            "elapsed_s": 4.318851176649332
+          },
+          {
+            "epoch": 49,
+            "train_loss": 0.08855131757445633,
+            "selection_loss": 0.0910970161203295,
+            "elapsed_s": 4.359577669762075
+          },
+          {
+            "epoch": 50,
+            "train_loss": 0.08695968321990222,
+            "selection_loss": 0.09107722225598991,
+            "elapsed_s": 4.365928523708135
+          },
+          {
+            "epoch": 51,
+            "train_loss": 0.08735577517654747,
+            "selection_loss": 0.09015868557617068,
+            "elapsed_s": 4.384116880130023
+          },
+          {
+            "epoch": 52,
+            "train_loss": 0.08744477812433615,
+            "selection_loss": 0.09157100436277688,
+            "elapsed_s": 4.344505792018026
+          },
+          {
+            "epoch": 53,
+            "train_loss": 0.08876654398045503,
+            "selection_loss": 0.08885968755930662,
+            "elapsed_s": 4.306987210176885
+          },
+          {
+            "epoch": 54,
+            "train_loss": 0.0873718056245707,
+            "selection_loss": 0.0895264025311917,
+            "elapsed_s": 4.2713036010973155
+          },
+          {
+            "epoch": 55,
+            "train_loss": 0.08684345043729991,
+            "selection_loss": 0.08869976061396301,
+            "elapsed_s": 4.0817895219661295
+          },
+          {
+            "epoch": 56,
+            "train_loss": 0.08642351132584736,
+            "selection_loss": 0.08715512533672154,
+            "elapsed_s": 4.071466055698693
+          },
+          {
+            "epoch": 57,
+            "train_loss": 0.08586859886418097,
+            "selection_loss": 0.09002929367125034,
+            "elapsed_s": 4.055577263701707
+          },
+          {
+            "epoch": 58,
+            "train_loss": 0.08682030951604247,
+            "selection_loss": 0.08955290378071368,
+            "elapsed_s": 4.079119426198304
+          },
+          {
+            "epoch": 59,
+            "train_loss": 0.08504752643057145,
+            "selection_loss": 0.0863323921803385,
+            "elapsed_s": 4.138003398198634
+          },
+          {
+            "epoch": 60,
+            "train_loss": 0.08573187241563573,
+            "selection_loss": 0.08775546168908477,
+            "elapsed_s": 4.151893806643784
+          },
+          {
+            "epoch": 61,
+            "train_loss": 0.08541835361393169,
+            "selection_loss": 0.08911867043934762,
+            "elapsed_s": 4.129723957274109
+          },
+          {
+            "epoch": 62,
+            "train_loss": 0.08476423841784708,
+            "selection_loss": 0.08711880864575505,
+            "elapsed_s": 4.103633621241897
+          },
+          {
+            "epoch": 63,
+            "train_loss": 0.08522835280746222,
+            "selection_loss": 0.08728593587875366,
+            "elapsed_s": 4.13008800521493
+          },
+          {
+            "epoch": 64,
+            "train_loss": 0.0852572155999951,
+            "selection_loss": 0.09069556859321892,
+            "elapsed_s": 4.16645742719993
+          },
+          {
+            "epoch": 65,
+            "train_loss": 0.08518499846104532,
+            "selection_loss": 0.08797184308059514,
+            "elapsed_s": 4.39864923292771
+          },
+          {
+            "epoch": 66,
+            "train_loss": 0.08431834151269868,
+            "selection_loss": 0.08540247287601233,
+            "elapsed_s": 4.274522987194359
+          },
+          {
+            "epoch": 67,
+            "train_loss": 0.08272703606053255,
+            "selection_loss": 0.08932445500977337,
+            "elapsed_s": 4.356513987760991
+          },
+          {
+            "epoch": 68,
+            "train_loss": 0.08399715542327613,
+            "selection_loss": 0.08877392625436187,
+            "elapsed_s": 4.288506889715791
+          },
+          {
+            "epoch": 69,
+            "train_loss": 0.08390767400851473,
+            "selection_loss": 0.08717136876657605,
+            "elapsed_s": 4.385240651667118
+          },
+          {
+            "epoch": 70,
+            "train_loss": 0.0831900741904974,
+            "selection_loss": 0.08693636651150882,
+            "elapsed_s": 4.446046836208552
+          },
+          {
+            "epoch": 71,
+            "train_loss": 0.08363903182907961,
+            "selection_loss": 0.09487966890446842,
+            "elapsed_s": 4.378660251852125
+          },
+          {
+            "epoch": 72,
+            "train_loss": 0.08341021442902274,
+            "selection_loss": 0.08757764170877635,
+            "elapsed_s": 4.388509513810277
+          },
+          {
+            "epoch": 73,
+            "train_loss": 0.08328695798991248,
+            "selection_loss": 0.09008619794622064,
+            "elapsed_s": 4.3216548739001155
+          },
+          {
+            "epoch": 74,
+            "train_loss": 0.08226467599160969,
+            "selection_loss": 0.08576949778944254,
+            "elapsed_s": 4.349790032021701
+          },
+          {
+            "epoch": 75,
+            "train_loss": 0.08304692717501894,
+            "selection_loss": 0.0871605952270329,
+            "elapsed_s": 4.106869137845933
+          },
+          {
+            "epoch": 76,
+            "train_loss": 0.08251750172348693,
+            "selection_loss": 0.08624745043925941,
+            "elapsed_s": 4.115204059984535
+          },
+          {
+            "epoch": 77,
+            "train_loss": 0.08228321827482432,
+            "selection_loss": 0.08692920487374067,
+            "elapsed_s": 4.307052297983319
+          },
+          {
+            "epoch": 78,
+            "train_loss": 0.08254568759002723,
+            "selection_loss": 0.08652170817367733,
+            "elapsed_s": 4.389356954023242
+          },
+          {
+            "epoch": 79,
+            "train_loss": 0.08215210781781934,
+            "selection_loss": 0.08690842986106873,
+            "elapsed_s": 4.244157172739506
+          },
+          {
+            "epoch": 80,
+            "train_loss": 0.08223116479348391,
+            "selection_loss": 0.08713305275887251,
+            "elapsed_s": 4.245538187213242
+          },
+          {
+            "epoch": 81,
+            "train_loss": 0.0817218195006717,
+            "selection_loss": 0.0891653907019645,
+            "elapsed_s": 4.431398265063763
+          },
+          {
+            "epoch": 82,
+            "train_loss": 0.08091862322180532,
+            "selection_loss": 0.08477387740276754,
+            "elapsed_s": 4.460630016867071
+          },
+          {
+            "epoch": 83,
+            "train_loss": 0.08347083139233291,
+            "selection_loss": 0.08635534415952861,
+            "elapsed_s": 4.469338190276176
+          },
+          {
+            "epoch": 84,
+            "train_loss": 0.08197700884193182,
+            "selection_loss": 0.0871808638330549,
+            "elapsed_s": 4.424008856993169
+          },
+          {
+            "epoch": 85,
+            "train_loss": 0.08111777828889899,
+            "selection_loss": 0.08631248958408833,
+            "elapsed_s": 4.48947931593284
+          },
+          {
+            "epoch": 86,
+            "train_loss": 0.08156169403810054,
+            "selection_loss": 0.08624370489269495,
+            "elapsed_s": 4.242251713760197
+          },
+          {
+            "epoch": 87,
+            "train_loss": 0.08045136771397665,
+            "selection_loss": 0.08480769162997603,
+            "elapsed_s": 4.267992543056607
+          },
+          {
+            "epoch": 88,
+            "train_loss": 0.08007733509293757,
+            "selection_loss": 0.08734888187609613,
+            "elapsed_s": 4.270847126375884
+          },
+          {
+            "epoch": 89,
+            "train_loss": 0.08051091825473122,
+            "selection_loss": 0.0866010629106313,
+            "elapsed_s": 4.453064545057714
+          },
+          {
+            "epoch": 90,
+            "train_loss": 0.08195271212025546,
+            "selection_loss": 0.08586982195265591,
+            "elapsed_s": 4.49379940982908
+          },
+          {
+            "epoch": 91,
+            "train_loss": 0.0801011408038903,
+            "selection_loss": 0.08622555620968342,
+            "elapsed_s": 4.494735684711486
+          },
+          {
+            "epoch": 92,
+            "train_loss": 0.08101448195520788,
+            "selection_loss": 0.08612764719873667,
+            "elapsed_s": 4.47172891581431
+          },
+          {
+            "epoch": 93,
+            "train_loss": 0.08117354279966094,
+            "selection_loss": 0.08611282333731651,
+            "elapsed_s": 4.455164389219135
+          },
+          {
+            "epoch": 94,
+            "train_loss": 0.0809843844617717,
+            "selection_loss": 0.08621983067132533,
+            "elapsed_s": 4.449317639693618
+          },
+          {
+            "epoch": 95,
+            "train_loss": 0.08098433309351094,
+            "selection_loss": 0.08877547644078732,
+            "elapsed_s": 4.506087786983699
+          },
+          {
+            "epoch": 96,
+            "train_loss": 0.08027677136124112,
+            "selection_loss": 0.08570700255222619,
+            "elapsed_s": 4.508594315033406
+          },
+          {
+            "epoch": 97,
+            "train_loss": 0.0803016253921669,
+            "selection_loss": 0.08423449820838869,
+            "elapsed_s": 4.5046276319772005
+          },
+          {
+            "epoch": 98,
+            "train_loss": 0.07921427575638518,
+            "selection_loss": 0.08639854518696666,
+            "elapsed_s": 4.533574007917196
+          },
+          {
+            "epoch": 99,
+            "train_loss": 0.07895494811236858,
+            "selection_loss": 0.08567195222713053,
+            "elapsed_s": 4.508068013004959
+          },
+          {
+            "epoch": 100,
+            "train_loss": 0.07842320276540704,
+            "selection_loss": 0.0848054310772568,
+            "elapsed_s": 4.4941560118459165
+          },
+          {
+            "epoch": 101,
+            "train_loss": 0.07953673228621483,
+            "selection_loss": 0.08633666927926242,
+            "elapsed_s": 4.480922586750239
+          },
+          {
+            "epoch": 102,
+            "train_loss": 0.07925634272396564,
+            "selection_loss": 0.08574021281674504,
+            "elapsed_s": 4.486860183998942
+          },
+          {
+            "epoch": 103,
+            "train_loss": 0.07828665775014088,
+            "selection_loss": 0.08743760362267494,
+            "elapsed_s": 4.458564850967377
+          },
+          {
+            "epoch": 104,
+            "train_loss": 0.07929091225378215,
+            "selection_loss": 0.08687316509895027,
+            "elapsed_s": 4.4434600616805255
+          },
+          {
+            "epoch": 105,
+            "train_loss": 0.07920256795478053,
+            "selection_loss": 0.08951614843681455,
+            "elapsed_s": 4.417132065631449
+          },
+          {
+            "epoch": 106,
+            "train_loss": 0.07838105404516682,
+            "selection_loss": 0.0850222734734416,
+            "elapsed_s": 4.439279661048204
+          },
+          {
+            "epoch": 107,
+            "train_loss": 0.0773787081707269,
+            "selection_loss": 0.08608999592252076,
+            "elapsed_s": 4.348099241964519
+          },
+          {
+            "epoch": 108,
+            "train_loss": 0.07816939102485776,
+            "selection_loss": 0.08576686447486281,
+            "elapsed_s": 4.414525183849037
+          },
+          {
+            "epoch": 109,
+            "train_loss": 0.07724238504306413,
+            "selection_loss": 0.08559734560549259,
+            "elapsed_s": 4.4008881519548595
+          },
+          {
+            "epoch": 110,
+            "train_loss": 0.07937257277080789,
+            "selection_loss": 0.08540733670815825,
+            "elapsed_s": 4.36422682274133
+          },
+          {
+            "epoch": 111,
+            "train_loss": 0.07664599467534572,
+            "selection_loss": 0.085731829283759,
+            "elapsed_s": 4.369080408010632
+          },
+          {
+            "epoch": 112,
+            "train_loss": 0.07738015553331934,
+            "selection_loss": 0.08657222567126155,
+            "elapsed_s": 4.409154997207224
+          },
+          {
+            "epoch": 113,
+            "train_loss": 0.07832896316540428,
+            "selection_loss": 0.0889303726144135,
+            "elapsed_s": 4.35682666907087
+          },
+          {
+            "epoch": 114,
+            "train_loss": 0.07664360731723718,
+            "selection_loss": 0.08664846140891314,
+            "elapsed_s": 4.357529293745756
+          },
+          {
+            "epoch": 115,
+            "train_loss": 0.07620564365061,
+            "selection_loss": 0.08688938990235329,
+            "elapsed_s": 4.384776228107512
+          },
+          {
+            "epoch": 116,
+            "train_loss": 0.07760827825404704,
+            "selection_loss": 0.08939638477750123,
+            "elapsed_s": 4.426660198252648
+          },
+          {
+            "epoch": 117,
+            "train_loss": 0.07791374370572157,
+            "selection_loss": 0.08661045553162694,
+            "elapsed_s": 4.388166243210435
+          }
+        ],
+        "calibration": {
+          "eeg": {
+            "shape": 0.049939095973968506,
+            "amplitude": 0.13167220591472079,
+            "kind": "selection_constant_residual_scale_not_network_uncertainty",
+            "partition": "selection",
+            "records": 2048
+          },
+          "hb": {
+            "shape": 0.05694421008229256,
+            "amplitude": 0.09913372963046828,
+            "kind": "selection_constant_residual_scale_not_network_uncertainty",
+            "partition": "selection",
+            "records": 2048
+          }
+        },
+        "best_epoch": 97,
+        "examples_per_second": 1875.1451077102133,
+        "selected_checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/fits/point_restricted_generator/seed_101/selected.pt"
+      },
+      "checkpoint_sha256": "5f82aceb4dde640141401b77001dad38a865a4fab97e4b13d2315a204fa101b8",
+      "checkpoint_bytes": 7465099
+    },
+    {
+      "arm": "observation_only_capacity_matched",
+      "seed": 101,
+      "last_complete_epoch": 121,
+      "status_before_resume": "running",
+      "record_before_resume": {
+        "status": "running",
+        "arm": "observation_only_capacity_matched",
+        "seed": 101,
+        "pilot": false,
+        "config_identity": "9a080dcd51d20f9e97952073dc2f964034e311f78a00a1b40db6214634c0eb0e",
+        "device": "cuda:0",
+        "train_records": 8192,
+        "selection_records": 2048,
+        "train_base_ids": 512,
+        "selection_base_ids": 128,
+        "parameter_count": 458168,
+        "mean_bottleneck_per_modality": 1081,
+        "uncertainty_head_parameters_present_all_arms": true,
+        "epochs_budget": 160,
+        "amplitude_normalization": {
+          "mean": -3.6703235701274397,
+          "scale": 0.44022013875619104,
+          "partition": "train"
+        },
+        "metadata": {
+          "schema": "semantic_response_tokenizer_v1",
+          "continuous": true,
+          "source_coordinate": "synthetic_reference_centered_shape_and_train_standardized_log_amplitude",
+          "source_status": "generator_conditional_measured_physiology_unqualified",
+          "encoder_context": "offline_bidirectional_window",
+          "modality_inputs": {
+            "eeg": "own_30_features_and_mask",
+            "hb": "own_HbO_HbR_and_mask"
+          },
+          "decoder_condition": "own_source_mean_and_own_observation_code",
+          "reconstruction_gradient_to_source": true,
+          "patches": 12,
+          "aggregation": "mean_of_directly_supported_continuous_predictions",
+          "uncertainty": "none",
+          "network_log_SD_bounds": [
+            -8.0,
+            4.0
+          ],
+          "patch_uncertainty": "perfect_positive_correlation_SD_upper_bound_not_calibrated_interval",
+          "qualified_for_measured_physiology": false
+        },
+        "selection_endpoint": "frozen_semantic_proper_loss_plus_own_reconstruction",
+        "completed_epochs": 121,
+        "best_selection_loss": 0.06594045914243907,
+        "elapsed_s": 538.0864270841703,
+        "history": [
+          {
+            "epoch": 1,
+            "train_loss": 0.320084469509311,
+            "selection_loss": 0.10977351944893599,
+            "elapsed_s": 4.646746098063886
+          },
+          {
+            "epoch": 2,
+            "train_loss": 0.10036969365319237,
+            "selection_loss": 0.09445100044831634,
+            "elapsed_s": 4.318503374233842
+          },
+          {
+            "epoch": 3,
+            "train_loss": 0.08204191137338057,
+            "selection_loss": 0.08120103203691542,
+            "elapsed_s": 4.280149757862091
+          },
+          {
+            "epoch": 4,
+            "train_loss": 0.07033532016794197,
+            "selection_loss": 0.07159528194461018,
+            "elapsed_s": 4.363939697854221
+          },
+          {
+            "epoch": 5,
+            "train_loss": 0.0660893642634619,
+            "selection_loss": 0.06986418389715254,
+            "elapsed_s": 4.3333724602125585
+          },
+          {
+            "epoch": 6,
+            "train_loss": 0.06518944402341731,
+            "selection_loss": 0.06857703381683677,
+            "elapsed_s": 4.312582738697529
+          },
+          {
+            "epoch": 7,
+            "train_loss": 0.06403270261944272,
+            "selection_loss": 0.0681135089835152,
+            "elapsed_s": 4.353060948196799
+          },
+          {
+            "epoch": 8,
+            "train_loss": 0.06364067672984675,
+            "selection_loss": 0.067879184265621,
+            "elapsed_s": 4.383521915879101
+          },
+          {
+            "epoch": 9,
+            "train_loss": 0.06347452811314724,
+            "selection_loss": 0.06846042722463608,
+            "elapsed_s": 4.333414888009429
+          },
+          {
+            "epoch": 10,
+            "train_loss": 0.06414449313888326,
+            "selection_loss": 0.07250310690142214,
+            "elapsed_s": 4.337400845717639
+          },
+          {
+            "epoch": 11,
+            "train_loss": 0.06503941331175156,
+            "selection_loss": 0.06745584716554731,
+            "elapsed_s": 4.3607959491200745
+          },
+          {
+            "epoch": 12,
+            "train_loss": 0.06308256948250346,
+            "selection_loss": 0.06752759753726423,
+            "elapsed_s": 4.373100001830608
+          },
+          {
+            "epoch": 13,
+            "train_loss": 0.06296110051334836,
+            "selection_loss": 0.06695545418187976,
+            "elapsed_s": 4.39073410211131
+          },
+          {
+            "epoch": 14,
+            "train_loss": 0.06251737370621413,
+            "selection_loss": 0.06709650449920446,
+            "elapsed_s": 4.316429971717298
+          },
+          {
+            "epoch": 15,
+            "train_loss": 0.06267464006668888,
+            "selection_loss": 0.06723562278784811,
+            "elapsed_s": 4.391608513891697
+          },
+          {
+            "epoch": 16,
+            "train_loss": 0.06337054824689403,
+            "selection_loss": 0.0668566458625719,
+            "elapsed_s": 4.222493492998183
+          },
+          {
+            "epoch": 17,
+            "train_loss": 0.06250338652171195,
+            "selection_loss": 0.06776676059234887,
+            "elapsed_s": 4.635772680863738
+          },
+          {
+            "epoch": 18,
+            "train_loss": 0.06271174582070671,
+            "selection_loss": 0.06785764929372817,
+            "elapsed_s": 4.768201572820544
+          },
+          {
+            "epoch": 19,
+            "train_loss": 0.06267688004299998,
+            "selection_loss": 0.06698176288045943,
+            "elapsed_s": 4.656606856267899
+          },
+          {
+            "epoch": 20,
+            "train_loss": 0.07817992600030266,
+            "selection_loss": 0.08252049644943327,
+            "elapsed_s": 4.3343760701827705
+          },
+          {
+            "epoch": 21,
+            "train_loss": 0.0650435286515858,
+            "selection_loss": 0.06765987875405699,
+            "elapsed_s": 4.491521751042455
+          },
+          {
+            "epoch": 22,
+            "train_loss": 0.06261933009955101,
+            "selection_loss": 0.06690779747441411,
+            "elapsed_s": 4.526186648290604
+          },
+          {
+            "epoch": 23,
+            "train_loss": 0.06228936021216214,
+            "selection_loss": 0.06689292343799025,
+            "elapsed_s": 4.509464885108173
+          },
+          {
+            "epoch": 24,
+            "train_loss": 0.06235082578496076,
+            "selection_loss": 0.06764266965910792,
+            "elapsed_s": 4.5078512891195714
+          },
+          {
+            "epoch": 25,
+            "train_loss": 0.06385831235093065,
+            "selection_loss": 0.06672145845368505,
+            "elapsed_s": 4.36640530731529
+          },
+          {
+            "epoch": 26,
+            "train_loss": 0.06245518376817927,
+            "selection_loss": 0.06693197204731405,
+            "elapsed_s": 4.366955252829939
+          },
+          {
+            "epoch": 27,
+            "train_loss": 0.062190666125388816,
+            "selection_loss": 0.06659935030620545,
+            "elapsed_s": 4.349222430959344
+          },
+          {
+            "epoch": 28,
+            "train_loss": 0.06211212810012512,
+            "selection_loss": 0.06704469525720924,
+            "elapsed_s": 4.368291785940528
+          },
+          {
+            "epoch": 29,
+            "train_loss": 0.06293028997606598,
+            "selection_loss": 0.06743211823049933,
+            "elapsed_s": 4.40509450994432
+          },
+          {
+            "epoch": 30,
+            "train_loss": 0.06220299162669107,
+            "selection_loss": 0.06685107201337814,
+            "elapsed_s": 4.557472746819258
+          },
+          {
+            "epoch": 31,
+            "train_loss": 0.0621521778521128,
+            "selection_loss": 0.06734107236843556,
+            "elapsed_s": 4.390948912128806
+          },
+          {
+            "epoch": 32,
+            "train_loss": 0.06209894653875381,
+            "selection_loss": 0.06649512820877135,
+            "elapsed_s": 4.381601938977838
+          },
+          {
+            "epoch": 33,
+            "train_loss": 0.06218109530163929,
+            "selection_loss": 0.0667562885209918,
+            "elapsed_s": 4.354120202362537
+          },
+          {
+            "epoch": 34,
+            "train_loss": 0.06198850736836903,
+            "selection_loss": 0.06651121424511075,
+            "elapsed_s": 4.4196520913392305
+          },
+          {
+            "epoch": 35,
+            "train_loss": 0.06196902800002135,
+            "selection_loss": 0.0664094421081245,
+            "elapsed_s": 4.318380836863071
+          },
+          {
+            "epoch": 36,
+            "train_loss": 0.06207238871138543,
+            "selection_loss": 0.06648677797056735,
+            "elapsed_s": 4.391936889383942
+          },
+          {
+            "epoch": 37,
+            "train_loss": 0.06182538575376384,
+            "selection_loss": 0.0666314740665257,
+            "elapsed_s": 4.378218524158001
+          },
+          {
+            "epoch": 38,
+            "train_loss": 0.06200900810654275,
+            "selection_loss": 0.06741468515247107,
+            "elapsed_s": 4.325062801130116
+          },
+          {
+            "epoch": 39,
+            "train_loss": 0.0625339669350069,
+            "selection_loss": 0.07424048194661736,
+            "elapsed_s": 4.331214817240834
+          },
+          {
+            "epoch": 40,
+            "train_loss": 0.06396844549453817,
+            "selection_loss": 0.06641737860627472,
+            "elapsed_s": 4.334801743738353
+          },
+          {
+            "epoch": 41,
+            "train_loss": 0.06190703238826245,
+            "selection_loss": 0.06642414291854948,
+            "elapsed_s": 4.442898370791227
+          },
+          {
+            "epoch": 42,
+            "train_loss": 0.06223252438940108,
+            "selection_loss": 0.06698170979507267,
+            "elapsed_s": 4.311976954340935
+          },
+          {
+            "epoch": 43,
+            "train_loss": 0.0619403168966528,
+            "selection_loss": 0.06721877492964268,
+            "elapsed_s": 4.344647201243788
+          },
+          {
+            "epoch": 44,
+            "train_loss": 0.061867523909313604,
+            "selection_loss": 0.06647888268344104,
+            "elapsed_s": 4.3028544769622386
+          },
+          {
+            "epoch": 45,
+            "train_loss": 0.06169078795937821,
+            "selection_loss": 0.06632900412660092,
+            "elapsed_s": 4.34666007803753
+          },
+          {
+            "epoch": 46,
+            "train_loss": 0.0620445967069827,
+            "selection_loss": 0.06632588361389935,
+            "elapsed_s": 4.4438351397402585
+          },
+          {
+            "epoch": 47,
+            "train_loss": 0.06182666349923238,
+            "selection_loss": 0.06647366704419255,
+            "elapsed_s": 4.560370055027306
+          },
+          {
+            "epoch": 48,
+            "train_loss": 0.0624796879128553,
+            "selection_loss": 0.06659397936891764,
+            "elapsed_s": 4.475178954657167
+          },
+          {
+            "epoch": 49,
+            "train_loss": 0.06179659042390995,
+            "selection_loss": 0.0662916520377621,
+            "elapsed_s": 4.541570479050279
+          },
+          {
+            "epoch": 50,
+            "train_loss": 0.06167472311062738,
+            "selection_loss": 0.06702118017710745,
+            "elapsed_s": 4.547581034246832
+          },
+          {
+            "epoch": 51,
+            "train_loss": 0.06190818053437397,
+            "selection_loss": 0.06634622905403376,
+            "elapsed_s": 4.47460397798568
+          },
+          {
+            "epoch": 52,
+            "train_loss": 0.06191360947559588,
+            "selection_loss": 0.06649359234143049,
+            "elapsed_s": 4.366783025208861
+          },
+          {
+            "epoch": 53,
+            "train_loss": 0.06168986952980049,
+            "selection_loss": 0.06631422450300306,
+            "elapsed_s": 4.204145327210426
+          },
+          {
+            "epoch": 54,
+            "train_loss": 0.06163413226022385,
+            "selection_loss": 0.06635923939757049,
+            "elapsed_s": 4.496805732138455
+          },
+          {
+            "epoch": 55,
+            "train_loss": 0.061644484056159854,
+            "selection_loss": 0.06635053432546556,
+            "elapsed_s": 4.34022595686838
+          },
+          {
+            "epoch": 56,
+            "train_loss": 0.06190164582221769,
+            "selection_loss": 0.06642332463525236,
+            "elapsed_s": 4.562598119024187
+          },
+          {
+            "epoch": 57,
+            "train_loss": 0.06159840108011849,
+            "selection_loss": 0.06634078023489565,
+            "elapsed_s": 4.634019691962749
+          },
+          {
+            "epoch": 58,
+            "train_loss": 0.061593524063937366,
+            "selection_loss": 0.06640293076634407,
+            "elapsed_s": 4.816401691175997
+          },
+          {
+            "epoch": 59,
+            "train_loss": 0.06198505195789039,
+            "selection_loss": 0.06647996057290584,
+            "elapsed_s": 4.786142816301435
+          },
+          {
+            "epoch": 60,
+            "train_loss": 0.06251046102261171,
+            "selection_loss": 0.06645434407982975,
+            "elapsed_s": 4.4567481419071555
+          },
+          {
+            "epoch": 61,
+            "train_loss": 0.061833342304453254,
+            "selection_loss": 0.06625029107090086,
+            "elapsed_s": 4.335719225928187
+          },
+          {
+            "epoch": 62,
+            "train_loss": 0.06167093341355212,
+            "selection_loss": 0.06663083599414676,
+            "elapsed_s": 4.348354370333254
+          },
+          {
+            "epoch": 63,
+            "train_loss": 0.06168621749384329,
+            "selection_loss": 0.06627987453248352,
+            "elapsed_s": 4.356357142794877
+          },
+          {
+            "epoch": 64,
+            "train_loss": 0.061792956956196576,
+            "selection_loss": 0.06637436244636774,
+            "elapsed_s": 4.356082427781075
+          },
+          {
+            "epoch": 65,
+            "train_loss": 0.061676115641603246,
+            "selection_loss": 0.06631750159431249,
+            "elapsed_s": 4.342673789709806
+          },
+          {
+            "epoch": 66,
+            "train_loss": 0.06165717059047893,
+            "selection_loss": 0.06698305066674948,
+            "elapsed_s": 4.351872026920319
+          },
+          {
+            "epoch": 67,
+            "train_loss": 0.06194746043183841,
+            "selection_loss": 0.06624437123537064,
+            "elapsed_s": 4.347886166069657
+          },
+          {
+            "epoch": 68,
+            "train_loss": 0.061893750447779894,
+            "selection_loss": 0.0667650664690882,
+            "elapsed_s": 4.3784954799339175
+          },
+          {
+            "epoch": 69,
+            "train_loss": 0.061856400716351345,
+            "selection_loss": 0.06633194349706173,
+            "elapsed_s": 4.366182538215071
+          },
+          {
+            "epoch": 70,
+            "train_loss": 0.06149316389928572,
+            "selection_loss": 0.06653828476555645,
+            "elapsed_s": 4.730948170647025
+          },
+          {
+            "epoch": 71,
+            "train_loss": 0.061583785514812917,
+            "selection_loss": 0.06630997883621603,
+            "elapsed_s": 4.815454483963549
+          },
+          {
+            "epoch": 72,
+            "train_loss": 0.06145177720463835,
+            "selection_loss": 0.0662200894439593,
+            "elapsed_s": 4.826545771677047
+          },
+          {
+            "epoch": 73,
+            "train_loss": 0.061567071825265884,
+            "selection_loss": 0.06630463665351272,
+            "elapsed_s": 4.795777044724673
+          },
+          {
+            "epoch": 74,
+            "train_loss": 0.06168100071954541,
+            "selection_loss": 0.06663026544265449,
+            "elapsed_s": 4.801392204128206
+          },
+          {
+            "epoch": 75,
+            "train_loss": 0.06153881808859296,
+            "selection_loss": 0.0662502582417801,
+            "elapsed_s": 4.782482835929841
+          },
+          {
+            "epoch": 76,
+            "train_loss": 0.06160633827676065,
+            "selection_loss": 0.06637271249201149,
+            "elapsed_s": 4.7646130817011
+          },
+          {
+            "epoch": 77,
+            "train_loss": 0.06157804446411319,
+            "selection_loss": 0.06686665618326515,
+            "elapsed_s": 4.564311323687434
+          },
+          {
+            "epoch": 78,
+            "train_loss": 0.06196414530859329,
+            "selection_loss": 0.0663663320010528,
+            "elapsed_s": 4.394722677767277
+          },
+          {
+            "epoch": 79,
+            "train_loss": 0.06149446399649605,
+            "selection_loss": 0.06615627720020711,
+            "elapsed_s": 4.3088560667820275
+          },
+          {
+            "epoch": 80,
+            "train_loss": 0.0615100457216613,
+            "selection_loss": 0.06637836119625717,
+            "elapsed_s": 4.3499039048329
+          },
+          {
+            "epoch": 81,
+            "train_loss": 0.0616531039995607,
+            "selection_loss": 0.06658907269593328,
+            "elapsed_s": 4.347467327024788
+          },
+          {
+            "epoch": 82,
+            "train_loss": 0.061656039470108226,
+            "selection_loss": 0.06628849147818983,
+            "elapsed_s": 4.317524187732488
+          },
+          {
+            "epoch": 83,
+            "train_loss": 0.06250905423075892,
+            "selection_loss": 0.06637743848841637,
+            "elapsed_s": 4.364508636761457
+          },
+          {
+            "epoch": 84,
+            "train_loss": 0.0615377347858157,
+            "selection_loss": 0.06679999211337417,
+            "elapsed_s": 3.8930639196187258
+          },
+          {
+            "epoch": 85,
+            "train_loss": 0.06157827700371854,
+            "selection_loss": 0.06621497904416174,
+            "elapsed_s": 4.185555915813893
+          },
+          {
+            "epoch": 86,
+            "train_loss": 0.06150671927025542,
+            "selection_loss": 0.06621011742390692,
+            "elapsed_s": 4.207307631149888
+          },
+          {
+            "epoch": 87,
+            "train_loss": 0.0614215393725317,
+            "selection_loss": 0.06626493553631008,
+            "elapsed_s": 4.371620747726411
+          },
+          {
+            "epoch": 88,
+            "train_loss": 0.061442436708603054,
+            "selection_loss": 0.0663663896266371,
+            "elapsed_s": 4.345344678964466
+          },
+          {
+            "epoch": 89,
+            "train_loss": 0.061388335190713406,
+            "selection_loss": 0.06623417511582375,
+            "elapsed_s": 4.335843238979578
+          },
+          {
+            "epoch": 90,
+            "train_loss": 0.06139746872941032,
+            "selection_loss": 0.0663198169786483,
+            "elapsed_s": 4.389155577868223
+          },
+          {
+            "epoch": 91,
+            "train_loss": 0.061398720543365926,
+            "selection_loss": 0.06615857081487775,
+            "elapsed_s": 4.311843837145716
+          },
+          {
+            "epoch": 92,
+            "train_loss": 0.06149931327672675,
+            "selection_loss": 0.06610241788439453,
+            "elapsed_s": 4.356860626023263
+          },
+          {
+            "epoch": 93,
+            "train_loss": 0.06138517634826712,
+            "selection_loss": 0.06624420150183141,
+            "elapsed_s": 4.345453516114503
+          },
+          {
+            "epoch": 94,
+            "train_loss": 0.06151188482181169,
+            "selection_loss": 0.0662952063139528,
+            "elapsed_s": 4.364640461746603
+          },
+          {
+            "epoch": 95,
+            "train_loss": 0.061674639029661193,
+            "selection_loss": 0.0666044435929507,
+            "elapsed_s": 4.391189618036151
+          },
+          {
+            "epoch": 96,
+            "train_loss": 0.06200509794871323,
+            "selection_loss": 0.06633543036878109,
+            "elapsed_s": 4.376660101581365
+          },
+          {
+            "epoch": 97,
+            "train_loss": 0.061427654058206826,
+            "selection_loss": 0.0662565304664895,
+            "elapsed_s": 4.37435601092875
+          },
+          {
+            "epoch": 98,
+            "train_loss": 0.06137467038934119,
+            "selection_loss": 0.06690533284563571,
+            "elapsed_s": 4.363783228676766
+          },
+          {
+            "epoch": 99,
+            "train_loss": 0.06354726746212691,
+            "selection_loss": 0.06645147898234427,
+            "elapsed_s": 4.38170572090894
+          },
+          {
+            "epoch": 100,
+            "train_loss": 0.06141210981877521,
+            "selection_loss": 0.06610338191967458,
+            "elapsed_s": 4.368682336062193
+          },
+          {
+            "epoch": 101,
+            "train_loss": 0.06128395802807063,
+            "selection_loss": 0.06607243849430233,
+            "elapsed_s": 4.3738491288386285
+          },
+          {
+            "epoch": 102,
+            "train_loss": 0.06125246631563641,
+            "selection_loss": 0.0661029921611771,
+            "elapsed_s": 4.365720103029162
+          },
+          {
+            "epoch": 103,
+            "train_loss": 0.061249074584338814,
+            "selection_loss": 0.06604771665297449,
+            "elapsed_s": 4.375456122215837
+          },
+          {
+            "epoch": 104,
+            "train_loss": 0.06122087218682282,
+            "selection_loss": 0.06615080777555704,
+            "elapsed_s": 4.371983902063221
+          },
+          {
+            "epoch": 105,
+            "train_loss": 0.06135694214026444,
+            "selection_loss": 0.06606136413756758,
+            "elapsed_s": 4.343815061729401
+          },
+          {
+            "epoch": 106,
+            "train_loss": 0.06127493001986295,
+            "selection_loss": 0.06652807944919914,
+            "elapsed_s": 4.395992361009121
+          },
+          {
+            "epoch": 107,
+            "train_loss": 0.061313313053688034,
+            "selection_loss": 0.06599987775553018,
+            "elapsed_s": 4.375874957069755
+          },
+          {
+            "epoch": 108,
+            "train_loss": 0.06119515671161935,
+            "selection_loss": 0.06598255468998104,
+            "elapsed_s": 4.374871578998864
+          },
+          {
+            "epoch": 109,
+            "train_loss": 0.061253111431142315,
+            "selection_loss": 0.06600813614204526,
+            "elapsed_s": 4.344388423953205
+          },
+          {
+            "epoch": 110,
+            "train_loss": 0.06117756379535422,
+            "selection_loss": 0.0659852233948186,
+            "elapsed_s": 4.370319446083158
+          },
+          {
+            "epoch": 111,
+            "train_loss": 0.06134436494903639,
+            "selection_loss": 0.06667506170924753,
+            "elapsed_s": 4.367792535573244
+          },
+          {
+            "epoch": 112,
+            "train_loss": 0.06128608787548728,
+            "selection_loss": 0.0660129280295223,
+            "elapsed_s": 4.390024772845209
+          },
+          {
+            "epoch": 113,
+            "train_loss": 0.06144018753548153,
+            "selection_loss": 0.06620480038691312,
+            "elapsed_s": 4.372949959244579
+          },
+          {
+            "epoch": 114,
+            "train_loss": 0.06128557864576578,
+            "selection_loss": 0.0660047756973654,
+            "elapsed_s": 4.439907563850284
+          },
+          {
+            "epoch": 115,
+            "train_loss": 0.061152737704105675,
+            "selection_loss": 0.06599579472094774,
+            "elapsed_s": 4.307013708166778
+          },
+          {
+            "epoch": 116,
+            "train_loss": 0.06115850346395746,
+            "selection_loss": 0.06608198687899858,
+            "elapsed_s": 4.1558111743070185
+          },
+          {
+            "epoch": 117,
+            "train_loss": 0.06119244816363789,
+            "selection_loss": 0.0661295463796705,
+            "elapsed_s": 4.150693288072944
+          },
+          {
+            "epoch": 118,
+            "train_loss": 0.061615696584340185,
+            "selection_loss": 0.06603306089527905,
+            "elapsed_s": 4.172117191832513
+          },
+          {
+            "epoch": 119,
+            "train_loss": 0.06149290830944665,
+            "selection_loss": 0.06656440626829863,
+            "elapsed_s": 4.354723738972098
+          },
+          {
+            "epoch": 120,
+            "train_loss": 0.0613521390769165,
+            "selection_loss": 0.06699107645545155,
+            "elapsed_s": 4.266452714800835
+          },
+          {
+            "epoch": 121,
+            "train_loss": 0.06124851340427995,
+            "selection_loss": 0.06594045914243907,
+            "elapsed_s": 4.494868570938706
+          }
+        ]
+      },
+      "checkpoint_sha256": "f72dd29e52c6edffaa5f02368113a0481051555f34aeecb6621f29f4533e1639",
+      "checkpoint_bytes": 7465355
+    }
+  ],
+  "reason": "SteadyformalGPU14\u201320percent atabout1.2GB/process; concurrent sameGPU pilot warmepochs0.144/0.162sec vsstandalone0.15\u20130.18sec. TwojobsperGPU useidle capacity withoutobservedperjobslowdown. UniquePIDatomicfilefix mathematicalAST equality audited.",
+  "resources": {
+    "GPUs": 2,
+    "jobs_per_GPU": 2,
+    "active_CPU_threads": 4
+  },
+  "launches": [
+    {
+      "gpu": 0,
+      "slot": 0,
+      "unit": "pid-semantic-response-tokenizer-gpu0-slot0-v2-20261002.service",
+      "arm": "point_restricted",
+      "seeds": [
+        101,
+        202,
+        303
+      ],
+      "commands": [
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_restricted",
+          "--seed",
+          "101"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_restricted",
+          "--seed",
+          "101"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_restricted",
+          "--seed",
+          "202"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_restricted",
+          "--seed",
+          "202"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_restricted",
+          "--seed",
+          "303"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_restricted",
+          "--seed",
+          "303"
+        ]
+      ],
+      "shell_recipe": "set -e\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 303\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 303\n",
+      "systemd_argv": [
+        "systemd-run",
+        "--user",
+        "--unit",
+        "pid-semantic-response-tokenizer-gpu0-slot0-v2-20261002",
+        "--property=WorkingDirectory=/SSD_2/pid-mcm-implementation",
+        "--property=StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu0_slot0.log",
+        "--property=StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu0_slot0.log",
+        "--property=MemoryAccounting=yes",
+        "--property=CPUAccounting=yes",
+        "--property=RemainAfterExit=yes",
+        "--setenv=CUDA_VISIBLE_DEVICES=0",
+        "--setenv=OMP_NUM_THREADS=1",
+        "--setenv=OPENBLAS_NUM_THREADS=1",
+        "--setenv=MKL_NUM_THREADS=1",
+        "--setenv=NUMEXPR_NUM_THREADS=1",
+        "--setenv=PYTHONUNBUFFERED=1",
+        "/bin/bash",
+        "-c",
+        "set -e\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 303\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_restricted --seed 303\n"
+      ],
+      "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu0_slot0.log"
+    },
+    {
+      "gpu": 0,
+      "slot": 1,
+      "unit": "pid-semantic-response-tokenizer-gpu0-slot1-v2-20261002.service",
+      "arm": "distribution_randomized",
+      "seeds": [
+        101,
+        202,
+        303
+      ],
+      "commands": [
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "distribution_randomized",
+          "--seed",
+          "101"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "distribution_randomized",
+          "--seed",
+          "101"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "distribution_randomized",
+          "--seed",
+          "202"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "distribution_randomized",
+          "--seed",
+          "202"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "distribution_randomized",
+          "--seed",
+          "303"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "distribution_randomized",
+          "--seed",
+          "303"
+        ]
+      ],
+      "shell_recipe": "set -e\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 303\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 303\n",
+      "systemd_argv": [
+        "systemd-run",
+        "--user",
+        "--unit",
+        "pid-semantic-response-tokenizer-gpu0-slot1-v2-20261002",
+        "--property=WorkingDirectory=/SSD_2/pid-mcm-implementation",
+        "--property=StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu0_slot1.log",
+        "--property=StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu0_slot1.log",
+        "--property=MemoryAccounting=yes",
+        "--property=CPUAccounting=yes",
+        "--property=RemainAfterExit=yes",
+        "--setenv=CUDA_VISIBLE_DEVICES=0",
+        "--setenv=OMP_NUM_THREADS=1",
+        "--setenv=OPENBLAS_NUM_THREADS=1",
+        "--setenv=MKL_NUM_THREADS=1",
+        "--setenv=NUMEXPR_NUM_THREADS=1",
+        "--setenv=PYTHONUNBUFFERED=1",
+        "/bin/bash",
+        "-c",
+        "set -e\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 303\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm distribution_randomized --seed 303\n"
+      ],
+      "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu0_slot1.log"
+    },
+    {
+      "gpu": 1,
+      "slot": 0,
+      "unit": "pid-semantic-response-tokenizer-gpu1-slot0-v2-20261002.service",
+      "arm": "observation_only",
+      "seeds": [
+        101,
+        202,
+        303
+      ],
+      "commands": [
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "observation_only",
+          "--seed",
+          "101"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "observation_only",
+          "--seed",
+          "101"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "observation_only",
+          "--seed",
+          "202"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "observation_only",
+          "--seed",
+          "202"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "observation_only",
+          "--seed",
+          "303"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "observation_only",
+          "--seed",
+          "303"
+        ]
+      ],
+      "shell_recipe": "set -e\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 303\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 303\n",
+      "systemd_argv": [
+        "systemd-run",
+        "--user",
+        "--unit",
+        "pid-semantic-response-tokenizer-gpu1-slot0-v2-20261002",
+        "--property=WorkingDirectory=/SSD_2/pid-mcm-implementation",
+        "--property=StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu1_slot0.log",
+        "--property=StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu1_slot0.log",
+        "--property=MemoryAccounting=yes",
+        "--property=CPUAccounting=yes",
+        "--property=RemainAfterExit=yes",
+        "--setenv=CUDA_VISIBLE_DEVICES=1",
+        "--setenv=OMP_NUM_THREADS=1",
+        "--setenv=OPENBLAS_NUM_THREADS=1",
+        "--setenv=MKL_NUM_THREADS=1",
+        "--setenv=NUMEXPR_NUM_THREADS=1",
+        "--setenv=PYTHONUNBUFFERED=1",
+        "/bin/bash",
+        "-c",
+        "set -e\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 303\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm observation_only --seed 303\n"
+      ],
+      "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu1_slot0.log"
+    },
+    {
+      "gpu": 1,
+      "slot": 1,
+      "unit": "pid-semantic-response-tokenizer-gpu1-slot1-v2-20261002.service",
+      "arm": "point_randomized",
+      "seeds": [
+        101,
+        202,
+        303
+      ],
+      "commands": [
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_randomized",
+          "--seed",
+          "101"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_randomized",
+          "--seed",
+          "101"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_randomized",
+          "--seed",
+          "202"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_randomized",
+          "--seed",
+          "202"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "train",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_randomized",
+          "--seed",
+          "303"
+        ],
+        [
+          "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py",
+          "--stage",
+          "evaluate",
+          "--project-root",
+          "/SSD_2/pid-mcm-implementation",
+          "--output",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer",
+          "--config",
+          "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+          "--device",
+          "cuda:0",
+          "--arm",
+          "point_randomized",
+          "--seed",
+          "303"
+        ]
+      ],
+      "shell_recipe": "set -e\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 303\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 303\n",
+      "systemd_argv": [
+        "systemd-run",
+        "--user",
+        "--unit",
+        "pid-semantic-response-tokenizer-gpu1-slot1-v2-20261002",
+        "--property=WorkingDirectory=/SSD_2/pid-mcm-implementation",
+        "--property=StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu1_slot1.log",
+        "--property=StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu1_slot1.log",
+        "--property=MemoryAccounting=yes",
+        "--property=CPUAccounting=yes",
+        "--property=RemainAfterExit=yes",
+        "--setenv=CUDA_VISIBLE_DEVICES=1",
+        "--setenv=OMP_NUM_THREADS=1",
+        "--setenv=OPENBLAS_NUM_THREADS=1",
+        "--setenv=MKL_NUM_THREADS=1",
+        "--setenv=NUMEXPR_NUM_THREADS=1",
+        "--setenv=PYTHONUNBUFFERED=1",
+        "/bin/bash",
+        "-c",
+        "set -e\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 101\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 202\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage train --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 303\n/SSD_2/pid-mcm-implementation/.venv/bin/python /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/scripts/train_semantic_response_tokenizer.py --stage evaluate --project-root /SSD_2/pid-mcm-implementation --output /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer --config /SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v2/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml --device cuda:0 --arm point_randomized --seed 303\n"
+      ],
+      "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/tokenizer/supervisor/train_v2_gpu1_slot1.log"
+    }
+  ]
+}

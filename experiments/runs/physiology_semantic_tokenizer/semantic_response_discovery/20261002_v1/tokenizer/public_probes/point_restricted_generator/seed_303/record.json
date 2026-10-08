@@ -1,0 +1,3839 @@
+{
+  "status": "complete",
+  "config_identity": "9a080dcd51d20f9e97952073dc2f964034e311f78a00a1b40db6214634c0eb0e",
+  "arm": "point_restricted_generator",
+  "seed": 303,
+  "feature_root": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/features/batch_v2",
+  "prefixes": [
+    40,
+    0
+  ],
+  "score_support": [
+    80,
+    120
+  ],
+  "methods": [
+    "context_raw",
+    "context_plus_O",
+    "context_plus_O_plus_S",
+    "context_plus_capacity_matched_observation_only"
+  ],
+  "planned_rows": 2880,
+  "encoder_fit": "synthetic_training_only_frozen_no_public_gradient",
+  "public_probe_fit": "train_only_weights_selection_only_alpha_and_predictive_SD",
+  "common_context": "raw_local_EEG_plus_other_region_full_Hb_plus_own_visible_Hb_prefix",
+  "target_Hb_boundary": "own_prefix_only_never_target_suffix; no_target_Hb_codes_at_zero_prefix",
+  "primary_capacity": "all_own_mean_codes_same_dimension_supervised_vs_independent_observation_only",
+  "uncertainty_features": "secondary_only_distribution_arm",
+  "primary_score_coordinate": "component_training_SD_normalized",
+  "restored_score_coordinate": "parent_prepared_Hb_units_after_inverse_new_training_gain_not_raw_native_waveform",
+  "aggregation": "windows_and_regions_within_subject_then_subject_equal_within_dataset_then_dataset_equal",
+  "physiological_semantics": "unqualified_conditional_processed_observation_completion",
+  "completed_rows": 2880,
+  "failed_rows": 0,
+  "elapsed_s": 10.293150851037353,
+  "summaries": [
+    {
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "planned_windows": 360,
+      "successful_windows": 360,
+      "NRMSE": 1.2286118055851765,
+      "CRPS_training_SD": 0.8462336038550354,
+      "Gaussian_NLL_training_SD": 2.661320724648786
+    },
+    {
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "planned_windows": 360,
+      "successful_windows": 360,
+      "NRMSE": 1.1554573725640036,
+      "CRPS_training_SD": 0.7932513696262594,
+      "Gaussian_NLL_training_SD": 2.652767195809405
+    },
+    {
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "planned_windows": 360,
+      "successful_windows": 360,
+      "NRMSE": 1.1732625442947662,
+      "CRPS_training_SD": 0.8039271320826312,
+      "Gaussian_NLL_training_SD": 2.6698509968587203
+    },
+    {
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "planned_windows": 360,
+      "successful_windows": 360,
+      "NRMSE": 1.1383381862833415,
+      "CRPS_training_SD": 0.7799938571349335,
+      "Gaussian_NLL_training_SD": 2.517608007570318
+    },
+    {
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "planned_windows": 360,
+      "successful_windows": 360,
+      "NRMSE": 1.29457715150391,
+      "CRPS_training_SD": 0.8949157101989959,
+      "Gaussian_NLL_training_SD": 2.7122041446412255
+    },
+    {
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "planned_windows": 360,
+      "successful_windows": 360,
+      "NRMSE": 1.3011916612291334,
+      "CRPS_training_SD": 0.8987136317516232,
+      "Gaussian_NLL_training_SD": 2.7430525550942533
+    },
+    {
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "planned_windows": 360,
+      "successful_windows": 360,
+      "NRMSE": 1.3035350761683646,
+      "CRPS_training_SD": 0.899419185733033,
+      "Gaussian_NLL_training_SD": 2.6732666388533826
+    },
+    {
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "planned_windows": 360,
+      "successful_windows": 360,
+      "NRMSE": 1.289947842340536,
+      "CRPS_training_SD": 0.8920523825146774,
+      "Gaussian_NLL_training_SD": 2.7434033482088407
+    }
+  ],
+  "contrasts": [
+    {
+      "prefix_steps": 40,
+      "contrast": "O_plus_S_minus_context_plus_O",
+      "planned_windows": 360,
+      "common_success_windows": 360,
+      "delta_NRMSE": 0.017805171730762587,
+      "delta_CRPS_training_SD": 0.010675762456371807,
+      "negative_delta_favors_semantic_plus_observation": true
+    },
+    {
+      "prefix_steps": 40,
+      "contrast": "O_plus_S_minus_context_plus_capacity_matched_observation_only",
+      "planned_windows": 360,
+      "common_success_windows": 360,
+      "delta_NRMSE": 0.0349243580114248,
+      "delta_CRPS_training_SD": 0.02393327494769772,
+      "negative_delta_favors_semantic_plus_observation": true
+    },
+    {
+      "prefix_steps": 40,
+      "contrast": "O_plus_S_minus_context_raw",
+      "planned_windows": 360,
+      "common_success_windows": 360,
+      "delta_NRMSE": -0.0553492612904102,
+      "delta_CRPS_training_SD": -0.04230647177240419,
+      "negative_delta_favors_semantic_plus_observation": true
+    },
+    {
+      "prefix_steps": 0,
+      "contrast": "O_plus_S_minus_context_plus_O",
+      "planned_windows": 360,
+      "common_success_windows": 360,
+      "delta_NRMSE": 0.002343414939231126,
+      "delta_CRPS_training_SD": 0.0007055539814098113,
+      "negative_delta_favors_semantic_plus_observation": true
+    },
+    {
+      "prefix_steps": 0,
+      "contrast": "O_plus_S_minus_context_plus_capacity_matched_observation_only",
+      "planned_windows": 360,
+      "common_success_windows": 360,
+      "delta_NRMSE": 0.013587233827828865,
+      "delta_CRPS_training_SD": 0.007366803218355669,
+      "negative_delta_favors_semantic_plus_observation": true
+    },
+    {
+      "prefix_steps": 0,
+      "contrast": "O_plus_S_minus_context_raw",
+      "planned_windows": 360,
+      "common_success_windows": 360,
+      "delta_NRMSE": 0.008957924664454504,
+      "delta_CRPS_training_SD": 0.004503475534037263,
+      "negative_delta_favors_semantic_plus_observation": true
+    }
+  ],
+  "selections": [
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4160,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.025747557655095024,
+        0.024229388659179143
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1955643529407873
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.224039224997107
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.2277718202923955
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2281571999529322
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.6477244323438371,
+        1.451931847146205
+      ],
+      "selection_residual_sd_before_floor": [
+        1.6477244323438371,
+        1.451931847146205
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 6080,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.025747557655095024,
+        0.024229388659179143
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1508409671608466
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.1706958082258443
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.1731421258944008
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.1733926168319393
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.6122257041215242,
+        1.3310407369444661
+      ],
+      "selection_residual_sd_before_floor": [
+        1.6122257041215242,
+        1.3310407369444661
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.025747557655095024,
+        0.024229388659179143
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1497136980610148
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.1674596945510403
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.1696545543830699
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.1698794262183343
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.5938515012204737,
+        1.3041448912565197
+      ],
+      "selection_residual_sd_before_floor": [
+        1.5938515012204737,
+        1.3041448912565197
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.025747557655095024,
+        0.024229388659179143
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1653093987037917
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.1853692816973322
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.1877809080456143
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.1880270576134486
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.623059553956938,
+        1.3382302245281912
+      ],
+      "selection_residual_sd_before_floor": [
+        1.623059553956938,
+        1.3382302245281912
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4160,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334348513141643,
+        0.011756359950725003
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9048876989179014
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9089828213965745
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.909728210280746
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9098077011632473
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8333290403688824,
+        1.229189918227109
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8333290403688824,
+        1.229189918227109
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 6080,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334348513141643,
+        0.011756359950725003
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8880213302145197
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8918926012005949
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8925535813433176
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.8926235184215955
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8053082607884415,
+        1.2047812286249016
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8053082607884415,
+        1.2047812286249016
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334348513141643,
+        0.011756359950725003
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8917080127619299
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8954576978009212
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8961087444909432
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.8961777390710355
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8063764303590708,
+        1.206891696865301
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8063764303590708,
+        1.206891696865301
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334348513141643,
+        0.011756359950725003
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8928775739645667
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8941516814475415
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8944349138838238
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.894465381117237
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8130987107604551,
+        1.2192438516388475
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8130987107604551,
+        1.2192438516388475
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4160,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334248906000366,
+        0.011759184635149564
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1686470672117306
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.2181907689176845
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.2245843576665805
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2252434355151645
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.2945939563442894,
+        1.338297909160891
+      ],
+      "selection_residual_sd_before_floor": [
+        1.2945939563442894,
+        1.338297909160891
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 6080,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334248906000366,
+        0.011759184635149564
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1707606079229274
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.217511501420502
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.223296133562102
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2238888383190996
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.3428853408355115,
+        1.2472033859970395
+      ],
+      "selection_residual_sd_before_floor": [
+        1.3428853408355115,
+        1.2472033859970395
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334248906000366,
+        0.011759184635149564
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.176200597376639
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.2221895966979177
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.227857193445173
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2284376344041257
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.3495655850722796,
+        1.2620595681518891
+      ],
+      "selection_residual_sd_before_floor": [
+        1.3495655850722796,
+        1.2620595681518891
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334248906000366,
+        0.011759184635149564
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.167939759440427
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.2068821897061068
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.2115983445143026
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2120802937240733
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.3487939496206203,
+        1.2526803467992589
+      ],
+      "selection_residual_sd_before_floor": [
+        1.3487939496206203,
+        1.2526803467992589
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4160,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.031640295320291736,
+        0.01577630222975977
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8259932159768693
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8616395743057216
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8660737732814243
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.8665284682541095
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8118549425543693,
+        1.0752080986376116
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8118549425543693,
+        1.0752080986376116
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 6080,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.031640295320291736,
+        0.01577630222975977
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8315008858962056
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8656675133581868
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8697919957680893
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.8702130737895127
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.7587634870759927,
+        1.0956808511036908
+      ],
+      "selection_residual_sd_before_floor": [
+        0.7587634870759927,
+        1.0956808511036908
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.031640295320291736,
+        0.01577630222975977
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8373956434159386
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8682322327058006
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8719100915772258
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.872285143030239
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.7707570392052174,
+        1.1035614515184435
+      ],
+      "selection_residual_sd_before_floor": [
+        0.7707570392052174,
+        1.1035614515184435
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.031640295320291736,
+        0.01577630222975977
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8129111597877854
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8370219977185519
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8397988258046953
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.8400808259486263
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.7492732653587801,
+        1.0613648882183946
+      ],
+      "selection_residual_sd_before_floor": [
+        0.7492732653587801,
+        1.0613648882183946
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4160,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.0322113236479047,
+        0.014575000132073261
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8849487510007108
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9004863611410209
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9026452921264745
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9028693761929775
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.7791400706395853,
+        1.4570839693882065
+      ],
+      "selection_residual_sd_before_floor": [
+        0.7791400706395853,
+        1.4570839693882065
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 6080,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.0322113236479047,
+        0.014575000132073261
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.757055052035695
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7675709662010324
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7689988591974051
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7691463940663377
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.6966317292754988,
+        1.1820593185963422
+      ],
+      "selection_residual_sd_before_floor": [
+        0.6966317292754988,
+        1.1820593185963422
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.0322113236479047,
+        0.014575000132073261
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7604553081556407
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7698901105848187
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7711795003757754
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7713127940027924
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.6890411748692259,
+        1.186080044905726
+      ],
+      "selection_residual_sd_before_floor": [
+        0.6890411748692259,
+        1.186080044905726
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.0322113236479047,
+        0.014575000132073261
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7977589403602463
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8071656990790232
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8084040357321693
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.80853155551059
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.7120435732829038,
+        1.2941741960932287
+      ],
+      "selection_residual_sd_before_floor": [
+        0.7120435732829038,
+        1.2941741960932287
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4160,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.03452035279705476,
+        0.007638405773908435
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.2842080995152791
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.2900962115815768
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.291281604473665
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2914089165410307
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.1314125545648825,
+        1.8801440234290374
+      ],
+      "selection_residual_sd_before_floor": [
+        1.1314125545648825,
+        1.8801440234290374
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 6080,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.03452035279705476,
+        0.007638405773908435
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.0861880516601001
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.087492328256147
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.0881425044602762
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.088214830771017
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9533755905571494,
+        1.5468501729740236
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9533755905571494,
+        1.5468501729740236
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.03452035279705476,
+        0.007638405773908435
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.0956788841965852
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.096907347915945
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.0975086897205792
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.0975755499034132
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.962452814398797,
+        1.5437295729171592
+      ],
+      "selection_residual_sd_before_floor": [
+        0.962452814398797,
+        1.5437295729171592
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.03452035279705476,
+        0.007638405773908435
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1449066319405157
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.1457359209721112
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.146156571842287
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.1462033113964725
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.947246424524578,
+        1.7093237547949778
+      ],
+      "selection_residual_sd_before_floor": [
+        0.947246424524578,
+        1.7093237547949778
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4160,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.02391454139920679,
+        0.02604025172047354
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.6703867431644827
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.6856943100681406
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.6874426096423418
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.6876198751552206
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.81878011506686,
+        0.6989852238407136
+      ],
+      "selection_residual_sd_before_floor": [
+        0.81878011506686,
+        0.6989852238407136
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 6080,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.02391454139920679,
+        0.02604025172047354
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.6665518235185485
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.6751354730601992
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.6760733351799425
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.6761679927353538
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.7896719780861395,
+        0.672338950770168
+      ],
+      "selection_residual_sd_before_floor": [
+        0.7896719780861395,
+        0.672338950770168
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.02391454139920679,
+        0.02604025172047354
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.6901472424918537
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7002191232294678
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7013165124771955
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7014272394896913
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8258439106068175,
+        0.7124042900834704
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8258439106068175,
+        0.7124042900834704
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "motor",
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.02391454139920679,
+        0.02604025172047354
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.645733598945225
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.6543563181282289
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.655303671032641
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.6553993371879403
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.7833026606406079,
+        0.6340345899361093
+      ],
+      "selection_residual_sd_before_floor": [
+        0.7833026606406079,
+        0.6340345899361093
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4160,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.024755435651543985,
+        0.025242194946205946
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.6033992202999904
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.6116704869370606
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.6125424892243464
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.6126301626052472
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.7250157237566581,
+        0.6954273710837198
+      ],
+      "selection_residual_sd_before_floor": [
+        0.7250157237566581,
+        0.6954273710837198
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 6080,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.024755435651543985,
+        0.025242194946205946
+      ],
+      "alpha": 0.01,
+      "rankings": [
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.3916984538371488
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.39170659734461927
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.3917884015732844
+        },
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.39263039935009286
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.47554099642597036,
+        0.5152938659912087
+      ],
+      "selection_residual_sd_before_floor": [
+        0.47554099642597036,
+        0.5152938659912087
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.024755435651543985,
+        0.025242194946205946
+      ],
+      "alpha": 0.01,
+      "rankings": [
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.38523304828851135
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.38524422395030683
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.3853562121981331
+        },
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.38648796804162594
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.47137399427829796,
+        0.508143329766576
+      ],
+      "selection_residual_sd_before_floor": [
+        0.47137399427829796,
+        0.508143329766576
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "posterior",
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.024755435651543985,
+        0.025242194946205946
+      ],
+      "alpha": 0.01,
+      "rankings": [
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.39641085612032656
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.3964187861840989
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.3964981679534998
+        },
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.39729308757993215
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.4736858648111773,
+        0.5190072454053603
+      ],
+      "selection_residual_sd_before_floor": [
+        0.4736858648111773,
+        0.5190072454053603
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4160,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.03237862922697564,
+        0.014199449615461757
+      ],
+      "alpha": 0.01,
+      "rankings": [
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.850976150200264
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8510342870568616
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8516124020510526
+        },
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8571008586235389
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.1510399863401215,
+        1.0697686920445866
+      ],
+      "selection_residual_sd_before_floor": [
+        1.1510399863401215,
+        1.0697686920445866
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 6080,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.03237862922697564,
+        0.014199449615461757
+      ],
+      "alpha": 0.01,
+      "rankings": [
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7134889188931237
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7135293537934387
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7139340531411422
+        },
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7180054518340504
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.93855676762833,
+        0.8583853171626735
+      ],
+      "selection_residual_sd_before_floor": [
+        0.93855676762833,
+        0.8583853171626735
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.03237862922697564,
+        0.014199449615461757
+      ],
+      "alpha": 0.01,
+      "rankings": [
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7023589434159767
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7023978059199023
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.702786852327109
+        },
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.706708039099272
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9225401267694714,
+        0.8486230583835769
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9225401267694714,
+        0.8486230583835769
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "prefrontal",
+      "prefix_steps": 40,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 6322,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.03237862922697564,
+        0.014199449615461757
+      ],
+      "alpha": 0.01,
+      "rankings": [
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7539300939577628
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7539806524280515
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7544854181445418
+        },
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7594467670694378
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9699558913645385,
+        0.9753594108940005
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9699558913645385,
+        0.9753594108940005
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4080,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.025747557655095024,
+        0.024229388659179143
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.2517666759375683
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.3049811905278628
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.3123114333264239
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.3130718696075843
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.6622607966209204,
+        1.5808846309993232
+      ],
+      "selection_residual_sd_before_floor": [
+        1.6622607966209204,
+        1.5808846309993232
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 5040,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.025747557655095024,
+        0.024229388659179143
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.253010460752113
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.3006806339701567
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.3068692216838742
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.3075063958031017
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.6594733952107479,
+        1.5697279930331443
+      ],
+      "selection_residual_sd_before_floor": [
+        1.6594733952107479,
+        1.5697279930331443
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.025747557655095024,
+        0.024229388659179143
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.2463932869803642
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.2941901034109236
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.3004387574444336
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.3010825325099957
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.6399469714727632,
+        1.5680720209143442
+      ],
+      "selection_residual_sd_before_floor": [
+        1.6399469714727632,
+        1.5680720209143442
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.025747557655095024,
+        0.024229388659179143
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.2455861378086595
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.2854681247988666
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.29050568313078
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2910225779585782
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.6491761125437778,
+        1.5829603720802299
+      ],
+      "selection_residual_sd_before_floor": [
+        1.6491761125437778,
+        1.5829603720802299
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4080,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334348513141643,
+        0.011756359950725003
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9489332452978385
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9635942487650011
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.965652320956661
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9658662728156843
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9077222865763954,
+        1.2632891576947425
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9077222865763954,
+        1.2632891576947425
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 5040,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334348513141643,
+        0.011756359950725003
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9747653471950862
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9887951387649221
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9906003713562033
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9907860449852667
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9381851996533386,
+        1.2837094426857183
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9381851996533386,
+        1.2837094426857183
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334348513141643,
+        0.011756359950725003
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9780753020304622
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9914353973889879
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9931611333935486
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9933387149244565
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9376893903007402,
+        1.29076380681952
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9376893903007402,
+        1.29076380681952
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334348513141643,
+        0.011756359950725003
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9792177476537368
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9935568977926778
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9953483610740422
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.995531857572999
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9510308300711793,
+        1.3058145484488441
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9510308300711793,
+        1.3058145484488441
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4080,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334248906000366,
+        0.011759184635149564
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1829889944894272
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.2346022133009982
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.241344132118157
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2420402005211226
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.2969473820757198,
+        1.3991281705018663
+      ],
+      "selection_residual_sd_before_floor": [
+        1.2969473820757198,
+        1.3991281705018663
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 5040,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334248906000366,
+        0.011759184635149564
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1854303335433962
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.231846478470773
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.2377763918129823
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.238386633865449
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.3244164456519638,
+        1.3675237827635467
+      ],
+      "selection_residual_sd_before_floor": [
+        1.3244164456519638,
+        1.3675237827635467
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334248906000366,
+        0.011759184635149564
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1896178956758072
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.235678525420093
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.2415360726878244
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2421385633088906
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.325591380629332,
+        1.380297759314867
+      ],
+      "selection_residual_sd_before_floor": [
+        1.325591380629332,
+        1.380297759314867
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 72,
+      "selection_rows": 20,
+      "evaluation_rows": 48,
+      "training_SD": [
+        0.03334248906000366,
+        0.011759184635149564
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.1744665321108863
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.2131437285395772
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.217904192981074
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.2183916331708289
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.3145530623392983,
+        1.3406325774654915
+      ],
+      "selection_residual_sd_before_floor": [
+        1.3145530623392983,
+        1.3406325774654915
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4080,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.031640295320291736,
+        0.01577630222975977
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8440612310904899
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8872070751848754
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8927930836226685
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.8933687997717777
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8571780432588038,
+        1.0890578958737862
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8571780432588038,
+        1.0890578958737862
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 5040,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.031640295320291736,
+        0.01577630222975977
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8329283275368502
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8706409698085998
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.875401971572209
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.8758907764611015
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8410870596979655,
+        1.0695894996938091
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8410870596979655,
+        1.0695894996938091
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.031640295320291736,
+        0.01577630222975977
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.8581494265498393
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8962443252495955
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9009759115973419
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9014607604584963
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8854093805693285,
+        1.1073786445786744
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8854093805693285,
+        1.1073786445786744
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.031640295320291736,
+        0.01577630222975977
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.834922648768049
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.8697979670422631
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.8740718744969909
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.8745090588476712
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8361798832557534,
+        1.0508687208975267
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8361798832557534,
+        1.0508687208975267
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4080,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.0322113236479047,
+        0.014575000132073261
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9566285664171985
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9845990114671899
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.988405974805346
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9888005965590486
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8352773816822289,
+        1.5985714052945914
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8352773816822289,
+        1.5985714052945914
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 5040,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.0322113236479047,
+        0.014575000132073261
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9512275827528324
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9740343580768958
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9769735513674078
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9772759973268594
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8376363771637365,
+        1.5742886039392978
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8376363771637365,
+        1.5742886039392978
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.0322113236479047,
+        0.014575000132073261
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9592119526733666
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9813942366585101
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9842093388993087
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9844984642081598
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8279217984190437,
+        1.5938587080083577
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8279217984190437,
+        1.5938587080083577
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.0322113236479047,
+        0.014575000132073261
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9667427606752904
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9902523862614634
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9931552142841492
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9934524153101965
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8611859373123397,
+        1.5568079718902987
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8611859373123397,
+        1.5568079718902987
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4080,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.03452035279705476,
+        0.007638405773908435
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.3769922091624496
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.3997946385378321
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.4032079922378857
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.4035657998567388
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.2803246163621116,
+        1.9864845618938083
+      ],
+      "selection_residual_sd_before_floor": [
+        1.2803246163621116,
+        1.9864845618938083
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 5040,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.03452035279705476,
+        0.007638405773908435
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.3730699317434287
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.392482359968268
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.3952491684424049
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.3955371793149642
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.261812645165915,
+        1.9756116327064646
+      ],
+      "selection_residual_sd_before_floor": [
+        1.261812645165915,
+        1.9756116327064646
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.03452035279705476,
+        0.007638405773908435
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.3733312105971136
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.391903965369888
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.3945490270708334
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.3948243232400321
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.2728455450389449,
+        1.9684595967726541
+      ],
+      "selection_residual_sd_before_floor": [
+        1.2728455450389449,
+        1.9684595967726541
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 68,
+      "selection_rows": 16,
+      "evaluation_rows": 40,
+      "training_SD": [
+        0.03452035279705476,
+        0.007638405773908435
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 1.3730034984768476
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 1.3846610367535943
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 1.3862200658233372
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 1.386381097668819
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.2736796769858174,
+        1.9852029125572535
+      ],
+      "selection_residual_sd_before_floor": [
+        1.2736796769858174,
+        1.9852029125572535
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4080,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.02391454139920679,
+        0.02604025172047354
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.691956814298774
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7083131635270595
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7101770650607957
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7103660362561793
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8452999337875742,
+        0.7032583920385175
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8452999337875742,
+        0.7032583920385175
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 5040,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.02391454139920679,
+        0.02604025172047354
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7261135218109945
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7402160410391185
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7417611907816358
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7419171812316994
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8755089430689187,
+        0.7334716357215063
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8755089430689187,
+        0.7334716357215063
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.02391454139920679,
+        0.02604025172047354
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7294251624820008
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7440653101228012
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7456690119794797
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7458309119629604
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8799586764783536,
+        0.7360770364910342
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8799586764783536,
+        0.7360770364910342
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "motor",
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.02391454139920679,
+        0.02604025172047354
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7121256366974787
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7256852324537646
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7271891295739495
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7273411506156431
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8727680746904184,
+        0.6884261349518908
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8727680746904184,
+        0.6884261349518908
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4080,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.024755435651543985,
+        0.025242194946205946
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.731565948647605
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7552893763044142
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7578801651099737
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7581416551950699
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.8936420201411379,
+        0.8250041315025637
+      ],
+      "selection_residual_sd_before_floor": [
+        0.8936420201411379,
+        0.8250041315025637
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 5040,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.024755435651543985,
+        0.025242194946205946
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7534937993190276
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7727472139754453
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7748172810344337
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7750258728079884
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9324091692695347,
+        0.853366532913403
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9324091692695347,
+        0.853366532913403
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.024755435651543985,
+        0.025242194946205946
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7528973427542445
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7718484089017322
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7738864002390379
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7740917630291215
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9322491681383817,
+        0.8530115248834472
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9322491681383817,
+        0.8530115248834472
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "posterior",
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.024755435651543985,
+        0.025242194946205946
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.7753086363268574
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.7951776850888398
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.7973065343495724
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.7975209544164891
+        }
+      ],
+      "predictive_sd_training_units": [
+        0.9418356752244489,
+        0.8661757015798456
+      ],
+      "selection_residual_sd_before_floor": [
+        0.9418356752244489,
+        0.8661757015798456
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_raw",
+      "status": "complete",
+      "feature_dimensions": 4080,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.03237862922697564,
+        0.014199449615461757
+      ],
+      "alpha": 0.01,
+      "rankings": [
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.902003261448557
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9020252367741378
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9022446937825489
+        },
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.904417442151269
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.2416648864411393,
+        1.1038798029881152
+      ],
+      "selection_residual_sd_before_floor": [
+        1.2416648864411393,
+        1.1038798029881152
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_plus_O",
+      "status": "complete",
+      "feature_dimensions": 5040,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.03237862922697564,
+        0.014199449615461757
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9348163984115443
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9352071989352782
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9352584010160415
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9352636482228331
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.285414277220808,
+        1.125474238645682
+      ],
+      "selection_residual_sd_before_floor": [
+        1.285414277220808,
+        1.125474238645682
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_plus_O_plus_S",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.03237862922697564,
+        0.014199449615461757
+      ],
+      "alpha": 10.0,
+      "rankings": [
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9369109985720101
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9376037936866034
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9376888649922215
+        },
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9376975411786189
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.2846689900383945,
+        1.1330612135071063
+      ],
+      "selection_residual_sd_before_floor": [
+        1.2846689900383945,
+        1.1330612135071063
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "region": "prefrontal",
+      "prefix_steps": 0,
+      "method": "context_plus_capacity_matched_observation_only",
+      "status": "complete",
+      "feature_dimensions": 5161,
+      "training_rows": 36,
+      "selection_rows": 12,
+      "evaluation_rows": 32,
+      "training_SD": [
+        0.03237862922697564,
+        0.014199449615461757
+      ],
+      "alpha": 0.01,
+      "rankings": [
+        {
+          "alpha": 0.01,
+          "selection_subject_equal_NRMSE": 0.9289867780570403
+        },
+        {
+          "alpha": 0.1,
+          "selection_subject_equal_NRMSE": 0.9289947019467512
+        },
+        {
+          "alpha": 1.0,
+          "selection_subject_equal_NRMSE": 0.9290745313206172
+        },
+        {
+          "alpha": 10.0,
+          "selection_subject_equal_NRMSE": 0.9299210194412609
+        }
+      ],
+      "predictive_sd_training_units": [
+        1.2858431438118312,
+        1.106929976976766
+      ],
+      "selection_residual_sd_before_floor": [
+        1.2858431438118312,
+        1.106929976976766
+      ],
+      "floor_fraction_of_training_SD": 0.05,
+      "floor_triggered": [
+        false,
+        false
+      ],
+      "fitting_partition": "train",
+      "alpha_selection_partition": "selection",
+      "uncertainty_calibration_partition": "selection",
+      "density": "Gaussian_predictive_residual_marginals_not_physiological_posterior"
+    }
+  ]
+}

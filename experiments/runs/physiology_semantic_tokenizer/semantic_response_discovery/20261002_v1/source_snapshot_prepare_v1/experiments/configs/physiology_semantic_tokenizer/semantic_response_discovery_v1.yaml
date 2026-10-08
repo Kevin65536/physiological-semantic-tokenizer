@@ -1,0 +1,141 @@
+schema: semantic_response_discovery_v1
+experiment_id: SSM-SEMANTIC-RESPONSE-DISCOVERY-v1
+seed: 20261002
+source_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1
+artifact_root: experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery
+metadata_plan: metadata_plan_proposal.json
+data_boundary: exact_public_parent_prepared_regions_frozen_subject_disjoint_metadata_plan
+protected_data: forbidden
+data:
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation]
+  region_names: [prefrontal, motor, posterior]
+  coordinate: first_5s_relative_logpower_and_parent_relative_Hb_refit_training_scales
+  temporal_interpretation: offline_processed_feature_completion_not_causal_native_forecast
+  split: subject_disjoint_train_selection_evaluation_sha256_seeded_metadata_only
+  prior_exposure: all_71_subjects_previously_analyzed_new_development_endpoint_not_independent_confirmation
+  visual_probe: Probe1_synchronous_three_regions_native_EEG_window_deduplicated
+tensor:
+  steps: 120
+  dt_s: 0.25
+  eeg_channels: 6
+  eeg_features: 30
+  eeg_bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  feature_order: channel_major_band_minor
+  reference_steps: 20
+  Hb_components: [HbO, HbR]
+  temporal_modes: 24
+model:
+  arms: [broad_a, gamma_selected, gamma_attenuation, gain_selected, zero_driver, random_seed_0, random_seed_1, random_seed_2, input_lowpass, viscoelastic_outflow]
+  parameter_policy: fixed_parent_H0_except_declared_training_selected_response_extension
+  driver_inference: EEG_only_before_Hb_prefix_calibration
+  gamma_candidates: [-1.0, -0.5, 0.0, 0.5, 1.0]
+  gain_candidates: [0.0, 0.5, 0.7071067811865475, 0.8944271909999159, 1.0]
+  tau_n_candidates: [0.0, 0.5, 1.0, 2.0]
+  tau_v_candidates: [0.0, 1.0, 3.0, 6.0]
+  random_seeds: [202610021, 202610022, 202610023]
+  state_sd: 0.025
+  ar_phi: 0.95
+  ar_weight: 0.1
+  eeg_mode_training_RMS_target: 0.025
+  common_Hb_modes: 4
+  common_Hb_rho: 0.35
+  common_Hb_scale: training_broad_a_rest_residual_only
+  initial_mode: tied_pv_logprior
+  initial_prior_sd: [0.1, 0.3, 0.3, 0.3]
+  legacy_prior_sd: [0.1, 0.3, 0.3, 0.3, 0.3]
+  initial_weight: 1.0
+  zero_prefix_policy: prior_initial_and_zero_common_no_target_Hb_fit
+solver:
+  max_nfev: 120
+  substeps: 4
+  numerical_backend: numba
+  gradient_tolerance: 1.0e-6
+calibration:
+  failure_penalty: 10.0
+  selection_prefix_steps: 40
+  zero_prefix_policy: reuse_primary_selected_hyperparameters
+  selection: training_SD_NRMSE_equal_dataset_subject_aggregation
+  tie_break: simplest_candidate_then_registered_order
+measured:
+  prefix_steps: [40, 0]
+  score_start: 80
+  score_stop: 120
+  shift_steps: 48
+  null_arms: [gamma_selected, gain_selected, best_stable]
+  pairings: [real, wrong_training_subject, real_shift_support, nonwrapping_shift_12s, other_region_EEG]
+  initial_ablation_modes: [rest, legacy_free_initial]
+  initial_ablation_arm: gamma_selected
+  initial_ablation_prefix_steps: 40
+  best_stable_candidates: [input_lowpass, viscoelastic_outflow]
+  best_stable_selection: selection_prefix40_per_dataset_region_frozen_gain_tie_input_lowpass
+  training_pair_permutation: same_dataset_task_condition_cross_subject
+baselines:
+  ridge_candidates: [0.01, 0.1, 1.0, 10.0]
+  time_modes: 4
+  filter_time_constants: [0.5, 1.0, 2.0, 4.0, 8.0]
+  arms: [training_template, task_condition_template_oracle, own_Hb_prefix_ridge, full_EEG_ridge, spatial_Hb_ridge, spatial_Hb_local_EEG_ridge, spatial_Hb_filterbank_EEG_ridge, spatial_filterbank_train_permutation]
+  spatial_target_boundary: other_regions_only_never_target_Hb
+uncertainty:
+  minimum_training_sd_fraction: 0.05
+  calibration: selection_residual_SD_frozen_by_arm_prefix_dataset_region_component
+  interpretation: calibrated_predictive_distribution_not_physiological_posterior
+synthetic:
+  scenarios: [standard, nonrest, input_lowpass, viscoelastic_outflow, common_Hb, no_coupling]
+  families: [restricted, randomized]
+  repeats: 12
+  calibration_repeats: 6
+  calibration_seed_stream: 101
+  evaluation_seed_stream: 201
+  amplitudes: [0.0125, 0.025, 0.05]
+  durations_s: [4.0, 8.0, 16.0]
+  variation: balanced_amplitude_duration_not_full_factorial
+tokenizer:
+  arms: [observation_only, point_restricted, point_randomized, distribution_randomized]
+  seeds: [101, 202, 303]
+  base_counts: {train: 512, selection: 128, evaluation: 256}
+  width: 64
+  observation_dim: 8
+  learning_rate: 0.001
+  epochs: 160
+  patience: 20
+  batch_size: 64
+  reconstruction_weight: 1.0
+  source_weight: 1.0
+  amplitude_weight: 0.25
+  ridge_alpha: 1.0
+  reference_steps: 20
+  patches: 12
+  train_scenarios: [baseline, true_a_amplitude, true_a_shape, feature_gain_only, Hb_gain_only, common_Hb, tau_change, initial_change]
+  evaluation_scenarios: [baseline, true_a_amplitude, true_a_shape, feature_gain_only, Hb_gain_only, common_Hb, tau_change, initial_change, non_dct_impulse, ou_drive, time_varying_feature_gain, rotated_spectral_mixture, correlated_Hb_component, input_lowpass, viscoelastic_outflow, alternative_hrf, independent_Hb_drive, no_coupling, exact_eeg_alias, exact_joint_alias]
+  encoder_boundary: each_modality_only_own_signal_support_no_other_modality_or_truth
+  semantic_target: reference_centered_unit_RMS_common_driver_shape_and_log_RMS_amplitude
+  observation_target: full_own_modality_observation
+  capacity_control: identical_networks_observation_only_shape_amplitude_heads_learn_reconstruction
+  semantic_reconstruction_gradient: detach_for_semantically_supervised_arms
+  split: base_identity_all_counterfactual_variants_together
+  evaluation_family: randomized_common_identical_cases_for_all_four_arms
+  measured_primary: frozen_means_and_observation_vs_entire_capacity_matched_observation_only_features
+  source_increment: same_frozen_supervised_observation_O_vs_O_plus_source_S
+  measured_target_Hb_input: visible_prefix_only_never_scored_suffix_zero_prefix_excludes_target_Hb_tokens
+  measured_context_input: full_local_EEG_and_other_region_Hb_allowed
+  measured_vs_synthetic: prefix_masked_measured_probe_separate_from_full_Hb_synthetic_recovery
+  uncertainty_features: secondary_only
+endpoints:
+  primary: [gamma_vs_matched_attenuation_and_selected_gain, conditional_EEG_increment_beyond_other_Hb_and_history, tokenizer_cross_generator_shape_amplitude_recovery, frozen_tokenizer_conditional_Hb_CRPS_increment]
+  secondary: [hidden_Hb_NRMSE, mechanism_confusion, 50_80_95_interval_coverage_width, counterfactual_response_and_false_change, alias_confident_error, risk_coverage]
+  diagnostic: [initial_prior_sensitivity, per_component_scores, regional_scores, optimization_and_physical_domain_failures]
+  aggregation: subject_equal_within_dataset_then_dataset_equal_three_regions_not_independent
+  bootstrap_repeats: 1000
+  null_multiplicity: Holm_within_registered_primary_null_family
+  engineering_response_advancement: at_least_2percent_NRMSE_improvement_interval_excludes_zero_two_datasets_same_direction_and_null_specificity
+  semantic_advancement: none_this_round_descriptive_recovery_counterfactual_alias_and_CRPS_no_teacher_qualification
+  stopping_rule: frozen_finite_cells_once_no_evaluation_tuning_no_automatic_VQ_or_source_claim
+  failure_denominator: planned_and_common_success_both_retained
+  semantic_boundary: generator_conditional_targets_until_independent_evidence_no_EI_metabolic_or_cellular_source_claim
+resources:
+  max_workers: 48
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  supervisor: user_systemd
+  GPU_policy: one_training_process_per_GPU_pilot_sized

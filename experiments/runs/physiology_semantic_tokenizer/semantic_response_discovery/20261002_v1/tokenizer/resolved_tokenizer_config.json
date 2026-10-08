@@ -1,0 +1,95 @@
+{
+  "config_identity": "9a080dcd51d20f9e97952073dc2f964034e311f78a00a1b40db6214634c0eb0e",
+  "contract_path": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v1/experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_v1.yaml",
+  "project_root": "/SSD_2/pid-mcm-implementation",
+  "implementation_root": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1/source_snapshot_training_v1",
+  "options": {
+    "width": 64,
+    "observation_dimensions": 8,
+    "learning_rate": 0.001,
+    "epochs": 160,
+    "patience": 20,
+    "batch_size": 64,
+    "seeds": [
+      101,
+      202,
+      303
+    ],
+    "reconstruction_weight": 1.0,
+    "source_weight": 1.0,
+    "amplitude_weight": 0.25,
+    "ridge_alpha": 1.0,
+    "reference_steps": 20,
+    "patches": 12,
+    "train_scenarios": [
+      "baseline",
+      "true_a_amplitude",
+      "true_a_shape",
+      "feature_gain_only",
+      "Hb_gain_only",
+      "common_Hb",
+      "tau_change",
+      "initial_change"
+    ],
+    "evaluation_scenarios": [
+      "baseline",
+      "true_a_amplitude",
+      "true_a_shape",
+      "feature_gain_only",
+      "Hb_gain_only",
+      "common_Hb",
+      "tau_change",
+      "initial_change",
+      "non_dct_impulse",
+      "ou_drive",
+      "time_varying_feature_gain",
+      "rotated_spectral_mixture",
+      "correlated_Hb_component",
+      "input_lowpass",
+      "viscoelastic_outflow",
+      "alternative_hrf",
+      "independent_Hb_drive",
+      "no_coupling",
+      "exact_eeg_alias",
+      "exact_joint_alias"
+    ],
+    "arms": [
+      "observation_only",
+      "point_restricted",
+      "point_randomized",
+      "distribution_randomized"
+    ],
+    "base_counts": {
+      "train": 512,
+      "selection": 128,
+      "evaluation": 256
+    },
+    "observation_dim": 8,
+    "encoder_boundary": "each_modality_only_own_signal_support_no_other_modality_or_truth",
+    "semantic_target": "reference_centered_unit_RMS_common_driver_shape_and_log_RMS_amplitude",
+    "observation_target": "full_own_modality_observation",
+    "capacity_control": "identical_networks_observation_only_shape_amplitude_heads_learn_reconstruction",
+    "semantic_reconstruction_gradient": "detach_for_semantically_supervised_arms",
+    "split": "base_identity_all_counterfactual_variants_together",
+    "evaluation_family": "randomized_common_identical_cases_for_all_four_arms",
+    "measured_primary": "frozen_means_and_observation_vs_entire_capacity_matched_observation_only_features",
+    "source_increment": "same_frozen_supervised_observation_O_vs_O_plus_source_S",
+    "measured_target_Hb_input": "visible_prefix_only_never_scored_suffix_zero_prefix_excludes_target_Hb_tokens",
+    "measured_context_input": "full_local_EEG_and_other_region_Hb_allowed",
+    "measured_vs_synthetic": "prefix_masked_measured_probe_separate_from_full_Hb_synthetic_recovery",
+    "uncertainty_features": "secondary_only",
+    "data_counts": {
+      "train": 512,
+      "selection": 128,
+      "evaluation": 256
+    },
+    "generator_seed": 20261002
+  },
+  "arms": [
+    "observation_only_capacity_matched",
+    "point_restricted_generator",
+    "point_randomized_generator",
+    "distribution_randomized_generator"
+  ],
+  "finite_fits": 12
+}

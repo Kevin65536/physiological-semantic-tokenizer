@@ -1,0 +1,184 @@
+{
+  "schema": "semantic_response_numerical_tolerance_pilot_v1",
+  "status": "completed",
+  "recorded_at": "2026-10-02T15:36:19.049523+00:00",
+  "scope": "synthetic_unit_level_warm_check_no_measured_reads",
+  "parameters": {
+    "fixed": {
+      "alpha": 0.32,
+      "E0": 0.32,
+      "gamma": 0.32,
+      "P0": 1.0,
+      "Q0": 0.35,
+      "driver_decay_per_s": 0.45,
+      "process_std": [
+        0.08,
+        0.01,
+        0.006,
+        0.004,
+        0.004,
+        0.004
+      ],
+      "observation_scale": [
+        0.08,
+        0.025,
+        0.015
+      ],
+      "student_nu": 5.0,
+      "eeg_loading": 1.0,
+      "eeg_offset": 0.0,
+      "neurovascular_gain": 1.0
+    },
+    "free": {
+      "kappa": 0.65,
+      "tau": 2.0
+    }
+  },
+  "implementation_files": [
+    "src/inference/semantic_response_ssm.py",
+    "src/inference/shared_driver_reconstruction.py",
+    "src/inference/shared_driver_rk4.py",
+    "src/inference/shared_driver_attribution.py",
+    "src/inference/t3a_balloon_robust_ssm.py"
+  ],
+  "implementation_phase": "uncommitted_pre_run_source_freeze",
+  "environment_python": ".venv/bin/python",
+  "decision": {
+    "recommended_gradient_tolerance": 1e-06,
+    "criterion": "actual_scaled_gradient_only_no_stagnation_as_convergence",
+    "reason": "tighter_tolerance_exhausted_a_noisy_cell_at_indistinguishable_objective"
+  },
+  "clean_fixture": {
+    "reproduction_script": "import time\nimport numpy as np\nfrom src.inference.semantic_response_ssm import fixed_driver_response,fit_fixed_driver_response\nfrom src.inference.shared_driver_attribution import equal_capacity_hb_basis\nfrom src.inference.t3a_balloon_robust_ssm import BalloonParameters\np=BalloonParameters();n=120;dt=.25;t=np.arange(n)*dt\nr=.018*np.sin(t/2)+.009*np.exp(-((t-4)/2)**2)\nb=equal_capacity_hb_basis(np.eye(3*n),modes=4).reshape(n,3,4)[:,1:]\nmask=np.zeros((n,2),bool);mask[:40]=True\ninitial=np.array([.003,1.008,1.006,1.006,1.002])\nfor lag,visc in [(0.,0.),(.7,1.2)]:\n truth=fixed_driver_response(r,p,dt,initial_state=initial,tau_n=lag,tau_v=visc)['prediction']+np.einsum('tck,k->tc',b,[.004,-.002,.001,.003])\n for tol in [1e-6,1e-8]:\n  started=time.monotonic();f=fit_fixed_driver_response(truth,r,p,dt,sd=.006,visible=mask,hb_basis=b,initial_mode='tied_pv_logprior',component_sd=.01,gradient_tolerance=tol,tau_n=lag,tau_v=visc,max_nfev=100)\n  print(dict(tau_n=lag,tau_v=visc,tolerance=tol,status=f['status'],reason=f['convergence_reason'],nfev=f['evaluations'],gradient=f['scaled_gradient_inf_norm'],seconds=time.monotonic()-started,objective=f['objective']))\n",
+    "steps": 120,
+    "dt_s": 0.25,
+    "prefix_steps": 40,
+    "tolerance_order": [
+      1e-06,
+      1e-08
+    ],
+    "rows": [
+      {
+        "tau_n": 0.0,
+        "tau_v": 0.0,
+        "tolerance": 1e-06,
+        "status": "completed",
+        "reason": "scaled_gradient",
+        "nfev": 5,
+        "gradient": 3.180582327110346e-07,
+        "seconds": 0.029089951887726784,
+        "objective": 0.1652632935570909
+      },
+      {
+        "tau_n": 0.0,
+        "tau_v": 0.0,
+        "tolerance": 1e-08,
+        "status": "completed",
+        "reason": "scaled_gradient",
+        "nfev": 7,
+        "gradient": 5.926713732941386e-11,
+        "seconds": 0.03993521723896265,
+        "objective": 0.1652632935569122
+      },
+      {
+        "tau_n": 0.7,
+        "tau_v": 1.2,
+        "tolerance": 1e-06,
+        "status": "completed",
+        "reason": "scaled_gradient",
+        "nfev": 5,
+        "gradient": 4.27985271043653e-07,
+        "seconds": 0.016533023212105036,
+        "objective": 0.15876307782163088
+      },
+      {
+        "tau_n": 0.7,
+        "tau_v": 1.2,
+        "tolerance": 1e-08,
+        "status": "completed",
+        "reason": "scaled_gradient",
+        "nfev": 7,
+        "gradient": 4.4375216460171866e-10,
+        "seconds": 0.02277630101889372,
+        "objective": 0.15876307781664437
+      }
+    ]
+  },
+  "noisy_fixture": {
+    "reproduction_script": "import numpy as np,time\nfrom src.inference.semantic_response_ssm import fixed_driver_response,fit_fixed_driver_response\nfrom src.inference.shared_driver_attribution import equal_capacity_hb_basis\nfrom src.inference.t3a_balloon_robust_ssm import BalloonParameters\np=BalloonParameters();n=120;t=np.arange(n)*.25\nbasis=equal_capacity_hb_basis(np.eye(3*n),modes=4).reshape(n,3,4)[:,1:]\nmask=np.zeros((n,2),bool);mask[:40]=True\nsummary={tol:[] for tol in [1e-6,1e-8]}\nfor seed in range(4):\n rng=np.random.default_rng(seed)\n driver=.025*np.sin(t/(1+seed*.3))+.01*np.exp(-((t-6)/3)**2)\n initial=np.array([.003,1.02,1.015,1.015,1.005])\n for lag,visc in [(0.,0.),(1.,0.),(0.,3.)]:\n  truth=fixed_driver_response(driver,p,.25,initial_state=initial,tau_n=lag,tau_v=visc)['prediction']\n  target=truth+np.einsum('tck,k->tc',basis,rng.normal(size=4)*.015)+rng.normal(size=(n,2))*.006\n  for tol in summary:\n   start=time.monotonic();f=fit_fixed_driver_response(target,driver,p,.25,sd=.006,visible=mask,hb_basis=basis,initial_mode='tied_pv_logprior',initial_prior_sd=[.1,.3,.3,.3],component_sd=.025,gradient_tolerance=tol,tau_n=lag,tau_v=visc,max_nfev=120)\n   row=dict(seed=seed,tau_n=lag,tau_v=visc,status=f['status'],reason=f['convergence_reason'],nfev=f['evaluations'],gradient=f['scaled_gradient_inf_norm'],seconds=time.monotonic()-start,objective=f['objective'])\n   summary[tol].append(row)\n   if not f['success']:print('failure',tol,row)\nfor tol,rows in summary.items():\n print('summary',tol,dict(cells=len(rows),successful=sum(r['status']=='completed' for r in rows),nfev_median=np.median([r['nfev'] for r in rows]),nfev_max=max(r['nfev'] for r in rows),gradient_max=max(r['gradient'] for r in rows),time_median=np.median([r['seconds'] for r in rows]),time_max=max(r['seconds'] for r in rows])))\nprint('max objective delta',max(abs(a['objective']-b['objective']) for a,b in zip(summary[1e-6],summary[1e-8])))\n",
+    "seeds": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "generator": "numpy.default_rng(seed)_sequential_component_then_observation_draws_in_declared_family_order",
+    "response_families": [
+      {
+        "tau_n": 0.0,
+        "tau_v": 0.0
+      },
+      {
+        "tau_n": 1.0,
+        "tau_v": 0.0
+      },
+      {
+        "tau_n": 0.0,
+        "tau_v": 3.0
+      }
+    ],
+    "steps": 120,
+    "dt_s": 0.25,
+    "prefix_steps": 40,
+    "initial_prior_sd": [
+      0.1,
+      0.3,
+      0.3,
+      0.3
+    ],
+    "max_nfev": 120,
+    "aggregates": [
+      {
+        "tolerance": 1e-06,
+        "cells": 12,
+        "successful": 12,
+        "nfev_median": 7.0,
+        "nfev_max": 9,
+        "gradient_max": 6.126278017465044e-07,
+        "time_median": 0.025031635770574212,
+        "time_max": 0.04272935912013054
+      },
+      {
+        "tolerance": 1e-08,
+        "cells": 12,
+        "successful": 11,
+        "nfev_median": 9.0,
+        "nfev_max": 119,
+        "gradient_max": 2.474941876198236e-08,
+        "time_median": 0.042279573157429695,
+        "time_max": 0.3581149112433195
+      }
+    ],
+    "failed_cells": [
+      {
+        "tolerance": 1e-08,
+        "seed": 2,
+        "tau_n": 1.0,
+        "tau_v": 0.0,
+        "status": "failed_numerical",
+        "reason": "evaluation_budget",
+        "nfev": 119,
+        "gradient": 2.474941876198236e-08,
+        "seconds": 0.3581149112433195,
+        "objective": 86.7143773319262
+      }
+    ],
+    "max_paired_objective_absolute_difference": 1.1056044968427159e-11,
+    "retention": "all_aggregate_and_failed_cell_stdout_retained_successful_individual_cell_rows_regenerable_from_exact_fixture_script"
+  },
+  "limitations": [
+    "tiny_synthetic_numerical_probe_not_measured_performance_or_physiological_evidence",
+    "warm_timing_is_not_a_parallel_resource_sizing_pilot",
+    "timings_are_observed_and_need_not_repeat_exactly"
+  ]
+}

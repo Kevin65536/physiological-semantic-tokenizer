@@ -1,0 +1,95 @@
+schema: ssm_state_continuity_v1
+experiment_id: SSM-STRENGTHEN-S3-v1
+artifact_root: experiments/runs/physiology_semantic_tokenizer/ssm_strengthening
+source_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml
+data_boundary: synthetic_only_no_measured_arrays
+protected_data: forbidden
+seed: 20261003
+seed_streams:
+  training: 3101
+  pilot: 3102
+  evaluation: 3103
+training_identities: 8
+evaluation_identities: 8
+tensor:
+  segments: 3
+  segment_steps: 120
+  dt_s: 0.25
+  state_order:
+  - r
+  - s
+  - f
+  - v
+  - p
+  - q
+initial:
+- rest
+- nonrest
+scenarios:
+- neural_only
+- common_colored
+modes:
+- full
+- center_Hb
+- Hb_hidden
+score: middle_segment_only_processed_feature_space
+observation:
+  modes_per_segment: 4
+  rho: 0.35
+  coefficient_sd:
+  - 0.04
+  - 0.03
+  - 0.02
+  - 0.01
+generator:
+  driver_sd: 0.025
+  driver_smoothing_steps: 5.0
+  common_sd: 0.025
+  common_smoothing_steps: 8.0
+  canonical_noise_sd:
+  - 0.00125
+  - 0.00015
+  - 7.0e-05
+  nonrest_sd: 0.015
+  substeps: 8
+comparison:
+  C_free: three_independent_120_point_fits_same_observations
+  C_chain: one_360_point_trajectory_initial_at_start_only
+  target_only: exact_reuse_of_C_free_middle_fit_no_duplicate_sample
+  driver_curvature_breaks:
+  - 120
+  - 240
+  observation_operator: block_diagonal_identical_30s_native_feature_operators
+  component_capacity: independent_four_coefficients_per_segment_both_arms
+  initial_prior: same_weight_per_estimated_initial_state_three_free_vs_one_chain
+  interpretation: offline_smoothing_with_visible_future_context_not_forecasting
+profiles:
+  identities:
+  - 0
+  - 1
+  modes:
+  - full
+  - center_Hb
+  offsets_sd:
+  - -0.5
+  - -0.25
+  - 0.0
+  - 0.25
+  - 0.5
+  direction: C_free_middle_initial_data_tangent_common_direction_shared_between_arms
+  constraint: all_component_coefficients_fixed_at_reference_plus_middle_direction
+  near_objective_fraction: 0.05
+  interpretation: restricted_engineering_profiles_existence_not_exhaustive_absence_or_confidence_interval
+gates:
+  failure_penalty: 100.0
+  hidden_relative_improvement_min: 0.05
+  synthetic_error_increase_max_sd: 0.02
+  failure_rate_increase_max: 0.01
+  bootstrap_repeats: 1000
+  stopping: fixed_once_no_retry_or_tuning_on_evaluation
+resources:
+  max_workers: 8
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  task_timeout_s: 900
+  supervisor: user_systemd
