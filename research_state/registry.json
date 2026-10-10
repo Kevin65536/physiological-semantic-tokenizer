@@ -1469,6 +1469,48 @@
       "role": "run_manifest"
     },
     {
+      "id": "e.ssm_output_support_contract",
+      "label": "SSM输出支持范围数值合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/ssm_output_support_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.ssm_output_support_plan",
+      "label": "SSM输出支持范围公开配对计划",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/plan.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.ssm_output_support_resources",
+      "label": "SSM输出支持范围持久执行资源",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/resources.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.ssm_output_support_summary",
+      "label": "SSM输出支持范围主实验摘要",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.ssm_output_support_verification",
+      "label": "SSM输出支持范围独立核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ssm_output_support_power_v2",
+      "label": "SSM输出支持范围背景匹配校准",
+      "path": "experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/power_calibration_v2/summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ssm_output_support_report",
+      "label": "SSM输出支持范围详细技术报告",
+      "path": "docs/report/20261010_ssm_output_support_v1.md",
+      "role": "result_summary"
+    },
+    {
       "id": "e.parameter_stability_summary",
       "label": "参数稳定性完整结果",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1/summary.json",
@@ -4840,6 +4882,34 @@
       ],
       "headline": false,
       "next_step": "优先独立复验Visual前额M0单参数τ，并增加可辨识性约束；保留条件重建用途，暂不把联合参数作为个体生理真值。N2与连续长度扩展未达到预设触发条件。"
+    },
+    {
+      "state_id": "main.ssm_output_support@2026-10-10.v1",
+      "entity": "main.ssm_output_support",
+      "label": "SSM输出支持范围与连续状态",
+      "track": "main",
+      "order": 176,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "三项公开开发实验及修订背景校准完成。匹配先验的连续状态改善中央HbR预测并降低切点敏感性，但代表记录仍存在低代价SSM/T分量交换；真实EEG对错配EEG的六个区间均跨零。保留数值失败，当前只支持带条件的代表性分解与完整剩余项，未确认唯一生理归属。",
+      "evidence_ids": [
+        "e.ssm_output_support_contract",
+        "e.ssm_output_support_plan",
+        "e.ssm_output_support_resources",
+        "e.ssm_output_support_summary",
+        "e.ssm_output_support_verification",
+        "e.ssm_output_support_power_v2",
+        "e.ssm_output_support_report"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-10T12:33:23.083810+00:00",
+      "depends_on": [
+        "main.ssm_strengthening"
+      ],
+      "headline": false,
+      "next_step": "无已启动的后续实验；候选方向是冻结X输出支持检验并寻找独立确认记录，SSM/T仍需额外观测约束。"
     }
   ]
 }

@@ -1,0 +1,106 @@
+schema: ssm_output_support_v1
+experiment_id: SSM-OUTPUT-SUPPORT-v1
+seed: 20261010
+artifact_root: experiments/runs/physiology_semantic_tokenizer/ssm_output_support
+source_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml
+source_pair_plan: experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1/pair_plan.json
+scope: public_development_output_audit_not_fresh_confirmation
+data:
+  cache_root: data/cache/physiology_semantic_clean_v5
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation]
+  protected_data: forbidden
+  calibration: existing_development_subjects_only
+  evaluation_subjects_per_dataset: 6
+  selection: lexical_subject_one_prefrontal_site_preferred_same_montage_calibration_available
+  records_per_subject: 2
+  labels_as_inputs: false
+  wrong_pair: same_subject_task_condition_onset_counts_roi_montage_nonoverlapping_record_pair
+  wrong_pair_limitation: onset_order_and_phase_not_exactly_matched
+tensor:
+  dt_s: 0.25
+  steps: 360
+  score_steps: [120, 240]
+  state_order: [r, s, f, v, p, q]
+  components: [EEG_logpower_PCA, relative_HbO, relative_HbR]
+observation:
+  eeg: continuous_90s_native_bandpower_5bands_6channels_training_PCA
+  hb: disjoint_native_sample_bin_means_no_temporal_filter
+  baseline: first_5s_visible_reference_not_assumed_rest
+  scale: training_PCA_to_0.025_Hb_common_positive_scale_to_0.025
+  model_operator: identical_native_sample_interpolation_bin_average_and_reference
+  extra_component: fixed_4_DCT_modes_per_original_30s_block_loading_0.65_0.35
+  coefficient_sd: [0.04, 0.03, 0.02, 0.01]
+  missing_remaining: NaN_on_unobserved_entries
+solver:
+  substeps: 4
+  validation_substeps: 8
+  penalty: 0.01
+  initial_penalty: 100.0
+  flow_prior_weight: 1.0
+  flow_prior_log_sd: 0.6931471805599453
+  max_iterations: 120
+  max_evaluations: 500
+  gradient_tolerance: 0.00001
+  constraint_tolerance: 0.00001
+  numerical_threads: 1
+comparison:
+  arms: [free, chain_matched, chain_first]
+  boundaries: [120, 240]
+  shifted_boundaries: [[100, 220], [140, 260]]
+  fixed_driver_curvature_breaks: [120, 240]
+  free_prior: physical_states_at_each_free_segment_start
+  chain_matched_prior: same_physical_states_at_same_three_times
+  chain_first_prior: physical_state_at_time_zero_only
+  parameter_policy: fixed_reference_tau_2_gain_1_kappa_0.64_no_response_search
+  masks: [full, middle_Hb, middle_HbR]
+  eeg_conditions: [paired, wrong_pair, Hb_only]
+  context_hb_s: [90, 75]
+profiles:
+  panel: first_lexical_evaluation_subject_each_dataset_first_record
+  outputs: [SSM_Hb, T, X, volume, p_minus_v, flow, driver]
+  nonlinear_modes: [full]
+  local_modes: [full, middle_Hb]
+  objectives: [data, total]
+  offsets: [-0.5, -0.25, 0.25, 0.5]
+  threshold_fraction: 0.05
+  direction: own_output_worst_generalized_tangent_each_arm_and_objective
+  parameter_coordinate_scales: {driver: 0.025, initial: 0.02}
+  state_output_unit: 0.01
+  constraint: signed_projection_of_whole_middle_output_all_actual_unknowns_reoptimized
+  local_information_floor: 0.000001
+  finite_search: witnesses_only_not_exhaustive_confidence_bounds
+synthetic:
+  training_seeds: 8
+  evaluation_seeds: 16
+  streams: {training: 5101, pilot: 5102, evaluation: 5103}
+  driver_sd: 0.025
+  driver_smoothing_steps: 5.0
+  nonrest_sd: 0.015
+  component_sd: 0.025
+  component_smoothing_steps: 8.0
+  canonical_noise_sd: [0.00125, 0.00015, 0.00007]
+  scenarios: [neural_only, nonrest_common]
+power:
+  seeds_per_dataset: 16
+  injection_Hb_training_SD: [0.25, 0.5, 1.0]
+  background: training_coordinate_joint_AR1_covariance_from_native_features_not_pure_noise
+  parameter_policy: same_fixed_reference
+  detection: paired_minus_wrong_pair_and_Hb_only_subject_seed_cluster_bootstrap
+endpoints:
+  primary: [output_profile_witness_range, boundary_T_X_remaining_stability, hidden_Hb_prediction]
+  secondary: [paired_EEG_increment, synthetic_component_truth, initial_volume_separation]
+  diagnostic: [full_reconstruction, local_data_vs_prior_information, fixed_parameter_restriction]
+  bootstrap_repeats: 2000
+  failure_penalty: 100.0
+  bootstrap_unit: subject_both_records_together_or_generator_seed
+  improvement_sign: comparator_error_minus_candidate_error
+  stopping: fixed_once_all_planned_failures_retained_no_evaluation_tuning
+resources:
+  max_workers: 24
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  supervisor: user_systemd
+report:
+  path: docs/report/20261010_ssm_output_support_v1.md
+  format: markdown
+  language: zh_CN

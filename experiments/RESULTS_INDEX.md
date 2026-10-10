@@ -37,6 +37,35 @@ targets so the delivered figures can be regenerated. Other prepared targets are
 rebuildable caches and stay local; array-only tests do not require run artifacts.
 The earlier presentation export remains local at its original versioned path.
 
+## SSM output support and continuous states — 2026-10-10
+
+The [contract](configs/physiology_semantic_tokenizer/ssm_output_support_v1.yaml)
+and [protocol](../docs/EXPERIMENT_PLAN.md#ssm-输出支持范围连续状态与跨模态约束2026-10-10)
+define output-function profiles, native continuous-record comparisons with
+matched boundary priors, and paired-EEG controls. Read the
+[Chinese technical report](../docs/report/20261010_ssm_output_support_v1.md)
+alongside the [owning summary](runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/summary.json)
+and [verification](runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/verification.json).
+Retain the resolved contracts, metadata plan, training coordinates, source
+snapshots, supervisor/resource records, terminal task JSON, comparison tables,
+and fitted/profile arrays needed to audit decomposition closure, hidden scores
+and alternative solutions. The initial power calibration remains intact; its
+separately versioned [background refinement](runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/power_calibration_v2/summary.json)
+retains the empirical training bank, moment checks, terminal tasks and paired
+results. `report_analysis_v1/` holds the report's derived tables and PNG figures.
+This package is explicitly retained in Git at its original paths. The tracked
+arrays include every standard full-observation measured fit for report/state
+audits, the prespecified records across all fitted conditions, the numerical
+failure, all output-profile vectors, and seed-zero synthetic examples. The
+development prepared records needed to regenerate the empirical background
+and the prespecified profile records are also retained. Other fitted arrays,
+evaluation preparation caches, pilot
+arrays and power-example arrays remain local; repeating the full numerical
+array audit requires those local payloads or regenerating them from the frozen
+sources and declared native datasets. All terminal task records and complete
+metric/profile/comparison tables are tracked, including unsuccessful outcomes.
+No previous evidence package is replaced or deleted.
+
 ## EEG proxy sampling-rate comparison — 2026-10-10
 
 The [versioned contract](configs/physiology_semantic_tokenizer/eeg_proxy_rate_v1.yaml)

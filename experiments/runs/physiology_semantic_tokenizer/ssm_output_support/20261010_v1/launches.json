@@ -1,0 +1,62 @@
+[
+  {
+    "unit": "ssm-output-support-prepare-20261010.service",
+    "command": [
+      "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+      "experiments/scripts/evaluate_ssm_output_support.py",
+      "--run-dir",
+      "experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1",
+      "--stage",
+      "prepare",
+      "--workers",
+      "12"
+    ],
+    "cwd": "/SSD_2/pid-mcm-implementation",
+    "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/prepare.log",
+    "environment": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    },
+    "created_at": "2026-10-10T12:01:45.439703+00:00"
+  },
+  {
+    "unit": "ssm-output-support-campaign-20261010.service",
+    "command": [
+      "/bin/bash",
+      "-c",
+      "set -e\nfor stage in calibrate synthetic measured profiles power summary\ndo\n .venv/bin/python experiments/scripts/evaluate_ssm_output_support.py --run-dir experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1 --stage \"$stage\" --workers 24\ndone\n"
+    ],
+    "cwd": "/SSD_2/pid-mcm-implementation",
+    "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/campaign.log",
+    "created_at": "2026-10-10T12:03:11.944997+00:00",
+    "environment": {
+      "numerical_threads": 1
+    },
+    "stages": [
+      "calibrate",
+      "synthetic",
+      "measured",
+      "profiles",
+      "power",
+      "summary"
+    ]
+  },
+  {
+    "unit": "ssm-output-support-power-v2-20261010.service",
+    "command": [
+      "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+      "experiments/scripts/evaluate_ssm_output_support.py",
+      "--run-dir",
+      "experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1",
+      "--stage",
+      "power_calibration_v2",
+      "--workers",
+      "24"
+    ],
+    "cwd": "/SSD_2/pid-mcm-implementation",
+    "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/power_v2.log",
+    "created_at": "2026-10-10T12:13:00.248929+00:00"
+  }
+]

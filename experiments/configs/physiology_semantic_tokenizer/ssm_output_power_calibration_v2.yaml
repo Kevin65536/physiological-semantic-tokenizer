@@ -1,0 +1,34 @@
+schema: ssm_output_power_calibration_v2
+experiment_id: SSM-OUTPUT-SUPPORT-v1-POWER-v2
+parent_run: experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1
+output_subdirectory: power_calibration_v2
+scope: same_public_development_suite_training_features_only_no_new_raw_reads
+reason: v1_AR1_background_underrepresented_HbR_amplitude_and_did_not_preserve_Hb_crosscovariance
+background:
+  method: training_record_mean_plus_Gaussian_mixture_of_centered_whole_record_trajectories
+  source: parent_training_only_frozen_feature_coordinate
+  mean: training_record_mean_at_each_of_360_time_points
+  Hb_weights: shared_between_HbO_and_HbR_independent_standard_normals_divided_by_sqrt_record_count
+  EEG_weights: independent_of_Hb_weights
+  properties: exact_training_mean_Hb_covariance_lag_products_and_expected_periodogram
+  interpretation: conditional_empirical_challenge_background_not_pure_noise_or_nonphysiological_truth
+  limitation: finite_training_record_span_and_fixed_task_mean_not_unseen_background_population
+generator:
+  seed_stream: 7103
+  independent_identities_per_dataset: 16
+  records_per_identity: 2
+  injection_Hb_training_SD: [0.0, 0.25, 0.5, 1.0]
+  wrong_pair: independent_driver_and_independent_EEG_background_with_same_frozen_task_mean
+  zero_injection: negative_control_for_the_detection_procedure
+  observation: parent_fixed_SSM_with_identical_native_bin_operator_and_mask
+  mask: middle_Hb
+  arm: chain_matched
+  solver: unchanged_parent_budget_weights_and_fixed_parameters
+statistics:
+  bootstrap_repeats: 2000
+  unit: identity_with_two_records
+  primary_calibration: all_16_generator_identities
+  matched_sample_size_sensitivity: first_6_seed_identities_without_value_selection
+  interpretation: sensitivity_calibration_not_a_precise_population_power_estimate
+stopping: fixed_once_keep_failures_no_measured_result_tuning
+protected_data: forbidden

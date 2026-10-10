@@ -1,0 +1,19 @@
+{
+  "schema": "ssm_output_support_report_analysis_v1",
+  "parent": "summary.json",
+  "supplementary_power": "power_calibration_v2/summary.json",
+  "inputs": [
+    "measured_metrics.csv",
+    "synthetic_metrics.csv",
+    "arrays/measured",
+    "arrays/synthetic",
+    "coordinates.json",
+    "plan.json"
+  ],
+  "methods": {
+    "T_X_truth": "raw truth RMSE divided by synthetic training scale retained in NPZ; paired seed bootstrap",
+    "background": "regenerate background only from retained deterministic generator and training bank; no fitting or raw reads",
+    "state": "central 30s fitted trajectories, model-conditional diagnostic not measured truth"
+  },
+  "measured_raw_arrays_read": 0
+}
