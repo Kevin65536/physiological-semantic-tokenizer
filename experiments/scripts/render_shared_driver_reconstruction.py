@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render retained shared-driver linear diagnostic evidence; never fit models."""
+"""Render retained shared-driver evidence and explicit educational linear replays."""
 from __future__ import annotations
 
 import argparse
@@ -6108,6 +6108,282 @@ def render_semantic_response_report(run, out, draft_name='SSM_SEMANTIC_RESPONSE_
     return record
 
 
+def fitting_gradient_flow(matrix, target, *, frames=101, rcond=1e-10):
+    """Exact continuous least-squares gradient flow, sampled on a log clock.
+
+    This is an educational solver for the retained linear screen, not a
+    reconstruction of the historical nonlinear optimizer's iteration history.
+    Coordinates and the singular-value cutoff match that screen.
+    """
+    from scipy.linalg import svd
+    a, b = np.asarray(matrix, float), np.asarray(target, float)
+    if (a.ndim != 2 or b.shape != (a.shape[0],) or frames < 3
+            or not np.isfinite(a).all() or not np.isfinite(b).all()
+            or not 0 < rcond < 1):
+        raise ValueError("Invalid educational least-squares system")
+    u, s, vt = svd(a, full_matrices=False)
+    keep = s > rcond * s[0]
+    if not keep.any():
+        raise ValueError("The educational design has no observable direction")
+    u, s, vt = u[:, keep], s[keep], vt[keep]
+    clock = np.r_[0., np.geomspace(1e-4 / s[0]**2, 35. / s[-1]**2, frames - 1)]
+    factors = -np.expm1(-clock[:, None] * s[None, :]**2)
+    coordinates = ((factors * (u.T @ b / s)) @ vt)
+    prediction = coordinates @ a.T
+    sse = np.sum((prediction - b)**2, axis=1)
+    return dict(clock=clock, coordinates=coordinates, prediction=prediction,
+                sse=sse, rank=len(s), singular_values=s,
+                left=u, inverse=(vt.T / s) @ u.T)
+
+
+def fitting_component_path(matrix, target, extra, *, frames=81, rcond=1e-10):
+    """Release a six-coefficient ridge penalty after eliminating the base fit.
+
+    At every frame the original driver/initial states are reoptimized exactly.
+    Lambda=0 is the existing expanded linear projection, not a new source claim.
+    """
+    from scipy.linalg import svd
+    a, b, c = np.asarray(matrix, float), np.asarray(target, float), np.asarray(extra, float)
+    base = fitting_gradient_flow(a, b, frames=3, rcond=rcond)
+    pinv, u = base['inverse'], base['left']
+    residual = b - u @ (u.T @ b)
+    cp = c - u @ (u.T @ c)
+    uc, s, vt = svd(cp, full_matrices=False)
+    keep = s > rcond * s[0]
+    uc, s, vt = uc[:, keep], s[keep], vt[keep]
+    penalties = np.r_[np.inf, np.geomspace(s[0]**2 * 1e5, s[-1]**2 * 1e-7, frames-2), 0.]
+    extra_coefficients = np.array([
+        np.zeros(c.shape[1]) if not np.isfinite(lam)
+        else vt.T @ ((s / (s*s + lam)) * (uc.T @ residual))
+        for lam in penalties])
+    base_coefficients = (b[None, :] - extra_coefficients @ c.T) @ pinv.T
+    physical = base_coefficients @ a.T
+    additional = extra_coefficients @ c.T
+    prediction = physical + additional
+    return dict(penalty=penalties, prediction=prediction, physical=physical,
+                additional=additional, coordinates=base_coefficients,
+                sse=np.sum((prediction-b)**2, axis=1))
+
+
+def render_fitting_explainer(run, out):
+    """Read two public retained cases and export a self-contained HTML lesson.
+
+    No raw reader, parameter selection, nonlinear refit, protected evaluation,
+    or mutation of retained evidence is performed. The new computations are
+    deterministic linear-screen replay and forward-only algebra checks.
+    """
+    import sys
+    from dataclasses import replace
+    import yaml
+
+    repo = Path(__file__).resolve().parents[2]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from src.inference.observation_baselines import native_feature_operators
+    from src.inference.shared_driver_reconstruction import (
+        build_shared_driver_design, nonlinear_driver_forward, waveform_component_basis)
+    from src.inference.t3a_balloon_robust_ssm import (
+        BalloonParameters, BalloonFixedParameters, BalloonFreeParameters)
+
+    run, out = run.resolve(), out.resolve()
+    if out.exists():
+        raise ValueError("Choose a fresh versioned export; existing artifacts are retained")
+    cfg = yaml.safe_load((run / 'resolved_config.yaml').read_text())
+    manifest = json.loads((run / 'manifest.json').read_text())
+    if (cfg.get('schema') != 'shared_driver_waveform_diagnostic_v1'
+            or manifest.get('execution') != 'completed'
+            or cfg.get('protected_boundary') != 'exact_parent_prepared_and_full_cell_arrays_only_no_raw_or_protected_loaders'
+            or cfg.get('focus') != dict(subject='subject_09', outer=3, trial=3)):
+        raise ValueError("Expected the completed public waveform diagnostic contract")
+    parent = (repo / cfg['parent_run']).resolve()
+    parent_manifest = json.loads((parent / 'manifest.json').read_text())
+    if (parent_manifest.get('execution') != 'completed'
+            or parent_manifest.get('experiment_id') != 'SSM-SHARED-DRIVER-CONDITIONAL-OPTICAL-GAIN-v1'):
+        raise ValueError("Unexpected parent evidence before array access")
+    parent_cfg = yaml.safe_load((parent / 'resolved_config.yaml').read_text())
+    metrics = pd.read_csv(parent / 'metrics.csv')
+    groups = [f'no_motion__{s}_o3' for s in cfg['subjects']]
+    panel = metrics[metrics.group.isin(groups) & metrics.method.eq('conditional_trained_gain')
+                    & metrics['mode'].eq('full')].copy()
+    if len(panel) != 18 or panel[['group', 'trial']].duplicated().any():
+        raise ValueError("Expected 18 unique retained validation windows")
+    score_columns = [f'nrmse_{c}' for c in COMPONENTS]
+    panel['combined_nrmse'] = np.sqrt(np.mean(panel[score_columns].to_numpy(float)**2, axis=1))
+    valid = (panel.status.eq('completed') & truth(panel.physical_valid)
+             & truth(panel.fine_physical_valid) & np.isfinite(panel.combined_nrmse))
+    good = panel[valid].sort_values(['combined_nrmse', 'group', 'trial']).iloc[0]
+    choices = [('difficult', '困难样例', 'no_motion__subject_09_o3', 3),
+               ('good', '较好样例', str(good.group), int(good.trial))]
+    n, dt = cfg['tensor']['steps'], cfg['tensor']['dt_s']
+    if (n, dt) != (120, .25):
+        raise ValueError("Unexpected retained time support")
+    temporal = native_feature_operators(n)
+    op = np.zeros((3*n, 3*n))
+    op[0::3, 0::3] = temporal['eeg']
+    op[1::3, 1::3] = op[2::3, 2::3] = temporal['fnirs'] @ temporal['native_interpolation']
+    cases, checks, sources = [], [], []
+
+    def read_json(path):
+        sources.append(str(path.relative_to(repo)))
+        return json.loads(path.read_text())
+
+    def read_arrays(path):
+        sources.append(str(path.relative_to(repo)))
+        with np.load(path, allow_pickle=False) as z:
+            return {k: z[k].copy() for k in z.files}
+
+    def compare(actual, expected, label, atol=1e-7):
+        error = float(np.max(np.abs(np.asarray(actual) - np.asarray(expected))))
+        if not np.allclose(actual, expected, atol=atol, rtol=1e-8):
+            raise ValueError(f"Retained evidence replay mismatch: {label}: {error}")
+        checks.append(dict(check=label, max_absolute_error=error, atol=atol, passed=True))
+
+    for key, label, group, trial in choices:
+        info = read_json(parent / 'prepared' / f'{group}.json')
+        metadata = info['metadata']
+        if (info['status'] != 'completed' or info['spec']['group'] != group
+                or metadata['validation'] != [3, 7, 11, 15, 19, 23]
+                or metadata['fixed_roi']['pair_name'] != 'AF7Fp1'
+                or trial not in metadata['validation']):
+            raise ValueError("Case identity/split/ROI mismatch before array access")
+        selection = read_json(parent / 'training' / f'{group}__conditional_trained_gain' / 'selection.json')
+        cell = parent / 'cells' / f'{group}__conditional_trained_gain__full'
+        record = read_json(cell / 'result.json')
+        arrays = read_arrays(cell / 'trajectories.npz')
+        idx = np.flatnonzero(arrays['trial_indices'] == trial)
+        if len(idx) != 1:
+            raise ValueError("Missing or duplicated case identity")
+        i = int(idx[0])
+        y, pred, states, sd = (arrays['target'][i], arrays['prediction'][i],
+                                arrays['states'][i], arrays['normalizer'])
+        row = next(r for r in record['rows'] if r['trial'] == trial)
+        if (y.shape != (n, 3) or states.shape != (n, 6) or sd.shape != (3,)
+                or np.any(sd <= 0) or not np.isfinite(y).all()
+                or row['status'] != 'completed' or not row['physical_valid']
+                or not row['fine_physical_valid'] or selection['status'] != 'completed'):
+            raise ValueError("Case is not a finite, successful retained fit")
+        nrmse = np.sqrt(np.mean(((pred-y)/sd)**2, axis=0))
+        compare(nrmse, [row[c] for c in score_columns], key + ': saved nonlinear NRMSE')
+        compare(sd, metadata['normalization_sd'], key + ': training-only scale')
+        fixed = {k: v for k, v in parent_cfg['fixed'].items() if k != 'kappa'}
+        fixed['neurovascular_gain'] = selection['parameter_value']
+        p = BalloonParameters(BalloonFixedParameters(**fixed),
+                              BalloonFreeParameters(kappa=parent_cfg['fixed']['kappa'], tau=2.))
+        hbmap = np.eye(3)
+        hbmap[1:, 1:] = np.asarray(info['conditional_mapping']['matrix'])
+        operator = op @ np.kron(np.eye(n), hbmap)
+        design = build_shared_driver_design(p, n, dt, processed_mean_operator=operator)
+        a = design.observation_design / np.tile(sd, n)[:, None]
+        b = ((y-design.offset)/sd).ravel()
+        flow = fitting_gradient_flow(a, b)
+        linear = read_arrays(run / 'linear' / group / 'predictions.npz')
+        li = int(np.flatnonzero(linear['trial_indices'] == trial)[0])
+        compare(y, linear['target'][li], key + ': identical measured target')
+        compare((flow['prediction'][-1].reshape(n, 3)*sd + design.offset),
+                linear['joint__fixed'][li], key + ': gradient-flow endpoint vs retained SVD')
+        if np.max(np.diff(flow['sse'])) > 1e-7:
+            raise ValueError("Educational gradient flow increased its objective")
+        nonlinear = nonlinear_driver_forward(states[:, 0], states[0, 1:], p, dt, derivative=False)
+        forward_pred = (operator @ nonlinear['canonical_prediction'].ravel()).reshape(n, 3)
+        compare(forward_pred, pred, key + ': retained nonlinear forward reconstruction')
+        for c in (.5, 1.25, 2.):
+            pp = replace(p, fixed=replace(p.fixed, eeg_loading=p.fixed.eeg_loading/c,
+                                        neurovascular_gain=p.fixed.neurovascular_gain/c))
+            moved = nonlinear_driver_forward(c*states[:, 0], states[0, 1:], pp, dt, derivative=False)
+            compare(moved['canonical_prediction'], nonlinear['canonical_prediction'],
+                    key + f': gain gauge c={c}', atol=1e-10)
+            # A separate, explicitly generated observation-gain mismatch:
+            # loading stays one, EEG changes, Hb and physical states do not.
+            pp = replace(pp, fixed=replace(pp.fixed, eeg_loading=p.fixed.eeg_loading))
+            omitted = nonlinear_driver_forward(c*states[:, 0], states[0, 1:], pp, dt, derivative=False)
+            expected = nonlinear['canonical_prediction'].copy()
+            expected[:, 0] *= c
+            compare(omitted['canonical_prediction'], expected,
+                    key + f': omitted EEG effective gain c={c}', atol=1e-10)
+        extras = {}
+        for mechanism in ('volume', 'exchange'):
+            extra = waveform_component_basis(p, n, dt, operator, mechanism, modes=6)
+            path = fitting_component_path(a, b, extra / np.tile(sd, n)[:, None])
+            compare(path['prediction'][-1].reshape(n, 3)*sd + design.offset,
+                    linear[f'joint__slow_{mechanism}'][li],
+                    key + ': extra ' + mechanism + ' vs retained SVD')
+            extras[mechanism] = dict(
+                prediction=path['prediction'].reshape(-1, n, 3) + design.offset/sd,
+                physical=path['physical'].reshape(-1, n, 3) + design.offset/sd,
+                additional=path['additional'].reshape(-1, n, 3),
+                driver=path['coordinates'][:, :n], sse=path['sse'],
+                endpoint_nrmse=np.sqrt(np.mean((path['prediction'][-1].reshape(n, 3)-b.reshape(n, 3))**2, axis=0)),
+                driver_relative_rms_change=float(np.sqrt(np.mean(
+                    (path['coordinates'][-1, :n]-flow['coordinates'][-1, :n])**2))
+                    / np.sqrt(np.mean(flow['coordinates'][-1, :n]**2))),
+                relative_penalty=[None if not np.isfinite(x) else float(x) for x in path['penalty']])
+        cases.append(dict(key=key, label=label, group=group, trial=trial,
+            identity=metadata['trials'][trial], train_count=len(metadata['train']),
+            validation_count=len(metadata['validation']), sd=sd, beta=p.fixed.neurovascular_gain,
+            eeg_loading=p.fixed.eeg_loading, tau=p.free.tau, kappa=p.free.kappa,
+            target=y/sd, prediction=pred/sd, states=states, nrmse=nrmse,
+            residual_correlation=float(np.corrcoef(((y-pred)/sd)[:, 1:].T)[0, 1]),
+            linear=dict(prediction=flow['prediction'].reshape(-1, n, 3) + design.offset/sd,
+                        driver=flow['coordinates'][:, :n], sse=flow['sse'],
+                        clock=flow['clock'], rank=flow['rank'],
+                        nrmse=np.sqrt(np.mean((flow['prediction'][-1].reshape(n, 3)-b.reshape(n, 3))**2, axis=0)),
+                        singular_values=flow['singular_values']), extras=extras,
+            final_state_interpretation='conditional_model_estimate_not_physiological_truth',
+            nonlinear_status=row['status'], integration_max_difference=row['integration_max_difference_training_sd']))
+
+    ablations = read_json(run / 'nonlinear_summary.json')['results']
+    ablations = [dict(arm=r['arm'], status=r['status'], nrmse=r.get('nrmse'))
+                 for r in ablations if r['group'] == choices[0][2]]
+    data = dict(schema='shared_driver_fitting_explainer_v1', date='2026-10-09',
+        measured_source=str(parent.relative_to(repo)), waveform_source=str(run.relative_to(repo)),
+        time_s=np.arange(n)*dt-5., cases=cases, ablations=ablations,
+        selection=dict(rule='minimum sqrt(mean(NRMSE_component^2)) among successful no_motion outer=3 full fits',
+            planned_windows=len(panel), successful_windows=int(valid.sum()), independent_subjects=3,
+            selected_group=str(good.group), selected_trial=int(good.trial),
+            values=panel[['group', 'trial', 'combined_nrmse']].to_dict('records')),
+        sources=sorted(set(sources)), checks=checks,
+        mathematical_reference='https://arxiv.org/abs/1010.1449',
+        claim_limits=[
+            'Measured targets are processed coordinates; all 360 values are visible during reconstruction.',
+            'NRMSE uses 18 training-window component SDs, not current-window SD or noise SD.',
+            'Gradient flow replays a linear screen; it is not a historical nonlinear optimizer trace.',
+            'The ridge path changes the extra-component penalty and refits driver/initial coordinates.',
+            'Gain gauge requires changing EEG loading; historical EEG loading is fixed.',
+            'Parameter/driver contamination in a measured case is not identifiable from its residual alone.',
+            'Extra components test representability and are not physiological source labels.'])
+
+    def serial(value):
+        if isinstance(value, np.ndarray):
+            return serial(value.tolist())
+        if isinstance(value, dict):
+            return {k: serial(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [serial(v) for v in value]
+        if isinstance(value, (np.integer, np.floating)):
+            return serial(value.item())
+        return value
+
+    payload = json.dumps(serial(data), ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+    template = Path(__file__).with_name('shared_driver_fitting_explainer.html').read_text(encoding='utf-8')
+    if template.count('__EXPLAINER_DATA__') != 1:
+        raise ValueError("Missing/ambiguous HTML data placeholder")
+    html = template.replace('__EXPLAINER_DATA__', payload.replace('</', '<\\/'))
+    out.mkdir(parents=True)
+    (out / 'index.html').write_text(html, encoding='utf-8')
+    verification = dict(schema=data['schema'], passed=True, checks=checks,
+        source_reads=sorted(set(sources)), cases=[dict(key=c['key'], identity=c['identity'],
+        nrmse=c['nrmse'], linear_nrmse=c['linear']['nrmse'],
+        extra_endpoints={name:dict(nrmse=e['endpoint_nrmse'],
+            driver_relative_rms_change=e['driver_relative_rms_change'],
+            denominator='RMS of base linear r(t), including its mean; not biological truth error')
+            for name,e in c['extras'].items()}) for c in cases], selection=data['selection'],
+        computation='linear screen replay; exact forward-only gauge checks; no nonlinear refitting',
+        claim_limits=data['claim_limits'], html_bytes=len(html.encode('utf-8')))
+    (out / 'verification.json').write_text(json.dumps(serial(verification), ensure_ascii=False, indent=2)+'\n')
+    print(json.dumps(dict(output=str(out/'index.html'), checks=len(checks), cases=len(cases),
+                         bytes=len(html.encode('utf-8'))), ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
@@ -6124,12 +6400,21 @@ def main():
     parser.add_argument("--fixed-roi-flow", action="store_true", help="Render fixed ROI log-flow soft regularization diagnostic")
     parser.add_argument("--fixed-roi-tau", action="store_true", help="Render fixed AF7Fp1 shared nonlinear tau diagnostic")
     parser.add_argument("--waveform-diagnostic", action="store_true")
+    parser.add_argument("--fitting-explainer", action="store_true", help="Export an offline interactive lesson from the retained public waveform cases")
     parser.add_argument("--teacher-robustness", action="store_true")
     parser.add_argument("--component-attribution", action="store_true")
     parser.add_argument("--semantic-response", action="store_true", help="Render the complete response dynamics and continuous semantics PPT report")
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.fitting_explainer:
+        if any((args.replay, args.nonlinear_fit, args.gain_prior_fit, args.fixed_roi_tau,
+                args.fixed_roi_flow, args.fixed_roi_initial, args.fixed_roi_optical,
+                args.conditional_optical_gain, args.waveform_diagnostic, args.step_control,
+                args.teacher_robustness, args.component_attribution, args.semantic_response)):
+            parser.error("Choose one report mode")
+        render_fitting_explainer(args.run.resolve(), args.output.resolve())
+        return
     if args.semantic_response:
         render_semantic_response_report(args.run.resolve(), args.output.resolve(), draft_name=args.presentation_name)
         return
