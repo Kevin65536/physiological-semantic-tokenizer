@@ -13,6 +13,30 @@ terms in its tables describe the retained artifact at its recorded snapshot. Use
 generated [`PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) for current execution and
 scientific verdicts.
 
+## Parameter stability and common interior — 2026-10-10
+
+The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_parameter_stability_v1.yaml)
+and [protocol](../docs/EXPERIMENT_PLAN.md#参数稳定性共同内点与拟合改进2026-10-10)
+define the E1–E6 suite. The retained
+[owning summary](runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1/summary.json)
+links the frozen metadata pairs, development coordinates/calibration, method
+selection, measured and synthetic results, full profile nodes, and numerical
+audits. `pair_metrics.csv` and `parameter_estimates.csv` retain the registered
+denominators. Original fit files and the failed numerical audit are preserved;
+the summary records the qualification exclusions without changing that evidence.
+
+The versioned [Chinese PPT](../docs/report/20261010_parameter_stability_v2/PARAMETER_STABILITY.pptx)
+and [PDF](../docs/report/20261010_parameter_stability_v2/PARAMETER_STABILITY.pdf)
+retain PNG figures, slide provenance, renderer source and export checks. These
+communication assets and the selected evidence are explicitly tracked at their
+original paths despite the default artifact ignore rules. Retain terminal task
+JSON, full profile nodes, original fitted trajectories for numerical replay,
+cross-fit residuals, calibration inputs, source snapshots, supervisor logs and
+software recovery records. The three report examples also retain prepared
+targets so the delivered figures can be regenerated. Other prepared targets are
+rebuildable caches and stay local; array-only tests do not require run artifacts.
+The earlier presentation export remains local at its original versioned path.
+
 ## EEG proxy sampling-rate comparison — 2026-10-10
 
 The [versioned contract](configs/physiology_semantic_tokenizer/eeg_proxy_rate_v1.yaml)

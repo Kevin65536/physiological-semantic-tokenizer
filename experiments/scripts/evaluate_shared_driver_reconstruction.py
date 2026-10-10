@@ -3134,22 +3134,16 @@ def semantics_prepare_worker(payload):
 
 def semantics_coordinate(refs, out, key, cfg):
     """Fit one explicit training-only PCA and common Hb gain; keep DC reference."""
-    sx=np.zeros(30);xx=np.zeros((30,30));sh=np.zeros(2);hh=np.zeros(2);count=0
-    for path in sorted({r['array_path'] for r in refs}):
-        selected=[r['array_index'] for r in refs if r['array_path']==path]
-        e,h=semantics_prepared_arrays(path)
-        x=e[selected].reshape(-1,30);v=h[selected].reshape(-1,2)
-        sx+=x.sum(axis=0);xx+=x.T@x;sh+=v.sum(axis=0);hh+=(v*v).sum(axis=0);count+=len(x)
-    if not count:raise ValueError('empty coordinate training partition')
-    covariance=xx/count-np.outer(sx/count,sx/count)
-    eigenvalues,eigenvectors=np.linalg.eigh(covariance);pc=eigenvectors[:,-1]
-    if pc[np.argmax(abs(pc))]<0:pc=-pc
-    variance_h=np.maximum(hh/count-(sh/count)**2,0.)
-    if eigenvalues[-1]<=1e-16 or min(variance_h)<=1e-24:raise ValueError('degenerate training coordinate')
-    eeg_factor=cfg['coordinate']['eeg_training_sd_target']/np.sqrt(eigenvalues[-1])
-    hb_factor=cfg['coordinate']['common_Hb_training_sd_target']/np.sqrt(np.mean(variance_h))
-    coordinate=dict(key=key,pc=pc,eeg_factor=eeg_factor,hb_factor=hb_factor,
-        sd=np.r_[np.sqrt(eigenvalues[-1])*eeg_factor,np.sqrt(variance_h)*hb_factor],
+    from src.data.ssm_prepared import fit_feature_coordinate
+    def chunks():
+        for path in sorted({r['array_path'] for r in refs}):
+            selected=[r['array_index'] for r in refs if r['array_path']==path]
+            e,h=semantics_prepared_arrays(path)
+            yield e[selected],h[selected]
+    coordinate=fit_feature_coordinate(chunks(),
+        eeg_training_sd_target=cfg['coordinate']['eeg_training_sd_target'],
+        common_hb_training_sd_target=cfg['coordinate']['common_Hb_training_sd_target'])
+    coordinate.update(key=key,
         training_subjects=sorted({r['subject'] for r in refs}),training_windows=len(refs),
         training_ids=[r['id'] for r in refs],eeg_channels=refs[0]['eeg_channels'],
         centering='first_5s_reference_only; covariance_center_used_for_PCA_not_subtracted_from_target',
@@ -3576,11 +3570,8 @@ def semantics_synthetic_specs(cfg):
 
 @lru_cache(maxsize=3)
 def semantics_model_operator(steps=120):
-    op = native_feature_operators(steps)
-    mean = np.zeros((3*steps,3*steps))
-    mean[0::3,0::3] = op['eeg']
-    mean[1::3,1::3] = mean[2::3,2::3] = op['fnirs']@op['native_interpolation']
-    return mean
+    from src.inference.observation_baselines import native_model_operator
+    return native_model_operator(steps)
 
 
 def semantics_generate(cfg, spec):

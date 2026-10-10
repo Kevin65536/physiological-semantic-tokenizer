@@ -1,0 +1,16 @@
+{
+  "utc": "2026-10-10T11:23:39.189321+00:00",
+  "unit": "ssm-parameter-stability-finalization-20261010.service",
+  "properties": "MainPID=526172\nExecStart={ path=/bin/bash ; argv[]=/bin/bash -c set -e; while [ \"$(systemctl --user show ssm-parameter-stability-calibration-20261010.service -p SubState --value)\" = running ]; do sleep 10; done; test \"$(systemctl --user show ssm-parameter-stability-calibration-20261010.service -p ExecMainStatus --value)\" = 0; for stage in select followup_decisions evaluation synthetic_selected verify summary; do .venv/bin/python experiments/scripts/evaluate_shared_driver_parameter_stability.py --run-dir experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1 --stage \"$stage\" --workers 48; done ; ignore_errors=no ; start_time=[Sat 2026-10-10 19:23:26 CST] ; stop_time=[n/a] ; pid=526172 ; code=(null) ; status=0/0 }\nWorkingDirectory=/SSD_2/pid-mcm-implementation\nStandardOutput=append\nStandardError=append\nSubState=running\n",
+  "waits_for": "ssm-parameter-stability-calibration-20261010.service",
+  "stages": [
+    "select",
+    "followup_decisions",
+    "evaluation",
+    "synthetic_selected",
+    "verify",
+    "summary"
+  ],
+  "fit_workers": 48,
+  "numerical_threads": 1
+}

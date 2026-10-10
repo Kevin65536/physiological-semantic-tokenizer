@@ -1,0 +1,123 @@
+schema: shared_driver_parameter_stability_v1
+experiment_id: SSM-PARAMETER-STABILITY-v1
+seed: 20261010
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1
+source_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml
+output_namespace: experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability
+scope: public_exploratory_frozen_evaluation_not_historically_unseen_confirmation
+data:
+  cache_root: data/cache/physiology_semantic_clean_v5
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation]
+  protected_data: forbidden
+  development_identity_owner: diagnostic_plan.json
+  task_priority:
+    eeg_fnirs_single_trial: [motor_imagery, mental_arithmetic]
+    simultaneous_eeg_nirs: [wg, nback, dsr]
+    visual_cognitive_motivation: [visual_cognitive_motivation]
+  pairing: exact_condition_onset_counts_same_task_roi_channels_duration
+  simultaneous_repeat_kind: within_record_disjoint_blocks_unverified_native_session
+  feature_processing: native_30s_blocks_no_motion_correction
+  coordinate_fit: development_subjects_only_separate_dataset_site
+  labels_as_model_inputs: false
+tensor:
+  dt_s: 0.25
+  block_steps: 120
+  blocks: 3
+  duration_s: 90
+  state_order: [r, s, f, v, p, q]
+  components: [EEG_logpower_PCA, relative_HbO, relative_HbR]
+parameters:
+  tau: {bounds: [0.5, 8.0], starts: [1.0, 2.0, 4.0]}
+  neurovascular_gain: {bounds: [0.1, 10.0], starts: [0.5, 1.0, 2.0]}
+  kappa: {bounds: [0.2, 1.5], starts: [0.32, 0.64, 1.28]}
+models:
+  P0: []
+  P1_tau: [tau]
+  P1_beta: [neurovascular_gain]
+  P2: [tau, neurovascular_gain]
+  P3: [tau, neurovascular_gain, kappa]
+solver:
+  substeps: 4
+  validation_substeps: 8
+  numerical_backend: numba
+  penalty: 0.01
+  initial_penalty: 100.0
+  flow_prior_weight: 1.0
+  flow_prior_log_sd: 0.6931471805599453
+  max_iterations: 150
+  max_evaluations_per_trial: 600
+  gradient_tolerance: 0.00001
+  raw_parameter_kkt_tolerance: 0.001
+  profile_iterations: 400
+  profile_evaluations_per_trial: 1800
+profile:
+  development_groups: 18
+  scalar_initial_nodes: 9
+  scalar_max_nodes: 25
+  directions: [ascending, descending]
+  joint_axis_nodes: 5
+  objective_tolerances: [0.005, 0.01, 0.05]
+  inner_fractions: [0.01, 0.05, 0.10]
+  objectives: [current_without_parameter_shrinkage, observation_only_legal_domain]
+  per_record_modality_nrmse_margin: 0.01
+  narrow_log_range_fraction: 0.25
+  finite_search_is_nonexistence_proof: false
+continuity:
+  arms: [C0a, C0b, C1]
+  prior: {C0a: all_segment_initials, C0b: first_segment_initial_only, C1: true_trajectory_start_only}
+  smoothness_crosses_original_breaks: false
+  length_followup_if_pass_s: [30, 60, 120]
+weighting:
+  arms: [W0, W1]
+  crossfit: three_contiguous_time_folds_all_components_hidden
+  covariance: stationary_AR1_times_3modality_covariance
+  shrinkage: 0.2
+  eigenvalue_floor: 0.05
+  ar1_clip: 0.9
+sharing:
+  lambdas: [0, 0.25, 1, 4]
+  center: pooled_development_objective
+  scale: paired_development_log_crossmoment_floor_0.01_working_not_population_normal
+  selection: development_leave_record_transfer_subject_equal
+  tie_tolerance: 0.0001
+  tie_break: weaker_shrinkage
+synthetic:
+  subjects: 32
+  repeats: 2
+  heterogeneity_log_sd: [0, 0.15, 0.45]
+  edge_subjects_per_level: 4
+  noise_fraction: 0.05
+  driver_sd: 0.025
+  oracle: true_driver_initial_observation_known
+  truth_access: scoring_and_oracle_only
+selection:
+  maximum_single_improvements: 2
+  combine_only_retained_singles: true
+  P3_trigger: P2_data_information_full_rank_and_synthetic_recovery_pass
+  N2_trigger: profile_finds_better_interior_than_N0_in_at_least_25pct_development_groups
+endpoints:
+  primary: [effective_interior_pair_rate, independent_repeat_vector_error, parameter_transfer_conditioned_reconstruction]
+  secondary: [per_modality_nrmse, ICC_A1_subject_bootstrap, median_P90_repeat_error, between_subject_variance]
+  diagnostic: [profile_intersection, information_compensation, gradient_decomposition, synthetic_recovery_slope]
+  nulls: [P0_fixed_reference, fully_shared_development_parameters]
+  success:
+    convergence_min: 0.95
+    repeat_symmetric_relative_median_max: 0.20
+    near_5pct_boundary_reduction_min: 0.50
+    nrmse_worsening_max: 0.01
+    synthetic_relative_median_max: 0.10
+    synthetic_relative_p90_max: 0.25
+    synthetic_slope_range: [0.8, 1.2]
+  bootstrap_unit: subject_with_all_sites_and_repeats_together
+  bootstrap_repeats: 2000
+  failure_denominator: all_metadata_registered_pairs
+resources:
+  max_workers: 52
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  supervisor: user_systemd
+report:
+  output_root: docs/report
+  language: zh_CN
+  formats: [pptx, pdf]
+  figures: png_220dpi

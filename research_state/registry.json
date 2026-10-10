@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-10T09:27:03.832151+00:00",
+  "updated_at": "2026-10-10T12:58:02.432130+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1448,6 +1448,48 @@
       "id": "e.eeg_proxy_rate_figures",
       "label": "位图图表可读性修订与来源",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_eeg_proxy_rate_v1/figures_v2/revision.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.parameter_stability_contract",
+      "label": "参数稳定性实验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_parameter_stability_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.parameter_stability_plan",
+      "label": "参数稳定性冻结配对",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1/pair_plan.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.parameter_stability_resources",
+      "label": "参数稳定性持久运行资源",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1/resources.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.parameter_stability_summary",
+      "label": "参数稳定性完整结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.parameter_stability_verification",
+      "label": "原始数值核验与失败记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.parameter_stability_presentation",
+      "label": "参数稳定性PPT报告",
+      "path": "docs/report/20261010_parameter_stability_v2/PARAMETER_STABILITY.pptx",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.parameter_stability_presentation_verification",
+      "label": "PPT/PDF位图与版面核验",
+      "path": "docs/report/20261010_parameter_stability_v2/export_validation_v2.json",
       "role": "diagnostic"
     }
   ],
@@ -4770,6 +4812,34 @@
       ],
       "headline": false,
       "next_step": "保留4Hz为当前比较基线；若继续研究10Hz，先解耦功率估计窗口与输出间隔，并在匹配自由度、共同目标与隐藏预测下验证，不因可见拟合改善宣称生理恢复。"
+    },
+    {
+      "state_id": "main.parameter_stability@2026-10-10.v1",
+      "entity": "main.parameter_stability",
+      "label": "参数稳定性与共同内点",
+      "track": "main",
+      "order": 175,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "已完成公开数据E1–E6及冻结候选评价。总体最佳为单参数τ，Single-Trial、Simultaneous、Visual重复差异中位分别51.5%、45.5%、42.0%，联合参数尚无合格有效配对；Simultaneous仅为同记录辅助证据。Visual前额M0的τ局部重复差异13.6%、有效配对3/7，是待独立验证的候选。共享可压低重复误差，但合成检验显示真实个体差异响应被压缩，不能认定生理准确性。两条开发C0b结果未通过重积分精度检查，保留原证据并从资格统计排除，冻结评价未受影响。",
+      "evidence_ids": [
+        "e.parameter_stability_contract",
+        "e.parameter_stability_plan",
+        "e.parameter_stability_resources",
+        "e.parameter_stability_summary",
+        "e.parameter_stability_verification",
+        "e.parameter_stability_presentation",
+        "e.parameter_stability_presentation_verification"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-10T12:58:02.432130+00:00",
+      "depends_on": [
+        "main.physiology_semantics"
+      ],
+      "headline": false,
+      "next_step": "优先独立复验Visual前额M0单参数τ，并增加可辨识性约束；保留条件重建用途，暂不把联合参数作为个体生理真值。N2与连续长度扩展未达到预设触发条件。"
     }
   ]
 }

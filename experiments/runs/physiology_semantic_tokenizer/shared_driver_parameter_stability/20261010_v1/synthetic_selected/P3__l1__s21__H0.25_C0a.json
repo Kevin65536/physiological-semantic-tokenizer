@@ -1,0 +1,672 @@
+{
+  "status": "completed",
+  "subject": 21,
+  "level": 1,
+  "model": "P3",
+  "variant": "H0.25_C0a",
+  "strength": 0.25,
+  "arm": "C0a",
+  "truth": {
+    "tau": 1.4400851363696807,
+    "neurovascular_gain": 1.1539871043430185,
+    "kappa": 0.860394291658797
+  },
+  "fits": [
+    {
+      "status": "completed",
+      "converged": true,
+      "parameter_names": [
+        "tau",
+        "neurovascular_gain",
+        "kappa"
+      ],
+      "parameter_values": [
+        1.8023605935843467,
+        1.0131841926363931,
+        0.6843322097322447
+      ],
+      "parameter_bounds": [
+        [
+          0.5,
+          8.0
+        ],
+        [
+          0.1,
+          10.0
+        ],
+        [
+          0.2,
+          1.5
+        ]
+      ],
+      "starts": [
+        {
+          "start": 0,
+          "converged": true,
+          "status": "completed",
+          "convergence_reason": "projected_scaled_gradient",
+          "evaluations": 33,
+          "iterations": 5,
+          "objective": 4.406121708227581,
+          "projected_scaled_gradient_inf_norm": 8.27502779592429e-06,
+          "parameter_values": [
+            1.802365214284326,
+            1.0131845583802044,
+            0.6843328379197062
+          ],
+          "domain_rejections": 0
+        },
+        {
+          "start": 1,
+          "converged": true,
+          "status": "completed",
+          "convergence_reason": "projected_scaled_gradient",
+          "evaluations": 33,
+          "iterations": 5,
+          "objective": 4.406121707656123,
+          "projected_scaled_gradient_inf_norm": 2.4857633138305202e-06,
+          "parameter_values": [
+            1.8023605935843467,
+            1.0131841926363931,
+            0.6843322097322447
+          ],
+          "domain_rejections": 0
+        },
+        {
+          "start": 2,
+          "converged": true,
+          "status": "completed",
+          "convergence_reason": "projected_scaled_gradient",
+          "evaluations": 33,
+          "iterations": 5,
+          "objective": 4.406121708732475,
+          "projected_scaled_gradient_inf_norm": 7.071945069224679e-06,
+          "parameter_values": [
+            1.8023523276883606,
+            1.013183241359554,
+            0.684332502414058
+          ],
+          "domain_rejections": 0
+        }
+      ],
+      "selected_start": 1,
+      "objective": 4.406121707656123,
+      "projected_scaled_gradient_inf_norm": 2.4857633138305202e-06,
+      "weighted_data_sse": 2.3629657022094235,
+      "flow_prior_cost": 1.2433922216223443,
+      "replay_max_abs_difference": [
+        2.220446049250313e-16,
+        2.220446049250313e-16,
+        1.8735013540549517e-16
+      ],
+      "information": {
+        "conditional_data": {
+          "matrix": [
+            [
+              130.8486899811821,
+              -114.21230757156167,
+              83.07291249465939
+            ],
+            [
+              -114.21230757156167,
+              354.4392464603825,
+              -121.34137332463169
+            ],
+            [
+              83.07291249465939,
+              -121.34137332463169,
+              117.94178672636781
+            ]
+          ],
+          "eigenvalues": [
+            40.187377145360585,
+            100.03558830656745,
+            463.0067577160043
+          ],
+          "svd_drivers": []
+        },
+        "data_only": {
+          "matrix": [
+            [
+              10.472943307630299,
+              -9.553774833952845,
+              10.66475110954373
+            ],
+            [
+              -9.553774833952845,
+              11.283791101911213,
+              -11.642030559077043
+            ],
+            [
+              10.66475110954373,
+              -11.642030559077043,
+              18.854849037442964
+            ]
+          ],
+          "eigenvalues": [
+            1.28812235711121,
+            3.86961113650016,
+            35.45384995337311
+          ],
+          "svd_drivers": [
+            "gesdd",
+            "gesdd",
+            "gesdd"
+          ]
+        },
+        "nuisance_regularized": {
+          "matrix": [
+            [
+              11.815819474469695,
+              -10.068016300576174,
+              11.66606439228189
+            ],
+            [
+              -10.068016300576174,
+              51.74154444023175,
+              -26.214981669477396
+            ],
+            [
+              11.66606439228189,
+              -26.214981669477396,
+              26.073763067295303
+            ]
+          ],
+          "eigenvalues": [
+            4.450742058935737,
+            13.449511379607165,
+            71.73087354345381
+          ],
+          "svd_drivers": [
+            "gesdd",
+            "gesdd",
+            "gesdd"
+          ]
+        }
+      },
+      "uncertainty": "NOT_ESTIMATED",
+      "physical_checks": [
+        {
+          "all_intermediate_valid": true,
+          "completed_samples": 120,
+          "requested_samples": 120,
+          "completed_states": {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.8399168796895903,
+            "minimum_v": 0.9466657694641233,
+            "minimum_p": 0.9466657643352046,
+            "minimum_q": 0.9713859647257078,
+            "minimum_extraction": 0.30222321286111187,
+            "maximum_extraction": 0.3681905521395628,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.4591674368474589,
+            "flow_below_0_01_count": 0
+          },
+          "substeps": 4,
+          "dt": 0.25,
+          "integrator": "classical_RK4_physical_coordinates_fixed_ZOH_driver"
+        },
+        {
+          "all_intermediate_valid": true,
+          "completed_samples": 120,
+          "requested_samples": 120,
+          "completed_states": {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.9927215577305457,
+            "minimum_v": 0.9866495072769792,
+            "minimum_p": 0.9754178721556119,
+            "minimum_q": 0.9299018415123789,
+            "minimum_extraction": 0.2766489279371551,
+            "maximum_extraction": 0.32192005394429746,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.38849008345667957,
+            "flow_below_0_01_count": 0
+          },
+          "substeps": 4,
+          "dt": 0.25,
+          "integrator": "classical_RK4_physical_coordinates_fixed_ZOH_driver"
+        },
+        {
+          "all_intermediate_valid": true,
+          "completed_samples": 120,
+          "requested_samples": 120,
+          "completed_states": {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.8725913593701716,
+            "minimum_v": 0.9582395261693435,
+            "minimum_p": 0.9582393105023996,
+            "minimum_q": 0.9702224942288901,
+            "minimum_extraction": 0.30093004335412415,
+            "maximum_extraction": 0.35723349619173833,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.44197375629567576,
+            "flow_below_0_01_count": 0
+          },
+          "substeps": 4,
+          "dt": 0.25,
+          "integrator": "classical_RK4_physical_coordinates_fixed_ZOH_driver"
+        }
+      ],
+      "objective_components": {
+        "data": 2.3629657022094235,
+        "driver": 0.0019165483590930384,
+        "initial": 0.6517188314000898,
+        "flow": 1.2433922216223443,
+        "parameter_prior": 0.14612840406517366
+      },
+      "raw_parameter_gradient": [
+        3.2990913658936805e-05,
+        -3.7211551899063444e-05,
+        1.378830353071514e-05
+      ],
+      "raw_parameter_gradient_components": {
+        "data": [
+          1.2968439691690332,
+          -3.175269931209824,
+          -0.7532370859994759
+        ],
+        "driver": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "initial": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "flow": [
+          0.0,
+          2.4657914344881124,
+          -0.8044736102392981
+        ],
+        "parameter_prior": [
+          -1.2968109782553743,
+          0.7094412851698125,
+          1.5577244845423046
+        ]
+      },
+      "raw_parameter_kkt_inf_norm": 3.7211551899063444e-05,
+      "projected_raw_parameter_gradient": [
+        3.2990913658936805e-05,
+        -3.7211551899063444e-05,
+        1.378830353071514e-05
+      ],
+      "log_parameter_boundary_distance": [
+        0.4624719190659227,
+        0.4971557972735225,
+        0.3894861899711326
+      ],
+      "evaluations": 102,
+      "tau": 1.8023605935843467,
+      "neurovascular_gain": 1.0131841926363931,
+      "kappa": 0.6843322097322447,
+      "nrmse": [
+        0.02644552592313148,
+        0.05529733787377108,
+        0.052977657554589774
+      ],
+      "correlation": [
+        0.99972170266351,
+        0.9987508234738864,
+        0.9890431233052414
+      ],
+      "parameters": {
+        "tau": 1.8023605935843467,
+        "neurovascular_gain": 1.0131841926363931,
+        "kappa": 0.6843322097322447
+      },
+      "accepted": true,
+      "model": "P3",
+      "arm": "C0a",
+      "seconds": 3.699363064020872,
+      "objective_kind": "current_without_parameter_shrinkage"
+    },
+    {
+      "status": "completed",
+      "converged": true,
+      "parameter_names": [
+        "tau",
+        "neurovascular_gain",
+        "kappa"
+      ],
+      "parameter_values": [
+        1.8049149643439333,
+        1.0407174347103196,
+        0.6862507671006859
+      ],
+      "parameter_bounds": [
+        [
+          0.5,
+          8.0
+        ],
+        [
+          0.1,
+          10.0
+        ],
+        [
+          0.2,
+          1.5
+        ]
+      ],
+      "starts": [
+        {
+          "start": 0,
+          "converged": true,
+          "status": "completed",
+          "convergence_reason": "projected_scaled_gradient",
+          "evaluations": 33,
+          "iterations": 5,
+          "objective": 3.5097703874494335,
+          "projected_scaled_gradient_inf_norm": 4.6203484718140035e-06,
+          "parameter_values": [
+            1.8049178275369242,
+            1.0407178260650687,
+            0.6862510183917838
+          ],
+          "domain_rejections": 0
+        },
+        {
+          "start": 1,
+          "converged": true,
+          "status": "completed",
+          "convergence_reason": "projected_scaled_gradient",
+          "evaluations": 33,
+          "iterations": 5,
+          "objective": 3.5097703873076296,
+          "projected_scaled_gradient_inf_norm": 1.6649371288586463e-06,
+          "parameter_values": [
+            1.8049149643439333,
+            1.0407174347103196,
+            0.6862507671006859
+          ],
+          "domain_rejections": 0
+        },
+        {
+          "start": 2,
+          "converged": true,
+          "status": "completed",
+          "convergence_reason": "projected_scaled_gradient",
+          "evaluations": 33,
+          "iterations": 5,
+          "objective": 3.5097703877542537,
+          "projected_scaled_gradient_inf_norm": 9.325367056002812e-06,
+          "parameter_values": [
+            1.8049099076493562,
+            1.040717505186874,
+            0.6862523743394462
+          ],
+          "domain_rejections": 0
+        }
+      ],
+      "selected_start": 1,
+      "objective": 3.5097703873076296,
+      "projected_scaled_gradient_inf_norm": 1.6649371288586463e-06,
+      "weighted_data_sse": 2.3407015936996505,
+      "flow_prior_cost": 0.8683934839277314,
+      "replay_max_abs_difference": [
+        2.220446049250313e-16,
+        2.6107588313450947e-16,
+        1.1102230246251565e-16
+      ],
+      "information": {
+        "conditional_data": {
+          "matrix": [
+            [
+              92.91532673308663,
+              -130.53159279909673,
+              99.30498733276826
+            ],
+            [
+              -130.53159279909673,
+              664.7288616098612,
+              -219.22277108402682
+            ],
+            [
+              99.30498733276826,
+              -219.22277108402682,
+              158.9603240246089
+            ]
+          ],
+          "eigenvalues": [
+            19.8063336898927,
+            114.3575307729673,
+            782.4406479046961
+          ],
+          "svd_drivers": []
+        },
+        "data_only": {
+          "matrix": [
+            [
+              10.447403203129845,
+              -9.456339467400294,
+              10.357964867248684
+            ],
+            [
+              -9.456339467400294,
+              11.401080229876975,
+              -11.341040850467401
+            ],
+            [
+              10.357964867248684,
+              -11.341040850467401,
+              19.36177313865184
+            ]
+          ],
+          "eigenvalues": [
+            1.438533843864533,
+            4.528374932958086,
+            35.24334779483604
+          ],
+          "svd_drivers": [
+            "gesdd",
+            "gesdd",
+            "gesdd"
+          ]
+        },
+        "nuisance_regularized": {
+          "matrix": [
+            [
+              12.844637244166403,
+              -12.490219386456602,
+              13.57762028783668
+            ],
+            [
+              -12.490219386456602,
+              68.51673451806653,
+              -32.28661957324649
+            ],
+            [
+              13.57762028783668,
+              -32.28661957324649,
+              30.226178748557476
+            ]
+          ],
+          "eigenvalues": [
+            4.680804073509712,
+            16.0215707910511,
+            90.88517564622958
+          ],
+          "svd_drivers": [
+            "gesdd",
+            "gesdd",
+            "gesdd"
+          ]
+        }
+      },
+      "uncertainty": "NOT_ESTIMATED",
+      "physical_checks": [
+        {
+          "all_intermediate_valid": true,
+          "completed_samples": 120,
+          "requested_samples": 120,
+          "completed_states": {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.8698804861348958,
+            "minimum_v": 0.9570517688653896,
+            "minimum_p": 0.9570520105721116,
+            "minimum_q": 0.9491744976656871,
+            "minimum_extraction": 0.2893826617234049,
+            "maximum_extraction": 0.3581182048661723,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.4433511119735344,
+            "flow_below_0_01_count": 0
+          },
+          "substeps": 4,
+          "dt": 0.25,
+          "integrator": "classical_RK4_physical_coordinates_fixed_ZOH_driver"
+        },
+        {
+          "all_intermediate_valid": true,
+          "completed_samples": 120,
+          "requested_samples": 120,
+          "completed_states": {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.8901316814423048,
+            "minimum_v": 0.9642320523857675,
+            "minimum_p": 0.9642135865937252,
+            "minimum_q": 0.9335755063019378,
+            "minimum_extraction": 0.2828495938189511,
+            "maximum_extraction": 0.35161104645408925,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.4332645257464437,
+            "flow_below_0_01_count": 0
+          },
+          "substeps": 4,
+          "dt": 0.25,
+          "integrator": "classical_RK4_physical_coordinates_fixed_ZOH_driver"
+        },
+        {
+          "all_intermediate_valid": true,
+          "completed_samples": 120,
+          "requested_samples": 120,
+          "completed_states": {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.9048705275073383,
+            "minimum_v": 0.9748279246656572,
+            "minimum_p": 0.9748279249524415,
+            "minimum_q": 0.968110509085553,
+            "minimum_extraction": 0.2995339678767665,
+            "maximum_extraction": 0.3470190755887995,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.42620736236638784,
+            "flow_below_0_01_count": 0
+          },
+          "substeps": 4,
+          "dt": 0.25,
+          "integrator": "classical_RK4_physical_coordinates_fixed_ZOH_driver"
+        }
+      ],
+      "objective_components": {
+        "data": 2.340701593699651,
+        "driver": 0.0018806117926058225,
+        "initial": 0.1287201629408551,
+        "flow": 0.8683934839277314,
+        "parameter_prior": 0.17007453494678598
+      },
+      "raw_parameter_gradient": [
+        8.891649082132247e-06,
+        -2.9790428516918155e-05,
+        6.476323070514489e-05
+      ],
+      "raw_parameter_gradient_components": {
+        "data": [
+          1.275834576856051,
+          -2.6940762887534784,
+          -0.9639134013173105
+        ],
+        "driver": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "initial": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "flow": [
+          0.0,
+          1.6574642606223136,
+          -0.7442740497053819
+        ],
+        "parameter_prior": [
+          -1.275825685206969,
+          1.036582237702648,
+          1.7082522142533976
+        ]
+      },
+      "raw_parameter_kkt_inf_norm": 6.476323070514489e-05,
+      "projected_raw_parameter_gradient": [
+        8.891649082132247e-06,
+        -2.9790428516918155e-05,
+        6.476323070514489e-05
+      ],
+      "log_parameter_boundary_distance": [
+        0.4629827171161714,
+        0.4913335849104229,
+        0.38809673144543083
+      ],
+      "evaluations": 102,
+      "tau": 1.8049149643439333,
+      "neurovascular_gain": 1.0407174347103196,
+      "kappa": 0.6862507671006859,
+      "nrmse": [
+        0.023456017546391775,
+        0.055116822599234346,
+        0.05398055185727363
+      ],
+      "correlation": [
+        0.999828700031898,
+        0.9991300143525375,
+        0.9915367457799483
+      ],
+      "parameters": {
+        "tau": 1.8049149643439333,
+        "neurovascular_gain": 1.0407174347103196,
+        "kappa": 0.6862507671006859
+      },
+      "accepted": true,
+      "model": "P3",
+      "arm": "C0a",
+      "seconds": 3.6062887189909816,
+      "objective_kind": "current_without_parameter_shrinkage"
+    }
+  ],
+  "training_center_accepted": true,
+  "fully_shared_estimate": {
+    "tau": 1.983507575437961,
+    "neurovascular_gain": 0.9603691215051477,
+    "kappa": 0.6653845405551885
+  }
+}

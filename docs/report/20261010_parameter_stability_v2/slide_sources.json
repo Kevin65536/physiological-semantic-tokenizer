@@ -1,0 +1,517 @@
+{
+  "schema": "parameter_stability_slide_sources_v1",
+  "evidence_root": "experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1",
+  "implementation_root": "/SSD_2/pid-mcm-implementation",
+  "slides": [
+    {
+      "slide": 1,
+      "title": "当前数据的生理参数：稳定性与可达性",
+      "source": "experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1/{summary.json,pair_plan.json}"
+    },
+    {
+      "slide": 2,
+      "title": "先看实测结论：稳定、内点与拟合需同时成立",
+      "source": "summary.json：evaluation_assessment；完整指标与逐模型对照见后续方法/结果页"
+    },
+    {
+      "slide": 3,
+      "title": "71 名被试对应多组区域配对，不能当作更多被试",
+      "source": "pair_plan.json；canonical native record/event metadata"
+    },
+    {
+      "slide": 4,
+      "title": "先冻结身份，再建立同一个观测坐标",
+      "source": "pair_plan.json；coordinates.json；docs/DATA_CONTRACT.md"
+    },
+    {
+      "slide": 5,
+      "title": "输入是处理后的观测，不是生理真值",
+      "source": "prepared/*.json；coordinates.json；native_feature_operators；fit_feature_coordinate"
+    },
+    {
+      "slide": 6,
+      "title": "六个状态的职责与真实计算路径",
+      "source": "shared_driver_rk4._slope/_integrate；native_model_operator"
+    },
+    {
+      "slide": 7,
+      "title": "逐层释放参数，联合模型按整个向量判断",
+      "source": "resolved_config.yaml；dimension_decision.json"
+    },
+    {
+      "slide": 8,
+      "title": "拟合目标含工程正则，不能冒充噪声似然",
+      "source": "fit_nonlinear_shared_parameters；objective_components；resolved_config.yaml"
+    },
+    {
+      "slide": 9,
+      "title": "连续性实验只改变初态重置与先验数量",
+      "source": "record_arrays；curvature_breaks；development_methods/*.json"
+    },
+    {
+      "slide": 10,
+      "title": "把重复、拟合、转移和 ICC 分别计算",
+      "source": "metric_contract in summary.json；pair_metrics.csv；parameter_estimates.csv"
+    },
+    {
+      "slide": 11,
+      "title": "有效内点配对率保留所有登记配对作为分母",
+      "source": "result_metrics；resolved_config.yaml；pair_metrics.csv"
+    },
+    {
+      "slide": 12,
+      "title": "合成校准保留同一采样与处理，噪声为已知设定",
+      "source": "synthetic_pair；oracle_fit；resolved_config.yaml；synthetic/*.json"
+    },
+    {
+      "slide": 13,
+      "title": "多真值校准检验个体差异，生成失败单列",
+      "source": "synthetic_manifest.json；synthetic/*.json；synthetic_summary.json"
+    },
+    {
+      "slide": 14,
+      "title": "P1：τ：理想条件下检验误差与假稳定",
+      "source": "synthetic_estimates.csv；synthetic_summary.json"
+    },
+    {
+      "slide": 15,
+      "title": "P1：β：理想条件下检验误差与假稳定",
+      "source": "synthetic_estimates.csv；synthetic_summary.json"
+    },
+    {
+      "slide": 16,
+      "title": "P2：τ、β：理想条件下检验误差与假稳定",
+      "source": "synthetic_estimates.csv；synthetic_summary.json"
+    },
+    {
+      "slide": 17,
+      "title": "P3：τ、β、κ：理想条件下检验误差与假稳定",
+      "source": "synthetic_estimates.csv；synthetic_summary.json"
+    },
+    {
+      "slide": 18,
+      "title": "合成校准：零个体差异下的恢复与收敛",
+      "source": "synthetic_summary.json；synthetic_estimates.csv"
+    },
+    {
+      "slide": 19,
+      "title": "合成校准：较小个体差异下的恢复与收敛",
+      "source": "synthetic_summary.json；synthetic_estimates.csv"
+    },
+    {
+      "slide": 20,
+      "title": "合成校准：较大个体差异下的恢复与收敛",
+      "source": "synthetic_summary.json；synthetic_estimates.csv"
+    },
+    {
+      "slide": 21,
+      "title": "合成信息近似能否解释实际重复波动",
+      "source": "summary.json：synthetic_information_calibration；synthetic/*.json"
+    },
+    {
+      "slide": 22,
+      "title": "合成信息近似能否解释实际重复波动",
+      "source": "summary.json：synthetic_information_calibration；synthetic/*.json"
+    },
+    {
+      "slide": 23,
+      "title": "实测基线：释放更多参数不保证更稳定",
+      "source": "pair_metrics.csv；development/*.json"
+    },
+    {
+      "slide": 24,
+      "title": "实测基线：释放更多参数不保证更稳定",
+      "source": "pair_metrics.csv；development/*.json"
+    },
+    {
+      "slide": 25,
+      "title": "参数信息会被驱动与初态的补偿抵消",
+      "source": "development/*.json：information；fit_nonlinear_shared_parameters"
+    },
+    {
+      "slide": 26,
+      "title": "近界解与求解不充分是两种不同问题",
+      "source": "development/*.json：raw_parameter_gradient / projected_raw_parameter_gradient"
+    },
+    {
+      "slide": 27,
+      "title": "向内下降还是向外下降，需要看梯度符号",
+      "source": "development/*__P3__N0.json：raw_parameter_gradient；original parameter bounds"
+    },
+    {
+      "slide": 28,
+      "title": "最弱信息方向是参数的组合，不能逐项孤立解释",
+      "source": "development/*.json：information.data_only.matrix；pair_plan.profile_panel"
+    },
+    {
+      "slide": 29,
+      "title": "共同内点检验重新优化所有补偿量",
+      "source": "profiles/*.json；profile_pair；profile_intersections"
+    },
+    {
+      "slide": 30,
+      "title": "共享参数与进入内区是两笔不同的代价",
+      "source": "profile_intersections；summary.json：delta_share_reference_fraction / delta_inner_reference_fraction"
+    },
+    {
+      "slide": 31,
+      "title": "先检查每个剖面节点的补偿量是否优化充分",
+      "source": "summary.json：profile_optimization；profiles/*.json"
+    },
+    {
+      "slide": 32,
+      "title": "Single-Trial：原工程目标的 A/B 参数剖面",
+      "source": "profiles/eeg_fnirs_single_trial__subject_08__prefrontal__P1_*__regularized.json"
+    },
+    {
+      "slide": 33,
+      "title": "Single-Trial：纯观测目标的 A/B 参数剖面",
+      "source": "profiles/eeg_fnirs_single_trial__subject_08__prefrontal__P1_*__obs.json"
+    },
+    {
+      "slide": 34,
+      "title": "Simultaneous：原工程目标的 A/B 参数剖面",
+      "source": "profiles/simultaneous_eeg_nirs__VP006__prefrontal__P1_*__regularized.json"
+    },
+    {
+      "slide": 35,
+      "title": "Simultaneous：纯观测目标的 A/B 参数剖面",
+      "source": "profiles/simultaneous_eeg_nirs__VP006__prefrontal__P1_*__obs.json"
+    },
+    {
+      "slide": 36,
+      "title": "Visual：原工程目标的 A/B 参数剖面",
+      "source": "profiles/visual_cognitive_motivation__S06__prefrontal__montage0__P1_*__regularized.json"
+    },
+    {
+      "slide": 37,
+      "title": "Visual：纯观测目标的 A/B 参数剖面",
+      "source": "profiles/visual_cognitive_motivation__S06__prefrontal__montage0__P1_*__obs.json"
+    },
+    {
+      "slide": 38,
+      "title": "Single-Trial：共同内点是否被实际找到",
+      "source": "profile_intersections.json；profiles/*.json"
+    },
+    {
+      "slide": 39,
+      "title": "Simultaneous：共同内点是否被实际找到",
+      "source": "profile_intersections.json；profiles/*.json"
+    },
+    {
+      "slide": 40,
+      "title": "Visual：共同内点是否被实际找到",
+      "source": "profile_intersections.json；profiles/*.json"
+    },
+    {
+      "slide": 41,
+      "title": "原目标：共同内点结论随容差怎样变化",
+      "source": "summary.json：profile_intersections；pair_plan.profile_panel"
+    },
+    {
+      "slide": 42,
+      "title": "纯观测目标：共同内点结论随容差怎样变化",
+      "source": "summary.json：profile_intersections；pair_plan.profile_panel"
+    },
+    {
+      "slide": 43,
+      "title": "E2：更充分搜索究竟改善了多少原目标",
+      "source": "solver_reference.csv；followup_decisions.json；profiles/*.json"
+    },
+    {
+      "slide": 44,
+      "title": "连续性降低部分重复误差，但仍须保住拟合",
+      "source": "pair_metrics.csv：development / N0,C0b,C1"
+    },
+    {
+      "slide": 45,
+      "title": "W1 使用冻结工作误差协方差",
+      "source": "development_calibration.json；crossfit/*.json"
+    },
+    {
+      "slide": 46,
+      "title": "W1 使用冻结工作误差协方差",
+      "source": "development_calibration.json；crossfit/*.json"
+    },
+    {
+      "slide": 47,
+      "title": "重复收益需核查代价：加权臂的 EEG 误差上升",
+      "source": "pair_metrics.csv：development / P2 / C1,W1,H4.0 versus N0"
+    },
+    {
+      "slide": 48,
+      "title": "E5 的共享强度只由开发留出记录选择",
+      "source": "development_calibration.json；frozen_selection.json"
+    },
+    {
+      "slide": 49,
+      "title": "共享中心本身也必须通过数值与边界检查",
+      "source": "development_calibration.json：models.*.pooled_fit / record_folds / mean"
+    },
+    {
+      "slide": 50,
+      "title": "单项改进必须同时保住拟合与转移表现",
+      "source": "frozen_selection.json：models.*.candidates"
+    },
+    {
+      "slide": 51,
+      "title": "单项改进必须同时保住拟合与转移表现",
+      "source": "frozen_selection.json：models.*.candidates"
+    },
+    {
+      "slide": 52,
+      "title": "方法在评价前冻结，评价后不再调参",
+      "source": "frozen_selection.json：evaluation_results_read=0"
+    },
+    {
+      "slide": 53,
+      "title": "共享后的稳定性必须接受独立真值校准",
+      "source": "synthetic_selected_training/*.json；synthetic_selected_summary.json；synthetic_selected_estimates.csv"
+    },
+    {
+      "slide": 54,
+      "title": "P3：τ、β、κ：共享后的多真值恢复（零差异）",
+      "source": "synthetic_selected_summary.json；synthetic_vector_recovery in summary.json"
+    },
+    {
+      "slide": 55,
+      "title": "P3：τ、β、κ：共享后的多真值恢复（小差异）",
+      "source": "synthetic_selected_summary.json；synthetic_vector_recovery in summary.json"
+    },
+    {
+      "slide": 56,
+      "title": "P3：τ、β、κ：共享后的多真值恢复（大差异）",
+      "source": "synthetic_selected_summary.json；synthetic_vector_recovery in summary.json"
+    },
+    {
+      "slide": 57,
+      "title": "Single-Trial：冻结候选中可达到的最好结果",
+      "source": "summary.json：groups；pair_metrics.csv"
+    },
+    {
+      "slide": 58,
+      "title": "Single-Trial：稳定、内点与有效配对的折中",
+      "source": "summary.json：evaluation groups"
+    },
+    {
+      "slide": 59,
+      "title": "Simultaneous：冻结候选中可达到的最好结果",
+      "source": "summary.json：groups；pair_metrics.csv"
+    },
+    {
+      "slide": 60,
+      "title": "Simultaneous：稳定、内点与有效配对的折中",
+      "source": "summary.json：evaluation groups"
+    },
+    {
+      "slide": 61,
+      "title": "Visual：冻结候选中可达到的最好结果",
+      "source": "summary.json：groups；pair_metrics.csv"
+    },
+    {
+      "slide": 62,
+      "title": "Visual：稳定、内点与有效配对的折中",
+      "source": "summary.json：evaluation groups"
+    },
+    {
+      "slide": 63,
+      "title": "Visual 的同记录块保留为独立的辅助结果",
+      "source": "summary.json：evaluation / Visual / within_record_disjoint_blocks"
+    },
+    {
+      "slide": 64,
+      "title": "Single-Trial：区域平均是否掩盖了局部较好结果",
+      "source": "summary.json：coordinate_groups；pair_metrics.csv"
+    },
+    {
+      "slide": 65,
+      "title": "Simultaneous：区域平均是否掩盖了局部较好结果",
+      "source": "summary.json：coordinate_groups；pair_metrics.csv"
+    },
+    {
+      "slide": 66,
+      "title": "Visual：区域平均是否掩盖了局部较好结果",
+      "source": "summary.json：coordinate_groups；pair_metrics.csv"
+    },
+    {
+      "slide": 67,
+      "title": "Single-Trial：独立估计的 τ、β 是否一致",
+      "source": "parameter_estimates.csv；frozen_selection.json"
+    },
+    {
+      "slide": 68,
+      "title": "Simultaneous：独立估计的 τ、β 是否一致",
+      "source": "parameter_estimates.csv；frozen_selection.json"
+    },
+    {
+      "slide": 69,
+      "title": "Visual：独立估计的 τ、β 是否一致",
+      "source": "parameter_estimates.csv；frozen_selection.json"
+    },
+    {
+      "slide": 70,
+      "title": "近界判断不依赖“是否恰好等于边界”",
+      "source": "summary.json：groups；pair_metrics.csv"
+    },
+    {
+      "slide": 71,
+      "title": "近界判断不依赖“是否恰好等于边界”",
+      "source": "summary.json：groups；pair_metrics.csv"
+    },
+    {
+      "slide": 72,
+      "title": "P3：τ、β、κ：候选相对基线的配对差值",
+      "source": "summary.json：paired_method_differences；pair_metrics.csv"
+    },
+    {
+      "slide": 73,
+      "title": "Simultaneous：共享改变了哪些 A/B 参数估计",
+      "source": "parameter_estimates.csv；frozen_selection.json；evaluation/*.json"
+    },
+    {
+      "slide": 74,
+      "title": "Visual：共享改变了哪些 A/B 参数估计",
+      "source": "parameter_estimates.csv；frozen_selection.json；evaluation/*.json"
+    },
+    {
+      "slide": 75,
+      "title": "Visual：共享改变了哪些 A/B 参数估计",
+      "source": "parameter_estimates.csv；frozen_selection.json；evaluation/*.json"
+    },
+    {
+      "slide": 76,
+      "title": "共享后的局部约束有多少来自新增先验",
+      "source": "summary.json：sharing_information_budget；evaluation/*.json；development_calibration.json"
+    },
+    {
+      "slide": 77,
+      "title": "共享后的局部约束有多少来自新增先验",
+      "source": "summary.json：sharing_information_budget；evaluation/*.json；development_calibration.json"
+    },
+    {
+      "slide": 78,
+      "title": "共享是否压低了实测中的个体差异",
+      "source": "summary.json：parameter_distributions；parameter_estimates.csv；frozen_selection.json"
+    },
+    {
+      "slide": 79,
+      "title": "共享是否压低了实测中的个体差异",
+      "source": "summary.json：parameter_distributions；parameter_estimates.csv；frozen_selection.json"
+    },
+    {
+      "slide": 80,
+      "title": "Single-Trial：目前能给出的具体参数数值",
+      "source": "summary.json：parameter_distributions；parameter_estimates.csv"
+    },
+    {
+      "slide": 81,
+      "title": "Single-Trial：固定参数也能重建到什么程度",
+      "source": "summary.json：groups；evaluation/*.json"
+    },
+    {
+      "slide": 82,
+      "title": "Simultaneous：目前能给出的具体参数数值",
+      "source": "summary.json：parameter_distributions；parameter_estimates.csv"
+    },
+    {
+      "slide": 83,
+      "title": "Simultaneous：固定参数也能重建到什么程度",
+      "source": "summary.json：groups；evaluation/*.json"
+    },
+    {
+      "slide": 84,
+      "title": "Visual：目前能给出的具体参数数值",
+      "source": "summary.json：parameter_distributions；parameter_estimates.csv"
+    },
+    {
+      "slide": 85,
+      "title": "Visual：固定参数也能重建到什么程度",
+      "source": "summary.json：groups；evaluation/*.json"
+    },
+    {
+      "slide": 86,
+      "title": "Single-Trial：ICC 需结合配对数和区间阅读",
+      "source": "summary.json：icc；parameter_estimates.csv"
+    },
+    {
+      "slide": 87,
+      "title": "Simultaneous：ICC 需结合配对数和区间阅读",
+      "source": "summary.json：icc；parameter_estimates.csv"
+    },
+    {
+      "slide": 88,
+      "title": "Visual：ICC 需结合配对数和区间阅读",
+      "source": "summary.json：icc；parameter_estimates.csv"
+    },
+    {
+      "slide": 89,
+      "title": "Single-Trial：典型片段 A 的观测与完整重建",
+      "source": "evaluation/eeg_fnirs_single_trial__subject_13__prefrontal__P2__N0.json；fits/*.npz"
+    },
+    {
+      "slide": 90,
+      "title": "Single-Trial：典型片段 B 的观测与完整重建",
+      "source": "evaluation/eeg_fnirs_single_trial__subject_13__prefrontal__P2__N0.json；fits/*.npz"
+    },
+    {
+      "slide": 91,
+      "title": "Single-Trial：核验典型曲线的幅度、偏移与时间",
+      "source": "evaluation/eeg_fnirs_single_trial__subject_13__prefrontal__P2__N0.json；fits/*.npz；prepared/*.npz"
+    },
+    {
+      "slide": 92,
+      "title": "Simultaneous：典型片段 A 的观测与完整重建",
+      "source": "evaluation/simultaneous_eeg_nirs__VP010__prefrontal__P2__N0.json；fits/*.npz"
+    },
+    {
+      "slide": 93,
+      "title": "Simultaneous：典型片段 B 的观测与完整重建",
+      "source": "evaluation/simultaneous_eeg_nirs__VP010__prefrontal__P2__N0.json；fits/*.npz"
+    },
+    {
+      "slide": 94,
+      "title": "Simultaneous：核验典型曲线的幅度、偏移与时间",
+      "source": "evaluation/simultaneous_eeg_nirs__VP010__prefrontal__P2__N0.json；fits/*.npz；prepared/*.npz"
+    },
+    {
+      "slide": 95,
+      "title": "Visual：典型片段 A 的观测与完整重建",
+      "source": "evaluation/visual_cognitive_motivation__S11__prefrontal__montage0__P2__N0.json；fits/*.npz"
+    },
+    {
+      "slide": 96,
+      "title": "Visual：典型片段 B 的观测与完整重建",
+      "source": "evaluation/visual_cognitive_motivation__S11__prefrontal__montage0__P2__N0.json；fits/*.npz"
+    },
+    {
+      "slide": 97,
+      "title": "Visual：核验典型曲线的幅度、偏移与时间",
+      "source": "evaluation/visual_cognitive_motivation__S11__prefrontal__montage0__P2__N0.json；fits/*.npz；prepared/*.npz"
+    },
+    {
+      "slide": 98,
+      "title": "对当前数据最有用的结论与下一步",
+      "source": "summary.json；profile_intersections.json；verification.json"
+    },
+    {
+      "slide": 99,
+      "title": "执行、数值与证据边界",
+      "source": "resources.json；software_recovery_*.json；source_snapshots/；verification.json"
+    },
+    {
+      "slide": 100,
+      "title": "两条对照记录因积分精度不足而不计为合格解",
+      "source": "verification.json；verify/*.json；summary.json：postfit_numerical_screen"
+    },
+    {
+      "slide": 101,
+      "title": "方法出处与解释限制",
+      "source": "docs/DATASETS_DESCRIPTION.md；Raue 2009；Friston 2015；PLOS pcbi.1011417"
+    }
+  ],
+  "method_references": {
+    "Raue et al.": "https://doi.org/10.1093/bioinformatics/btp358",
+    "Friston et al.": "https://www.frontiersin.org/journals/systems-neuroscience/articles/10.3389/fnsys.2015.00164/full",
+    "PLOS Computational Biology": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1011417"
+  }
+}
