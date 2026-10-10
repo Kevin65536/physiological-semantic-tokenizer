@@ -18,6 +18,27 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Observation semantics — Git retention 2026-10-10
+
+The observation-semantics evidence is retained in Git at
+[`observation_semantics/20261009_v2`](runs/physiology_semantic_tokenizer/observation_semantics/20261009_v2/summary.json)
+and its bounded
+[`C/D refinement`](runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/summary.json).
+Each keeps the resolved contract, frozen source (excluding compiled caches),
+supervisor launch, per-unit result/provenance JSON, complete metric and comparison
+tables, fitted readouts and verification. Semantic-stability range/mask arrays
+and the saved mechanism and event/hardware example arrays are also retained. The
+[`Chinese PPT/PDF export`](../docs/report/20261009_observation_semantics_v3/observation_semantics_20261009.pptx)
+and its adjacent `slide_sources.json`, validation and 23 source PNG figures trace
+the report back to those owners. The superseded
+[`pilot conclusion`](runs/physiology_semantic_tokenizer/observation_semantics/20261009_v1/pilot_conclusion.json)
+and its contract/launch/provenance records are retained without changing their
+bytes. Prepared native input NPZ caches, compiled caches, rendered page/contact
+sheet previews and earlier presentation attempts remain local; full verification
+and report regeneration require the prepared caches and the explicitly referenced
+parent evidence. Current execution and interpretation are recorded only in the
+research-state registry.
+
 ## Git retention update — 2026-10-08
 
 The response-discovery and strengthening suites retain their executable contracts,

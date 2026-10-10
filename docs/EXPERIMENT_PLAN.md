@@ -33,6 +33,62 @@ teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
 
+## 观测物理量、事件锚点与竞争机制（2026-10-09）
+
+`OBSERVATION-SEMANTICS-v1` 执行本次用户提供的 A–E 计划。数值、划分和停止规则由
+[`observation_semantics_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/observation_semantics_v1.yaml)
+持有，入口为 `experiments/scripts/evaluate_observation_semantics.py`；先运行 synthetic
+软件检查，再在持久 supervisor 下运行 pilot 和各阶段。输出使用独立的
+`observation_semantics/<run>/`，旧证据只读。该套件是公开开发诊断，不改变正式
+SSM/tokenizer，不开启其他比较协议的 protected split，不构成 teacher 晋级。
+
+- **A：语义稳定性。** 复用明确指定的成分归属六窗口 profile 和 72 窗口敏感性数组，
+  在保留 HbO/HbR 幅度关系后计算 HbT 与 Xρ。分别交付完整预测、物理项、额外项的
+  sampled lower/upper、训练坐标 SD 中的范围和有效性掩码。5% 工程目标 profile
+  与改变测量/先验/加载设置的敏感性集合分开；单一解不能被判为稳定。这里只评估
+  保留的有限候选，并复用强化实验的 BC/HselectedC 响应选择及 initial/response
+  tangent-guided profile。后者仍是固定响应参数的成分位移再拟合，不能被叙述为
+  连续参数的完整 profile；未探测方向和原生连续初态竞争仍未被排除。
+- **B：事件级实测关联。** Single-Trial 的 session_00 和 Simultaneous 的 cnt_wg，
+  从冻结 parent 的合法时间身份按双时钟不重叠、时间先后确定每记录至多八窗。
+  奇数编号被试训练，偶数编号被试评价；尺度、事件阈值、回归和条件时间模板都只用
+  训练被试。使用统一 reader 返回的 signed HEOG/VEOG 和六路原生前额 EEG 电位。
+  VEOG 幅度/HEOG 斜率越阈事件是检测候选，不冒充人工标注眨眼/眼跳。
+  比较真实 EOG、同条件错训练被试和非环绕八秒时移；评分共同支持为 [8,21) 秒。
+  HbT/Xρ 与原始正光强的 OD 一步差分是独立目标，不以拟合的 SSM 残差为真值。
+  Hb 端点使用冻结的即时及延迟事件 FIR 特征。电位预测相减后再走原有五频带功率链，
+  报告功率交叉项，不能将 log-power 变化直接命名为眼电幅度。
+- **C：硬件与空间对照。** 仅在有经核实 source/detector 身份的 Single-Trial 上，
+  逐目标通道比较一个共享 optode donor、一个模板距离尽量匹配的非共享 donor、
+  一个更远的非共享 donor。三者均为两路 Hb 输入的相同容量 ridge，冻结于训练被试；
+  评价目标 Hb 完全隐藏。共享硬件与组织重叠仍可能混杂；距离匹配剩余差异必须报告。
+  Simultaneous 现有几何表的 source/detector 缺失明确标为不可执行，不能由邻近关系补写。
+- **D：匹配观测的竞争机制。** 用现有非线性六状态 SSM 生成 τ、Hb 增益、额外 HbT
+  和时移，按预定 RMS/谱/波形距离选择最相似的非零干预。比较无锚点、正确锚点、
+  错配锚点及推理缺失锚点。锚点是合成的独立增益标定、时间标定与额外 HbT 观测，
+  没有 τ 或机制标签输入。训练身份仅定尺度，评价身份只生成、匹配和评分；没有评价调参。
+  本阶段向所有候选提供相同已知驱动/初态，是条件 oracle 能力上界，不能替代实测
+  teacher 保护证据。报告错误类别、物理/成分误差、τ 变化被虚假分配到额外项的
+  有符号投影，以及固定似然比候选集合的实际覆盖率；该集合不是已校准后验。
+- **E：独立机制验证。** 需要另外的局部短间距与同步血压/CO₂ 等数据；缺少这些
+  文件时记录未执行，不以双波长导出的 HbT、模板几何或合成锚点代替。
+
+所有结果先在窗口/目标上配对，再在被试内平均，最后被试等权；D 以生成身份为块。
+区间为冻结模型的 2,000 次块 bootstrap percentile 区间，单侧 sign-flip 与 Holm
+仅在声明的主要检验族内使用。计划数、可用数和失败原因同时保留。报告说明原生单位、
+训练 SD、离线处理支持和误差方向，PPT 与 PDF 均使用 PNG 图形；正文及表格保留文本。
+
+**C/D 的有界补充合同。** 首轮保留结果揭示两项设计限制：最近共享 donor 的非共享
+对照距离普遍更远；已知驱动/初态和白噪声的合成面板具有分类天花板。
+[`observation_semantics_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/observation_semantics_v2.yaml)
+因此只增加两项敏感性诊断，不改写首轮结果、不重新读取原生数据、不重做 B：C 从全部
+合法共享/非共享 donor 配对中按纯几何最小化距离差，并在预定 0.02 模板头单位的
+caliper 内给出主要对照，全通道为次要描述；这仍是同一公开开发人群，不称新确认。
+D 固定 stationary AR(1) ρ=0.95、相同边际噪声 SD 和新的训练/评价生成身份，采用
+与生成器完全一致的协方差白化似然，并据此匹配波形。补充检验一次完成全部单元，
+不根据新结果调整噪声或锚点。其目的为检验有效时间信息量和距离混杂，不是获得
+预定正结果。局部短间距或独立生理来源的实测验证仍需 E 的新增观测。
+
 ## 有限响应适配与独立观测约束（2026-10-03）
 
 `SSM-STRENGTHEN-v1` 执行用户提供的“有限生理响应适配＋独立观测约束＋成分混淆

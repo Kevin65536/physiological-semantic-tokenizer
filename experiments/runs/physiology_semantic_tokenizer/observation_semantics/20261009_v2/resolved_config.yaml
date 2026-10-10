@@ -1,0 +1,184 @@
+schema: observation_semantics_v1
+experiment_id: OBSERVATION-SEMANTICS-v1
+seed: 20261009
+artifact_root: experiments/runs/physiology_semantic_tokenizer/observation_semantics
+cache_root: data/cache/physiology_semantic_clean_v5
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1
+attribution_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1
+robustness_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1
+strengthening_run: experiments/runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v3
+strengthening_array_run: experiments/runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v2
+data_boundary: current_registered_public_data_and_explicit_retained_development_evidence
+protected_data: forbidden
+tensor:
+  seconds: 30
+  hb_steps: 120
+  dt_s: 0.25
+  eeg_rate_hz: 200
+  eeg_channels: 6
+  eeg_bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+  hb_order:
+  - HbO
+  - HbR
+  masks: actual_native_support_per_modality_and_channel_pair_no_QC_censoring
+  observation_coordinates:
+  - HbT
+  - HbX_rho035
+measured:
+  datasets:
+  - eeg_fnirs_single_trial
+  - simultaneous_eeg_nirs
+  records:
+    eeg_fnirs_single_trial: session_00
+    simultaneous_eeg_nirs: cnt_wg
+  split: odd_native_subject_number_train_even_evaluate
+  site: prefrontal
+  windows_per_record: 8
+  window_selection: chronological_nonoverlap_on_both_native_clocks_from_frozen_parent_refs
+  fitting: train_subjects_only_no_evaluation_selection
+  use: exploratory_public_development_not_new_population_confirmation
+stability:
+  profiles: frozen_6_window_3_direction_displacement_profiles
+  sensitivity: frozen_72_window_measurement_prior_and_loading_variants
+  response_initial: retained_strengthening_response_choices_and_initial_response_tangent_guided_profiles
+  near_equivalent_objective_fraction: 0.05
+  stable_rms_range_training_SD: 0.2
+  minimum_alternatives: 2
+  rho: 0.35
+  interpretation: sampled_engineering_identification_set_not_confidence_or_posterior
+events:
+  voltage_band_hz:
+  - 0.5
+  - 15.0
+  regression_rate_hz: 50
+  voltage_lags_s:
+  - -0.04
+  - 0.0
+  - 0.04
+  ridge_weight: 0.01
+  event_height_training_SD: 3.0
+  event_refractory_s: 0.5
+  instant_lags_s:
+  - 0.0
+  - 0.25
+  - 0.5
+  - 1.0
+  delayed_lags_s:
+  - 2.0
+  - 4.0
+  - 6.0
+  - 8.0
+  delayed_control: same_training_model_with_instant_event_lags_only
+  score_interval_s:
+  - 8.0
+  - 21.0
+  null_shift_s: 8.0
+  nulls:
+  - wrong_training_subject_same_condition
+  - nonwrapping_time_shift
+  baseline: training_condition_time_template
+  event_names:
+  - vertical_EOG_excursion
+  - horizontal_EOG_slope_excursion
+  claims: EOG_associated_voltage_optical_transient_or_delayed_Hb_only
+hardware:
+  dataset: eeg_fnirs_single_trial
+  target_channels: all_registered_pairs_with_source_detector_and_position
+  donors_per_arm: 1
+  arms:
+  - shared_optode
+  - disjoint_distance_matched
+  - disjoint_far
+  matching: nearest_shared_then_closest_template_distance_disjoint_then_farthest_disjoint
+  capacity: two_Hb_predictors_plus_intercept_per_target_frozen_ridge
+  ridge_weight: 0.1
+  score_interval_s:
+  - 8.0
+  - 21.0
+  null_shift_s: 8.0
+  baseline: training_condition_time_template
+  coordinate_distance: normalized_template_head_units_not_mm
+mechanisms:
+  training_identities: 64
+  evaluation_identities: 128
+  mechanisms:
+  - tau
+  - Hb_gain
+  - extra_HbT
+  - lag
+  competing_pairs:
+  - - tau
+    - Hb_gain
+  - - tau
+    - extra_HbT
+  - - tau
+    - lag
+  - - Hb_gain
+    - extra_HbT
+  - - Hb_gain
+    - lag
+  - - extra_HbT
+    - lag
+  steps: 120
+  dt_s: 0.25
+  candidates_per_mechanism: 9
+  matching: minimize_pairwise_whitened_waveform_distance_with_RMS_and_spectrum_balance
+  target_change_SD: 0.25
+  min_change_SD: 0.1
+  observation_noise_SD: 0.2
+  anchor_noise_fraction: 0.3
+  anchor_regimes:
+  - absent
+  - correct
+  - mismatched
+  - missing_at_inference
+  anchor_semantics: synthetic_independent_gain_timing_and_extra_HbT_measurements_no_tau_or_class_label
+  inference: common_noise_whitened_candidate_distance_plus_frozen_anchor_likelihood
+  ambiguity: candidates_within_fixed_likelihood_ratio_of_best
+  likelihood_ratio_cutoff: 3.841459
+  teacher_protection: component_change_RMSE_and_false_component_projection_on_true_tau_change
+  truth_boundary: truth_used_only_for_generation_matching_and_scoring_not_observation_only_inference
+endpoints:
+  primary:
+  - profile_coordinate_stability_coverage
+  - heldout_EOG_voltage_prediction_vs_null
+  - shared_vs_disjoint_donor_prediction
+  - matched_mechanism_error_and_teacher_protection
+  secondary:
+  - EOG_optical_transient_prediction
+  - EOG_delayed_Hb_prediction
+  - sensitivity_coverage
+  - mechanism_ambiguity_coverage
+  diagnostic:
+  - power_chain_nonadditivity
+  - hardware_distance_balance
+  - event_triggered_waveforms
+  - matching_quality
+  uncertainty: subject_or_synthetic_identity_block_2000_percentile_bootstrap_frozen_models
+  multiplicity: Holm_within_each_declared_primary_family_using_subject_or_identity_sign_flip
+  failures: preserve_planned_and_available_denominators_no_success_subset_promotion
+  stopping: all_declared_cells_once_no_evaluation_tuning
+independent_validation:
+  E: requires_new_independent_short_separation_and_peripheral_measurements
+  absent_data_behavior: report_not_run_no_source_name_promotion
+resources:
+  max_workers: 32
+  numerical_threads: 1
+  bounded_in_flight: 2
+  supervisor: user_systemd
+  pilot_records: 2
+report:
+  output_root: docs/report
+  language: zh_CN
+  format: pptx
+  pdf_figures: png_240dpi

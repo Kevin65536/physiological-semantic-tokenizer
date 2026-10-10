@@ -1,0 +1,192 @@
+[
+  {
+    "slide": 1,
+    "title": "Observation 分支：从拟合到可检验证据",
+    "source": "event_comparisons.csv；refinement/hardware_comparisons.csv、mechanism_metrics.csv"
+  },
+  {
+    "slide": 2,
+    "title": "本次回答四个问题，保留一个数据缺口",
+    "source": "resolved_config.yaml；summary.json；refinement/resolved_config.yaml"
+  },
+  {
+    "slide": 3,
+    "title": "被试隔离、原生时钟和缺失支持均保留",
+    "source": "measured_plan.json；prepared/*.json；DATA_CONTRACT.md"
+  },
+  {
+    "slide": 4,
+    "title": "从训练到评价：哪些量被冻结",
+    "source": "evaluate_observation_semantics.py：prepare_worker、event_analysis、hardware_analysis"
+  },
+  {
+    "slide": 5,
+    "title": "指标与区间：先窗口，再被试",
+    "source": "observation_semantics.py：block_interval、sign_flip_p、holm；各 comparisons.csv"
+  },
+  {
+    "slide": 6,
+    "title": "A｜可测坐标不等于组织来源",
+    "source": "shared_driver_attribution.py：hb_diagnostic_coordinates；用户计划 §三"
+  },
+  {
+    "slide": 7,
+    "title": "A｜三个集合回答不同的稳定性问题",
+    "source": "stability_metrics.csv；stability/*.npz；stability_worker"
+  },
+  {
+    "slide": 8,
+    "title": "A｜完整预测接近，额外 HbT 仍可变化",
+    "source": "stability_metrics.csv：near_equivalent_profile、D-fixed、HbT"
+  },
+  {
+    "slide": 9,
+    "title": "A｜同一窗口中的相互抵消是可见的",
+    "source": "stability/eeg_fnirs_single_trial__subject_05__session_00__prefrontal__w12.npz；原 attribution profiles"
+  },
+  {
+    "slide": 10,
+    "title": "A｜稳定性取决于具体坐标与候选集合",
+    "source": "stability_metrics.csv：sensitivity、M-observation"
+  },
+  {
+    "slide": 11,
+    "title": "A｜更换响应解释，也会移动额外成分",
+    "source": "stability_metrics.csv：response_choice、near_equivalent_initial、near_equivalent_response"
+  },
+  {
+    "slide": 12,
+    "title": "A｜已交付可供 teacher 使用的字段",
+    "source": "observation_semantics.py：coordinate_stability；stability/*.json、*.npz"
+  },
+  {
+    "slide": 13,
+    "title": "B｜电位混入与慢 Hb 响应分开检验",
+    "source": "resolved_config.yaml：events；event_models.json；event_inventory.csv"
+  },
+  {
+    "slide": 14,
+    "title": "B｜真实 EOG 可预测跨被试前额电位",
+    "source": "event_metrics.csv、event_comparisons.csv：EEG_voltage"
+  },
+  {
+    "slide": 15,
+    "title": "B｜signed 映射保留通道与方向信息",
+    "source": "event_models.json：voltage_model；prepared/*.json：eeg_channels"
+  },
+  {
+    "slide": 16,
+    "title": "B｜EOG 与电位的对应可直接核验",
+    "source": "prepared/eeg_fnirs_single_trial__subject_02__session_00.npz；event_models.json；event_metrics.csv"
+  },
+  {
+    "slide": 17,
+    "title": "B｜电位证据没有延伸成稳定 Hb 归属",
+    "source": "event_comparisons.csv：real_vs_template；各 Hb/OD 端点"
+  },
+  {
+    "slide": 18,
+    "title": "B｜加入延迟事件项没有一致增量",
+    "source": "event_comparisons.csv：delayed_increment；event_models.json：instant_model"
+  },
+  {
+    "slide": 19,
+    "title": "B｜电位可相加，功率与 log-power 不可相加",
+    "source": "power_chain.csv；observation_baselines.py：eeg_band_power"
+  },
+  {
+    "slide": 20,
+    "title": "B｜检测事件数不是独立样本量",
+    "source": "event_inventory.csv；measured_plan.json"
+  },
+  {
+    "slide": 21,
+    "title": "C｜先匹配几何，再比较硬件共享",
+    "source": "refinement/hardware_topology.json；prepared/*.json：geometry"
+  },
+  {
+    "slide": 22,
+    "title": "C｜距离匹配后仍有共享优势",
+    "source": "refinement/hardware_metrics.csv、hardware_comparisons.csv：distance_caliper"
+  },
+  {
+    "slide": 23,
+    "title": "C｜目标完全隐藏，仍可预测部分波形",
+    "source": "prepared 数组；refinement/hardware_models.json、hardware_metrics.csv"
+  },
+  {
+    "slide": 24,
+    "title": "C｜真实同步优于错被试与时移",
+    "source": "refinement/hardware_comparisons.csv：distance_caliper 的 wrong / shift"
+  },
+  {
+    "slide": 25,
+    "title": "C｜首轮距离不平衡，原结果完整保留",
+    "source": "两个运行的 hardware_topology.json、hardware_comparisons.csv；v2 合同"
+  },
+  {
+    "slide": 26,
+    "title": "C｜光学共同变化提供背景，不能直接定源",
+    "source": "refinement/hardware_metrics.csv：synchronous_OD_jump_correlation"
+  },
+  {
+    "slide": 27,
+    "title": "D｜改变机制位置，保持推断条件对称",
+    "source": "mechanism_library、mechanism_worker；两个 resolved_config.yaml"
+  },
+  {
+    "slide": 28,
+    "title": "D｜白噪声天花板与慢相关噪声诊断",
+    "source": "mechanism_calibration.json、mechanism_metrics.csv；refinement 的对应文件"
+  },
+  {
+    "slide": 29,
+    "title": "D｜“最相似”不等于完全不可区分",
+    "source": "两个运行的 mechanism_matching.csv；mechanism_library"
+  },
+  {
+    "slide": 30,
+    "title": "D｜错配锚点比缺失锚点更危险",
+    "source": "refinement/mechanism_metrics.csv、mechanism_comparisons.csv"
+  },
+  {
+    "slide": 31,
+    "title": "D｜错误锚点会把动力学变化吸入额外项",
+    "source": "refinement/mechanism_metrics.csv：component_error、false_component_projection"
+  },
+  {
+    "slide": 32,
+    "title": "D｜输出候选集合仍需检查经验覆盖",
+    "source": "refinement/mechanism_metrics.csv：ambiguous、set_coverage、parameter_set_coverage"
+  },
+  {
+    "slide": 33,
+    "title": "D｜拟合相近时，分量解释可以走错",
+    "source": "refinement/mechanisms/r000.npz、mechanism_metrics.csv"
+  },
+  {
+    "slide": 34,
+    "title": "统计上能确认什么，哪些仍不确定",
+    "source": "event_comparisons.csv；refinement/hardware_comparisons.csv、mechanism_comparisons.csv"
+  },
+  {
+    "slide": 35,
+    "title": "本轮的解释等级与下游用途",
+    "source": "本报告对应 A/B/C/D 保留证据；用户计划 §五、§八"
+  },
+  {
+    "slide": 36,
+    "title": "E 未执行；下一步应补独立约束",
+    "source": "summary.json：E；用户计划 §七 E；DATA_CONTRACT.md"
+  },
+  {
+    "slide": 37,
+    "title": "完整分母、软件检查与交付边界",
+    "source": "summary.json、verification.json；refinement/summary.json、verification.json"
+  },
+  {
+    "slide": 38,
+    "title": "证据、代码与复现入口",
+    "source": "experiments/README.md；docs/EXPERIMENT_PLAN.md；两个 launch.json"
+  }
+]

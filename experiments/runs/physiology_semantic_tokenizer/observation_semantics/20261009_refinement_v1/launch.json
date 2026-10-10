@@ -1,0 +1,32 @@
+{
+  "command": [
+    "systemd-run",
+    "--user",
+    "--unit=observation-semantics-refinement-20261009-v1",
+    "--property=Type=exec",
+    "--property=RemainAfterExit=yes",
+    "--property=WorkingDirectory=/SSD_2/pid-mcm-implementation",
+    "--property=StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/service.log",
+    "--property=StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/service.err",
+    "--setenv=OPENBLAS_NUM_THREADS=1",
+    "--setenv=OMP_NUM_THREADS=1",
+    "--setenv=MKL_NUM_THREADS=1",
+    "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+    "-u",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/source_snapshot_v1/experiments/scripts/evaluate_observation_semantics.py",
+    "--config",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/source_snapshot_v1/experiments/configs/physiology_semantic_tokenizer/observation_semantics_v2.yaml",
+    "--project-root",
+    "/SSD_2/pid-mcm-implementation",
+    "--run-dir",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1",
+    "--stage",
+    "refinement",
+    "--workers",
+    "32"
+  ],
+  "cwd": "/SSD_2/pid-mcm-implementation",
+  "snapshot": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/source_snapshot_v1",
+  "unit": "observation-semantics-refinement-20261009-v1",
+  "scope": "C geometry-only rematch; D new seeds and exact colored-noise likelihood; original A/B/C/D retained"
+}

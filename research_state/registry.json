@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-02T18:27:56.039354+00:00",
+  "updated_at": "2026-10-09T10:53:25.253861+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1358,6 +1358,66 @@
       "id": "e.ssm_strengthening_s3_verification",
       "label": "连续状态合成分母与执行核验",
       "path": "experiments/runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_s3_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.observation_semantics_contract",
+      "label": "观测语义A–D执行合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/observation_semantics_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.observation_semantics_refinement_contract",
+      "label": "几何匹配与慢噪声补充合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/observation_semantics_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.observation_semantics_launch",
+      "label": "观测语义冻结源码与持久运行",
+      "path": "experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_v2/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.observation_semantics_refinement_launch",
+      "label": "C/D补充持久运行",
+      "path": "experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.observation_semantics_summary",
+      "label": "观测语义完整结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_v2/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.observation_semantics_refinement_summary",
+      "label": "C/D有界补充结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.observation_semantics_verification",
+      "label": "原实验418项保留证据检查",
+      "path": "experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_v2/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.observation_semantics_refinement_verification",
+      "label": "补充298项保留证据检查",
+      "path": "experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.observation_semantics_presentation",
+      "label": "观测语义38页中文PPT",
+      "path": "docs/report/20261009_observation_semantics_v3/observation_semantics_20261009.pptx",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.observation_semantics_presentation_validation",
+      "label": "PPT/PDF文字与位图核验",
+      "path": "docs/report/20261009_observation_semantics_v3/presentation_validation.json",
       "role": "diagnostic"
     }
   ],
@@ -4622,6 +4682,38 @@
       ],
       "headline": false,
       "next_step": "优先核验原生连续记录的时间、参考与观测支持，再为C-free/C-chain制定小规模冻结实测验证。保留原始空间ridge与训练模板强基线及失败分母；不扩大响应库、目标软修正或VQ，不把候选低敏感当作可靠标签。未建立未参与决策的新身份清单前，不启动S5新确认。"
+    },
+    {
+      "state_id": "main.observation_semantics@2026-10-09.v1",
+      "entity": "main.observation_semantics",
+      "label": "观测形成、事件锚点与竞争机制",
+      "track": "main",
+      "order": 173,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "A完成72窗18人的条件范围分析；固定方向6窗profile仅2窗有非零接纳位移，不能将单解或代数零坐标判为来源可靠。B/C读取55人440原生窗，奇数训练、偶数评价；EOG前额电位NRMSE由.767/.818降至.333/.336，Hb与OD事件预测无一致正面增量。C纯几何距离匹配20目标、14人2240配对，共享donor优于非共享.0372 NRMSE（95%区间.0250–.0499），非共享仍优于模板.1339；组织重叠未排除。白噪声已知驱动/初态合成无锚点全判对；独立128身份慢噪声补充错误率无/正确/错锚点为.78%/.26%/18.82%，正确锚点的六对分类增量均未通过Holm。716项证据核验通过，38页PPT和23张位图完成；E因缺独立短间距及外周生理数据未执行。未训练新tokenizer或开启受保护评价。",
+      "evidence_ids": [
+        "e.observation_semantics_contract",
+        "e.observation_semantics_refinement_contract",
+        "e.observation_semantics_launch",
+        "e.observation_semantics_refinement_launch",
+        "e.observation_semantics_summary",
+        "e.observation_semantics_refinement_summary",
+        "e.observation_semantics_verification",
+        "e.observation_semantics_refinement_verification",
+        "e.observation_semantics_presentation",
+        "e.observation_semantics_presentation_validation"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-09T10:53:25.253861+00:00",
+      "depends_on": [
+        "main.component_attribution",
+        "main.ssm_strengthening"
+      ],
+      "headline": false,
+      "next_step": "将EOG相关电位读出和分量范围作为带有效性字段的teacher候选；以新增独立短间距/外周生理观测区分组织与驱动来源。连续实测初态及学生缺锚点仍需独立冻结检验，不将开发关联升级为生理来源资格。"
     }
   ]
 }
