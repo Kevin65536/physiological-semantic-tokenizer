@@ -1,7 +1,9 @@
 # Source-code map
 
 Reusable code is organized by responsibility. SSM diagnostics have executable
-implementations; the next tokenizer generation has no training runtime yet.
+implementations. The independent conditional-supervision tokenizer screen has a
+versioned runtime in `experiments/scripts/run_functional_tokenizer.py`; the
+physical-teacher qualification path remains separate.
 Execution and scientific verdicts come from the
 [project registry view](../docs/PROJECT_STATUS.md), not this directory map.
 
@@ -9,16 +11,16 @@ Execution and scientific verdicts come from the
 | --- | --- |
 | `data/` | registry, unified loaders, preprocessing, alignment, masks, geometry, and retained target contracts |
 | `inference/` | Balloon forward/robust inference (`t3a_balloon_robust_ssm.py`), joint and temporal observation inference (`t3a_balloon_joint_ssm.py`), trajectory MAP (`balloon_trajectory_map.py`), and shared observation baselines (`observation_baselines.py`); older adaptive/SMC models remain retained references |
-| `teachers/` | `physical_state_teacher.py`: frozen training-teacher output adapter; separate from raw loaders and inference solvers |
-| `tokenizers/` | stopped E2 tokenizer, corrected EMA VQ, and retained R2 diagnostic component (replay-only) |
-| `analysis/` | stopped Token Physiology Atlas |
+| `teachers/` | `functional_teacher.py`: conditional six-state SSM target adapter; `physical_state_teacher.py`: retained training-teacher adapter |
+| `tokenizers/` | `functional_tokenizer.py`: independent S/O continuous/hard-VQ screen; corrected EMA VQ and stopped E2/R2 replay |
+| `analysis/` | `functional_tokenizer.py`: frozen grouped probes and integer-only reader; stopped Token Physiology Atlas |
 | `losses/` | losses required by the stopped E2 runtime |
 | `metrics/` | trajectory reliability and the in-memory residual-field schema used by diagnostic readers and reports |
 | `foundation/` | frozen-token consumer interface |
 | `visualization/` | Token Physiology Atlas figures |
 | `utils/` | shared I/O, logging, checkpoints, metrics comparison, and registry validation/rendering |
 
-The retained public tokenizer surface has one owner:
+The retained E2 public tokenizer surface has one owner:
 `PhysiologySemanticTokenizer`. Generic tokenizers and the failed continuous,
 lag-conditioned, and observation-SSM generations were moved to the local ignored
 archive; packages do not import that archive. The E2 surface is stopped and

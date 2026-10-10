@@ -14,7 +14,7 @@ in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 | Question | Authority |
 | --- | --- |
 | What lifecycle is recorded for each track? | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) (generated) |
-| Where is the planned clean-slate experiment sequence? | [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md) (`PST-DISCOVERY-v1`; no measured run authorized) |
+| Where are experiment designs and their boundaries? | [`EXPERIMENT_PLAN.md`](EXPERIMENT_PLAN.md): original `PST-DISCOVERY-v1` qualification path and separately versioned public diagnostics, including `TK-FUNCTIONAL-v1` |
 | What rationale and evidence support the scientific conclusion? | [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md) |
 | Where should paper Methods, Results, Discussion, and Figures take material from? | [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md) |
 | What data, masks, joins, geometry, and splits are valid? | [`DATA_CONTRACT.md`](DATA_CONTRACT.md) |

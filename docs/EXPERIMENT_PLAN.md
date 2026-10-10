@@ -2,10 +2,11 @@
 
 _Owning protocol: `PST-DISCOVERY-v1` · state: planned · 2026-08-26_
 
-This is the single current experiment-design owner for the next
-physiology-semantic tokenizer generation. The plan is limited to physical-teacher
-qualification, source/observation tokenization, and coupling-prior retention. It
-does not use downstream task performance as a training or selection endpoint.
+This document owns experiment design. The original `PST-DISCOVERY-v1` path
+concerns physical-teacher qualification, source/observation tokenization and
+coupling-prior retention. The separately versioned `TK-FUNCTIONAL-v1` screen
+below tests conditional supervision without claiming physical qualification.
+Neither path uses task labels to train the tokenizer.
 
 The bounded SSM entry points are indexed in
 [`experiments/README.md`](../experiments/README.md). The synthetic P0 launcher
@@ -32,6 +33,60 @@ authorize tokenizer promotion. Any future measured confirmation or physical
 teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
+
+## 条件功能监督与 hard token 开发矩阵（2026-10-10）
+
+`TK-FUNCTIONAL-v1` 按用户本次指引建立独立公开开发线。数值合同由
+[`functional_tokenizer_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/functional_tokenizer_v1.yaml)
+持有，统一入口为 `experiments/scripts/run_functional_tokenizer.py`。当前条件目标
+可以用于工程蒸馏，无须先通过旧生理资格流程；结果也不反向授予 teacher 资格。
+旧 E/R、连续语义原型和已完成 SSM 证据保持原身份及负结果。
+
+从统一索引枚举 Single-Trial、Simultaneous 全部可用公开被试，按数据集内固定
+种子划分 train/validation/test，再读数组、拟合变换及生成缓存。主任务为左右手
+MI 和 n-back 负荷，MA/BL、WG/BL 为次要任务；Visual、DSR、完整外折、集合监督
+和 O 量化为条件扩展，本批不自动启动。新划分不把已有开发历史的公共数据变成
+全新确认集。状态只在 `research_state/registry.json` 维护。
+
+每个原生事件的 teacher 读取连续 `[-30,+60) s`，学生编码 `[0,+20) s`；Hb
+预处理另使用可见 `[-30,-25) s` 参考前缀，不能称仅有 20 s 的完整输入支持。预设
+前额、左/右运动区域各取一个真实 Hb 通道对和六个邻近 EEG 通道，保留模板几何
+与源身份。学生重建选定原生 200 Hz EEG 电位和原生 Hb 的 4 Hz 不重叠 bin；
+这是明确的原生 EEG 支路，不使用项目伪迹清理，也不是全头皮或原始 10 Hz Hb
+重建。Hb 与 Single-Trial OD 参考只用最初可见 5 s，不跨缺失区间滤波。完整
+上下文不足则记录排除；区域副本、重叠 teacher 上下文和全部记录按被试分组。
+
+teacher 复用六状态 RK4、固定响应参数、`chain_matched` 连续传播/边界先验及
+D-fixed 额外项。PCA、Hb 共同正尺度、目标尺度及平滑带宽匹配只用训练被试。
+主目标是 SSM EEG 特征预测和 `X=0.35 HbO−0.65 HbR`，wide 增加 T；完整剩余项
+是同坐标的 `u−SSM prediction`，不是共同项系数，更不能从原始 EEG 电位相减。
+失败及分母保留，全部臂只在同一完整、收敛 trial 子集上作匹配训练。
+
+八臂共用容量与曝光预算，S/O 编码路径独立，C-stop 只切断重建到 S 的梯度。
+无任务、耦合、独立性或去标签训练损失；shuffle 同数据集同区域跨训练被试，
+不读取类别。QT 的 teacher 监督和重建均在 hard-forward 路径。每次保留检查点
+同步导出 pre/soft/O 和单独的整数 ID/冻结码本/身份文件；主 hard-S 评价通过
+`--stage hard-probe`，不打开连续导出。S+O 与纯 ID 的性能、实际码率分别报告。
+连续臂的后处理 k-means 只在训练集拟合。
+
+TK0 检查观测、SSM、完整剩余项、直接统计和平滑目标的任务可读性及模态独立的
+目标可预测性；后者不是生理正确性。TK1–3 使用固定容量线性 probe 与同一原生
+trial/block 标签子集，验证标签计入预算；区域先合并，记录内计算后被试等权，
+种子在被试内汇总。跨 session 是次要协议：外层未见被试的前、中、末原生
+session 分别用于 probe 训练、选择、评分。差值方向、工程阈值由 YAML 冻结，
+探索性区间不宣称多重比较后的统计显著性，成功子集不能掩盖失败。
+
+TK4 在同一生成身份、驱动和噪声下比较真实变化、D/off-D 扰动、竞争归属及
+相同观测/不同真值的 alias；合成 EEG 为固定载波压力测试，不代表真实来源。
+小型训练面板的 T 替代解须在原目标容差内整段可行；CT/C-wide 用同初始化与
+数据顺序配对重训，没有见证则保留不可用，不逐时刻拼目标。TK5 汇总条件波形
+原型并用训练身份对齐 ID；隐藏 Hb 在任何操作前遮蔽，真实 EEG、简单 EEG、同
+被试错记录/原生 session、同条件错配和非回绕移位均用共同支持。未来 EEG
+可见的结果只能称离线补全，共现不进入训练或承担未经支持的耦合论据。
+
+先通过合成/软件检查及资源先导，再以源代码快照、user systemd 和 linger 启动。
+CPU 与 GPU 并发、线程及在途任务受限，独立 TK0/机制准备与 GPU 训练并行；
+原子任务结果及优化器/RNG 检查点可恢复，命令、资源、失败和进度保留于 run。
 
 ## SSM 输出支持范围、连续状态与跨模态约束（2026-10-10）
 

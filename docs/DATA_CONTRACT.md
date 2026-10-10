@@ -59,6 +59,25 @@ that succeeds only because two arrays currently share an ordering is invalid.
 
 ## Target lineage and versioned continuous-target candidate
 
+### TK conditional functional targets — 2026-10-10
+
+The versioned `functional_training_cache_v1` producer is owned by
+[`functional_tokenizer_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/functional_tokenizer_v1.yaml)
+and [`src/data/functional_tokenizer.py`](../src/data/functional_tokenizer.py).
+It reads registry-listed public Single-Trial/Simultaneous identities after
+subject partitioning. Its label-blind frozen targets are **conditional model
+outputs**, not qualified physiological teacher targets or the historical patch
+schema. The general measurement loader still emits no teacher sidecar.
+
+The manifest retains canonical identity, native clocks/channels/source identity,
+train-fitted coordinates, 90 s privileged teacher versus 20 s student support,
+numerical failures and the matched complete-trial denominator. The consumer
+reuses native readers and disjoint Hb observation operators; its native EEG
+branch and sampled Hb coordinates are explicit in the contract. PCA, scales,
+smoothing and codebooks fit training subjects only. Hidden Hb cannot return
+through filtering, optical references, teacher outputs or input cache fields.
+Other protocols' protected boundaries and historical evidence remain intact.
+
 ### v1 patch target (historical)
 
 The implemented v1 observation screen is retained as historical evidence. Its

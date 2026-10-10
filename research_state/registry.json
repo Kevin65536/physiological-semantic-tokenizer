@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-10T12:58:02.432130+00:00",
+  "updated_at": "2026-10-10T16:03:42.064334+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1532,6 +1532,24 @@
       "id": "e.parameter_stability_presentation_verification",
       "label": "PPT/PDF位图与版面核验",
       "path": "docs/report/20261010_parameter_stability_v2/export_validation_v2.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.functional_tokenizer_contract",
+      "label": "条件功能监督与hard token实验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/functional_tokenizer_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.functional_tokenizer_pilot",
+      "label": "公开窗口读取与冻结teacher先导",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261010_pilot_v1/preparation_summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.functional_tokenizer_resources",
+      "label": "独立监督CPU吞吐先导",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261010_cpu_benchmark_v1/cpu_benchmark.json",
       "role": "diagnostic"
     }
   ],
@@ -4910,6 +4928,30 @@
       ],
       "headline": false,
       "next_step": "无已启动的后续实验；候选方向是冻结X输出支持检验并寻找独立确认记录，SSM/T仍需额外观测约束。"
+    },
+    {
+      "state_id": "main.functional_tokenizer@2026-10-11.v1",
+      "entity": "main.functional_tokenizer",
+      "label": "条件功能监督与离散token开发矩阵",
+      "track": "main",
+      "order": 180,
+      "entity_kind": "experiment",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "按新合同实现TK0–TK5：八臂×三种子联合预训练、独立hard-ID评分、信息/带宽/错teacher/梯度对照、少标签与跨session探针、机制干预、替代解配对重训及隐藏Hb配对null。公开55名被试按训练/验证/评价重新划分，保留三个区域和原生trial分组。先导18/18区域窗完成联合及单模态拟合；目前仅软件/先导证据，尚无tokenizer实测收益结论。",
+      "evidence_ids": [
+        "e.functional_tokenizer_contract",
+        "e.functional_tokenizer_pilot",
+        "e.functional_tokenizer_resources"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-10T16:03:42.064334+00:00",
+      "depends_on": [
+        "main.ssm_output_support"
+      ],
+      "headline": false,
+      "next_step": "完成最终检查与源代码提交后，按先导选定的资源通过独立systemd服务启动；受保护比较、Visual/DSR扩展及完整外折不在本批范围。"
     }
   ]
 }
