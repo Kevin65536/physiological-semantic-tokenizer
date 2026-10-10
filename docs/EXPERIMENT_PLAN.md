@@ -1192,6 +1192,22 @@ HbR/HbT loading（0.05/0.1/0.2/0.35/0.5）。先通过0.1/0.2/0.35三种已知�
 血氧饱和度，不能在没有新观测的情况下确定头皮、动脉或静脉来源。此后续属于
 看过第一轮结果后的探索性诊断，不追溯声称预注册或独立确认。
 
+### 贴边样例的驱动曲率与转运时间诊断（2026-10-10）
+
+[`shared_driver_tau_curvature_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tau_curvature_v1.yaml)
+持有这次小范围探索的完整合同，复用 `--waveform-diagnostic` 入口。对象是用户指出的
+MNE TDDR、subject_01、outer=3、AF7Fp1 的保留验证窗口；只读取已完成公开光学运行
+中的精确目标、重建及状态数组。原训练尺度、目标处理、固定生理参数和样例身份不变。
+固定 τ 网格与曲率惩罚交叉，每个节点重新拟合逐时点驱动及五个初态；辅助对照分开
+移除 EEG 目标、血流和初态惩罚。这里不重新选择训练参数，不把验证窗口全目标拟合
+称为预测，也不把下界外的工程敏感性范围称为正常生理范围。
+
+先检验小 τ 下的 Python/编译后端及步长一致性、已知驱动恢复和曲率抑制控制，再在
+持久 supervisor 下完成计时 pilot 和有界并行诊断。报告同配对分母的 Hb NRMSE、
+目标峰谷误差、EEG 代价、驱动粗糙度及全部失败；无正则线性单/双 Hb 筛查只用于
+表达能力解释，不替代物理可行的非线性结果。具体执行及数值由新的运行证据持有，
+不覆盖原始贴边参数和历史结论。
+
 ## Reading guide
 
 This file owns experiment design. It contains bounded diagnostic protocols and

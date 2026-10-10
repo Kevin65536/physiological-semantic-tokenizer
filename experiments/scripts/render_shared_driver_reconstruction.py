@@ -2694,9 +2694,86 @@ def render_conditional_optical_gain(run, out, *, pilot_truth_audit=None, termina
     (out/'export_validation.json').write_text(json.dumps(audit,indent=2))
 
 
+def render_tau_curvature(run,out):
+    """Static figures from retained diagnostic rows; failed fits stay visible."""
+    if out.exists():raise ValueError('choose a fresh versioned export')
+    summary=json.loads((run/'summary.json').read_text())
+    if json.loads((run/'manifest.json').read_text()).get('execution')!='completed':
+        raise ValueError('tau/curvature evidence must be complete')
+    out.mkdir(parents=True);plt.rcParams.update({'font.size':10})
+    choices=[('tau0.5_curvature0.01','Reference refit', '#777777','--'),
+             ('tau0.125_curvature0.01',r'$\tau=0.125$ s','#d4502c','-'),
+             ('tau0.5_curvature0','No driver curvature','#1f77b4',':'),
+             ('Hb_only','Hb only, original penalties','#238b45','-.')]
+    t=np.arange(120)*.25-5.;fig,axes=plt.subplots(2,2,figsize=(13,8.5),layout='constrained')
+    sources=['summary.json','metrics.csv'];reference=None
+    for name,label,color,style in choices:
+        folder=run/'cells'/f'{name}__trial3';row=json.loads((folder/'result.json').read_text())
+        sources.extend([str((folder/'result.json').relative_to(run)),str((folder/'trajectory.npz').relative_to(run))])
+        with np.load(folder/'trajectory.npz',allow_pickle=False) as z:
+            target=z['target']/z['normalizer'];pred=z['prediction']/z['normalizer'];states=z['states'];sd=z['normalizer']
+            if reference is None:reference=z['retained']/sd
+        status='' if row['status']=='completed' else ' [NOT CONVERGED]'
+        for c in (1,2):
+            ax=axes[0,c-1]
+            if name==choices[0][0]:ax.plot(t,target[:,c],color='#182e41',lw=1.8,label='Measured processed target')
+            ax.plot(t,pred[:,c],color=color,ls=style,lw=1.8,label=f'{label}{status}; error {row["nrmse"][c]:.3f}')
+            ax.set(title=f'{COMPONENTS[c]} / frozen training SD',xlabel='Time relative to event (s)',ylabel='Training SD')
+            ax.axvline(0,color='#c2c8ce',lw=.8);ax.grid(alpha=.15);ax.legend(fontsize=8)
+        axes[1,0].plot(t,states[:,0],color=color,ls=style,label=label+status)
+        if name in ('tau0.125_curvature0.01','tau0.5_curvature0'):
+            axes[1,1].plot(t,pred[:,2]-reference[:,2],color=color,ls=style,label=label)
+    axes[1,0].set(title='Refitted driver; original model coordinates',xlabel='Time relative to event (s)',ylabel=r'$r(t)$')
+    axes[1,0].legend(fontsize=8);axes[1,0].grid(alpha=.15)
+    axes[1,1].set(title='HbR prediction change relative to retained reference',xlabel='Time relative to event (s)',ylabel='Training SD; zero = no change')
+    axes[1,1].axhline(0,color='#777777',lw=.8);axes[1,1].legend(fontsize=8);axes[1,1].grid(alpha=.15)
+    fig.suptitle('Missing-extrema diagnostic: subject_01 / session_01 / event 7 / AF7Fp1\n'
+                 'MNE TDDR; full 30 s targets visible; driver and five initial states refitted at each condition',fontsize=13)
+    fig.savefig(out/'focus_waveforms.png',dpi=220);plt.close(fig)
+    labels={
+        'tau0.5_curvature0.01':'Reference refit', 'tau0.5_curvature0':'No driver curvature',
+        'tau0.25_curvature0.01':'Tau 0.25 s', 'tau0.25_curvature0':'Tau 0.25 s + no curvature',
+        'tau0.125_curvature0.01':'Tau 0.125 s','tau0.125_curvature0':'Tau 0.125 s + no curvature',
+        'Hb_only':'Hb only','Hb_only_no_curvature':'Hb only + no curvature',
+        'no_flow':'No flow prior','no_initial':'No initial-state prior','no_penalties':'No soft penalties',
+        'Hb_only_no_penalties':'Hb only + no soft penalties',
+        'Hb_only_no_penalties_tau0125':'Hb only + no penalties + tau 0.125 s'}
+    aggs=summary['aggregates'];focus={r['arm']['name']:r for r in summary['focus']}
+    fig,axes=plt.subplots(1,2,figsize=(15,7.5),layout='constrained')
+    baseline=summary['focus'][0]['reference']['hb_nrmse']
+    for k,agg in enumerate(aggs):
+        name=agg['arm']['name'];r=focus[name];ok=r['status']=='completed' and r['converged']
+        value=r.get('hb_nrmse')
+        if value is not None:
+            axes[0].barh(k,value,color='#4479b4' if ok else '#eeeeee',edgecolor='#4479b4',hatch=None if ok else '///')
+            axes[0].text(value+.006,k,f'{value:.3f}'+(' *' if not ok else ''),va='center',fontsize=8)
+        pooled=agg['hb_nrmse_pooled']
+        if pooled is not None:
+            axes[1].barh(k,pooled,color='#4479b4' if agg['successful']==6 else '#b6c8db')
+            axes[1].plot(agg['reference_hb_nrmse_same_subset'],k,'|',color='black',ms=17,mew=2)
+            axes[1].text(.47,k,f'{pooled:.3f} ({agg["successful"]}/6)',va='center',fontsize=8)
+        else:
+            axes[1].text(.015,k,'0/6; no valid fit',va='center',fontsize=9,color='#666666')
+    axes[0].axvline(baseline,color='#333333',ls='--',lw=1)
+    for ax in axes:
+        ax.set_yticks(range(len(aggs)),[labels[a['arm']['name']] for a in aggs]);ax.set_ylim(len(aggs)-.5,-.5)
+        ax.set_xlabel('Hb NRMSE; lower is better');ax.grid(axis='x',alpha=.15);ax.set_xlim(0,.62)
+    axes[0].set_title('Screenshot window\n* = failed fit; diagnostic iterate only',fontsize=11)
+    axes[1].set_title('Six windows from one subject; valid / planned\nBlack tick = reference on the same valid subset',fontsize=11)
+    fig.suptitle('Constraint ablations use the same targets and frozen training SD\n'
+        'RMS over time and Hb components, then RMS over successful paired windows; no population inference',fontsize=13)
+    fig.savefig(out/'constraint_comparison.png',dpi=220);plt.close(fig)
+    import shutil
+    shutil.copy2(__file__,out/'renderer_snapshot.py')
+    (out/'figure_sources.json').write_text(json.dumps(dict(run=str(run),sources=sources,
+        plots=['focus_waveforms.png','constraint_comparison.png'],generator='renderer_snapshot.py',
+        failed_fits='hatched and labelled; never primary success'),indent=2)+'\n')
+
+
 def render_waveform_diagnostic(run,out,volume_run=None):
     import yaml
     cfg=yaml.safe_load((run/'resolved_config.yaml').read_text())
+    if cfg['schema']=='shared_driver_tau_curvature_v1':return render_tau_curvature(run,out)
     if json.loads((run/'manifest.json').read_text()).get('execution')!='completed':raise ValueError('diagnostic must be terminal')
     if out.exists():raise ValueError('choose a fresh versioned report export')
     out.mkdir(parents=True);(out/'figures').mkdir()

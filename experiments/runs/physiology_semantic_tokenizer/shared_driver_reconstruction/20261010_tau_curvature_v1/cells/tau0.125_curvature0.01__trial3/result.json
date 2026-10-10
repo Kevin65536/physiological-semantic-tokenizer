@@ -1,0 +1,290 @@
+{
+  "status": "completed",
+  "converged": true,
+  "starts": [
+    {
+      "start": 0,
+      "converged": true,
+      "status": "completed",
+      "evaluations": 11,
+      "rejected_steps": 0,
+      "domain_rejections": 0,
+      "nondecreasing_rejections": 0,
+      "derivative_rejections": 0,
+      "iterations": 5,
+      "convergence_reason": "scaled_gradient",
+      "objective": 58.419702404333265,
+      "gradient_inf_norm": 0.0009919474087581271,
+      "scaled_gradient_inf_norm": 5.049386072656349e-05
+    },
+    {
+      "start": 1,
+      "converged": true,
+      "status": "completed",
+      "evaluations": 11,
+      "rejected_steps": 0,
+      "domain_rejections": 0,
+      "nondecreasing_rejections": 0,
+      "derivative_rejections": 0,
+      "iterations": 5,
+      "convergence_reason": "scaled_gradient",
+      "objective": 58.41970242616738,
+      "gradient_inf_norm": 0.0006640161262913163,
+      "scaled_gradient_inf_norm": 3.3815032138349234e-05
+    }
+  ],
+  "selected_start": 0,
+  "objective": 58.419702404333265,
+  "scaled_gradient_inf_norm": 5.049386072656349e-05,
+  "convergence_reason": "scaled_gradient",
+  "evaluations": 22,
+  "roughness": 90.5241225024816,
+  "flow_prior_cost": 0.4841987408260541,
+  "state_ranges": {
+    "minimum": [
+      -0.14327255246753684,
+      -0.08832967422139083,
+      0.8204495383239201,
+      0.9388622569235355,
+      0.9388622569235355,
+      0.9803421229761625
+    ],
+    "maximum": [
+      0.26250574286557027,
+      0.08819365714081358,
+      1.0405050909504374,
+      1.0126865433903833,
+      1.2998906649746895,
+      1.169401112506572
+    ]
+  },
+  "physical_checks": {
+    "all_intermediate_valid": true,
+    "completed_samples": 120,
+    "requested_samples": 120,
+    "completed_states": {
+      "finite": true,
+      "positive_fvpq": true,
+      "oxygen_extraction_in_unit_interval": true,
+      "absolute_hb_nonnegative": true,
+      "hbr_not_above_hbt": true,
+      "rest_equilibrium": true,
+      "minimum_f": 0.8204495383239201,
+      "minimum_v": 0.9388622569235355,
+      "minimum_p": 0.9388622569235355,
+      "minimum_q": 0.9803421229761626,
+      "minimum_extraction": 0.3097140157371276,
+      "maximum_extraction": 0.37503673197398935,
+      "extraction_float_saturation_count": 0,
+      "minimum_log_one_minus_extraction": -0.4700624021312107,
+      "flow_below_0_01_count": 0
+    },
+    "substeps": 16,
+    "dt": 0.25,
+    "integrator": "classical_RK4_physical_coordinates_fixed_ZOH_driver"
+  },
+  "replay_max_abs_difference": 2.6085904270001237e-16,
+  "replay_failure": null,
+  "weighted_data_sse": 45.11586387514339,
+  "arm": {
+    "name": "tau0.125_curvature0.01",
+    "tau": 0.125,
+    "penalty": 0.01,
+    "initial_penalty": 100.0,
+    "flow_prior_weight": 1.0,
+    "hb_only": false
+  },
+  "trial": 3,
+  "identity": {
+    "subject": "subject_01",
+    "session": "session_01",
+    "original_ma_trial_position": 3,
+    "training_ordinal": 3,
+    "event_index": 7,
+    "native_start_samples": {
+      "eeg": 44882,
+      "fnirs": 2756
+    },
+    "eeg_time_ms": 229410.0,
+    "fnirs_time_ms": 280640.0,
+    "feature_contract": {
+      "unit_conversion": {
+        "native_unit": "uV",
+        "quantity": "electric_potential",
+        "evidence": "MAT cnt.yUnit",
+        "unit_status": "verified",
+        "output_unit": "uV",
+        "factor": 1.0,
+        "inverse_factor": 1.0,
+        "measurement_group": "electric_potential:uV"
+      },
+      "power_unit": "uV^2",
+      "feature": "natural log(P/P_ref)",
+      "power_reference_uv2": 1.0,
+      "power_floor_uv2": 1e-12,
+      "floor_fraction": 0.0,
+      "invalid_power_fraction": 0.0,
+      "band_hz": [
+        1.0,
+        45.0
+      ],
+      "dtype": "float64"
+    },
+    "sample_id": "eeg_fnirs_single_trial|subject_01|session_01|event=7|offset=-5.0|duration=30.0"
+  },
+  "reference": {
+    "nrmse": [
+      0.31877343033397837,
+      0.3632437224099452,
+      0.34957760863649945
+    ],
+    "hb_nrmse": 0.3564761607248421,
+    "target_extrema": 7,
+    "matched_extrema": 1,
+    "extrema_rmse": 0.5628398871695235,
+    "extrema": [
+      {
+        "component": "HbO",
+        "kind": "peak",
+        "time_s": 8.25,
+        "target_training_sd": 1.2193165439851523,
+        "prediction_training_sd": 1.0367941163411445,
+        "signed_deficit_training_sd": 0.18252242764400783,
+        "matched_time_s": null
+      },
+      {
+        "component": "HbO",
+        "kind": "peak",
+        "time_s": 23.0,
+        "target_training_sd": 2.50152825658411,
+        "prediction_training_sd": 1.8234361415901943,
+        "signed_deficit_training_sd": 0.6780921149939156,
+        "matched_time_s": 22.0
+      },
+      {
+        "component": "HbO",
+        "kind": "trough",
+        "time_s": 1.75,
+        "target_training_sd": -0.6162092930719228,
+        "prediction_training_sd": 0.1637302823853926,
+        "signed_deficit_training_sd": 0.7799395754573155,
+        "matched_time_s": null
+      },
+      {
+        "component": "HbO",
+        "kind": "trough",
+        "time_s": 12.0,
+        "target_training_sd": 0.7930473501199916,
+        "prediction_training_sd": 1.086478110153094,
+        "signed_deficit_training_sd": 0.2934307600331024,
+        "matched_time_s": null
+      },
+      {
+        "component": "HbR",
+        "kind": "peak",
+        "time_s": 2.5,
+        "target_training_sd": 0.10527468821636458,
+        "prediction_training_sd": 0.01933179321108575,
+        "signed_deficit_training_sd": 0.08594289500527884,
+        "matched_time_s": null
+      },
+      {
+        "component": "HbR",
+        "kind": "peak",
+        "time_s": 16.5,
+        "target_training_sd": 0.8226021325413867,
+        "prediction_training_sd": 0.46396691240046395,
+        "signed_deficit_training_sd": 0.35863522014092275,
+        "matched_time_s": null
+      },
+      {
+        "component": "HbR",
+        "kind": "trough",
+        "time_s": 6.25,
+        "target_training_sd": -1.0068162140114674,
+        "prediction_training_sd": -0.061308380893480084,
+        "signed_deficit_training_sd": 0.9455078331179873,
+        "matched_time_s": null
+      }
+    ]
+  },
+  "nrmse": [
+    0.3259363226736091,
+    0.3734501666687888,
+    0.36092384081675793
+  ],
+  "hb_nrmse": 0.3672404157053432,
+  "target_extrema": 7,
+  "matched_extrema": 1,
+  "extrema_rmse": 0.5891870048743011,
+  "extrema": [
+    {
+      "component": "HbO",
+      "kind": "peak",
+      "time_s": 8.25,
+      "target_training_sd": 1.2193165439851523,
+      "prediction_training_sd": 1.1227323338046515,
+      "signed_deficit_training_sd": 0.09658421018050078,
+      "matched_time_s": null
+    },
+    {
+      "component": "HbO",
+      "kind": "peak",
+      "time_s": 23.0,
+      "target_training_sd": 2.50152825658411,
+      "prediction_training_sd": 1.7664815322550638,
+      "signed_deficit_training_sd": 0.7350467243290462,
+      "matched_time_s": 22.0
+    },
+    {
+      "component": "HbO",
+      "kind": "trough",
+      "time_s": 1.75,
+      "target_training_sd": -0.6162092930719228,
+      "prediction_training_sd": 0.20144117913346907,
+      "signed_deficit_training_sd": 0.8176504722053919,
+      "matched_time_s": null
+    },
+    {
+      "component": "HbO",
+      "kind": "trough",
+      "time_s": 12.0,
+      "target_training_sd": 0.7930473501199916,
+      "prediction_training_sd": 1.1098919545188182,
+      "signed_deficit_training_sd": 0.31684460439882656,
+      "matched_time_s": null
+    },
+    {
+      "component": "HbR",
+      "kind": "peak",
+      "time_s": 2.5,
+      "target_training_sd": 0.10527468821636458,
+      "prediction_training_sd": 0.03178589727283813,
+      "signed_deficit_training_sd": 0.07348879094352645,
+      "matched_time_s": null
+    },
+    {
+      "component": "HbR",
+      "kind": "peak",
+      "time_s": 16.5,
+      "target_training_sd": 0.8226021325413867,
+      "prediction_training_sd": 0.4040025077071349,
+      "signed_deficit_training_sd": 0.4185996248342518,
+      "matched_time_s": null
+    },
+    {
+      "component": "HbR",
+      "kind": "trough",
+      "time_s": 6.25,
+      "target_training_sd": -1.0068162140114674,
+      "prediction_training_sd": -0.042037460075556414,
+      "signed_deficit_training_sd": 0.964778753935911,
+      "matched_time_s": null
+    }
+  ],
+  "driver_rms": 0.0860930500809095,
+  "initial_prior_cost": 11.914398563339004,
+  "integration_max_difference_training_sd": 2.6011505931888916e-08,
+  "seconds": 4.518461945001036,
+  "peak_rss_bytes": 586674176
+}

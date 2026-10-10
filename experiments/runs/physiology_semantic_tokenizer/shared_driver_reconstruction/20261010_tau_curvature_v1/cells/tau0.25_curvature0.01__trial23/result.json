@@ -1,0 +1,272 @@
+{
+  "status": "completed",
+  "converged": true,
+  "starts": [
+    {
+      "start": 0,
+      "converged": true,
+      "status": "completed",
+      "evaluations": 11,
+      "rejected_steps": 0,
+      "domain_rejections": 0,
+      "nondecreasing_rejections": 0,
+      "derivative_rejections": 0,
+      "iterations": 5,
+      "convergence_reason": "scaled_gradient",
+      "objective": 63.35961537513717,
+      "gradient_inf_norm": 0.0007032259895630827,
+      "scaled_gradient_inf_norm": 2.9808023858361094e-05
+    },
+    {
+      "start": 1,
+      "converged": true,
+      "status": "completed",
+      "evaluations": 13,
+      "rejected_steps": 0,
+      "domain_rejections": 0,
+      "nondecreasing_rejections": 0,
+      "derivative_rejections": 0,
+      "iterations": 6,
+      "convergence_reason": "scaled_gradient",
+      "objective": 63.35961555997739,
+      "gradient_inf_norm": 0.0023133483297124832,
+      "scaled_gradient_inf_norm": 6.618434416202633e-05
+    }
+  ],
+  "selected_start": 0,
+  "objective": 63.35961537513717,
+  "scaled_gradient_inf_norm": 2.9808023858361094e-05,
+  "convergence_reason": "scaled_gradient",
+  "evaluations": 24,
+  "roughness": 123.01609401923244,
+  "flow_prior_cost": 4.695381916553379,
+  "state_ranges": {
+    "minimum": [
+      -0.16701834582128935,
+      -0.2232916785405439,
+      0.6094779972053933,
+      0.8533716171403489,
+      0.8530743931069797,
+      0.7915889397712814
+    ],
+    "maximum": [
+      0.36135567650364486,
+      0.1766827785309948,
+      1.5550060400525572,
+      1.1519165190291731,
+      1.1519165190291731,
+      1.246070625117986
+    ]
+  },
+  "physical_checks": {
+    "all_intermediate_valid": true,
+    "completed_samples": 120,
+    "requested_samples": 120,
+    "completed_states": {
+      "finite": true,
+      "positive_fvpq": true,
+      "oxygen_extraction_in_unit_interval": true,
+      "absolute_hb_nonnegative": true,
+      "hbr_not_above_hbt": true,
+      "rest_equilibrium": true,
+      "minimum_f": 0.6094779972053933,
+      "minimum_v": 0.8533716171403489,
+      "minimum_p": 0.8530743931069797,
+      "minimum_q": 0.7915889397712814,
+      "minimum_extraction": 0.21965058664103462,
+      "maximum_extraction": 0.4688841283336706,
+      "extraction_float_saturation_count": 0,
+      "minimum_log_one_minus_extraction": -0.6327750674845394,
+      "flow_below_0_01_count": 0
+    },
+    "substeps": 16,
+    "dt": 0.25,
+    "integrator": "classical_RK4_physical_coordinates_fixed_ZOH_driver"
+  },
+  "replay_max_abs_difference": 2.498001805406602e-16,
+  "replay_failure": null,
+  "weighted_data_sse": 43.94082224751283,
+  "arm": {
+    "name": "tau0.25_curvature0.01",
+    "tau": 0.25,
+    "penalty": 0.01,
+    "initial_penalty": 100.0,
+    "flow_prior_weight": 1.0,
+    "hb_only": false
+  },
+  "trial": 23,
+  "identity": {
+    "subject": "subject_01",
+    "session": "session_05",
+    "original_ma_trial_position": 8,
+    "training_ordinal": 7,
+    "event_index": 17,
+    "native_start_samples": {
+      "eeg": 100851,
+      "fnirs": 5553
+    },
+    "eeg_time_ms": 509253.0,
+    "fnirs_time_ms": 560320.0,
+    "feature_contract": {
+      "unit_conversion": {
+        "native_unit": "uV",
+        "quantity": "electric_potential",
+        "evidence": "MAT cnt.yUnit",
+        "unit_status": "verified",
+        "output_unit": "uV",
+        "factor": 1.0,
+        "inverse_factor": 1.0,
+        "measurement_group": "electric_potential:uV"
+      },
+      "power_unit": "uV^2",
+      "feature": "natural log(P/P_ref)",
+      "power_reference_uv2": 1.0,
+      "power_floor_uv2": 1e-12,
+      "floor_fraction": 0.0,
+      "invalid_power_fraction": 0.0,
+      "band_hz": [
+        1.0,
+        45.0
+      ],
+      "dtype": "float64"
+    },
+    "sample_id": "eeg_fnirs_single_trial|subject_01|session_05|event=17|offset=-5.0|duration=30.0"
+  },
+  "reference": {
+    "nrmse": [
+      0.26140872737053267,
+      0.44324285278790665,
+      0.3410400814556753
+    ],
+    "hb_nrmse": 0.3954570543730732,
+    "target_extrema": 6,
+    "matched_extrema": 2,
+    "extrema_rmse": 0.5688441408734297,
+    "extrema": [
+      {
+        "component": "HbO",
+        "kind": "peak",
+        "time_s": 10.5,
+        "target_training_sd": 3.1725246871719213,
+        "prediction_training_sd": 2.237422525598074,
+        "signed_deficit_training_sd": 0.9351021615738473,
+        "matched_time_s": null
+      },
+      {
+        "component": "HbO",
+        "kind": "peak",
+        "time_s": 16.75,
+        "target_training_sd": 3.6964651751927575,
+        "prediction_training_sd": 3.144848124623818,
+        "signed_deficit_training_sd": 0.5516170505689395,
+        "matched_time_s": 16.25
+      },
+      {
+        "component": "HbO",
+        "kind": "trough",
+        "time_s": 13.75,
+        "target_training_sd": 2.4100432181749203,
+        "prediction_training_sd": 2.736102703656255,
+        "signed_deficit_training_sd": 0.32605948548133457,
+        "matched_time_s": null
+      },
+      {
+        "component": "HbR",
+        "kind": "peak",
+        "time_s": 20.5,
+        "target_training_sd": -3.1655562127712007,
+        "prediction_training_sd": -3.3820421322517533,
+        "signed_deficit_training_sd": 0.21648591948055262,
+        "matched_time_s": null
+      },
+      {
+        "component": "HbR",
+        "kind": "trough",
+        "time_s": 17.0,
+        "target_training_sd": -4.1594868412604535,
+        "prediction_training_sd": -3.6295112550690676,
+        "signed_deficit_training_sd": 0.529975586191386,
+        "matched_time_s": 17.0
+      },
+      {
+        "component": "HbR",
+        "kind": "trough",
+        "time_s": 22.5,
+        "target_training_sd": -3.4283176083473332,
+        "prediction_training_sd": -2.854950838109357,
+        "signed_deficit_training_sd": 0.5733667702379761,
+        "matched_time_s": null
+      }
+    ]
+  },
+  "nrmse": [
+    0.25032116260804593,
+    0.4451304047029782,
+    0.32461016171523716
+  ],
+  "hb_nrmse": 0.38955926011316283,
+  "target_extrema": 6,
+  "matched_extrema": 2,
+  "extrema_rmse": 0.570332099008617,
+  "extrema": [
+    {
+      "component": "HbO",
+      "kind": "peak",
+      "time_s": 10.5,
+      "target_training_sd": 3.1725246871719213,
+      "prediction_training_sd": 2.228364694209355,
+      "signed_deficit_training_sd": 0.9441599929625664,
+      "matched_time_s": null
+    },
+    {
+      "component": "HbO",
+      "kind": "peak",
+      "time_s": 16.75,
+      "target_training_sd": 3.6964651751927575,
+      "prediction_training_sd": 3.145216675972178,
+      "signed_deficit_training_sd": 0.5512484992205797,
+      "matched_time_s": 16.25
+    },
+    {
+      "component": "HbO",
+      "kind": "trough",
+      "time_s": 13.75,
+      "target_training_sd": 2.4100432181749203,
+      "prediction_training_sd": 2.7470640430433977,
+      "signed_deficit_training_sd": 0.3370208248684774,
+      "matched_time_s": null
+    },
+    {
+      "component": "HbR",
+      "kind": "peak",
+      "time_s": 20.5,
+      "target_training_sd": -3.1655562127712007,
+      "prediction_training_sd": -3.3661166013018224,
+      "signed_deficit_training_sd": 0.20056038853062175,
+      "matched_time_s": null
+    },
+    {
+      "component": "HbR",
+      "kind": "trough",
+      "time_s": 17.0,
+      "target_training_sd": -4.1594868412604535,
+      "prediction_training_sd": -3.6595565703033697,
+      "signed_deficit_training_sd": 0.49993027095708387,
+      "matched_time_s": 17.0
+    },
+    {
+      "component": "HbR",
+      "kind": "trough",
+      "time_s": 22.5,
+      "target_training_sd": -3.4283176083473332,
+      "prediction_training_sd": -2.8344982443218507,
+      "signed_deficit_training_sd": 0.5938193640254825,
+      "matched_time_s": null
+    }
+  ],
+  "driver_rms": 0.1258194334886131,
+  "initial_prior_cost": 13.493250270878631,
+  "integration_max_difference_training_sd": 1.3058762278313523e-08,
+  "seconds": 4.569839789997786,
+  "peak_rss_bytes": 586674176
+}

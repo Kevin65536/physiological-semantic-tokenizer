@@ -10,6 +10,36 @@ from src.inference.shared_driver_reconstruction import (
 from experiments.scripts import evaluate_shared_driver_reconstruction as run
 
 
+def test_tau_curvature_contract_and_parent_reject_before_array_access(monkeypatch,tmp_path,capsys):
+    import json
+    import yaml
+    cfg=run.read_waveform_config(run.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tau_curvature_v1.yaml')
+    monkeypatch.setattr(np,'load',lambda *a,**k:pytest.fail('unexpected array access'))
+    run.tau_curvature_main(SimpleNamespace(check_only=True),cfg)
+    assert '"measured_arrays_read": 0' in capsys.readouterr().out
+    parent=tmp_path/cfg['parent_run'];parent.mkdir(parents=True)
+    (parent/'manifest.json').write_text(json.dumps({'execution':'completed','experiment_id':'wrong_parent'}))
+    (parent/'resolved_config.yaml').write_text(yaml.safe_dump({}))
+    group=cfg['group'];method=cfg['method']
+    run.write_json(parent/'prepared'/f'{group}.json',{'metadata':{}})
+    run.write_json(parent/'training'/f'{group}__{method}'/'selection.json',{})
+    run.write_json(parent/'cells'/f'{group}__{method}__full'/'result.json',{})
+    with pytest.raises(ValueError,match='boundary'):
+        run.tau_curvature_parent(cfg,tmp_path)
+
+
+def test_tau_curvature_metrics_detect_missing_peak_and_frozen_scale():
+    cfg=run.read_waveform_config(run.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tau_curvature_v1.yaml')
+    t=np.arange(120)*.25-5.;y=np.zeros((120,3));y[:,1]=np.exp(-((t-10)/1.5)**2)
+    sd=np.array([1.,2.,1.]);pred=np.zeros_like(y)
+    lost=run.tau_curvature_metrics(y,pred,sd,cfg)
+    exact=run.tau_curvature_metrics(y,y,sd,cfg)
+    assert lost['target_extrema']==1 and lost['matched_extrema']==0
+    assert lost['extrema_rmse']==pytest.approx(.5)
+    assert exact['matched_extrema']==1 and exact['hb_nrmse']==0
+    assert lost['hb_nrmse']==pytest.approx(np.sqrt(np.mean((y[:,1:]/sd[1:])**2)))
+
+
 def test_viscoelastic_rest_design_against_independent_mass_balance_ode():
     p=BalloonParameters();n=24;dt=.1;viscosity=2.3
     d=build_shared_driver_design(p,n,dt,venous_viscoelastic_s=viscosity)

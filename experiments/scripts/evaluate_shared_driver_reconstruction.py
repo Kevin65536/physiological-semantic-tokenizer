@@ -2580,6 +2580,7 @@ def conditional_step_control_main(args):
 def read_waveform_config(path):
     cfg=yaml.safe_load(Path(path).read_text())
     filename={'shared_driver_waveform_diagnostic_v1':'shared_driver_waveform_diagnostic_v1.yaml',
+              'shared_driver_tau_curvature_v1':'shared_driver_tau_curvature_v1.yaml',
               'shared_driver_waveform_volume_fraction_v1':'shared_driver_waveform_volume_fraction_v1.yaml'}.get(cfg.get('schema'))
     if filename is None:raise ValueError('unknown waveform schema')
     expected=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer'/filename
@@ -2808,8 +2809,272 @@ def waveform_volume_main(args,cfg):
     manifest.update(execution='completed',summary='summary.json');write_json(path,manifest)
 
 
+def tau_curvature_arms(cfg):
+    arms=[]
+    for tau in cfg['tau_grid_s']:
+        for weight in cfg['curvature_weights']:
+            arms.append(dict(name=f'tau{tau:g}_curvature{weight:g}',tau=tau,penalty=weight,
+                             initial_penalty=100.,flow_prior_weight=1.,hb_only=False))
+    for name in cfg['controls']:
+        arms.append(dict(name=name,tau=.125 if name.endswith('tau0125') else .5,
+            penalty=0. if 'no_curvature' in name or 'no_penalties' in name else .01,
+            initial_penalty=0. if name=='no_initial' or 'no_penalties' in name else 100.,
+            flow_prior_weight=0. if name=='no_flow' or 'no_penalties' in name else 1.,
+            hb_only=name.startswith('Hb_only')))
+    return arms
+
+
+def tau_curvature_parent(cfg,root):
+    """Validate the one named public parent and identities before array access."""
+    parent=Path(root)/cfg['parent_run'];group=cfg['group'];method=cfg['method']
+    manifest=json.loads((parent/'manifest.json').read_text())
+    pc=yaml.safe_load((parent/'resolved_config.yaml').read_text())
+    spec=dict(kind='measured',group=group,subject='subject_01',outer=3,optical_pipeline='mne_tddr')
+    info=json.loads((parent/'prepared'/f'{group}.json').read_text())
+    selected=json.loads((parent/'training'/f'{group}__{method}'/'selection.json').read_text())
+    cell=parent/'cells'/f'{group}__{method}__full'
+    record=json.loads((cell/'result.json').read_text());m=info['metadata']
+    if (manifest.get('execution')!='completed'
+            or manifest.get('experiment_id')!='SSM-SHARED-DRIVER-FIXED-ROI-OPTICAL-v1'
+            or pc.get('schema')!='shared_driver_fixed_roi_optical_v1'
+            or pc.get('scope')!='nonprotected_retained_public_development_diagnostic'
+            or pc.get('protected_boundary')!='only_exact_parent_prepared_arrays_no_raw_or_protected_loaders'
+            or info.get('status')!='completed' or info['spec']!=spec or record['spec']!=spec
+            or selected.get('status')!='completed' or selected['spec']!=spec
+            or selected['parameter_value']!=.5 or pc['tau_training']['bounds']!=[.5,8.]
+            or m['synthetic'] or m['validation']!=cfg['trials']
+            or m['train']!=[i for i in range(24) if i not in cfg['trials']]
+            or m['fixed_roi']['pair_name']!='AF7Fp1' or len(m['trials'])!=24
+            or sorted(r['trial'] for r in record['rows'])!=cfg['trials']):
+        raise ValueError('tau/curvature parent boundary or identity mismatch')
+    with np.load(cell/'trajectories.npz',allow_pickle=False) as z:
+        arrays={k:z[k].copy() for k in ('target','prediction','states','normalizer','trial_indices')}
+    if (arrays['target'].shape!=(6,120,3) or arrays['prediction'].shape!=(6,120,3)
+            or arrays['states'].shape!=(6,120,6) or arrays['normalizer'].shape!=(3,)
+            or arrays['trial_indices'].tolist()!=cfg['trials']
+            or not all(np.isfinite(v).all() for v in arrays.values()) or np.any(arrays['normalizer']<=0)):
+        raise ValueError('tau/curvature parent tensor mismatch')
+    np.testing.assert_allclose(arrays['normalizer'],m['normalization_sd'],rtol=1e-12,atol=0)
+    for i,trial in enumerate(cfg['trials']):
+        row=next(r for r in record['rows'] if r['trial']==trial)
+        if row['status']!='completed' or not row['physical_valid'] or not row['fine_physical_valid']:
+            raise ValueError('named retained reference was not successful')
+        error=np.sqrt(np.mean(((arrays['prediction'][i]-arrays['target'][i])/arrays['normalizer'])**2,axis=0))
+        np.testing.assert_allclose(error,[row[f'nrmse_{c}'] for c in MODALITIES],rtol=1e-10,atol=1e-12)
+    return arrays,info,parameters(pc,.5)
+
+
+def tau_curvature_metrics(target,prediction,sd,cfg):
+    from scipy.signal import find_peaks
+    dt=cfg['tensor']['dt_s'];e=cfg['extrema'];t=np.arange(len(target))*dt-5.
+    normalized=target/sd;fitted=prediction/sd;err=fitted-normalized
+    result=dict(nrmse=np.sqrt(np.mean(err**2,axis=0)),hb_nrmse=float(np.sqrt(np.mean(err[:,1:]**2))))
+    details=[]
+    for component in (1,2):
+        for sign in (1,-1):
+            ids=find_peaks(sign*normalized[:,component],prominence=e['prominence_training_sd'],
+                           distance=int(round(e['minimum_separation_s']/dt)))[0]
+            predicted=find_peaks(sign*fitted[:,component],prominence=e['prominence_training_sd'],
+                                 distance=int(round(e['minimum_separation_s']/dt)))[0].tolist()
+            for index in ids:
+                if not e['event_support_s'][0]<=t[index]<=e['event_support_s'][1]:continue
+                candidates=[j for j in predicted if abs(j-index)*dt<=e['matching_tolerance_s']]
+                matched=min(candidates,key=lambda j:abs(j-index)) if candidates else None
+                if matched is not None:predicted.remove(matched)
+                details.append(dict(component=MODALITIES[component],kind='peak' if sign==1 else 'trough',
+                    time_s=float(t[index]),target_training_sd=float(normalized[index,component]),
+                    prediction_training_sd=float(fitted[index,component]),
+                    signed_deficit_training_sd=float(-sign*err[index,component]),
+                    matched_time_s=None if matched is None else float(t[matched])))
+    result.update(target_extrema=len(details),matched_extrema=sum(x['matched_time_s'] is not None for x in details),
+        extrema_rmse=float(np.sqrt(np.mean([x['signed_deficit_training_sd']**2 for x in details]))) if details else None,
+        extrema=details)
+    return result
+
+
+def tau_curvature_cell(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver,nonlinear_driver_forward
+    from src.inference.observation_baselines import native_model_operator
+    cfg,root,out,arm,trial=payload;dest=Path(out)/'cells'/f"{arm['name']}__trial{trial}"
+    if (dest/'result.json').exists():return json.loads((dest/'result.json').read_text())
+    started=time.monotonic();a,info,p=tau_curvature_parent(cfg,root);i=cfg['trials'].index(trial)
+    p=replace(p,free=replace(p.free,tau=arm['tau']));state=a['states'][i];y=a['target'][i];sd=a['normalizer']
+    op=native_model_operator(120);mask=np.ones(y.shape,bool)
+    if arm['hb_only']:mask[:,0]=False
+    settings=cfg['nonlinear']
+    fit=fit_nonlinear_shared_driver(y,p,.25,mean_operator=op,sd=sd,visible=mask,
+        starts=[dict(driver=state[:,0],initial_state=state[0,1:]),
+                dict(driver=np.zeros(120),initial_state=np.r_[0.,np.ones(4)])],
+        penalty=arm['penalty'],initial_penalty=arm['initial_penalty'],flow_prior_weight=arm['flow_prior_weight'],
+        flow_prior_log_sd=cfg['regularization']['flow_log_sd'],numerical_backend='numba',
+        max_evaluations=settings['max_evaluations'],substeps=settings['substeps'],
+        gradient_tolerance=settings['gradient_tolerance'])
+    keys=('status','converged','starts','selected_start','objective','scaled_gradient_inf_norm',
+          'convergence_reason','evaluations','roughness','flow_prior_cost','state_ranges','physical_checks',
+          'replay_max_abs_difference','replay_failure','weighted_data_sse')
+    row={k:fit[k] for k in keys if k in fit}
+    row.update(arm=arm,trial=trial,identity=info['metadata']['trials'][trial],
+               reference=tau_curvature_metrics(y,a['prediction'][i],sd,cfg))
+    if 'prediction' in fit:
+        pred=fit['prediction'];row.update(tau_curvature_metrics(y,pred,sd,cfg))
+        row['driver_rms']=float(np.sqrt(np.mean(fit['driver']**2)))
+        row['initial_prior_cost']=float(arm['initial_penalty']*np.sum((fit['initial_state']-[0,1,1,1,1])**2))
+        try:
+            fine=nonlinear_driver_forward(fit['driver'],fit['initial_state'],p,.25,
+                substeps=settings['check_substeps'],derivative=False,numerical_backend='numba')
+            fine_pred=(op@fine['canonical_prediction'].ravel()).reshape(y.shape)
+            gap=float(np.max(abs(fine_pred-pred)/sd));row['integration_max_difference_training_sd']=gap
+            if gap>settings['maximum_integration_difference_training_sd']:
+                row.update(status='failed_integration_check',converged=False)
+        except (ValueError,FloatingPointError,OverflowError) as exc:
+            row.update(status='failed_integration_check',converged=False,integration_error=repr(exc))
+        dest.mkdir(parents=True,exist_ok=True)
+        np.savez_compressed(dest/'trajectory.npz',target=y,normalizer=sd,prediction=pred,
+                            states=fit['states'],retained=a['prediction'][i])
+    row.update(seconds=time.monotonic()-started,peak_rss_bytes=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024)
+    write_json(dest/'result.json',row);return serial(row)
+
+
+def tau_curvature_synthetic(cfg):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver,nonlinear_driver_forward
+    from src.inference.observation_baselines import native_model_operator
+    p=BalloonParameters();p=replace(p,free=replace(p.free,tau=cfg['synthetic']['tau_s']))
+    t=np.arange(120)*.25;s=cfg['synthetic'];rng=np.random.default_rng(s['seed'])
+    phase=rng.uniform(-np.pi,np.pi,2)
+    driver=.02*np.sin(2*np.pi*s['driver_slow_hz']*t+phase[0])+.02*np.sin(2*np.pi*s['driver_fast_hz']*t+phase[1])
+    initial=np.r_[0.,np.ones(4)];op=native_model_operator(120);sd=np.array([.04,.01,.003]);checks={};rows=[]
+    fine=nonlinear_driver_forward(driver,initial,p,.25,substeps=32,derivative=True,numerical_backend='numba')
+    y=(op@fine['canonical_prediction'].ravel()).reshape(120,3)
+    coarse=nonlinear_driver_forward(driver,initial,p,.25,substeps=16,derivative=True,numerical_backend='python')
+    compiled=nonlinear_driver_forward(driver,initial,p,.25,substeps=16,derivative=True,numerical_backend='numba')
+    checks['compiled_python_prediction']=bool(np.max(abs(compiled['canonical_prediction']-coarse['canonical_prediction']))<1e-10)
+    checks['compiled_python_jacobian']=bool(np.max(abs(compiled['jacobian']-coarse['jacobian']))<1e-9)
+    checks['fine_grid']=bool(np.max(abs((op@(coarse['canonical_prediction']-fine['canonical_prediction']).ravel()).reshape(120,3)/sd))<.005)
+    old=nonlinear_driver_forward(driver,initial,replace(p,free=replace(p.free,tau=.5)),.25,
+        substeps=16,derivative=False,numerical_backend='numba')
+    checks['tau_does_not_change_flow']=bool(np.max(abs(old['states'][:,1:3]-fine['states'][:,1:3]))<1e-8)
+    checks['tau_changes_Hb']=bool(np.max(abs(old['canonical_prediction'][:,1:]-fine['canonical_prediction'][:,1:]))>1e-5)
+    for weight in (0.,1.):
+        f=fit_nonlinear_shared_driver(y,p,.25,mean_operator=op,sd=sd,penalty=weight,initial_penalty=0.,
+            flow_prior_weight=0.,max_evaluations=240,gradient_tolerance=1e-7,substeps=16,numerical_backend='numba')
+        rows.append(dict(penalty=weight,status=f['status'],nrmse=np.sqrt(np.mean(((f['prediction']-y)/sd)**2,axis=0)),
+            driver_rmse=float(np.sqrt(np.mean((f['driver']-driver)**2))),seconds=None))
+    checks['matched_unpenalized_recovery']=bool(rows[0]['status']=='completed' and max(rows[0]['nrmse'])<1e-4)
+    checks['curvature_can_suppress_known_dynamics']=bool(rows[1]['status']=='completed' and rows[1]['driver_rmse']>rows[0]['driver_rmse']*10)
+    return dict(status='passed' if all(checks.values()) else 'failed',checks=checks,rows=rows,
+                measured_arrays_read=0,interpretation='software_and_known_truth_controls_not_measured_physiology_validation')
+
+
+def tau_curvature_screens(cfg,root,out):
+    from src.inference.shared_driver_reconstruction import fit_waveform_subspace,nonlinear_driver_forward
+    from src.inference.observation_baselines import native_model_operator
+    a,info,p=tau_curvature_parent(cfg,root);op=native_model_operator(120);rows=[];forward=[];arrays={}
+    for tau in cfg['tau_grid_s']:
+        pp=replace(p,free=replace(p.free,tau=tau));d=build_shared_driver_design(pp,120,.25,processed_mean_operator=op)
+        for name,components in [('joint',[0,1,2]),('Hb_only',[1,2]),('HbO_only',[1]),('HbR_only',[2])]:
+            mask=np.zeros((120,3),bool);mask[:,components]=True
+            fit=fit_waveform_subspace(a['target'],d,a['normalizer'],visible=mask)
+            arrays[f'tau{tau:g}_{name}']=fit['prediction']
+            for i,trial in enumerate(cfg['trials']):
+                rows.append(dict(tau=tau,mask=name,trial=trial,rank=fit['rank'],
+                    max_fractional_excursion=fit['max_fractional_excursion'][i],
+                    **tau_curvature_metrics(a['target'][i],fit['prediction'][i],a['normalizer'],cfg)))
+        for i,trial in enumerate(cfg['trials']):
+            state=a['states'][i]
+            f=nonlinear_driver_forward(state[:,0],state[0,1:],pp,.25,substeps=32,derivative=False,numerical_backend='numba')
+            pred=(op@f['canonical_prediction'].ravel()).reshape(120,3)
+            arrays[f'forward_tau{tau:g}_trial{trial}']=pred
+            forward.append(dict(tau=tau,trial=trial,**tau_curvature_metrics(a['target'][i],pred,a['normalizer'],cfg)))
+    np.savez_compressed(out/'screen_predictions.npz',**arrays)
+    write_json(out/'screens.json',dict(linear=rows,fixed_driver=forward,
+        interpretation='linear_unregularized_is_representability_only_not_physically_valid_or_predictive'))
+
+
+def tau_curvature_summary(cfg,out):
+    rows=[];aggregates=[]
+    for arm in tau_curvature_arms(cfg):
+        current=[]
+        for trial in cfg['trials']:
+            path=out/'cells'/f"{arm['name']}__trial{trial}"/'result.json'
+            if path.exists():current.append(json.loads(path.read_text()))
+        rows.extend(current);good=[r for r in current if r['status']=='completed' and r['converged']]
+        aggregates.append(dict(arm=arm,planned=len(cfg['trials']),terminal=len(current),successful=len(good),
+            successful_trials=[r['trial'] for r in good],
+            hb_nrmse_pooled=float(np.sqrt(np.mean([r['hb_nrmse']**2 for r in good]))) if good else None,
+            reference_hb_nrmse_same_subset=float(np.sqrt(np.mean([r['reference']['hb_nrmse']**2 for r in good]))) if good else None,
+            paired_hb_delta=[r['hb_nrmse']-r['reference']['hb_nrmse'] for r in good],
+            extrema_count=sum(r['target_extrema'] for r in good),matched_extrema=sum(r['matched_extrema'] for r in good),
+            failures=[dict(trial=r['trial'],status=r['status']) for r in current if r not in good]))
+    write_json(out/'summary.json',dict(expected=78,terminal=len(rows),successful=sum(a['successful'] for a in aggregates),
+        independent_subjects=1,window_count=6,aggregates=aggregates,
+        focus=[r for r in rows if r['trial']==cfg['focus_trial']],
+        score='sqrt(mean over 120 times and two Hb components of ((prediction-target)/frozen_training_SD)^2)',
+        pooling='equal-size windows pooled by RMS of per-window Hb NRMSE; successes and same-subset reference shown',
+        scientific_verdict='exploratory_conditional_constraint_diagnostic_no_population_or_prediction_claim'))
+    pd.DataFrame([dict(arm=r['arm']['name'],tau=r['arm']['tau'],trial=r['trial'],status=r['status'],
+        **{k:r.get(k) for k in ('hb_nrmse','extrema_rmse','matched_extrema','target_extrema','driver_rms','roughness',
+                              'scaled_gradient_inf_norm','integration_max_difference_training_sd','seconds')},
+        **{f'nrmse_{c}':r.get('nrmse',[None]*3)[i] for i,c in enumerate(MODALITIES)}) for r in rows]).to_csv(out/'metrics.csv',index=False)
+    return aggregates
+
+
+def tau_curvature_main(args,cfg):
+    if args.check_only:
+        print(json.dumps(dict(status='passed',nonlinear_cells=78,measured_arrays_read=0)));return
+    if args.phase not in ('synthetic','measured'):raise ValueError('separate synthetic and measured phases required')
+    root=args.project_root.resolve();out=args.run_dir.resolve()
+    if out.parent!=(root/cfg['output_root']).resolve():raise ValueError('output outside owning namespace')
+    if not 1<=args.workers<=cfg['resources']['max_workers']:raise ValueError('worker count outside contract')
+    out.mkdir(parents=True,exist_ok=True);lock=(out/'controller.lock').open('w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    resolved=out/'resolved_config.yaml'
+    if resolved.exists() and yaml.safe_load(resolved.read_text())!=cfg:raise ValueError('resume contract mismatch')
+    resolved.write_text(yaml.safe_dump(cfg,sort_keys=False))
+    path=out/'manifest.json';m=json.loads(path.read_text()) if path.exists() else {}
+    if m.get('execution')=='completed':raise ValueError('completed evidence is read-only; choose a fresh run')
+    if args.phase=='measured' and m.get('synthetic_status')!='passed':raise ValueError('synthetic controls must pass before measured reads')
+    if not (out/'source_snapshot').exists():
+        import subprocess
+        for rel in ('experiments/scripts/evaluate_shared_driver_reconstruction.py',
+                    'src/inference/shared_driver_reconstruction.py','src/inference/shared_driver_rk4.py',
+                    'src/inference/t3a_balloon_robust_ssm.py','src/inference/observation_baselines.py'):
+            dest=out/'source_snapshot'/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(CODE_ROOT/rel,dest)
+        m['source_revision']=subprocess.check_output(['git','rev-parse','HEAD'],cwd=CODE_ROOT,text=True).strip()
+    m.update(experiment_id=cfg['experiment_id'],execution='running',phase=args.phase,controller_pid=os.getpid(),
+             workers=args.workers,supervisor=os.environ.get('WAVEFORM_SUPERVISOR','unspecified'))
+    m.setdefault('invocations',[]).append(dict(argv=sys.argv,cwd=str(Path.cwd()),time=datetime.now(timezone.utc).isoformat(),
+        workers=args.workers,python=sys.executable,supervisor=m['supervisor'],
+        numerical_threads={key:os.environ.get(key) for key in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','MKL_NUM_THREADS')}))
+    write_json(path,m)
+    try:
+        if args.phase=='synthetic':
+            started=time.monotonic();result=tau_curvature_synthetic(cfg);result['seconds']=time.monotonic()-started
+            result['peak_rss_bytes']=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss*1024
+            write_json(out/'synthetic_summary.json',result)
+            m.update(execution='synthetic_terminal',synthetic_status=result['status']);print(json.dumps(serial(result)),flush=True)
+        else:
+            arms=tau_curvature_arms(cfg)
+            work=[(cfg,str(root),str(out),arm,trial) for arm in arms for trial in cfg['trials']]
+            if args.pilot:work=[x for x in work if x[-1]==3 and x[-2]['name'] in ('tau0.5_curvature0.01','Hb_only_no_penalties_tau0125')]
+            pending=[x for x in work if not (out/'cells'/f"{x[-2]['name']}__trial{x[-1]}"/'result.json').exists()]
+            for payload,row,error in bounded_nonlinear_work(tau_curvature_cell,pending,args.workers,args.workers):
+                if error:
+                    row=dict(arm=payload[-2],trial=payload[-1],status='failed_worker',converged=False,error=error)
+                    write_json(out/'cells'/f"{row['arm']['name']}__trial{row['trial']}"/'result.json',row)
+                print(json.dumps(dict(arm=row['arm']['name'],trial=row['trial'],status=row['status'],
+                    hb_nrmse=row.get('hb_nrmse'),seconds=row.get('seconds'))),flush=True)
+            if not args.pilot:tau_curvature_screens(cfg,root,out)
+            aggregates=tau_curvature_summary(cfg,out)
+            m.update(execution='pilot_terminal' if args.pilot else 'completed',
+                     terminal_cells=sum(a['terminal'] for a in aggregates),summary='summary.json')
+    except Exception as exc:
+        m.update(execution='failed',error=repr(exc),traceback=traceback.format_exc());raise
+    finally:
+        m['updated_at']=datetime.now(timezone.utc).isoformat();write_json(path,m)
+
+
 def waveform_diagnostic_main(args):
     cfg=read_waveform_config(args.config)
+    if cfg['schema']=='shared_driver_tau_curvature_v1':return tau_curvature_main(args,cfg)
     if args.check_only:
         print(json.dumps(dict(status='passed',groups=6,focus_nonlinear_cells=12 if cfg['schema']=='shared_driver_waveform_diagnostic_v1' else 0,measured_arrays_read=0)));return
     if cfg['schema']=='shared_driver_waveform_volume_fraction_v1':return waveform_volume_main(args,cfg)

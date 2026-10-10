@@ -1,0 +1,86 @@
+schema: shared_driver_tau_curvature_v1
+experiment_id: SSM-SHARED-DRIVER-TAU-CURVATURE-v1
+scope: exploratory_reanalysis_of_exact_nonprotected_parent_features
+parent_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_optical_v1
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+group: mne_tddr__subject_01_o3
+method: trained_tau_logflow1
+trials:
+- 3
+- 7
+- 11
+- 15
+- 19
+- 23
+focus_trial: 3
+selection: all_six_validation_windows_of_the_user_named_lower_boundary_group
+tensor:
+  steps: 120
+  dt_s: 0.25
+  components:
+  - EEG
+  - HbO
+  - HbR
+split: retained_18_train_6_validation_no_new_parameter_selection
+target: exact_parent_processed_target_and_frozen_training_SD
+mask: full_window_joint_except_explicit_Hb_only_controls
+baseline: retained_tau_0_5_and_same_objective_refit
+primary: paired_Hb_NRMSE_and_target_extremum_errors_on_all_six_windows
+secondary: EEG_error_driver_roughness_flow_and_initial_penalty_controls
+diagnostic: unregularized_linear_joint_Hb_and_single_component_representability
+null: relaxing_driver_curvature_or_lowering_tau_does_not_recover_missing_extrema
+tau_grid_s:
+- 0.5
+- 0.25
+- 0.125
+curvature_weights:
+- 0.01
+- 0.0
+controls:
+- Hb_only
+- Hb_only_no_curvature
+- no_flow
+- no_initial
+- no_penalties
+- Hb_only_no_penalties
+- Hb_only_no_penalties_tau0125
+regularization:
+  initial_weight: 100.0
+  flow_weight: 1.0
+  flow_log_sd: 0.6931471805599453
+  amplitude_weight: 0.0
+nonlinear:
+  max_evaluations: 320
+  gradient_tolerance: 0.0001
+  substeps: 16
+  check_substeps: 32
+  maximum_integration_difference_training_sd: 0.005
+starts:
+- retained_fit
+- physical_rest
+extrema:
+  prominence_training_sd: 0.25
+  minimum_separation_s: 1.0
+  matching_tolerance_s: 1.0
+  event_support_s:
+  - 0.0
+  - 24.75
+synthetic:
+  seed: 2026101001
+  tau_s: 0.125
+  driver_slow_hz: 0.07
+  driver_fast_hz: 0.35
+resources:
+  max_workers: 24
+  numerical_threads_per_worker: 1
+  max_seconds: 900
+stopping: exactly_78_nonlinear_cells_plus_declared_linear_and_fixed_driver_screens_no_adaptive_parameter_selection
+protected_boundary: exact_named_parent_validation_trajectory_arrays_only_no_raw_or_protected_loaders
+claim_limits:
+- exploratory_conditional_refitting_of_visible_validation_targets_not_prediction_or_training_selection
+- one_subject_six_dependent_windows_not_six_independent_subjects
+- tau_below_0_5_is_an_engineering_stress_test_not_a_validated_physiological_range
+- Hb_only_controls_change_the_observation_objective_and_cannot_be_ranked_by_total_objective
+- linear_unregularized_screens_can_leave_the_physical_domain
+- failed_fits_remain_in_denominators_and_are_not_primary_successes
+- missing_measured_extrema_are_not_automatically_neural_or_vascular_truth
