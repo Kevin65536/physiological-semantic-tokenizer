@@ -6384,6 +6384,375 @@ def render_fitting_explainer(run, out):
                          bytes=len(html.encode('utf-8'))), ensure_ascii=False))
 
 
+def select_parameter_explorer_cases(metrics):
+    """Select low/middle/high Hb error examples from the bounded public panel."""
+    groups = [f'no_motion__subject_{s}_o3' for s in ('01', '09', '18')]
+    panel = metrics[metrics.group.isin(groups)
+                    & metrics.method.eq('conditional_trained_gain')
+                    & metrics['mode'].eq('full')].copy()
+    if len(panel) != 18 or panel[['group', 'trial']].duplicated().any():
+        raise ValueError('Expected 18 unique public validation windows')
+    panel['hb_nrmse'] = np.sqrt(panel[['nrmse_HbO', 'nrmse_HbR']].pow(2).mean(axis=1, skipna=False))
+    valid = (panel.status.eq('completed') & truth(panel.physical_valid)
+             & truth(panel.fine_physical_valid) & np.isfinite(panel.hb_nrmse))
+    ordered = panel[valid].sort_values(['hb_nrmse', 'group', 'trial'])
+    if len(ordered.group.unique()) != 3:
+        raise ValueError('Need a valid example from each of the three subjects')
+    low = ordered.iloc[0]
+    high = ordered[ordered.group.ne(low.group)].iloc[-1]
+    median = float(ordered.hb_nrmse.median())
+    middle = ordered[~ordered.group.isin([low.group, high.group])].copy()
+    middle['distance'] = abs(middle.hb_nrmse - median)
+    mid = middle.sort_values(['distance', 'group', 'trial']).iloc[0]
+    selected = []
+    for key, label, row in [('low', '重建较好', low), ('middle', '误差居中', mid), ('high', '困难样例', high)]:
+        selected.append(dict(key=key, label=label, group=str(row.group), trial=int(row.trial),
+                             hb_nrmse=float(row.hb_nrmse)))
+    return selected, dict(planned=18, valid=int(valid.sum()), failed=int((~valid).sum()),
+        independent_subjects=3, median_hb_nrmse=median,
+        rule='min Hb NRMSE; max among other subjects; nearest overall median in remaining subject; ties by group/trial',
+        panel=json.loads(panel[['group', 'trial', 'status', 'physical_valid', 'fine_physical_valid', 'hb_nrmse']].to_json(orient='records')))
+
+
+def parameter_response_frames(driver, initial, parameters, operator, target, sd, *,
+                              factors, dt=.25, backend='numba', integration_tolerance=.005,
+                              parameter_bounds=None):
+    """Forward-only parameter sweep; each node is solved, never morphed or refitted."""
+    from dataclasses import replace
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+
+    target, sd, factors = np.asarray(target), np.asarray(sd), np.asarray(factors)
+    if (sd.shape != (3,) or np.any(sd <= 0) or not np.isfinite(sd).all()
+            or target.shape != (len(driver), 3) or not np.isfinite(target).all()
+            or factors.ndim != 1 or not np.isfinite(factors).all() or np.any(factors <= 0)):
+        raise ValueError('Invalid response target, training scale or parameter factors')
+    result = {}
+    parameter_bounds = parameter_bounds or {}
+    if any(name not in ('tau', 'kappa', 'neurovascular_gain') or len(bounds) != 2
+           or not np.isfinite(bounds).all() or not 0 < bounds[0] < bounds[1]
+           for name, bounds in parameter_bounds.items()):
+        raise ValueError('Invalid historical parameter bounds')
+    for name in ('tau', 'kappa', 'neurovascular_gain'):
+        reference = getattr(parameters.fixed if name == 'neurovascular_gain' else parameters.free, name)
+        frames = []
+        for factor in factors:
+            value = float(reference * factor)
+            frame = dict(factor=float(factor), value=value)
+            if name in parameter_bounds and not parameter_bounds[name][0] <= value <= parameter_bounds[name][1]:
+                frames.append(dict(**frame, status='outside_optimization_bounds', prediction=None,
+                    nrmse=None, reason='Outside the retained optimizer search interval; not solved'))
+                continue
+            p = (replace(parameters, fixed=replace(parameters.fixed, **{name: value}))
+                 if name == 'neurovascular_gain'
+                 else replace(parameters, free=replace(parameters.free, **{name: value})))
+            try:
+                coarse = nonlinear_driver_forward(driver, initial, p, dt, derivative=False,
+                    substeps=4, numerical_backend=backend)
+                fine = nonlinear_driver_forward(driver, initial, p, dt, derivative=False,
+                    substeps=8, numerical_backend=backend)
+                prediction = (operator @ coarse['canonical_prediction'].ravel()).reshape(target.shape)
+                checked = (operator @ fine['canonical_prediction'].ravel()).reshape(target.shape)
+                difference = float(np.max(np.abs((prediction - checked) / sd)))
+                frame['integration_difference_training_sd'] = difference
+                if not np.isfinite(prediction).all() or not np.isfinite(difference) or difference > integration_tolerance:
+                    frame.update(status='integration_failed', prediction=None, nrmse=None,
+                                 reason='4 vs 8 RK4 substeps exceeds retained tolerance')
+                else:
+                    errors = np.sqrt(np.mean(((prediction - target) / sd)**2, axis=0))
+                    frame.update(status='completed', prediction=(prediction / sd).tolist(),
+                        nrmse=errors.tolist(), hb_nrmse=float(np.sqrt(np.mean(errors[1:]**2))))
+            except (FloatingPointError, ValueError, OverflowError) as exc:
+                frame.update(status='domain_failed', prediction=None, nrmse=None, reason=str(exc))
+            frames.append(frame)
+        result[name] = dict(reference=float(reference), frames=frames)
+        if name in parameter_bounds:
+            result[name]['optimization_bounds'] = list(parameter_bounds[name])
+    return result
+
+
+def parameter_boundary_evidence(selection, starts, bounds):
+    """Validate actual lower-bound training evidence, independently of waveform scores."""
+    if (selection.get('status') != 'completed' or not selection.get('converged')
+            or selection.get('parameter_name') != 'tau'
+            or selection.get('expected_training_trials') != 18
+            or selection.get('expected_starts') != 3 or len(starts) != 3
+            or selection.get('successful_starts') != 3):
+        raise ValueError('Expected three converged shared-tau training starts')
+    for i, result in enumerate(starts):
+        if (result.get('status') != 'completed' or not result.get('converged')
+                or result.get('start_index') != i or result.get('parameter_name') != 'tau'
+                or result.get('parameter_bounds') != list(bounds)
+                or result.get('boundary_status') != 'LOWER'
+                or not np.isclose(result.get('parameter_value', np.nan), bounds[0], rtol=0, atol=1e-10)):
+            raise ValueError('A training start does not support the recorded lower-bound claim')
+    index = selection['selected_training_start']
+    if index not in range(3):
+        raise ValueError('Invalid selected boundary start')
+    selected = starts[index]
+    if not np.isclose(selection['parameter_value'], selected['parameter_value'], rtol=0, atol=1e-10):
+        raise ValueError('Boundary selection and training record disagree')
+    trace = selected.get('trace', [])
+    if (not trace or not np.isclose(trace[-1]['parameter_value'], selected['parameter_value'], rtol=0, atol=1e-10)
+            or not np.isclose(trace[-1]['objective'], selected['objective'], rtol=1e-10)):
+        raise ValueError('Missing or inconsistent retained optimizer trace')
+    hits = [row['iteration'] for row in trace if np.isclose(row['parameter_value'], bounds[0], rtol=0, atol=1e-10)]
+    return dict(parameter='tau', value=float(selected['parameter_value']), bounds=list(bounds), side='LOWER',
+        selected_start=index, training_windows=18, first_boundary_iteration=int(hits[0]),
+        final_iteration=int(trace[-1]['iteration']), convergence_reason=selected['convergence_reason'],
+        log_parameter_gradient=selected['log_parameter_gradient'],
+        projected_log_parameter_gradient=selected['projected_log_parameter_gradient'],
+        trace=[{k:row[k] for k in ('iteration', 'parameter_value', 'objective')} for row in trace],
+        starts=[{k:row[k] for k in ('start_index', 'start_tau', 'parameter_value', 'objective', 'boundary_status', 'status')} for row in starts])
+
+
+def render_parameter_explorer(run, out, *, boundary_run=None):
+    """Fresh public waveform export, optionally with an evidenced boundary case."""
+    import sys
+    import time
+    import shutil
+    import os
+    import yaml
+    from datetime import datetime, timezone
+    repo = Path(__file__).resolve().parents[2]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from src.inference.observation_baselines import native_model_operator
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    from src.inference.t3a_balloon_robust_ssm import BalloonParameters, BalloonFixedParameters, BalloonFreeParameters
+
+    run, out = run.resolve(), out.resolve()
+    if out.exists():
+        raise ValueError('Choose a fresh versioned export; existing artifacts are retained')
+    sources = []
+
+    def read_json(path):
+        sources.append(str(path.relative_to(repo) if path.is_relative_to(repo) else path))
+        return json.loads(path.read_text())
+
+    manifest = read_json(run / 'manifest.json')
+    cfg_path = run / 'resolved_config.yaml'
+    cfg = yaml.safe_load(cfg_path.read_text())
+    sources.append(str(cfg_path.relative_to(repo) if cfg_path.is_relative_to(repo) else cfg_path))
+    if (manifest.get('execution') != 'completed'
+            or manifest.get('experiment_id') != 'SSM-SHARED-DRIVER-CONDITIONAL-OPTICAL-GAIN-v1'
+            or cfg.get('schema') != 'shared_driver_conditional_optical_gain_v1'
+            or cfg.get('scope') != 'nonprotected_retained_public_development_diagnostic'
+            or cfg.get('protected_boundary') != 'only_exact_parent_prepared_arrays_no_raw_or_protected_loaders'):
+        raise ValueError('Expected completed nonprotected conditional-optical-gain evidence before array access')
+    n, dt = cfg['tensor']['steps'], cfg['tensor']['dt_s']
+    if (n, dt) != (120, .25) or cfg['reference_tau_s'] != 2.:
+        raise ValueError('Unexpected source time/parameter contract')
+    metrics = pd.read_csv(run / 'metrics.csv')
+    sources.append(str((run / 'metrics.csv').relative_to(repo)))
+    selected, selection = select_parameter_explorer_cases(metrics)
+    jobs = [(choice, run, cfg, 'conditional_trained_gain', None) for choice in selected]
+    if boundary_run is not None:
+        boundary_run = boundary_run.resolve()
+        bm = read_json(boundary_run / 'manifest.json')
+        bc_path = boundary_run / 'resolved_config.yaml'
+        bc = yaml.safe_load(bc_path.read_text())
+        sources.append(str(bc_path.relative_to(repo) if bc_path.is_relative_to(repo) else bc_path))
+        if (bm.get('execution') != 'completed'
+                or bm.get('experiment_id') != 'SSM-SHARED-DRIVER-FIXED-ROI-OPTICAL-v1'
+                or bc.get('schema') != 'shared_driver_fixed_roi_optical_v1'
+                or bc.get('scope') != 'nonprotected_retained_public_development_diagnostic'
+                or bc.get('protected_boundary') != 'only_exact_parent_prepared_arrays_no_raw_or_protected_loaders'
+                or bc['tensor']['steps'] != n or bc['tensor']['dt_s'] != dt
+                or bc['tau_training']['bounds'] != [.5, 8.]):
+            raise ValueError('Expected completed nonprotected optical boundary evidence before array access')
+        group, method = 'mne_tddr__subject_01_o3', 'trained_tau_logflow1'
+        folder = boundary_run / 'training' / f'{group}__{method}'
+        chosen = read_json(folder / 'selection.json')
+        starts = [read_json(folder / f'start_{i}' / 'result.json') for i in range(3)]
+        expected_spec = dict(kind='measured', group=group, subject='subject_01', outer=3, optical_pipeline='mne_tddr')
+        if chosen['spec'] != expected_spec or any(r['spec'] != expected_spec for r in starts):
+            raise ValueError('Boundary training identity mismatch')
+        boundary = parameter_boundary_evidence(chosen, starts, bc['tau_training']['bounds'])
+        record = read_json(boundary_run / 'cells' / f'{group}__{method}__full' / 'result.json')
+        rows = record['rows']
+        if (record['spec'] != expected_spec or len(rows) != 6
+                or sorted(r['trial'] for r in rows) != [3, 7, 11, 15, 19, 23]):
+            raise ValueError('Unexpected boundary validation identities')
+        good = [r for r in rows if r['status'] == 'completed' and r['physical_valid'] and r['fine_physical_valid']
+                and np.isfinite([r['nrmse_HbO'], r['nrmse_HbR']]).all()]
+        if not good:
+            raise ValueError('No valid retained boundary waveform')
+        row = min(good, key=lambda r:r['trial'])
+        choice = dict(key='boundary', label='τ 触及下界', group=group, trial=int(row['trial']),
+                      hb_nrmse=float(np.sqrt((row['nrmse_HbO']**2 + row['nrmse_HbR']**2)/2)))
+        boundary.update(source_run=str(boundary_run.relative_to(repo)),
+            window_selection='first successful validation trial by stored trial index in the named boundary group',
+            validation_planned=len(rows), validation_valid=len(good),
+            interpretation='tau was fitted jointly on 18 training windows then frozen; this validation window did not estimate tau')
+        jobs.append((choice, boundary_run, bc, method, boundary))
+    factors = np.linspace(.5, 1.5, 61)
+    cases, checks = [], []
+    started = time.perf_counter()
+    for choice, case_run, case_cfg, method, boundary in jobs:
+        group, trial = choice['group'], choice['trial']
+        info = read_json(case_run / 'prepared' / f'{group}.json')
+        meta = info['metadata']
+        fitted = read_json(case_run / 'training' / f'{group}__{method}' / 'selection.json')
+        cell = case_run / 'cells' / f'{group}__{method}__full'
+        record = read_json(cell / 'result.json')
+        if (info['status'] != 'completed' or info['spec']['group'] != group
+                or meta['validation'] != [3, 7, 11, 15, 19, 23] or trial not in meta['validation']
+                or meta['fixed_roi']['pair_name'] != 'AF7Fp1' or fitted['status'] != 'completed'
+                or meta['synthetic'] or len(meta['train']) != 18):
+            raise ValueError('Source identity/split/ROI mismatch before array access')
+        path = cell / 'trajectories.npz'
+        sources.append(str(path.relative_to(repo)))
+        with np.load(path, allow_pickle=False) as arrays:
+            indices = np.flatnonzero(arrays['trial_indices'] == trial)
+            if len(indices) != 1:
+                raise ValueError('Ambiguous source trial')
+            i = int(indices[0])
+            target, baseline, states, sd = (arrays[k].copy() if k == 'normalizer' else arrays[k][i].copy()
+                                           for k in ('target', 'prediction', 'states', 'normalizer'))
+        rows = [r for r in record['rows'] if r['trial'] == trial]
+        if len(rows) != 1 or rows[0]['status'] != 'completed' or not rows[0]['physical_valid'] or not rows[0]['fine_physical_valid']:
+            raise ValueError('Selected source fit failed')
+        if states.shape != (n, 6) or not np.isfinite(states).all():
+            raise ValueError('Invalid retained states')
+        np.testing.assert_allclose(sd, meta['normalization_sd'], rtol=1e-12, atol=1e-12)
+        errors = np.sqrt(np.mean(((baseline - target)/sd)**2, axis=0))
+        np.testing.assert_allclose(errors, [rows[0][f'nrmse_{c}'] for c in COMPONENTS], rtol=1e-10, atol=1e-10)
+        fixed = {k: v for k, v in case_cfg['fixed'].items() if k != 'kappa'}
+        if boundary is None:
+            fixed['neurovascular_gain'] = fitted['parameter_value']
+        parameters = BalloonParameters(BalloonFixedParameters(**fixed),
+            BalloonFreeParameters(kappa=case_cfg['fixed']['kappa'],
+                tau=fitted['parameter_value'] if boundary else case_cfg['reference_tau_s']))
+        mapping = np.eye(3)
+        if boundary is None:
+            mapping[1:, 1:] = info['conditional_mapping']['matrix']
+        else:
+            np.testing.assert_allclose([rows[0]['tau'], rows[0]['neurovascular_gain']],
+                                       [parameters.free.tau, parameters.fixed.neurovascular_gain], rtol=1e-12)
+        operator = native_model_operator(n) @ np.kron(np.eye(n), mapping)
+        responses = parameter_response_frames(states[:, 0], states[0, 1:], parameters,
+            operator, target, sd, factors=factors, dt=dt,
+            parameter_bounds={'tau':boundary['bounds']} if boundary else None)
+        for name, response in responses.items():
+            base = response['frames'][30]
+            if base['status'] != 'completed':
+                raise ValueError('Baseline replay failed')
+            error = float(np.max(np.abs(np.asarray(base['prediction']) - baseline/sd)))
+            np.testing.assert_allclose(base['prediction'], baseline/sd, atol=1e-7, rtol=1e-8)
+            # Validate the compiled arithmetic against the original backend at the reference.
+            checks.append(dict(case=choice['key'], parameter=name, baseline_max_error_training_sd=error))
+        reference_python = nonlinear_driver_forward(states[:, 0], states[0, 1:], parameters, dt,
+                                                    derivative=False, numerical_backend='python')
+        py_pred = (operator @ reference_python['canonical_prediction'].ravel()).reshape(n, 3)
+        np.testing.assert_allclose(py_pred, baseline, atol=1e-7, rtol=1e-8)
+        case = dict(**choice, identity=meta['trials'][trial], train_count=len(meta['train']),
+            training_sd=sd.tolist(), target=(target/sd).tolist(), baseline=(baseline/sd).tolist(),
+            baseline_nrmse=errors.tolist(), driver=states[:, 0].tolist(), initial=states[0, 1:].tolist(),
+            responses=responses, source_run=str(case_run.relative_to(repo)), method=method,
+            pipeline=info['spec']['optical_pipeline'],
+            observation_mapping='identity' if boundary else 'conditional_B')
+        if boundary:
+            case['boundary'] = boundary
+        cases.append(case)
+    planned = len(cases)*3*len(factors)
+    excluded = sum(f['status'] == 'outside_optimization_bounds' for c in cases for r in c['responses'].values() for f in r['frames'])
+    failed = sum(f['status'] not in ('completed', 'outside_optimization_bounds') for c in cases for r in c['responses'].values() for f in r['frames'])
+    data = dict(schema='shared_driver_parameter_explorer_v2', created_at=datetime.now(timezone.utc).isoformat(),
+        source_run=str(run.relative_to(repo)), time_s=(np.arange(n)*dt-5).tolist(), factors=factors.tolist(),
+        baseline_index=30, selection=selection, cases=cases, checks=checks, sources=sorted(set(sources)),
+        scan=dict(planned=planned, completed=planned-failed-excluded, failed=failed, excluded=excluded, elapsed_s=time.perf_counter()-started,
+            substeps=[4, 8], tolerance_training_sd=.005, backend='numba',
+            fixed='retained fitted driver, physical initial states, all other parameters, observation map and training scales',
+            scope='forward-only explanatory sensitivity; no refitting or parameter selection',
+            ranges='0.5 to 1.5 times reference; boundary case tau below historical lower bound excluded without solving; engineering sensitivity, not population physiological bounds'),
+        interpretation='processed measured targets, not noiseless physiological truth; full observations were visible in the retained fit')
+    out.mkdir(parents=True)
+    source_files = ['experiments/scripts/render_shared_driver_reconstruction.py',
+                    'experiments/scripts/shared_driver_parameter_explorer.html',
+                    'src/inference/shared_driver_reconstruction.py', 'src/inference/shared_driver_rk4.py',
+                    'src/inference/t3a_balloon_robust_ssm.py', 'src/inference/observation_baselines.py']
+    for relative in source_files:
+        destination = out / 'source_snapshot' / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(repo / relative, destination)
+    data['execution'] = dict(command=[sys.executable, *sys.argv], cwd=str(Path.cwd()),
+        python=sys.version, numpy=np.__version__, source_snapshot=source_files,
+        numerical_threads={key: os.environ.get(key) for key in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS')},
+        resource_note='bounded compiled forward-only export; one process avoids worker startup for millisecond nodes')
+    # This JSON is the owning numeric export; HTML and PNG use exactly this payload.
+    payload = json.dumps(data, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
+    (out / 'data.json').write_text(payload+'\n', encoding='utf-8')
+    template = Path(__file__).with_name('shared_driver_parameter_explorer.html').read_text(encoding='utf-8')
+    if template.count('__PARAMETER_DATA__') != 1:
+        raise ValueError('Missing/ambiguous parameter explorer placeholder')
+    (out / 'index.html').write_text(template.replace('__PARAMETER_DATA__', payload.replace('</', '<\\/')), encoding='utf-8')
+    font = Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font))
+        plt.rcParams['font.family'] = font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams['axes.unicode_minus'] = False
+    times = np.asarray(data['time_s'])
+    for name, label in [('tau', '转运时间常数 τ'), ('kappa', '信号衰减率 κ'), ('neurovascular_gain', '有效神经血管增益 β')]:
+        fig, axes = plt.subplots(2, 3, figsize=(15, 7.2), sharex=True, sharey='row')
+        for col, case in enumerate(cases[:3]):
+            for row, component in enumerate((1, 2)):
+                ax = axes[row, col]
+                ax.plot(times, np.asarray(case['target'])[:, component], color='#243746', lw=1.4, label='实测目标')
+                for index, color, style in [(0, '#2469ba', '-'), (30, '#80909d', '--'), (60, '#d45d32', '-')]:
+                    frame = case['responses'][name]['frames'][index]
+                    if frame['status'] == 'completed':
+                        ax.plot(times, np.asarray(frame['prediction'])[:, component], color=color, ls=style,
+                                lw=1.7, label=f"{frame['factor']:.1f} × 基准")
+                ax.axvline(0, color='#adb8c2', ls=':', lw=1)
+                ax.axhline(0, color='#dae1e7', lw=.6)
+                ax.set_title(f"{case['label']} · {case['identity']['subject']} · trial {case['trial']}\n"
+                             f"基准 Hb 综合 NRMSE = {case['hb_nrmse']:.3f}", fontsize=10)
+                ax.set_ylabel(f'{COMPONENTS[component]} / 训练 SD')
+                if row == 1:
+                    ax.set_xlabel('事件相对时间 / 秒')
+                if col == 0 and row == 0:
+                    ax.legend(fontsize=8)
+                ax.spines[['top', 'right']].set_visible(False)
+        fig.suptitle(f'{label}：固定已拟合驱动和初态的前向响应', fontsize=16, y=.99)
+        fig.text(.5, .015, '同一参数只改变模型重建；黑线为处理后的实测目标。全部观测参与过基准拟合。扫描范围是工程敏感性范围。',
+                 ha='center', fontsize=10)
+        fig.tight_layout(rect=(0, .04, 1, .95))
+        fig.savefig(out / f'{name}_comparison.png', dpi=220)
+        plt.close(fig)
+    if boundary_run is not None:
+        case = cases[-1]
+        fig, axes = plt.subplots(2, 3, figsize=(15, 7.2), sharex=True, sharey='row')
+        for col, (name, label, unit) in enumerate([('tau', 'τ', 's'), ('kappa', 'κ', '1/s'), ('neurovascular_gain', 'β', '模型坐标')]):
+            for row, component in enumerate((1, 2)):
+                ax = axes[row, col]
+                ax.plot(times, np.asarray(case['target'])[:, component], color='#243746', lw=1.4, label='实测目标 / MNE TDDR')
+                indices = (30, 45, 60) if name == 'tau' else (0, 30, 60)
+                for index in indices:
+                    color = '#80909d' if index == 30 else '#d45d32' if index == 60 else '#2469ba'
+                    frame = case['responses'][name]['frames'][index]
+                    if frame['status'] == 'completed':
+                        ax.plot(times, np.asarray(frame['prediction'])[:, component], color=color,
+                            ls='--' if index == 30 else '-', lw=1.7,
+                            label=f"{label} = {frame['value']:.3f} {unit}" + ('（基准）' if index == 30 else ''))
+                ax.axvline(0, color='#adb8c2', ls=':', lw=1)
+                ax.set_title(f'只改变 {label}；驱动、初态及其余参数固定', fontsize=11)
+                ax.set_ylabel(f'{COMPONENTS[component]} / 本管道训练 SD')
+                if row == 0:
+                    ax.legend(fontsize=8)
+                else:
+                    ax.set_xlabel('事件相对时间 / 秒')
+                ax.spines[['top', 'right']].set_visible(False)
+        fig.suptitle('新增触界样例：S01 / session_01 / event 7 · 训练共享 τ 停在下界 0.5 秒', fontsize=15)
+        fig.text(.5, .02, 'τ 搜索范围为 0.5–8 秒，三个起点均触下界；此验证窗沿用训练 τ。目标、尺度与观测映射不同于前三段，不能直接排名。', ha='center', fontsize=10)
+        fig.tight_layout(rect=(0, .04, 1, .94))
+        fig.savefig(out / 'boundary_comparison.png', dpi=220)
+        plt.close(fig)
+    print(json.dumps(dict(output=str(out/'index.html'), selection=selected,
+                          planned=planned, failed=failed, excluded=excluded,
+                          boundary_case=cases[-1]['identity'] if boundary_run is not None else None,
+                          elapsed_s=data['scan']['elapsed_s']), ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, required=True)
@@ -6401,19 +6770,26 @@ def main():
     parser.add_argument("--fixed-roi-tau", action="store_true", help="Render fixed AF7Fp1 shared nonlinear tau diagnostic")
     parser.add_argument("--waveform-diagnostic", action="store_true")
     parser.add_argument("--fitting-explainer", action="store_true", help="Export an offline interactive lesson from the retained public waveform cases")
+    parser.add_argument("--parameter-explorer", action="store_true", help="Export three public examples with forward-only physiology parameter sweeps")
+    parser.add_argument("--boundary-run", type=Path, help="Add the retained optical shared-tau lower-bound example to --parameter-explorer")
     parser.add_argument("--teacher-robustness", action="store_true")
     parser.add_argument("--component-attribution", action="store_true")
     parser.add_argument("--semantic-response", action="store_true", help="Render the complete response dynamics and continuous semantics PPT report")
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
-    if args.fitting_explainer:
+    if args.boundary_run and not args.parameter_explorer:
+        parser.error('--boundary-run requires --parameter-explorer')
+    if args.fitting_explainer or args.parameter_explorer:
         if any((args.replay, args.nonlinear_fit, args.gain_prior_fit, args.fixed_roi_tau,
                 args.fixed_roi_flow, args.fixed_roi_initial, args.fixed_roi_optical,
                 args.conditional_optical_gain, args.waveform_diagnostic, args.step_control,
-                args.teacher_robustness, args.component_attribution, args.semantic_response)):
+                args.teacher_robustness, args.component_attribution, args.semantic_response)) or (args.fitting_explainer and args.parameter_explorer):
             parser.error("Choose one report mode")
-        render_fitting_explainer(args.run.resolve(), args.output.resolve())
+        if args.parameter_explorer:
+            render_parameter_explorer(args.run.resolve(), args.output.resolve(), boundary_run=args.boundary_run)
+        else:
+            render_fitting_explainer(args.run.resolve(), args.output.resolve())
         return
     if args.semantic_response:
         render_semantic_response_report(args.run.resolve(), args.output.resolve(), draft_name=args.presentation_name)
