@@ -13,6 +13,26 @@ terms in its tables describe the retained artifact at its recorded snapshot. Use
 generated [`PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) for current execution and
 scientific verdicts.
 
+## EEG proxy sampling-rate comparison — 2026-10-10
+
+The [versioned contract](configs/physiology_semantic_tokenizer/eeg_proxy_rate_v1.yaml)
+and [protocol](../docs/EXPERIMENT_PLAN.md#eeg-功率代理采样率与实测重建2026-10-10)
+define the native EEG rate comparison, fixed Hb target and driver-grid control.
+The Git-retained package is
+[`20261010_eeg_proxy_rate_v1`](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_eeg_proxy_rate_v1/summary.json):
+`metrics.csv` and `paired_comparisons.csv` hold the per-fit and subject-block
+comparisons; `preparation_summary.json` audits native 4 Hz replay;
+`verification.json` checks arrays, metrics and the original baseline replay.
+It includes the resolved contract, exact window/coordinate plan, source snapshot,
+supervisor/resource records, synthetic checks, all terminal fit JSON/NPZ files,
+the compact prepared proxy/target arrays needed to audit their scores, and the
+final PNG overview/examples in `figures_v2/`. The runtime lock and superseded
+run-root PNG export remain local. Native-record regeneration and historical
+baseline replay still require the explicitly referenced datasets and parent
+evidence. No old parent evidence is changed. The common
+4 Hz EEG compatibility score and each method's own-rate EEG fit are distinct
+endpoints; the former is not an inverse log-power aggregation.
+
 Some run and checkpoint paths below point to local Git-ignored artifacts that remain
 useful in this workspace but are not part of the tracked paper record. For manuscript
 Methods/Results, start with the linked human-readable reports and campaign tables;

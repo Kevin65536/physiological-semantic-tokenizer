@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-09T10:53:25.253861+00:00",
+  "updated_at": "2026-10-10T09:27:03.832151+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1418,6 +1418,36 @@
       "id": "e.observation_semantics_presentation_validation",
       "label": "PPT/PDF文字与位图核验",
       "path": "docs/report/20261009_observation_semantics_v3/presentation_validation.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.eeg_proxy_rate_contract",
+      "label": "4/10 Hz EEG代理配对实验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/eeg_proxy_rate_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.eeg_proxy_rate_launch",
+      "label": "持久监督启动与资源范围",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_eeg_proxy_rate_v1/run_launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.eeg_proxy_rate_summary",
+      "label": "固定面板配对重建与隐藏预测",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_eeg_proxy_rate_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.eeg_proxy_rate_verification",
+      "label": "原基线、目标和指标复核",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_eeg_proxy_rate_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.eeg_proxy_rate_figures",
+      "label": "位图图表可读性修订与来源",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_eeg_proxy_rate_v1/figures_v2/revision.json",
       "role": "diagnostic"
     }
   ],
@@ -4714,6 +4744,32 @@
       ],
       "headline": false,
       "next_step": "将EOG相关电位读出和分量范围作为带有效性字段的teacher候选；以新增独立短间距/外周生理观测区分组织与驱动来源。连续实测初态及学生缺锚点仍需独立冻结检验，不将开发关联升级为生理来源资格。"
+    },
+    {
+      "state_id": "main.eeg_proxy_rate@2026-10-10.v1",
+      "entity": "main.eeg_proxy_rate",
+      "label": "EEG代理采样率与实测重建",
+      "track": "main",
+      "order": 174,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "三公开数据集18人72窗，36/36合成及432/432实测拟合收敛；原生4Hz特征与144条原H0基线预测均逐值复现。4→10Hz完整HbO/HbR NRMSE：Single .42705/.40302→.42721/.40238，Sim .48148/.41456→.48191/.41266，Visual .30885/.31375→.30727/.31306；绝对变化均<.002。隐藏Hb无一致改善。原4Hz EEG兼容误差约.297/.242/.284→.443/.429/.449，受100/250ms功率窗口目标差异限制。仅加密网格改善可见重建，不能归为EEG信息或生理恢复收益；完整拟合单窗耗时中位1.07→2.89秒。不支持直接升级默认代理率，保留开发面板与固定参数条件。",
+      "evidence_ids": [
+        "e.eeg_proxy_rate_contract",
+        "e.eeg_proxy_rate_launch",
+        "e.eeg_proxy_rate_summary",
+        "e.eeg_proxy_rate_verification",
+        "e.eeg_proxy_rate_figures"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-10T09:27:03.832151+00:00",
+      "depends_on": [
+        "main.teacher_robustness"
+      ],
+      "headline": false,
+      "next_step": "保留4Hz为当前比较基线；若继续研究10Hz，先解耦功率估计窗口与输出间隔，并在匹配自由度、共同目标与隐藏预测下验证，不因可见拟合改善宣称生理恢复。"
     }
   ]
 }

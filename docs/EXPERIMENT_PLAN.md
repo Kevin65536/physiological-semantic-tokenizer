@@ -33,6 +33,31 @@ teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
 
+## EEG 功率代理采样率与实测重建（2026-10-10）
+
+`SSM-EEG-PROXY-RATE-v1` 按用户要求在原三数据集固定公开开发面板上比较
+4 Hz 与原生 EEG 重新计算的 10 Hz 功率代理。数值、身份范围与停止规则由
+[`eeg_proxy_rate_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/eeg_proxy_rate_v1.yaml)
+持有，入口为 `experiments/scripts/evaluate_eeg_proxy_rate.py`。先做数组级测试及
+已知生成器的合成检查，再通过持久 supervisor 重算原窗口的 EEG；4 Hz 特征须
+复现保留 parent 数组，Hb、外折 PCA、加载与训练 SD 原样继承，不新拟合评价尺度。
+
+A4 为原 4 Hz EEG／4 Hz 驱动网格；B4_grid10 保留相同 EEG、仅加密驱动网格；
+C10 使用 100 ms 非重叠均方功率的 10 Hz EEG／10 Hz 驱动网格。所有方法的 Hb
+输入、目标及滤波支持仍为原 4 Hz 坐标。B/C 的 Hb 均值算子与自由度相同；EEG
+误差按 `4 / EEG采样率` 加权，保持每单位时间的模态权重，曲率和 flow 先验继续
+使用已有时间积分定义。固定 H0 参数，无额外观测成分，零驱动／静息初态同起点。
+这是工程加权重建，不将平滑后时间点视为独立噪声似然。
+
+主要端点是完整观测拟合下相同 HbO/HbR 目标的冻结训练 SD NRMSE；同时报告
+对原 4 Hz EEG 目标的兼容重建、各自采样率 EEG 误差及完全隐藏 Hb 的预测。
+共同 EEG 评分使用潜在读出映回原 4 Hz 处理算子，不声称是 log-power/PCA 的
+精确逆聚合；不同采样率自身目标的误差不能单独用于优劣排名。沿用功率 bin
+左端时间戳，因此 100/250 ms 窗口的支持差异属于本次特征变更，不解读成新的
+生理延迟。按窗口配对、被试内平均 NMSE、被试等权后开方，并给出条件于冻结
+坐标的被试块 bootstrap 区间。保留完整失败分母、状态范围及耗时；无测试调参，
+不将原 QC 选择面板称为新确认，不开启其他协议的 protected split。
+
 ## 观测物理量、事件锚点与竞争机制（2026-10-09）
 
 `OBSERVATION-SEMANTICS-v1` 执行本次用户提供的 A–E 计划。数值、划分和停止规则由

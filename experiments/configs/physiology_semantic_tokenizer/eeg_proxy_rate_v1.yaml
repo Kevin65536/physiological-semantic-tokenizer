@@ -1,0 +1,65 @@
+schema: eeg_proxy_rate_v1
+experiment_id: SSM-EEG-PROXY-RATE-v1
+seed: 20261010
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1
+cache_root: data/cache/physiology_semantic_clean_v5
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+scope: exact_parent_72_public_windows_18_subjects_three_datasets
+protected_data: forbidden
+datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation]
+excluded: [visual_cognitive_motivation/S06/Part1]
+native_access: unified_EEG_reader_for_exact_parent_records_and_window_support_only
+coordinate: frozen_parent_training_PCA_and_factors_no_refitting
+tensor:
+  seconds: 30
+  baseline_seconds: 5
+  hb_rate_hz: 4
+  eeg_bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  channels: 6
+  power: nonoverlapping_mean_squared_bandpass_then_log_then_baseline_then_frozen_PCA
+  timestamps: inherited_left_edge_of_power_bin_not_center
+arms:
+  A4: {eeg_rate_hz: 4, model_rate_hz: 4}
+  B4_grid10: {eeg_rate_hz: 4, model_rate_hz: 10}
+  C10: {eeg_rate_hz: 10, model_rate_hz: 10}
+modes: [full, Hb_hidden]
+model: existing_nonlinear_shared_driver_H0_no_extra_observation_component
+fixed: {alpha: 0.32, E0: 0.32, gamma: 0.32, P0: 1.0, Q0: 0.35, driver_decay_per_s: 0.45, eeg_loading: 1.0, neurovascular_gain: 1.0, kappa: 0.64, tau: 2.0}
+solver:
+  numerical_backend: numba
+  substeps: 4
+  penalty: 0.01
+  initial_penalty: 100.0
+  flow_prior_weight: 1.0
+  flow_prior_log_sd: 0.6931471805599453
+  gradient_tolerance: 0.00001
+  max_evaluations: 600
+  starts: same_zero_driver_and_rest_one_start_no_result_based_restarts
+loss:
+  data: sum_modality_4_over_rate_times_squared_residual_over_frozen_training_SD
+  interpretation: engineering_time_weighted_SSE_not_independent_sample_likelihood
+  priors: existing_continuous_time_curvature_and_log_flow_integrals
+endpoints:
+  primary: full_HbO_HbR_NRMSE_same_retained_4Hz_targets_and_training_SD
+  secondary: common_4Hz_EEG_target_compatibility_and_hidden_Hb_prediction
+  diagnostic: own_rate_EEG_fit_not_same_target_comparison_state_ranges_failures_cost
+  paired_contrasts: [[A4, C10], [B4_grid10, C10], [A4, B4_grid10]]
+  aggregation: mean_window_NMSE_within_subject_then_equal_subject_mean_then_sqrt
+  bootstrap: 2000_subject_blocks_frozen_coordinates_percentile_95
+  difference: candidate_minus_reference_NRMSE_negative_is_better
+  null: increasing_EEG_proxy_rate_does_not_improve_common_target_reconstruction
+synthetic:
+  cases: 6
+  role: matched_forward_software_and_recovery_diagnostic_not_measured_proxy_truth
+  driver_sd: 0.025
+  spectra: [slow, mixed]
+  noise_fraction: 0.05
+stopping: all_72_windows_three_arms_two_modes_once_fixed_budget_no_test_tuning
+resources: {max_workers: 40, preparation_workers: 8, numerical_threads: 1, in_flight_per_worker: 2, supervisor: user_systemd}
+claim_limits:
+  - A4_to_C10_changes_proxy_window_and_driver_grid_B4_grid10_controls_grid
+  - 100ms_vs250ms_power_windows_change_estimand_and_inherited_time_support
+  - common_EEG_score_is_compatibility_with_original_4Hz_proxy_not_exact_inverse_of_log_power
+  - reused_QC_selected_development_panel_not_independent_confirmation
+  - full_observation_fit_is_not_hidden_prediction_or_physiology_identification
+  - baseline_Hb_remain_exact_parent_no_new_optical_processing
