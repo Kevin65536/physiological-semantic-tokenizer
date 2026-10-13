@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-03; payload-pruning record retained from
+_Evidence surface updated 2026-10-13; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -12,6 +12,42 @@ This file owns retention and evidence locations, not current project state. Stat
 terms in its tables describe the retained artifact at its recorded snapshot. Use the
 generated [`PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) for current execution and
 scientific verdicts.
+
+## REFED backfill and four-dataset comparison — 2026-10-13
+
+The [versioned protocol](../docs/EXPERIMENT_PLAN.md#refed-公开实验补齐与四数据集比较2026-10-13)
+and [report evidence map](configs/physiology_semantic_tokenizer/refed_four_dataset_report_v1.yaml)
+give the exact retained and REFED roots for the ten diagnostic families. Each
+family keeps its own resolved contract, terminal task records, score tables,
+failures, verification and source/supervisor identity. Shared/disjoint-optode
+experiments are excluded. The base
+[run](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261013_refed_physiology_semantics_v3/summary.json)
+also retains planar-neighbour sensitivity and the separately versioned
+[four-dataset transfer summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261013_refed_physiology_semantics_v3/four_dataset_transfer_v1/summary.json).
+The response owner's
+[four-dataset statistics](runs/physiology_semantic_tokenizer/semantic_response_discovery/20261013_refed_v2/four_dataset_comparison_v1/summary.json)
+recompute dataset-equal effects and the registered nine-test family from the
+disjoint old/new cell tables; they do not average previously reported intervals.
+
+Retain fitted/profile arrays needed for numerical replay, native-record and
+split identities, prepared representative windows, calibration inputs and the
+explicit inherited-synthetic references. Frozen synthetic encoder checkpoints
+remain under their original response run; public REFED probes retain that
+encoder identity. Preparation caches are rebuildable and remain local. The new
+artifacts stay local under the existing ignored run/report roots; reviewed
+executable configs and report source are part of the code reading surface.
+No historical evidence or failed attempt is removed or overwritten.
+
+The [54-page Chinese PPT](../docs/report/20261013_refed_four_dataset_v1/REFED_FOUR_DATASET_REPORT.pptx),
+[PDF](../docs/report/20261013_refed_four_dataset_v1/REFED_FOUR_DATASET_REPORT.pdf)
+and [bitmap figure atlas](../docs/report/20261013_refed_four_dataset_v1/FIGURE_ATLAS.pdf)
+are versioned communication exports. Keep their figure CSVs, LaTeX/PNG formula
+sources, slide-to-evidence map, renderer snapshot and
+[delivery checks](../docs/report/20261013_refed_four_dataset_v1/delivery_checks.json).
+The report reads the final parameter
+[summary](runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261013_refed_v2/summary.json),
+including the selected-sharing synthetic calibration and the preserved
+summary-only software correction; it does not replace any run's fact source.
 
 ## Parameter stability and common interior — 2026-10-10
 

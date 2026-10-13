@@ -14,6 +14,106 @@ from experiments.scripts import evaluate_shared_driver_reconstruction as runner
 CONFIG = Path(__file__).resolve().parents[1]/'experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml'
 
 
+def test_transfer_summary_includes_retained_target_panels_and_failed_denominators(tmp_path):
+    out, old = tmp_path/'new', tmp_path/'retained'
+    out.mkdir(); old.mkdir()
+    datasets=['eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation','refed']
+    refs=[dict(id=d+'__s1',dataset=d,subject='s1') for d in datasets]
+    (out/'diagnostic_plan.json').write_text(json.dumps(dict(windows=refs[-1:])))
+    (old/'diagnostic_plan.json').write_text(json.dumps(dict(windows=refs[:-1])))
+    for ref in refs:
+        p=out/'transfer'/ref['id'];p.mkdir(parents=True)
+        row=dict(method='source_equal_dataset_log_ensemble',tau=2.,converged=ref['dataset']!='refed',
+                 nrmse=[.1,.2,.3],all_below_half=False)
+        (p/'result.json').write_text(json.dumps(dict(ref=ref,rows=[row],status='completed',sources={})))
+    cfg=dict(transfer_source_runs=['retained'],data=dict(datasets=['refed']))
+    result=runner.semantics_four_dataset_transfer_summary(cfg,out,tmp_path)
+    assert result['planned_targets']==4 and result['converged']==3 and result['new_fits']==0
+    frame=pd.read_csv(out/'four_dataset_transfer_v1/metrics.csv')
+    assert set(frame.dataset)==set(datasets)
+    assert frame.loc[frame.dataset=='refed','error'].isna().all()
+    assert next(r for r in result['groups'] if r['dataset']=='refed')['planned']==1
+
+
+def test_refed_planar_anchors_require_explicit_shared_frame_and_keep_native_identity():
+    from types import SimpleNamespace
+    names=['FP1','C3','O1','F3','FZ','C1','CP3','P3','PZ']
+    positions=[[0,.8],[-.8,0],[0,-.8],[-.3,.5],[0,.5],[-.4,0],[-.5,-.2],[-.3,-.5],[0,-.5]]
+    def row(name,position):
+        return dict(channel_name=name,base_channel_name=name,x=position[0],y=position[1],z=0,
+            coordinate_system='refed_paper_layout_2d_v1',coordinate_units='normalized_figure_radius',
+            metadata={'spatial_dimension':2})
+    eeg=[row(n,p) for n,p in zip(names,positions)]
+    hb=[row('CH'+str(i+1),p) for i,p in enumerate([[0,.75],[-.75,0],[0,-.75]])]
+    geometry=SimpleNamespace(for_channels=lambda **kw:eeg if kw['modality']=='eeg' else hb)
+    record=SimpleNamespace(dataset_id='refed',manifest={'measurement':{
+        'eeg_channel_names':names,'fnirs_channel_names':[f'CH{i}_{role}' for i in range(1,4) for role in ('HbO','HbR')]}})
+    assert runner.semantics_anchors(record,geometry)[0]==[]  # frozen v1 remains excluded
+    anchors,reason=runner.semantics_anchors(record,geometry,
+        refed_region_eeg_anchors={'prefrontal':'FP1','motor':'C3','posterior':'O1'})
+    assert reason is None and [a['hb_channel'] for a in anchors]==['CH1','CH2','CH3']
+    assert all(len(a['eeg_channels'])==6 and a['seventh_eeg_channel'] not in a['eeg_channels'] for a in anchors)
+    assert all(a['eeg_channels'][0]==name for a,name in zip(anchors,names[:3]))
+    hb[0]['coordinate_system']='dataset_head_coordinates'
+    with pytest.raises(ValueError,match='complete paper-layout'):
+        runner.semantics_anchors(record,geometry,refed_region_eeg_anchors={'prefrontal':'FP1'})
+
+
+def test_refed_video_folds_keep_every_window_of_a_video_together(tmp_path):
+    cfg=runner.semantics_config(CONFIG.with_name('shared_driver_physiology_semantics_refed_v2.yaml'))
+    retained=tmp_path/cfg['retained_run'];retained.mkdir(parents=True)
+    subjects=[str(i) for i in range(1,7)]
+    (retained/'cohort.json').write_text(json.dumps({'subject_folds':{'refed':{s:i%3 for i,s in enumerate(subjects)}}}))
+    rng=np.random.default_rng(41);inventory=[]
+    for subject in subjects:
+        for video in range(1,5):
+            key=f'refed__{subject}__video_{video}';folder=tmp_path/'prepared'/key;folder.mkdir(parents=True)
+            windows=[dict(window=i,eeg_start_s=30.*i,hb_start_s=30.*i,event_id=video,
+                task='emotion_video',condition='same_emotion',independent_block=f'video_{video}') for i in range(4)]
+            anchor=dict(region='prefrontal',eeg_channels=[f'c{i}' for i in range(6)],hb_pair=0,hb_channel='CH1',
+                windows=windows,array_file='prefrontal.npz')
+            inventory.append(dict(key=key,dataset='refed',subject=subject,record=f'video_{video}',
+                repeat_group=f'video_{video}',anchors=[anchor],windows=windows))
+            (folder/'record.json').write_text(json.dumps(dict(prepared=[anchor],qc={'channels':[
+                dict(rho=.2,support=1,jump_fraction=[0,0],flat_step_fraction=[0,0])]})))
+            np.savez(folder/'prefrontal.npz',eeg_features=rng.normal(size=(4,120,30)),hb=rng.normal(size=(4,120,2)))
+    (tmp_path/'inventory.json').write_text(json.dumps({'records':inventory}))
+    refs,coordinates=runner.semantics_cohort(cfg,tmp_path,tmp_path)
+    for subject in subjects:
+        own=[r for r in refs if r['subject']==subject]
+        assert {r['repeat_fold'] for r in own}=={0,1}
+        for video in range(1,5):assert len({r['repeat_fold'] for r in own if r['record']==f'video_{video}'})==1
+        for r in own:
+            coordinate=coordinates[f'refed__prefrontal__outer{r["subject_fold"]}']
+            assert subject not in coordinate['training_subjects']
+
+
+def test_boundary_neighbor_fit_preserves_hidden_target_and_rejects_coordinate_leakage(tmp_path,monkeypatch):
+    from src.inference import shared_driver_reconstruction as inference
+    cfg=runner.semantics_config(CONFIG.with_name('shared_driver_physiology_semantics_refed_v2.yaml'))
+    prepared=tmp_path/'prepared'/'record';prepared.mkdir(parents=True)
+    rng=np.random.default_rng(2);hb=rng.normal(size=(1,120,2))
+    for suffix in ('','_boundary_swap'):
+        np.savez(prepared/('motor'+suffix+'.npz'),eeg_features=rng.normal(size=(1,120,30)),hb=hb)
+    coordinates=tmp_path/'coordinates';coordinates.mkdir()
+    c=dict(pc=[1.]+[0.]*29,eeg_factor=1.,hb_factor=1.,sd=[1.,2.,3.],training_subjects=['train'])
+    for suffix in ('','__boundary_swap'):(coordinates/('refed__motor__outer0'+suffix+'.json')).write_text(json.dumps(c))
+    ref=dict(id='test_ref',dataset='refed',subject='eval',site='motor',region='motor',subject_fold=0,
+        array_path=str(prepared/'motor.npz'),array_index=0)
+    calls=[]
+    def fit(observed,*args,**kwargs):
+        calls.append(observed.copy())
+        return dict(status='fixture',converged=True,prediction=np.nan_to_num(observed))
+    monkeypatch.setattr(inference,'fit_nonlinear_shared_driver',fit)
+    result=runner.semantics_geometry_worker((cfg,str(tmp_path),ref))
+    assert len(result['rows'])==4 and len(calls)==4
+    assert np.isnan(calls[1][:,1:]).all() and np.isnan(calls[3][:,1:]).all()
+    np.testing.assert_array_equal(calls[0][:,1:],calls[2][:,1:])
+    c['training_subjects']=['eval'];(coordinates/'refed__motor__outer0__boundary_swap.json').write_text(json.dumps(c))
+    with pytest.raises(ValueError,match='leaked evaluation'):
+        runner.semantics_geometry_worker((cfg,str(tmp_path),dict(ref,id='different_ref')))
+
+
 def test_absolute_agreement_penalizes_systematic_repeat_offset():
     x=np.arange(1.,8.)
     assert runner.semantics_icc_absolute(np.column_stack([x,x]))==pytest.approx(1.)

@@ -4,8 +4,25 @@ Callers validate the exact parent root and permitted identities before calling
 this boundary. This is not a raw-dataset parser and never rebuilds missing data.
 """
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
+
+
+@lru_cache(maxsize=16)
+def public_prepared_datasets(parent):
+    """REFED needs its resolved planar parent contract before any prepared read."""
+    import yaml
+    path=Path(parent)/'resolved_config.yaml'
+    if path.is_file():
+        cfg=yaml.safe_load(path.read_text())
+        if cfg.get('schema')=='shared_driver_physiology_semantics_refed_v2':
+            data=cfg['data']
+            if (data.get('datasets')!=['refed'] or data.get('protected_data')!='forbidden'
+                    or data.get('refed_geometry')!='refed_paper_layout_2d_v1' or not data.get('geometry_root')):
+                raise ValueError('invalid REFED prepared parent data/geometry contract')
+            return ('refed',)
+    return ('eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation')
 
 
 @lru_cache(maxsize=16)

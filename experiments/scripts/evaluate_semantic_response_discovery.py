@@ -9,6 +9,7 @@ endpoints in this runner is a native-signal causal forecast.
 from __future__ import annotations
 
 import argparse
+import copy
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from datetime import datetime, timezone
 import fcntl
@@ -100,15 +101,18 @@ def save_arrays(path, **arrays):
 
 def read_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
+    refed=cfg.get('schema')=='semantic_response_discovery_refed_v2'
+    source=SOURCE_RUN.replace('20260928_physiology_semantics_v1','20261013_refed_physiology_semantics_v3') if refed else SOURCE_RUN
+    source_config=SOURCE_CONFIG.replace('_v1.yaml','_refed_v2.yaml') if refed else SOURCE_CONFIG
     try:
-        if (cfg["schema"] != "semantic_response_discovery_v1" or cfg["source_run"] != SOURCE_RUN
-                or cfg["source_config"] != SOURCE_CONFIG or cfg["artifact_root"] != ARTIFACT_ROOT
+        if (cfg["schema"] not in ("semantic_response_discovery_v1","semantic_response_discovery_refed_v2") or cfg["source_run"] != source
+                or cfg["source_config"] != source_config or cfg["artifact_root"] != ARTIFACT_ROOT
                 or cfg["protected_data"] != "forbidden"
                 or cfg["data_boundary"] != "exact_public_parent_prepared_regions_frozen_subject_disjoint_metadata_plan"
                 or cfg["metadata_plan"] != "metadata_plan_proposal.json"):
             raise ValueError("wrong public source or protected-data boundary")
         t, m, b, measured = cfg["tensor"], cfg["model"], cfg["baselines"], cfg["measured"]
-        if (tuple(cfg["data"]["datasets"]) != DATASETS or tuple(cfg["data"]["region_names"]) != REGIONS
+        if (tuple(cfg["data"]["datasets"]) != (("refed",) if refed else DATASETS) or tuple(cfg["data"]["region_names"]) != REGIONS
                 or t["steps"] != 120 or t["dt_s"] != .25 or t["eeg_channels"] != 6 or t["eeg_features"] != 30
                 or t["eeg_bands_hz"] != [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
                 or t["feature_order"] != "channel_major_band_minor" or t["reference_steps"] != 20
@@ -141,6 +145,8 @@ def read_config(path):
                 or cfg["solver"]["numerical_backend"] not in ("numba", "python")
                 or cfg["calibration"]["failure_penalty"] <= 0 or cfg["synthetic"]["repeats"] < 1):
             raise ValueError("positive priors and solver budgets required")
+        if refed and cfg['data'].get('split_counts')!={'refed':{'train':20,'selection':6,'evaluation':6}}:
+            raise ValueError('REFED requires the declared disjoint 20/6/6 subject split')
     except (KeyError, TypeError, IndexError) as exc:
         raise ValueError(f"incomplete semantic response contract: {exc}") from exc
     return cfg
@@ -168,7 +174,8 @@ def operators(steps=120):
 
 def validate_ref(ref, parent):
     """Reject dataset, geometry, path and identity drift before any NPZ access."""
-    if ref.get("dataset") not in DATASETS:
+    from src.data.ssm_prepared import public_prepared_datasets
+    if ref.get("dataset") not in public_prepared_datasets(str(parent)):
         raise ValueError("unsupported or protected dataset before array read")
     if ref["dataset"] == "visual_cognitive_motivation" and ref.get("subject") == "S06" and "Part1" in ref.get("record", ""):
         raise ValueError("excluded Visual S06 Part1 before array read")
@@ -211,6 +218,58 @@ def raw_target(ref, parent):
     return eeg, hb
 
 
+def refed_metadata_plan(cfg,run_root,project_root=CODE_ROOT):
+    """Freeze native windows and subject groups without opening any signal array."""
+    import hashlib
+    if cfg.get('schema')!='semantic_response_discovery_refed_v2':raise ValueError('automatic metadata planning is REFED-specific')
+    path=Path(run_root)/cfg['metadata_plan']
+    if path.exists():return read_json(path)
+    parent=(Path(project_root)/cfg['source_run']).resolve()
+    refs=read_json(parent/'cohort.json')['refs']
+    previous=set(read_json(parent/'diagnostic_plan.json')['selected_subjects']['refed'])
+    subjects=sorted({r['subject'] for r in refs})
+    if len(subjects)!=32:raise ValueError('full 32-subject REFED metadata inventory required')
+    def rank(purpose,value):return hashlib.sha256(f'{cfg["seed"]}|refed|{purpose}|{value}'.encode()).hexdigest()
+    evaluation=sorted(sorted(set(subjects)-previous,key=lambda s:rank('evaluation_subject',s))[:6])
+    selection=sorted(sorted(set(subjects)-set(evaluation),key=lambda s:rank('selection_subject',s))[:6])
+    training=sorted(set(subjects)-set(evaluation)-set(selection))
+    splits={'refed':dict(train=training,selection=selection,evaluation=evaluation,previous_diagnostic_subjects=sorted(previous))}
+    grouped={}
+    for ref in refs:grouped.setdefault((ref['subject'],ref['record'],ref['window']),[]).append(ref)
+    windows=[];ineligible=[]
+    for split in WINDOW_CAPS:
+        for subject in splits['refed'][split]:
+            available=[]
+            for (s,record,window),regional in grouped.items():
+                if s!=subject:continue
+                if len(regional)!=3 or {r['region'] for r in regional}!=set(REGIONS):
+                    ineligible.append(dict(subject=s,record=record,window=window,reason='incomplete_three_regions'));continue
+                r=regional[0]
+                available.append(dict(split=split,native_id=f'refed|{s}|{record}|window{window}',dataset='refed',subject=s,
+                    native_eeg_record=record,record=record,key=r['key'],window=window,event_id=r['event_id'],
+                    task=r['task'],condition=r['condition'],eeg_start_s=r['eeg_start_s'],hb_start_s=r['hb_start_s'],
+                    eeg_end_s=r['eeg_start_s']+30,hb_end_s=r['hb_start_s']+30,
+                    regional_refs=sorted(regional,key=lambda q:REGIONS.index(q['region']))))
+            counts_condition={};counts_record={}
+            for _ in range(WINDOW_CAPS[split]):
+                if not available:raise ValueError('incomplete registered REFED subject window cap')
+                chosen=min(available,key=lambda w:(counts_condition.get(w['condition'],0),counts_record.get(w['record'],0),
+                    rank(split+'_window',w['native_id'])))
+                available.remove(chosen);windows.append(chosen)
+                counts_condition[chosen['condition']]=counts_condition.get(chosen['condition'],0)+1
+                counts_record[chosen['record']]=counts_record.get(chosen['record'],0)+1
+    value=dict(schema='semantic_response_discovery_metadata_plan_proposal_v1',created_at=datetime.now(timezone.utc).isoformat(),
+        seed=cfg['seed'],parent_run=str(parent),source_scope='exact_public_parent_prepared_regional_EEG30_Hb2',
+        measured_arrays_read=0,splits=splits,windows=windows,counts={'refed':{k:dict(subjects=len(v),native_windows=len(v)*WINDOW_CAPS[k])
+            for k,v in splits['refed'].items() if k in WINDOW_CAPS}},total_native_windows=len(windows),total_regional_rows=3*len(windows),
+        native_window_ineligibility=ineligible,split_algorithm='same seeded SHA256 subject ranking; exclude retained six diagnostic subjects from evaluation; 20/6/6 disjoint subjects',
+        window_algorithm='least-used emotion then video; fixed metadata hash tie break; complete synchronous triples; no fitted/QC selection',
+        historical_scope='public_REFED_development_prior_native_Hb_audit_not_fresh_confirmation',
+        limitations=['coarse_planar_template_not_individual_3d','whole_video_and_subject_dependencies_retained',
+            'offline_feature_completion_not_native_causal_prediction','unverified_absolute_units_and_hardware_clock'])
+    write_json(path,value);return value
+
+
 def parent_plan(cfg, run_root, project_root=CODE_ROOT):
     """Validate metadata membership only; parent fitted coordinates are never read."""
     parent = (Path(project_root) / cfg["source_run"]).resolve()
@@ -227,11 +286,13 @@ def parent_plan(cfg, run_root, project_root=CODE_ROOT):
     if len(lookup) != len(parent_refs):
         raise ValueError("duplicate public parent identity")
     old_panel = read_json(parent / "diagnostic_plan.json")["windows"]
-    previous = {dataset: {r["subject"] for r in old_panel if r["dataset"] == dataset} for dataset in DATASETS}
-    for dataset in DATASETS:
+    datasets=cfg['data']['datasets'];split_counts=cfg['data'].get('split_counts',SPLIT_COUNTS)
+    expected_native=sum(split_counts[d][k]*WINDOW_CAPS[k] for d in datasets for k in WINDOW_CAPS)
+    previous = {dataset: {r["subject"] for r in old_panel if r["dataset"] == dataset} for dataset in datasets}
+    for dataset in datasets:
         split = proposal["splits"][dataset]
         groups = [set(split[k]) for k in WINDOW_CAPS]
-        if (any(len(groups[i]) != SPLIT_COUNTS[dataset][name] for i, name in enumerate(WINDOW_CAPS))
+        if (any(len(groups[i]) != split_counts[dataset][name] for i, name in enumerate(WINDOW_CAPS))
                 or any(groups[i] & groups[j] for i in range(3) for j in range(i))
                 or groups[2] & previous[dataset]):
             raise ValueError("subject split or previous-panel evaluation exclusion mismatch")
@@ -241,7 +302,7 @@ def parent_plan(cfg, run_root, project_root=CODE_ROOT):
     items, seen, subject_windows = [], set(), {}
     for window in proposal["windows"]:
         dataset, subject, split = window["dataset"], window["subject"], window["split"]
-        if dataset not in DATASETS or split not in WINDOW_CAPS or subject not in proposal["splits"][dataset][split]:
+        if dataset not in datasets or split not in WINDOW_CAPS or subject not in proposal["splits"][dataset][split]:
             raise ValueError("window subject outside declared split")
         if window["native_id"] in seen:
             raise ValueError("duplicate native window identity")
@@ -261,12 +322,12 @@ def parent_plan(cfg, run_root, project_root=CODE_ROOT):
             items.append(dict(ref=ref, split=split, native_id=window["native_id"],
                               calibration_key=f'{dataset}__{ref["region"]}',
                               synchronous_region_ids=sorted(r["id"] for r in refs if r["id"] != ref["id"])))
-    if (len(items) != 1032 or len(seen) != 344
+    if (len(items) != 3*expected_native or len(seen) != expected_native
             or any(n > WINDOW_CAPS[key[2]] for key, n in subject_windows.items())
-            or len(subject_windows) != sum(sum(v.values()) for v in SPLIT_COUNTS.values())):
+            or len(subject_windows) != sum(sum(split_counts[d].values()) for d in datasets)):
         raise ValueError("registered subject/window caps or full split inventory mismatch")
     calibration = []
-    for dataset in DATASETS:
+    for dataset in datasets:
         for region in REGIONS:
             selected = [x for x in items if x["ref"]["dataset"] == dataset and x["ref"]["region"] == region]
             calibration.append(dict(key=f"{dataset}__{region}", dataset=dataset, region=region,
@@ -275,8 +336,8 @@ def parent_plan(cfg, run_root, project_root=CODE_ROOT):
                                     **{f"{split}_subjects": proposal["splits"][dataset][split] for split in WINDOW_CAPS}))
     return dict(schema="semantic_response_discovery_public_plan_v1", parent=str(parent),
                 proposal_path=str(Path(run_root) / cfg["metadata_plan"]), windows=items, calibration=calibration,
-                refs=[x["ref"] for x in items], counts=proposal["counts"], total_native_windows=344,
-                total_regional_rows=1032, split_algorithm=proposal["split_algorithm"],
+                refs=[x["ref"] for x in items], counts=proposal["counts"], total_native_windows=expected_native,
+                total_regional_rows=3*expected_native, split_algorithm=proposal["split_algorithm"],
                 historical_scope=proposal["historical_scope"], limitations=proposal["limitations"])
 
 
@@ -1319,8 +1380,11 @@ def primary_null_specificity(frame, cfg):
     and windows of a subject remain in one sign block.
     """
     rows = []
+    datasets=cfg.get('data',{}).get('datasets',DATASETS)
+    split_counts=cfg.get('data',{}).get('split_counts',SPLIT_COUNTS)
     subset = frame[frame.prefix_steps == 40]
-    expected_pairs = sum(SPLIT_COUNTS[d]["evaluation"] for d in DATASETS) * 8 * len(REGIONS)
+    expected_subjects=sum(split_counts[d]['evaluation'] for d in datasets)
+    expected_pairs = expected_subjects * 8 * len(REGIONS)
     for arm in cfg["measured"]["null_arms"]:
         for pairing in ("wrong_training_subject", "nonwrapping_shift_12s", "other_region_EEG"):
             control_pairing = "real_shift_support" if pairing == "nonwrapping_shift_12s" else "real"
@@ -1331,7 +1395,7 @@ def primary_null_specificity(frame, cfg):
             else:
                 merged = a.merge(c, on="id", how="outer", suffixes=("_null", "_real"), validate="one_to_one")
             units, valid_count = [], 0
-            counts = {dataset: 0 for dataset in DATASETS}
+            counts = {dataset: 0 for dataset in datasets}
             if len(merged):
                 av = pd.to_numeric(merged.get("Hb_nrmse_null", pd.Series(np.nan, index=merged.index)), errors="coerce")
                 cv = pd.to_numeric(merged.get("Hb_nrmse_real", pd.Series(np.nan, index=merged.index)), errors="coerce")
@@ -1339,11 +1403,11 @@ def primary_null_specificity(frame, cfg):
                 good = merged[valid].copy()
                 good["difference"] = av.loc[good.index] - cv.loc[good.index]
                 valid_count = len(good)
-                for dataset in DATASETS:
+                for dataset in datasets:
                     subject = good[good.dataset_real == dataset].groupby("subject_real").difference.mean().dropna()
                     counts[dataset] = len(subject)
                     for identity, value in subject.items():
-                        units.append(dict(dataset=dataset, subject=identity, difference=float(value), weight=1 / (3 * len(subject))))
+                        units.append(dict(dataset=dataset, subject=identity, difference=float(value), weight=1 / (len(datasets) * len(subject))))
             all_datasets = all(counts.values())
             observed = p_value = None
             if units and all_datasets:
@@ -1353,7 +1417,7 @@ def primary_null_specificity(frame, cfg):
                 statistics = signs @ weighted
                 observed = float(statistics[0])
                 p_value = float(np.mean(statistics >= statistics[0]))
-            full_inventory = len(units) == 15 and counts == {d: SPLIT_COUNTS[d]["evaluation"] for d in DATASETS}
+            full_inventory = len(units) == expected_subjects and counts == {d: split_counts[d]["evaluation"] for d in datasets}
             eligible = bool(full_inventory and valid_count == expected_pairs and len(merged) == expected_pairs)
             rows.append(dict(arm=arm, null_pairing=pairing, real_pairing=control_pairing, prefix_steps=40,
                              metric="Hb_nrmse", planned_pairs=len(merged), expected_pairs=expected_pairs,
@@ -1377,7 +1441,7 @@ def primary_null_specificity(frame, cfg):
     return rows
 
 
-def dataset_equal_pairs(frame, *, controls, metric, seed):
+def dataset_equal_pairs(frame, *, controls, metric, seed, datasets=DATASETS):
     rows, rng = [], np.random.default_rng(seed)
     for prefix in sorted(set(frame.prefix_steps)):
         group = frame[frame.prefix_steps == prefix]
@@ -1393,13 +1457,13 @@ def dataset_equal_pairs(frame, *, controls, metric, seed):
                 good = merged[valid].copy()
                 good["gain"] = cv.loc[good.index] - av.loc[good.index]
                 dataset_means, distributions, subjects = [], [], 0
-                for dataset in DATASETS:
+                for dataset in datasets:
                     units = good[good.dataset_arm == dataset].groupby("subject_arm").gain.mean().dropna()
                     if len(units):
                         dataset_means.append(float(units.mean()))
                         distributions.append(rng.choice(units.to_numpy(), (1000, len(units)), replace=True).mean(axis=1))
                         subjects += len(units)
-                full = len(dataset_means) == len(DATASETS)
+                full = len(dataset_means) == len(datasets)
                 bootstrap = np.mean(distributions, axis=0) if full else np.array([])
                 interval = np.quantile(bootstrap, [.025, .975]) if len(bootstrap) else [np.nan, np.nan]
                 rows.append(dict(prefix_steps=prefix, arm=arm, control=control, metric=metric,
@@ -1408,6 +1472,48 @@ def dataset_equal_pairs(frame, *, controls, metric, seed):
                                  ci_low=interval[0], ci_high=interval[1], positive_gain="arm_better",
                                  interval="dataset_equal_subject_block_1000_fixed_objects_exploratory"))
     return rows
+
+
+def summarize_four_datasets(cfg, run_root, project_root):
+    """Recompute the registered pooled contrasts from disjoint retained cells."""
+    if cfg['schema'] != 'semantic_response_discovery_refed_v2':
+        raise ValueError('four-dataset comparison requires the REFED extension contract')
+    current = Path(run_root)
+    retained = Path(project_root) / cfg['retained_run']
+    paths = [retained / 'measured_cells.csv', current / 'measured_cells.csv']
+    frames = [pd.read_csv(path, dtype={'subject': str}) for path in paths]
+    if set(frames[0].dataset) != set(DATASETS) or set(frames[1].dataset) != {'refed'}:
+        raise ValueError('retained and new dataset inventories must be disjoint and complete')
+    frame = pd.concat(frames, ignore_index=True)
+    if frame.duplicated(['id', 'arm', 'pairing', 'prefix_steps']).any():
+        raise ValueError('duplicated comparison cells')
+    for root in (retained, current):
+        if read_json(root / 'summary.json')['execution'] != 'completed':
+            raise ValueError('comparison requires completed source evidence')
+    combined = copy.deepcopy(cfg)
+    combined['data']['datasets'] = list(DATASETS) + ['refed']
+    combined['data']['split_counts'] = {**SPLIT_COUNTS, **cfg['data']['split_counts']}
+    controls = ['gamma_attenuation', 'gain_selected', 'own_Hb_prefix_ridge',
+                'full_EEG_ridge', 'spatial_Hb_ridge', 'spatial_filterbank_train_permutation']
+    comparisons = []
+    for metric in ('Hb_nrmse', 'Gaussian_CRPS', 'Gaussian_NLL', 'Gaussian_CRPS_normalized'):
+        comparisons.extend(dataset_equal_pairs(frame[frame.pairing == 'real'], controls=controls,
+            metric=metric, seed=cfg['seed'], datasets=combined['data']['datasets']))
+    primary = primary_null_specificity(frame, combined)
+    destination = current / 'four_dataset_comparison_v1'
+    if destination.exists():
+        raise ValueError('preserve the existing versioned comparison')
+    destination.mkdir()
+    pd.DataFrame(comparisons).to_csv(destination / 'dataset_equal_comparisons.csv', index=False)
+    pd.DataFrame(primary).to_csv(destination / 'primary_null_specificity.csv', index=False)
+    result = dict(schema='semantic_response_four_dataset_comparison_v1', execution='completed',
+        datasets=combined['data']['datasets'], sources=[str(p) for p in paths],
+        source_cell_counts=[len(f) for f in frames], unique_cells=len(frame),
+        split_counts=combined['data']['split_counts'], bootstrap='dataset_equal_whole_subject_1000',
+        primary_family_size=9, primary=primary, native_reads=0, model_fits=0,
+        scope='conditional_on_retained_training_selection_not_new_confirmation')
+    write_json(destination / 'summary.json', result)
+    return result
 
 
 def summarize_synthetic(cfg, run_root):
@@ -1501,7 +1607,7 @@ def summarize(cfg, run_root):
         comparisons, overall = [], []
         for metric in ("Hb_nrmse", "Gaussian_CRPS", "Gaussian_NLL", "Gaussian_CRPS_normalized"):
             comparisons.extend(paired_rows(real, controls=controls, groups=["dataset", "prefix_steps"], metric=metric, seed=cfg["seed"]))
-            overall.extend(dataset_equal_pairs(real, controls=controls, metric=metric, seed=cfg["seed"]))
+            overall.extend(dataset_equal_pairs(real, controls=controls, metric=metric, seed=cfg["seed"],datasets=cfg['data']['datasets']))
         pd.DataFrame(comparisons).to_csv(root / "paired_comparisons.csv", index=False)
         pd.DataFrame(overall).to_csv(root / "dataset_equal_comparisons.csv", index=False)
         pd.DataFrame(null_rows(frame, cfg)).to_csv(root / "paired_nulls.csv", index=False)
@@ -1526,12 +1632,14 @@ def summarize(cfg, run_root):
         result["measured"] = dict(planned=len(expected), recorded=int((frame.status != "not_recorded").sum()),
                                    successful=int(frame.success.sum()), failed=int((~frame.success.astype(bool)).sum()),
                                    fitted=int(frame.fit_performed.sum()), converged_fitted=int((frame.fit_performed & frame.converged).sum()),
-                                   subjects=15, native_windows=120, regional_rows=360)
-    calibrations = [root / "calibration" / (f"{d}__{r}.json") for d in DATASETS for r in REGIONS]
-    result["calibration"] = dict(planned=9, recorded=sum(p.exists() for p in calibrations),
+                                   subjects=len({(r['ref']['dataset'],r['ref']['subject']) for r in plan['windows'] if r['split']=='evaluation'}),
+                                   native_windows=len({r['native_id'] for r in plan['windows'] if r['split']=='evaluation'}),
+                                   regional_rows=sum(r['split']=='evaluation' for r in plan['windows']))
+    calibrations = [root / "calibration" / (f"{d}__{r}.json") for d in cfg['data']['datasets'] for r in REGIONS]
+    result["calibration"] = dict(planned=len(calibrations), recorded=sum(p.exists() for p in calibrations),
                                  completed=sum(p.exists() and read_json(p).get("status") == "completed" for p in calibrations))
     ssm_execution = ("completed" if result["synthetic"]["execution"] == "completed"
-                     and result["calibration"]["recorded"] == 9 and result.get("measured", {}).get("recorded") == len(expected)
+                     and result["calibration"]["recorded"] == len(calibrations) and result.get("measured", {}).get("recorded") == len(expected)
                      and bool(expected) else "incomplete")
     result.update(overall_execution_status(ssm_execution, root))
     write_json(root / "summary.json", result)
@@ -1699,6 +1807,9 @@ def initialize_run(cfg, args, run_root):
 
 def run_stage(cfg, args, run_root):
     project_root = Path(args.project_root)
+    if args.stage == 'four-dataset-summary':
+        return summarize_four_datasets(cfg, run_root, project_root)
+    if args.stage=='plan':return refed_metadata_plan(cfg,run_root,project_root)
     if args.stage == "dryrun":
         return dry_run(cfg, run_root, project_root)
     if args.stage == "synthetic":
@@ -1744,7 +1855,7 @@ def main(argv=None):
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--project-root", type=Path, default=CODE_ROOT)
     parser.add_argument("--run-root", type=Path, required=True)
-    parser.add_argument("--stage", choices=("dryrun", "pilot", "synthetic", "calibrate", "measured", "summarize", "export-features"), required=True)
+    parser.add_argument("--stage", choices=("plan","dryrun", "pilot", "synthetic", "calibrate", "measured", "summarize", "export-features", "four-dataset-summary"), required=True)
     parser.add_argument("--workers", type=int, default=None)
     args = parser.parse_args(argv)
     cfg = read_config(args.config)

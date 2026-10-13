@@ -1,0 +1,64 @@
+schema: refed_four_dataset_report_v1
+datasets:
+- eeg_fnirs_single_trial
+- simultaneous_eeg_nirs
+- visual_cognitive_motivation
+- refed
+runs:
+  physiology_semantics:
+    retained: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1
+    refed: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261013_refed_physiology_semantics_v3
+    config: experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_refed_v2.yaml
+  shared_driver_teacher_robustness:
+    retained: experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1
+    refed: experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261013_refed_v2
+    config: experiments/configs/physiology_semantic_tokenizer/shared_driver_teacher_robustness_refed_v2.yaml
+  shared_driver_attribution:
+    retained: experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1
+    refed: experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution/20261013_refed_v2
+    config: experiments/configs/physiology_semantic_tokenizer/shared_driver_attribution_refed_v2.yaml
+  shared_driver_modes:
+    retained: experiments/runs/physiology_semantic_tokenizer/shared_driver_modes/20261002_v1
+    refed: experiments/runs/physiology_semantic_tokenizer/shared_driver_modes/20261013_refed_v2
+    config: experiments/configs/physiology_semantic_tokenizer/shared_driver_modes_refed_v2.yaml
+  ssm_strengthening:
+    retained: experiments/runs/physiology_semantic_tokenizer/ssm_strengthening/20261003_v3
+    refed: experiments/runs/physiology_semantic_tokenizer/ssm_strengthening/20261013_refed_v2
+    config: experiments/configs/physiology_semantic_tokenizer/ssm_strengthening_refed_v2.yaml
+  observation_semantics:
+    retained: experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_v2
+    refed: experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261013_refed_v2
+    config: experiments/configs/physiology_semantic_tokenizer/observation_semantics_refed_v2.yaml
+  shared_driver_parameter_stability:
+    retained: experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1
+    refed: experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261013_refed_v2
+    config: experiments/configs/physiology_semantic_tokenizer/shared_driver_parameter_stability_refed_v2.yaml
+  ssm_output_support:
+    retained: experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1
+    refed: experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261013_refed_v2
+    config: experiments/configs/physiology_semantic_tokenizer/ssm_output_support_refed_v2.yaml
+  semantic_response_discovery:
+    retained: experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261002_v1
+    refed: experiments/runs/physiology_semantic_tokenizer/semantic_response_discovery/20261013_refed_v2
+    config: experiments/configs/physiology_semantic_tokenizer/semantic_response_discovery_refed_v2.yaml
+  eeg_proxy_rate:
+    retained: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_eeg_proxy_rate_v1
+    refed: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261013_refed_eeg_proxy_rate_v2
+    config: experiments/configs/physiology_semantic_tokenizer/eeg_proxy_rate_refed_v2.yaml
+scope: completed_public_development_evidence_only_no_new_fits_or_native_reads
+excluded:
+- shared_disjoint_optode_experiment
+- new_EOG_or_peripheral_anchors
+- TK_FUNCTIONAL_training
+statistics: preserve_each_endpoint_score_and_aggregation; recompute_only_explicit_dataset_equal_response_contrasts;
+  whole_subject_bootstrap
+figures:
+  format: PNG
+  dpi: 240
+formulas: LaTeX_to_PNG
+report:
+  language: zh_CN
+  formats:
+  - pptx
+  - pdf
+  output_root: docs/report

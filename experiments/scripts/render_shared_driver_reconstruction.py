@@ -6830,10 +6830,652 @@ def render_parameter_explorer(run, out, *, boundary_run=None):
                           elapsed_s=data['scan']['elapsed_s']), ensure_ascii=False))
 
 
+def render_refed_comparison(config_path, out):
+    """Readable four-dataset presentation from the explicit retained evidence map."""
+    import ast
+    import shutil
+    import subprocess
+    from datetime import datetime, timezone
+    from PIL import Image, ImageFont
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.dml.color import RGBColor
+    import yaml
+
+    repo = Path(__file__).resolve().parents[2]
+    cfg = yaml.safe_load(Path(config_path).read_text())
+    if cfg['schema'] != 'refed_four_dataset_report_v1' or len(cfg['runs']) != 10:
+        raise ValueError('explicit ten-family comparison contract required')
+    if out.exists() and any(out.iterdir()):
+        raise ValueError('choose a fresh versioned report export')
+    datasets = cfg['datasets']
+    labels = dict(zip(datasets, ['单试次', '同步', '视觉', 'REFED']))
+    roots = {k: {s: repo / v[s] for s in ('retained', 'refed')} for k, v in cfg['runs'].items()}
+    summaries = {}
+    for family, pair in roots.items():
+        summaries[family] = {}
+        for version, root in pair.items():
+            value = json.loads((root/'summary.json').read_text())
+            status = value.get('execution', value.get('status'))
+            if status not in ('completed', 'complete'):
+                raise ValueError(f'incomplete evidence: {root}')
+            summaries[family][version] = value
+    out.mkdir(parents=True)
+    figures, formulas = out/'figures', out/'formulas'
+    figures.mkdir(); formulas.mkdir()
+    font = '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'
+    font_manager.fontManager.addfont(font)
+    plt.rcParams.update({'font.family': font_manager.FontProperties(fname=font).get_name(),
+                         'font.size': 13, 'axes.unicode_minus': False})
+    colors = ['#245E8F', '#CC7A29', '#278C79', '#A95069']
+    deck = Presentation()
+    deck.slide_width, deck.slide_height = Inches(13.333), Inches(7.5)
+    sources, shape_audit, figure_paths, formula_paths = [], [], [], []
+
+    def read(family, name):
+        frames = []
+        for version, root in roots[family].items():
+            frame = pd.read_csv(root/name)
+            if 'dataset' in frame:
+                frame = frame[frame.dataset.eq('refed') if version == 'refed' else frame.dataset.isin(datasets[:-1])]
+            if 'population' in frame:
+                frame = frame[frame.population.eq('refed') if version == 'refed' else frame.population.isin(datasets[:-1])]
+            frame = frame.copy(); frame['evidence_path'] = str((root/name).relative_to(repo))
+            frames.append(frame)
+        return pd.concat(frames, ignore_index=True)
+
+    def provenance(family, *names):
+        paths=[]
+        for name in names:
+            found=[]
+            for root in roots[family].values():
+                path=root/name
+                if not path.exists() and name.startswith('resolved_config.'):
+                    path=root/'resolved_config.yaml'
+                if path.exists():found.append(str(path.relative_to(repo)))
+            if not found:raise ValueError(f'missing cited evidence: {family}/{name}')
+            paths.extend(found)
+        return paths
+
+    def count_lines(value, width, size):
+        f = ImageFont.truetype(font, round(size*4))
+        count = 0
+        for line in str(value).split('\n'):
+            current = ''; count += 1
+            for ch in line:
+                if current and f.getlength(current+ch)/4 > width*72:
+                    count += 1; current = ch
+                else:
+                    current += ch
+        return count
+
+    def text(slide, value, x, y, w, h, size=21, bold=False, color='173B50'):
+        if count_lines(value, w, size)*size*1.18 > h*72:
+            raise ValueError(f'text overflow on page {len(deck.slides)}: {value[:70]}')
+        shape = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+        tf = shape.text_frame; tf.word_wrap = True
+        tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+        for i, line in enumerate(str(value).split('\n')):
+            p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+            p.text = line; p.line_spacing = 1.12; p.space_after = p.space_before = Pt(0)
+            for run in p.runs:
+                run.font.name = 'Noto Sans CJK SC'; run.font.size = Pt(size)
+                run.font.bold = bold; run.font.color.rgb = RGBColor.from_string(color)
+        shape_audit.append(dict(slide=len(deck.slides), text=value, x=x, y=y, w=w, h=h, size=size))
+
+    def page(title, subtitle, source):
+        s = deck.slides.add_slide(deck.slide_layouts[6])
+        text(s, title, .55, .32, 12.2, .58, 27, True)
+        text(s, subtitle, .58, 1.02, 12.12, .55, 15, color='506A7B')
+        text(s, f'REFED 补齐与四数据集比较  |  2026-10-13  |  {len(deck.slides):02}', .58, 7.12, 12, .2, 10, color='506A7B')
+        short = source if isinstance(source, str) else '; '.join(source)
+        s.notes_slide.notes_text_frame.text = 'Owning evidence: '+short
+        sources.append(dict(page=len(deck.slides), title=title, sources=source))
+        return s
+
+    def body(title, subtitle, paragraphs, source):
+        s = page(title, subtitle, source)
+        height = 4.95/len(paragraphs)
+        for i, paragraph in enumerate(paragraphs):
+            text(s, paragraph, .78, 1.78+i*height, 11.78, height-.15, 21)
+        return s
+
+    def picture(s, path, x, y, w, h):
+        frame_w,frame_h=w,h
+        with Image.open(path) as im:
+            ratio = im.width/im.height
+            if path.parent==formulas:
+                w,h=min(w,im.width/300),min(h,im.height/300)
+        pw, ph = min(w, h*ratio), min(h, w/ratio)
+        s.shapes.add_picture(str(path), Inches(x+(frame_w-pw)/2), Inches(y+(frame_h-ph)/2), width=Inches(pw), height=Inches(ph))
+
+    def equation(key, latex):
+        tex = formulas/(key+'.tex')
+        tex.write_text(r'\documentclass[12pt]{article}'+'\n'+r'\usepackage{amsmath,amssymb}'+'\n'
+            +r'\usepackage[paperwidth=14in,paperheight=4in,margin=.2in]{geometry}'+'\n'
+            +r'\pagestyle{empty}\begin{document}\fontsize{22}{28}\selectfont\['+latex+r'\]\end{document}'+'\n')
+        command = [shutil.which('pdflatex') or '/home/uais0/.local/bin/pdflatex', '-interaction=nonstopmode', '-halt-on-error', tex.name]
+        result = subprocess.run(command, cwd=formulas, text=True, capture_output=True)
+        if result.returncode:
+            raise ValueError(result.stdout[-1800:])
+        with fitz.open(tex.with_suffix('.pdf')) as doc:
+            rects = [fitz.Rect(b[:4]) for b in doc[0].get_text('blocks')]
+            clip = rects[0]
+            for rect in rects[1:]: clip |= rect
+            clip += (-7, -7, 7, 7)
+            path = tex.with_suffix('.png'); doc[0].get_pixmap(clip=clip, dpi=300, alpha=False).save(path)
+        formula_paths.append(path)
+        return path
+
+    def mathpage(title, latex, key, explanation, source):
+        s = page(title, '公式以 LaTeX 渲染；符号和计算范围在正文中解释。', source)
+        picture(s, equation(key, latex), .8, 1.6, 11.7, 1.35)
+        text(s, explanation, .8, 3.22, 11.7, 3.45, 21)
+
+    def select(frame, conditions):
+        part = frame
+        for name, value in conditions.items():
+            part = part[part[name].eq(value)]
+        return part.copy()
+
+    def forest(title, frame, panels, source, caption, *, value='gain', low='ci_low', high='ci_high',
+               planned='planned_pairs', paired='common_success_pairs', subjects='subjects', unit='人',
+               shared_scale=True, xlabel='误差收益（正值表示候选更好）'):
+        """Every panel is an explicitly named paired contrast, sharing one scale."""
+        selected = []
+        for name, conditions in panels:
+            part = select(frame, conditions)
+            if part.dataset.duplicated().any() or set(part.dataset) != set(datasets):
+                raise ValueError(f'nonunique/incomplete plot contrast: {title} / {name}')
+            part['comparison_label'] = name; selected.append(part)
+        data = pd.concat(selected, ignore_index=True)
+        from matplotlib.ticker import MaxNLocator
+        fig, axes = plt.subplots(1, len(panels), figsize=(12, 3.65), squeeze=False, sharex=shared_scale)
+        finite = data[[low, high, value]].to_numpy(float); finite = finite[np.isfinite(finite)]
+        span = max(float(np.ptp(finite)), .0001); limits = (min(0., finite.min())-.13*span, max(0., finite.max())+.13*span)
+        for j, (name, _) in enumerate(panels):
+            ax = axes[0,j]; part = data[data.comparison_label == name].set_index('dataset')
+            if not shared_scale:
+                own=part[[low,high,value]].to_numpy(float);own=own[np.isfinite(own)]
+                span=max(float(np.ptp(own)),.0001);limits=(min(0.,own.min())-.13*span,max(0.,own.max())+.13*span)
+            for i, ds in enumerate(datasets):
+                row = part.loc[ds]; mean, lo, hi = float(row[value]), float(row[low]), float(row[high])
+                ax.plot([lo,hi], [i,i], color=colors[i], lw=2)
+                ax.plot(mean, i, marker=['o','s','^','D'][i], color=colors[i], ms=7)
+                count = f'{int(row[paired])}/{int(row[planned])}; {int(row[subjects])}{unit}'
+                number=f'{mean:+.4f}' if abs(mean)<.01 else f'{mean:+.3f}'
+                ax.text(1.04, i, f'{number}\n{count}', transform=ax.get_yaxis_transform(),ha='left', va='center', fontsize=11)
+            ax.set(yticks=range(4), yticklabels=[labels[d] for d in datasets], ylim=(3.6,-.6),
+                   xlim=limits, title=name, xlabel=xlabel)
+            ax.xaxis.set_major_locator(MaxNLocator(4))
+            ax.axvline(0, color='#777777', ls='--', lw=1)
+            ax.spines[['top','right']].set_visible(False)
+        fig.tight_layout(w_pad=1.5)
+        key=f'{len(deck.slides)+1:02}_paired'; path=figures/(key+'.png')
+        fig.savefig(path,dpi=240);plt.close(fig);data.to_csv(figures/(key+'.csv'),index=False);figure_paths.append(path)
+        scope='被试' if unit=='人' else '生成种子'
+        scale_note='子图横轴统一。' if shared_scale else '子图横轴独立缩放。'
+        s=page(title,f'点为{scope}等权效应，线为条件 95% 整块区间；右侧为成功配对/计划数与独立单元数。'+scale_note,source)
+        picture(s,path,.55,1.65,12.2,3.85)
+        text(s,caption,.75,5.67,11.85,1.18,19)
+
+    def bars(title, frame, categories, series, source, caption, *, ylabel='NRMSE（越低越好）', percent=False):
+        fig, axes=plt.subplots(1,len(series),figsize=(12,3.55),squeeze=False,sharey=True)
+        data=[]
+        for j,(name,column) in enumerate(series):
+            ax=axes[0,j]
+            for k,(label,conditions) in enumerate(categories):
+                part=select(frame,conditions).set_index('dataset').reindex(datasets)
+                if part.index.duplicated().any():raise ValueError('ambiguous bar series')
+                values=part[column].to_numpy(float)*(100 if percent else 1)
+                x=np.arange(4)+(k-(len(categories)-1)/2)*.22
+                ax.bar(x,values,.2,label=label,color=colors[k],hatch=['','//','xx','..'][k],edgecolor='white',linewidth=.6)
+                for xi,v in zip(x,values):
+                    if np.isfinite(v):
+                        number=f'{v:.1f}' if percent else (f'{v:.4f}' if abs(v)<.01 else f'{v:.3f}')
+                        ax.text(xi,v,number,ha='center',va='bottom' if v>=0 else 'top',fontsize=10,
+                            rotation=90 if len(series)>1 else 0)
+                p=part.reset_index();p['comparison_label']=label;p['panel']=name;data.append(p)
+            ax.set(xticks=range(4),xticklabels=[labels[d] for d in datasets],title=name,ylabel=ylabel if j==0 else '')
+            ax.tick_params(axis='x',labelsize=12);ax.spines[['top','right']].set_visible(False);ax.margins(y=.38)
+            if np.any(np.asarray([r[column].min() for r in data])<0):ax.axhline(0,color='#777777',lw=1)
+            if j==0:ax.legend(frameon=False,fontsize=11)
+        fig.tight_layout();key=f'{len(deck.slides)+1:02}_values';path=figures/(key+'.png')
+        fig.savefig(path,dpi=240);plt.close(fig);pd.concat(data).to_csv(figures/(key+'.csv'),index=False);figure_paths.append(path)
+        s=page(title,'每根柱为一个数据集的保留汇总值；子图共用纵轴。颜色与纹理表示方法，数值标在柱端。',source)
+        picture(s,path,.55,1.65,12.2,3.85);text(s,caption,.75,5.67,11.85,1.18,19)
+
+    body('REFED 补齐后，重建收益仍需接受预测与归属检验',
+        '十组公开开发实验；原三数据集保留结果，加上 REFED 的新版本分支。',[
+        '研究问题：补齐粗粒度 EEG–Hb 空间对应后，REFED 是否支持共享驱动、稳定生理参数，以及有下游用途的连续语义？',
+        '比较范围：Single-Trial（图中简称单试次）、Simultaneous（同步）、Visual（视觉）和 REFED。十组实验沿用各自方法、候选网格与端点，不合并成一个总分。',
+        '本报告分别讨论完整重建、隐藏补全、跨视频稳定性、成分归属与冻结编码器探针。实测目标不等于潜在生理真值。',
+        '共享／不共享光极对照不在本轮范围；未新增功能分类训练、EOG 或独立短间距验证。'],str(config_path))
+    body('二维论文布局补足了邻域选择，仍有明确空间边界',
+        'REFED：32 人、480 段视频；按不重叠 30 秒划窗，共 1,472 个时间窗、4,416 个区域窗。',[
+        '前额、运动和后部是模板区域标签。Hb 锚点分别为 CH49、CH25、CH18；每个锚点使用邻近六个 EEG 电极，并保留 source/detector 身份。',
+        '邻域来自二维论文配准，不是个体三维定位，也不保证与其他数据集覆盖同一皮层组织。第六／第七邻居交换仅检验工程选择敏感性。',
+        '同情绪视频按原生编号交替分成两组，整段视频保持在同组。原有六名 QC 分层诊断被试和 24 个目标窗口保持固定；三个区域是相关观测。',
+        '90 秒实验在单个视频内部取连续记录，不跨视频拼接。重复性比较包含视频内容变化，不能称为同刺激、跨 session 或跨日重测。'],
+        [str(repo/'docs/DATA_CONTRACT.md'),str(repo/'docs/EXPERIMENT_PLAN.md')])
+    mathpage('先固定误差分母，再区分评分支持与汇总层级',
+        r'e_{wc}=\sqrt{\frac{1}{|\Omega_{wc}|}\sum_{t\in\Omega_{wc}}\left(\frac{\hat y_{wtc}-y_{wtc}}{\sigma^{\rm train}_{c}}\right)^2},\qquad \Delta=e_{\rm control}-e_{\rm candidate}',
+        'error', '每个窗口、每个成分的误差，是评分时间点上预测减目标的均方根，再除以该管道训练标准差。评分集合只包含该端点规定的目标；完整拟合与隐藏补全分开。\n\n训练 SD 固定，不是当前窗口 SD，也不是未中心化 RMS。正收益表示候选误差较低；0.02 是误差绝对差，不能直接读成 2%。\n\n多数配对图先在被试内汇总窗口，再等权汇总被试。基础重建、采样率和参数稳定性保留各自的汇总顺序；相关窗口不作为独立样本。',
+        ['src/inference/observation_baselines.py', '各组 resolved_config 与评分实现'])
+    body('训练、选择、当前窗口拟合和评价承担不同职责',
+        '跨数据集误差均使用各自训练尺度，不能解释为统一物理幅值。',[
+        '训练：估计 PCA（主成分分析）坐标、尺度、背景、线性基线或响应候选。选择：冻结超参数与候选；评价被试不参与这些估计。',
+        '当前窗口拟合：在被冻结的方法与尺度下重估驱动、初态及合同允许的分量。拟合可见数据更好，不代表隐藏目标或潜变量更准确。',
+        '30 秒面板先构造离线处理特征，再遮蔽输入；它检验处理坐标下的补全，不是原始信号的实时预测。连续输出实验改用原生 Hb 样本的不相交分箱。',
+        '区间条件于已冻结训练／选择对象，按被试整块重采样；注入校准按生成种子。除专门列出的九项 Holm 检验外，不宣称经过全报告多重比较校正。'],str(config_path))
+    mathpage('共享驱动通过血流动力学映射到 Hb 观测',
+        r'\begin{gathered}\dot s=\beta r-\kappa s-\gamma(f-1),\quad\dot f=s,\quad \tau\dot v=f-v^{1/\alpha}\\\tau\dot p=f-v^{1/\alpha}p/v,\qquad\tau\dot q=fE(f)/E_0-v^{1/\alpha}q/v\end{gathered}',
+        'dynamics', '驱动 r 与信号状态 s 经神经血管增益、反馈和衰减控制血流 f。v、p、q 分别是相对基线的血容量、总 Hb 量和脱氧 Hb 量；静息比值为 1。时间常数以秒计。\n\n模型在正值状态的对数坐标中积分；HbO 与 HbR 由总量和脱氧量构造，再经过同一观测算子、参考段扣除和训练缩放。EEG 使用五频带、六通道的对数功率或固定模式。\n\n不同组只释放合同指定的参数、驱动、初态和附加观测分量。它们都是条件模型估计，未获得实测生理参数真值。',
+        ['src/inference/t3a_balloon_robust_ssm.py','src/inference/shared_driver_reconstruction.py'])
+    mathpage('状态到观测的变换保留单位与基线约定',
+        r'E(f)=1-(1-E_0)^{1/f},\qquad \Delta\mathrm{HbR}=Q_0(q-1),\qquad\Delta\mathrm{HbO}=P_0(p-1)-Q_0(q-1)',
+        'observation', 'E 是氧提取分数，静息值 E0 固定为 0.32。上一页的 alpha 为血容量与出流关系的指数参数，固定 0.32；gamma 为反馈系数，固定 0.32。衰减率 kappa 的基准为每秒 0.64。\n\nP0 和 Q0 是模型的总 Hb 与脱氧 Hb 基线量，分别固定 1 和 0.35；差分观测的基准为零。这些是模型坐标，未把 REFED 的相对浓度校准成绝对生理含量。\n\n有效神经血管增益的基准为 1，时间常数基准为 2 秒。方法页说明何时释放它们。附加 Hb 观测项在同一处理坐标相加；其幅度不自动具有真实来源标签。',
+        ['src/inference/t3a_balloon_robust_ssm.py',cfg['runs']['physiology_semantics']['config']])
+    body('可见维度与未知量决定了每组比较的含义','下列数字描述对应模型的参数化；不把不同管道的自由度混成同一模型。',[
+        '基础 30 秒窗口：六通道、五频带形成 30 维 EEG 特征，由训练 PCA 压到一维，与 HbO/HbR 构成 120×3 目标。固定参数时仍要估计 120 个驱动值和五个物理初态。',
+        '附加观测项：四个平滑余弦系数控制同一 Hb 方向；固定、训练或交换方向改变的是分量约束，不是引入已知的生理来源标签。',
+        '区域谱模型：每条驱动使用 24 个时间基系数；宽频与谱对比是固定 EEG 载荷下的模式。R2 的第二模式增加自由度，必须与独立驱动及线性基线比较。',
+        '90 秒连续输出：360 个驱动值。自由块有三个起点、共 15 个物理初态；连续模型只有五个起始状态。两者都保留三个原始块上的 12 个附加观测系数。'],
+        ['src/inference/shared_driver_reconstruction.py','src/inference/shared_driver_modes.py','src/inference/ssm_output_audit.py'])
+
+    family='physiology_semantics'
+    body('1｜基础重建：参数共享是否帮助跨记录解释？','H0 为固定参数；H1 为数据集共享；H2 为被试共享；H3 为当前记录校准。',[
+        '所有方法沿用同一结构和允许的可见观测，改变的是时间常数或神经血管增益的共享层级。每个目标窗口重新拟合驱动与初态。',
+        'H1、H2 使用合同规定的训练部分。H3 仅用每条记录前三个窗口校准，并在后续窗口评价；不能与含早期窗口的全集直接比较。',
+        '下一页完整重建按窗口、记录、montage、区域、被试逐层等权汇总窗口 NRMSE；通过率另用全部计划分母。它不是把窗口中位数再平均。'],provenance(family,'resolved_config.yaml','reconstruction_summary.json'))
+    base=read(family,'reconstruction_all_eligible.csv')
+    bars('REFED 的共享时间常数改善 Hb，同时牺牲部分 EEG 拟合',base,
+        [('固定',dict(method='H0_fixed')),('数据集共享',dict(method='H1_dataset__tau')),('被试共享',dict(method='H2_subject__tau'))],
+        [(c,'nrmse_'+c) for c in COMPONENTS],provenance(family,'reconstruction_all_eligible.csv'),
+        'REFED 固定模型 4,411/4,416 窗收敛；EEG/HbO/HbR 为 0.210/0.249/0.265。数据集共享后为 0.231/0.233/0.254。分量之间存在折衷，不能仅凭 Hb 下降判定整体生理语义成立。')
+    completion=read(family,'completion_summary.csv')
+    completion['lo']=completion.error_subject_CI.map(lambda x:ast.literal_eval(x)[0]);completion['hi']=completion.error_subject_CI.map(lambda x:ast.literal_eval(x)[1])
+    # These are absolute errors, so retain the native descriptive summary rather than treating them as paired gains.
+    bars('隐藏完整 Hb 时，条件重建要与训练模板及线性基线比较',completion,
+        [('固定模型',dict(mode='Hb_hidden',method='H0_fixed',arm='real')),
+         ('训练模板',dict(mode='Hb_hidden',method='training_template',arm='real')),
+         ('跨模态 ridge',dict(mode='Hb_hidden',method='ridge_cross',arm='real'))],
+        [('隐藏 Hb','error')],provenance(family,'completion_summary.csv'),
+        '仅 EEG 可见，目标 Hb 只用于评分。柱为各合同按被试汇总的误差；完整拟合的低误差不预示隐藏预测优势。模型收敛和适用窗口分母保存在相邻源表，不把有限成功值当作全体通过。')
+    body('基础参数的表面重复性部分来自边界聚集','REFED 重复组是不同视频集合，不能视为同刺激的生理参数重测。',[
+        '增益／时间常数的重复差异中位数为 9.6%／19.2%，但贴边配对分别占 66.7%／58.9%。只看内点配对时，差异增至 45.1%／37.4%。',
+        '固定 Hb、训练划分与方法，交换 EEG 邻域的第六／第七电极并重新拟合训练 PCA。六个区域×方法比较的 Hb NRMSE 改变量绝对值均不超过 0.0044，区间均跨零。',
+        '这些结果支持该二维邻域下的条件重建；既不证明个体空间定位准确，也不证明生理参数恢复。迁移端点已因新增 REFED 来源重算目标驱动。'],
+        provenance(family,'repeatability_pairs.csv','geometry_sensitivity_summary.json','transfer_metrics.csv'))
+    repeat=pd.DataFrame([r for version,root in roots[family].items()
+        for r in json.loads((root/'training_summary.json').read_text())['repeatability']
+        if (r['dataset']=='refed')==(version=='refed') and r['hierarchy']=='H2_subject'])
+    bars('被试共享参数的低重复差异要与内点子集同时阅读',repeat,
+        [('有效增益',dict(parameter='neurovascular_gain')),('时间常数',dict(parameter='tau'))],
+        [('所有成功配对中位数','median_pair_difference'),('仅内点配对中位数','median_pair_difference_interior')],
+        provenance(family,'training_summary.json'),
+        '这里是被试×区域重复配对的中位数，未把区域视为独立被试。REFED 增益/时间常数有 96/96、95/96 成功配对；内点只剩 32、39 对，条件子集不能代替完整分母。',
+        ylabel='对称相对差异（越低越好）')
+    transfer_path=roots[family]['refed']/'four_dataset_transfer_v1/summary.csv'
+    transfer=pd.read_csv(transfer_path)
+    bars('增加 REFED 来源没有一致改善其他数据集的迁移重建',transfer,
+        [('固定参数',dict(method='H0_fixed')),('目标训练共享',dict(method='target_H1_tau')),
+         ('其他数据集集成',dict(method='source_equal_dataset_log_ensemble'))],
+        [('跨数据集时间常数迁移','error')],str(transfer_path.relative_to(repo)),
+        '每数据集预选六人各一窗，144 次拟合全部收敛。REFED 固定/目标共享/来源集成误差为 0.250/0.243/0.250。误差先平均三个成分，再平均被试；目标观测仍在其他目标被试上校准，因此不是严格零样本迁移。')
+    body('来源集合改变后，需要重新拟合目标驱动','其他数据集的时间常数按数据集等权取对数平均；重叠训练折不是独立重复。',[
+        'Single-Trial 的来源集成误差由原三数据集设置的 0.2799 变为 0.2919；Simultaneous 由 0.3601 变为 0.3641；Visual 由 0.2925 变为 0.2898。',
+        '新增 REFED 对两个目标的平均误差不利，对 Visual 略有改善。这些是同一预选面板上的描述性变化，未新增显著性主张。',
+        '各来源数据集保留自己的训练坐标。迁移的是条件模型时间常数，当前目标窗的驱动与初态仍重新拟合；不能据此声称绝对幅值、有效增益或个体解剖信息可迁移。'],
+        provenance(family,'transfer_metrics.csv','four_dataset_transfer_v1/summary.csv'))
+
+    family='shared_driver_teacher_robustness';robust=read(family,'measured_paired.csv')
+    body('2｜teacher 稳健性：增加分量与先验改变了什么？','teacher 指当前窗口拟合得到的条件教师解。四臂分别检验观测项、驱动先验及其组合。',[
+        'M0：原固定结构。M-observation：增加固定 Hb 方向上的平滑观测分量。M-prior：给 EEG 不可见时的驱动增加训练先验。M-combined：同时使用两者。',
+        '坐标、尺度和先验由训练分区确定；每个窗口在相同可见掩码下独立拟合。隐藏 HbR 时不能使用它，隐藏 EEG 时只由 Hb 与训练先验约束驱动。',
+        '每数据集为六人、24 个诊断窗口。下一页是共同成功配对的被试等权收益，标出成功／计划分母；敏感性与剖面属于解的稳定性诊断。'],provenance(family,'resolved_config.json','measured_summary.csv'))
+    forest('观测项改善完整拟合，但隐藏 HbR 的收益并不一致',robust,
+        [('完整拟合：观测项',dict(mode='full',arm='M-observation',control='M0')),
+         ('隐藏 HbR：观测项',dict(mode='HbR_hidden',arm='M-observation',control='M0'))],
+        provenance(family,'measured_paired.csv'),
+        'REFED 完整拟合改善 0.021，隐藏 HbR 却退化 0.036。后者区间完全低于零，说明额外拟合自由度没有稳定转化为跨成分预测收益。',
+        value='mean_gain',planned='denominator',paired='common_success',subjects='independent_units')
+    forest('驱动先验大幅约束隐藏 EEG 的失稳解',robust,
+        [('隐藏 EEG：先验',dict(mode='EEG_hidden',arm='M-prior',control='M0')),
+         ('隐藏 Hb：组合',dict(mode='Hb_hidden',arm='M-combined',control='M0'))],
+        provenance(family,'measured_paired.csv'),
+        'REFED 隐藏 EEG 的窗口误差中位数由 29.592 降至 0.881，仍高于训练模板 0.831。图显示均值配对收益，中位数仅作补充；两者汇总量不同。',
+        value='mean_gain',planned='denominator',paired='common_success',subjects='independent_units',shared_scale=False)
+
+    family='shared_driver_attribution';attribution=read(family,'measured_paired.csv')
+    body('3｜结构性归属：相似拟合是否对应唯一的来源分量？','保持驱动与观测结构，改变附加 Hb 分量的方向与信息来源。',[
+        'D-fixed 使用预定方向；D-trained 在训练分区学习方向；D-exchange 交换方向。完整预测是物理分量和附加观测分量之和，不能把附加项直接称为已识别噪声。',
+        '隐藏通道实验可读取其他区域的 Hb 供体。真实供体与错被试、非环绕时间移位供体在相同目标支持上比较；标签只用于匹配，不输入驱动。',
+        '剖面固定要求的分量变化，再重新优化其余未知量。目标代价增加不超过 5% 的节点是替代解见证；有限搜索范围不是置信区间。'],provenance(family,'resolved_config.json','confounding_profiles.csv'))
+    forest('交换方向在 REFED 的隐藏 HbO 端点优于固定方向',attribution,
+        [('隐藏 HbO',dict(mode='HbO_hidden',arm='D-exchange',control='D-fixed')),
+         ('隐藏 HbR',dict(mode='HbR_hidden',arm='D-exchange',control='D-fixed'))],
+        provenance(family,'measured_paired.csv'),
+        'REFED 隐藏 HbO 的改善为 0.319，区间 0.102–0.554；隐藏 HbR 的区间跨零。对方向的依赖说明“拟合的分量”与“真实来源”需要分别验证。',
+        value='mean_gain',planned='denominator',paired='common_success',subjects='independent_units')
+    spatial=read(family,'spatial_nulls.csv')
+    forest('真实空间供体尚未在 REFED 显示明确的配对增量',spatial,
+        [('真实 vs 错被试',dict(method='D-fixed',arm='real',control='wrong_subject')),
+         ('真实 vs 时间移位',dict(method='D-fixed',arm='real_shift_support',control='nonwrapping_shift_12s'))],
+        provenance(family,'spatial_nulls.csv'),
+        'REFED 两种收益区间均跨零。预定的两个剖面窗口均发现约 0.25 训练 SD 的分量交换，而代价只增加约 4.5%–4.9%；来源归属仍有可交换空间。',
+        value='mean_gain',planned='denominator',paired='common_success',subjects='independent_units')
+
+    family='shared_driver_modes';modes=read(family,'measured_paired.csv')
+    body('4｜区域与谱模式：更多 EEG 结构能否改善隐藏 Hb？','每个原始窗口扩展为三个区域；区域不是新的独立被试。',[
+        'R0-PCA 在同一平滑时间基下重拟合原 PCA 驱动，不等于历史 M0。R1 使用宽频共同模式；R2 加入固定谱对比模式，其血管耦合系数在选择分区冻结。',
+        '所有 EEG 输入仍是六通道×五频带的对数功率；独立驱动对照允许 Hb 与 EEG 使用不同驱动，检验共享限制是否有代价。',
+        '隐藏全部 Hb 时，只有 EEG 和冻结训练对象可见。真实配对还需与错被试、其他区域 EEG、非环绕时间移位比较，才能讨论特定空间与时间关系。'],provenance(family,'resolved_config.json','measured_plan.json'))
+    forest('谱模式在 REFED 后部改善宽频基线，其他区域仍不确定',modes,
+        [(name,dict(region=region,mode='Hb_hidden',arm='R2_selected',control='R1_broadband'))
+         for name,region in [('前额','prefrontal'),('运动','motor'),('后部','posterior')]],
+        provenance(family,'measured_paired.csv'),
+        'REFED 后部收益 0.051；前额和运动区间跨零。3,096 次模型拟合中保留 29 次数值失败；本页隐藏完整 Hb 的三个 REFED 对比均有 24/24 成功配对。')
+    forest('相对独立驱动，REFED 的共享谱模式未建立优势',modes,
+        [(name,dict(region=region,mode='Hb_hidden',arm='R2_selected',control='independent'))
+         for name,region in [('前额','prefrontal'),('运动','motor'),('后部','posterior')]],
+        provenance(family,'measured_paired.csv','pairing_nulls.csv'),
+        'REFED 前额、后部共享模型分别差 0.049、0.082。真实配对相对错被试在运动与后部有收益，但相对时间移位三区域均不明确；不能只凭一种 null 宣称共享耦合成立。')
+
+    family='ssm_strengthening';strength=read(family,'paired_hidden_metrics.csv').rename(columns={'population':'dataset'})
+    body('5｜有限响应与空间观测：增量能否超过复杂度代价？','分别改变响应核和空间观测项，并用二乘二设计检查组合收益。',[
+        '响应选择 Hselected：从有限候选中在训练／选择分区冻结响应；BC 和 HselectedC 含附加观测项。当前窗口仍只拟合可见输入下的驱动、初态与分量。',
+        '空间项由其他区域的公开观测交叉拟合得到。F00 是原响应与原空间项，F01 仅改空间，F11 同时改响应与空间；原始空间 ridge 保持 v3 评分规则。',
+        '下一页风险对失败赋 NRMSE 100，先在被试内汇总再等权平均；不能用共同成功子集隐藏失败。扩展规则要求至少 5% 隐藏 Hb 收益，且其他端点不退化。'],
+        provenance(family,'resolved_config.json','paired_hidden_metrics.csv','decision.json'))
+    forest('REFED 的组合改善约 3.9%，未达到预设扩展要求',strength,
+        [('响应改动',dict(kind='measured',mode='Hb_hidden',baseline='BC',candidate='HselectedC',metric='score_nrmse')),
+         ('空间改动：相对 BC',dict(kind='measured',mode='Hb_hidden',baseline='BC',candidate='F01',metric='score_nrmse')),
+         ('组合改动',dict(kind='measured',mode='Hb_hidden',baseline='F00',candidate='F11',metric='score_nrmse'))],
+        provenance(family,'paired_hidden_metrics.csv'),
+        'REFED 原模型 0.753，响应适配 0.731，组合 0.724；收益约 2.9% 与 3.9%。部分单成分端点退化，三条分支均未通过继续扩展条件。此图含失败罚值，异常大的收益须结合分母阅读。',
+        planned='planned',paired='paired_success',subjects='independent_units',shared_scale=False)
+
+    family='observation_semantics';stability=read(family,'stability_summary.csv')
+    mathpage('6｜观测语义 A：稳定坐标不等于唯一的物理来源',
+        r'T=y_O+y_R,\quad X=0.35y_O-0.65y_R,\qquad W_c=\sqrt{\frac{1}{N}\sum_t\left(\frac{\max_k z_{ktc}-\min_k z_{ktc}}{\sigma_c^{\rm train}}\right)^2}',
+        'coordinates', '先在保留 HbO/HbR 幅值比的坐标中计算总量 T 和交换方向 X，再除以对应训练尺度。不能把两个成分分别标准化后相加。\n\nk 是同一窗口不同扰动或近等价解，z 是物理预测、附加项或总预测的指定坐标。范围宽度按全窗均方根汇总；至少两个候选且宽度不超过 0.2 训练 SD，才把该窗口计为稳定。\n\n该指标衡量候选集合内的变化，不是潜变量误差、相关系数或置信区间。敏感性集合与受约束剖面的候选范围也不同。',
+        ['src/inference/observation_semantics.py','src/inference/shared_driver_attribution.py'])
+    obs=select(stability,dict(kind='sensitivity',arm='M-observation',field='physical_prediction',metric='stable_coordinate'))
+    bars('REFED 的 HbX 较 HbT 稳定，但这种稳定只对给定扰动成立',obs,
+        [('总量 T',dict(coordinate='HbT')),('交换 X',dict(coordinate='HbX'))],[('稳定窗口比例','mean')],
+        provenance(family,'stability_summary.csv'),
+        '观测项模型中，REFED 的 T/X 稳定窗口比例为 20.8%/75.0%，各有 24 窗、六人。交换方向剖面仍可改变 X；固定或训练方向仅一个候选时，不能判为稳定。',
+        ylabel='稳定窗口比例 / %',percent=True)
+    obs=select(stability,dict(kind='sensitivity',arm='M-observation',field='physical_prediction',metric='rms_range_SD'))
+    bars('扰动范围给出稳定性的幅度，不能替代来源验证',obs,
+        [('总量 T',dict(coordinate='HbT')),('交换 X',dict(coordinate='HbX'))],[('全窗 RMS 范围','mean')],
+        provenance(family,'stability_summary.csv'),
+        'REFED 的 T/X 范围分别为 0.345/0.176 训练 SD。柱为先计算各窗口范围、再在被试层级平均的值；不能理解为能量占比、方向正确率或潜变量恢复精度。',
+        ylabel='候选范围 / 训练 SD')
+
+    family='shared_driver_parameter_stability'
+    body('参数稳定性的方法选择完全在开发被试上完成','REFED 六名开发、26 名评价被试；每人三个区域，同情绪的两个不同视频。',[
+        'N0 在三个 30 秒块分别估计初态，共享记录参数。开发阶段检查连续状态、交叉拟合残差的 AR1 工作协方差，以及对开发总体中心的参数共享。',
+        '每类至多保留两个单项改进，必须同时考虑重复性、原始坐标拟合与交换参数后的重建。选择冻结后才评价；评价集的描述性排名不会反向重选方法。',
+        'REFED 只保留单时间常数和双参数模型的部分共享。单参数前额／后部强度为 0.25／1，运动为 0；双参数运动／后部为 0.25，前额为 0。0 表示不共享。',
+        '共享中心与工作尺度只从开发记录估计，不能视为已知人群生理分布。三参数进入了诊断，但未保留改进；额外求解器和连续长度扩展均未触发。'],
+        provenance(family,'frozen_selection.json','followup_decisions.json'))
+    mathpage('7｜参数稳定性必须同时满足内点、重复与预测条件',
+        r'd=\max_j\frac{2|\theta_{Aj}-\theta_{Bj}|}{|\theta_{Aj}|+|\theta_{Bj}|},\qquad d\leq0.20,\quad\frac{\log\theta_j-\log L_j}{\log U_j-\log L_j}\in[0.05,0.95]',
+        'repeat', 'A、B 是同一被试与区域的两段记录。重复差异取所有释放参数中的最大值；内点按参数上下界的对数距离计算。时间常数、增益、衰减率的单位与边界分别由合同固定。\n\nP1 只释放一个参数，P2 联合释放时间常数和增益，P3 进一步释放衰减率。P3 只在合成恢复与开发信息条件通过后运行；评价结果不决定维数。\n\n有效配对还要求两段均数值接受，每个成分的拟合及交换参数后的误差均不超过 N0 加 0.01。固定／共享零差异对照不能算个体参数资格证据。',
+        provenance(family,'summary.json','dimension_decision.json'))
+    parameter_frames=[]
+    for version,summary in summaries[family].items():
+        f=pd.DataFrame(summary['groups'])
+        f=f[(f.partition=='evaluation')&(f.variant=='N0')]
+        f=f[f.dataset.eq('refed') if version=='refed' else f.dataset.isin(datasets[:-1])]
+        for ds,part in f.groupby('dataset'):
+            kinds=set(part.repeat_kind)
+            chosen='independent_native_record' if 'independent_native_record' in kinds else sorted(kinds)[0]
+            parameter_frames.append(part[part.repeat_kind==chosen])
+    parameters_frame=pd.concat(parameter_frames,ignore_index=True)
+    bars('有效内点比例比单独报告重复误差更严格',parameters_frame,
+        [('单时间常数',dict(model='P1_tau')),('双参数',dict(model='P2')),('三参数',dict(model='P3'))],
+        [('评价集有效配对率','subject_equal_effective_pair_rate')],provenance(family,'summary.json'),
+        '统一显示 N0 基线；开发选择的增强方法另列在源表。Single-Trial/Visual 优先用独立原生记录，Simultaneous 为同记录不相交块；REFED 为同情绪不同视频。重复条件不同，不应做统一生理重测排名。',
+        ylabel='被试等权有效配对率 / %',percent=True)
+    bars('重复差异需结合贴边比例与失败分母解释',parameters_frame,
+        [('单时间常数',dict(model='P1_tau')),('双参数',dict(model='P2')),('三参数',dict(model='P3'))],
+        [('重复差异中位数','repeat_median'),('近边界配对率','near_05_pair_rate')],provenance(family,'summary.json'),
+        '左：区域内汇总后、跨被试的重复差异中位数。右：有限参数配对中至少一个参数接近边界的比例。缺失／拒绝解仍在有效率的完整计划分母；较小差异不自动等于有效内点。',
+        ylabel='比例（非百分比）')
+    ref_groups=parameters_frame[parameters_frame.dataset=='refed']
+    parameter_lines=[]
+    for model in ['P1_tau','P1_beta','P2','P3']:
+        part=ref_groups[ref_groups.model==model]
+        if len(part)!=1:raise ValueError('REFED parameter summary inventory')
+        row=part.iloc[0]
+        parameter_lines.append(f"{model}：计划 {int(row.planned_pairs)} 对、{int(row.independent_subjects)} 人；接受 {int(row.accepted_pairs)} 对，有效 {int(row.effective_pairs)} 对。重复差异中位数 {row.repeat_median:.3f}，近边界比例 {row.near_05_pair_rate:.1%}。")
+    body('REFED 参数稳定性：保留全部计划分母',
+        '基线 N0 的评价集结果；三种区域共享被试，不能作为独立人次。',parameter_lines,
+        provenance(family,'summary.json','verification.json'))
+    body('部分共享降低重复差异，却没有增加有效内点','以下为冻结选择的评价结果；配对区间按 26 名被试整块计算，未作确认性多重比较声明。',[
+        '单时间常数：重复差异中位数由 49.9% 降至 42.8%；被试平均差异的改变量为 −0.073，95% 区间 −0.124 至 −0.025。有效配对仍为 2/78。',
+        '双参数：重复差异中位数由 94.3% 降至 80.2%；被试平均差异的改变量为 −0.176，区间 −0.252 至 −0.107。有效配对仍为 0/78，近界比例 97.4%。',
+        '单参数的交换参数重建误差略降：HbO/HbR 平均改变量为 −0.0022/−0.0032；双参数的 HbO 改变量区间跨零。稳定性增益不等于个体参数准确。',
+        '858 个评价配对任务完成；开发与评价合计复算 2,904 条记录。2,801 条数值接受记录全部通过细化积分，最大差 0.000569 训练 SD；原始失败与拒绝解保持原分母。'],
+        provenance(family,'summary.json','verification.json'))
+    synth=pd.DataFrame(summaries[family]['refed']['selected_synthetic']['estimates'])
+    synth=synth[synth.level.isin([1,2])].copy()
+    options=[('单参数时间常数\n共享强度 0.25','P1_tau','H0.25_C0a','tau'),
+             ('单参数时间常数\n共享强度 1','P1_tau','H1_C0a','tau'),
+             ('双参数时间常数\n共享强度 0.25','P2','H0.25_C0a','tau'),
+             ('双参数有效增益\n共享强度 0.25','P2','H0.25_C0a','neurovascular_gain')]
+    fig,ax=plt.subplots(figsize=(12,3.6));plotted=[]
+    for level,label,color,hatch in [(1,'较低异质性',colors[0],''),(2,'较高异质性',colors[1],'//')]:
+        values=[]
+        for name,model,variant,parameter in options:
+            row=select(synth,dict(level=level,model=model,variant=variant,parameter=parameter)).iloc[0]
+            values.append(row.log_recovery_slope);plotted.append(row.to_dict())
+        x=np.arange(4)+(level-1.5)*.26
+        ax.bar(x,values,.24,label=label,color=color,hatch=hatch,edgecolor='white')
+        for xi,v in zip(x,values):ax.text(xi,v+.018,f'{v:.3f}',ha='center',fontsize=12)
+    ax.axhline(1,color='#777777',ls='--',label='理想差异恢复斜率')
+    ax.set(xticks=range(4),xticklabels=[o[0] for o in options],ylim=(0,1.25),ylabel='对数参数恢复斜率')
+    ax.spines[['top','right']].set_visible(False);ax.legend(frameon=False,ncol=3,fontsize=12);fig.tight_layout()
+    path=figures/f'{len(deck.slides)+1:02}_parameter_recovery.png';fig.savefig(path,dpi=240);plt.close(fig);figure_paths.append(path);pd.DataFrame(plotted).to_csv(path.with_suffix('.csv'),index=False)
+    s=page('共享会压缩已知的真实个体差异','先按生成身份平均两次估计，再以对数真值为横轴、对数估计为纵轴拟合斜率；虚线为 1。',
+        provenance(family,'synthetic_selected_summary.json'))
+    picture(s,path,.55,1.65,12.2,3.85)
+    text(s,'主体对数异质性设为 0.15/0.45，各含四个近界身份。单参数计划 32 人均可用；双参数各为 31/32 人，失败保留。强共享的低异质性斜率仅 0.176；较小重复差异可能伴随真实差异丢失。',.75,5.67,11.85,1.18,19)
+
+    family='ssm_output_support';output=read(family,'measured_paired.csv')
+    body('8｜连续状态：边界稳定是否带来更好的隐藏补全？','每条记录为连续 90 秒；评分中间 30 秒，两个同情绪视频构成配对。',[
+        'free 在每个 30 秒块独立估初态；chain-matched 连续传播状态，但在相同三个时刻施加匹配先验；chain-first 只保留起点先验。驱动的曲率切点固定。',
+        '参数固定为时间常数 2 秒、增益 1、衰减率 0.64，不做响应搜索。Hb 使用原生样本不相交分箱；EEG 使用离线 90 秒功率与训练 PCA。前五秒参考不假定静息。',
+        '隐藏中间 Hb 时，上下文 Hb 与整段 EEG 可见；真实、错视频 EEG 和 Hb-only 共用目标。错视频匹配被试、情绪与区域，不精确匹配内容或瞬时情绪轨迹。'],
+        provenance(family,'resolved_config.yaml','plan.json'))
+    forest('连续状态在 REFED 的总体隐藏 Hb 收益仍有不确定性',output,
+        [('连续 vs 自由块',dict(mode='middle_Hb',comparison='continuity',comparator='free',candidate='chain_matched',metric='score_nrmse')),
+         ('真实 vs 错配 EEG',dict(mode='middle_Hb',comparison='EEG_increment',comparator='wrong_pair',candidate='paired',metric='score_nrmse')),
+         ('真实 vs Hb-only',dict(mode='middle_Hb',comparison='EEG_increment',comparator='Hb_only',candidate='paired',metric='score_nrmse'))],
+        provenance(family,'measured_paired.csv'),
+        'REFED 自由块误差 1.185，连续状态 1.135；收益区间跨零。真实 EEG 对错配、Hb-only 的收益也均跨零。失败按 100 计入风险；REFED 本组 252/252 拟合收敛。',
+        value='improvement',low='lower',high='upper',paired='paired_success',subjects='independent_units',shared_scale=False)
+    boundary=read(family,'output_stability_paired.csv')
+    forest('连续传播大幅减少切点变化引起的坐标漂移',boundary,
+        [('总量 T',dict(perturbation='boundary',metric='T_change')),
+         ('交换 X',dict(perturbation='boundary',metric='X_change'))],
+        provenance(family,'output_stability_paired.csv'),
+        '切点相对 30/60 秒移动正负 5 秒，比较中间输出相对原切点解的 RMS 改变。REFED 的 T/X 从自由块 0.263/0.191 降至连续模型 0.0056/0.0039 训练 SD；边界稳定仍不等于来源唯一。',
+        value='improvement',low='lower',high='upper',paired='paired_success',subjects='independent_units',xlabel='坐标变化减少 / 训练 SD')
+    profile=read(family,'profile_ranges.csv')
+    profile=select(profile,dict(mode='full',objective='total'))
+    # Explicit output selection avoids averaging different physical quantities.
+    bars('连续约束仍允许有限的总量分量交换',select(profile,dict(output='T')),
+        [('自由块',dict(arm='free')),('连续匹配',dict(arm='chain_matched'))],
+        [('总目标容差内 T 的可见证范围','width')],provenance(family,'profile_ranges.csv'),
+        '每数据集预选一名评价被试的一条记录。范围为总目标代价增加不超过 5% 的有符号投影见证；不是能量占比或置信区间。搜索到正负 0.5，宽度 1 表示达到搜索端点，不能视为封闭范围。',
+        ylabel='有符号投影范围 / 训练 SD')
+    power=read(family,'power_calibration_v2/paired.csv')
+    forest('已知注入能被检出，但不替代实测耦合的证据',power,
+        [('0.5 SD：相对错配',dict(amplitude=.5,comparator='wrong_pair')),
+         ('0.5 SD：相对 Hb-only',dict(amplitude=.5,comparator='Hb_only'))],
+        provenance(family,'power_calibration_v2/paired.csv'),
+        '背景来自训练记录，固定背景并注入已知共享驱动；每数据集 16 个种子、每种子两段。REFED 收益为 0.301/0.079，区间均大于零。零注入在 REFED 上的两项区间均跨零；校准不证明实测来源唯一。',
+        value='improvement',low='lower',high='upper',paired='paired_success',subjects='independent_units',unit='种子')
+
+    family='semantic_response_discovery';response=read(family,'paired_comparisons.csv')
+    body('9｜响应动力学：形状适配是否超过衰减与线性基线？','REFED 使用 20 名训练、6 名选择、6 名评价被试；评价被试与旧 QC 面板不同。',[
+        '每个 30 秒区域窗口含 120 个时间点。主要端点只给模型前 10 秒自身 Hb 与全窗 EEG，评分最后 10 秒；零前缀是单独条件。离线处理不构成原生实时预测。',
+        'gamma-selected 使用选择集决定谱对比权重；gain-selected 改有效增益；best-stable 从有限稳定响应候选中选择。选择对象冻结后才进入评价。',
+        '衰减对照保留相同输入衰减。完整 EEG ridge 使用全部局部 EEG；空间 Hb ridge 使用其他区域 Hb。它们得到的输入不同，比较解释必须包含信息条件。',
+        'REFED 有 48 个原始评价窗口，展开为 144 个区域窗口；9,216 项评分全部成功，3,600 次需要优化的拟合全部收敛。四数据集汇总按数据集等权、被试整块计算。'],
+        provenance(family,'resolved_config.json','summary.json'))
+    forest('REFED 最佳响应优于衰减对照，却仍落后于线性基线',response,
+        [('相对衰减对照',dict(prefix_steps=40,arm='best_stable',control='gamma_attenuation',metric='Hb_nrmse')),
+         ('相对完整 EEG ridge',dict(prefix_steps=40,arm='best_stable',control='full_EEG_ridge',metric='Hb_nrmse')),
+         ('相对空间 Hb ridge',dict(prefix_steps=40,arm='best_stable',control='spatial_Hb_ridge',metric='Hb_nrmse'))],
+        provenance(family,'paired_comparisons.csv'),
+        'REFED 相对衰减对照改善 0.052，但相对完整 EEG 与空间 Hb ridge 分别退化 0.200/0.203。响应灵活性改善一个控制端点，并未证明其信息利用优于强基线。')
+    combined=roots[family]['refed']/'four_dataset_comparison_v1'
+    overall=pd.read_csv(combined/'dataset_equal_comparisons.csv')
+    rows=select(overall,dict(prefix_steps=40,metric='Hb_nrmse',control='gamma_attenuation'))
+    rows=rows[rows.arm.isin(['gamma_selected','gain_selected','best_stable'])]
+    fig,ax=plt.subplots(figsize=(11.8,3.5))
+    names={'gamma_selected':'谱权重选择','gain_selected':'增益选择','best_stable':'最佳稳定响应'}
+    for i,r in enumerate(rows.itertuples()):
+        ax.plot([r.ci_low,r.ci_high],[i,i],color=colors[i],lw=2);ax.plot(r.gain,i,'o',color=colors[i],ms=8)
+        ax.text(r.ci_high+.002,i,f'{r.gain:+.4f}  [{r.ci_low:+.4f}, {r.ci_high:+.4f}]',va='center',fontsize=13)
+    ax.set(yticks=range(len(rows)),yticklabels=[names[a] for a in rows.arm],ylim=(len(rows)-.5,-.5),xlabel='相对衰减对照的 Hb NRMSE 收益')
+    ax.axvline(0,color='#777777',ls='--');ax.spines[['top','right']].set_visible(False);ax.margins(x=.6);fig.tight_layout()
+    path=figures/f'{len(deck.slides)+1:02}_equal_datasets.png';fig.savefig(path,dpi=240);plt.close(fig);figure_paths.append(path);rows.to_csv(path.with_suffix('.csv'),index=False)
+    s=page('四数据集总体效应由逐窗口配对重新汇总','点为四数据集等权效应，线为各数据集内整块重采样被试的条件 95% 区间。',str((combined/'dataset_equal_comparisons.csv').relative_to(repo)))
+    picture(s,path,.55,1.65,12.2,3.85)
+    text(s,'每次重采样保留同一被试的全部区域与窗口；先算被试均值，再算数据集均值，最后等权平均四个数据集。训练／选择对象冻结，不能把旧、新区间直接平均。',.75,5.67,11.85,1.18,19)
+    primary=pd.read_csv(combined/'primary_null_specificity.csv')
+    lines=[]
+    for arm,label in names.items():
+        p=primary[primary.arm==arm];values=', '.join(f'{v:+.4f}' for v in p.dataset_equal_gain)
+        lines.append(f'{label}：对错被试、时间移位、其他区域的等权收益依次为 {values}；三项 Holm 校正 p 值均为 1。')
+    lines.append('每项均有 504/504 成功区域窗口配对、21 名被试。九项精确被试符号翻转检验均未通过；方向为错配误差减真实配对误差，正值才支持真实配对。')
+    body('九项配对特异性检验均未通过','条件于冻结训练／选择的探索性检验；Holm 校正覆盖三个候选×三种配对。',lines,
+        str((combined/'primary_null_specificity.csv').relative_to(repo)))
+    body('冻结连续编码器探针检验语义代码的增量','原合成编码器保持冻结；公开数据只用于训练线性探针、选择正则化及预测尺度。',[
+        '共同上下文包含原始局部 EEG、其他区域全窗 Hb，以及允许的自身 Hb 前缀。自身隐藏 Hb 从不进入编码器；零前缀时不提供自身 Hb 代码。',
+        'O 为观测代码，S 为受合成语义监督的连续代码。比较加入 S 前后，以及参数容量匹配的独立观测编码器；不能把更大的特征向量自动归因于语义。',
+        '下页先在每个优化种子内汇总被试，再平均三个种子。种子共享相同评价被试，不是新的独立样本；仅展示描述性点估计，不给跨种子的独立样本区间。',
+        'REFED 的 12 个冻结编码器探针共 14,688 项评分，全部完成。原合成训练和评价只按原身份引用，本轮没有重新训练编码器。'],
+        provenance(family,'tokenizer/summary.json'))
+    probe_rows=[];probe_sources=[]
+    encoder_names={'point_restricted_generator':'受限点模型','point_randomized_generator':'随机化点模型','distribution_randomized_generator':'分布模型'}
+    for version,root in roots[family].items():
+        for encoder in encoder_names:
+            seed_values=[]
+            for seed in [101,202,303]:
+                source=root/'tokenizer/public_probes'/encoder/f'seed_{seed}'/'records.csv'
+                probe_sources.append(str(source.relative_to(repo)))
+                f=pd.read_csv(source,dtype={'subject':str})
+                f=f[(f.prefix_steps==40)&(f.dataset.eq('refed') if version=='refed' else f.dataset.isin(datasets[:-1]))]
+                f=f[f.method.isin(['context_plus_O','context_plus_O_plus_S','context_plus_capacity_matched_observation_only'])]
+                if not f.success.all():raise ValueError('probe point summary must preserve failed rows explicitly')
+                g=f.groupby(['dataset','subject','method']).NRMSE.mean().groupby(['dataset','method']).mean().unstack('method')
+                g['vs_O']=g.context_plus_O-g.context_plus_O_plus_S
+                g['vs_capacity']=g.context_plus_capacity_matched_observation_only-g.context_plus_O_plus_S
+                seed_values.append(g.reset_index())
+            for ds,row in pd.concat(seed_values).groupby('dataset')[['vs_O','vs_capacity']].mean().iterrows():
+                probe_rows.append(dict(dataset=ds,encoder=encoder,**row.to_dict()))
+    bars('REFED 的语义代码未改善同一编码器的观测代码基线',pd.DataFrame(probe_rows),
+        [(label,dict(encoder=encoder)) for encoder,label in encoder_names.items()],
+        [('加入 S 相对 O','vs_O'),('相对等容量观测模型','vs_capacity')],probe_sources,
+        'REFED 分布模型的 NRMSE 从仅 O 代码的 1.2543 变为联合代码的 1.2560，退化 0.0017。相对等容量模型的描述性小差异不能替代对 O 基线的增量，也不建立生理语义资格。',
+        ylabel='NRMSE 收益（正值较好）')
+
+    family='eeg_proxy_rate'
+    body('10｜EEG 代理采样率：区分信息加密与求解自由度','A4：4 Hz EEG／4 Hz 动力学；B4-grid10：4 Hz EEG／10 Hz 动力学；C10：10 Hz EEG／10 Hz 动力学。',[
+        '三臂使用同一原生 EEG、相同六通道五频带、冻结 PCA 与训练尺度；Hb 目标和观测算子保持一致。提高 EEG 采样率同时按时间支持校正损失权重。',
+        'B4-grid10 仅增加驱动求解网格，隔离数值自由度；C10 再增加实际 EEG 功率观测。每个窗口的驱动和初态独立重拟合，生理参数固定。',
+        '图在共同 4 Hz 坐标评分：先平均被试内均方误差，再等权平均被试，最后开平方。共同 EEG 兼容误差不等于 C10 自身 10 Hz 观测误差。',
+        'REFED 24 窗、144 次拟合全部收敛；原生 4 Hz 特征精确复现父运行。准备阶段的路径错误发生在读取实测前，修正后按新源码快照续跑，失败记录保留。'],
+        provenance(family,'summary.json','preparation_summary.json'))
+    rate_rows=[]
+    for version,summary in summaries[family].items():
+        for r in summary['paired']:
+            if (r['dataset']=='refed') != (version=='refed'):continue
+            for j,c in enumerate(COMPONENTS):
+                rate_rows.append(dict(dataset=r['dataset'],mode=r['mode'],reference=r['reference'],candidate=r['candidate'],component=c,
+                    gain=-r['delta_nrmse'][j],ci_low=-r['delta_ci95'][j][1],ci_high=-r['delta_ci95'][j][0],
+                    planned_pairs=r['planned_pairs'],common_success_pairs=r['available_pairs'],subjects=r['subjects']))
+    rates=pd.DataFrame(rate_rows)
+    forest('加密 EEG 观测只小幅改善完整 Hb 拟合',rates,
+        [(c,dict(mode='full',reference='A4',candidate='C10',component=c)) for c in ['HbO','HbR']],
+        provenance(family,'summary.json'),
+        'REFED HbO/HbR 误差分别下降 0.0029/0.0013。图将源表的“候选减对照”反号为收益；区间同步反号并交换端点，不能混用差值方向。')
+    forest('完整拟合的微小收益没有转化为隐藏 Hb 优势',rates,
+        [(c,dict(mode='Hb_hidden',reference='A4',candidate='C10',component=c)) for c in ['HbO','HbR']],
+        provenance(family,'summary.json'),
+        'REFED 隐藏 HbO/HbR 的误差反而增加 0.0039/0.0024；HbR 退化区间不跨零。仅加密求解网格可改善完整拟合，但隐藏 Hb 的收益区间仍跨零。')
+    forest('仅加密驱动网格改善拟合，暴露了自由度效应',rates,
+        [(c,dict(mode='full',reference='A4',candidate='B4_grid10',component=c)) for c in ['HbO','HbR']],
+        provenance(family,'summary.json'),
+        'REFED 仅加密网格使完整 HbO/HbR 误差下降 0.0847/0.0215，明显大于新增 10 Hz EEG 观测的收益。这属于当前窗口拟合能力变化，不是新生理信息的直接证据。')
+
+    body('REFED 数值分母：基础与结构诊断','不同条目分别计窗口、模型拟合或评分行，不能把这些数量相加当作独立样本。',[
+        '基础固定模型：计划 4,416 个区域窗口，4,411 个收敛、5 个未收敛；32 名被试。通过率保留未收敛窗口。',
+        '四臂稳健性：2,400 次模型拟合，2,399 次收敛、1 次未收敛；六人、24 个窗口。',
+        '结构性成分归属：1,440 项评分记录完成；24 个目标窗口均有其他区域供体。剖面保留近等价与不满足容差的全部节点。',
+        '区域与谱模式：3,096 次模型拟合，3,067 次收敛、29 次数值失败；72 个区域窗来自六人、24 个原始窗。',
+        '响应与空间强化：2,352 项评分记录完成；风险比较对失败赋 100，保留共同成功子集与全部计划分母两种表。'],
+        [str(roots[f]['refed']/'summary.json') for f in ['physiology_semantics','shared_driver_teacher_robustness','shared_driver_attribution','shared_driver_modes','ssm_strengthening']])
+    body('REFED 数值分母：坐标、连续输出、响应与采样率','参数稳定性分母在第 7 组专页；原三数据集的失败分母保留在各配对图与源表。',[
+        '观测语义 A：24 个窗口；634 项保留数组核验通过。只有一个候选的情况记为证据不足，不能算稳定。',
+        '连续输出：252/252 实测拟合收敛；168 个剖面节点中 152 个收敛、16 个未收敛。训练背景校准的 288 项 AR1 与 384 项经验背景任务均完成。',
+        '响应动力学：9,216/9,216 项评分成功；其中 3,600/3,600 次优化收敛。48 个原始窗展开为 144 个区域窗，独立单元仍为六名被试。',
+        '冻结公开探针：14,688/14,688 项评分成功；三个优化种子共享同一评价身份。原合成证据按原身份沿用。',
+        'EEG 采样率：144/144 次模型拟合收敛；24 窗、六人。原生 4 Hz 输入复现与 432 项保存误差复算均通过。'],
+        [str(roots[f]['refed']/'summary.json') for f in ['observation_semantics','ssm_output_support','semantic_response_discovery','eeg_proxy_rate']])
+    body('结论：四类证据应分别决定下游用途','新增 REFED 没有消除重建、预测、参数与成分归属之间的差异。',[
+        '条件重建：共享时间常数、观测项和更细求解网格能够降低部分误差，可作为明确输入条件下的重建工具。',
+        '隐藏预测：响应适配的收益未超过既定扩展阈值；强线性基线仍有优势。提高 EEG 代理采样率没有带来相应隐藏 Hb 收益。',
+        '生理解释：边界聚集、参数重复条件差异与可交换分量限制了个体生理参数或来源的解释；区间跨零的真实配对收益不能写成已确认耦合。',
+        '表示用途：冻结语义代码对 REFED 的观测代码基线没有增量。后续宜优先检验可见信息、配对特异性和基线充分性，不能只扩大模型维数或训练规模。'],str(config_path))
+    body('交付说明与复核入口','本报告为保留事实的通信导出，项目 registry 和各组运行仍是唯一事实源。',[
+        '十组实验的配置、逐窗口表、失败记录、验证与源码快照保留在原方法 artifact root 下的新版本目录；未覆盖原有日期结果。',
+        '每张图对应同名 CSV；逐页来源保存在 slide_sources.json，讲者备注含完整证据路径。正文已解释输入、评分支持、比较方向和统计单元。',
+        '图表以 240 dpi、公式以 300 dpi PNG 嵌入 PPT 与 PDF；正文和数字解释保持可选择。公式的 LaTeX 源码另存，图册只嵌入位图。',
+        '限制：公开开发面板、冻结对象条件区间、二维粗粒度空间映射、不同重复条件与训练尺度。未宣称绝对幅值校准、个体三维定位或潜变量真值恢复。'],str(config_path))
+
+    ppt=out/'REFED_FOUR_DATASET_REPORT.pptx';deck.save(ppt)
+    (out/'slide_sources.json').write_text(json.dumps(sources,ensure_ascii=False,indent=2)+'\n')
+    (out/'text_layout.json').write_text(json.dumps(shape_audit,ensure_ascii=False,indent=2)+'\n')
+    profile_path=(out/'libreoffice_profile').resolve().as_uri()
+    command=['libreoffice','-env:UserInstallation='+profile_path,'--headless','--convert-to','pdf','--outdir',str(out),str(ppt)]
+    result=subprocess.run(command,capture_output=True,text=True,timeout=180)
+    (out/'pdf_export.log').write_text(result.stdout+'\n'+result.stderr)
+    if result.returncode or not ppt.with_suffix('.pdf').exists():raise ValueError('PDF conversion failed')
+    atlas=fitz.open()
+    for path in figure_paths+formula_paths:
+        page_atlas=atlas.new_page(width=960,height=540)
+        page_atlas.insert_image(fitz.Rect(24,24,936,516),filename=str(path),keep_proportion=True)
+    atlas.save(out/'FIGURE_ATLAS.pdf',deflate=True);atlas.close()
+    with fitz.open(ppt.with_suffix('.pdf')) as doc:
+        audit=dict(pages=len(doc),ppt_pages=len(deck.slides),figures=len(figure_paths),formulas=len(formula_paths),
+            image_objects=len({item[0] for page in doc for item in page.get_images()}),
+            displayed_images=sum(len(page.get_image_info()) for page in doc),
+            selectable_characters=sum(len(p.get_text()) for p in doc),
+            empty_text_pages=[i+1 for i,p in enumerate(doc) if len(p.get_text().strip())<10],
+            render_scope='PPT_exported_to_PDF_figures_PNG_240dpi_formulas_PNG_300dpi',
+            created_at=datetime.now(timezone.utc).isoformat(),evidence_only=True)
+        if audit['pages']!=audit['ppt_pages'] or audit['empty_text_pages'] or audit['image_objects']<len(figure_paths)+len(formula_paths):
+            raise ValueError('export page/text/image audit failed')
+    (out/'export_audit.json').write_text(json.dumps(audit,ensure_ascii=False,indent=2)+'\n')
+    shutil.copy2(config_path,out/Path(config_path).name)
+    shutil.copy2(__file__,out/'render_shared_driver_reconstruction.py')
+    print(json.dumps(dict(ppt=str(ppt),pdf=str(ppt.with_suffix('.pdf')),**audit),ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run", type=Path, required=True)
+    parser.add_argument("--run", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument('--refed-comparison', action='store_true', help='Render the versioned ten-family four-dataset evidence report')
+    parser.add_argument('--comparison-config', type=Path)
     parser.add_argument("--replay", action="store_true", help="Render nonlinear fixed-driver replay against its parent")
     parser.add_argument("--nonlinear-fit", action="store_true", help="Render nonlinear optimization cells and complete denominators")
     parser.add_argument("--gain-prior-fit", action="store_true", help="Render four-arm effective gain and driver amplitude prior diagnostic")
@@ -6855,6 +7497,21 @@ def main():
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.refed_comparison:
+        if args.comparison_config is None:
+            parser.error('--refed-comparison requires --comparison-config')
+        if any((args.replay, args.nonlinear_fit, args.gain_prior_fit, args.fixed_roi_tau,
+                args.fixed_roi_flow, args.fixed_roi_initial, args.fixed_roi_optical,
+                args.conditional_optical_gain, args.waveform_diagnostic, args.step_control,
+                args.teacher_robustness, args.component_attribution, args.semantic_response,
+                args.fitting_explainer, args.parameter_explorer)):
+            parser.error('Choose one report mode')
+        render_refed_comparison(args.comparison_config.resolve(), args.output.resolve())
+        return
+    if args.run is None:
+        parser.error('--run is required for this report mode')
+    if args.comparison_config:
+        parser.error('--comparison-config requires --refed-comparison')
     if args.boundary_run and not args.parameter_explorer:
         parser.error('--boundary-run requires --parameter-explorer')
     if args.fitting_explainer or args.parameter_explorer:

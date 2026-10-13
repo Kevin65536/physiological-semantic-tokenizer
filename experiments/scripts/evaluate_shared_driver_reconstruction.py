@@ -3119,16 +3119,22 @@ def waveform_diagnostic_main(args):
 
 def semantics_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
-    if cfg.get('schema') != 'shared_driver_physiology_semantics_v1':
+    refed = cfg.get('schema') == 'shared_driver_physiology_semantics_refed_v2'
+    if cfg.get('schema') not in ('shared_driver_physiology_semantics_v1', 'shared_driver_physiology_semantics_refed_v2'):
         raise ValueError('wrong physiology semantics contract')
     if (cfg['tensor']['steps'] != 120 or cfg['tensor']['dt_s'] != .25 or
             cfg['tensor']['state_order'] != ['r', 's', 'f', 'v', 'p', 'q'] or
             cfg['data']['protected_data'] != 'forbidden' or
             cfg['data']['cache_root'] != 'data/cache/physiology_semantic_clean_v5' or
-            set(cfg['data']['datasets']) != {'eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation','refed'} or
+            set(cfg['data']['datasets']) != ({'refed'} if refed else {'eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation','refed'}) or
             cfg['data']['motion_method'] != 'none' or cfg['splits']['labels_as_model_inputs'] or
             cfg['report']['format'] != 'pptx'):
         raise ValueError('physiology semantics tensor, data, model or report contract violated')
+    if refed and (cfg['data'].get('refed_geometry') != 'refed_paper_layout_2d_v1'
+            or not cfg['data'].get('geometry_root') or not cfg.get('retained_run')
+            or cfg['data'].get('region_eeg_anchors') != {'prefrontal': 'FP1', 'motor': 'C3', 'posterior': 'O1'}
+            or cfg['splits'].get('refed_record_grouping') != 'whole_video_emotion_stratified_repeats'):
+        raise ValueError('REFED requires its explicit planar geometry, regions and video split contract')
     semantics_parameters(cfg).validate()
     return cfg
 
@@ -3147,13 +3153,38 @@ def semantics_solver_options(cfg):
         'initial_penalty', 'flow_prior_weight', 'flow_prior_log_sd', 'gradient_tolerance')}
 
 
-def semantics_anchors(record, geometry):
+def semantics_anchors(record, geometry, *, refed_region_eeg_anchors=None):
     """Select actual channels from metadata only; never use fitted errors."""
     meta = record.manifest['measurement']
     eeg = geometry.for_channels(record=record, modality='eeg', channel_names=meta['eeg_channel_names'])
     hb = geometry.for_channels(record=record, modality='fnirs', channel_names=meta['fnirs_channel_names'][::2])
     if record.dataset_id == 'refed':
-        return [], 'REFED EEG template is not registered to native Hb geometry'
+        if refed_region_eeg_anchors is None:
+            return [], 'REFED EEG template is not registered to native Hb geometry'
+        if any(r.get('coordinate_system') != 'refed_paper_layout_2d_v1'
+               or r.get('coordinate_units') != 'normalized_figure_radius'
+               or r.get('metadata',{}).get('spatial_dimension') != 2 for r in eeg+hb):
+            raise ValueError('REFED regional selection requires the complete paper-layout plane')
+        ex=np.array([[r['x'], r['y']] for r in eeg], dtype=float)
+        hx=np.array([[r['x'], r['y']] for r in hb], dtype=float)
+        if not np.isfinite(ex).all() or not np.isfinite(hx).all():
+            raise ValueError('incomplete REFED paper geometry')
+        lookup={r['channel_name'].upper():i for i,r in enumerate(eeg)}
+        anchors=[];used=set()
+        for region,name in refed_region_eeg_anchors.items():
+            if name not in lookup:raise ValueError('missing REFED anatomical template anchor: '+name)
+            index=int(np.argmin(np.linalg.norm(hx-ex[lookup[name]],axis=1)))
+            if index in used:raise ValueError('REFED regions must use distinct measured Hb pairs')
+            used.add(index)
+            distances=np.linalg.norm(ex-hx[index],axis=1)
+            order=np.argsort(distances,kind='stable');neighbors=order[:6]
+            anchors.append(dict(region=region,hb_pair=index,hb_channel=hb[index]['base_channel_name'],
+                eeg_indices=neighbors.tolist(),eeg_channels=[eeg[i]['channel_name'] for i in neighbors],
+                hb_geometry=hb[index],eeg_geometry=[eeg[i] for i in neighbors],
+                region_reference_eeg=name,neighbor_boundary_gap=float(distances[order[6]]-distances[order[5]]),
+                seventh_eeg_channel=eeg[order[6]]['channel_name'],
+                spatial_claim='coarse_2d_paper_template_not_individual_3d_or_optical_sensitivity_centroid'))
+        return anchors,None
     ex = np.array([[r.get(k) if r.get(k) is not None else np.nan for k in ('x','y','z')] for r in eeg])
     hx = np.array([[r.get(k) if r.get(k) is not None else np.nan for k in ('x','y','z')] for r in hb])
     if not np.isfinite(ex).all() or not np.isfinite(hx).all():
@@ -3220,7 +3251,9 @@ def semantics_inventory(cfg, project_root, out):
     from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
     from src.data.unified_physiology import ChannelGeometryIndex, DEFAULT_ADMISSIBLE_ALIGNMENT_CASES
     index = CleanPhysiologyCacheIndex(Path(project_root)/cfg['data']['cache_root'])
-    geometry = ChannelGeometryIndex(index.cache_root)
+    geometry_root=cfg['data'].get('geometry_root')
+    geometry = ChannelGeometryIndex(index.cache_root,
+        geometry_root=Path(project_root)/geometry_root if geometry_root else None)
     records, excluded = [], []
     for record in index.records:
         if record.dataset_id not in cfg['data']['datasets']:
@@ -3234,7 +3267,8 @@ def semantics_inventory(cfg, project_root, out):
             reason = 'unverified_alignment'
         if reason == 'retained_S06_Part1_alignment_exclusion':
             excluded.append(dict(join_key=record.join_key, reason=reason)); continue
-        anchors, spatial_reason = semantics_anchors(record, geometry)
+        anchors, spatial_reason = semantics_anchors(record, geometry,
+            refed_region_eeg_anchors=cfg['data'].get('region_eeg_anchors'))
         windows, rejected = semantics_window_plan(record, index.events_by_join_key.get(record.join_key, []))
         if reason:
             rejected.append(dict(reason=reason, planned_windows=len(windows)))
@@ -3252,6 +3286,7 @@ def semantics_inventory(cfg, project_root, out):
             hb_unit=record.manifest['measurement']['fnirs_preprocessing_state']['canonical_unit']))
     result = dict(schema='physiology_semantics_inventory_v1', records=records, excluded=excluded,
         input_cache=str(index.cache_root), measured_arrays_read=0,
+        geometry_root=geometry_root,
         subject_counts={ds: len({r['subject'] for r in records if r['dataset']==ds}) for ds in cfg['data']['datasets']},
         record_counts={ds: sum(r['dataset']==ds for r in records) for ds in cfg['data']['datasets']})
     write_json(Path(out)/'inventory.json', result)
@@ -3363,7 +3398,10 @@ def semantics_prepare_worker(payload):
             if not all(n in lookup for n in names):
                 failures.append(dict(region=anchor['region'], reason='native_EEG_channel_identity')); continue
             selected = [lookup[n] for n in names]
-            features, hb, identities = [], [], []
+            features, hb, identities, boundary_features = [], [], [], []
+            boundary_name=anchor.get('seventh_eeg_channel') if cfg['data'].get('neighbor_sensitivity') else None
+            if boundary_name is not None and boundary_name.upper() not in lookup:
+                raise ValueError('registered boundary-neighbor channel is absent from native EEG')
             for window in spec['windows']:
                 start = round(window['eeg_start_s']*eeg.sample_rate_hz)
                 length = round(30*eeg.sample_rate_hz)
@@ -3379,12 +3417,23 @@ def semantics_prepare_worker(payload):
                     failures.append(dict(region=anchor['region'], window=window['window'], reason='invalid_power')); continue
                 logpower = np.log(power).reshape(120,-1)
                 features.append(operator['eeg']@logpower)
+                if boundary_name is not None:
+                    alternative=signal.copy()
+                    alternative[:,-1]=eeg.values[start:start+length,lookup[boundary_name.upper()]]
+                    alt_power=eeg_band_power(alternative,bands=cfg['tensor']['eeg_bands_hz'],
+                        sample_rate=eeg.sample_rate_hz,target_rate=4.)
+                    if not np.isfinite(alt_power).all() or np.any(alt_power<=0):
+                        raise ValueError('invalid registered boundary-neighbor power')
+                    boundary_features.append(operator['eeg']@np.log(alt_power).reshape(120,-1))
                 hb.append(operator['fnirs']@h)
                 identities.append(window)
             path.parent.mkdir(parents=True,exist_ok=True)
             if features:
                 np.savez_compressed(path.parent/(anchor['region']+'.npz'),
                     eeg_features=np.array(features), hb=np.array(hb))
+                if boundary_features:
+                    np.savez_compressed(path.parent/(anchor['region']+'_boundary_swap.npz'),
+                        eeg_features=np.array(boundary_features),hb=np.array(hb))
                 prepared.append(dict(**anchor, windows=identities, array_file=anchor['region']+'.npz',
                     eeg_native_unit=eeg.native_unit, eeg_native_rate=eeg.sample_rate_hz,
                     native_eeg_source=str(eeg.source_path)))
@@ -3430,7 +3479,7 @@ def semantics_balanced_select(refs, limit, seed):
     return chosen
 
 
-def semantics_cohort(cfg,out):
+def semantics_cohort(cfg,out,project_root=CODE_ROOT):
     inventory=json.loads((out/'inventory.json').read_text())
     cohorts=[];unavailable=[]
     channel_sets={}
@@ -3443,6 +3492,15 @@ def semantics_cohort(cfg,out):
         rng=np.random.default_rng(np.random.SeedSequence([cfg['seed'],21,cfg['data']['datasets'].index(ds)]))
         rng.shuffle(subjects)
         subject_folds[ds]={s:i%cfg['splits']['subject_folds'] for i,s in enumerate(subjects)}
+    refed_repeats={}
+    if cfg.get('schema')=='shared_driver_physiology_semantics_refed_v2':
+        # The former inventory already registered these subjects without fitting EEG--Hb.
+        retained=Path(project_root)/cfg['retained_run']
+        subject_folds['refed']=json.loads((retained/'cohort.json').read_text())['subject_folds']['refed']
+        videos={r['record']:r['windows'][0]['condition'] for r in inventory['records'] if r['windows']}
+        for condition in sorted(set(videos.values())):
+            names=sorted([name for name in videos if videos[name]==condition],key=lambda n:int(n.rsplit('_',1)[-1]))
+            refed_repeats.update({name:i%2 for i,name in enumerate(names)})
     for spec in inventory['records']:
         path=out/'prepared'/spec['key']/'record.json'
         if not path.exists():unavailable.append(dict(key=spec['key'],reason='preparation_failed'));continue
@@ -3460,6 +3518,8 @@ def semantics_cohort(cfg,out):
                 elif spec['dataset']=='simultaneous_eeg_nirs':
                     repeat=groups.index(w['independent_block'])%2
                     repeat_unit+='::'+str(groups.index(w['independent_block']))
+                elif spec['dataset']=='refed':
+                    repeat=refed_repeats[spec['record']]
                 else:
                     # Preserve both probes of the same EEG Part in the same fold.
                     import re
@@ -3669,11 +3729,14 @@ def semantics_parallel_stage(cfg,out,stage,worker,payloads,workers,key_fn):
     return failed
 
 
-def semantics_diagnostic_plan(cfg,out):
+def semantics_diagnostic_plan(cfg,out,project_root=CODE_ROOT):
     refs=json.loads((out/'cohort.json').read_text())['refs']
     inventory=json.loads((out/'inventory.json').read_text())['records']
     rng=np.random.default_rng(np.random.SeedSequence([cfg['seed'],61]))
     selected={};strata=[];windows=[]
+    retained=None
+    if cfg.get('retained_run'):
+        retained=json.loads((Path(project_root)/cfg['retained_run']/'diagnostic_plan.json').read_text())
     for ds in cfg['data']['datasets']:
         burdens={}
         for spec in inventory:
@@ -3688,7 +3751,26 @@ def semantics_diagnostic_plan(cfg,out):
             choice=rng.choice(block,size=min(2,len(block)),replace=False).tolist()
             selected[ds].extend(choice)
             strata.extend(dict(dataset=ds,subject=s,stratum=stratum,quality_burden=float(np.mean(burdens[s]))) for s in choice)
+        if ds=='refed' and retained is not None:
+            selected[ds]=retained['selected_subjects'][ds]
+            strata=[r for r in strata if r['dataset']!=ds]+[r for r in retained['strata'] if r['dataset']==ds]
         for subject in selected[ds]:
+            if ds=='refed' and retained is not None:
+                # Two complete videos of the same emotion, two disjoint 30 s windows each.
+                # These are H0/hidden diagnostic targets, independent of H3 calibration.
+                own=[r for r in refs if r['dataset']==ds and r['subject']==subject and r['region']=='prefrontal']
+                pairs=[]
+                for condition in sorted({r['condition'] for r in own}):
+                    groups={}
+                    for r in own:
+                        if r['condition']==condition:groups.setdefault(r['record'],[]).append(r)
+                    a=sorted([n for n,g in groups.items() if g[0]['repeat_fold']==0 and len(g)>=3])
+                    b=sorted([n for n,g in groups.items() if g[0]['repeat_fold']==1 and len(g)>=3])
+                    if a and b:pairs.append((condition,a[0],b[0],groups))
+                if not pairs:raise ValueError('REFED diagnostic requires two same-emotion supported videos')
+                condition,a,b,groups=pairs[0]
+                for name in (a,b):windows.extend(sorted(groups[name],key=lambda r:r['eeg_start_s'])[-2:])
+                continue
             own=[r for r in refs if r['dataset']==ds and r['subject']==subject and r['record_evaluation']]
             if not own:continue
             sites=sorted({r['site'] for r in own},key=lambda s:(not s.startswith('prefrontal'),s))
@@ -3700,8 +3782,10 @@ def semantics_diagnostic_plan(cfg,out):
                 record=available[0]['record'];available=[r for r in available if r['record']==record]
                 for index in sorted(set((0,len(available)//2))):windows.append(available[index])
     plan=dict(selected_subjects=selected,strata=strata,windows=windows,
-        selection='seeded two subjects per QC-burden tercile; no SSM errors or fitted parameters read',
-        unsupported='REFED remains Hb QC only; no invented cross-modal spatial correspondence')
+        selection=('retained REFED QC-tercile subjects; lexical same-emotion videos in opposite repeat folds; last two complete disjoint windows; no fit selection'
+                   if retained is not None else 'seeded two subjects per QC-burden tercile; no SSM errors or fitted parameters read'),
+        unsupported=('individual_3d_and_absolute_units_unavailable' if retained is not None else
+                     'REFED remains Hb QC only; no invented cross-modal spatial correspondence'))
     write_json(out/'diagnostic_plan.json',plan);return plan
 
 
@@ -4320,11 +4404,12 @@ def semantics_context_worker(payload):
     started=time.monotonic();index=CleanPhysiologyCacheIndex(Path(project_root)/cfg['data']['cache_root'])
     record=next(r for r in index.records if r.join_key.replace('|','__').replace('/','_')==ref['key'])
     event=next(e for e in index.events_by_join_key[record.join_key] if e['event_index']==ref['event_id'])
-    if not window_within_alignment_support(event,-50.,120.):
+    es,hs=ref['eeg_start_s']-45,ref['hb_start_s']-45
+    relative_start=es-float(event['eeg_time_ms'])/1000.
+    if not window_within_alignment_support(event,relative_start,120.):
         result=dict(ref=ref,status='unavailable_alignment_support',rows=[])
         write_json(path,result);return result
     eeg=load_native_eeg_record(Path(project_root),record);native=load_native_fnirs_record(Path(project_root),record)
-    es,hs=ref['eeg_start_s']-45,ref['hb_start_s']-45
     start=round(es*eeg.sample_rate_hz);length=round(120*eeg.sample_rate_hz)
     if min(es,hs)<0 or start+length>len(eeg.values) or hs<native['time_s'][0] or hs+119.75>native['time_s'][-1]:
         result=dict(ref=ref,status='unavailable_native_support',rows=[])
@@ -4369,21 +4454,62 @@ def semantics_context_worker(payload):
     write_json(path,result);return result
 
 
+def semantics_geometry_worker(payload):
+    """Boundary-neighbor intervention with the Hb target and outer subjects fixed."""
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
+    cfg,root,ref=payload;out=Path(root);path=out/'geometry_sensitivity'/ref['id']/'result.json'
+    if path.exists():return json.loads(path.read_text())
+    key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
+    baseline=json.loads((out/'coordinates'/(key+'.json')).read_text())
+    alternate=json.loads((out/'coordinates'/(key+'__boundary_swap.json')).read_text())
+    alternative=dict(ref,array_path=str(Path(ref['array_path']).with_name(ref['region']+'_boundary_swap.npz')))
+    targets=[semantics_target(ref,baseline),semantics_target(alternative,alternate)]
+    if not np.array_equal(targets[0][:,1:],targets[1][:,1:]):raise ValueError('geometry sensitivity changed the Hb target')
+    if not np.array_equal(np.asarray(baseline['sd'])[1:],np.asarray(alternate['sd'])[1:]):raise ValueError('geometry sensitivity changed Hb training scale')
+    started=time.monotonic();rows=[];saved={'Hb_target':targets[0][:,1:],'Hb_sd':np.array(baseline['sd'])[1:]}
+    for variant,target,coordinate in zip(('registered','boundary_swap'),targets,(baseline,alternate)):
+        if ref['subject'] in coordinate['training_subjects']:raise ValueError('geometry PCA leaked evaluation subject')
+        sd=np.asarray(coordinate['sd'])
+        for mode in ('full','Hb_hidden'):
+            mask=np.ones((120,3),bool) if mode=='full' else semantics_missing_mask(mode)
+            observed=target.copy();observed[~mask]=np.nan
+            fit=fit_nonlinear_shared_driver(observed,semantics_parameters(cfg),.25,sd=sd,visible=mask,
+                mean_operator=semantics_model_operator(),max_evaluations=cfg['solver']['max_evaluations_per_trial'],
+                **semantics_solver_options(cfg))
+            row=dict(variant=variant,mode=mode,status=fit['status'],converged=fit['converged'])
+            if 'prediction' in fit:
+                row['Hb_nrmse']=float(np.sqrt(np.mean(((fit['prediction'][:,1:]-target[:,1:])/sd[1:])**2)))
+                saved[variant+'__'+mode]=fit['prediction'][:,1:]
+            rows.append(row)
+    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
+    result=dict(ref=ref,rows=rows,status='completed',seconds=time.monotonic()-started,
+        changed='sixth EEG neighbor replaced by seventh; PCA refit on same training subjects only',
+        fixed='Hb channel/values/scales; outer folds; solver, response parameters, masks and priors',
+        interpretation='engineering_neighborhood_sensitivity_not_placement_uncertainty_or_physiological_accuracy')
+    write_json(path,result);return result
+
+
 def semantics_transfer_worker(payload):
     from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
-    cfg,root,ref=payload;out=Path(root);path=out/'transfer'/ref['id']/'result.json'
+    cfg,root,ref=payload[:3];project_root=Path(payload[3]) if len(payload)>3 else CODE_ROOT
+    out=Path(root);path=out/'transfer'/ref['id']/'result.json'
     if path.exists():return json.loads(path.read_text())
-    started=time.monotonic();plan=json.loads((out/'training_plan.json').read_text())['jobs'];sources={}
-    for spec in plan:
-        if spec['hierarchy']!='H1_dataset' or spec['parameter']!='tau':continue
-        train=spec['train'];ds=train[0]['dataset']
-        if ds==ref['dataset'] or train[0]['region']!=ref['region']:continue
-        fit=json.loads((out/'training'/spec['key']/'result.json').read_text())
-        if fit['converged']:sources.setdefault(ds,[]).append(dict(key=spec['key'],tau=fit['parameter_value']))
+    started=time.monotonic();sources={}
+    source_roots=[out]+[project_root/p for p in cfg.get('transfer_source_runs',[])]
+    target_root=Path(ref.get('transfer_target_root',out)).resolve()
+    if target_root not in {p.resolve() for p in source_roots}:raise ValueError('unregistered transfer target run')
+    for source_root in source_roots:
+        plan=json.loads((source_root/'training_plan.json').read_text())['jobs']
+        for spec in plan:
+            if spec['hierarchy']!='H1_dataset' or spec['parameter']!='tau':continue
+            train=spec['train'];ds=train[0]['dataset']
+            if ds==ref['dataset'] or train[0]['region']!=ref['region']:continue
+            fit=json.loads((source_root/'training'/spec['key']/'result.json').read_text())
+            if fit['converged']:sources.setdefault(ds,[]).append(dict(key=spec['key'],tau=fit['parameter_value'],source_run=str(source_root)))
     key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
-    coordinate=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.array(coordinate['sd']);y=semantics_target(ref,coordinate)
+    coordinate=json.loads((target_root/'coordinates'/(key+'.json')).read_text());sd=np.array(coordinate['sd']);y=semantics_target(ref,coordinate)
     candidates=[dict(method='H0_fixed',tau=cfg['fixed']['tau'])]
-    own=json.loads((out/'training'/(key+'__H1__tau')/'result.json').read_text())
+    own=json.loads((target_root/'training'/(key+'__H1__tau')/'result.json').read_text())
     if own['converged']:candidates.append(dict(method='target_H1_tau',tau=own['parameter_value']))
     for ds,values in sources.items():
         candidates.append(dict(method='source_'+ds,tau=float(np.exp(np.mean(np.log([v['tau'] for v in values]))))))
@@ -4398,7 +4524,7 @@ def semantics_transfer_worker(payload):
         rows.append(row)
     result=dict(ref=ref,rows=rows,sources=sources,status='completed',seconds=time.monotonic()-started,
         interpretation='calibrated_observation_coordinate_tau_transfer; source_fold_estimates_are_overlapping_ensemble_members_not_independent_repeats',
-        unsupported='strict_zero_shot_amplitude_or_beta_transfer; REFED_cross_modal_geometry',
+        unsupported='strict_zero_shot_amplitude_or_beta_transfer; individual_3d_geometry',
         target_calibration_subjects=coordinate['training_subjects'])
     write_json(path,result);return result
 
@@ -4842,6 +4968,48 @@ def semantics_completion_summary(cfg,out):
     write_json(out/'completion_summary.json',result);return result
 
 
+def semantics_four_dataset_transfer_summary(cfg, out, project_root):
+    """Summarize every already fitted target, including retained target panels."""
+    if not cfg.get('transfer_source_runs'):
+        raise ValueError('explicit retained transfer sources required')
+    plans=[out]+[Path(project_root)/p for p in cfg['transfer_source_runs']]
+    selected={}
+    for root in plans:
+        for ref in json.loads((root/'diagnostic_plan.json').read_text())['windows']:
+            selected.setdefault((ref['dataset'],ref['subject']),ref)
+    rows=[]
+    for ref in selected.values():
+        path=out/'transfer'/ref['id']/'result.json'
+        result=json.loads(path.read_text())
+        if result['ref']['id']!=ref['id'] or result['status']!='completed':
+            raise ValueError('missing or mismatched planned transfer evidence')
+        for row in result['rows']:
+            rows.append(dict(dataset=ref['dataset'],subject=ref['subject'],identity=ref['id'],
+                method=row['method'],tau=row['tau'],converged=row['converged'],
+                error=float(np.mean(row['nrmse'])) if row.get('converged') and 'nrmse' in row else None,
+                passed=row.get('all_below_half',False),source_datasets=sorted(result['sources']),
+                evidence_path=str(path.relative_to(project_root))))
+    frame=pd.DataFrame(rows)
+    if set(frame.dataset)!=set(cfg['data']['datasets']+['eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation']):
+        raise ValueError('incomplete four-dataset target inventory')
+    if frame.duplicated(['identity','method']).any():raise ValueError('duplicate transfer cell')
+    destination=out/'four_dataset_transfer_v1'
+    if destination.exists():raise ValueError('preserve the versioned transfer summary')
+    destination.mkdir()
+    frame.to_csv(destination/'metrics.csv',index=False)
+    groups=[]
+    for (dataset,method),part in frame.groupby(['dataset','method']):
+        groups.append(dict(dataset=dataset,method=method,planned=len(part),successes=int(part.converged.sum()),
+            subjects=part.subject.nunique(),error=part.error.mean(),pass_rate=part.passed.mean()))
+    pd.DataFrame(groups).to_csv(destination/'summary.csv',index=False)
+    value=dict(execution='completed',planned_targets=len(selected),planned_fits=len(rows),
+        converged=int(frame.converged.sum()),groups=groups,native_arrays_read=0,new_fits=0,
+        aggregation='mean_three_component_NRMSE_within_record_then_subject_equal; failures_retained_separately',
+        scope='target_observation_calibrated_on_other_target_subjects; source_dataset_log_tau_equal_ensemble_not_zero_shot')
+    write_json(destination/'summary.json',value)
+    return value
+
+
 def semantics_profile_summary(cfg,out):
     selected={}
     for ref in json.loads((out/'diagnostic_plan.json').read_text())['windows']:selected.setdefault((ref['dataset'],ref['subject']),ref)
@@ -4915,6 +5083,7 @@ def semantics_profile_summary(cfg,out):
 def semantics_summary(cfg,out,project_root):
     required=['prepare','qc_detail','cohort','synthetic','synthetic_feature','synthetic_joint','synthetic_kappa',
               'synthetic_hierarchy','synthetic_stress','observation_math','training','measured','missing','profiles','diagnostics','integration_audit']
+    if cfg['data'].get('neighbor_sensitivity'):required.append('geometry_sensitivity')
     manifests={name:json.loads((out/(name+'_manifest.json')).read_text()) for name in required}
     if any(m['execution']!='completed' for m in manifests.values()):raise ValueError('all planned stages must be terminal before the final summary')
     training=semantics_training_summary(cfg,out);qc=semantics_qc_summary(cfg,out)
@@ -4970,7 +5139,9 @@ def semantics_summary(cfg,out,project_root):
             stable_H2_median_screen_groups=stable,
             parameter_claim='conditional_model_time_parameter_and_effective_gain_only; no absolute_individual_physiology_release',
             source_claim='canonical_observation_combinations_and_model_residual; no_unique_cortical_systemic_or_metabolic_separation'),
-        report_format='pptx',limitations=['REFED cross-modal geometry unavailable; Hb QC only',
+        report_format='pptx',retained_synthetic_run=cfg.get('retained_run'),
+        limitations=[('REFED planar paper geometry only; unit and hardware-clock uncertainty retained'
+                      if cfg.get('retained_run') else 'REFED cross-modal geometry unavailable; Hb QC only'),
             'Full observation validation refits its driver/initial state; reconstruction not prediction',
             'Missing/prefix tasks at processed-feature level, not raw causal forecasting',
             'Frozen feature gauges and calibration uncertainty not refitted in bootstrap',
@@ -5012,7 +5183,38 @@ def physiology_semantics_main(args):
         project_root=str(args.project_root.resolve()), supervisor=os.environ.get('SSM_SYSTEMD_UNIT'),
         controller_pid=os.getpid(), workers=args.workers, pilot=args.pilot)
     write_json(manifest_path, manifest)
-    if stage == 'integration_audit':
+    if stage == 'four_dataset_transfer_summary':
+        result=semantics_four_dataset_transfer_summary(cfg,out,args.project_root.resolve())
+        manifest.update(execution='completed',summary=result)
+    elif stage == 'geometry_sensitivity':
+        if not cfg['data'].get('neighbor_sensitivity'):raise ValueError('no geometry intervention in this contract')
+        refs=json.loads((out/'cohort.json').read_text())['refs']
+        panel=json.loads((out/'diagnostic_plan.json').read_text())['windows']
+        identities={(r['key'],r['window']) for r in panel}
+        selected=[r for r in refs if (r['key'],r['window']) in identities]
+        for ds,site,fold in sorted({(r['dataset'],r['site'],r['subject_fold']) for r in selected}):
+            train=[dict(r,array_path=str(Path(r['array_path']).with_name(r['region']+'_boundary_swap.npz')))
+                   for r in refs if r['dataset']==ds and r['site']==site and r['subject_fold']!=fold]
+            semantics_coordinate(train,out,f'{ds}__{site}__outer{fold}__boundary_swap',cfg)
+        write_json(out/'geometry_sensitivity_plan.json',dict(refs=selected,selection='same native windows as frozen diagnostic panel, all synchronous regions'))
+        failures=semantics_parallel_stage(cfg,out,stage,semantics_geometry_worker,
+            [(cfg,str(out),ref) for ref in selected],args.workers,lambda p:p[2]['id'])
+        rows=[]
+        for ref in selected:
+            path=out/'geometry_sensitivity'/ref['id']/'result.json'
+            if path.exists():rows.extend(dict(id=ref['id'],subject=ref['subject'],region=ref['region'],**r) for r in json.loads(path.read_text())['rows'])
+        frame=pd.DataFrame(rows);frame.to_csv(out/'geometry_sensitivity_metrics.csv',index=False)
+        comparisons=[]
+        for (region,mode),group in frame.groupby(['region','mode']):
+            good=group[group.converged];pivot=good.pivot(index=['id','subject'],columns='variant',values='Hb_nrmse').reindex(columns=['registered','boundary_swap']).dropna()
+            delta=pivot['boundary_swap']-pivot['registered'];subjects=delta.groupby('subject').mean()
+            ci=semantics_bootstrap_mean(subjects.to_numpy(),cfg['seed'])
+            comparisons.append(dict(region=region,mode=mode,planned_windows=int(group.id.nunique()),common_success=len(pivot),
+                subjects=len(subjects),swap_minus_registered_Hb_nrmse=float(subjects.mean()),ci_low=ci[0],ci_high=ci[1]))
+        write_json(out/'geometry_sensitivity_summary.json',dict(comparisons=comparisons,
+            interpretation='positive error change favors registered neighborhood; subject-block interval conditional on frozen training coordinates'))
+        manifest.update(execution='failed' if failures else 'completed',failures=failures,planned=len(selected))
+    elif stage == 'integration_audit':
         if json.loads((out/'measured_manifest.json').read_text())['execution']!='completed':raise ValueError('terminal full reconstruction required for immutable replay')
         groups={}
         for ref in json.loads((out/'cohort.json').read_text())['refs']:groups.setdefault((ref['key'],ref['site']),[]).append(ref)
@@ -5031,8 +5233,13 @@ def physiology_semantics_main(args):
         for ref in plan['windows']:selected.setdefault((ref['dataset'],ref['subject']),ref)
         failures=semantics_parallel_stage(cfg,out,'context',semantics_context_worker,
             [(cfg,str(out),str(args.project_root.resolve()),ref) for ref in selected.values()],args.workers,lambda p:p[3]['id'])
+        transfer_selected=dict(selected)
+        for source in cfg.get('transfer_source_runs',[]):
+            old_root=args.project_root/source
+            for ref in json.loads((old_root/'diagnostic_plan.json').read_text())['windows']:
+                transfer_selected.setdefault((ref['dataset'],ref['subject']),dict(ref,transfer_target_root=str(old_root)))
         failures.extend(semantics_parallel_stage(cfg,out,'transfer',semantics_transfer_worker,
-            [(cfg,str(out),ref) for ref in selected.values()],args.workers,lambda p:p[2]['id']))
+            [(cfg,str(out),ref,str(args.project_root)) for ref in transfer_selected.values()],args.workers,lambda p:p[2]['id']))
         groups={}
         for ref in json.loads((out/'cohort.json').read_text())['refs']:
             groups.setdefault((ref['dataset'],ref['site'],ref['subject_fold']),[]).append(ref)
@@ -5144,7 +5351,8 @@ def physiology_semantics_main(args):
     elif stage == 'cohort':
         preparation=json.loads((out/'prepare_manifest.json').read_text())
         if preparation['execution']!='completed':raise ValueError('completed preparation required')
-        refs,coordinates=semantics_cohort(cfg,out)
+        refs,coordinates=semantics_cohort(cfg,out,args.project_root)
+        if cfg.get('retained_run'):semantics_diagnostic_plan(cfg,out,args.project_root)
         manifest.update(execution='completed',windows=len(refs),coordinates=len(coordinates))
     elif stage == 'inventory':
         manifest['summary'] = semantics_inventory(cfg, args.project_root, out)['record_counts']
@@ -5153,7 +5361,9 @@ def physiology_semantics_main(args):
         inventory = json.loads((out/'inventory.json').read_text())
         specs = inventory['records']
         if args.pilot:
-            specs = [next(r for r in specs if r['dataset']==ds) for ds in cfg['data']['datasets']]
+            limit=getattr(args,'pilot_records',1)
+            specs = [r for ds in cfg['data']['datasets'] for r in
+                     [x for x in specs if x['dataset']==ds][:limit]]
         payloads = [(cfg, str(out), str(args.project_root.resolve()), spec) for spec in specs]
         started = time.monotonic(); failed = []
         for k, (payload, result, error) in enumerate(bounded_nonlinear_work(
@@ -5198,9 +5408,10 @@ ROBUSTNESS_ARMS = ('M0', 'M-observation', 'M-prior', 'M-combined')
 
 def robustness_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
-    if (cfg.get('schema') != 'shared_driver_teacher_robustness_v1'
-            or cfg['source_run'] != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1'
-            or cfg['source_config'] != 'experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml'
+    refed=cfg.get('schema')=='shared_driver_teacher_robustness_refed_v2'
+    if (cfg.get('schema') not in ('shared_driver_teacher_robustness_v1','shared_driver_teacher_robustness_refed_v2')
+            or cfg['source_run'] != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/'+('20261013_refed_physiology_semantics_v3' if refed else '20260928_physiology_semantics_v1')
+            or cfg['source_config'] != 'experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_'+('refed_v2' if refed else 'v1')+'.yaml'
             or cfg['data_boundary'] != 'exact_public_parent_prepared_arrays_and_coordinates_only'
             or cfg['protected_data'] != 'forbidden' or cfg['parameter_policy'] != 'H0_fixed'
             or cfg['arms'] != list(ROBUSTNESS_ARMS)
@@ -5439,20 +5650,22 @@ def robustness_synthetic_worker(payload):
 
 
 def robustness_parent_inputs(cfg,project_root,out):
+    from src.data.ssm_prepared import public_prepared_datasets
     parent=(Path(project_root)/cfg['source_run']).resolve()
     summary=json.loads((parent/'summary.json').read_text())
     if summary['execution']!='completed':raise ValueError('parent evidence is not terminal')
     refs=json.loads((parent/'cohort.json').read_text())['refs']
     panel=json.loads((parent/'diagnostic_plan.json').read_text())['windows']
+    datasets=public_prepared_datasets(str(parent))
     for ref in refs:
-        if ref['dataset'] not in ('eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation'):
+        if ref['dataset'] not in datasets:
             raise ValueError('unsupported/protected dataset before array read')
         path=Path(ref['array_path']).resolve()
         if not path.is_relative_to(parent/'prepared'):raise ValueError('array path outside exact public parent')
         if ref['dataset']=='visual_cognitive_motivation' and ref['subject']=='S06' and 'Part1' in ref['record']:
             raise ValueError('excluded Visual record')
     ids={r['id'] for r in refs}
-    if len(panel)!=72 or any(r['id'] not in ids for r in panel):raise ValueError('parent panel identity mismatch')
+    if len(panel)!=24*len(datasets) or any(r['id'] not in ids for r in panel):raise ValueError('parent panel identity mismatch')
     coordinates={}
     for ref in panel:
         key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
@@ -5473,7 +5686,8 @@ def robustness_parent_inputs(cfg,project_root,out):
         interpretation='different_native_clock_origins_are_not_fitted_lags; offline_feature_completion_not_raw_prediction',
         extra_lag_correction='none_no_independent_calibration_evidence',
         parent_native_qc=str(parent/'native_qc_summary.json'),
-        limitations=['No renewed hardware-clock measurement','REFED excluded from cross-modal fitting: geometry unavailable',
+        limitations=['No renewed hardware-clock measurement',
+            ('REFED uses coarse planar paper registration, not individual 3D' if datasets==('refed',) else 'REFED excluded from cross-modal fitting: geometry unavailable'),
             'PCA coordinate is statistical EEG log-power, not calibrated neural activity'])
     write_json(out/'processing_timing_audit.json',audit)
     return parent,refs,panel,coordinates
@@ -5805,6 +6019,45 @@ def robustness_summary(cfg,out):
     return summary
 
 
+def robustness_verify(cfg,out):
+    """Recompute saved real-pair errors and decomposition without refitting."""
+    summary=json.loads((out/'summary.json').read_text())
+    if summary['execution']!='completed':raise ValueError('incomplete robustness evidence')
+    plan=json.loads((out/'measured_plan.json').read_text());maximum=closure=0.;scored=0;failures=[]
+    for ref in plan['windows']:
+        key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
+        cal=json.loads((out/'calibration'/(key+'.json')).read_text())
+        coord=json.loads((out/'coordinates'/(key+'.json')).read_text())
+        if (ref['subject'] in set(cal['training_subjects'])|set(cal['selection_subjects'])|set(coord['training_subjects'])
+                or set(cal['training_subjects'])&set(cal['selection_subjects'])):
+            failures.append(ref['id']+'/training_subject_overlap')
+        path=out/'measured'/ref['id']/'result.json';result=json.loads(path.read_text())
+        real=[r for r in result['rows'] if r['pairing']=='real' and r['arm'] in ROBUSTNESS_ARMS]
+        if len(real)!=len(cfg['measured']['modes'])*len(ROBUSTNESS_ARMS):failures.append(ref['id']+'/denominator')
+        with np.load(path.with_suffix('.npz'),allow_pickle=False) as arrays:
+            target,sd=arrays['target'],arrays['sd']
+            if not np.array_equal(sd,np.asarray(coord['sd'])):failures.append(ref['id']+'/training_scale')
+            for row in real:
+                prefix=row['mode']+'__'+row['arm']+'__'
+                if prefix+'prediction' not in arrays:
+                    if row['converged']:failures.append(ref['id']+'/'+prefix+'missing_prediction')
+                    continue
+                mask=np.ones((120,3),bool) if row['mode']=='full' else ~semantics_missing_mask(row['mode'])
+                for field,name in [('prediction','total'),('physical_prediction','physical')]:
+                    value=float(np.sqrt(np.mean(((arrays[prefix+field]-target)/sd)[mask]**2)))
+                    maximum=max(maximum,abs(value-row[name+'_nrmse']));scored+=1
+                delta=arrays[prefix+'prediction']-arrays[prefix+'physical_prediction']-arrays[prefix+'observation_component']
+                closure=max(closure,float(np.max(abs(delta))))
+                if row['mode']=='Hb_hidden' and np.any(arrays[prefix+'observation_component']):failures.append(ref['id']+'/hidden_component')
+    if maximum>1e-10 or closure>1e-10:failures.append('metric_or_decomposition_reproduction')
+    result=dict(status='passed' if not failures else 'failed',windows=len(plan['windows']),scores_recomputed=scored,
+        max_score_error=maximum,max_decomposition_error=closure,failures=failures,
+        inherited_synthetic_run=cfg.get('retained_run'),native_arrays_read=0,refits=0)
+    write_json(out/'verification.json',result)
+    if failures:raise ValueError('robustness evidence verification failed')
+    return result
+
+
 def robustness_main(args):
     cfg=robustness_config(args.config);base=semantics_config(CODE_ROOT/cfg['source_config'])
     if args.check_only:
@@ -5864,6 +6117,7 @@ def robustness_main(args):
                 failures=semantics_parallel_stage(cfg,out,stage,robustness_profile_worker,
                     [(cfg,base,str(out),r) for r in selected],args.workers,lambda p:p[-1]['id'])
         elif stage=='summarize':robustness_summary(cfg,out)
+        elif stage=='verify':robustness_verify(cfg,out)
         state.update(execution='completed' if not failures else 'completed_with_task_failures',task_failures=failures,
             finished_at=datetime.now(timezone.utc).isoformat())
     except Exception as exc:
@@ -5876,11 +6130,12 @@ ATTRIBUTION_ARMS = ('M0', 'D-fixed', 'D-trained', 'D-exchange')
 
 def attribution_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
-    if (cfg.get('schema') != 'shared_driver_attribution_v1'
-            or cfg['source_run'] != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_physiology_semantics_v1'
-            or cfg['robustness_run'] != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/20261001_v1'
-            or cfg['source_config'] != 'experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml'
-            or cfg['robustness_config'] != 'experiments/configs/physiology_semantic_tokenizer/shared_driver_teacher_robustness_v1.yaml'
+    refed=cfg.get('schema')=='shared_driver_attribution_refed_v2'
+    if (cfg.get('schema') not in ('shared_driver_attribution_v1','shared_driver_attribution_refed_v2')
+            or cfg['source_run'] != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/'+('20261013_refed_physiology_semantics_v3' if refed else '20260928_physiology_semantics_v1')
+            or cfg['robustness_run'] != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_teacher_robustness/'+('20261013_refed_v2' if refed else '20261001_v1')
+            or cfg['source_config'] != 'experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_'+('refed_v2' if refed else 'v1')+'.yaml'
+            or cfg['robustness_config'] != 'experiments/configs/physiology_semantic_tokenizer/shared_driver_teacher_robustness_'+('refed_v2' if refed else 'v1')+'.yaml'
             or cfg['protected_data'] != 'forbidden'
             or cfg['data_boundary'] != 'public_parent_panel_training_and_synchronous_regions_plus_registered_EOG'
             or cfg['direction']['arms'] != list(ATTRIBUTION_ARMS)
@@ -6057,6 +6312,9 @@ def attribution_parent(cfg, project_root, out):
     previous_panel = json.loads((previous/'measured_plan.json').read_text())['windows']
     if [r['id'] for r in panel] != [r['id'] for r in previous_panel]:
         raise ValueError('paired panel differs from retained robustness panel')
+    if cfg.get('schema')=='shared_driver_attribution_refed_v2':
+        write_json(out/'anchor_plan.json',dict(coordinate_keys=[],refs=[],status='not_run',
+            source_status='no_REFED_EOG_in_current_native_reader',native_arrays_read=0))
     return parent, previous, refs, panel, coordinates
 
 
@@ -6657,7 +6915,7 @@ def attribution_summarize(cfg, out, project_root):
     pd.DataFrame(overlap_rows).to_csv(out/'jacobian_overlap.csv',index=False)
     anchors=table(anchor_records,'rows');anchors.to_csv(out/'anchor_metrics.csv',index=False)
     ap=[]
-    for control in ('zero','training_mean','wrong_subject'):
+    for control in (('zero','training_mean','wrong_subject') if len(anchors) else ()):
         for metric in ('component_nrmse','hidden_Hb_nrmse'):
             ap.extend(robustness_paired(anchors.rename(columns={'pairing':'arm'}),['dataset'],
                 control=control,value=metric,arms=['real'],seed=cfg['seed']))
@@ -6676,7 +6934,7 @@ def attribution_summarize(cfg, out, project_root):
         audit=dict(windows=len(audit),sensitivity_fits=len(sensitivity),
             previous_false_reassurance_max=float(reliability.false_reassurance_fraction.max())),
         confounding=dict(profile_fits=len(profiles),near_equivalent_rows=int(profiles.near_equivalent.sum())),
-        anchors=dict(coordinates=len(anchor_keys),rows=len(anchors),source_status='unresolved'),
+        anchors=dict(coordinates=len(anchor_keys),rows=len(anchors),source_status='unresolved' if anchor_keys else 'unavailable_no_REFED_EOG'),
         prototype=dict(models=len(prototype_records),test_rows=len(proto),scope=cfg['prototype']['scope']),
         endpoint_files=['audit_metrics.csv','audit_associations.csv','component_sensitivity.csv','measured_paired.csv',
             'spatial_nulls.csv','temporal_paired.csv','synthetic_summary.csv','counterfactual_summary.csv',
@@ -6887,6 +7145,8 @@ def main():
     ap.add_argument('--workers',type=int,default=1)
     ap.add_argument('--check-only',action='store_true')
     ap.add_argument('--pilot',action='store_true')
+    ap.add_argument('--pilot-records',type=int,default=1,
+                    help='bounded preparation pilot records per dataset; does not change formal inventory')
     ap.add_argument('--replay-of',type=Path)
     ap.add_argument('--nonlinear-fit',action='store_true')
     ap.add_argument('--gain-prior-fit',action='store_true')
@@ -6902,8 +7162,8 @@ def main():
     ap.add_argument('--component-attribution',action='store_true')
     ap.add_argument('--attribution-stage',choices=['pilot','synthetic_calibration','synthetic','calibration','measured','audit',
         'profiles','auxiliary','anchors','prototype_data','prototype','summarize','verify'],default='pilot')
-    ap.add_argument('--robustness-stage',choices=['pilot','synthetic_calibration','synthetic','calibration','measured','profiles','summarize'],default='pilot')
-    ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','summarize'],default='synthetic')
+    ap.add_argument('--robustness-stage',choices=['pilot','synthetic_calibration','synthetic','calibration','measured','profiles','summarize','verify'],default='pilot')
+    ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
     if args.component_attribution:

@@ -86,9 +86,13 @@ def sha256(path):
 
 def read_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
-    if (cfg.get('schema') != 'ssm_strengthening_v1' or cfg.get('experiment_id') != 'SSM-STRENGTHEN-v1'
-            or cfg.get('source_run') != SOURCE_RUN or cfg.get('attribution_run') != ATTRIBUTION_RUN
-            or cfg.get('source_config') != SOURCE_CONFIG or cfg.get('artifact_root') != ARTIFACT_ROOT
+    refed=cfg.get('schema')=='ssm_strengthening_refed_v2'
+    source=SOURCE_RUN.replace('20260928_physiology_semantics_v1','20261013_refed_physiology_semantics_v3') if refed else SOURCE_RUN
+    attribution=ATTRIBUTION_RUN.replace('20261002_v1','20261013_refed_v2') if refed else ATTRIBUTION_RUN
+    source_config=SOURCE_CONFIG.replace('_v1.yaml','_refed_v2.yaml') if refed else SOURCE_CONFIG
+    if (cfg.get('schema') not in ('ssm_strengthening_v1','ssm_strengthening_refed_v2') or cfg.get('experiment_id') != ('SSM-STRENGTHEN-REFED-v2' if refed else 'SSM-STRENGTHEN-v1')
+            or cfg.get('source_run') != source or cfg.get('attribution_run') != attribution
+            or cfg.get('source_config') != source_config or cfg.get('artifact_root') != ARTIFACT_ROOT
             or cfg.get('data_boundary') != 'exact_public_parent_panel_training_selection_and_synchronous_donors'
             or cfg.get('protected_data') != 'forbidden'):
         raise ValueError('versioned identity or public data boundary mismatch')
@@ -99,7 +103,7 @@ def read_config(path):
             or cfg['observation']['rho'] != .35 or cfg['observation']['ranks'] != [1,2]
             or cfg['observation']['ridge_weights'] != [.1,1.,10.]
             or cfg['synthetic']['scenarios'] != SCENARIOS
-            or cfg['measured']['datasets'] != ['eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation']
+            or cfg['measured']['datasets'] != (['refed'] if refed else ['eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation'])
             or cfg['measured']['modes'] != ['full','HbO_hidden','HbR_hidden','center_Hb','Hb_hidden','EEG_hidden']
             or cfg['synthetic']['modes'] != ['full','Hb_hidden','EEG_hidden']
             or cfg['response']['selection_modes'] != ['HbO_hidden','HbR_hidden','center_Hb']
@@ -372,8 +376,8 @@ def measured_plan(cfg, project_root):
     refs = read_json(parent/'cohort.json')['refs']
     lookup = {r['id']:r for r in refs}
     panel = read_json(parent/'diagnostic_plan.json')['windows']
-    if len(panel) != 72 or len({(r['dataset'],r['subject']) for r in panel}) != 18:
-        raise ValueError('unchanged 72-window/18-subject development panel required')
+    if len(panel) != 24*len(cfg['measured']['datasets']) or len({(r['dataset'],r['subject']) for r in panel}) != 6*len(cfg['measured']['datasets']):
+        raise ValueError('24-window/six-subject development panel required per declared dataset')
     if [r['id'] for r in panel] != [r['id'] for r in read_json(previous/'measured_plan.json')['windows']]:
         raise ValueError('historical paired panel mismatch')
     by_window = {}
@@ -444,10 +448,10 @@ def measured_plan(cfg, project_root):
 
 
 def load_measured_case(spec, cal):
-    from src.data.ssm_prepared import prepared_target
+    from src.data.ssm_prepared import prepared_target,public_prepared_datasets
 
     ref, coord = spec['ref'], spec['coordinate']
-    datasets = ['eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation']
+    datasets = public_prepared_datasets(str(spec['parent']))
     validate_public_ref(ref,spec['parent'],datasets)
     target = prepared_target(ref,coord)
     donors, scales, ratios, names, raw = [], [], [], [], []
@@ -1520,7 +1524,7 @@ def summarize(cfg, base, out):
     write_json(out/'decision.json',decision)
     summary = dict(schema='ssm_strengthening_summary_v1',experiment_id=cfg['experiment_id'],
         execution='completed' if not failures else 'completed_with_task_failures',
-        synthetic=read_json(out/'synthetic_summary.json'),measured=dict(windows=len(specs),subjects=18,
+        synthetic=read_json(out/'synthetic_summary.json'),measured=dict(windows=len(specs),subjects=len({(s['case']['ref']['dataset'],s['case']['ref']['subject']) for s in specs}),
             rows=len(measured),converged=int(measured.converged.sum()),task_failures=failures),
         profiles=profile_result,endpoint_files=['response_selection.csv','spatial_readout.csv','paired_hidden_metrics.csv',
             'mechanism_attribution.csv','confounding_profiles.csv','risk_coverage.csv','decision.json'],

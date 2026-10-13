@@ -16,6 +16,35 @@ def cfg():
     return runner.read_config(runner.DEFAULT_CONFIG)
 
 
+def test_four_dataset_summary_uses_disjoint_cells_and_whole_inventory(tmp_path, monkeypatch):
+    retained, current = tmp_path / 'old', tmp_path / 'new'
+    for folder, datasets in ((retained, runner.DATASETS), (current, ['refed'])):
+        folder.mkdir()
+        pd.DataFrame([dict(id=d+'__s1', dataset=d, subject='s1', arm='broad_a',
+            pairing='real', prefix_steps=40) for d in datasets]).to_csv(folder/'measured_cells.csv', index=False)
+        (folder/'summary.json').write_text(json.dumps(dict(execution='completed')))
+    seen = []
+    def pooled(frame, **kwargs):
+        seen.append((set(frame.dataset), kwargs['datasets']))
+        return []
+    def primary(frame, contract):
+        assert sum(contract['data']['split_counts'][d]['evaluation']
+                   for d in contract['data']['datasets']) == 21
+        return []
+    monkeypatch.setattr(runner, 'dataset_equal_pairs', pooled)
+    monkeypatch.setattr(runner, 'primary_null_specificity', primary)
+    config = dict(schema='semantic_response_discovery_refed_v2', retained_run='old', seed=1,
+        data=dict(datasets=['refed'], split_counts={'refed': dict(evaluation=6)}))
+    result = runner.summarize_four_datasets(config, current, tmp_path)
+    assert result['unique_cells'] == 4 and result['native_reads'] == 0
+    assert all(a == set(runner.DATASETS) | {'refed'} and len(b) == 4 for a, b in seen)
+    assert config['data']['datasets'] == ['refed']
+    cells = pd.read_csv(current/'measured_cells.csv')
+    pd.concat([cells, cells]).to_csv(current/'measured_cells.csv', index=False)
+    with pytest.raises(ValueError, match='duplicated'):
+        runner.summarize_four_datasets(config, current, tmp_path)
+
+
 def _ref(parent, *, subject="training", record="record", region="motor", window=0,
          dataset="eeg_fnirs_single_trial", site=None):
     key = f"{dataset}__{subject}__{record}"

@@ -69,8 +69,12 @@ def read_json(path):
 
 def read_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
-    if (cfg.get('schema') != 'shared_driver_modes_v1' or cfg.get('source_run') != SOURCE_RUN
-            or cfg.get('split_run') != SPLIT_RUN or cfg.get('source_config') != SOURCE_CONFIG
+    refed=cfg.get('schema')=='shared_driver_modes_refed_v2'
+    source=SOURCE_RUN.replace('20260928_physiology_semantics_v1','20261013_refed_physiology_semantics_v3') if refed else SOURCE_RUN
+    split=SPLIT_RUN.replace('20261001_v1','20261013_refed_v2') if refed else SPLIT_RUN
+    source_config=SOURCE_CONFIG.replace('_v1.yaml','_refed_v2.yaml') if refed else SOURCE_CONFIG
+    if (cfg.get('schema') not in ('shared_driver_modes_v1','shared_driver_modes_refed_v2') or cfg.get('source_run') != source
+            or cfg.get('split_run') != split or cfg.get('source_config') != source_config
             or cfg.get('artifact_root') != ARTIFACT_ROOT or cfg.get('protected_data') != 'forbidden'
             or cfg.get('data_boundary') != 'exact_public_parent_prepared_regions_and_frozen_training_selection_identities'):
         raise ValueError('wrong versioned source or public data boundary')
@@ -80,9 +84,9 @@ def read_config(path):
             or t['feature_order'] != 'channel_major_band_minor' or t['reference_steps'] != 20
             or t['Hb_components'] != ['HbO','HbR'] or t['temporal_modes'] != 24
             or tuple(m['arms']) != ARMS or tuple(cfg['measured']['modes']) != MODES
-            or tuple(cfg['data']['datasets']) != DATASETS
+            or tuple(cfg['data']['datasets']) != (('refed',) if refed else DATASETS)
             or cfg['data']['region_names'] != ['prefrontal','motor','posterior']
-            or cfg['data']['panel_windows'] != 72 or cfg['data']['panel_subjects'] != 18
+            or cfg['data']['panel_windows'] != (24 if refed else 72) or cfg['data']['panel_subjects'] != (6 if refed else 18)
             or m['gamma_candidates'] != [-1.,-.5,0.,.5,1.] or m['common_Hb_modes'] != 4
             or m['common_Hb_rho'] != .35 or m['parameter_policy'] != 'H0_fixed_parent_Balloon'
             or m['vascular_projection'] != 'equal_norm_a_plus_gamma_b_over_sqrt_one_plus_gamma_squared'
@@ -152,7 +156,8 @@ def endpoint_mask(mode, mask, support=None):
 
 
 def validate_ref(ref, parent):
-    if ref['dataset'] not in DATASETS:
+    from src.data.ssm_prepared import public_prepared_datasets
+    if ref['dataset'] not in public_prepared_datasets(str(parent)):
         raise ValueError('unsupported or protected dataset before array read')
     if ref['dataset']=='visual_cognitive_motivation' and ref['subject']=='S06' and 'Part1' in ref['record']:
         raise ValueError('excluded Visual S06 Part1 before array read')
@@ -204,7 +209,7 @@ def parent_plan(cfg, project_root):
         raise ValueError('duplicate parent identity')
     panel = read_json(parent/'diagnostic_plan.json')['windows']
     old_panel = read_json(split_root/'measured_plan.json')['windows']
-    if (len(panel)!=72 or len({(r['dataset'],r['subject']) for r in panel})!=18
+    if (len(panel)!=cfg['data']['panel_windows'] or len({(r['dataset'],r['subject']) for r in panel})!=cfg['data']['panel_subjects']
             or [r['id'] for r in panel]!=[r['id'] for r in old_panel]
             or any(r['id'] not in lookup or lookup[r['id']]!=r for r in panel)):
         raise ValueError('frozen public panel identity mismatch')
@@ -255,7 +260,7 @@ def parent_plan(cfg, project_root):
         needed.update(item['training_ids']);needed.update(item['selection_ids'])
     retained_refs=[lookup[identity] for identity in sorted(needed)]
     return dict(schema='shared_driver_modes_public_plan_v1',parent=str(parent),split_root=str(split_root),
-        original_windows=len(panel),original_subjects=18,windows=expanded,calibration=list(calibration.values()),
+        original_windows=len(panel),original_subjects=cfg['data']['panel_subjects'],windows=expanded,calibration=list(calibration.values()),
         refs=retained_refs,regional_exclusions=exclusions,region_eligibility=region_eligibility,
         planned_region_slots=len(region_eligibility),expanded_windows=len(expanded),
         selection='unchanged_parent_QC_selected_panel_and_metadata_only_synchronous_regions',
@@ -789,9 +794,9 @@ def summarize(cfg,out):
                 null.extend(paired_rows(pairs,controls=[pairing],groups=['dataset','region','mode'],seed=cfg['seed']))
             pd.DataFrame(null).to_csv(out/'pairing_nulls.csv',index=False)
         recorded=sum(cell_path(out,s).exists() for s in specs)
-        result['measured']=dict(planned=len(specs),recorded=recorded,expanded_windows=plan['expanded_windows'],original_windows=72,
+        result['measured']=dict(planned=len(specs),recorded=recorded,expanded_windows=plan['expanded_windows'],original_windows=plan['original_windows'],
             planned_region_slots=plan['planned_region_slots'],region_eligibility=plan['region_eligibility'],
-            subjects=18,regions=sorted({s['ref']['region'] for s in specs}),
+            subjects=plan['original_subjects'],regions=sorted({s['ref']['region'] for s in specs}),
             converged=sum(bool(read_json(cell_path(out,s)).get('converged')) for s in specs if cell_path(out,s).exists()),
             regional_exclusions=plan['regional_exclusions'])
         calibration=[read_json(out/'calibration'/(s['key']+'.json')) for s in plan['calibration'] if (out/'calibration'/(s['key']+'.json')).exists()]

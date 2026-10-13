@@ -929,7 +929,7 @@ def _probe_contrasts(rows, prefixes):
     return contrasts
 
 
-def probe(output, arm, seed, options, identity, device, feature_root, contract):
+def probe(output, arm, seed, options, identity, device, feature_root, contract, *, encoder_run=None, encoder_identity=None):
     """Frozen public conditional probe, with all data boundaries fixed before fit.
 
     Primary context is identical raw local EEG, the two other regional full Hb
@@ -962,6 +962,8 @@ def probe(output, arm, seed, options, identity, device, feature_root, contract):
     if arm == "distribution_randomized_generator":
         methods.append("context_plus_O_plus_S_plus_uncertainty_secondary")
     record = dict(status="running", config_identity=identity, arm=arm, seed=seed,
+        encoder_run=str(encoder_run) if encoder_run is not None else str(output),
+        encoder_config_identity=encoder_identity or identity,
         feature_root=str(Path(feature_root).resolve()), prefixes=prefixes,
         score_support=[score_start, score_stop], methods=methods,
         planned_rows=len(batches["evaluation"]["eeg"]) * len(methods) * len(prefixes),
@@ -978,8 +980,8 @@ def probe(output, arm, seed, options, identity, device, feature_root, contract):
     atomic_json(record_path, record)
     all_rows, selections = [], []
     try:
-        model, checkpoint = selected_model(output, arm, seed, options, identity, device)
-        capacity_model, capacity_checkpoint = selected_model(output, ARMS[0], seed, options, identity, device)
+        model, checkpoint = selected_model(encoder_run or output, arm, seed, options, encoder_identity or identity, device)
+        capacity_model, capacity_checkpoint = selected_model(encoder_run or output, ARMS[0], seed, options, encoder_identity or identity, device)
         for prefix in prefixes:
             context, features, donor_records = {}, {method: {} for method in methods}, {}
             for split, data in batches.items():
@@ -1073,7 +1075,7 @@ def probe(output, arm, seed, options, identity, device, feature_root, contract):
         raise
 
 
-def scenario_variant_tables(output, options):
+def scenario_variant_tables(output, options, *, source=None):
     """Summarize retained evaluation rows without mixing paired variants.
 
     Optimization seeds reuse the same evaluation bases. Their mean/range is a
@@ -1083,7 +1085,7 @@ def scenario_variant_tables(output, options):
     per_seed, grouped_seeds = [], {}
     for arm in ARMS:
         for seed in options["seeds"]:
-            path = output / "evaluation" / arm / f"seed_{seed}" / "records.csv"
+            path = (source or output) / "evaluation" / arm / f"seed_{seed}" / "records.csv"
             if not path.exists():
                 continue
             with path.open(newline="") as handle:
@@ -1131,16 +1133,18 @@ def scenario_variant_tables(output, options):
         independence="base_IDs_shared_across_seeds_and_counterfactual_variants")
 
 
-def summarize(output, options, identity, *, require_public_probes=True):
+def summarize(output, options, identity, *, require_public_probes=True, encoder_run=None, encoder_identity=None):
     fits, evaluations, public_probes, missing = [], [], [], []
     stage_collections = (("fits", fits), ("evaluation", evaluations), ("public_probes", public_probes))
     for arm in ARMS:
         for seed in options["seeds"]:
             for stage, collection in stage_collections:
-                path = output / stage / arm / f"seed_{seed}" / "record.json"
+                parent=(encoder_run or output) if stage in ('fits','evaluation') else output
+                expected_identity=(encoder_identity or identity) if stage in ('fits','evaluation') else identity
+                path = parent / stage / arm / f"seed_{seed}" / "record.json"
                 if path.exists():
                     record = json.loads(path.read_text())
-                    if record["config_identity"] != identity:
+                    if record["config_identity"] != expected_identity:
                         raise ValueError("summary found another configuration identity")
                     collection.append(record)
                 elif stage != "public_probes" or require_public_probes:
@@ -1162,6 +1166,8 @@ def summarize(output, options, identity, *, require_public_probes=True):
             missing=expected - len(records) if required else 0,
             required_for_this_summary=required)
     atomic_json(output / "summary.json", dict(schema="semantic_response_tokenizer_suite_v1",
+        retained_encoder_run=str(encoder_run) if encoder_run is not None else None,
+        retained_encoder_config_identity=encoder_identity,
         config_identity=identity, expected_fits=expected, fits=fits,
         evaluations=evaluations, public_probes=public_probes, missing=missing,
         scope="synthetic_and_registered_public_probes" if require_public_probes else "synthetic_training_and_recovery_only",
@@ -1175,7 +1181,7 @@ def summarize(output, options, identity, *, require_public_probes=True):
         synthetic_completed_records=sum(item.get("completed_records", 0) for item in evaluations),
         synthetic_nonfinite_records=sum(item.get("completed_records", 0) - item.get("finite_records", 0) for item in evaluations),
         stage_statuses=stage_statuses,
-        scenario_variant_metrics=scenario_variant_tables(output, options),
+        scenario_variant_metrics=scenario_variant_tables(output, options, source=encoder_run),
         status="complete" if synthetic_complete and (public_complete or not require_public_probes) and not missing else "incomplete",
         physiological_semantic_qualification="not_established_by_synthetic_fit_or_reconstruction"))
 
@@ -1191,6 +1197,8 @@ def main(argv=None):
     parser.add_argument("--seed", type=int)
     parser.add_argument("--prepared", type=Path, help="explicit external EEG/Hb NPZ for frozen export only")
     parser.add_argument("--feature-root", type=Path, help="owning public feature export directory for frozen probe")
+    parser.add_argument('--encoder-run',type=Path,help='retained synthetic encoder run for a separately versioned public probe')
+    parser.add_argument('--encoder-config',type=Path,help='original unchanged encoder configuration, paired with --encoder-run')
     parser.add_argument("--workers", type=int, default=1, help="bounded prepare generation workers; size from measured throughput")
     parser.add_argument("--family", choices=("restricted", "randomized"), help="prepare one family")
     parser.add_argument("--partition", choices=("train", "selection", "evaluation"), help="prepare one partition")
@@ -1199,6 +1207,17 @@ def main(argv=None):
     if not args.project_root.is_dir():
         raise ValueError("project root must be an existing directory")
     contract, options, identity = load_contract(args.config)
+    encoder_identity=None
+    if (args.encoder_run is None)!=(args.encoder_config is None):
+        raise ValueError('retained encoder run and configuration must be supplied together')
+    if args.encoder_run is not None:
+        if args.stage not in ('probe','summarize') or contract.get('schema')!='semantic_response_discovery_refed_v2':
+            raise ValueError('retained encoder reuse is only the declared REFED frozen-probe extension')
+        expected=(args.project_root/contract['retained_run']/'tokenizer').resolve()
+        if args.encoder_run.resolve()!=expected:raise ValueError('encoder source differs from retained contract')
+        _,encoder_options,encoder_identity=load_contract(args.encoder_config)
+        if encoder_options!=options:raise ValueError('retained encoder architecture/training/generator options changed')
+        args.encoder_run=args.encoder_run.resolve()
     args.output.mkdir(parents=True, exist_ok=True)
     resolved = args.output / "resolved_tokenizer_config.json"
     if resolved.exists() and json.loads(resolved.read_text())["config_identity"] != identity:
@@ -1223,7 +1242,8 @@ def main(argv=None):
     if args.stage == "prepare":
         prepare(args.output, options, identity, args.workers, args.family, args.partition)
     elif args.stage == "summarize":
-        summarize(args.output, options, identity, require_public_probes="data_boundary" in contract)
+        summarize(args.output, options, identity, require_public_probes="data_boundary" in contract,
+            encoder_run=args.encoder_run,encoder_identity=encoder_identity)
     else:
         for arm in ([args.arm] if args.arm else ARMS):
             for seed in ([args.seed] if args.seed is not None else options["seeds"]):
@@ -1234,7 +1254,8 @@ def main(argv=None):
                 elif args.stage == "export":
                     export(args.output, arm, seed, options, identity, device, args.prepared)
                 elif args.stage == "probe":
-                    probe(args.output, arm, seed, options, identity, device, args.feature_root, contract)
+                    probe(args.output, arm, seed, options, identity, device, args.feature_root, contract,
+                        encoder_run=args.encoder_run,encoder_identity=encoder_identity)
 
 
 if __name__ == "__main__":

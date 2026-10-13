@@ -26,6 +26,7 @@ import traceback
 for _name in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMBA_NUM_THREADS'):
     os.environ[_name] = '1'
 ROOT = Path(__file__).resolve().parents[2]
+CODE_ROOT = ROOT
 sys.path.insert(0, str(ROOT))
 
 import numpy as np
@@ -79,8 +80,10 @@ def read_json(path):
 
 def read_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
-    if (cfg['schema'] != 'eeg_proxy_rate_v1' or cfg['source_run'] != SOURCE
-            or cfg['protected_data'] != 'forbidden' or tuple(cfg['datasets']) != DATASETS
+    refed=cfg.get('schema')=='eeg_proxy_rate_refed_v2'
+    source=SOURCE.replace('20260928_physiology_semantics_v1','20261013_refed_physiology_semantics_v3') if refed else SOURCE
+    if (cfg['schema'] not in ('eeg_proxy_rate_v1','eeg_proxy_rate_refed_v2') or cfg['source_run'] != source
+            or cfg['protected_data'] != 'forbidden' or tuple(cfg['datasets']) != (('refed',) if refed else DATASETS)
             or cfg['cache_root'] != 'data/cache/physiology_semantic_clean_v5'):
         raise ValueError('unregistered source/data boundary')
     if cfg['arms'] != ARMS or cfg['modes'] != ['full', 'Hb_hidden']:
@@ -113,15 +116,16 @@ def validate_panel(cfg, project_root=ROOT):
     panel = read_json(parent/'diagnostic_plan.json')['windows']
     refs = {r['id']: r for r in read_json(parent/'cohort.json')['refs']}
     inventory = {r['key']: r for r in read_json(parent/'inventory.json')['records']}
-    if len(panel) != 72 or len({r['id'] for r in panel}) != 72:
-        raise ValueError('expected exactly 72 unique parent windows')
+    expected=24*len(cfg['datasets'])
+    if len(panel) != expected or len({r['id'] for r in panel}) != expected:
+        raise ValueError('expected exactly 24 unique parent windows per dataset')
     coordinates = {}
-    for ds in DATASETS:
+    for ds in cfg['datasets']:
         group = [r for r in panel if r['dataset'] == ds]
         if len(group) != 24 or len({r['subject'] for r in group}) != 6:
             raise ValueError('expected 24 windows / six subjects per dataset')
     for ref in panel:
-        if ref['dataset'] not in DATASETS or ref != refs.get(ref['id']):
+        if ref['dataset'] not in cfg['datasets'] or ref != refs.get(ref['id']):
             raise ValueError('identity not in exact public cohort')
         if ref['dataset'] == DATASETS[2] and ref['subject'] == 'S06' and 'part1' in ref['record'].lower():
             raise ValueError('excluded Visual support')
@@ -442,12 +446,13 @@ def render_figures(cfg,out,frame,*,destination=None):
             ax = axes[i,j]
             for k,arm in enumerate(ARMS):
                 values=[]
-                for ds in DATASETS:
+                for ds in cfg['datasets']:
                     part=frame[(frame['mode']==mode)&(frame.arm==arm)&(frame.dataset==ds)&frame.converged]
                     values.append(np.sqrt(part.groupby('subject')['nmse_'+name].mean().mean()))
-                ax.bar(np.arange(3)+(k-1)*.24, values,width=.23,color=colors[arm],label=labels[arm],
+                ax.bar(np.arange(len(cfg['datasets']))+(k-1)*.24, values,width=.23,color=colors[arm],label=labels[arm],
                        hatch=('', '//', '..')[k])
-            ax.set_xticks(range(3),['Single','Simultaneous','Visual'])
+            ds_labels=dict(zip(DATASETS,['Single','Simultaneous','Visual']),refed='REFED')
+            ax.set_xticks(range(len(cfg['datasets'])),[ds_labels[d] for d in cfg['datasets']])
             ax.set_title(('Full fit' if mode=='full' else 'Hb withheld')+' / '+name+('*' if j==0 else ''))
             ax.set_ylabel('NRMSE (training SD)',fontsize=9)
     handles, legend_labels = axes[0,0].get_legend_handles_labels()
@@ -458,7 +463,7 @@ def render_figures(cfg,out,frame,*,destination=None):
     plt.close(fig)
     plan=read_json(out/'measured_plan.json')['windows']
     selected=[]
-    for ds in DATASETS:
+    for ds in cfg['datasets']:
         # Representative selection is frozen identity order, not post-fit quality.
         ref=next(r for r in plan if r['dataset']==ds)
         selected.append(ref['id'])
@@ -484,12 +489,15 @@ def render_figures(cfg,out,frame,*,destination=None):
 
 
 def main():
+    global ROOT
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',type=Path,default=DEFAULT)
     parser.add_argument('--run-dir',type=Path,required=True)
     parser.add_argument('--stage',choices=['check','synthetic','prepare','pilot','run','summarize'],required=True)
     parser.add_argument('--workers',type=int,default=6)
+    parser.add_argument('--project-root',type=Path,default=ROOT)
     args=parser.parse_args()
+    ROOT=args.project_root.resolve()
     cfg=read_config(args.config)
     out=args.run_dir.resolve()
     allowed=(ROOT/cfg['output_root']).resolve()
@@ -517,7 +525,7 @@ def main():
             else:
                 if not read_json(out/'synthetic_summary.json')['software_pass']:
                     raise ValueError('synthetic software check required before measured access')
-                panel,inventory,coordinates=validate_panel(cfg)
+                panel,inventory,coordinates=validate_panel(cfg, ROOT)
                 if args.stage=='prepare':
                     write_json(out/'measured_plan.json',dict(windows=panel,coordinate_keys=sorted(coordinates),
                         selection='exact_parent_panel_unchanged'))
@@ -531,9 +539,9 @@ def main():
                         max_eeg_replay_error=max(v['eeg_replay_max_abs'] for r in rows for v in r['rows']),
                         peak_worker_rss_bytes=max(r['peak_rss_bytes'] for r in rows)))
                 elif args.stage in ('pilot','run'):
-                    if read_json(out/'preparation_summary.json')['windows']!=72:
+                    if read_json(out/'preparation_summary.json')['windows']!=24*len(cfg['datasets']):
                         raise ValueError('full paired preparation required')
-                    selected=[next(r for r in panel if r['dataset']==ds) for ds in DATASETS] if args.stage=='pilot' else panel
+                    selected=[next(r for r in panel if r['dataset']==ds) for ds in cfg['datasets']] if args.stage=='pilot' else panel
                     # Pilot identities are part of the declared panel; full stage reuses them verbatim.
                     payloads=[(cfg,str(out),ref,arm,mode,'measured') for ref in selected for arm in ARMS for mode in cfg['modes']]
                     started=time.monotonic()

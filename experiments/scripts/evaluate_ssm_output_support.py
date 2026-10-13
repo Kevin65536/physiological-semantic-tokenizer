@@ -23,6 +23,7 @@ import traceback
 for _name in ('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS'):
     os.environ[_name] = '1'
 ROOT = Path(__file__).resolve().parents[2]
+CODE_ROOT = ROOT
 sys.path.insert(0, str(ROOT))
 import numpy as np
 import pandas as pd
@@ -65,14 +66,15 @@ def read(path):
 
 def load_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
-    if (cfg['schema'] != 'ssm_output_support_v1' or cfg['experiment_id'] != 'SSM-OUTPUT-SUPPORT-v1'
+    refed=cfg.get('schema')=='ssm_output_support_refed_v2'
+    if (cfg['schema'] not in ('ssm_output_support_v1','ssm_output_support_refed_v2') or cfg['experiment_id'] != ('SSM-OUTPUT-SUPPORT-REFED-v2' if refed else 'SSM-OUTPUT-SUPPORT-v1')
             or cfg['data']['protected_data'] != 'forbidden' or cfg['data']['labels_as_inputs']
             or cfg['tensor']['steps'] != 360 or cfg['tensor']['dt_s'] != .25
             or cfg['tensor']['score_steps'] != [120, 240]
             or cfg['comparison']['arms'] != ['free', 'chain_matched', 'chain_first']
             or cfg['comparison']['masks'] != ['full', 'middle_Hb', 'middle_HbR']
             or cfg['resources']['numerical_threads'] != 1
-            or cfg['data']['datasets'] != ['eeg_fnirs_single_trial', 'simultaneous_eeg_nirs', 'visual_cognitive_motivation']):
+            or cfg['data']['datasets'] != (['refed'] if refed else ['eeg_fnirs_single_trial', 'simultaneous_eeg_nirs', 'visual_cognitive_motivation'])):
         raise ValueError('invalid output-support scope, tensor, masks or data boundary')
     if len(set(cfg['synthetic']['streams'].values())) != 3:
         raise ValueError('training/pilot/evaluation generator streams must be distinct')
@@ -1009,28 +1011,31 @@ def summarize(cfg, out, pp):
 def snapshot(cfg, out, stage):
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     folder = out/'source_snapshots'/(stage+'_'+stamp)
-    paths = [Path(__file__).relative_to(ROOT), Path('src/inference/ssm_output_audit.py'),
+    paths = [Path(__file__).relative_to(CODE_ROOT), Path('src/inference/ssm_output_audit.py'),
         Path('src/inference/shared_driver_rk4.py'), Path('src/inference/observation_baselines.py'),
         Path('src/inference/shared_driver_reconstruction.py'),
         Path('src/data/ssm_prepared.py'), Path('src/data/unified_physiology.py'),
         Path('tests/test_ssm_output_support.py')]
     folder.mkdir(parents=True)
     for path in paths:
-        dest = folder/path; dest.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(ROOT/path, dest)
+        dest = folder/path; dest.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(CODE_ROOT/path, dest)
     write(folder/'identity.json', dict(source_sha=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         dirty_status=subprocess.check_output(['git', 'status', '--short'], cwd=ROOT, text=True),
         snapshots=[str(p) for p in paths], created_at=datetime.now(timezone.utc).isoformat()))
 
 
 def main():
+    global ROOT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=DEFAULT)
     parser.add_argument('--run-dir', type=Path, required=True)
     parser.add_argument('--stage', choices=['plan', 'pilot', 'prepare', 'calibrate', 'synthetic', 'measured', 'profiles', 'power', 'power_calibration_v2', 'summary'], required=True)
     parser.add_argument('--calibration-contract', type=Path, default=ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_output_power_calibration_v2.yaml')
     parser.add_argument('--workers', type=int, default=8)
+    parser.add_argument('--project-root',type=Path,default=ROOT)
     parser.add_argument('--limit', type=int, default=0, help='pilot/prepare throughput benchmark prefix; not a final experiment')
     args = parser.parse_args(); cfg = load_config(args.config)
+    ROOT=args.project_root.resolve()
     out = args.run_dir.resolve(); root = (ROOT/cfg['artifact_root']).resolve()
     if not out.is_relative_to(root) or out == root:
         raise ValueError('versioned owning artifact root required')

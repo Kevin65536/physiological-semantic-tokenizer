@@ -20,6 +20,7 @@ import traceback
 for name in ('OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','MKL_NUM_THREADS','NUMEXPR_NUM_THREADS'):
     os.environ[name]='1'
 ROOT=Path(__file__).resolve().parents[2]
+CODE_ROOT=ROOT
 sys.path.insert(0,str(ROOT))
 import numpy as np
 import pandas as pd
@@ -60,11 +61,15 @@ def active_models(out):
 
 def config(path):
     cfg=yaml.safe_load(Path(path).read_text())
-    if (cfg['schema']!='shared_driver_parameter_stability_v1' or cfg['data']['protected_data']!='forbidden'
+    if (cfg['schema'] not in ('shared_driver_parameter_stability_v1','shared_driver_parameter_stability_refed_v2') or cfg['data']['protected_data']!='forbidden'
         or cfg['tensor']!=dict(dt_s=.25,block_steps=120,blocks=3,duration_s=90,state_order=['r','s','f','v','p','q'],
                               components=['EEG_logpower_PCA','relative_HbO','relative_HbR'])
         or cfg['data']['labels_as_model_inputs'] or cfg['resources']['numerical_threads']!=1):
         raise ValueError('invalid stability scope/tensor/data contract')
+    if cfg['schema']=='shared_driver_parameter_stability_refed_v2' and (
+            cfg['data']['datasets']!=['refed'] or
+            cfg['data'].get('pairing')!='different_whole_videos_same_emotion_same_roi_channels_first_90s'):
+        raise ValueError('REFED requires whole-video same-emotion repeat pairing')
     for name,bounds in zip(PARAMETERS,BOUNDS):
         if cfg['parameters'][name]['bounds']!=bounds.tolist():raise ValueError('original parameter bounds must stay fixed')
     return cfg
@@ -78,6 +83,18 @@ def pair_candidates(spec, events, anchor, site, seconds=90):
     """Metadata-only fixed-duration candidates. Labels are pairing metadata only."""
     from src.data.event_alignment import window_within_alignment_support
     result=[];de=spec['array_shapes']['eeg'][0]/200.;dh=spec['array_shapes']['fnirs'][0]/10.
+    if spec['dataset']=='refed':
+        if not events or min(de,dh)<seconds:return []
+        event=events[0]
+        conditions={w['condition'] for w in spec.get('windows',[])}
+        if len(conditions)!=1 or 'unknown' in conditions:return []
+        condition=next(iter(conditions));signature=((condition,1),)
+        return [dict(key=spec['key'],join_key=spec['join_key'],record=spec['record'],
+            dataset='refed',subject=spec['subject'],site=site,region=anchor['region'],
+            task='emotion_video',event_id=event['event_index'],eeg_start_s=0.,hb_start_s=0.,duration_s=seconds,
+            condition_counts=dict(signature),anchor=anchor,signature=signature,
+            alignment_support=event.get('metadata',{}).get('alignment_support_ms'),native_session=None,
+            source_files=spec['source_files'],repeat_interpretation='different_video_same_emotion_not_same_stimulus_or_cross_day_retest')]
     ordered=sorted([e for e in events if e.get('eeg_time_ms') is not None and e.get('fnirs_time_ms') is not None],key=lambda e:e['eeg_time_ms'])
     for e in ordered:
         es=e['eeg_time_ms']/1000.-5.;hs=e['fnirs_time_ms']/1000.-5.
@@ -467,6 +484,29 @@ def synthetic_summary(cfg,out):
     write(out/'synthetic_summary.json',summary);return summary
 
 
+def decide_dimension(cfg,out,pp):
+    """Admit P3 from retained synthetic recovery and development P2 only."""
+    path=out/'dimension_decision.json'
+    if path.exists():return read(path)
+    synth=synthetic_summary(cfg,out)
+    p2=[r for r in synth if r['model']=='P2' and r['variant']=='C0a' and r['level']>0]
+    recovery=bool(p2) and all(r['convergence']>=.95 and r['median_relative_error']<=.1 and r['p90_relative_error']<=.25
+        and r['log_recovery_slope'] is not None and .8<=r['log_recovery_slope']<=1.2 for r in p2)
+    ratios=[]
+    for pair in pp['pairs']:
+        if pair['partition']!='development':continue
+        record=read(out/'development'/(pair['id']+'__P2__N0.json'))
+        for fit in record.get('fits',[]):
+            eig=np.asarray(fit.get('information',{}).get('data_only',{}).get('eigenvalues',[]),float)
+            if len(eig)==2:ratios.append(float(eig[0]/max(eig[-1],1e-20)))
+    ratio=float(np.median(ratios)) if ratios else None
+    value=dict(run_P3=bool(recovery and ratio is not None and ratio>1e-4),P2_synthetic_recovery_pass=recovery,
+        P2_development_information_eigen_ratio_median=ratio,evaluated_records=len(ratios),evaluation_subjects_read=False,
+        criterion='P2 synthetic recovery including planned failure denominator; median effective information eigenratio > 1e-4',
+        scope='admit P3 diagnostic before P3 development/calibration; no parameter qualification')
+    write(path,value);return value
+
+
 def select_methods(cfg,out,pp):
     cal=read(out/'development_calibration.json');models=active_models(out);selection={};details=[]
     dev=[p for p in pp['pairs'] if p['partition']=='development' and (out/'prepared'/(p['id']+'.npz')).exists()]
@@ -520,20 +560,11 @@ def select_methods(cfg,out,pp):
         retained=sorted([c for c in candidates if c['retain']],key=lambda c:(-c['effective_gain'],-c['repeat_gain'],c['variant']))[:2]
         selection[model]=dict(singles=[r['variant'] for r in retained],candidates=candidates,
             combine=len(retained)==2,sharing_strengths={key:strengths[(key,model)] for key in cal})
-    synth=synthetic_summary(cfg,out)
-    p2=[r for r in synth if r['model']=='P2' and r['variant']=='C0a' and r['level']>0]
-    recovery=bool(p2) and all(r['convergence']>=.95 and r['median_relative_error']<=.1 and r['p90_relative_error']<=.25
-        and r['log_recovery_slope'] is not None and .8<=r['log_recovery_slope']<=1.2 for r in p2)
-    ratios=[]
-    for p in dev:
-        d=read(out/'development'/('__'.join((p['id'],'P2','N0'))+'.json'))
-        for f in d.get('fits',[]):
-            eig=np.asarray(f.get('information',{}).get('data_only',{}).get('eigenvalues',[]),float)
-            if len(eig)==2:ratios.append(eig[0]/max(eig[-1],1e-20))
-    p3=bool(recovery and ratios and np.median(ratios)>1e-4)
+    dimension=decide_dimension(cfg,out,pp)
     value=dict(schema='parameter_stability_frozen_selection_v1',status='frozen_before_evaluation',
         models=selection,sharing_development_leave_record_scores=details,
-        P3_trigger=dict(run=p3,synthetic_P2_pass=recovery,median_effective_information_ratio=float(np.median(ratios)) if ratios else None),
+        P3_trigger=dict(run=dimension['run_P3'],synthetic_P2_pass=dimension['P2_synthetic_recovery_pass'],
+            median_effective_information_ratio=dimension['P2_development_information_eigen_ratio_median']),
         development_subjects=pp['development_subjects'],evaluation_results_read=0,
         selection_margins=dict(repeat_gain_min=.01,per_pair_raw_and_transfer_pass_fraction_min=.8,max_singles=2),
         selection_is_not_physiological_qualification=True)
@@ -973,7 +1004,8 @@ def summarize(cfg,out,pp):
     # State the required numerical/repeat gates separately from physiological
     # identification; passing the former is not a physiological qualification.
     result['evaluation_assessment']=[]
-    dataset_labels={'eeg_fnirs_single_trial':'Single-Trial','simultaneous_eeg_nirs':'Simultaneous','visual_cognitive_motivation':'Visual'}
+    dataset_labels={'eeg_fnirs_single_trial':'Single-Trial','simultaneous_eeg_nirs':'Simultaneous',
+                    'visual_cognitive_motivation':'Visual','refed':'REFED'}
     for dataset in cfg['data']['datasets']:
         kind='within_record_disjoint_blocks' if dataset=='simultaneous_eeg_nirs' else 'independent_native_record'
         for model in active_models(out):
@@ -998,10 +1030,13 @@ def summarize(cfg,out,pp):
         result['headline_conclusion']=(f'{len(assessments)}个数据集×参数层次中，{passes}个观察最佳结果同时满足数值通过率≥95%和重复差异中位≤20%。'
             '实测个体生理准确性仍未建立；共享的稳定收益须与真实差异恢复分开判断。')
         dataset_findings=[]
-        for dataset,label in dataset_labels.items():
+        for dataset in cfg['data']['datasets']:
+            label=dataset_labels[dataset]
             own=[a for a in assessments if a['dataset']==dataset]
+            if not own:continue
             chosen=min(own,key=lambda a:(-a['effective_pairs']/a['planned_pairs'],a['best_repeat_median'],a['model']))
-            caveat='同记录辅助证据' if dataset=='simultaneous_eeg_nirs' else '独立记录评价'
+            caveat=('同情绪不同视频条件稳定性' if dataset=='refed' else
+                    '同记录辅助证据' if dataset=='simultaneous_eeg_nirs' else '独立记录评价')
             dataset_findings.append((label+'（'+caveat+'）',
                 f"观察排名最高为{chosen['model']}／{chosen['descriptive_best_variant']}：重复差异中位{chosen['best_repeat_median']:.1%}，"
                 f"5%近界配对{chosen['best_near_05_pair_rate']:.1%}，有效配对{chosen['effective_pairs']}/{chosen['planned_pairs']}。不能据此认定个体生理真值已恢复。"))
@@ -1121,6 +1156,7 @@ def run_stage(cfg,out,stage,workers,pilot=0):
         if pilot:jobs=jobs[:pilot]
         return run_tasks(cfg,out,stage,synthetic_worker,jobs,[f'{m}__l{l}__s{s:02d}' for _,_,s,l,m in jobs],workers)
     pp=read(out/'pair_plan.json');pairs=pp['pairs']
+    if stage=='dimension':return decide_dimension(cfg,out,pp)
     if stage=='prepare':
         jobs=[(cfg,str(out),p) for p in pairs]
         if pilot:jobs=jobs[:pilot]
@@ -1157,11 +1193,13 @@ def run_stage(cfg,out,stage,workers,pilot=0):
 
 
 def main():
-    global RETRY_FAILED
+    global RETRY_FAILED,ROOT
     ap=argparse.ArgumentParser();ap.add_argument('--config',default=str(DEFAULT));ap.add_argument('--run-dir',required=True)
     ap.add_argument('--stage',required=True);ap.add_argument('--workers',type=int,default=1);ap.add_argument('--pilot',type=int,default=0)
     ap.add_argument('--retry-failed',action='store_true',help='retain failed attempts and retry unfinished software tasks')
+    ap.add_argument('--project-root',type=Path,default=ROOT)
     args=ap.parse_args();cfg=config(args.config);out=Path(args.run_dir).resolve()
+    ROOT=args.project_root.resolve()
     RETRY_FAILED=args.retry_failed
     if not out.is_relative_to((ROOT/cfg['output_namespace']).resolve()):raise ValueError('output outside owning namespace')
     if not 1<=args.workers<=cfg['resources']['max_workers']:raise ValueError('worker budget')
@@ -1177,7 +1215,7 @@ def main():
         'src/inference/shared_driver_reconstruction.py','src/inference/shared_driver_rk4.py',
         'src/inference/observation_baselines.py','src/data/ssm_prepared.py']
     for filename in files:
-        dest=snapshot/filename;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/filename,dest)
+        dest=snapshot/filename;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(CODE_ROOT/filename,dest)
     write(snapshot/'invocation.json',dict(argv=sys.argv,cwd=str(ROOT),python=sys.executable,workers=args.workers,
         source_sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         numerical_threads=1,utc=stamp))

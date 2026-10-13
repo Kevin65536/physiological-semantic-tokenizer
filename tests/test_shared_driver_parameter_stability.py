@@ -9,6 +9,25 @@ from src.inference.t3a_balloon_robust_ssm import BalloonParameters
 from src.data.ssm_prepared import fit_feature_coordinate
 
 
+def test_refed_repeats_use_complete_same_emotion_videos_without_pre_event_padding():
+    from experiments.scripts.evaluate_shared_driver_parameter_stability import pair_candidates,select_pair
+    anchor=dict(region='prefrontal',eeg_channels=list('abcdef'),hb_channel='CH49')
+    def spec(name,seconds,emotion='sad'):
+        return dict(dataset='refed',subject='1',key=name,join_key='refed|1|'+name,record=name,
+            array_shapes={'eeg':[int(seconds*200),64],'fnirs':[int(seconds*10),102]},
+            windows=[{'condition':emotion}],source_files=[])
+    events=[dict(event_index=0,eeg_time_ms=0.,fnirs_time_ms=0.,metadata={})]
+    a=pair_candidates(spec('video_2',137),events,anchor,'prefrontal')
+    b=pair_candidates(spec('video_13',111),events,anchor,'prefrontal')
+    assert a[0]['eeg_start_s']==a[0]['hb_start_s']==0. and a[0]['duration_s']==90
+    assert pair_candidates(spec('video_10',60),events,anchor,'prefrontal')==[]
+    pair,kind=select_pair(a+b,['emotion_video'])
+    assert kind=='independent_native_record' and len({r['record'] for r in pair})==2
+    wrong=pair_candidates(spec('video_15',170,'happy'),events,anchor,'prefrontal')
+    assert select_pair(a+wrong,['emotion_video'])[0] is None
+    assert select_pair(a+a,['emotion_video'])[0] is None
+
+
 def fixture():
     p=BalloonParameters()
     r=.025*np.sin(np.arange(28)*.3)

@@ -72,7 +72,7 @@ def read_json(path):
 
 def read_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
-    if cfg['schema'] not in ('observation_semantics_v1', 'observation_semantics_v2') or cfg['protected_data'] != 'forbidden':
+    if cfg['schema'] not in ('observation_semantics_v1', 'observation_semantics_v2','observation_semantics_refed_v2') or cfg['protected_data'] != 'forbidden':
         raise ValueError('only the public versioned observation-semantics contract is supported')
     if cfg['cache_root'] != 'data/cache/physiology_semantic_clean_v5':
         raise ValueError('native reads require the specified v5 public cache identity')
@@ -82,6 +82,8 @@ def read_config(path):
         raise ValueError('unsupported split')
     if cfg['mechanisms']['steps'] != 120 or cfg['mechanisms']['candidates_per_mechanism'] != 9:
         raise ValueError('unexpected finite mechanism panel')
+    if cfg['schema']=='observation_semantics_refed_v2' and cfg.get('enabled_sections')!=['A']:
+        raise ValueError('REFED extension is limited to coordinate stability; hardware comparison excluded')
     return cfg
 
 
@@ -104,6 +106,13 @@ def nonoverlap(refs, limit):
 def make_plan(cfg, project_root):
     """Metadata only. No historical embargo or other comparison data is consulted."""
     root = Path(project_root)
+    if cfg.get('enabled_sections')==['A']:
+        source=root/cfg['attribution_run']
+        if read_json(source/'summary.json')['execution']!='completed':raise ValueError('completed REFED attribution required')
+        windows=read_json(source/'measured_plan.json')['windows']
+        if len(windows)!=24 or any(r['dataset']!='refed' for r in windows):raise ValueError('unexpected REFED stability panel')
+        return dict(records=[],expected_records=0,expected_windows=len(windows),split='retained_attribution_panel',
+            use='retained_array_analysis_only_no_new_native_reads',metadata_source=str(source/'measured_plan.json'))
     refs = read_json(root/cfg['source_run']/'cohort.json')['refs']
     records = []
     for ds in cfg['measured']['datasets']:
@@ -876,6 +885,19 @@ def summarize(cfg, out, plan, project_root=ROOT):
                 metric=metric, windows=len(part), sufficient_windows=int(part.sufficient_candidates.sum()),
                 **block_interval(units)))
     pd.DataFrame(a_summary).to_csv(out/'stability_summary.csv', index=False)
+    if cfg.get('enabled_sections')==['A']:
+        expected=len(read_json(Path(project_root)/cfg['attribution_run']/'measured_plan.json')['windows'])
+        failures=sorted((out/'failures').glob('*.json'))
+        result=dict(experiment_id=cfg['experiment_id'],execution='completed' if len(a_files)==expected and not failures else 'incomplete',
+            updated_at=datetime.now(timezone.utc).isoformat(),scientific_verdict='exploratory_component_specific_evidence',
+            A=dict(planned_windows=expected,available_windows=len(a_files),metrics='stability_summary.csv'),
+            B=dict(status='not_run',reason='no_REFED_EOG_in_native_reader'),
+            C=dict(status='not_run',reason='explicitly_excluded_by_user'),
+            D=dict(status='retained_unchanged',source=cfg['retained_run']),
+            E=dict(status='not_run',reason='no_new_independent_measurements'),
+            native_reads=0,failures=[str(p.relative_to(out)) for p in failures],
+            claims='coordinate_stability_not_tissue_or_unique_source_identification')
+        write_json(out/'summary.json',result);return result
     mechanism_counts = summarize_mechanisms(cfg, out)
     prep = [read_json(out/'prepared'/f"{s['key']}.json") for s in plan['records']
             if (out/'prepared'/f"{s['key']}.json").exists()]
@@ -929,6 +951,25 @@ def verify_results(cfg, out, project_root):
         checks.append(dict(name=name, passed=bool(condition), **info))
     summary = read_json(out/'summary.json')
     check('completed_summary', summary['execution'] == 'completed')
+    if cfg.get('enabled_sections')==['A']:
+        frame=pd.read_csv(out/'stability_metrics.csv')
+        refs=read_json(Path(project_root)/cfg['attribution_run']/'measured_plan.json')['windows']
+        check('exact_REFED_panel',set(frame.id)=={r['id'] for r in refs} and set(frame.dataset)=={'refed'})
+        check('single_candidate_not_stable',not frame.loc[~frame.sufficient_candidates,'stable_coordinate'].any())
+        for ref in refs:
+            with np.load(out/'stability'/f'{ref["id"]}.npz',allow_pickle=False) as arrays:
+                for key in arrays.files:
+                    if not key.endswith('__candidates'):continue
+                    prefix=key.removesuffix('__candidates')
+                    stats=coordinate_stability(arrays[key],arrays['coordinate_scale'],threshold=cfg['stability']['stable_rms_range_training_SD'])
+                    for name in ('lower','upper','pointwise_stable'):
+                        check(ref['id']+'/'+prefix+'/'+name,np.allclose(stats[name],arrays[prefix+'__'+name],equal_nan=True))
+        check('hardware_not_executed',summary['C']['status']=='not_run' and not (out/'hardware_models.json').exists())
+        result=dict(status='passed' if all(c['passed'] for c in checks) else 'failed',checks=checks,
+            check_count=len(checks),failed_count=sum(not c['passed'] for c in checks),native_reads=0)
+        write_json(out/'verification.json',result)
+        if result['status']!='passed':raise ValueError('REFED stability retained-array verification failed')
+        return result
     plan = read_json(out/'measured_plan.json')
     prepared = Path(project_root)/cfg['previous_run'] if 'previous_run' in cfg else out
     for spec in plan['records']:
@@ -997,6 +1038,8 @@ def main():
     p.add_argument('--workers', type=int, default=16)
     args = p.parse_args()
     cfg = read_config(args.config)
+    if cfg.get('enabled_sections')==['A'] and args.stage not in ('check','plan','stability','summary','verify'):
+        raise ValueError('REFED scope is A only; no hardware, native event or synthetic campaign')
     if cfg['schema'] == 'observation_semantics_v2' and args.stage not in ('check', 'refinement', 'verify'):
         raise ValueError('v2 is only the specified C/D refinement, not a repeated measured campaign')
     out = args.run_dir.resolve()
