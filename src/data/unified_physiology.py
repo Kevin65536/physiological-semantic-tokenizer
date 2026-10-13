@@ -771,8 +771,20 @@ def _slice_window(values: np.ndarray, onset_ms: float, duration_s: float, sample
 class ChannelGeometryIndex:
     """Read the common channel-geometry sidecar and emit one row per channel."""
 
-    def __init__(self, cache_root: Path):
-        path = cache_root / "channel_geometry/channels.jsonl"
+    def __init__(
+        self,
+        cache_root: str | Path,
+        *,
+        geometry_root: str | Path | None = None,
+    ) -> None:
+        self.geometry_root = (
+            Path(cache_root) / "channel_geometry"
+            if geometry_root is None
+            else Path(geometry_root)
+        )
+        path = self.geometry_root / "channels.jsonl"
+        if geometry_root is not None and not path.is_file():
+            raise FileNotFoundError(f"Explicit channel geometry sidecar does not exist: {path}")
         self.rows = []
         if path.exists():
             with path.open("r", encoding="utf-8") as handle:
@@ -845,6 +857,7 @@ class ChannelGeometryIndex:
                 "measured_subject_coordinate": metadata.get("measured_subject_coordinate"),
                 "intended_use": metadata.get("intended_use"),
                 "source_file": row.get("source_file"),
+                "metadata": metadata,
             })
         return output
 
@@ -992,6 +1005,7 @@ class UnifiedPhysiologyWindowDataset:
         cache_root: str | Path = DEFAULT_CLEAN_CACHE_ROOT,
         *,
         dataset_ids: Sequence[str] = RAW_DATASET_IDS,
+        geometry_root: str | Path | None = None,
         window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
         window_offset_s: float = 0.0,
         eeg_signal_branch: str = SINGLE_TRIAL_EEG_ARTIFACT_SCHEMA,
@@ -1014,7 +1028,7 @@ class UnifiedPhysiologyWindowDataset:
         self.output_coordinate = output_coordinate
         self.project_root = Path(__file__).resolve().parents[2]
         self.index = CleanPhysiologyCacheIndex(self.cache_root)
-        self.geometry_index = ChannelGeometryIndex(self.cache_root)
+        self.geometry_index = ChannelGeometryIndex(self.cache_root, geometry_root=geometry_root)
         self.dataset_ids = requested
         self.window_duration_s = float(window_duration_s)
         self.window_offset_s = float(window_offset_s)
@@ -1695,6 +1709,7 @@ class REFEDContinuousSequenceDataset(UnifiedPhysiologyWindowDataset):
         self,
         cache_root: str | Path = DEFAULT_CLEAN_CACHE_ROOT,
         *,
+        geometry_root: str | Path | None = None,
         window_duration_s: float = DEFAULT_UNIFIED_WINDOW_DURATION_S,
         window_stride_s: float | None = None,
         target_sample_rate_hz: float = REFED_DEFAULT_TARGET_SAMPLE_RATE_HZ,
@@ -1723,6 +1738,7 @@ class REFEDContinuousSequenceDataset(UnifiedPhysiologyWindowDataset):
         super().__init__(
             cache_root,
             dataset_ids=("refed",),
+            geometry_root=geometry_root,
             window_duration_s=window_duration_s,
             window_offset_s=0.0,
             eeg_signal_branch=eeg_signal_branch,

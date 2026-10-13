@@ -356,6 +356,49 @@ cannot support exact distance or co-registration claims. Geometry missingness
 must remain visible; copying or mirroring a channel to fill a model input is
 not allowed in the primary shared benchmark.
 
+### REFED paper-layout registration — 2026-10-13
+
+The versioned [paper-layout asset](../src/data/assets/refed_paper_layout_v1.json)
+uses Figure 2 on page 5 of the [REFED paper](https://proceedings.neurips.cc/paper_files/paper/2025/file/2bf0ed7c35d9d84128e7f7c72ab76402-Paper-Datasets_and_Benchmarks_Track.pdf).
+EEG and optical marker centers are extracted from the **same left joint panel**;
+the right inset independently supplies numbered channel/source/detector links.
+The builder requires exact agreement with released `EEG_channels.csv` identities
+and order and all `fNIRS_coordinates.csv` channel/source/detector triples before
+emitting coordinates. AFz is a reference marker, not an extra observation channel.
+The extraction utility is
+[`extract_refed_paper_layout.py`](../experiments/scripts/extract_refed_paper_layout.py);
+it accepts explicit PDF, EEG metadata, fNIRS metadata, new asset and audit paths.
+The extraction and metadata audit are retained in
+[`20261013_refed_graphical_registration_v1`](../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20261013_refed_graphical_registration_v1/graphical_layout_extraction_v1.json).
+The [consumer verification](../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20261013_refed_graphical_registration_v1/consumer_verification.json)
+and [per-channel neighbor table](../experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20261013_refed_graphical_registration_v1/cross_modal_neighbors.csv)
+check local selection and bound sensitivity of sixth/seventh-neighbor membership.
+The chosen layout perturbations are engineering sensitivity checks, not placement
+confidence intervals; failure of the sufficient stability bound means potential
+boundary ambiguity, not demonstrated neighbor changes.
+
+Both modalities share one head-outline center and one isotropic drawing radius.
+Positive x points to figure-right and positive y to the anterior/top of the figure.
+Each Hb site is the **drawing midpoint** of its source and detector. The frame is
+`refed_paper_layout_2d_v1`, units are `normalized_figure_radius`, and the three-slot
+geometry interface embeds the plane with `z=0`, `spatial_dimension=2` and
+`z_meaning=planar_embedding_not_measured_depth`. This supports coarse EEG–Hb
+neighborhood selection, not individual 3D registration, millimetre distances,
+cortical localization or optical sensitivity centroids. Original Hb XYZ remains
+separate metadata with `unknown_native` units; no axis or unit conversion is inferred.
+The PDF supplies template positions, not placement uncertainty or biological truth.
+
+Use the existing builder with `--datasets refed --refed-geometry paper_layout_v1
+--output-dir <fresh_geometry_root>` and pass that directory as `geometry_root` to
+`ChannelGeometryIndex`, `UnifiedPhysiologyWindowDataset`,
+`REFEDContinuousSequenceDataset` or `UnifiedPhysiologyLocalViewDataset`.
+The override is a complete selected sidecar, not an automatic merge with the old
+geometry. An explicit missing sidecar or mixed old/new REFED frames is rejected.
+This path needs only the released metadata; it does not rebuild signal caches.
+Historical caches, the standard EEG-only montage, frozen experiment exclusions
+and measured results retain their original identities. New experiments must name
+this geometry version and independently define their task, region and split scope.
+
 ## Splits and protected data
 
 ### Current public-subject policy — 2026-09-17

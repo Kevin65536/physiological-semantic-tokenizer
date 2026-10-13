@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 import re
@@ -175,6 +176,106 @@ def records_from_refed_coordinates(path: Path, *, source_file: str | None = None
                     metadata={"raw_channel": channel},
                 )
             )
+    return rows
+
+
+def records_from_refed_paper_layout(
+    layout_path: Path,
+    eeg_channels_path: Path,
+    fnirs_coordinates_path: Path,
+    *,
+    source_files: Mapping[str, str] | None = None,
+) -> list[ChannelGeometryRecord]:
+    """Register both modalities in the paper's common, explicitly planar layout.
+
+    The released labels and every numbered source/detector link must agree
+    before any geometry is emitted.  Native Hb XYZ remains separate provenance;
+    it is never transformed into, or substituted for, drawing coordinates.
+    """
+    layout = json.loads(layout_path.read_text(encoding="utf-8"))
+    if layout.get("schema") != "refed_paper_layout_v1":
+        raise ValueError("unsupported REFED paper layout schema")
+    with eeg_channels_path.open(encoding="utf-8-sig", newline="") as handle:
+        native_eeg = list(csv.DictReader(handle))
+    with fnirs_coordinates_path.open(encoding="utf-8-sig", newline="") as handle:
+        native_hb = list(csv.DictReader(handle))
+    names = [str(row["ch_name"]).strip().upper() for row in native_eeg]
+    figure_names = [str(row["channel_name"]).strip().upper() for row in layout["eeg"]]
+    if (len(names) != 64 or len(set(names)) != 64 or names != figure_names
+            or [int(row["ch_id"]) for row in native_eeg] != list(range(1, 65))):
+        raise ValueError("REFED paper EEG labels/order disagree with released channel identities")
+    if layout["reference"]["channel_name"].upper() != "AFZ" or "AFZ" in names:
+        raise ValueError("REFED AFz must remain a reference, not an observed EEG channel")
+    expected_links = [(row["channel"], row["source"], row["detector"]) for row in layout["channels"]]
+    native_links = [(int(row["Channel"]), int(row["Source"]), int(row["Detector"])) for row in native_hb]
+    if (native_links != expected_links or [row[0] for row in native_links] != list(range(1, 52))
+            or len({row[1:] for row in native_links}) != 51):
+        raise ValueError("REFED paper channel/source/detector mapping disagrees with released coordinates")
+    optodes = {}
+    for role in ("sources", "detectors"):
+        entries = layout[role]
+        if sorted(row["index"] for row in entries) != list(range(1, 19)):
+            raise ValueError(f"REFED paper requires exactly 18 unique {role}")
+        optodes[role] = {row["index"]: row for row in entries}
+    normalization = layout["normalization"]
+    center = np.asarray(normalization["center_page_pt"], dtype=float)
+    radius = float(normalization["radius_page_pt"])
+    if (center.shape != (2,) or not np.isfinite(center).all()
+            or not np.isfinite(radius) or radius <= 0
+            or normalization["x_positive"] != "figure_right"
+            or normalization["y_positive"] != "figure_anterior"):
+        raise ValueError("invalid REFED common planar normalization")
+
+    def point(row: Mapping[str, Any]) -> np.ndarray:
+        xy = np.asarray(row["center_page_pt"], dtype=float)
+        if xy.shape != (2,) or not np.isfinite(xy).all():
+            raise ValueError("REFED paper contains an invalid marker center")
+        return xy
+
+    for item in layout["eeg"] + layout["sources"] + layout["detectors"] + [layout["reference"]]:
+        point(item)
+    files = dict(source_files or {
+        "layout": str(layout_path), "eeg_channels": str(eeg_channels_path),
+        "native_fnirs_coordinates": str(fnirs_coordinates_path),
+    })
+    common = {
+        "geometry_version": "refed_paper_layout_v1",
+        "source": layout["source"], "source_files": files,
+        "normalization": normalization,
+        "spatial_dimension": 2, "z_meaning": "planar_embedding_not_measured_depth",
+        "measured_subject_coordinate": False,
+        "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+        "prohibited_interpretation": "individual_3d_registration_mm_distance_cortical_location_or_optical_sensitivity",
+        "reference_electrode": layout["reference"],
+    }
+
+    def make_row(name: str, modality: str, xy: np.ndarray, metadata: dict[str, Any],
+                 source: int | None = None, detector: int | None = None) -> ChannelGeometryRecord:
+        normalized = (xy - center) / radius
+        return ChannelGeometryRecord(
+            dataset_id="refed", subject="all", record_id="global_refed_paper_layout_v1",
+            modality=modality, channel_name=name,
+            channel_role="template_eeg_electrode" if modality == "eeg" else "drawing_source_detector_midpoint",
+            coordinate_system="refed_paper_layout_2d_v1", coordinate_units="normalized_figure_radius",
+            x=float(normalized[0]), y=float(-normalized[1]), z=0.0,
+            source_index=source, detector_index=detector, source_file=files["layout"],
+            metadata={**common, "center_page_pt": xy.tolist(), **metadata},
+        )
+
+    rows = [make_row(name, "eeg", point(item), {
+        "coordinate_status": "paper_figure_digitized_2d", "figure_marker": item,
+    }) for name, item in zip(names, layout["eeg"])]
+    for native, (channel, source, detector) in zip(native_hb, native_links):
+        source_marker = optodes["sources"][source]
+        detector_marker = optodes["detectors"][detector]
+        rows.append(make_row(f"CH{channel}", "fnirs", (point(source_marker) + point(detector_marker)) / 2, {
+            "coordinate_status": "paper_figure_optode_midpoint_2d",
+            "source_marker": source_marker, "detector_marker": detector_marker,
+            "native_geometry": {
+                "coordinate_system": "dataset_head_coordinates", "coordinate_units": "unknown_native",
+                **{axis.lower(): float(native[axis]) for axis in ("X", "Y", "Z")},
+            },
+        }, source, detector))
     return rows
 
 

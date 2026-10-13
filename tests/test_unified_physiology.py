@@ -411,6 +411,91 @@ def test_visual_geometry_index_selects_the_probe_encoded_in_record_id(tmp_path):
     assert probe2[0]["x"] == -1.0
 
 
+def test_geometry_index_explicit_root_preserves_planar_template_and_hb_pair_identity(tmp_path):
+    cache = tmp_path / "cache"
+    default_geometry = cache / "channel_geometry"
+    default_geometry.mkdir(parents=True)
+    geometry_root = tmp_path / "refed_paper_layout_v1"
+    geometry_root.mkdir()
+    metadata = {
+        "coordinate_status": "paper_figure_optode_midpoint_2d",
+        "spatial_dimension": 2,
+        "z_meaning": "planar_embedding_not_measured_depth",
+        "measured_subject_coordinate": False,
+        "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+        "native_coordinates": [10.0, 20.0, 30.0],
+    }
+    row = {
+        "dataset_id": "refed",
+        "canonical_subject_id": "all",
+        "base_record_id": "global_fnirs_paper_layout_v1",
+        "modality": "fnirs",
+        "channel_name": "CH1",
+        "x": 0.25,
+        "y": 0.5,
+        "z": 0.0,
+        "coordinate_system": "refed_paper_layout_2d_v1",
+        "coordinate_units": "normalized_figure_radius",
+        "source_index": 1,
+        "detector_index": 2,
+        "source_file": "fixture_layout.csv",
+        "metadata": metadata,
+    }
+    (geometry_root / "channels.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    (default_geometry / "channels.jsonl").write_text(
+        json.dumps({**row, "x": -10.0}) + "\n", encoding="utf-8"
+    )
+    record = SimpleNamespace(dataset_id="refed", canonical_subject_id="1", base_record_id="video_1")
+    default = ChannelGeometryIndex(cache).for_channels(
+        record=record, modality="fnirs", channel_names=("CH1_HbO",)
+    )
+    selected = ChannelGeometryIndex(cache, geometry_root=geometry_root).for_channels(
+        record=record, modality="fnirs", channel_names=("CH1_HbO", "CH1_HbR")
+    )
+
+    assert default[0]["x"] == -10.0
+    assert [item["component"] for item in selected] == ["HbO", "HbR"]
+    for item in selected:
+        assert item["base_channel_name"] == "CH1"
+        assert (item["x"], item["y"], item["z"]) == (0.25, 0.5, 0.0)
+        assert item["coordinate_system"] == "refed_paper_layout_2d_v1"
+        assert item["coordinate_units"] == "normalized_figure_radius"
+        assert item["position_available"]
+        assert item["coordinate_status"] == metadata["coordinate_status"]
+        assert item["measured_subject_coordinate"] is False
+        assert item["intended_use"] == metadata["intended_use"]
+        assert (item["source_index"], item["detector_index"]) == (1, 2)
+        assert item["metadata"] == metadata
+    with pytest.raises(FileNotFoundError, match="Explicit channel geometry sidecar"):
+        ChannelGeometryIndex(cache, geometry_root=tmp_path / "missing")
+    assert ChannelGeometryIndex(tmp_path / "cache_without_geometry").rows == []
+
+
+@pytest.mark.parametrize("dataset_type", [UnifiedPhysiologyWindowDataset, REFEDContinuousSequenceDataset])
+def test_unified_dataset_reads_explicit_geometry_without_moving_signal_cache(tmp_path, dataset_type):
+    cache = tmp_path / "cache"
+    (cache / "event_index").mkdir(parents=True)
+    (cache / "cache_manifest.json").write_text(
+        json.dumps({"schema": CLEAN_CACHE_SCHEMA, "records": []}), encoding="utf-8"
+    )
+    (cache / "event_index/event_manifest.json").write_text(
+        json.dumps({"event_alignment_schema": EVENT_ALIGNMENT_SCHEMA}), encoding="utf-8"
+    )
+    geometry_root = tmp_path / "refed_paper_layout_v1"
+    geometry_root.mkdir()
+    row = {"dataset_id": "refed", "modality": "eeg", "channel_name": "Fz", "x": 0.0}
+    (geometry_root / "channels.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    dataset = dataset_type(cache, geometry_root=geometry_root)
+
+    assert dataset.cache_root == cache
+    assert dataset.geometry_index.geometry_root == geometry_root
+    assert dataset.geometry_index.rows == [row]
+    assert not (cache / "channel_geometry").exists()
+    with pytest.raises(FileNotFoundError, match="Explicit channel geometry sidecar"):
+        dataset_type(cache, geometry_root=tmp_path / "missing")
+
+
 def test_alignment_admission_filter_excludes_unstable_records(tmp_path):
     cache = tmp_path / "cache"
     (cache / "event_index").mkdir(parents=True)

@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -57,6 +58,7 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         cache_root: str = DEFAULT_CLEAN_CACHE_ROOT,
         *,
         dataset_ids: Sequence[str] = ("eeg_fnirs_single_trial",),
+        geometry_root: str | Path | None = None,
         subject_keys: Iterable[str] | None = None,
         task_namespaces: Iterable[str] | None = None,
         window_duration_s: float = 20.0,
@@ -72,9 +74,12 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         require_auxiliary_target: bool = False,
         base_dataset: UnifiedPhysiologyWindowDataset | None = None,
     ) -> None:
+        if base_dataset is not None and geometry_root is not None:
+            raise ValueError("Supply geometry_root when constructing base_dataset, not alongside it")
         self.base = base_dataset or UnifiedPhysiologyWindowDataset(
             cache_root=cache_root,
             dataset_ids=dataset_ids,
+            geometry_root=geometry_root,
             window_duration_s=window_duration_s,
             window_offset_s=window_offset_s,
             eeg_signal_branch=eeg_signal_branch,
@@ -171,6 +176,18 @@ class UnifiedPhysiologyLocalViewDataset(Dataset):
         anchor = _position([fnirs_rows[fnirs_index]])[0]
         eeg_units = {str(row.get("coordinate_units")) for row in eeg_rows}
         fnirs_units = str(fnirs_rows[fnirs_index].get("coordinate_units"))
+        eeg_systems = {str(row.get("coordinate_system")) for row in eeg_rows}
+        fnirs_systems = {str(row.get("coordinate_system")) for row in fnirs_rows}
+        paper_layout_system = "refed_paper_layout_2d_v1"
+        if paper_layout_system in eeg_systems or paper_layout_system in fnirs_systems:
+            if eeg_systems != {paper_layout_system} or fnirs_systems != {paper_layout_system}:
+                raise ValueError(
+                    "REFED paper layout local selection requires the same coordinate system "
+                    "for EEG and fNIRS"
+                )
+            fnirs_unit_set = {str(row.get("coordinate_units")) for row in fnirs_rows}
+            if eeg_units != {"normalized_figure_radius"} or fnirs_unit_set != {"normalized_figure_radius"}:
+                raise ValueError("REFED paper layout local selection requires normalized_figure_radius units")
         if not self.allow_cross_coordinate_systems and (
             len(eeg_units) != 1 or fnirs_units not in eeg_units
         ):

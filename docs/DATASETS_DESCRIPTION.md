@@ -173,8 +173,13 @@ reader 已去除 REFED 的硬编码 V 声明及 MATLAB EEG 缺失 `yUnit` 时的
 | fNIRS | 51 | 47.62 Hz | HbO, HbR, HbT, Abs 780/805/830nm | `.mat` (signal_type × channel × time) |
 
 EEG 原始文件未提供逐被试数字化坐标，但 `EEG_channels.csv` 与官方通道分布图
-给出固定 64-channel layout。当前 physiology-semantic sidecar 使用版本化标准
+给出固定 64-channel layout。旧 `standard_montage_v1` sidecar 使用版本化标准
 montage 推导 within-EEG adjacency；它不是个体实测位置或 EEG-fNIRS 共配准。
+
+2026-10-13 增加独立的 `refed_paper_layout_v1`：论文 Figure 2 与发布表的 EEG
+身份及光学连线对应后，直接从联合布局提取两模态位置，支持示意图平面中的粗粒度
+邻接配准。AFz 仅作为参考位置；原生 XYZ 不据此认定为毫米或转换为个体三维坐标。
+坐标定义、版本入口与审计证据由 [数据合同](DATA_CONTRACT.md#refed-paper-layout-registration--2026-10-13) 持有。
 
 #### fNIRS 原始保存语义与单位
 - README 明确说明原始 fNIRS 张量同时包含 `HbO`, `HbR`, `HbT`, `Abs 780 nm`, `Abs 805 nm`, `Abs 830 nm` 六类信号。

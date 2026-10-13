@@ -1,12 +1,15 @@
 import csv
+import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 from scipy.io import savemat
 
 from src.data.channel_geometry import (
     records_from_mnt,
     records_from_refed_coordinates,
+    records_from_refed_paper_layout,
     records_from_template_montage_csv,
     records_from_visual_fnirs_reference,
     records_from_visual_fnirs_graphical_projection,
@@ -55,6 +58,76 @@ def test_records_from_refed_coordinates_preserves_source_detector_indices(tmp_pa
     assert rows[0].source_index == 7
     assert rows[0].detector_index == 8
     assert rows[0].coordinate_system == "dataset_head_coordinates"
+
+
+def _paper_layout_inputs(tmp_path):
+    """Synthetic release metadata; tests never require the ignored dataset."""
+    asset = Path(__file__).resolve().parents[1] / "src/data/assets/refed_paper_layout_v1.json"
+    layout = json.loads(asset.read_text())
+    eeg_path, hb_path = tmp_path / "eeg.csv", tmp_path / "hb.csv"
+    with eeg_path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["ch_id", "ch_name"])
+        writer.writerows((i, row["channel_name"]) for i, row in enumerate(layout["eeg"], 1))
+    with hb_path.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["Channel", "Source", "Detector", "X", "Y", "Z"])
+        writer.writerows((r["channel"], r["source"], r["detector"], 1000, -2000, 3000)
+                         for r in layout["channels"])
+    return asset, eeg_path, hb_path
+
+
+def test_refed_paper_layout_is_common_plane_not_native_xyz_or_reference_channel(tmp_path):
+    rows = records_from_refed_paper_layout(*_paper_layout_inputs(tmp_path))
+    eeg = {row.channel_name: row for row in rows if row.modality == "eeg"}
+    hb = {row.channel_name: row for row in rows if row.modality == "fnirs"}
+    assert len(eeg) == 64 and len(hb) == 51 and "AFZ" not in eeg
+    assert eeg["FP1"].x < 0 < eeg["FP2"].x
+    assert eeg["FPZ"].y > eeg["CZ"].y > eeg["OZ"].y
+    assert hb["CH1"].x > 0 > hb["CH18"].x
+    assert hb["CH48"].y > hb["CH38"].y > 0
+    assert hb["CH1"].metadata["native_geometry"]["x"] == 1000
+    assert hb["CH1"].metadata["native_geometry"]["coordinate_units"] == "unknown_native"
+    assert all(row.z == 0 and abs(row.x) < 1.1 and abs(row.y) < 1.1 for row in rows)
+    assert {row.coordinate_system for row in rows} == {"refed_paper_layout_2d_v1"}
+    assert {row.coordinate_units for row in rows} == {"normalized_figure_radius"}
+    assert all(row.metadata["spatial_dimension"] == 2
+               and row.metadata["measured_subject_coordinate"] is False for row in rows)
+
+
+@pytest.mark.parametrize("mismatch", ["eeg_order", "reference", "link", "duplicate_optode", "nonfinite"])
+def test_refed_paper_layout_rejects_inconsistent_identity_or_coordinates(tmp_path, mismatch):
+    asset, eeg_path, hb_path = _paper_layout_inputs(tmp_path)
+    layout = json.loads(asset.read_text())
+    if mismatch == "eeg_order":
+        layout["eeg"][0], layout["eeg"][1] = layout["eeg"][1], layout["eeg"][0]
+    elif mismatch == "reference":
+        layout["reference"]["channel_name"] = "CZ"
+    elif mismatch == "link":
+        layout["channels"][0]["detector"] = 8
+    elif mismatch == "duplicate_optode":
+        layout["sources"][1]["index"] = layout["sources"][0]["index"]
+    else:
+        layout["detectors"][0]["center_page_pt"][0] = float("nan")
+    changed = tmp_path / "layout.json"
+    changed.write_text(json.dumps(layout))
+    with pytest.raises(ValueError):
+        records_from_refed_paper_layout(changed, eeg_path, hb_path)
+
+
+def test_refed_paper_layout_builder_uses_explicit_version_without_replacing_legacy(tmp_path, monkeypatch):
+    from experiments import build_clean_channel_geometry as builder
+    asset, eeg_path, hb_path = _paper_layout_inputs(tmp_path)
+    eeg_path.rename(tmp_path / "EEG_channels.csv")
+    hb_path.rename(tmp_path / "fNIRS_coordinates.csv")
+    monkeypatch.setitem(builder.DATA_ROOTS, "refed", tmp_path)
+    monkeypatch.setattr(builder, "REFED_PAPER_LAYOUT_ASSET", asset)
+    rows = list(builder.iter_records(["refed"], refed_geometry="paper_layout_v1"))
+    assert len(rows) == 115
+    assert all(row.metadata["geometry_version"] == "refed_paper_layout_v1" for row in rows)
+    monkeypatch.setattr(builder, "refed_eeg_template_records", lambda _: [])
+    legacy = list(builder.iter_records(["refed"]))
+    assert len(legacy) == 51 and legacy[0].coordinate_system == "dataset_head_coordinates"
 
 
 def test_refed_standard_montage_asset_matches_all_loader_channels_with_explicit_provenance():

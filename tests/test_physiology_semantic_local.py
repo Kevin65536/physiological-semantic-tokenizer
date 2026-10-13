@@ -158,6 +158,70 @@ def test_unified_local_view_rejects_unadmitted_coordinate_mix():
         dataset[0]
 
 
+def test_unified_local_view_forwards_explicit_geometry_root(tmp_path, monkeypatch):
+    import src.data.physiology_semantic_local as local
+
+    namespace, sample = _base_dataset()
+    geometry_root = tmp_path / "refed_paper_layout_v1"
+    received = {}
+
+    def build_base(**kwargs):
+        received.update(kwargs)
+        return _Base(namespace, sample)
+
+    monkeypatch.setattr(local, "UnifiedPhysiologyWindowDataset", build_base)
+    dataset = UnifiedPhysiologyLocalViewDataset(
+        geometry_root=geometry_root, reject_unknown_labels=False
+    )
+    assert received["geometry_root"] == geometry_root
+    assert dataset[0]["selected_eeg_channels"]
+    with pytest.raises(ValueError, match="when constructing base_dataset"):
+        UnifiedPhysiologyLocalViewDataset(
+            geometry_root=geometry_root, base_dataset=_Base(namespace, sample)
+        )
+
+
+@pytest.mark.parametrize("allow_cross_systems", [False, True])
+@pytest.mark.parametrize("mixed_modality", ["eeg", "fnirs"])
+@pytest.mark.parametrize("mixed_index", [0, 1])
+def test_refed_paper_layout_rejects_mixed_frames_even_with_cross_system_flag(
+    allow_cross_systems, mixed_modality, mixed_index
+):
+    namespace, sample = _base_dataset()
+    sample["dataset_id"] = "refed"
+    for rows in sample["channel_geometry"].values():
+        for row in rows:
+            row["coordinate_system"] = "refed_paper_layout_2d_v1"
+            row["coordinate_units"] = "normalized_figure_radius"
+    sample["channel_geometry"][mixed_modality][mixed_index]["coordinate_system"] = "legacy_template"
+    dataset = UnifiedPhysiologyLocalViewDataset(
+        base_dataset=_Base(namespace, sample),
+        reject_unknown_labels=False,
+        allow_cross_coordinate_systems=allow_cross_systems,
+    )
+
+    with pytest.raises(ValueError, match="same coordinate system"):
+        dataset._select_eeg(sample, 0)
+
+
+def test_refed_paper_layout_selects_six_eeg_neighbors_in_shared_plane():
+    namespace, sample = _base_dataset()
+    sample["dataset_id"] = "refed"
+    for rows in sample["channel_geometry"].values():
+        for row in rows:
+            row["coordinate_system"] = "refed_paper_layout_2d_v1"
+            row["coordinate_units"] = "normalized_figure_radius"
+    dataset = UnifiedPhysiologyLocalViewDataset(
+        base_dataset=_Base(namespace, sample), reject_unknown_labels=False,
+        allow_cross_coordinate_systems=True,
+    )
+
+    assert dataset._select_eeg(sample, 0).tolist() == [1, 2, 3, 4, 5, 6]
+    sample["channel_geometry"]["fnirs"][0]["coordinate_units"] = "mm"
+    with pytest.raises(ValueError, match="normalized_figure_radius units"):
+        dataset._select_eeg(sample, 0)
+
+
 def test_unified_local_view_never_selects_a_bad_fnirs_component():
     namespace, sample = _base_dataset()
     sample["bad_channel_mask"]["fnirs"][:2] = True

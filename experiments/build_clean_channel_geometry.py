@@ -23,6 +23,7 @@ from src.data.channel_geometry import (  # noqa: E402
     ChannelGeometryRecord,
     records_from_mnt,
     records_from_refed_coordinates,
+    records_from_refed_paper_layout,
     records_from_template_montage_csv,
     records_from_visual_ced,
     records_from_visual_fnirs_graphical_projection,
@@ -41,6 +42,7 @@ DATA_ROOTS = {
     "simultaneous_eeg_nirs": PROJECT_ROOT / "data/Simultaneous EEG&NIRS",
 }
 REFED_EEG_TEMPLATE_ASSET = PROJECT_ROOT / "src/data/assets/refed_standard_1005_montage_v1.csv"
+REFED_PAPER_LAYOUT_ASSET = PROJECT_ROOT / "src/data/assets/refed_paper_layout_v1.json"
 VISUAL_FNIRS_TOPOLOGY_ASSET = PROJECT_ROOT / "src/data/assets/visual_fnirs_4x4_topology_v1.csv"
 REFED_EEG_TEMPLATE_PROVENANCE = {
     "schema": "refed_standard_montage_geometry_v1",
@@ -93,6 +95,9 @@ def parse_args() -> argparse.Namespace:
     from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
     parser.add_argument("--output-dir", default=f"{DEFAULT_CLEAN_CACHE_ROOT}/channel_geometry")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--refed-geometry", choices=("standard_montage_v1", "paper_layout_v1"),
+                        default="standard_montage_v1",
+                        help="Versioned REFED geometry; paper layout supports coarse planar cross-modal neighborhoods")
     return parser.parse_args()
 
 
@@ -267,14 +272,25 @@ def iter_visual(root: Path) -> Iterable[ChannelGeometryRecord]:
         )
 
 
-def iter_records(datasets: list[str]) -> Iterable[ChannelGeometryRecord]:
+def iter_records(datasets: list[str], *, refed_geometry: str = "standard_montage_v1") -> Iterable[ChannelGeometryRecord]:
     if "eeg_fnirs_single_trial" in datasets:
         yield from iter_single_trial(DATA_ROOTS["eeg_fnirs_single_trial"])
     if "refed" in datasets:
-        yield from refed_eeg_template_records(DATA_ROOTS["refed"])
-        path = DATA_ROOTS["refed"] / "fNIRS_coordinates.csv"
-        if path.exists():
-            yield from records_from_refed_coordinates(path, source_file=_rel(path))
+        root = DATA_ROOTS["refed"]
+        if refed_geometry == "paper_layout_v1":
+            yield from records_from_refed_paper_layout(
+                REFED_PAPER_LAYOUT_ASSET, root / "EEG_channels.csv", root / "fNIRS_coordinates.csv",
+                source_files={"layout": _rel(REFED_PAPER_LAYOUT_ASSET),
+                              "eeg_channels": _rel(root / "EEG_channels.csv"),
+                              "native_fnirs_coordinates": _rel(root / "fNIRS_coordinates.csv")},
+            )
+        elif refed_geometry == "standard_montage_v1":
+            yield from refed_eeg_template_records(root)
+            path = root / "fNIRS_coordinates.csv"
+            if path.exists():
+                yield from records_from_refed_coordinates(path, source_file=_rel(path))
+        else:
+            raise ValueError(f"unknown REFED geometry: {refed_geometry}")
     if "visual_cognitive_motivation" in datasets:
         yield from iter_visual(DATA_ROOTS["visual_cognitive_motivation"])
     if "simultaneous_eeg_nirs" in datasets:
@@ -288,9 +304,11 @@ def main() -> None:
         output_dir = PROJECT_ROOT / output_dir
     if output_dir.exists() and not args.overwrite:
         raise FileExistsError(f"output directory exists; pass --overwrite: {output_dir}")
+    if output_dir.exists() and args.refed_geometry == "paper_layout_v1":
+        raise FileExistsError("REFED paper geometry requires a fresh versioned output directory")
+    rows = [record.to_dict() for record in iter_records(args.datasets, refed_geometry=args.refed_geometry)]
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = [record.to_dict() for record in iter_records(args.datasets)]
     channels_path = output_dir / "channels.jsonl"
     count = _write_jsonl(channels_path, rows)
     files = {"channels_jsonl": _rel(channels_path)}
@@ -367,7 +385,19 @@ def main() -> None:
                 DATA_ROOTS["refed"] / "Figures/Figure_1.png"
             ),
             "adjacency_method": "top_view_xy_delaunay_v1",
-        } if "refed" in args.datasets else None,
+        } if "refed" in args.datasets and args.refed_geometry == "standard_montage_v1" else None,
+        "refed_paper_layout_provenance": {
+            "schema": "refed_paper_layout_v1",
+            "asset": _rel(REFED_PAPER_LAYOUT_ASSET),
+            "asset_sha256": _sha256(REFED_PAPER_LAYOUT_ASSET),
+            "source": json.loads(REFED_PAPER_LAYOUT_ASSET.read_text())["source"],
+            "eeg_channels_sha256": _sha256(DATA_ROOTS["refed"] / "EEG_channels.csv"),
+            "fnirs_coordinates_sha256": _sha256(DATA_ROOTS["refed"] / "fNIRS_coordinates.csv"),
+            "identity_check": "all_64_EEG_labels_and_51_numbered_source_detector_links_match",
+            "coordinate_system": "refed_paper_layout_2d_v1",
+            "spatial_dimension": 2,
+            "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+        } if "refed" in args.datasets and args.refed_geometry == "paper_layout_v1" else None,
         "visual_fnirs_template_provenance": {
             **VISUAL_FNIRS_TEMPLATE_PROVENANCE,
             "topology_asset": _rel(VISUAL_FNIRS_TOPOLOGY_ASSET),
@@ -387,11 +417,13 @@ def main() -> None:
             ),
         } if "visual_cognitive_motivation" in args.datasets else None,
         "notes": [
-            "Coordinates preserve each dataset's native coordinate system and units.",
+            "Native and template coordinates retain their declared frame, units and provenance.",
             "Visual fNIRS coordinates are graphical/CED template projections, not measured 3D optode coordinates.",
             "Visual projected coordinates are valid for within-fNIRS adjacency and coarse cross-modal alignment only.",
-            "REFED EEG coordinates are a standard-template topology proxy, not participant digitization.",
-            "REFED EEG adjacency is valid only as within-EEG neighborhood information.",
+            ("REFED uses a shared paper-layout plane; z=0 is an embedding, not measured depth. "
+             "Only coarse cross-modal neighborhoods are supported; native Hb XYZ remains separate."
+             if args.refed_geometry == "paper_layout_v1" else
+             "REFED standard EEG montage supports within-EEG adjacency only, not cross-modal registration."),
         ],
     }
     write_json(output_dir / "geometry_manifest.json", manifest, ensure_ascii=False)
