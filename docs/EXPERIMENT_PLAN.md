@@ -1,6 +1,7 @@
 # Experiment sequencing
 
-_Owning protocol: `PST-DISCOVERY-v1` · state: planned · 2026-08-26_
+_Design owner for independently versioned experiment protocols. Registered
+execution and scientific verdicts live in `research_state/registry.json`._
 
 This document owns experiment design. The original `PST-DISCOVERY-v1` path
 concerns physical-teacher qualification, source/observation tokenization and
@@ -33,6 +34,234 @@ authorize tokenizer promotion. Any future measured confirmation or physical
 teacher qualification still requires the unresolved margins, primary
 estimand, calibration, and compute decisions below to be frozen in a separate
 contract.
+
+## Reading guide
+
+Section order is not an execution queue. Use the [registry view](PROJECT_STATUS.md)
+for state and next actions, the
+[entrypoint/config/test map](../experiments/README.md#entrypoint-config-and-test-map)
+for implemented commands, and the [result index](../experiments/RESULTS_INDEX.md#find-results-by-question)
+for evidence. A design section does not establish that an executable contract or
+measured result exists.
+
+| Reading task | Sections |
+| --- | --- |
+| Reacquire downstream task performance | [Downstream rebenchmark design](#downstream-rebench-v1); retained comparison contracts remain separate |
+| Dataset extensions and conditional tokenizer probes | [REFED extension](#refed-公开实验补齐与四数据集比较2026-10-13), [TK-FUNCTIONAL](#条件功能监督与-hard-token-开发矩阵2026-10-10) |
+| Output support, parameter stability and measurement semantics | [Output support](#ssm-输出支持范围连续状态与跨模态约束2026-10-10), [parameter stability](#参数稳定性共同内点与拟合改进2026-10-10), [observation semantics](#观测物理量事件锚点与竞争机制2026-10-09) |
+| Response, regional and component semantics | [Response design](#响应动力学与连续语义原型2026-10-02), [regional modes](#区域与谱模式共享驱动检验2026-10-02), [attribution](#结构性成分归属与分级语义检验2026-10-02) |
+| Fixed-structure physiology and shared-driver reconstruction | [2026-09-28 design](#固定结构的跨数据集生理语义检验2026-09-28-设计), [reconstruction screen](#共享驱动重建与参数自由度筛查2026-09-26) |
+| Dataset processing and SSM fit revision | [Joint revision](#数据统一化与-ssm-拟合的联合修订2026-09-15) |
+| Observation-contract design | [Observation repair follow-up](#观测合同修复后的下一轮实验设计2026-09-10) |
+| Retained overnight and observation protocols | [Overnight v2](#bounded-overnight-ssm-diagnostics-retained-v2-contract), [flow/mask bridge](#step5-flow-domain-and-mask-specific-observation-experiment), [repair v1](#step5-observation-contract-repair-and-regression-retained-v1), [observation diagnostic](#step5-observation-adaptation-diagnostic-retained-v1-contract) |
+| Synthetic calibration and staged qualification | [Step5A0 localization](#step5a0-inference-consistency-diagnostic), [Step5 stages](#full-step5-staged-continuation) |
+| Original qualification design | [Question](#fixed-question-and-decision-target), [flow](#experiment-flow), [estimand and statistics](#common-estimand-and-statistical-contract) |
+| Qualification and tokenizer design | [P0](#p0-software-and-synthetic-qualification), [teacher selection](#t-physical-teacher-selection), [tokenizer](#bq-source-and-observation-tokenizer), [coupling prior](#c-coupling-prior-return) |
+| Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
+| Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
+
+<a id="downstream-rebench-v1"></a>
+
+## 下游任务性能重新获取（2026-10-16）
+
+`DOWNSTREAM-REBENCH-v1` 是独立版本的设计方案，目标是在统一测量输入、训练支持和
+评价口径下重新获取对比方法的下游性能。本节是设计 owner；本轮不创建可执行配置、
+不启动训练或实测评价。样本库存、方法适用性和资源预算核定后，才形成可执行合同。
+旧 [比较协议](comparisons/PROTOCOL.md)、[最终结果](comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)
+和方法内冻结文件保留原身份；本方案不恢复旧 queue，也不改写历史数值。
+
+### 问题、比较层级和交付范围
+
+分别回答：冻结表示中有多少可供简单读出使用的任务信息；方法经过合理的下游监督
+适配后表现如何；主方法的收益能否在相同输入和监督预算下保留。冻结线性探测（LP）、
+全参数微调（FT）和从头监督训练分别呈现，EEG-only 与 EEG–fNIRS 分表；预训练
+来源、目标语料重叠和训练期额外信息在每行明确标注。不同轨道不形成总体排名。
+
+方案分两批交付：先取得 LP、简单信号基线和原生监督模型，再取得预训练模型的 FT
+结果。若只完成第一批，结论限于冻结表示和既定监督模型；要声称充分下游适配后的
+最终比较，第二批也是必要工作。两批都使用同一冻结库存、外折和评分规则。主分析
+使用全部允许的训练标签；few-shot、跨 session、长血流上下文和另一套 tokenizer
+输入不在主矩阵中同时展开。
+
+本版是已有开发历史的公开数据 benchmark。重新划分、换随机种子或换名称不会
+产生新的未查看确认集。旧分数只提供历史背景，不作为新版的性能下界；新版分数
+也不证明生理耦合、原论文数值复现或方法理论上限。
+
+### 统一测量与任务合同
+
+复用 [数据合同](DATA_CONTRACT.md#cache-contract) 中的当前统一 loader/registry，
+固定 `physiology_semantic_clean_v5`、`physiology_measurement_alignment_v5`、
+`motion_method=none`、measurement 坐标与 event alignment v2；实施时以具体 manifest
+核定身份，不跟随运行期间的默认值漂移。原数据说明由
+[`DATASETS_DESCRIPTION.md`](DATASETS_DESCRIPTION.md) 指向。不得把旧 v1 特征缓存或
+checkpoint 的输入身份直接改名为新版，也不得恢复通用逐通道 MAD。模型特定的群体
+尺度、PCA、特征选择和目标变换只在相应训练分区拟合。
+
+| 数据集／任务 | 编码窗口与目标 | 主评价支持 |
+| --- | --- | --- |
+| Single-Trial：MI、MA | 事件后 `[0,8)` 秒；LMI/RMI、MA/BL | 原生 trial，保留 session 和事件身份 |
+| Simultaneous：WG、n-back | 同步 `[0,8)` 秒；WG/BL、0/2/3-back | 原生事件及其 record/session 依赖 |
+| Simultaneous：DSR | 同步 `[0,2)` 秒；EEG-native Go/No-go | fNIRS 仅为同步 context，不将 block marker 当事件级响应或类别 |
+| Visual：认知动机 | 同步 `[0,8)` 秒；RR/RF/FF/FR | 保留事件角色、探头和记录身份；不把区域副本当独立样本 |
+| REFED：valence/arousal | 20 秒窗，原生 1 Hz `[2,T]` 标签与逐坐标 mask | 按原生视频构造不重叠评分段，保留末端部分输入及目标支持 |
+
+**编码窗口不是全部信息支持。** 当前缓存含连续记录双侧预处理；每格同时记录
+编码窗、参考前缀、重采样／滤波上下文及实际处理记录范围。主表明确为离线任务，
+不宣称严格只看 8 秒或实时预测。相同比较组从相同 canonical arrays、真实通道
+身份集合、时间锚点和 recorded-support mask 开始；内部 patch、池化和已声明的
+无标签固定变换可以保持方法原生，但不能暗中增加时间或传感器信息。
+
+EEG-only 主组固定每任务同一组 16 个真实通道，面板按元数据而非下游分数确定。
+双模态主组按任务固定同一真实 EEG/HbO/HbR 通道清单；不能接收该面板的方法在看
+评价分数前记录不支持，不能复制通道、删掉困难被试或改成自己的较容易支持集。
+完整原生容量的单模态结果和长血流上下文如需研究，另定义 profile。同步 8 秒预算
+可能限制 NVC/血流方法，故本版只评价该预算下的性能，不将其称为这些方法的能力上限。
+
+### 方法、来源与适用性
+
+| Owner／方法 | 第一批 | 第二批及命名边界 |
+| --- | --- | --- |
+| BIOT、CBraMod、REVE | 官方预训练 frozen LP，六个分类任务逐格验证 | FT 单独成表；REFED 需真实时序输出和 mask 能力，不把分类 embedding 平铺成序列 |
+| NormWear | `NormWear EEG-fNIRS adapted` frozen LP | 相同适配的 FT；原预训练无 fNIRS，不能写成原论文 fNIRS 复现；REFED 未通过适配前不填数 |
+| EFRM | 目标数据集整体排除的预训练与 frozen LP，含 REFED 序列任务 | FT 保持同一 target-excluded 条件；旧 v1 输入上训练的权重如复用，只能另标旧域迁移 |
+| BrainFusion | 独立监督重实现，训练内完成 CSP/NVC/stacking 选择 | 最终在全部外层训练样本重新拟合；DSR/REFED 在新适配被验证前保持 unsupported |
+| STA-Net-PyTorch | 在本版相同窗口、通道和分母上重新训练的监督适配 | 旧 3 秒 EEG／13 秒 fNIRS 结果继续仅作 native-context 参考；新版本须验证形状和 source deviations |
+| 简单基线 | majority／train-prior、训练均值；EEG 频带功率＋线性模型、Hb 统计特征＋线性模型、双模态特征拼接 | REFED 使用同时间支持的训练拟合 ridge；与复杂模型共用分区、标签和评分支持 |
+| 本项目候选 | 仅在相同 profile 的新适配和外折训练完成后进入对应 LP 表 | 可训练模型进入相应监督／FT 表；条件目标、原生输入、训练曝光分别声明 |
+
+REVE 的 Single-Trial MI/MA 仍为已知 target-corpus-overlap 轨道；其他官方预训练
+语料的未排除重叠也要如实标记。EFRM 的 LODO、外部官方预训练和项目内预训练不
+称为相同数据曝光。按 source manifest 固定权重、输出层及偏离项；预训练预算独立
+计量，不能隐藏在下游训练成本里。跨数据集可核定为同一自然人的记录仍按人隔离；
+无法核定的跨语料身份重叠作为限制保留。
+
+现有 [`TK-FUNCTIONAL-v1`](#条件功能监督与-hard-token-开发矩阵2026-10-10) 使用原生 EEG、
+20 秒学生窗口、额外 Hb 参考前缀和 90 秒条件教师，其单次划分与 balanced-accuracy
+主指标也不同，不能直接接入本版。纳入候选时须按本版重新适配、分折训练和评分；
+教师、目标尺度、码本及学生都不能使用外层评价被试。训练期更长的教师上下文必须
+披露，并保留相同架构、训练曝光的无教师／替代监督对照，不能将额外信息收益全部
+归因于 token 设计。本方案不自动展开第二套 TK20 完整基线矩阵。
+
+### 被试划分、选择和最终重新拟合
+
+默认每数据集 **5 个外折、外层训练集合内 3 个内折**；划分种子 `20261016`，最终
+随机训练种子 `[17,42,73]`。同数据集各任务共享被试外折，全部 session、record、
+trial、video 和区域副本随被试分组。先用许可元数据核定共同库存、类别和通道支持，
+再读数组。Visual 等较小集合若无法满足内折类别覆盖，在任何评价前统一修订该
+数据集的内折设计，不给某方法单独改折或丢样本。
+
+内折选择超参数、训练轮数和阈值；所有有学习状态的预处理及表示训练同样服从
+内折边界。最终用选定设置在**完整外层训练集合**重新拟合，再预测该外折评价被试。
+BrainFusion 的全部组件和 stacking 内部 OOF 也适用此规则；最终拟合样本身份须
+与同组其他方法一致。不得继续保留“一个方法仅 train，其余 train+validation”
+的差别。确定性方法无需人为重复三个相同结果；存在随机训练的种子全部保留，不选
+最好 seed。表示预训练种子和读出种子分开记录，共享同一 backbone 的多个 head
+种子不能冒充多次独立预训练。
+
+### 搜索预算与收敛判据
+
+以下是实施时核验的设计默认值，不能视为所有模型已充分训练的保证：
+
+- LP 使用固定表示、训练拟合标准化和真正的线性读出。分类
+  `C ∈ {0.001,0.01,0.1,1,10,100}`；序列 ridge 的
+  `alpha ∈ {0.001,0.01,0.1,1,10,100}`。可训练非线性 pooling/LayerNorm
+  若保留，必须另标 adapter/head 轨道，不能仍叫统一线性探测。
+- 监督神经模型和 FT 每个 method×task×track 最多 12 个预先列出的候选配置，
+  三内折、调参种子 17。候选包括来自固定上游实现的优化器、backbone/head 学习率、
+  weight decay 和 clipping；不对所有方法强制同一学习率。BrainFusion 等非神经
+  方法使用同上限的有限训练内候选，完整记录其内部拟合成本。
+- 神经下游默认最多 200 epochs，至少 50 epochs 后允许 patience 30 停止；选择
+  指标与本版任务主指标一致。配置按合并三个内折验证被试后的被试等权分数选择，平局依次取训练成本
+  较低者及冻结顺序靠前者。最终 refit 使用选定配置三个内折最佳 epoch 的中位数
+  （向上取整），外折评价不参与早停。
+- pilot 在开发支持上核对吞吐、内存和训练／内折曲线。若持续触及预算上限且仍在
+  改善，先修订并冻结该类模型的预算，再开展外折评价；不能看过外折低分后有选择地
+  追加搜索。未证明收敛的结果保留预算限制，不称“合理高水平”。
+
+### 评分、基线、不确定性与失败
+
+分类主指标为**被试等权 macro-F1**：每位被试汇总全部合规事件预测，按任务完整
+类别集合计算；先平均该被试的训练种子，再平均被试。区域副本如存在，先按冻结
+规则合为一次事件预测。伴随报告 balanced accuracy、accuracy、各类召回和校准。
+旧 fold-mean macro-F1 只作单独标注的兼容描述，不替换新主指标，也不能把旧数值
+与新主指标相减。缺失类别按固定完整类别集合和 `zero_division=0` 计算，不能按
+该方法的预测类别缩小分母。
+
+REFED 先在原生 record 内拼接不重复的有效评分段，对 valence/arousal 分别计算
+masked CCC、MAE/RMSE，再 record→subject 等权汇总，两个坐标的算术平均为主 CCC。
+不足有效点或 CCC 分母为零时保留 undefined 及覆盖缺口；原生标签坐标上的误差
+与训练缩放坐标区分。Pearson/Spearman 遇常数目标或预测标记 undefined，禁止
+继续使用旧辅助指标中的强制 0。记录输入 mask 和 target mask 各自作用，不能用
+输入完整性代替目标有效性。
+
+无信息基线使用同支持的训练 majority、train-prior random 期望和训练目标均值；
+分类 macro-F1 的 B0 取前两者较强者，沿用同一被试聚合顺序，不能一律写成 `1/K`。
+CCC 的无正向关联参照为 0，同时保留训练均值预测的实际 MAE/RMSE。简单信号基线
+提供独立于无信息基线的能力参照，不能只比较复杂方法彼此的低分。
+
+默认 2,000 次被试块 bootstrap（种子 `20261016`），两侧 95% percentile 区间；一次抽样保留
+被试的全部记录、seed 和各方法结果，方法差使用相同抽样。区间条件于已训练模型，
+不覆盖重新训练的全部变异；窗口、种子、五个外折均不是独立生物重复。预先指定
+主方法相对同轨简单信号基线的逐任务比较：先计算每位被试种子平均后的配对差
+`d_s`，统计量为其被试均值；以种子 `20261016` 进行 10,000 次被试级独立正负号
+翻转，双侧 `p=(1+次数(|T_b|≥|T_obs|))/10001`。该检验要求零假设下被试差的符号
+可交换，保持条件于已训练模型的开发性解释。按模态／训练轨道分别定义检验族，
+族内跨任务对上述原始 p 值使用 Holm 校正；主方法缺席时只报告描述性比较。
+其他事后两两比较标为探索性，
+不以区间是否重叠代替配对差检验，不将分类和回归合成平均排行榜。
+
+每格同时报告计划与完成的 fold×seed、被试、事件／有效时间点、排除及失败。
+unsupported 无数值，运行失败不记成零分，失败后不缩小分母发布正常排名。保留全部
+有效低分和负结果；完整观测表与“正常方法性能”的准入判断分开。正式数字仍按
+[`METRIC_ACCEPTANCE.md`](comparisons/METRIC_ACCEPTANCE.md) 逐格给出 B0、target、
+相容参考 H／source 的适用性、关系判断、uncertainty、decision 和具体脚注。
+旧 `B0+0.02` fallback 只作最低线，不能代替充分训练或接近能力上界的证据；被拒
+任务不得在保留同方法高分的同时静默删除。
+
+### 实施顺序、资源与产物归属
+
+| 阶段 | 工作与可审阅产物 | 结束条件 |
+| --- | --- | --- |
+| 软件和合同准备 | 统一元数据库存／被试折、每格支持声明、版本化适配与指标 fixture | train-only fitting、mask/时钟、固定类别、常数相关、同支持 refit、失败分母测试及 synthetic/dry-run 通过 |
+| 公开开发 pilot | MI、n-back、REFED 代表二类／多类／序列路径；资源与收敛试测 | 只用开发支持定候选、预算和适配；无最终外折分数用于选择 |
+| 第一批正式重获取 | 所有支持任务的 LP、简单基线和原生监督模型 | 全部计划单元终态、保留预测／指标和完整失败；只作对应轨道结论 |
+| 第二批适配性能 | 官方预训练及 EFRM 的 FT，同一库存和外折 | 不根据第一批外折低分改选择规则；与 LP 独立成表，完成后才形成适配性能比较 |
+| 汇总和验收 | 被试配对统计、每格准入、来源／预算／失败脚注及版本化图表 | 表值可追溯到单次运行，所有不支持、失败和拒绝格可见 |
+
+两批候选空间、报告规则及拟比较的方法必须在第一批外折结果揭示前冻结。pilot
+使用独立列明的开发身份；若这些身份后来进入外折评价，整体结论继续标为开发性，
+不能宣称未受 pilot 决策影响。软件缺陷若要求更改已冻结输入或评分，保留旧版本
+及失败记录，在新版本中统一重测受影响单元，不能只修复有利的一格。
+
+正式运行前检查 CPU 配额／亲和性、内存、GPU、存储及竞争进程；以 pilot 吞吐和
+峰值内存确定并发、线程和预估时长。用已约定的持久 supervisor 运行，记录命令、
+环境、源版本、日志、进度和可恢复输出；不因历史队列串行而闲置可并行资源。
+每个随机训练支持单元默认有 5 外折×3 最终种子；内折搜索、预训练及确定性基线
+成本另计。任务／方法支持表和试测成本核定前不填写虚假的固定总 job 数或 GPU 小时。
+
+沿用现有 owner 和 artifact root，实施时在其中增加版本化 run，不建立平行
+`results/`、wrapper 或逐方法授权层：
+
+```text
+comparative_methods/<method>/runs/downstream_rebench_v1/<run>/
+comparative_methods/runs/downstream_rebench_v1/<run>/          # 共享合同、路径索引与联合汇总
+experiments/runs/physiology_semantic_tokenizer/downstream_rebench/<run>/  # 主方法
+```
+
+各方法保存其拟合／预测／指标事实；联合汇总只消费这些带身份的终态产物，不维护
+第二份手写状态。公共统计放在既有 library owner，方法差异留在各自 package；历史
+sealed 脚本与配置不原地修改。实际结果以后由
+[`RESULTS_INDEX.md`](../experiments/RESULTS_INDEX.md#comparison-methods) 链接，注册执行
+状态仍只在 registry 更新。
+
+本次授权范围为整理和设计。后续一次边界明确的执行授权可以覆盖声明的 pilot、
+两批训练和汇总，同范围内不逐命令重复确认；历史 protected 数据不因本设计解锁，
+如涉及受保护读取仍须满足唯一 owning protocol/controller 及其独立 gate。当前
+公开被试政策不等于允许重读旧 protected prediction 或把它用于调参。
+
+实施前需要核定的事项限于：timing v2 下各任务共同库存及小样本内折可行性；各方法
+新 profile／REFED 能力和通道面板；预训练来源与身份重叠；候选参数、预训练成本及
+资源预算。未核定前，本节是可审阅方案，不是已通过验证的运行合同。
 
 ## REFED 公开实验补齐与四数据集比较（2026-10-13）
 
@@ -1306,26 +1535,6 @@ MNE TDDR、subject_01、outer=3、AF7Fp1 的保留验证窗口；只读取已完
 目标峰谷误差、EEG 代价、驱动粗糙度及全部失败；无正则线性单/双 Hb 筛查只用于
 表达能力解释，不替代物理可行的非线性结果。具体执行及数值由新的运行证据持有，
 不覆盖原始贴边参数和历史结论。
-
-## Reading guide
-
-This file owns experiment design. It contains bounded diagnostic protocols and
-the broader tokenizer design; section order is not an execution queue. Use the
-[registry view](PROJECT_STATUS.md) for state and next actions, and the
-[entrypoint/config/test map](../experiments/README.md#entrypoint-config-and-test-map)
-to navigate implemented commands. Short-term scratch plans are not dependencies.
-
-| Reading task | Sections |
-| --- | --- |
-| Fixed-structure physiology semantics and parameter sharing | [2026-09-28 design](#固定结构的跨数据集生理语义检验2026-09-28-设计) |
-| Dataset processing and SSM fit revision | [Joint revision](#数据统一化与-ssm-拟合的联合修订2026-09-15) |
-| Observation-contract design | [Observation repair follow-up](#观测合同修复后的下一轮实验设计2026-09-10) |
-| Retained overnight and observation protocols | [Overnight v2](#bounded-overnight-ssm-diagnostics-retained-v2-contract), [flow/mask bridge](#step5-flow-domain-and-mask-specific-observation-experiment), [repair v1](#step5-observation-contract-repair-and-regression-retained-v1), [observation diagnostic](#step5-observation-adaptation-diagnostic-retained-v1-contract) |
-| Synthetic calibration and staged qualification | [Step5A0 localization](#step5a0-inference-consistency-diagnostic), [Step5 stages](#full-step5-staged-continuation) |
-| Overall research design | [Question](#fixed-question-and-decision-target), [flow](#experiment-flow), [estimand and statistics](#common-estimand-and-statistical-contract) |
-| Qualification and tokenizer design | [P0](#p0-software-and-synthetic-qualification), [teacher selection](#t-physical-teacher-selection), [tokenizer](#bq-source-and-observation-tokenizer), [coupling prior](#c-coupling-prior-return) |
-| Implementation and remaining design decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
-| Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
 
 ## 数据统一化与 SSM 拟合的联合修订（2026-09-15）
 

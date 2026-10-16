@@ -11,7 +11,43 @@ checkpoint.
 This file owns retention and evidence locations, not current project state. Status
 terms in its tables describe the retained artifact at its recorded snapshot. Use the
 generated [`PROJECT_STATUS.md`](../docs/PROJECT_STATUS.md) for current execution and
-scientific verdicts.
+scientific verdicts. Its owning record is
+[`research_state/registry.json`](../research_state/registry.json); experiment designs
+and access boundaries remain in the [experiment plan](../docs/EXPERIMENT_PLAN.md)
+and [data contract](../docs/DATA_CONTRACT.md).
+
+## Find results by question
+
+Suite names below are relative to `runs/physiology_semantic_tokenizer/`.
+Follow an evidence entry to its exact run, owning summary, endpoint tables and
+report links. The [entrypoint/config/test map](README.md#entrypoint-config-and-test-map)
+provides the corresponding implementation route; [run-directory guidance](runs/README.md)
+explains the path hierarchy and reading order.
+
+| Research question | Suite root | Evidence entry |
+| --- | --- | --- |
+| How do the diagnostic families compare across datasets? | Multiple suites, resolved by the report evidence map | [REFED and four-dataset comparison](#refed-backfill-and-four-dataset-comparison--2026-10-13) |
+| What does a fixed shared driver reconstruct, and how do observation and solver choices affect it? | `shared_driver_reconstruction/` | [Fixed-structure semantics](#fixed-structure-physiology-semantics--2026-09-28), [EEG proxy rates](#eeg-proxy-sampling-rate-comparison--2026-10-10), [reconstruction diagnostics](#reconstruction-and-measurement-diagnostics) |
+| Are fitted parameters repeatable and supported away from boundaries? | `shared_driver_parameter_stability/` | [Parameter stability and common interior](#parameter-stability-and-common-interior--2026-10-10) |
+| What output support and continuous-state constraints do the observations provide? | `ssm_output_support/` | [Output support and continuous states](#ssm-output-support-and-continuous-states--2026-10-10) |
+| Which observation semantics survive mechanism and hardware controls? | `observation_semantics/` | [Observation semantics](#observation-semantics--git-retention-2026-10-10) |
+| What do response dynamics and continuous representations recover? | `semantic_response_discovery/` | [Response dynamics and continuous semantics](#response-dynamics-and-continuous-semantics--2026-10-02-run) |
+| Do finite responses and independent observations improve hidden-feature prediction? | `ssm_strengthening/` | [Finite response and independent observations](#finite-response-and-independent-observations--2026-10-03) |
+| Do regional and spectral coordinates add shared information? | `shared_driver_modes/` | [Regional spectral shared drivers](#regional-spectral-shared-drivers--2026-10-02) |
+| What can the fitted components be attributed to? | `shared_driver_attribution/` | [Structured-component attribution](#structured-component-attribution--2026-10-02) |
+| How sensitive is the conditional teacher to observation mismatch and driver priors? | `shared_driver_teacher_robustness/` | [Conditional teacher robustness](#conditional-teacher-robustness--2026-10-01) |
+| What do native Hb pairs and measurement processing show? | `data_quality_audit/` | [Native Hb direction prevalence](#native-hb-direction-prevalence--2026-09-28), [measurement diagnostics](#reconstruction-and-measurement-diagnostics) |
+| What did earlier identifiability, inference and temporal diagnostics establish? | `t3_*`, `t3c_*`, `step5/`, `step5a_inference_consistency/`, `ssm_overnight/` | [T3 and Step5 evidence](#t3-identifiability-and-step5-inference), [overnight snapshot](#overnight-evidence-snapshot--2026-09-10), [Step5A0 snapshot](#step5a0-evidence-snapshot--2026-09-07) |
+| What is retained from the original teacher and tokenizer qualification? | `e0_*`, `e1_*`, `e2_*`, `r0*`, `r1*`, `r2*` | [E0–E2 and R-series evidence](#e0e2-and-r-series-qualification-evidence), [Token Atlas](#token-atlas) |
+
+[Comparison-method evidence](#comparison-methods) and [Croce validation](#croce-validation)
+keep their separate package owners. [Retention and migration history](#retention-and-migration-history)
+records storage changes and dated cleanup separately from the result-reading routes.
+
+Some run and checkpoint paths below point to local Git-ignored artifacts that remain
+useful in this workspace but are not part of the tracked paper record. For manuscript
+Methods/Results, start with the linked human-readable reports and campaign tables;
+use local payloads only when a report explicitly requires them.
 
 ## REFED backfill and four-dataset comparison — 2026-10-13
 
@@ -122,11 +158,6 @@ evidence. No old parent evidence is changed. The common
 4 Hz EEG compatibility score and each method's own-rate EEG fit are distinct
 endpoints; the former is not an inverse log-power aggregation.
 
-Some run and checkpoint paths below point to local Git-ignored artifacts that remain
-useful in this workspace but are not part of the tracked paper record. For manuscript
-Methods/Results, start with the linked human-readable reports and campaign tables;
-use local payloads only when a report explicitly requires them.
-
 ## Observation semantics — Git retention 2026-10-10
 
 The observation-semantics evidence is retained in Git at
@@ -147,51 +178,6 @@ sheet previews and earlier presentation attempts remain local; full verification
 and report regeneration require the prepared caches and the explicitly referenced
 parent evidence. Current execution and interpretation are recorded only in the
 research-state registry.
-
-## Git retention update — 2026-10-08
-
-The response-discovery and strengthening suites retain their executable contracts,
-implementation and tests together with the following selected evidence in Git.
-All newly registered evidence paths and the final response report's 57 source PNGs
-are included. Existing dated evidence files are retained without modification.
-
-| Suite | Retained in Git | Retained locally for audit/replay |
-| --- | --- | --- |
-| Response discovery, 2026-10-02 | Resolved contract, metadata split and plan, calibration, source snapshots/identities, launch/completion and failure logs, aggregate SSM comparisons/nulls, tokenizer summaries and paired changes, public-probe records/selection, final v2 PPT/PDF and figure provenance | Per-cell SSM tables/records/arrays, synthetic tokenizer per-example records, prepared/feature/mode caches, selected encoder weights and resumable optimizer checkpoints, pilot payloads and earlier report exports |
-| Strengthening, 2026-10-03 v1/v2/v3 | Prelaunch failure record, original and correction source/launch identities, input/split/calibration records, original summaries/decisions, v3 measured and aggregate synthetic tables, response/spatial/profile/risk comparisons, correction record and verification | Per-task training/evaluation/profile payloads and full synthetic metric tables; v3 still refers to the retained local v2 arrays |
-| Continuous-state S3, 2026-10-03 | Frozen contract/source, scales, pilot/launch/completion records, all terminal task JSON, state/profile/paired tables and verification | Continuous truth and fitted trajectory arrays and compiled caches |
-
-A checkout supports review of the reported comparisons and failure denominators;
-replaying individual fits or regenerating all report panels requires the local
-payloads listed above. These payloads remain unchanged on disk.
-
-## Git retention update — 2026-10-03
-
-This update removes 165 historical run files (130.8 MiB of uncompressed
-tracked content) from the Git reading surface. Their original local files remain
-unchanged, and their previous tracked copies remain available at commit
-`87402efbeb3dd6ebd6104d0f9a6629b696c5971d`. The later reports and consolidated
-stage reviews below own the reading routes; this changes storage, not numerical
-results or scientific verdicts.
-
-| Historical group | Retained in Git | Retained locally for audit/replay |
-| --- | --- | --- |
-| Step5A / Step5, 2026-09-07–09 | Stage summaries and reviews, manifests, resolved contracts, failure diagnostics, registered observation-repair evidence and report-linked sources/images | Unreferenced runner/inference copies, unresolved U3 numerical grids and redundant standalone figures |
-| Overnight N1–N7 / observation v3, 2026-09-09–11 | Markdown/PDF reports, their bitmap figures, the report-linked N7 atlas, aggregate comparisons, manifests, source/continuation identities and verification records | Self-contained HTML, vector originals, the duplicate v3 atlas, task/status ledgers and detailed per-fit/truth tables |
-| Hb calibration v1/v2 and pilots, 2026-09-18/24 | Final reports, figures, summaries, paired effects, failure tables, manifests and source audit | Pilot metric tables, compressed task records, source copies and detailed parameter/profile records |
-
-All previously tracked registry evidence paths and all images embedded by the
-retained Markdown reports remain tracked. The frozen v3 report's four appendix
-links to `fit_status.csv`, `synthetic_state_truth.csv`,
-`missing_support_truth.csv` and `processed_visible_truth.csv` now require the
-local evidence or the historical Git copies. Historical report bytes are unchanged.
-The full-tree Git history is retained; this pruning reduces a future checkout's
-files, not an existing clone's object history. Recent shared-driver evidence,
-protected comparison packages and sealed R-series material keep their boundaries.
-
-Generated runs are ignored as one directory. Add any newly selected evidence by
-explicit file path with `git add -f -- <file>` and describe its reading route here;
-adding another run does not require another `.gitignore` exception list.
 
 ## Finite response and independent observations — 2026-10-03
 
@@ -361,35 +347,6 @@ them. Earlier v1/v2 exports retain their font/layout failure records and are not
 the delivered version. These artifacts do not confer tokenizer or physiological
 teacher qualification.
 
-## Measurement cache migration — 2026-09-16
-
-The [migration inventory](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_measurement_cache_migration_v4/migration.json)
-records authorized cleanup, retained metadata, cache validation and before/after
-allocated disk usage. That migration selected the v4 measurement cache;
-model-specific normalization belongs to SSM/tokenizer consumers. Retired general
-v1 and public smoke arrays are rebuildable; preserve their manifests, event and
-geometry metadata in this migration package before deleting those directories.
-The v3 SSM native cache and historical teacher sidecars remain retained inputs.
-This is a data preparation migration, not a new model result or protected evaluation.
-
-The subsequent [public-subject extension](runs/physiology_semantic_tokenizer/data_quality_audit/20260917_all_subject_cache_v4/manifest.json)
-records retirement of the inherited subject embargo and the independently supervised
-cache expansion. Its [validation and 30-second inventory](runs/physiology_semantic_tokenizer/data_quality_audit/20260917_all_subject_cache_v4/validation.json)
-verify new signal/event/geometry coverage and unchanged existing arrays/events.
-Compressed pre-extension indices and manifests preserve the earlier cache inventory;
-the 2026-09-16 migration evidence remains unchanged.
-
-## No-motion cache migration — 2026-09-28
-
-The [migration record](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/migration.json)
-retains the decision sources, exact supervised commands, worker/IO measurements,
-source patch and test results. The [validation](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/validation.json)
-compares the new cache with the previous record inventory, EEG arrays, units,
-support, events, geometry and actual unified/sequence loading. Preserve both
-cache identities and this evidence; this migration does not authorize deletion
-of the old cache. Method choice and processing boundaries are owned by
-[DATA_CONTRACT](../docs/DATA_CONTRACT.md#无运动校正的通用缓存--2026-09-28).
-
 ## Main-method evidence
 
 ### Fixed-structure physiology semantics — 2026-09-28
@@ -456,6 +413,8 @@ fits to those processed targets. The [same-window motion audit](runs/physiology_
 identifies algorithm-induced slow drift; those scores cannot establish recovered
 physiology. The optical observation contrast retains separate targets and scales.
 
+### Reconstruction and measurement diagnostics
+
 | Stage | Retained authority / artifact | Why it remains |
 | --- | --- | --- |
 | Shared nonlinear gain and driver-amplitude prior | [Manifest](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_gain_prior_v1/manifest.json), [summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_gain_prior_v1/summary.json), [Chinese report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_gain_prior_v1/report_v1/REPORT.md), [bitmap PDF](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_gain_prior_v1/report_v1/REPORT.pdf), [contract](configs/physiology_semantic_tokenizer/shared_driver_gain_prior_v1.yaml) | Preserve frozen source, supervised launches, synthetic truth, all shared-parameter starts, training failures and validation denominators, four-arm paired comparisons, state excursions and visual checks. Signal-SD ridge bias, optimization-budget limits and changing Hb locations prevent a physiological subject-parameter claim. |
@@ -487,6 +446,11 @@ physiology. The optical observation contrast retains separate targets and scales
 | Step5 flow-domain and mask-specific observation repair | [`20260909_observation_repair_v2_verified/summary.md`](runs/physiology_semantic_tokenizer/step5/20260909_observation_repair_v2_verified/summary.md), [update histories and drift roots](runs/physiology_semantic_tokenizer/step5/20260909_observation_repair_v2_verified/replay.json), [contract](configs/physiology_semantic_tokenizer/step5_observation_repair_v2.yaml) | matrix-exponential drift-domain classification and visible-only interpolation operators; synthetic full/center/whole-modality comparison; nonlinear temporal qualification remains a prerequisite to a new measured comparison |
 | Step5 observation contract repair and regression (retained v1) | [`20260908_observation_repair_v1/summary.md`](runs/physiology_semantic_tokenizer/step5/20260908_observation_repair_v1/summary.md), [numerical compatibility and refined replay](runs/physiology_semantic_tokenizer/step5/20260908_observation_repair_v1/verification_review.json), [contract](configs/physiology_semantic_tokenizer/step5_observation_repair_v1.yaml) | log-domain extraction repair, known-scale invariance on reused and independent synthetic inputs, explicitly approximate temporal reference, identical-input failure continuation and same-fold fixed SSM/linear control; numerical corrections work, measured teacher remains unqualified |
 | Step5 observation adaptation diagnostic | [`20260908_observation_diagnostic_v1/summary.md`](runs/physiology_semantic_tokenizer/step5/20260908_observation_diagnostic_v1/summary.md), [numerical review](runs/physiology_semantic_tokenizer/step5/20260908_observation_diagnostic_v1/diagnostic_review.json), [contract](configs/physiology_semantic_tokenizer/step5_observation_diagnostic_v1.yaml) | controlled preprocessing bridge, original-training-only modality curves/residuals, nested-CV lag control and retained saturation failures; exploratory, no teacher admission |
+
+### E0–E2 and R-series qualification evidence
+
+| Stage | Retained authority / artifact | Why it remains |
+| --- | --- | --- |
 | E0 final teacher revalidation (stopped) | [`20260723_adaptive_teacher_e0_v3_line_clean_v4_revalidation_v1`](runs/physiology_semantic_tokenizer/e0_teacher_validity/20260723_adaptive_teacher_e0_v3_line_clean_v4_revalidation_v1/summary.md) | retained development teacher surface and claim boundary |
 | E1 K128 health (stopped) | [`20260722_e1_health_coupling_visual_report_v1`](runs/physiology_semantic_tokenizer/e1_quantizer_correctness/20260722_e1_health_coupling_visual_report_v1/summary.json) and retained multi-seed summaries | software/occupancy reference |
 | E2 weight calibration (stopped) | [`20260723_e2_v4_training_gradient_weight_calibration_v1`](runs/physiology_semantic_tokenizer/e2_weight_calibration/20260723_e2_v4_training_gradient_weight_calibration_v1/analysis/summary.md) | explains frozen semantic-objective scale |
@@ -499,6 +463,11 @@ physiology. The optical observation contrast retains separate targets and scales
 | D1B (abandoned) | [`20260728_d1b_train_only_grid_v1`](runs/physiology_semantic_tokenizer/r1p_d1b_train_only_hyperparameter_seal/20260728_d1b_train_only_grid_v1/summary.json) | incomplete train-only evidence; validation remained undetermined and the lane is not continued |
 | R2-D formal (stopped) | [`20260728_r2d_cj_seed20260728_formal_v1`](runs/physiology_semantic_tokenizer/r2_continuous_observability/20260728_r2d_cj_seed20260728_formal_v1/summary.json) | bilateral observability failure |
 | R2-D statistical audit (stopped) | [`20260728_r1d_cj_seed20260728_v2_stat_audit`](runs/physiology_semantic_tokenizer/r2_continuous_observability_analysis/20260728_r1d_cj_seed20260728_v2_stat_audit/diagnostic_summary.json) | uncertainty and diagnostic reference |
+
+### T3 identifiability and Step5 inference
+
+| Stage | Retained authority / artifact | Why it remains |
+| --- | --- | --- |
 | T3 Step 2 identifiability (complete exploratory negative) | [`detailed report`](../docs/analysis/20260902_T3_IDENTIFIABILITY_STEP2_REPORT.md) and local [`v3 summary`](runs/physiology_semantic_tokenizer/t3_identifiability/20260902_step2_identifiability_v3/summary.md) | fit-only beta/kappa/tau practical-identifiability endpoint unsupported; no qualification or promotion |
 | T3 Step 3 three-session LOSO (complete exploratory negative) | [`detailed report`](../docs/analysis/20260902_T3_MULTISESSION_LOSO_STEP3_REPORT.md) and local [`v2 summary`](runs/physiology_semantic_tokenizer/t3_multisession_loso/20260902_step3_multisession_loso_v2/summary.md) | fit-only effective-kappa candidate worsened held-out recovery NLL versus fixed M0; parameter screen failed; no trait, qualification, or promotion claim |
 | T3c Step 4 hierarchical admission (complete blocked gate) | [`detailed report`](../docs/analysis/20260903_T3C_HIERARCHICAL_STEP4_ADMISSION_REPORT.md) and local [`v3 summary`](runs/physiology_semantic_tokenizer/t3c_hierarchical_composite_admission/20260903_step4_admission_v3/summary.md) | array-free admission found 6/8 prerequisites unmet; measured partial pooling not started; no trait, qualification, or promotion claim |
@@ -520,7 +489,8 @@ aggregate metric views, run manifests, resolved configurations, software pilots,
 candidate-rule summaries and source identities. The Markdown reports display
 their figures on GitHub; the N7 report-linked figure atlas also remains tracked.
 Self-contained HTML, vector originals, the duplicate v3 atlas and detailed
-per-fit/truth tables are local after the 2026-10-03 retention update above.
+per-fit/truth tables are local after the
+[2026-10-03 retention update](#git-retention-update--2026-10-03).
 The frozen reports and their scientific conclusions are unchanged.
 
 Per-task/per-trial tables, their compressed copies, task/status ledgers,
@@ -536,7 +506,8 @@ artifacts without making them part of the published surface.
 The Git evidence package retains the stage summaries, manifests, resolved
 configurations, failure diagnostics, report-linked sources and key figures in
 their original run paths. Unreferenced frozen runner/inference copies and
-superseded diagnostic grids are local after the 2026-10-03 retention update.
+superseded diagnostic grids are local after the
+[2026-10-03 retention update](#git-retention-update--2026-10-03).
 Per-case arrays, prepared measured inputs and full numerical grids also remain
 local; manifest references identify that audit/replay surface.
 
@@ -699,7 +670,87 @@ redesigned Synthetic Phase 1 and Real Phase 2 were not run and are **abandoned**
 they do not form a current dependency lane. A future clean flow must establish a
 new owner, protocol, and evidence identity.
 
-## Historical source/observation generation
+## Retention and migration history
+
+These dated records explain which payloads are tracked, local, rebuildable or
+historically removed. They preserve the scope and identities of the original
+storage actions; they do not authorize another cleanup or define a new run queue.
+
+### Git retention update — 2026-10-08
+
+The response-discovery and strengthening suites retain their executable contracts,
+implementation and tests together with the following selected evidence in Git.
+All newly registered evidence paths and the final response report's 57 source PNGs
+are included. Existing dated evidence files are retained without modification.
+
+| Suite | Retained in Git | Retained locally for audit/replay |
+| --- | --- | --- |
+| Response discovery, 2026-10-02 | Resolved contract, metadata split and plan, calibration, source snapshots/identities, launch/completion and failure logs, aggregate SSM comparisons/nulls, tokenizer summaries and paired changes, public-probe records/selection, final v2 PPT/PDF and figure provenance | Per-cell SSM tables/records/arrays, synthetic tokenizer per-example records, prepared/feature/mode caches, selected encoder weights and resumable optimizer checkpoints, pilot payloads and earlier report exports |
+| Strengthening, 2026-10-03 v1/v2/v3 | Prelaunch failure record, original and correction source/launch identities, input/split/calibration records, original summaries/decisions, v3 measured and aggregate synthetic tables, response/spatial/profile/risk comparisons, correction record and verification | Per-task training/evaluation/profile payloads and full synthetic metric tables; v3 still refers to the retained local v2 arrays |
+| Continuous-state S3, 2026-10-03 | Frozen contract/source, scales, pilot/launch/completion records, all terminal task JSON, state/profile/paired tables and verification | Continuous truth and fitted trajectory arrays and compiled caches |
+
+A checkout supports review of the reported comparisons and failure denominators;
+replaying individual fits or regenerating all report panels requires the local
+payloads listed above. These payloads remain unchanged on disk.
+
+### Git retention update — 2026-10-03
+
+This update removes 165 historical run files (130.8 MiB of uncompressed
+tracked content) from the Git reading surface. Their original local files remain
+unchanged, and their previous tracked copies remain available at commit
+`87402efbeb3dd6ebd6104d0f9a6629b696c5971d`. The later reports and consolidated
+stage reviews in the result sections own the reading routes; this changes
+storage, not numerical results or scientific verdicts.
+
+| Historical group | Retained in Git | Retained locally for audit/replay |
+| --- | --- | --- |
+| Step5A / Step5, 2026-09-07–09 | Stage summaries and reviews, manifests, resolved contracts, failure diagnostics, registered observation-repair evidence and report-linked sources/images | Unreferenced runner/inference copies, unresolved U3 numerical grids and redundant standalone figures |
+| Overnight N1–N7 / observation v3, 2026-09-09–11 | Markdown/PDF reports, their bitmap figures, the report-linked N7 atlas, aggregate comparisons, manifests, source/continuation identities and verification records | Self-contained HTML, vector originals, the duplicate v3 atlas, task/status ledgers and detailed per-fit/truth tables |
+| Hb calibration v1/v2 and pilots, 2026-09-18/24 | Final reports, figures, summaries, paired effects, failure tables, manifests and source audit | Pilot metric tables, compressed task records, source copies and detailed parameter/profile records |
+
+All previously tracked registry evidence paths and all images embedded by the
+retained Markdown reports remain tracked. The frozen v3 report's four appendix
+links to `fit_status.csv`, `synthetic_state_truth.csv`,
+`missing_support_truth.csv` and `processed_visible_truth.csv` now require the
+local evidence or the historical Git copies. Historical report bytes are unchanged.
+The full-tree Git history is retained; this pruning reduces a future checkout's
+files, not an existing clone's object history. Recent shared-driver evidence,
+protected comparison packages and sealed R-series material keep their boundaries.
+
+Generated runs are ignored as one directory. Add any newly selected evidence by
+explicit file path with `git add -f -- <file>` and describe its reading route here;
+adding another run does not require another `.gitignore` exception list.
+
+### Measurement cache migration — 2026-09-16
+
+The [migration inventory](runs/physiology_semantic_tokenizer/data_quality_audit/20260916_measurement_cache_migration_v4/migration.json)
+records authorized cleanup, retained metadata, cache validation and before/after
+allocated disk usage. That migration selected the v4 measurement cache;
+model-specific normalization belongs to SSM/tokenizer consumers. Retired general
+v1 and public smoke arrays are rebuildable; preserve their manifests, event and
+geometry metadata in this migration package before deleting those directories.
+The v3 SSM native cache and historical teacher sidecars remain retained inputs.
+This is a data preparation migration, not a new model result or protected evaluation.
+
+The subsequent [public-subject extension](runs/physiology_semantic_tokenizer/data_quality_audit/20260917_all_subject_cache_v4/manifest.json)
+records retirement of the inherited subject embargo and the independently supervised
+cache expansion. Its [validation and 30-second inventory](runs/physiology_semantic_tokenizer/data_quality_audit/20260917_all_subject_cache_v4/validation.json)
+verify new signal/event/geometry coverage and unchanged existing arrays/events.
+Compressed pre-extension indices and manifests preserve the earlier cache inventory;
+the 2026-09-16 migration evidence remains unchanged.
+
+### No-motion cache migration — 2026-09-28
+
+The [migration record](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/migration.json)
+retains the decision sources, exact supervised commands, worker/IO measurements,
+source patch and test results. The [validation](runs/physiology_semantic_tokenizer/data_quality_audit/20260928_motion_cache_v5/validation.json)
+compares the new cache with the previous record inventory, EEG arrays, units,
+support, events, geometry and actual unified/sequence loading. Preserve both
+cache identities and this evidence; this migration does not authorize deletion
+of the old cache. Method choice and processing boundaries are owned by
+[DATA_CONTRACT](../docs/DATA_CONTRACT.md#无运动校正的通用缓存--2026-09-28).
+
+### Historical source/observation generation
 
 The pre-2026-07 physiology-semantic archive retains its README/inventory,
 resolved configs, manifests, metric logs, summaries, CSV/JSON tables, figures,
@@ -714,7 +765,7 @@ remain readable and comparable, but exact checkpoint/array replay is no longer
 locally available without rebuilding from retained code/configuration and raw
 data.
 
-## 2026-07-30 pruning record
+### 2026-07-30 pruning record
 
 The cleanup was frozen after checking all local processes. The only active
 project compute was EFRM LODO v2; none of the targets below intersected an

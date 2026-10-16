@@ -1,12 +1,31 @@
 # Physiology-semantic tokenizer configurations
 
-This directory contains reviewed SSM, T3 and Step5 diagnostic contracts and
-retained R-series contracts. The
+This directory contains reviewed SSM and observation diagnostics, conditional
+semantic/tokenizer contracts, and retained T3, Step5 and R-series contracts. The
 [entrypoint/config/test map](../../README.md#entrypoint-config-and-test-map)
 owns their command and test correspondence. Execution and scientific verdicts
 come from the [project registry view](../../../docs/PROJECT_STATUS.md).
 Generated variants, local tuning files, run outputs and abandoned preregistries
 are intentionally excluded from Git.
+
+## Find a contract
+
+| Scientific responsibility | Entrypoint, config and test owner |
+| --- | --- |
+| Measurement preparation, coordinates, scale and preprocessing | [Data and observation checks](../../README.md#data-preparation-and-observation-checks) |
+| Shared dynamics, reconstruction and parameter reliability | [Shared-driver diagnostics](../../README.md#shared-driver-reconstruction-and-reliability) |
+| Conditional Hb constraints and observation effects | [Hb diagnostics](../../README.md#hb-conditional-diagnostics) |
+| Response/component semantics and conditional tokenizer development | [Semantic and tokenizer entries](../../README.md#semantic-and-tokenizer-development) |
+| Figure, report and parameter-explanation exports | [Visualization entries](../../README.md#visualization-and-report-exports) |
+| T3, Step5 and overnight replay | [Recorded diagnostic entries](../../README.md#t3-step5-and-overnight-diagnostic-replay) |
+
+These groups identify scientific responsibilities; a shared directory does not
+merge their protocols, splits or claims. Downstream task-label benchmarking uses
+the separate [rebenchmark design](../../../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1),
+[retained comparison protocol](../../../docs/comparisons/PROTOCOL.md) and
+[method-owned configurations](../../../comparative_methods/README.md).
+The [result index](../../RESULTS_INDEX.md) locates retained evidence; this page
+owns configuration boundaries rather than results or execution state.
 
 ## Retained historical boundary
 
@@ -18,9 +37,11 @@ these records.
 
 The theory/architecture principles are frozen in
 [`METHOD_RATIONALE.md`](../../../docs/METHOD_RATIONALE.md). The
-observation–source v2 map is a pre-freeze implementation snapshot only; no
-executable tokenizer-training YAML exists yet. The
-historical YAML/runtime surface is not a template for a new candidate. Do not
+observation–source v2 map is a pre-freeze implementation snapshot only and
+defines no executable tokenizer-training contract. The independent conditional
+functional tokenizer has its [own YAML](functional_tokenizer_v1.yaml) and
+[protocol](../../../docs/EXPERIMENT_PLAN.md#条件功能监督与-hard-token-开发矩阵2026-10-10).
+The historical YAML/runtime surface is not a template for a new candidate. Do not
 reuse an old YAML by changing its experiment ID, target, or output path. The
 replaceable design note is
 [`observation_source_exploration_v2.json`](../../../docs/physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json).
@@ -32,7 +53,10 @@ tensor-shape, split, and null checks. Protected cohorts require the owning
 protocol plus separate, explicit user authorization and are never opened by a
 config flag.
 
-The version-controlled configuration surface is deliberately limited to:
+## Earlier SSM, T3, Step5 and R-series contracts
+
+The retained contract table below complements the task navigation above. Each
+file keeps its recorded scientific and data boundary:
 
 | File | Purpose | Contract / reading boundary |
 | --- | --- | --- |

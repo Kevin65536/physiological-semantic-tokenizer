@@ -1,9 +1,10 @@
 # Comparison methods
 
-> **STATUS: LEGACY 2026 TREE — STOPPED.** The recorded comparison campaigns and
+> **Retained 2026 campaigns — STOPPED.** The recorded comparison campaigns and
 > method deliveries are complete and retained as read-only evidence. Any
-> unexecuted queue, launch path, or follow-up in this tree is **ABANDONED**;
-> these files are not a current experiment-flow entrypoint or authorization.
+> unexecuted legacy queue, launch path, or follow-up is **ABANDONED**.
+> The separately versioned [downstream rebenchmark design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1)
+> does not restart those campaigns or modify their frozen evidence.
 
 This tree contains comparison-method integrations, compact protocol/evidence files,
 and local generated assets. It also retains the frozen 2026 public matrices and joint
@@ -17,13 +18,21 @@ directory, or signed campaign artifact.
 
 ## Start here
 
+| Reading task | Owning entry |
+| --- | --- |
+| Design the next downstream benchmark | [`DOWNSTREAM-REBENCH-v1`](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1): data version, input support, fitting budget, tracks and evaluation design |
+| Find implementation and local tests | [Directory map](#directory-map), then the selected method's README and source manifest |
+| Read retained formal performance | [Dated joint result table](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md); [retained result locations](../experiments/RESULTS_INDEX.md#comparison-methods) |
+| Explain historical low scores | [`performance_analysis/`](performance_analysis/README.md): exploratory analyses, separate from formal performance |
+| Check registered lifecycle | [Generated comparison status](../docs/PROJECT_STATUS.md#对比实验) |
+
 Read only what the task needs:
 
 1. [`docs/comparisons/PROTOCOL.md`](../docs/comparisons/PROTOCOL.md) — shared data,
-   split, task, metric, and protected-evaluation contract;
+   split, task, metric, and protected-evaluation contract for the retained campaign;
 2. [`docs/comparisons/METRIC_ACCEPTANCE.md`](../docs/comparisons/METRIC_ACCEPTANCE.md)
    — rules for admitting a numeric result;
-3. for adapter changes, [`ADAPTER_ALIGNMENT_GATES_V2.md`](ADAPTER_ALIGNMENT_GATES_V2.md),
+3. for historical adapter semantics, [`ADAPTER_ALIGNMENT_GATES_V2.md`](ADAPTER_ALIGNMENT_GATES_V2.md),
    its [`machine contract`](adapter_alignment_gate_contract_v2.yaml), and
    [`metric targets`](comparison_metric_targets_v1.yaml);
 4. the target method's `README.md`, `sources/method_manifest.yaml`, retained config,
@@ -87,8 +96,11 @@ protocol/controller, not to method-local authorization copies.
 
 ## Evidence and tests
 
-For each method, prefer `evidence/alignment_v2/summary_final.json` and the reviewed
-matrix completion summary over intermediate `summary.json`, pilot, or partial files.
+For retained adapter coverage, prefer `evidence/alignment_v2/summary_final.json`;
+for public training completion, use the reviewed matrix completion summary. Neither
+is a final test score. Read the dated joint result table for final performance,
+and follow its explicit evidence links when a deeper audit is needed.
+Prefer these final summaries over intermediate `summary.json`, pilot, or partial files.
 The intermediate files remain only where frozen configs still hash or consume them.
 
 The repository's default `pytest.ini` does not collect method-local test directories.
