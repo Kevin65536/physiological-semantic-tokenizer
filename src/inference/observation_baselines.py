@@ -348,3 +348,258 @@ def conditional_optical_hb_mapping(fnirs_factor):
     return dict(matrix=matrix,base_matrix=bbar,fnirs_factor=k,beta_reference=reference,
                 P0_assumed_uM=71.,tissue_sensitivity_assumed=1.,path_length_cm=3.,dpf=6.,
                 interpretation='conditional_prediction_map_not_individual_absolute_calibration')
+
+
+def spatial_observation_design(eeg_positions, hb_positions, modes=1, *,
+                               geometry='true', seed=0, kernel_width=None,
+                               bands=5):
+    """Freeze one or two spatial readouts in the supplied montage coordinates.
+
+    Hb row zero is the declared target. A second anchor, when requested, is
+    the farthest supplied Hb donor, with input order breaking distance ties.
+    Gaussian EEG columns have unit L2 norm. Hb rows are convex kernel mixtures;
+    for one core every Hb loading is one. The default width is the median
+    positive sensor-to-anchor distance in these coordinates, not a calibrated
+    physiological distance.
+
+    A sham only reassigns the true design's rows to the unchanged signal order.
+    It preserves each matrix's singular values, anchors and parameter count.
+    The target Hb row remains fixed; two Hb channels have no donor permutation.
+    A meaningful sham requires an EEG row assignment that changes its readout.
+    """
+    eeg, hb = np.asarray(eeg_positions, float), np.asarray(hb_positions, float)
+    if (eeg.ndim != 2 or hb.ndim != 2 or not len(eeg) or not len(hb)
+            or not eeg.shape[1] or eeg.shape[1] != hb.shape[1]
+            or not np.isfinite(eeg).all() or not np.isfinite(hb).all()):
+        raise ValueError('finite EEG [C,D] and Hb [J,D] coordinates are required')
+    if (isinstance(modes, (bool, np.bool_)) or modes not in (1, 2)
+            or isinstance(bands, (bool, np.bool_)) or bands != 5):
+        raise ValueError('spatial designs support K=1 or 2 and exactly five EEG bands')
+    k = int(modes)
+    if geometry not in ('true', 'uniform', 'sham'):
+        raise ValueError('geometry must be true, uniform or sham')
+    if geometry == 'uniform' and k != 1:
+        raise ValueError('uniform geometry is defined only for K=1')
+    anchors = [0]
+    if k == 2:
+        if len(hb) < 2:
+            raise ValueError('K=2 requires a distinct Hb donor anchor')
+        distances = np.linalg.norm(hb[1:]-hb[0], axis=1)
+        farthest = int(np.argmax(distances))+1
+        if not np.isfinite(distances).all() or distances[farthest-1] <= 0:
+            raise ValueError('K=2 requires spatially distinct Hb anchors')
+        anchors.append(farthest)
+    anchor_positions = hb[anchors]
+    eeg_distance = np.linalg.norm(eeg[:, None, :]-anchor_positions, axis=2)
+    hb_distance = np.linalg.norm(hb[:, None, :]-anchor_positions, axis=2)
+    if not np.isfinite(eeg_distance).all() or not np.isfinite(hb_distance).all():
+        raise ValueError('coordinate distances must be finite')
+    if kernel_width is None:
+        distances = np.r_[eeg_distance.ravel(), hb_distance.ravel()]
+        positive = distances[distances > 0]
+        if not len(positive):
+            raise ValueError('kernel width needs a positive montage distance')
+        width = float(np.median(positive))
+    else:
+        width = float(kernel_width)
+    if not np.isfinite(width) or width <= 0:
+        raise ValueError('kernel_width must be positive finite')
+    if geometry == 'uniform':
+        spatial_eeg = np.ones((len(eeg), 1))/np.sqrt(len(eeg))
+    else:
+        # Subtracting a column constant preserves its normalized Gaussian
+        # kernel while avoiding underflow at a distant montage origin.
+        log_eeg = -.5*(eeg_distance/width)**2
+        spatial_eeg = np.exp(np.maximum(log_eeg-log_eeg.max(axis=0), -700.))
+        spatial_eeg /= np.linalg.norm(spatial_eeg, axis=0)
+    if k == 1:
+        hb_loadings = np.ones((len(hb), 1))
+    else:
+        log_hb = -.5*(hb_distance/width)**2
+        hb_loadings = np.exp(np.maximum(log_hb-log_hb.max(axis=1, keepdims=True), -700.))
+        hb_loadings /= hb_loadings.sum(axis=1, keepdims=True)
+    eeg_rank = int(np.linalg.matrix_rank(spatial_eeg))
+    hb_rank = int(np.linalg.matrix_rank(hb_loadings))
+    if eeg_rank != k or hb_rank != k:
+        raise ValueError('spatial EEG and Hb readouts must both have rank K')
+    eeg_permutation, hb_permutation = np.arange(len(eeg)), np.arange(len(hb))
+    eeg_changed = hb_changed = False
+    if geometry == 'sham':
+        rng = np.random.default_rng(seed)
+        eeg_permutation = rng.permutation(len(eeg))
+        if np.array_equal(spatial_eeg[eeg_permutation], spatial_eeg):
+            different = np.flatnonzero(np.any(spatial_eeg != spatial_eeg[0], axis=1))
+            if not len(different):
+                raise ValueError('sham needs a nontrivial EEG geometry-to-signal assignment')
+            eeg_permutation = np.arange(len(eeg))
+            other = int(different[0])
+            eeg_permutation[[0, other]] = eeg_permutation[[other, 0]]
+        if len(hb) > 2:
+            hb_permutation[1:] = rng.permutation(np.arange(1, len(hb)))
+            if np.array_equal(hb_permutation, np.arange(len(hb))):
+                hb_permutation[1:] = np.roll(hb_permutation[1:], 1)
+        eeg_changed = not np.array_equal(spatial_eeg[eeg_permutation], spatial_eeg)
+        hb_changed = not np.array_equal(hb_loadings[hb_permutation], hb_loadings)
+        spatial_eeg = spatial_eeg[eeg_permutation]
+        hb_loadings = hb_loadings[hb_permutation]
+    return dict(spatial_eeg=spatial_eeg, hb_loadings=hb_loadings,
+                anchors=anchors, anchor_positions=anchor_positions.copy(), K=k,
+                ranks=dict(eeg=eeg_rank, hb=hb_rank), bands=int(bands),
+                permutation=dict(eeg=eeg_permutation, hb=hb_permutation),
+                eeg_changed=eeg_changed, hb_changed=hb_changed,
+                geometry=geometry, seed=seed, kernel_width=width,
+                learned_band_coefficients=int(bands)*k,
+                interpretation='supplied_montage_coordinates_not_individual_cortical_registration')
+
+
+def fit_spatial_coordinates(chunks, training_ids=None, *, target_rms=.025):
+    """Fit frozen observation coordinates from explicitly supplied train pairs.
+
+    Each pair is already referenced EEG [T,C,5], Hb [T,J,2]. Each EEG band's
+    RMS is pooled over training time and channels, then shared by all channels
+    so fixed spatial amplitudes remain intact. A single RMS across Hb channels
+    and both species preserves HbO/HbR ratios and the HbO+HbR identity. No
+    record is centered or independently normalized. Callers own the training
+    membership; this API never receives evaluation arrays.
+    """
+    target_rms = float(target_rms)
+    if not np.isfinite(target_rms) or target_rms <= 0:
+        raise ValueError('target_rms must be positive finite')
+    eeg_chunks, hb_chunks = [], []
+    shape = None
+    for eeg, hb in chunks:
+        eeg, hb = np.asarray(eeg, float), np.asarray(hb, float)
+        if (eeg.ndim != 3 or eeg.shape[2] != 5 or not eeg.shape[1]
+                or hb.ndim != 3 or hb.shape[2] != 2 or not hb.shape[1]
+                or not len(eeg) or len(eeg) != len(hb)
+                or not np.isfinite(eeg).all() or not np.isfinite(hb).all()):
+            raise ValueError('finite training EEG [T,C,5] and Hb [T,J,2] pairs are required')
+        current = (eeg.shape[1:], hb.shape[1:])
+        if shape is not None and shape != current:
+            raise ValueError('training chunks must preserve channel and band identity')
+        shape = current
+        eeg_chunks.append(eeg)
+        hb_chunks.append(hb)
+    if not eeg_chunks:
+        raise ValueError('at least one training pair is required')
+    ids = None if training_ids is None else list(training_ids)
+    if ids is not None and len(ids) != len(eeg_chunks):
+        raise ValueError('training_ids must identify exactly the supplied training chunks')
+    eeg, hb = np.concatenate(eeg_chunks), np.concatenate(hb_chunks)
+    if len(eeg) < 2:
+        raise ValueError('at least two training time rows are required')
+    with np.errstate(over='ignore', invalid='ignore'):
+        band_scale = np.sqrt(np.mean(eeg**2, axis=(0, 1)))/target_rms
+        eeg_scale = np.broadcast_to(band_scale, eeg.shape[1:]).copy()
+        hb_scale = float(np.sqrt(np.mean(hb**2))/target_rms)
+    if (not np.isfinite(eeg_scale).all() or np.any(eeg_scale <= 0)
+            or not np.isfinite(hb_scale) or hb_scale <= 0):
+        raise ValueError('training RMS must provide positive finite observation scales')
+    scaled = np.column_stack(((eeg/eeg_scale).reshape(len(eeg), -1),
+                              (hb/hb_scale).reshape(len(hb), -1)))
+    sd_before_floor = scaled.std(axis=0)
+    sd_floor = target_rms*1e-6
+    return dict(eeg_scale=eeg_scale, hb_scale=hb_scale,
+                sd=np.maximum(sd_before_floor, sd_floor),
+                sd_before_floor=sd_before_floor, sd_floor=sd_floor,
+                sd_floor_applied=sd_before_floor < sd_floor,
+                training_count=len(eeg_chunks), training_rows=len(eeg),
+                training_ids=ids, target_rms=target_rms,
+                centering='none_already_referenced_inputs',
+                eeg_scale_definition='per_band_training_RMS_pooled_over_time_and_channels_divided_by_target_rms',
+                eeg_shape=shape[0], hb_shape=shape[1])
+
+
+def transform_spatial_coordinates(eeg, hb, coordinate):
+    """Divide by frozen training scales; retain hidden NaNs without time mixing.
+
+    Returns EEG [T,C*5] in channel-major/band-minor order and Hb [T,J,2].
+    EEG may enter as either [T,C,5] or the same declared flattened ordering.
+    The elementwise operation cannot let a hidden target alter visible values.
+    """
+    eeg, hb = np.asarray(eeg, float), np.asarray(hb, float)
+    scale = np.asarray(coordinate['eeg_scale'], float)
+    hb_scale = float(coordinate['hb_scale'])
+    if (scale.ndim != 2 or scale.shape[1] != 5 or not len(scale)
+            or not np.isfinite(scale).all() or np.any(scale <= 0)
+            or not np.isfinite(hb_scale) or hb_scale <= 0):
+        raise ValueError('frozen spatial observation scales must be positive finite')
+    if eeg.ndim == 2 and eeg.shape[1] == scale.size:
+        eeg = eeg.reshape(len(eeg), *scale.shape)
+    if (eeg.ndim != 3 or eeg.shape[1:] != scale.shape
+            or hb.ndim != 3 or hb.shape[2] != 2 or len(hb) != len(eeg)
+            or tuple(hb.shape[1:]) != tuple(coordinate['hb_shape'])
+            or np.isinf(eeg).any() or np.isinf(hb).any()):
+        raise ValueError('observation shape/order must match the frozen training coordinates')
+    return (eeg/scale).reshape(len(eeg), -1), hb/hb_scale
+
+
+def fit_spatial_eeg_loadings(eeg_chunks, driver_chunks, spatial_eeg, *,
+                             ridge=.1, training_ids=None):
+    """Learn exactly five signed band coefficients per fixed spatial core.
+
+    For each band the pooled training equations are
+    E[t,c,b] = sum_k spatial_eeg[c,k]*a[b,k]*driver[t,k].
+    Each band's Gram is averaged across training time/channel rows. The ridge
+    penalty is ridge*trace(Gram)/K, so ridge is dimensionless and changing the
+    supplied driver units changes loadings inversely while preserving predicted
+    EEG. No channel coefficient, intercept, loading renormalization or
+    driver/gain change can undo geometry. The caller's fixed driver gauge is
+    retained, including its sign and scale.
+    """
+    spatial = np.asarray(spatial_eeg, float)
+    ridge = float(ridge)
+    if (spatial.ndim != 2 or not len(spatial) or spatial.shape[1] not in (1, 2)
+            or not np.isfinite(spatial).all()
+            or np.linalg.matrix_rank(spatial) != spatial.shape[1]
+            or not np.isfinite(ridge) or ridge < 0):
+        raise ValueError('finite full-rank [C,K] geometry and nonnegative ridge are required')
+    c, k = spatial.shape
+    eeg_values, drivers = list(eeg_chunks), list(driver_chunks)
+    if not eeg_values or len(eeg_values) != len(drivers):
+        raise ValueError('paired training EEG and driver chunks are required')
+    ids = None if training_ids is None else list(training_ids)
+    if ids is not None and len(ids) != len(eeg_values):
+        raise ValueError('training_ids must identify exactly the supplied training chunks')
+    designs, targets = [], []
+    for eeg, driver in zip(eeg_values, drivers):
+        eeg, driver = np.asarray(eeg, float), np.asarray(driver, float)
+        if eeg.ndim == 2 and eeg.shape[1] == c*5:
+            eeg = eeg.reshape(len(eeg), c, 5)
+        if (eeg.ndim != 3 or eeg.shape[1:] != (c, 5) or not len(eeg)
+                or driver.shape != (len(eeg), k)
+                or not np.isfinite(eeg).all() or not np.isfinite(driver).all()):
+            raise ValueError('finite paired training EEG [T,C,5] and driver [T,K] are required')
+        designs.append((driver[:, None, :]*spatial[None, :, :]).reshape(-1, k))
+        targets.append(eeg.reshape(-1, 5))
+    design, target = np.concatenate(designs), np.concatenate(targets)
+    design_rank = int(np.linalg.matrix_rank(design))
+    if design_rank != k:
+        raise ValueError('training driver/geometry equations are rank deficient')
+    with np.errstate(over='ignore', under='ignore', invalid='ignore'):
+        gram = design.T@design/len(design)
+    gram_trace = float(np.trace(gram))
+    if not np.isfinite(gram_trace) or gram_trace <= np.finfo(float).tiny:
+        raise ValueError('EEG loading calibration unavailable: training Gram trace is too small or nonfinite')
+    # Every band has the same complete channel/time support and driver design.
+    # Keep the five effective penalties explicit for the retained fit contract.
+    effective_ridge = np.full(5, ridge*gram_trace/k)
+    coefficients = np.linalg.solve(gram+effective_ridge[0]*np.eye(k),
+                                   design.T@target/len(design)).T
+    loading = (spatial[:, None, :]*coefficients[None, :, :]).reshape(c*5, k)
+    norm = np.linalg.norm(loading, axis=0)
+    if not np.isfinite(loading).all() or np.any(norm <= 1e-10):
+        raise ValueError('fitted EEG loading has a near-zero core column')
+    singular = np.linalg.svd(loading, compute_uv=False)
+    rank = int(np.linalg.matrix_rank(loading))
+    if rank != k or singular[-1] <= 1e-8*singular[0]:
+        raise ValueError('fitted EEG loading is rank deficient or nearly singular')
+    return dict(eeg_loadings=loading, band_coefficients=coefficients,
+                rank=rank, condition=float(singular[0]/singular[-1]),
+                design_rank=design_rank, design_condition=float(np.linalg.cond(design)),
+                training_ids=ids, training_count=len(eeg_values),
+                training_rows=sum(len(value) for value in eeg_values),
+                learned_coefficients=5*k, ridge=ridge,
+                effective_ridge=effective_ridge, gram_trace=np.full(5, gram_trace),
+                ridge_definition='penalty_b = ridge * trace(X_b.T @ X_b / n_rows) / K',
+                driver_gauge='unchanged_fixed_reference')

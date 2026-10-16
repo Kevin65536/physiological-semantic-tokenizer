@@ -1,0 +1,375 @@
+{
+  "id": "05aad5614753edc0edf418f5",
+  "record_id": "synthetic|uninformative_EEG|evaluation|0|record=0",
+  "subject": "evaluation_00",
+  "arm": "K2_true_H4_E12",
+  "mode": "heldout_pair",
+  "pairing": "paired",
+  "method": "SSM",
+  "scenario": "uninformative_EEG",
+  "success": true,
+  "calibration": "oracle_signed_band_readout_for_software_smoke_only",
+  "coordinate_source": "scenarios/uninformative_EEG/coordinate.json",
+  "sd_reference_scope": "complete_training_window_no_evaluation_statistics",
+  "status": "completed",
+  "converged": true,
+  "convergence_reason": "scaled_gradient",
+  "nfev": 11,
+  "iterations": 5,
+  "objective": 17.44316828483164,
+  "objective_components": {
+    "eeg_data": 13.249152393571826,
+    "hb_data": 3.549418841302372,
+    "driver_curvature": 4.168654411403977e-06,
+    "initial_state": 0.4781637105334665,
+    "flow_prior": 0.1664291707695585
+  },
+  "physical_checks": [
+    {
+      "finite": true,
+      "positive_fvpq": true,
+      "oxygen_extraction_in_unit_interval": true,
+      "absolute_hb_nonnegative": true,
+      "hbr_not_above_hbt": true,
+      "rest_equilibrium": true,
+      "minimum_f": 0.9722592872082239,
+      "minimum_v": 0.9982547477770367,
+      "minimum_p": 1.0014287434324496,
+      "minimum_q": 0.9731787228841824,
+      "minimum_extraction": 0.30171851111572157,
+      "maximum_extraction": 0.32744156987447015,
+      "extraction_float_saturation_count": 0,
+      "minimum_log_one_minus_extraction": -0.3966662863353953,
+      "flow_below_0_01_count": 0,
+      "valid": true
+    },
+    {
+      "finite": true,
+      "positive_fvpq": true,
+      "oxygen_extraction_in_unit_interval": true,
+      "absolute_hb_nonnegative": true,
+      "hbr_not_above_hbt": true,
+      "rest_equilibrium": true,
+      "minimum_f": 0.8984872306835258,
+      "minimum_v": 0.9666757940507051,
+      "minimum_p": 0.9666657134204453,
+      "minimum_q": 0.9978025724440824,
+      "minimum_extraction": 0.3184449048942667,
+      "maximum_extraction": 0.3489933031882998,
+      "extraction_float_saturation_count": 0,
+      "minimum_log_one_minus_extraction": -0.4292353498653412,
+      "flow_below_0_01_count": 0,
+      "valid": true
+    }
+  ],
+  "support": {
+    "visible_count": 2640,
+    "effective_count": 2640,
+    "weighting": "visible_modality_mean",
+    "effective_denominators": {
+      "eeg": 60.0,
+      "hb": 6.0
+    },
+    "eeg_counts": [
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+    ],
+    "hb_counts": [
+      [
+        0,
+        0
+      ],
+      [
+        40,
+        40
+      ],
+      [
+        40,
+        40
+      ],
+      [
+        40,
+        40
+      ]
+    ],
+    "eeg_loading_rank": 2,
+    "hb_loading_rank": 2,
+    "visible_eeg_loading_rank": 2,
+    "visible_hb_loading_rank": 2,
+    "interpretation": "fixed conditional observation support; not physiological identifiability",
+    "driver_data_column_norms": [
+      [
+        775.0877630551458,
+        969.148667546549
+      ],
+      [
+        1041.3611806382041,
+        1216.1871939896319
+      ],
+      [
+        910.0900960975704,
+        1057.8614217958093
+      ],
+      [
+        724.5974209816669,
+        832.2328832765814
+      ],
+      [
+        599.7923171891857,
+        684.8778863469344
+      ],
+      [
+        536.7069320365207,
+        611.9956146527738
+      ]
+    ]
+  },
+  "complexity": {
+    "driving_trajectories": 2,
+    "temporal_modes": 6,
+    "trajectory_parameters": 12,
+    "initial_parameters": 10,
+    "total_parameters": 22,
+    "extra_hb_parameters": 0,
+    "graph_parameters": 0,
+    "fixed_coordinate_gauge": true,
+    "weighting": "visible_modality_mean",
+    "effective_denominators": {
+      "eeg": 60.0,
+      "hb": 6.0
+    }
+  },
+  "failure_log": [],
+  "integration_max_training_sd": 1.125449958817122e-06,
+  "scaled_gradient_inf_norm": 1.15493594028554e-06,
+  "known_truth_diagnostics": {
+    "coordinate": "generator_model_coordinate_identity",
+    "comparison": "fixed_anchor_order_no_posthoc_sign_permutation_or_scale_fit",
+    "reference_steps": 7,
+    "state_order": [
+      "r",
+      "s",
+      "f",
+      "v",
+      "p",
+      "q"
+    ],
+    "drivers": [
+      {
+        "mode": 0,
+        "status": "computed",
+        "raw_rmse": 0.019364004051962813,
+        "reference_centered_rmse": 0.032837156929242446,
+        "reference_centered_nrmse": 0.7340426971787641,
+        "truth_reference_centered_rms": 0.04473466878078005,
+        "reference_dc_error": -0.023301885865527026,
+        "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+      },
+      {
+        "mode": 1,
+        "status": "computed",
+        "raw_rmse": 0.007874159427683668,
+        "reference_centered_rmse": 0.008901042727209022,
+        "reference_centered_nrmse": 1.7893592934822042,
+        "truth_reference_centered_rms": 0.004974430098880276,
+        "reference_dc_error": 0.0024450425895555065,
+        "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+      }
+    ],
+    "states": [
+      {
+        "mode": 0,
+        "coordinates": {
+          "r": {
+            "status": "computed",
+            "raw_rmse": 0.019364004051962813,
+            "reference_centered_rmse": 0.032837156929242446,
+            "reference_centered_nrmse": 0.7340426971787641,
+            "truth_reference_centered_rms": 0.04473466878078005,
+            "reference_dc_error": -0.023301885865527026,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "s": {
+            "status": "computed",
+            "raw_rmse": 0.01986342519951594,
+            "reference_centered_rmse": 0.023025824093693466,
+            "reference_centered_nrmse": 0.5822323013830916,
+            "truth_reference_centered_rms": 0.03954748652555977,
+            "reference_dc_error": 0.02486595814003613,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "f": {
+            "status": "computed",
+            "raw_rmse": 0.022996256526914484,
+            "reference_centered_rmse": 0.024401417183593555,
+            "reference_centered_nrmse": 0.5708207477420897,
+            "truth_reference_centered_rms": 0.042747950701011825,
+            "reference_dc_error": -0.0035919701117441694,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "v": {
+            "status": "computed",
+            "raw_rmse": 0.0052439638149640875,
+            "reference_centered_rmse": 0.005475527102655853,
+            "reference_centered_nrmse": 0.41630784063756077,
+            "truth_reference_centered_rms": 0.013152591827889372,
+            "reference_dc_error": -0.0006702067850161697,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "p": {
+            "status": "computed",
+            "raw_rmse": 0.005427559824736264,
+            "reference_centered_rmse": 0.004881097095956729,
+            "reference_centered_nrmse": 0.3711129456330137,
+            "truth_reference_centered_rms": 0.013152591827889372,
+            "reference_dc_error": 0.0022576608952342703,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "q": {
+            "status": "computed",
+            "raw_rmse": 0.002221659864224969,
+            "reference_centered_rmse": 0.0022013938306428894,
+            "reference_centered_nrmse": 0.11955332610014231,
+            "truth_reference_centered_rms": 0.018413488795777377,
+            "reference_dc_error": -0.00022379974717956497,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          }
+        }
+      },
+      {
+        "mode": 1,
+        "coordinates": {
+          "r": {
+            "status": "computed",
+            "raw_rmse": 0.007874159427683668,
+            "reference_centered_rmse": 0.008901042727209022,
+            "reference_centered_nrmse": 1.7893592934822042,
+            "truth_reference_centered_rms": 0.004974430098880276,
+            "reference_dc_error": 0.0024450425895555065,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "s": {
+            "status": "computed",
+            "raw_rmse": 0.007441638604066974,
+            "reference_centered_rmse": 0.0068032024496328305,
+            "reference_centered_nrmse": 0.5127047758726565,
+            "truth_reference_centered_rms": 0.013269239472273967,
+            "reference_dc_error": -0.005574539834435576,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "f": {
+            "status": "computed",
+            "raw_rmse": 0.009905172063881248,
+            "reference_centered_rmse": 0.009969394739014044,
+            "reference_centered_nrmse": 0.1473249565309928,
+            "truth_reference_centered_rms": 0.06766942257279253,
+            "reference_dc_error": 0.0008828551288159181,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "v": {
+            "status": "computed",
+            "raw_rmse": 0.002427123240070211,
+            "reference_centered_rmse": 0.002432181431223786,
+            "reference_centered_nrmse": 0.10943150514702381,
+            "truth_reference_centered_rms": 0.02222560521264962,
+            "reference_dc_error": 0.0010588617933467992,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "p": {
+            "status": "computed",
+            "raw_rmse": 0.0023564042113301915,
+            "reference_centered_rmse": 0.0023389860452933705,
+            "reference_centered_nrmse": 0.10523835112315166,
+            "truth_reference_centered_rms": 0.02222560521264962,
+            "reference_dc_error": 0.0002897390124433352,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          },
+          "q": {
+            "status": "computed",
+            "raw_rmse": 0.002160986050381288,
+            "reference_centered_rmse": 0.0010482768603600457,
+            "reference_centered_nrmse": 0.03897383390378707,
+            "truth_reference_centered_rms": 0.026896939699283345,
+            "reference_dc_error": -0.002052531796987611,
+            "undefined_normalization": "None_when_truth_reference_centered_RMS_is_zero"
+          }
+        }
+      }
+    ]
+  },
+  "nmse": 0.11736131923086299,
+  "nrmse": 0.3425803836048745,
+  "component_nmse": [
+    0.1759093331042474,
+    0.0588133053574786
+  ],
+  "correlation": [
+    0.9468151876318165,
+    0.9539661349238434
+  ],
+  "amplitude_rms_ratio": [
+    0.8098736255552708,
+    0.9700331584715755
+  ],
+  "scored_values": 66,
+  "denominator": "frozen_training_SD_per_component",
+  "pooling": "mean_time_then_equal_HbO_HbR; subject_aggregation_precedes_square_root"
+}

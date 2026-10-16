@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-13T08:17:32.584373+00:00",
+  "updated_at": "2026-10-16T15:10:28.797287+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1682,6 +1682,24 @@
       "id": "e.refed_backfill_report_checks",
       "label": "四数据集PPT/PDF位图与版面检查",
       "path": "docs/report/20261013_refed_four_dataset_v1/delivery_checks.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.local_spatial_contract",
+      "label": "局部多通道观测与空间动态维数合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_spatial_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.local_spatial_smoke",
+      "label": "局部空间模型合成软件检查 v3",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261016_implementation_smoke_v3/summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.local_spatial_plan",
+      "label": "局部空间模型元数据计划 v3（无信号读取）",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261016_metadata_plan_v3/plan.json",
       "role": "diagnostic"
     }
   ],
@@ -5127,6 +5145,30 @@
       ],
       "headline": false,
       "next_step": "本次补齐与重绘已交付。保留失败、源码/服务修复记录和所有旧证据；下一项研究设计须以配对特异性、共同内点及真实差异恢复为问题，不自动启动新实测或受保护评价。"
+    },
+    {
+      "state_id": "main.local_spatial@2026-10-16.v1",
+      "entity": "main.local_spatial",
+      "label": "局部多通道观测与空间动态维数",
+      "track": "main",
+      "order": 182,
+      "entity_kind": "experiment",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "版本化设计与实现：公开Single-Trial局部2/4对Hb、6/12路EEG，K1/K2守恒动态，真实/置换几何、同输入ridge、错配EEG及K2轨迹与初态相等约束对照。元数据计划含29人174窗，按17/6/6人划分；未读取信号。独立训练尺度的已知读出合成冒烟12/12完成，正负结果均保留；完整训练校准合成与新的实测运行尚未启动，不赋予生理资格。",
+      "evidence_ids": [
+        "e.local_spatial_contract",
+        "e.local_spatial_smoke",
+        "e.local_spatial_plan"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-16T15:28:02.489249+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "先完成独立训练校准与选择的完整合成机制比较；正式实测须有明确执行范围并使用既有持久监督规范。保留全部失败，分别判断几何、EEG及独立轨迹增量，不自动赋予来源或个体参数资格。"
     }
   ]
 }

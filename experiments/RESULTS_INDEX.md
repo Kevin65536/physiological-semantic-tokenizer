@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-13; payload-pruning record retained from
+_Evidence surface updated 2026-10-16; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -26,6 +26,7 @@ explains the path hierarchy and reading order.
 
 | Research question | Suite root | Evidence entry |
 | --- | --- | --- |
+| Do local channels, geometry and independent dynamics contribute separately? | `shared_driver_spatial/` | [Spatial software and metadata evidence](#local-spatial-software-and-metadata--2026-10-16) |
 | How do the diagnostic families compare across datasets? | Multiple suites, resolved by the report evidence map | [REFED and four-dataset comparison](#refed-backfill-and-four-dataset-comparison--2026-10-13) |
 | What does a fixed shared driver reconstruct, and how do observation and solver choices affect it? | `shared_driver_reconstruction/` | [Fixed-structure semantics](#fixed-structure-physiology-semantics--2026-09-28), [EEG proxy rates](#eeg-proxy-sampling-rate-comparison--2026-10-10), [reconstruction diagnostics](#reconstruction-and-measurement-diagnostics) |
 | Are fitted parameters repeatable and supported away from boundaries? | `shared_driver_parameter_stability/` | [Parameter stability and common interior](#parameter-stability-and-common-interior--2026-10-10) |
@@ -48,6 +49,30 @@ Some run and checkpoint paths below point to local Git-ignored artifacts that re
 useful in this workspace but are not part of the tracked paper record. For manuscript
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
+
+## Local spatial software and metadata — 2026-10-16
+
+The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_spatial_v1.yaml)
+and [design](../docs/EXPERIMENT_PLAN.md#局部多通道观测与空间动态维数2026-10-16)
+define the local multi-channel suite. Retain these bounded implementation checks:
+
+Git retains the final v3 JSON evidence and source snapshots listed below. Rebuildable
+synthetic NPZ arrays, runtime locks and superseded v1/v2 directories remain local.
+
+- [Synthetic smoke v3](runs/physiology_semantic_tokenizer/shared_driver_spatial/20261016_implementation_smoke_v3/summary.json):
+  per-scenario known-readout checks, with scoring scales frozen from separate training
+  seeds. Keep the resolved contract, source snapshot, execution record, scenario
+  coordinates and complete cell diagnostics. This is not learned-calibration,
+  measured-data or physiological qualification evidence.
+- [Metadata plan v3](runs/physiology_semantic_tokenizer/shared_driver_spatial/20261016_metadata_plan_v3/plan.json):
+  subject splits, frozen sensor identities, target-optode exclusions, window support,
+  wrong-EEG availability and planned cells. Signal-array readers were disabled during
+  this audit; no measured fit was performed.
+- Preserve `20261016_implementation_smoke_v1` as superseded debugging evidence:
+  its scales used evaluation statistics and must not support hidden-target claims.
+  Preserve the v1 metadata plan and both v2 runs with their original source identities.
+  The v3 checks reproduce v2 numerics and metadata while completing the read-dependency
+  source snapshots and per-stage execution history.
 
 ## REFED backfill and four-dataset comparison — 2026-10-13
 

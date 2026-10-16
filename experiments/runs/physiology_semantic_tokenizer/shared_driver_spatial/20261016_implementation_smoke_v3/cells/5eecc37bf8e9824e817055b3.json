@@ -1,0 +1,233 @@
+{
+  "id": "5eecc37bf8e9824e817055b3",
+  "record_id": "synthetic|identical_sources|evaluation|0|record=0",
+  "subject": "evaluation_00",
+  "arm": "K1_true_H4_E12",
+  "mode": "heldout_pair",
+  "pairing": "paired",
+  "method": "SSM",
+  "scenario": "identical_sources",
+  "success": true,
+  "calibration": "oracle_signed_band_readout_for_software_smoke_only",
+  "coordinate_source": "scenarios/identical_sources/coordinate.json",
+  "sd_reference_scope": "complete_training_window_no_evaluation_statistics",
+  "status": "completed",
+  "converged": true,
+  "convergence_reason": "scaled_gradient",
+  "nfev": 9,
+  "iterations": 4,
+  "objective": 27.45249485787212,
+  "objective_components": {
+    "eeg_data": 26.084722690745593,
+    "hb_data": 1.1773413349325468,
+    "driver_curvature": 1.802160761929073e-07,
+    "initial_state": 0.04715312307100536,
+    "flow_prior": 0.14327752890690024
+  },
+  "physical_checks": [
+    {
+      "finite": true,
+      "positive_fvpq": true,
+      "oxygen_extraction_in_unit_interval": true,
+      "absolute_hb_nonnegative": true,
+      "hbr_not_above_hbt": true,
+      "rest_equilibrium": true,
+      "minimum_f": 0.8953683335164287,
+      "minimum_v": 0.9659363762773371,
+      "minimum_p": 0.9658363536141154,
+      "minimum_q": 0.9998095512406222,
+      "minimum_extraction": 0.31636551487463216,
+      "maximum_extraction": 0.3499659510310936,
+      "extraction_float_saturation_count": 0,
+      "minimum_log_one_minus_extraction": -0.4307305344353105,
+      "flow_below_0_01_count": 0,
+      "valid": true
+    }
+  ],
+  "support": {
+    "visible_count": 2640,
+    "effective_count": 2640,
+    "weighting": "visible_modality_mean",
+    "effective_denominators": {
+      "eeg": 60.0,
+      "hb": 6.0
+    },
+    "eeg_counts": [
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40,
+      40
+    ],
+    "hb_counts": [
+      [
+        0,
+        0
+      ],
+      [
+        40,
+        40
+      ],
+      [
+        40,
+        40
+      ],
+      [
+        40,
+        40
+      ]
+    ],
+    "eeg_loading_rank": 1,
+    "hb_loading_rank": 1,
+    "visible_eeg_loading_rank": 1,
+    "visible_hb_loading_rank": 1,
+    "interpretation": "fixed conditional observation support; not physiological identifiability",
+    "driver_data_column_norms": [
+      [
+        1122.5007574558751
+      ],
+      [
+        1162.0632401060936
+      ],
+      [
+        990.4450840691547
+      ],
+      [
+        734.5846953243247
+      ],
+      [
+        586.1382259551497
+      ],
+      [
+        518.8769845299723
+      ]
+    ]
+  },
+  "complexity": {
+    "driving_trajectories": 1,
+    "temporal_modes": 6,
+    "trajectory_parameters": 6,
+    "initial_parameters": 5,
+    "total_parameters": 11,
+    "extra_hb_parameters": 0,
+    "graph_parameters": 0,
+    "fixed_coordinate_gauge": true,
+    "weighting": "visible_modality_mean",
+    "effective_denominators": {
+      "eeg": 60.0,
+      "hb": 6.0
+    }
+  },
+  "failure_log": [],
+  "integration_max_training_sd": 2.5368325324057745e-07,
+  "scaled_gradient_inf_norm": 1.6029476817274025e-07,
+  "known_truth_diagnostics": {
+    "coordinate": "generator_model_coordinate_identity",
+    "comparison": "fixed_anchor_order_no_posthoc_sign_permutation_or_scale_fit",
+    "reference_steps": 7,
+    "state_order": [
+      "r",
+      "s",
+      "f",
+      "v",
+      "p",
+      "q"
+    ],
+    "drivers": {
+      "status": "unavailable_different_number_of_cores",
+      "fitted_shape": [
+        40,
+        1
+      ],
+      "truth_shape": [
+        40,
+        2
+      ]
+    },
+    "states": {
+      "status": "unavailable_different_number_of_cores",
+      "fitted_shape": [
+        40,
+        1,
+        6
+      ],
+      "truth_shape": [
+        40,
+        2,
+        6
+      ]
+    }
+  },
+  "nmse": 0.03408567717171366,
+  "nrmse": 0.18462306782120608,
+  "component_nmse": [
+    0.05973428111824494,
+    0.00843707322518237
+  ],
+  "correlation": [
+    0.9940838784972932,
+    0.9994766836461879
+  ],
+  "amplitude_rms_ratio": [
+    0.9974967336575847,
+    1.0025568007829937
+  ],
+  "scored_values": 66,
+  "denominator": "frozen_training_SD_per_component",
+  "pooling": "mean_time_then_equal_HbO_HbR; subject_aggregation_precedes_square_root"
+}
