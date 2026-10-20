@@ -21,6 +21,22 @@ reproduction: the original checkpoint and processed pretraining arrays were
 not released, all project data are paired, the sampling rates are changed to
 the repository-wide 200/10 Hz contract, and channels are not duplicated.
 
+## Versioned rebenchmark interface
+
+The separately versioned [rebenchmark adapter](rebench_v1.py) implements the
+[downstream rebenchmark contract](../../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1).
+It reuses the EFRM library architecture and three pretraining objectives, with
+explicit 200/10 Hz measurement-v5 panels and recorded-support masks. Its
+`create_pretraining_model`, `pretraining_loss` / `pretrain_step`, and checkpoint
+save/resume functions are consumed by the common durable worker; historical
+launchers and v1 weights are not relabeled or resumed. Downstream creation
+requires a newly completed fresh refit excluding the entire target dataset.
+REFED exposes actual time-token features and a separate input-support mask for
+pointwise linear readout, rather than projecting one pooled vector into a
+trajectory. [Synthetic tests](tests/test_rebench_v1.py) exercise this version
+without reading retained datasets or runs. The remaining sections document the
+frozen historical implementation.
+
 ## Frozen v2 performance-testing protocol
 
 The completed v2 experiment followed

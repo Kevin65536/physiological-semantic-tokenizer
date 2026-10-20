@@ -7,11 +7,12 @@ _Generated from `research_state/registry.json`; do not edit this block._
 
 - **主方法**（PST-DISCOVERY-v1 tokenizer 发现流程）— 未开始 / 尚未判定：旧Step5A0联合似然校准与A1有限合成正证据、Step5B实测teacher负结论保留。氧提取和已知尺度回归关闭；漂移越界已明确分类，遮挡感知算子已保留上下文并通过线性特征桥接检查。当前时序参考仍采用Gaussian近似，非线性Student-t时序推断及原训练边界的新同折实测比较尚未完成；全面UQ和tokenizer未晋级。
 - **Token Atlas**（Atlas Statistical tier）— 已废弃（未完成且不再开展） / 尚未判定：Statistical tier 尚未运行；本旧分析支路废弃，不再开展。
-- **对比实验**（六方法联合正式 campaign）— 已停止（此前已完成） / 混合结论：540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。
+- **对比实验**（统一测量v5下游任务性能重新获取）— 运行中 / 尚未判定：完整988节点计划已从20261016_v2/source_v2冻结快照启动：975个下游评价、12个EFRM全目标数据集排除的三种子预训练及最终汇总。保持5外折×3内折、LP/FT/从头监督和三种信号基线；MI/MA各60部分fNIRS支持窗与REFED480部分支持窗保留。184项综合测试及后续62项缺失输入/恢复/调度专项检查通过；NormWear与BrainFusion真实缺失支持smoke、REFED空标签分支均通过。BrainFusion按内部OOF训练分区独立填补，未定义NVC使用明确零特征约定，旧核及失败证据保留。user systemd服务downstream-rebench-20261016-v2启用且linger开启，40线程/180GiB调度预算，双GPU优先预训练与LP；用户选择完整执行、不设总时限。初版保留20个已完成EEG简单基线、5个中断任务及旧快照；尚无完整方法比较结论。
 - **Croce 验证**（新版 Synthetic Phase 1）— 已废弃（未完成且不再开展） / 尚未判定：新版 Synthetic Phase 1 尚未开始；本旧验证流废弃，不再开展。
 
 ### Next steps
 - **主方法** — 在遮挡感知观测合同下实现并校验非线性Student-t轨迹推断，覆盖完整、中心遮挡和整模态缺失；不得用静息点Gaussian参考或旧A0代替。满足该前提后，在原训练边界比较固定W=0/−0.5、同折线性基础/联合模型及配对/移位控制；该复现实验不扩大GWZ或既定数据面板；公共数据流程已取消固定被试封锁，新实验按当前数据合同独立确定划分。
+- **对比实验** — 通过同一冻结任务矩阵和持久服务监控、恢复，保持所有计划分母和失败；完整轨道终态后核验被试/种子等权统计、REFED训练均值误差、输入与目标覆盖、REVE重叠及方法准入。预估数月至一年以上，待持续epoch吞吐细化；不因低外折分数改候选或扩大数据范围。
 
 See the [generated project status](docs/PROJECT_STATUS.md) for lifecycle states and evidence links.
 <!-- project-state:end -->

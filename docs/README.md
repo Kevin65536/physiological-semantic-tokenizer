@@ -27,7 +27,7 @@ in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 | What happened in E0–E2 and R0–R2? | [`physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
 | What is the full R-series evidence? | [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md) |
 | What is the retained comparison contract? | [`comparisons/PROTOCOL.md`](comparisons/PROTOCOL.md): frozen legacy benchmark |
-| How will downstream performance be reacquired? | [`DOWNSTREAM-REBENCH-v1`](EXPERIMENT_PLAN.md#downstream-rebench-v1): new design; executable contracts and runs are separate deliverables |
+| How will downstream performance be reacquired? | [`DOWNSTREAM-REBENCH-v1`](EXPERIMENT_PLAN.md#downstream-rebench-v1): design and execution scope; [versioned implementation](../comparative_methods/README.md#downstream-rebenchmark-v1) |
 | Which comparisons stopped, and which follow-ups were abandoned? | [`PROJECT_STATUS.md#对比实验`](PROJECT_STATUS.md#对比实验) (generated) |
 | What is the short comparison-method summary? | [`comparisons/STATUS.md`](comparisons/STATUS.md) |
 | What are the completed protected-comparison results? | [`comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md) |

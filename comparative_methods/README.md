@@ -21,6 +21,7 @@ directory, or signed campaign artifact.
 | Reading task | Owning entry |
 | --- | --- |
 | Design the next downstream benchmark | [`DOWNSTREAM-REBENCH-v1`](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1): data version, input support, fitting budget, tracks and evaluation design |
+| Run the versioned downstream benchmark | [Execution entry](#downstream-rebenchmark-v1), [reviewed contract](downstream_rebench_v1.yaml) |
 | Find implementation and local tests | [Directory map](#directory-map), then the selected method's README and source manifest |
 | Read retained formal performance | [Dated joint result table](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md); [retained result locations](../experiments/RESULTS_INDEX.md#comparison-methods) |
 | Explain historical low scores | [`performance_analysis/`](performance_analysis/README.md): exploratory analyses, separate from formal performance |
@@ -43,6 +44,30 @@ Read only what the task needs:
 Local ignored release candidates, authorization records, ORR files, predictions,
 and job statuses are optional historical evidence. They are never prerequisites for
 understanding the repository or starting public-surface code work.
+
+## Downstream rebenchmark v1
+
+The [design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1) and
+[executable contract](downstream_rebench_v1.yaml) define the new public v5 comparison.
+It has its own `rebench_v1.py` adapters and does not resume retained v2 campaigns.
+
+| Owner | Contract / targeted tests |
+| --- | --- |
+| [`src/data/downstream_benchmark.py`](../src/data/downstream_benchmark.py): inventory, subject splits, native masks and label-blind source windows | [`test_downstream_benchmark.py`](../tests/test_downstream_benchmark.py) |
+| [`downstream_rebench_worker_v1.py`](downstream_rebench_worker_v1.py): train-only transforms, inner selection, fresh final fit and recovery | [`test_downstream_rebench_worker_v1.py`](../tests/test_downstream_rebench_worker_v1.py); method-local `tests/test_rebench_v1.py` |
+| [`run_downstream_rebench_v1.py`](run_downstream_rebench_v1.py): build frozen jobs, bound resources, resume and dispatch dependencies | [`test_downstream_rebench_scheduler.py`](../tests/test_downstream_rebench_scheduler.py) |
+| [`aggregate_downstream_rebench_v1.py`](aggregate_downstream_rebench_v1.py): planned denominators, subject/seed aggregation and admission | [`test_aggregate_downstream_rebench_v1.py`](../tests/test_aggregate_downstream_rebench_v1.py); metrics in [`src/metrics/downstream_benchmark.py`](../src/metrics/downstream_benchmark.py) |
+| [`rebench_baselines_v1.py`](rebench_baselines_v1.py), [`rebench_eeg_common_v1.py`](rebench_eeg_common_v1.py): signal baselines and shared EEG adaptation | [`test_downstream_rebench_baselines.py`](../tests/test_downstream_rebench_baselines.py), [`test_downstream_rebench_eeg_models.py`](../tests/test_downstream_rebench_eeg_models.py) |
+
+Build a new run only after its inventory, splits, multimodal input audit and resource
+smoke are retained. Use the same controller's `--build-config`, `--run-root`,
+`--source-root` and `--smoke-summary` options. The generated `jobs.json` owns the
+resolved DAG; model outputs remain under each method's existing `runs/` root.
+Run `--manifest <jobs.json>` through the recorded persistent service and use
+`--manifest <jobs.json> --status` to reconnect. Preserve the frozen source and job
+identity when resuming. Per-job failures block dependent training; the final aggregate
+still records all planned units and failures. Runtime status is in `scheduler_status.json`;
+registered lifecycle is in the project registry, not this README.
 
 ## Directory map
 

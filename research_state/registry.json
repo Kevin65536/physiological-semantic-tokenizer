@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-16T15:10:28.797287+00:00",
+  "updated_at": "2026-10-16T16:23:32.510257+00:00",
   "tracks": [
     {
       "id": "main",
@@ -18,7 +18,7 @@
       "id": "comparisons",
       "label": "对比实验",
       "order": 2,
-      "headline_entity": "comparison.campaign"
+      "headline_entity": "comparison.downstream_rebench"
     },
     {
       "id": "croce",
@@ -1701,6 +1701,78 @@
       "label": "局部空间模型元数据计划 v3（无信号读取）",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261016_metadata_plan_v3/plan.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.downstream_rebench_contract",
+      "label": "新版下游比较执行合同",
+      "path": "comparative_methods/downstream_rebench_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.downstream_rebench_launch",
+      "label": "新版下游比较持久服务启动记录",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_jobs",
+      "label": "新版下游比较冻结任务矩阵",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v1/jobs.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_resources",
+      "label": "新版下游比较实测资源与缺失支持",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v1/resource_summary.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_source",
+      "label": "新版下游比较冻结源码身份",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v1/source_manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_progress",
+      "label": "新版下游比较持久调度进度",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v1/scheduler_status.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_v2_launch",
+      "label": "新版下游比较v2持久服务启动记录",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_v2_jobs",
+      "label": "新版下游比较v2冻结任务矩阵",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/jobs.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_v2_resources",
+      "label": "新版下游比较v2实测资源与缺失支持",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/resource_summary.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_v2_source",
+      "label": "新版下游比较v2冻结源码身份",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/source_manifest_v2.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_v2_progress",
+      "label": "新版下游比较v2持久调度进度",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/scheduler_status.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_v2_revision",
+      "label": "新版下游比较初版中断与修复身份",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/revision.json",
+      "role": "run_manifest"
     }
   ],
   "records": [
@@ -5169,6 +5241,101 @@
       ],
       "headline": false,
       "next_step": "先完成独立训练校准与选择的完整合成机制比较；正式实测须有明确执行范围并使用既有持久监督规范。保留全部失败，分别判断几何、EEG及独立轨迹增量，不自动赋予来源或个体参数资格。"
+    },
+    {
+      "state_id": "comparison.downstream_rebench@2026-10-17.v1",
+      "entity": "comparison.downstream_rebench",
+      "label": "统一测量v5下游任务性能重新获取",
+      "track": "comparisons",
+      "order": 100,
+      "entity_kind": "experiment",
+      "execution": "stopped",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "首版988节点完整计划已冻结并启动，184项针对性测试及联合输入审计通过。独立末检发现BrainFusion对MI/MA部分fNIRS支持仍硬拒绝，初始派发已主动停止，原始源码、任务矩阵、启动及完成/中断记录全部保留。修复限定新版BrainFusion各内部OOF训练分区的训练均值填补，并保持原窗口、被试折、候选与种子；完整矩阵将从新版本快照接续。初版仅产生早期基线，尚无完整方法比较结论。",
+      "evidence_ids": [
+        "e.downstream_rebench_contract",
+        "e.downstream_rebench_launch",
+        "e.downstream_rebench_jobs",
+        "e.downstream_rebench_resources",
+        "e.downstream_rebench_source",
+        "e.downstream_rebench_progress"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-16T16:15:00.932112+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": true
+    },
+    {
+      "state_id": "comparison.campaign@2026-10-17.navigation",
+      "entity": "comparison.campaign",
+      "label": "六方法联合正式 campaign",
+      "track": "comparisons",
+      "order": 80,
+      "entity_kind": "aggregate",
+      "execution": "stopped",
+      "scientific_verdict": "mixed",
+      "analysis_intent": "confirmatory",
+      "summary": "540/540 jobs 完成且无技术失败；42 个 cell 中 22 个可带注释报告、12 个数值被拒、2 个仅 overlap track、6 个不适用。",
+      "evidence_ids": [
+        "e.comparison_campaign"
+      ],
+      "supersedes": [
+        "comparison.campaign@2026-08-25.stopped"
+      ],
+      "updated_at": "2026-10-16T16:15:00.932072+00:00",
+      "progress": {
+        "completed": 540,
+        "total": 540,
+        "unit": "jobs"
+      },
+      "outcome_counts": {
+        "table_ready_with_note": 22,
+        "rejected_value": 12,
+        "overlap_track_only": 2,
+        "unsupported": 6
+      },
+      "depends_on": [
+        "comparison.biot",
+        "comparison.cbramod",
+        "comparison.reve",
+        "comparison.efrm",
+        "comparison.normwear",
+        "comparison.brainfusion"
+      ],
+      "headline": false
+    },
+    {
+      "state_id": "comparison.downstream_rebench@2026-10-17.v2",
+      "entity": "comparison.downstream_rebench",
+      "label": "统一测量v5下游任务性能重新获取",
+      "track": "comparisons",
+      "order": 100,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "完整988节点计划已从20261016_v2/source_v2冻结快照启动：975个下游评价、12个EFRM全目标数据集排除的三种子预训练及最终汇总。保持5外折×3内折、LP/FT/从头监督和三种信号基线；MI/MA各60部分fNIRS支持窗与REFED480部分支持窗保留。184项综合测试及后续62项缺失输入/恢复/调度专项检查通过；NormWear与BrainFusion真实缺失支持smoke、REFED空标签分支均通过。BrainFusion按内部OOF训练分区独立填补，未定义NVC使用明确零特征约定，旧核及失败证据保留。user systemd服务downstream-rebench-20261016-v2启用且linger开启，40线程/180GiB调度预算，双GPU优先预训练与LP；用户选择完整执行、不设总时限。初版保留20个已完成EEG简单基线、5个中断任务及旧快照；尚无完整方法比较结论。",
+      "evidence_ids": [
+        "e.downstream_rebench_contract",
+        "e.downstream_rebench_v2_launch",
+        "e.downstream_rebench_v2_jobs",
+        "e.downstream_rebench_v2_resources",
+        "e.downstream_rebench_v2_source",
+        "e.downstream_rebench_v2_progress",
+        "e.downstream_rebench_v2_revision"
+      ],
+      "supersedes": [
+        "comparison.downstream_rebench@2026-10-17.v1"
+      ],
+      "updated_at": "2026-10-16T16:23:32.510257+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": true,
+      "next_step": "通过同一冻结任务矩阵和持久服务监控、恢复，保持所有计划分母和失败；完整轨道终态后核验被试/种子等权统计、REFED训练均值误差、输入与目标覆盖、REVE重叠及方法准入。预估数月至一年以上，待持续epoch吞吐细化；不因低外折分数改候选或扩大数据范围。"
     }
   ]
 }

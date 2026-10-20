@@ -66,8 +66,11 @@ measured result exists.
 ## 下游任务性能重新获取（2026-10-16）
 
 `DOWNSTREAM-REBENCH-v1` 是独立版本的设计方案，目标是在统一测量输入、训练支持和
-评价口径下重新获取对比方法的下游性能。本节是设计 owner；本轮不创建可执行配置、
-不启动训练或实测评价。样本库存、方法适用性和资源预算核定后，才形成可执行合同。
+评价口径下重新获取对比方法的下游性能。本节是设计 owner。最初请求限于设计；
+2026-10-16 后续请求明确授权本版公开数据 smoke、两批完整训练及自动汇总，
+并选择持续运行、不设总时限。核定后的可执行合同为
+[`downstream_rebench_v1.yaml`](../comparative_methods/downstream_rebench_v1.yaml)，
+实现和恢复入口见[比较方法说明](../comparative_methods/README.md#downstream-rebenchmark-v1)。
 旧 [比较协议](comparisons/PROTOCOL.md)、[最终结果](comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md)
 和方法内冻结文件保留原身份；本方案不恢复旧 queue，也不改写历史数值。
 
@@ -255,14 +258,19 @@ sealed 脚本与配置不原地修改。实际结果以后由
 [`RESULTS_INDEX.md`](../experiments/RESULTS_INDEX.md#comparison-methods) 链接，注册执行
 状态仍只在 registry 更新。
 
-本次授权范围为整理和设计。后续一次边界明确的执行授权可以覆盖声明的 pilot、
-两批训练和汇总，同范围内不逐命令重复确认；历史 protected 数据不因本设计解锁，
+最初整理和设计的授权已由上述本版执行请求接续，覆盖声明的 pilot、
+两批训练和汇总，同范围内不逐命令重复确认；历史 protected 数据不因本版执行解锁，
 如涉及受保护读取仍须满足唯一 owning protocol/controller 及其独立 gate。当前
 公开被试政策不等于允许重读旧 protected prediction 或把它用于调参。
 
-实施前需要核定的事项限于：timing v2 下各任务共同库存及小样本内折可行性；各方法
-新 profile／REFED 能力和通道面板；预训练来源与身份重叠；候选参数、预训练成本及
-资源预算。未核定前，本节是可审阅方案，不是已通过验证的运行合同。
+本版执行冻结 timing v2 库存和被试外／内折、各方法支持面板、预训练来源与重叠、
+候选参数及 smoke 资源预算。EFRM 使用非目标数据集的无标签 8 秒源窗，整个目标
+数据集排除；Stage A 在源被试间选择，Stage B 从新初值在全部允许源窗重新拟合。
+普通神经拟合仅保留单个滚动恢复 checkpoint、轻量阶段记录及最终模型，避免每个
+内折候选重复长期保存优化器。具体源窗、未使用支持、资源测量、失败及源码快照
+保存在[本版运行目录](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/)；
+首版派发及缺失通道 smoke 的失败记录保留在相邻 `20261016_v1/` 和新版 smoke 目录。
+主方法尚无本版实现，不包含在已实现的比较矩阵中。当前执行状态仍以 registry 为准。
 
 ## 局部多通道观测与空间动态维数（2026-10-16）
 

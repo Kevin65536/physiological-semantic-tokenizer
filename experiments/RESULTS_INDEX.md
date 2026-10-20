@@ -671,6 +671,18 @@ its own question and evidence contract.
 
 ## Comparison methods
 
+The independent [downstream rebenchmark v1](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1)
+retains its [frozen inventory, splits and job manifest](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/),
+[resource measurements](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/resource_summary.json),
+source snapshot and service record in the shared owning run. Method-specific final
+fits remain under `<method>/runs/downstream_rebench_v1/20261016_v2/`; the final
+`aggregate/` consumes that exact planned matrix. Keep the original smoke failures,
+corrected REFED smoke and `input_audit_v2/` multimodal coverage audit together.
+The superseded `20261016_v1/` dispatch retains its initial baselines and interrupted
+work. The revised run preserves its first failed BrainFusion smoke and uses
+`source_v2/` after the constant-channel fix; no dated source or failure is replaced.
+These new public development outputs do not replace the dated evidence below.
+
 | Method | Retained surface | Policy |
 | --- | --- | --- |
 | STA-Net | complete [`20260727` formal run](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/) including 140 retained formal checkpoints and [`aggregate`](../comparative_methods/STA-Net-PyTorch/runs/fivefold/20260727_sta_net_no_artifact_mask_converged_5fold_v1/aggregate/paper_table.md) | **stopped** method-native historical reference |

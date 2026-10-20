@@ -1,0 +1,181 @@
+schema: downstream_rebench_execution_v1
+experiment_id: DOWNSTREAM-REBENCH-v1
+design: docs/EXPERIMENT_PLAN.md#downstream-rebench-v1
+scope: public_development_not_fresh_confirmation
+artifact_root: comparative_methods/runs/downstream_rebench_v1
+data:
+  cache_root: data/cache/physiology_semantic_clean_v5
+  processing_schema: physiology_measurement_alignment_v5
+  coordinate: measurement
+  motion_method: none
+  event_alignment: physiology_event_alignment_v2
+  tasks: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual, refed_regression]
+  classification_seconds: 8
+  dsr_seconds: 2
+  refed_seconds: 20
+  refed_target_rate_hz: 1
+  missing_inputs: retain_masks_no_method_specific_deletion
+  missing_targets: retain_predictions_and_coverage_no_empty_supervised_update
+  full_support_audit: whole_frozen_inventory_before_evaluation
+  visual_probes: concatenate_real_channels_one_prediction_per_event
+  preprocessing_context: offline_full_record_not_causal_window_only
+split:
+  seed: 20261016
+  outer_folds: 5
+  inner_folds: 3
+  unit: dataset_native_subject_all_sessions_records_events_videos_together
+  tuning_seed: 17
+  final_seeds: [17, 42, 73]
+  deterministic_seeds: [17]
+  final_fit: complete_outer_training_partition
+  reuse_selection: same_method_task_track_fold_and_fixed_backbone_only
+training:
+  precision: bf16_on_cuda_float32_on_cpu
+  effective_batch_size: 32
+  max_epochs: 200
+  min_epochs_before_early_stop: 50
+  patience: 30
+  best_epoch: any_observed_epoch_including_before_minimum_stopping_epoch
+  final_epochs: ceiling_median_of_three_selected_inner_best_epochs
+  refit_schedule: replay_prefix_of_original_200_epoch_schedule
+  supervised_loss_reduction: valid_target_points_within_effective_batch
+  empty_supervision: zero_optimizer_and_scheduler_updates_record_counts
+  input_scaler: masked_channel_mean_sd_fit_on_each_inner_training_partition
+  brainfusion_input_scaler: owned_inside_its_subject_grouped_oof_pipeline
+  linear_C: [0.001, 0.01, 0.1, 1, 10, 100]
+  ridge_alpha: [0.001, 0.01, 0.1, 1, 10, 100]
+  deterministic_lp: one_fit_per_fold_for_fixed_official_encoder_and_linear_solver
+methods:
+  signal_linear:
+    tracks: [lp]
+    modalities: [eeg, fnirs, multimodal]
+    tasks: all
+    seeds: deterministic
+    source: comparative_methods/rebench_baselines_v1.py
+  biot:
+    tracks: [lp, ft]
+    tasks: classification
+    profile: eeg_only
+    ft_search:
+      learning_rates: [0.00001, 0.0001, 0.001]
+      weight_decays: [0.00001, 0.0001]
+      optimizer: adam
+      gradient_clip_norm: 1
+      lr_schedule: constant
+      warmup_epochs: 0
+      source: comparative_methods/BIOT/upstream/run_binary_supervised.py
+      deviation: clipping_and_finite_learning_rate_neighbourhood_are_new_protocol_choices
+  cbramod:
+    tracks: [lp, ft]
+    tasks: classification
+    profile: eeg_only
+    ft_search:
+      learning_rates: [0.00001, 0.00003, 0.0001]
+      weight_decays: [0.01, 0.05]
+      optimizer: adamw
+      gradient_clip_norm: 1
+      lr_schedule: cosine
+      warmup_epochs: 0
+      source: comparative_methods/CBraMod/upstream/finetune_main.py
+      deviation: source_supported_single_lr_variant_new_finite_search_and_training_horizon
+  reve:
+    tracks: [lp, ft]
+    tasks: classification
+    profile: eeg_only
+    overlap_tasks: [motor_imagery, mental_arithmetic]
+    ft_search:
+      learning_rates: [0.00001, 0.00003, 0.0001]
+      weight_decays: [0.001, 0.01]
+      optimizer: adamw
+      betas: [0.92, 0.999]
+      eps: 0.000000001
+      gradient_clip_norm: 2
+      lr_schedule: cosine
+      warmup_epochs: 0
+      source: comparative_methods/REVE/upstream/src/configs/optimizer/adamw.yaml
+      deviation: declared_adamw_variant_cosine_instead_of_plateau_no_mixup
+  normwear:
+    tracks: [lp, ft]
+    tasks: classification
+    profile: multimodal
+    reporting_name: NormWear EEG-fNIRS adapted
+    missing_input_adapter: training_mean_imputation_after_masked_standardization_no_native_mask_attention
+    ft_search:
+      learning_rates: [0.00001, 0.00003, 0.0001]
+      weight_decays: [0.01, 0.05]
+      optimizer: adamw
+      gradient_clip_norm: 1
+      lr_schedule: cosine
+      warmup_epochs: 4
+      source: comparative_methods/NormWear/upstream/downstream_pipeline/main_finetune.py
+      deviation: absolute_lr_grid_and_clipping_are_new_fnirs_adaptation_choices_not_source_reproduction
+  efrm:
+    tracks: [lp, ft]
+    tasks: all
+    profile: multimodal
+    checkpoint_policy: new_measurement_v5_whole_target_dataset_excluded_stage_b_refit
+    ft_search:
+      learning_rates: [0.00001, 0.00003, 0.0001]
+      weight_decays: [0.01, 0.05]
+      optimizer: adamw
+      gradient_clip_norm: 1
+      lr_schedule: cosine
+      warmup_epochs: 4
+      source: comparative_methods/EFRM-PyTorch/efrm_pytorch/training.py
+      deviation: new_full_finetuning_protocol_on_retrained_source_architecture_not_paper_few_shot_reproduction
+  sta_net:
+    tracks: [supervised]
+    tasks: all
+    profile: multimodal
+    search: method_local_DEFAULT_SEARCH
+    source: comparative_methods/STA-Net-PyTorch/rebench_v1.py
+    reporting_name: STA-Net matched-window supervised adaptation
+  brainfusion:
+    tracks: [supervised]
+    tasks: [motor_imagery, mental_arithmetic, wg, nback, visual]
+    profile: multimodal
+    search: method_local_DEFAULT_SEARCH
+    source: comparative_methods/BrainFusion-NVC-CSP-Stacking/rebench_v1.py
+    reporting_name: BrainFusion independent supervised reimplementation
+    missing_input_adapter: native_channel_training_mean_fitted_separately_inside_each_oof_fold_and_final_refit
+pretraining:
+  method: efrm
+  source_inventory: label_blind_declared_8_second_source_subset
+  source_sampling: each_unique_source_window_once_per_epoch_grouped_by_panel
+  target_exclusion: whole_dataset_all_tasks
+  seeds: [17, 42, 73]
+  source_subject_split_seed: 20261016
+  source_validation_fraction: 0.2
+  stage_a: non_target_training_selection_on_disjoint_non_target_subjects
+  stage_b: fresh_initialization_refit_all_declared_non_target_source_windows
+  max_epochs: 100
+  min_epochs: 20
+  patience: 15
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  adam_betas: [0.9, 0.95]
+  effective_batch_size: 32
+  gradient_cache: exact_full_batch_negative_set_with_bounded_microbatches
+  refit_schedule: original_100_epoch_cosine_prefix
+metrics:
+  classification_primary: seed_within_subject_then_subject_equal_macro_f1_fixed_classes
+  refed_primary: masked_ccc_coordinate_then_record_then_subject_equal
+  bootstrap: {unit: subject, repeats: 2000, seed: 20261016, confidence: 0.95}
+  failures: no_complete_cell_value_without_all_planned_fold_seed_and_target_coverage
+  admission: docs/comparisons/METRIC_ACCEPTANCE.md
+  missing_compatible_reference: fallback_with_explicit_no_upper_bound_evidence_note
+  superiority_tests: none_without_a_preregistered_main_method
+resources:
+  supervisor: user_systemd_with_verified_linger
+  overall_time_limit: null
+  cpu_thread_budget: 40
+  ram_budget_gib: 180
+  gpus: [0, 1]
+  gpu_reserve_mib: {0: 6144, 1: 2048}
+  concurrency: measured_smoke_peak_memory_and_actual_free_memory
+  max_gpu_jobs_per_device: 4
+  priority: simple_baselines_then_lp_and_supervised_then_full_finetuning
+  competing_jobs: preserve_other_users_processes
+  resume: same_immutable_job_with_epoch_optimizer_scheduler_rng_checkpoint
+  failed_jobs: retain_failure_and_block_dependants_continue_independent_work
+  checkpoint_retention: one_rolling_training_checkpoint_and_final_model_per_job
