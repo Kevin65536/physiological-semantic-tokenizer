@@ -1,0 +1,142 @@
+schema: shared_driver_spatial_v1
+experiment_id: SSM-LOCAL-SPATIAL-v1
+seed: 20261016
+artifact_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial
+scope: public_development_local_spatial_observation_not_source_localization
+data:
+  datasets: [eeg_fnirs_single_trial]
+  cache_root: data/cache/physiology_semantic_clean_v5
+  protected_data: forbidden
+  region: prefrontal
+  hb_pairs: 4
+  eeg_channels: 12
+  disjoint_optodes: true
+  optode_policy: exclude_target_shared_optodes_record_donor_donor_sharing
+  max_patch_angle_deg: 45.0
+  window_seconds: 30.0
+  window_offset_s: -5.0
+  reference_seconds: 5.0
+  split_seed: 20261016
+  train_fraction: 0.6
+  selection_fraction: 0.2
+  max_subjects: 29
+  max_records_per_subject: 2
+  max_windows_per_record: 3
+  selection: metadata_only_nested_patch_and_chronological_nonoverlap
+  split: dataset_subject_disjoint_train_selection_evaluation
+  other_datasets: unsupported_in_v1_without_verified_optode_identity
+tensor:
+  steps: 120
+  dt_s: 0.25
+  reference_steps: 20
+  eeg_bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  eeg_feature_order: channel_major_band_minor
+  hb_components: [HbO, HbR]
+  temporal_modes: 16
+  state_order: [r, s, f, v, p, q]
+fixed:
+  tau: 2.0
+  kappa: 0.64
+  gamma: 0.32
+  alpha: 0.32
+  E0: 0.32
+  P0: 1.0
+  Q0: 0.35
+  neurovascular_gain: 1.0
+  eeg_loading: 1.0
+model:
+  modes: [1, 2]
+  main_panel: {hb_pairs: 4, eeg_channels: 12}
+  count_panels: [{hb_pairs: 2, eeg_channels: 12}, {hb_pairs: 4, eeg_channels: 6}]
+  geometry: ['true', uniform, sham]
+  sham_seed: 2026101601
+  uniform: K1_only_K2_uniform_is_rank_collapse_not_a_capacity_control
+  hb_mapping: fixed_nonnegative_row_normalized_geometric_support_after_independent_Balloon_propagation
+  eeg_mapping: fixed_spatial_kernel_times_training_signed_band_coefficients
+  gauge: fixed_physical_driver_beta1_Hb_gain1_no_column_renormalization
+  local_initials: one_five_state_initial_per_core_not_per_observation_channel
+  extra_hb_component: none
+  network_edges: none
+calibration:
+  target_rms: 0.025
+  eeg_scale: one_training_RMS_per_band_shared_across_channels_preserve_spatial_loading
+  eeg_loading_ridge: 0.1
+  eeg_loading_ridge_definition: ridge_times_mean_diagonal_training_driver_Gram
+  ridge_baseline: 0.1
+  eeg_weight_candidates: [0.0, 0.1, 1.0]
+  sequence: train_coordinates_then_Hb_only_drivers_then_signed_EEG_readout_then_selection_subjects
+  selection_mode: heldout_pair
+  selection_metric: subject_equal_hidden_pair_NMSE_with_failure_penalty
+  tie_break: smaller_EEG_weight_then_fewer_modes
+  target_coordinate: same_training_coordinate_for_all_arms_and_nested_panels
+solver:
+  numerical_backend: numba
+  substeps: 4
+  validation_substeps: 8
+  integration_tolerance_training_sd: 0.005
+  max_nfev: 180
+  gradient_tolerance: 0.00001
+  driver_curvature_weight: 0.01
+  initial_weight: 100.0
+  flow_prior_weight: 1.0
+  flow_log_sd: 0.6931471805599453
+  data_weight: T_times_visible_modality_mean_standardized_squared_error
+  interpretation: engineering_objective_not_calibrated_likelihood
+evaluation:
+  modes: [full, heldout_pair, center_pair]
+  target_pair: 0
+  center_steps: [48, 72]
+  score_steps: [20, 120]
+  pairings: [paired, Hb_only, wrong_EEG]
+  fixed_weight_diagnostic: main_panels_paired_heldout_and_center_SSM_fixed1
+  tied_diagnostic: K2_main_paired_heldout_and_center_same_readout_same_weight1_tied_drivers_and_initials
+  wrong_EEG: other_nonoverlapping_record_window_same_subject_task_condition_and_montage
+  missing_wrong_pair: retain_unavailable_no_unmatched_fallback
+  baselines: [training_template, spatial_ridge, joint_ridge, own_context_interpolation]
+  ridge_input: same_visible_EEG_and_other_Hb_pairs_no_target_channel
+  baseline_support: same_input_ridge_for_heldout_pair_center_also_has_own_context_interpolation
+  reference: hidden_pair_reference_for_scoring_only_prediction_uses_own_reference_operator
+  hidden_policy: mask_before_input_assembly_no_target_reference_PCA_or_window_statistics
+  primary: heldout_pair_HbO_HbR_training_SD_NRMSE
+  secondary: [center_pair_error, full_waveform_error, correlation, amplitude_RMS_ratio]
+  diagnostic: [driver_recovery, state_recovery, spatial_rank, integration_error, all_failures]
+  comparisons: [true_vs_sham, true_vs_uniform_K1, K2_vs_K1, K2_free_vs_tied_fixed1, selected_vs_fixed1, multi_vs_small_panel, paired_vs_Hb_only, paired_vs_wrong_EEG, model_vs_same_input_ridge]
+  bootstrap_unit: subject_all_windows_targets_and_conditions_together
+  bootstrap_repeats: 1000
+  failure_penalty_nmse: 100.0
+  uncertainty: descriptive_subject_bootstrap_frozen_selection_not_population_confirmation
+synthetic:
+  coordinate_policy: generator_model_coordinates_identity_scaling_training_only_SD
+  training_seed: 2026101611
+  selection_seed: 2026101612
+  evaluation_seed: 2026101613
+  training_repeats: 3
+  selection_repeats: 2
+  evaluation_repeats: 4
+  records_per_identity: 2
+  scenarios: [single_source, two_sources, identical_sources, uninformative_EEG, geometry_mismatch, Hb_common_interference]
+  identical_sources: temporal_rank_collapse_not_identical_K1_EEG_observation_family
+  driver_rms: 0.025
+  common_hb_direction: [0.65, 0.35]
+  noise_sd: {eeg: 0.00125, HbO: 0.00015, HbR: 0.00007}
+  scope: software_and_known_truth_mechanism_controls_not_measured_qualification
+  smoke: {steps: 40, temporal_modes: 6, repeats: 1}
+resources:
+  max_workers: 24
+  numerical_threads: 1
+  max_in_flight_per_worker: 2
+  supervisor: user_systemd_or_existing_durable_scheduler_for_substantial_stages
+stopping: fixed_manifest_all_terminal_cells_no_evaluation_tuning_or_automatic_capacity_expansion
+claim_limits:
+  - metadata_geometry_is_sensor_neighborhood_not_individual_cortical_source_localization
+  - disjoint_optodes_do_not_guarantee_disjoint_tissue_sensitivity
+  - more_channels_are_not_more_independent_subjects
+  - K1_multiple_scalar_Hb_readouts_add_constraints_not_independent_temporal_modes
+  - K2_has_two_independent_conserved_state_trajectories_and_no_network_connectivity
+  - EEG_logpower_mapping_is_not_a_voltage_leadfield_or_a_metabolic_calibration
+  - training_Hb_only_drivers_are_conditional_estimates_not_neural_truth
+  - hidden_pair_baseline_is_scoring_only_and_never_an_inference_input
+  - new_record_hidden_channel_prediction_is_not_unseen_montage_generalization
+  - spatial_prediction_gain_does_not_identify_neural_scalp_or_systemic_sources
+  - negative_or_failed_cells_remain_in_complete_planned_denominators
+  - public_previously_examined_subjects_are_development_not_fresh_confirmation

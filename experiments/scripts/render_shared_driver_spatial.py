@@ -1490,9 +1490,21 @@ def _figure_text_audit(fig):
     from matplotlib.text import Text
     fig.canvas.draw()
     renderer, bounds = fig.canvas.get_renderer(), fig.bbox
+    # Locators may retain a tick beyond the view interval (for example 1.4
+    # when ylim ends at 1.22). Matplotlib does not draw those tick labels.
+    # Exclude only those labels; ordinary off-canvas text still fails.
+    undrawn_tick_labels = set()
+    for ax in fig.axes:
+        for axis in (ax.xaxis, ax.yaxis):
+            low, high = sorted(axis.get_view_interval())
+            for ticks, locations in ((axis.get_major_ticks(), axis.get_majorticklocs()),
+                                     (axis.get_minor_ticks(), axis.get_minorticklocs())):
+                for tick, location in zip(ticks, locations):
+                    if location < low-1e-10 or location > high+1e-10:
+                        undrawn_tick_labels.update((tick.label1, tick.label2))
     count, outside = 0, []
     for artist in fig.findobj(Text):
-        if not artist.get_visible() or not artist.get_text():
+        if artist in undrawn_tick_labels or not artist.get_visible() or not artist.get_text():
             continue
         count += 1
         rect = artist.get_window_extent(renderer)
@@ -1685,16 +1697,856 @@ def render_bundle(manifest_path, output):
     return _render(manifest_path, output, fresh=True)
 
 
+def _experiment_evidence(directory, *, audit_arrays=True):
+    """Read one explicit completed run; independently recompute its endpoints."""
+    import hashlib
+    from collections import Counter, defaultdict
+
+    directory = Path(directory).resolve()
+    read = lambda name: json.loads((directory/name).read_text())
+    summary, plan = read("summary.json"), read("plan.json")
+    if summary.get("execution") != "completed" or summary.get("terminal") != plan["planned_cells"]:
+        raise ValueError("a complete planned denominator is required for a report")
+    coordinate = read("coordinate.json")
+    calibration = {p.stem: json.loads(p.read_text()) for p in (directory/"calibration").glob("*.json")}
+    identities = {r["id"]: r for r in plan["rows"]}
+    targets, cells, groups = {}, [], defaultdict(list)
+    max_error, checked = 0., 0
+    for spec in plan["cells"]:
+        path = directory/"cells"/(spec["id"]+".json")
+        row = json.loads(path.read_text())
+        if any(row.get(k) != spec[k] for k in ("id", "record_id", "arm", "method", "mode", "pairing")):
+            raise ValueError("cell identity differs from the immutable plan")
+        if row["status"] == "missing":
+            raise ValueError("missing terminal cell")
+        if row["status"] == "completed" and (not row["success"] or not np.isfinite(row["nmse"])):
+            raise ValueError("invalid completed score")
+        if audit_arrays and row["status"] == "completed":
+            identity = row["record_id"]
+            if identity not in targets:
+                key = hashlib.sha256(identity.encode()).hexdigest()[:24]
+                with np.load(directory/"prepared"/(key+".npz"), allow_pickle=False) as z:
+                    targets[identity] = z["hb"][:, 0].copy()/coordinate["hb_scale"]
+            with np.load(path.with_suffix(".npz"), allow_pickle=False) as z:
+                if "target_prediction" in z:
+                    pred = z["target_prediction"]
+                else:
+                    arm = calibration[row["arm"]]["arm"]
+                    offset = arm["eeg_channels"]*5
+                    pred = z["prediction"][:, offset:offset+2]
+                score = slice(48, 72) if row["mode"] == "center_pair" else slice(20, 120)
+                sd = np.asarray(coordinate["sd"])[60:62]
+                value = float(np.mean(((pred[score]-targets[identity][score])/sd)**2))
+            error = abs(value-row["nmse"])
+            max_error = max(max_error, error)
+            if not np.isclose(value, row["nmse"], rtol=1e-10, atol=1e-11):
+                raise ValueError(f"independent scoring mismatch: {row['id']}")
+            checked += 1
+        compact = {k: row.get(k) for k in (
+            "id", "record_id", "subject", "arm", "mode", "pairing", "method", "scenario",
+            "status", "success", "nmse", "nrmse", "component_nmse", "correlation",
+            "amplitude_rms_ratio", "eeg_weight", "nfev", "integration_max_training_sd",
+            "known_truth_diagnostics", "error", "convergence_reason")}
+        cells.append(compact)
+        key = "|".join(row[k] for k in ("scenario", "arm", "mode", "pairing", "method"))
+        groups[key].append(row)
+    counts = dict(Counter(r["status"] for r in cells))
+    if counts != summary["status_counts"]:
+        raise ValueError("status counts differ from the retained summary")
+    group_error, contrast_error, interval_error = 0., 0., 0.
+    for key, rows in groups.items():
+        subjects = defaultdict(list)
+        for row in rows:
+            if row["status"] not in ("unavailable_wrong_EEG", "unavailable_preparation"):
+                subjects[row["subject"]].append(row["nmse"] if row["status"] == "completed" else 100.)
+        actual = {s: float(np.mean(v)) for s, v in subjects.items()}
+        declared = summary["groups"][key]["subject_nmse_with_failure_penalty"]
+        if set(actual) != set(declared):
+            raise ValueError("subject aggregation identities differ")
+        for s in actual:
+            group_error = max(group_error, abs(actual[s]-declared[s]))
+        if group_error > 1e-10:
+            raise ValueError("independent subject aggregation mismatch")
+    for contrast in summary["comparisons"]:
+        a = {r["record_id"]: r for r in groups[contrast["candidate"]]}
+        b = {r["record_id"]: r for r in groups[contrast["reference"]]}
+        paired = defaultdict(lambda: ([], []))
+        for identity in sorted(set(a) & set(b)):
+            left, right = a[identity], b[identity]
+            if any(r["status"] in ("unavailable_wrong_EEG", "unavailable_preparation") for r in (left, right)):
+                continue
+            x, y = paired[left["subject"]]
+            x.append(left["nmse"] if left["status"] == "completed" else 100.)
+            y.append(right["nmse"] if right["status"] == "completed" else 100.)
+        differences = np.asarray([np.sqrt(np.mean(paired[s][1]))-np.sqrt(np.mean(paired[s][0]))
+                                  for s in sorted(paired)])
+        if len(differences):
+            contrast_error = max(contrast_error, abs(float(differences.mean())-contrast["mean_nrmse_improvement"]))
+            draw = np.random.default_rng(20261016).integers(0, len(differences), (1000, len(differences)))
+            interval = np.quantile(differences[draw].mean(axis=1), [.025, .975])
+            interval_error = max(interval_error, float(np.max(abs(interval-contrast["interval_95"]))))
+            if contrast_error > 1e-10 or interval_error > 1e-10:
+                raise ValueError("independent paired-bootstrap mismatch")
+    checks = dict(planned=plan["planned_cells"], terminal=len(cells), status_counts=counts,
+        rescored_arrays=checked, max_nmse_error=max_error, max_subject_nmse_error=group_error,
+        max_paired_gain_error=contrast_error, max_interval_error=interval_error,
+        independent_scoring="retained arrays; frozen train SD; per-window NMSE then within-subject mean and square root",
+        bootstrap="1000 subject resamples, seed 20261016; common available canonical windows; failure NMSE 100")
+    return dict(root=directory, summary=summary, plan=plan, coordinate=coordinate,
+        calibration=calibration, cells=cells, identities=identities, checks=checks)
+
+
+def _report_number(value, digits=4):
+    return "不可估计" if value is None else f"{value:.{digits}f}"
+
+
+def _report_group(evidence, arm="K1_true_H4_E12", mode="heldout_pair", pairing="paired", method="SSM"):
+    scenario = evidence["cells"][0]["scenario"]
+    return evidence["summary"]["groups"]["|".join((scenario, arm, mode, pairing, method))]
+
+
+def _report_contrast(evidence, comparison, arm="K1_true_H4_E12", mode="heldout_pair", pairing="paired"):
+    matches = [c for c in evidence["summary"]["comparisons"]
+               if c["comparison"] == comparison and c["candidate"].split("|")[1:4] == [arm, mode, pairing]]
+    if len(matches) != 1:
+        raise ValueError(f"contrast must be unique: {comparison}, {arm}, {mode}, {pairing}")
+    return matches[0]
+
+
+class _SpatialReport:
+    """Local PPT and searchable PDF export; every figure/formula is a PNG."""
+    def __init__(self, output):
+        import fitz
+        from PIL import ImageFont
+        from pptx import Presentation
+        from pptx.util import Inches
+        self.output = _fresh(output)
+        for name in ("figures", "formulas", "tables", "preview"):
+            (self.output/name).mkdir()
+        self.deck = Presentation()
+        self.deck.slide_width, self.deck.slide_height = Inches(13.333), Inches(7.5)
+        self.font = ImageFont.truetype(str(FONT_PATH), 80)
+        self.pdf_font = fitz.Font(fontfile=str(FONT_PATH))
+        self.pages, self.figures, self.formulas, self.layout = [], [], [], []
+
+    def text(self, slide, content, x, y, w, h, size=20, bold=False, color="18324D"):
+        from pptx.util import Inches, Pt
+        from pptx.dml.color import RGBColor
+        from PIL import ImageFont
+        font = ImageFont.truetype(str(FONT_PATH), round(size*4))
+        lines = 0
+        for line in str(content).split("\n"):
+            used = ""; lines += 1
+            for char in line:
+                if used and font.getlength(used+char)/4 > w*72:
+                    lines += 1; used = char
+                else:
+                    used += char
+        if lines*size*1.18 > h*72:
+            raise ValueError(f"slide {len(self.deck.slides)} text exceeds box: {content[:80]}")
+        box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
+        frame = box.text_frame
+        frame.word_wrap = True
+        frame.margin_left = frame.margin_right = frame.margin_top = frame.margin_bottom = 0
+        for i, line in enumerate(str(content).split("\n")):
+            p = frame.paragraphs[0] if i == 0 else frame.add_paragraph()
+            p.text, p.line_spacing = line, 1.1
+            p.space_after = p.space_before = Pt(0)
+            for run in p.runs:
+                run.font.name = "Noto Sans CJK SC"
+                run.font.size, run.font.bold = Pt(size), bold
+                run.font.color.rgb = RGBColor.from_string(color)
+        self.layout.append(dict(page=len(self.deck.slides), text=content, x=x, y=y, w=w, h=h, size=size))
+
+    def page(self, title, subtitle, source):
+        slide = self.deck.slides.add_slide(self.deck.slide_layouts[6])
+        self.text(slide, title, .55, .30, 12.2, .60, 26, True)
+        self.text(slide, subtitle, .58, 1.02, 12.1, .48, 14, color="526879")
+        self.text(slide, f"局部空间实验  |  Single-Trial  |  2026-10-20  |  {len(self.deck.slides):02}",
+                  .58, 7.13, 12.1, .22, 10, color="526879")
+        slide.notes_slide.notes_text_frame.text = "Owning evidence: "+str(source)
+        self.pages.append(dict(page=len(self.deck.slides), title=title, subtitle=subtitle, source=str(source), paragraphs=[], images=[]))
+        return slide
+
+    def body(self, title, subtitle, paragraphs, source, *, size=21):
+        slide = self.page(title, subtitle, source)
+        step = 5.05/len(paragraphs)
+        for i, paragraph in enumerate(paragraphs):
+            self.text(slide, paragraph, .8, 1.72+i*step, 11.7, step-.18, size)
+        self.pages[-1]["paragraphs"] = list(paragraphs)
+        return slide
+
+    def picture(self, slide, path, x, y, w, h):
+        from PIL import Image
+        from pptx.util import Inches
+        frame_w, frame_h = w, h
+        with Image.open(path) as im:
+            ratio = im.width/im.height
+            if Path(path).parent.name == "formulas":
+                w, h = min(w, im.width/300), min(h, im.height/300)
+        width, height = min(w, h*ratio), min(h, w/ratio)
+        slide.shapes.add_picture(str(path), Inches(x+(frame_w-width)/2), Inches(y+(frame_h-height)/2),
+                                width=Inches(width), height=Inches(height))
+        self.pages[-1]["images"].append(str(Path(path).relative_to(self.output)))
+
+    def figure(self, title, subtitle, fig, caption, source, key):
+        import matplotlib.pyplot as plt
+        path = self.output/"figures"/(key+".png")
+        _figure_text_audit(fig)
+        fig.savefig(path, dpi=240, facecolor="white")
+        plt.close(fig)
+        self.figures.append(path)
+        slide = self.page(title, subtitle, source)
+        self.picture(slide, path, .62, 1.62, 12.05, 3.95)
+        self.text(slide, caption, .8, 5.79, 11.7, 1.06, 17)
+        self.pages[-1]["paragraphs"] = [caption]
+        return slide
+
+    def equation(self, title, latex, key, explanation, source):
+        import fitz, subprocess
+        directory = self.output/"formulas"
+        tex = directory/(key+".tex")
+        tex.write_text("\\documentclass[12pt]{article}\n\\usepackage{amsmath,amssymb}\n"
+            "\\usepackage[paperwidth=14in,paperheight=5in,margin=.2in]{geometry}\n"
+            "\\pagestyle{empty}\\begin{document}\\fontsize{23}{29}\\selectfont\\[\n"
+            +latex+"\n\\]\\end{document}\n")
+        result = subprocess.run(["pdflatex", "-interaction=nonstopmode", "-halt-on-error", tex.name],
+                                cwd=directory, capture_output=True, text=True)
+        if result.returncode:
+            raise ValueError(result.stdout[-2000:])
+        with fitz.open(tex.with_suffix(".pdf")) as doc:
+            boxes = [fitz.Rect(b[:4]) for b in doc[0].get_text("blocks")]
+            clip = boxes[0]
+            for box in boxes[1:]:
+                clip |= box
+            clip += (-8, -8, 8, 8)
+            path = tex.with_suffix(".png")
+            doc[0].get_pixmap(clip=clip, dpi=300).save(path)
+        self.formulas.append(path)
+        slide = self.page(title, "LaTeX 公式位图；符号、单位和时间支持在本页解释。", source)
+        self.picture(slide, path, .75, 1.62, 11.8, 2.25)
+        self.text(slide, explanation, .8, 4.10, 11.7, 2.65, 19)
+        self.pages[-1]["paragraphs"] = [explanation]
+
+    def finish(self, checks, appendix):
+        import fitz, html, subprocess, zipfile
+        from PIL import Image
+
+        ppt = self.output/"LOCAL_SPATIAL_REPORT.pptx"
+        self.deck.save(ppt)
+        (self.output/"slide_sources.json").write_text(json.dumps(self.pages, ensure_ascii=False, indent=2)+"\n")
+        (self.output/"text_layout.json").write_text(json.dumps(self.layout, ensure_ascii=False, indent=2)+"\n")
+        profile = (self.output/"libreoffice_profile").resolve().as_uri()
+        conversion = subprocess.run(["libreoffice", "-env:UserInstallation="+profile, "--headless",
+            "--convert-to", "pdf", "--outdir", str(self.output), str(ppt)],
+            capture_output=True, text=True, timeout=180)
+        (self.output/"pdf_export.log").write_text(conversion.stdout+"\n"+conversion.stderr)
+        if conversion.returncode or not ppt.with_suffix(".pdf").exists():
+            raise ValueError("PPT PDF export failed")
+
+        document = fitz.open()
+        html_parts = ['<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>局部空间实验技术报告</title>',
+            '<style>body{max-width:1100px;margin:40px auto;font:18px/1.65 sans-serif;color:#18324d}'
+            'img{max-width:100%;height:auto}section{margin:3em 0}small{overflow-wrap:anywhere}'
+            'table{border-collapse:collapse}td,th{padding:7px;border:1px solid #bbc}</style>',
+            '<h1>局部多通道与空间动态维数：技术报告</h1>',
+            '<p>2026-10-20；Single-Trial 公开开发面板。本文为保留运行的通信导出，运行摘要与逐单元记录是事实来源。</p>']
+
+        def put(page, text, x, y, width, size=12.5, color=(.095, .196, .302)):
+            lines = _wrap_pdf(self.pdf_font, str(text), width, size).split("\n")
+            writer = fitz.TextWriter(page.rect)
+            for i, line in enumerate(lines):
+                writer.append((x, y+i*size*1.4), line, font=self.pdf_font, fontsize=size)
+            writer.write_text(page, color=color)
+            return y+len(lines)*size*1.4
+
+        for entry in self.pages:
+            page = document.new_page(width=842, height=595)
+            put(page, entry["title"], 38, 37, 766, 20)
+            y = put(page, entry["subtitle"], 38, 65, 766, 11.5)+12
+            html_parts.append("<section><h2>"+html.escape(entry["title"])+"</h2><p>"+html.escape(entry["subtitle"])+"</p>")
+            for relative in entry["images"]:
+                path = self.output/relative
+                with Image.open(path) as im:
+                    width, height = im.size
+                scale = min(758/width, 266/height)
+                if path.parent.name == "formulas":
+                    scale = min(scale, 72/300)
+                w, h = width*scale, height*scale
+                page.insert_image(fitz.Rect(42+(758-w)/2, y, 42+(758+w)/2, y+h), filename=str(path))
+                y += h+20
+                html_parts.append('<img src="'+html.escape(relative)+'" alt="'+html.escape(entry["title"])+'">')
+            for paragraph in entry["paragraphs"]:
+                required = len(_wrap_pdf(self.pdf_font, paragraph, 758, 13).split("\n"))*18.2+14
+                if y+required > 520:
+                    page = document.new_page(width=842, height=595)
+                    y = put(page, entry["title"]+"（续）", 38, 37, 766, 18)+18
+                y = put(page, paragraph, 42, y, 758, 13)+14
+                html_parts.append("<p>"+html.escape(paragraph).replace("\n", "<br>")+"</p>")
+            put(page, "来源："+entry["source"], 38, 556, 766, 7.3)
+            html_parts.append("<small>来源："+html.escape(entry["source"])+"</small></section>")
+        for title, paragraphs in appendix:
+            page = document.new_page(width=842, height=595)
+            y = put(page, title, 38, 37, 766, 20)+20
+            html_parts.append("<section><h2>"+html.escape(title)+"</h2>")
+            for paragraph in paragraphs:
+                required = len(_wrap_pdf(self.pdf_font, paragraph, 758, 12.5).split("\n"))*17.5+14
+                if y+required > 550:
+                    page = document.new_page(width=842, height=595)
+                    y = put(page, title+"（续）", 38, 37, 766, 18)+18
+                y = put(page, paragraph, 42, y, 758, 12.5)+14
+                html_parts.append("<p>"+html.escape(paragraph).replace("\n", "<br>")+"</p>")
+            html_parts.append("</section>")
+        document.subset_fonts(fallback=True)
+        document.save(self.output/"TECHNICAL_REPORT.pdf", garbage=4, deflate=True)
+        document.close()
+        html_parts.append("</html>")
+        (self.output/"TECHNICAL_REPORT.html").write_text("\n".join(html_parts))
+
+        atlas = fitz.open()
+        for path in self.figures+self.formulas:
+            with Image.open(path) as im:
+                width, height = im.size
+            dpi = 300 if path.parent.name == "formulas" else 240
+            page = atlas.new_page(width=width*72/dpi+36, height=height*72/dpi+36)
+            page.insert_image(fitz.Rect(18, 18, page.rect.width-18, page.rect.height-18), filename=str(path))
+        atlas.save(self.output/"FIGURE_ATLAS.pdf", deflate=True)
+        atlas.close()
+        exports = {}
+        for filename in ("LOCAL_SPATIAL_REPORT.pdf", "TECHNICAL_REPORT.pdf", "FIGURE_ATLAS.pdf"):
+            with fitz.open(self.output/filename) as doc:
+                outside = []
+                for i, page in enumerate(doc):
+                    for block in page.get_text("dict")["blocks"]:
+                        if block["type"] != 0:
+                            continue
+                        for line in block["lines"]:
+                            for span in line["spans"]:
+                                box = fitz.Rect(span["bbox"])
+                                if box.x0 < -1 or box.y0 < -1 or box.x1 > page.rect.width+1 or box.y1 > page.rect.height+1:
+                                    outside.append(dict(page=i+1, text=span["text"], bbox=list(box)))
+                exports[filename] = dict(pages=len(doc), image_objects=len({x[0] for page in doc for x in page.get_images()}),
+                    displayed_images=sum(len(page.get_image_info()) for page in doc),
+                    selectable_characters=sum(len(page.get_text()) for page in doc), text_outside_page=outside)
+                if outside:
+                    raise ValueError(f"PDF text clipping: {filename}: {outside[:2]}")
+                if filename != "FIGURE_ATLAS.pdf" and exports[filename]["selectable_characters"] < 1000:
+                    raise ValueError("report body text must remain searchable")
+                if filename == "LOCAL_SPATIAL_REPORT.pdf":
+                    if len(doc) != len(self.deck.slides) or exports[filename]["image_objects"] < len(self.figures)+len(self.formulas):
+                        raise ValueError("PPT page/image count mismatch")
+                    for i, page in enumerate(doc):
+                        page.get_pixmap(dpi=100, alpha=False).save(self.output/"preview"/f"page_{i+1:02}.png")
+        audit = dict(schema="shared_driver_spatial_report_v1", output=str(self.output.resolve()),
+            kind="completed_public_experiment", page_count=len(self.deck.slides), figure_count=len(self.figures),
+            formula_count=len(self.formulas), bitmap_figures=True, figure_dpi=240, formula_dpi=300,
+            independent_evidence_checks=checks, exports=exports)
+        (self.output/"delivery_checks.json").write_text(json.dumps(audit, ensure_ascii=False, indent=2)+"\n")
+        (self.output/"render_shared_driver_spatial.py").write_bytes(Path(__file__).read_bytes())
+        return audit
+
+
+def _report_csv(output, name, records):
+    import csv
+    if not records:
+        return
+    keys = list(dict.fromkeys(k for row in records for k in row))
+    with (Path(output)/"tables"/(name+".csv")).open("w", newline="", encoding="utf-8-sig") as stream:
+        writer = csv.DictWriter(stream, fieldnames=keys)
+        writer.writeheader()
+        writer.writerows({k: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v
+                          for k, v in row.items()} for row in records)
+
+
+def _report_forest(contrasts, labels):
+    plt = _plotting()
+    fig, ax = plt.subplots(figsize=(12.2, 3.9))
+    for i, (row, label) in enumerate(zip(contrasts, labels)):
+        value, interval = row["mean_nrmse_improvement"], row["interval_95"]
+        if value is None:
+            ax.text(0, i, "不可估计", va="center")
+            continue
+        ax.errorbar(value, i, xerr=[[value-interval[0]], [interval[1]-value]], color=BLUE,
+                    marker="o", markersize=6, capsize=4, linewidth=2)
+        ax.annotate(f"{value:+.4f}  [{interval[0]:+.4f}, {interval[1]:+.4f}]",
+                    (value, i), xytext=(8, 8), textcoords="offset points", fontsize=10)
+    ax.set_yticks(range(len(labels)), labels)
+    ax.invert_yaxis()
+    ax.axvline(0, color=GRAY, linestyle="--")
+    ax.set_xlabel("归一化误差收益（正值有利于候选）")
+    ax.grid(axis="x", alpha=.18)
+    ax.margins(x=.35, y=.25)
+    fig.subplots_adjust(left=.26, right=.96, bottom=.20, top=.92)
+    return fig
+
+
+def _report_examples(evidence):
+    rows = [r for r in evidence["cells"] if r["arm"] == "K1_true_H4_E12" and r["mode"] == "heldout_pair"
+            and r["pairing"] == "paired" and r["method"] == "SSM"]
+    rows.sort(key=lambda r: (r["nrmse"] if r["status"] == "completed" else 10., r["record_id"]))
+    selected, used = [], set()
+    for label, rank in (("较好", 0), ("居中", (len(rows)-1)/2), ("困难", len(rows)-1)):
+        choices = sorted(enumerate(rows), key=lambda pair: (abs(pair[0]-rank), pair[1]["record_id"]))
+        index, row = next((i, r) for i, r in choices if r["subject"] not in used)
+        used.add(row["subject"])
+        selected.append(dict(label=label, rank=index+1, denominator=len(rows), **row))
+    return selected
+
+
+def _report_waveforms(evidence, example, mode="heldout_pair"):
+    import hashlib
+    plt = _plotting()
+    identity = example["record_id"]
+    key = hashlib.sha256(identity.encode()).hexdigest()[:24]
+    with np.load(evidence["root"]/"prepared"/(key+".npz"), allow_pickle=False) as z:
+        target = z["hb"][:, 0].copy()/evidence["coordinate"]["hb_scale"]
+    sd = np.asarray(evidence["coordinate"]["sd"])[60:62]
+    definitions = [("K1_true_H4_E12", "SSM", "K1", BLUE, "--"),
+        ("K2_true_H4_E12", "SSM", "K2", ORANGE, "-."),
+        ("K1_true_H4_E12", "joint_ridge", "联合 ridge", "#278C79", ":")]
+    if mode == "center_pair":
+        definitions.append(("K1_true_H4_E12", "own_context_interpolation", "自身插值", GRAY, "--"))
+    fig, axes = plt.subplots(1, 2, figsize=(12.2, 3.9), sharex=True)
+    time = np.arange(120)*.25-5
+    for i, ax in enumerate(axes):
+        ax.plot(time, target[:, i]/sd[i], color=INK, linewidth=2, label="处理后实测（评分目标）")
+        ax.axvline(0, color=GRAY, linestyle=":", linewidth=1)
+        if mode == "center_pair":
+            ax.axvspan(7, 13, color="#ECE3D3", alpha=.55)
+        ax.set(title=("HbO", "HbR")[i], xlabel="事件相对时间（秒）", ylabel="幅值 / 本色团训练 SD")
+        ax.grid(alpha=.15)
+    values = []
+    for arm, method, label, color, style in definitions:
+        row = next(r for r in evidence["cells"] if r["record_id"] == identity and r["arm"] == arm
+                   and r["mode"] == mode and r["pairing"] == "paired" and r["method"] == method)
+        values.append(f"{label} {_report_number(row['nrmse'])}" if row["status"] == "completed" else f"{label} 失败")
+        if row["status"] != "completed":
+            continue
+        with np.load(evidence["root"]/"cells"/(row["id"]+".npz"), allow_pickle=False) as z:
+            prediction = z["target_prediction"] if "target_prediction" in z else z["prediction"][:, 60:62]
+            if method == "own_context_interpolation":
+                prediction = prediction.copy()
+                prediction[:48] = np.nan
+                prediction[72:] = np.nan
+            for i, ax in enumerate(axes):
+                ax.plot(time, prediction[:, i]/sd[i], color=color, linestyle=style, linewidth=1.7, label=label)
+    axes[0].legend(loc="best", fontsize=10)
+    for ax in axes:
+        ax.set_xlim(-5, 25)
+    fig.subplots_adjust(left=.07, right=.98, bottom=.18, top=.89, wspace=.26)
+    return fig, "；".join(values)
+
+
+def _report_waveform_explanation(evidence, example, mode="heldout_pair"):
+    import hashlib
+    identity = example["record_id"]
+    key = hashlib.sha256(identity.encode()).hexdigest()[:24]
+    with np.load(evidence["root"]/"prepared"/(key+".npz"), allow_pickle=False) as z:
+        target = z["hb"][:, 0].copy()/evidence["coordinate"]["hb_scale"]
+    sd = np.asarray(evidence["coordinate"]["sd"])[60:62]
+    indices = np.arange(48,72) if mode == "center_pair" else np.arange(20,120)
+    paragraphs = []
+    signed = lambda value: f"{value:+.2f}".replace("-", "−")
+    for component, name in enumerate(("HbO", "HbR")):
+        truth = target[indices,component]/sd[component]
+        peak = indices[int(np.argmax(truth))]*.25-5
+        parts = [f"{name} 在评分区间由 {signed(truth[0])} 变为 {signed(truth[-1])} 个训练 SD；最大值时刻为事件后 {peak:.2f} 秒。"]
+        for arm,method,label in [("K1_true_H4_E12","SSM","K1"),("K2_true_H4_E12","SSM","K2"),
+                                 ("K1_true_H4_E12","joint_ridge","联合 ridge")]:
+            row = next(r for r in evidence["cells"] if r["record_id"]==identity and r["arm"]==arm
+                       and r["method"]==method and r["mode"]==mode and r["pairing"]=="paired")
+            if row["status"] != "completed":
+                parts.append(label+" 数值失败，未绘制其预测。")
+            else:
+                with np.load(evidence["root"]/"cells"/(row["id"]+".npz"), allow_pickle=False) as z:
+                    prediction = z["target_prediction"] if "target_prediction" in z else z["prediction"][:,60:62]
+                    p = prediction[indices,component]/sd[component]
+                bias = float(np.mean(p-truth))
+                delay = indices[int(np.argmax(p))]*.25-5-peak
+                parts.append(f"{label}：相关 {_report_number(row['correlation'][component],2)}，幅比 {_report_number(row['amplitude_rms_ratio'][component],2)}，均差 {signed(bias)} SD，峰差 {signed(delay)} 秒。")
+        paragraphs.append("".join(parts))
+    paragraphs.append("幅比是预测 RMS 除以目标 RMS，1 表示幅度相同；均差是预测减实测的平均差，正值为整体高估。峰差是预测最大值时刻减实测最大值时刻，正值表示更晚，不是生理延迟估计。样例与色团纵轴独立定标以显示细节；同一子图内所有方法共享刻度。")
+    return paragraphs
+
+
+def render_experiment_report(measured_run, synthetic_run, output):
+    """Export the frozen spatial experiment without fitting or raw-data access."""
+    from collections import Counter
+    measured, synthetic_root = Path(measured_run).resolve(), Path(synthetic_run).resolve()
+    if measured == synthetic_root:
+        raise ValueError("measured and synthetic evidence must have separate identities")
+    config = json.loads((measured/"resolved_config.json").read_text())
+    if (config["schema"] != "shared_driver_spatial_v1"
+            or config["data"]["datasets"] != ["eeg_fnirs_single_trial"]
+            or config["data"]["protected_data"] != "forbidden"
+            or json.loads((measured/"run_identity.json").read_text())["family"] != "public"):
+        raise ValueError("report requires the registered Single-Trial spatial experiment")
+    if json.loads((synthetic_root/"run_identity.json").read_text())["family"] != "synthetic":
+        raise ValueError("synthetic controls must retain their generator identity")
+    parent = json.loads((synthetic_root/"summary.json").read_text())
+    if parent.get("execution") != "completed" or parent.get("calibration_oracle") is not False:
+        raise ValueError("complete learned-calibration synthetic controls are required")
+    main = _experiment_evidence(measured)
+    synthetic = {name: _experiment_evidence(synthetic_root/"scenarios"/name)
+                 for name in config["synthetic"]["scenarios"]}
+    report = _SpatialReport(output)
+    plt = _plotting()
+    source = str(measured/"summary.json")
+    protocol = "experiments/configs/physiology_semantic_tokenizer/shared_driver_spatial_v1.yaml"
+    model_source = "src/inference/shared_driver_spatial.py; src/inference/shared_driver_rk4.py"
+    value = lambda arm="K1_true_H4_E12", mode="heldout_pair", method="SSM": _report_group(
+        main, arm=arm, mode=mode, method=method)["mean_subject_nrmse_with_failure_penalty"]
+    k1, k2 = value(), value("K2_true_H4_E12")
+    joint, spatial, template = (value(method=x) for x in ("joint_ridge", "spatial_ridge", "training_template"))
+    # This dated narrative describes this evidence generation. A different run
+    # needs a fresh interpretation, rather than silently reusing its prose.
+    expected = [1.1716097413841338, 2.1478277094932774, .9970527304437269]
+    if (not np.allclose([k1,k2,joint], expected, rtol=0, atol=1e-10)
+            or main["checks"]["status_counts"] != {
+                "completed":11042, "failed_numerical":67, "unavailable_wrong_EEG":735}):
+        raise ValueError("the dated 2026-10-20 narrative requires its original evidence generation")
+    _report_csv(report.output, "measured_groups", [dict(group=k, **v) for k, v in main["summary"]["groups"].items()])
+    _report_csv(report.output, "measured_comparisons", main["summary"]["comparisons"])
+    _report_csv(report.output, "measured_cells", [{k:v for k,v in r.items() if k != "known_truth_diagnostics"} for r in main["cells"]])
+    for name, evidence in synthetic.items():
+        _report_csv(report.output, "synthetic_"+name, [dict(group=k, **v) for k,v in evidence["summary"]["groups"].items()])
+    _report_csv(report.output, "calibration_selection", [dict(arm=arm, selected_weight=c["selected_eeg_weight"],
+        training_planned=c["training_subset"]["planned"], training_succeeded=c["training_subset"]["succeeded"], **v)
+        for arm,c in main["calibration"].items() for v in c["candidates"]])
+
+    report.body("实测隐藏预测仍由线性空间基线领先", "EEG：脑电；HbO/HbR：氧合/去氧血红蛋白；ridge：带正则的线性岭回归。", [
+        f"主指标是整对隐藏 Hb 的归一化均方根误差（NRMSE），按训练标准差（SD）评分。联合 ridge {joint:.4f}、空间 ridge {spatial:.4f}、单核心 K1 {k1:.4f}、双核心 K2 {k2:.4f}；越低越好。",
+        "29 人按 17／6／6 人划分训练、选择和评价；评价含 36 个窗口。统计独立单元是被试，通道、时间点和重复窗口都不增加独立人数。",
+        "K2 的主结果含预定失败惩罚；34/36 窗成功。K1 的五个空间／数量候选均选 EEG 权重 0，不能把它们的表现解释为 EEG 的增量。",
+        "完整合成支持匹配双源条件下的恢复能力；实测没有确认正确几何、EEG 配对或两套独立轨迹的稳定额外收益。"], source)
+    report.body("三个问题使用各自的对照回答", "先区分观测数量、空间对应与动态容量，再解释结果。", [
+        "观测数量：同一目标及同一 K1 动态下，比较四对与两对 Hb、十二路与六路 EEG；子面板由最大面板切片，训练尺度不重新拟合。",
+        "空间对应：同样信号、相同参数数目与选择预算，比较真实、置换和 K1 均匀几何；置换改变通道与几何权重的对应。",
+        "动态容量：守恒状态空间模型简称 SSM。K2 含两套独立驱动及初态；另用同一读出、固定 EEG 权重 1 的轨迹相等限制模型，区分读出家族和动态自由度。",
+        "跨模态增量：正确 EEG 与 Hb-only、任务和条件匹配的错配 EEG 比较，并与获得相同可见输入的 ridge 比较。"], protocol)
+    report.body("评价只覆盖六名公开开发被试", "受试者划分先于信号读取；每人两个记录、每记录三个不重叠窗口。", [
+        "训练：17 人、102 窗；选择：6 人、36 窗；评价：6 人、36 窗。划分种子固定为 20261016，没有根据评价误差调整窗口或传感器。",
+        "评价包含 18 个运动想象窗（左手 8、右手 10）与 18 个心算／基线窗（心算 4、基线 14）。本组结果不是任务分类性能。",
+        "36 个评价窗中，29 个具有同被试、同任务／条件、同传感器布局（montage）的非重叠错配 EEG；其余 7 个保留缺失，不用不匹配对象补齐。",
+        "这些被试已有公开开发历史；换分组没有形成新的未查看确认集。本版没有读取其他数据集、保护分区或个体解剖信息。"], str(measured/"plan.json"))
+
+    patch = main["plan"]["rows"][0]["patch"]
+    fig, axes = plt.subplots(1, 2, figsize=(12.2, 3.9), gridspec_kw={"width_ratios":[1.25,1]})
+    e, h = np.asarray(patch["eeg_coordinates"]), np.asarray(patch["hb_coordinates"])
+    axes[0].scatter(e[:,0], e[:,1], s=34, color=BLUE, marker="o", label="EEG")
+    axes[0].scatter(h[1:,0], h[1:,1], s=80, color="#278C79", marker="s", label="Hb 供体")
+    axes[0].scatter(h[0,0], h[0,1], s=130, color=ORANGE, marker="*", label="隐藏 Hb 目标")
+    for i, name in enumerate(patch["eeg_channel_names"]):
+        axes[0].annotate(name, e[i,:2], xytext=(4,5), textcoords="offset points", fontsize=10)
+    positions = [(-.77,1.12),(-.77,1.03),(.43,1.14),(.49,1.02)]
+    for i, name in enumerate(patch["hb_pair_names"]):
+        axes[0].annotate(f"H{i}: {name}", h[i,:2], xytext=positions[i], textcoords="data",
+                         fontsize=10, arrowprops=dict(arrowstyle="-",color=GRAY,linewidth=.7))
+    axes[0].set(xlabel="模板 x（无单位）", ylabel="模板 y（无单位）", title="三维模板坐标的 x-y 投影")
+    axes[0].set_ylim(.10,1.18)
+    axes[0].set_xlim(-.98,.99)
+    axes[0].legend(loc="lower right", fontsize=9)
+    weights = np.asarray(main["calibration"]["K2_true_H4_E12"]["design"]["hb_loadings"])
+    im = axes[1].imshow(weights, vmin=0, vmax=1, cmap="Blues", aspect="auto")
+    axes[1].set_yticks(range(4), ["H0 目标", "H1 供体", "H2 供体", "H3 供体"])
+    axes[1].set_xticks([0,1], ["局部模式 1", "局部模式 2"])
+    axes[1].set_title("冻结 Hb 混合权重；每行和为 1")
+    for i in range(4):
+        for j in range(2):
+            axes[1].text(j,i,f"{weights[i,j]:.3f}",ha="center",va="center",color="white" if weights[i,j]>.6 else INK)
+    fig.colorbar(im,ax=axes[1],label="混合权重（无单位）")
+    fig.subplots_adjust(left=.06,right=.96,bottom=.2,top=.86,wspace=.37)
+    report.figure("目标不共享光极，供体仍有硬件依赖", "每个点是传感器位置；模板几何不等于个体皮层定位。", fig,
+        "目标为 FpzFp1。目标与三个供体不共享已核验光极；H1/H2 共享探测器，H2/H3 共享光源。四对 Hb 不代表四个独立组织来源。右图给出实际冻结的 K2 空间混合权重。", str(measured/"plan.json"), "geometry")
+    report.body("测量、变换和评分坐标明确分开", "原生 EEG 为微伏；Single-Trial fNIRS 输入是双波长光强。", [
+        "EEG 使用原生 200 Hz、双侧乳突参考的公开信号，保留眼动等伪迹。五频带为 1–4、4–8、8–13、13–30、30–45 Hz，构造 4 Hz 的参考相对对数功率（log-power）。",
+        "Hb 从原生 760/850 nm 光强构造光密度，再用修正 Beer–Lambert 定律（MBLL）转换为相对 HbO/HbR；原生样本按互不交叠的 bin 聚合，不跨隐藏 Hb 区间滤波。",
+        "每窗 30 秒，从事件前 5 秒至事件后 25 秒；前 5 秒定义参考，输出为 120 个位置。模型对自身轨迹施加同一参考算子。",
+        "EEG 每频带跨通道共用训练均方根（RMS），Hb 所有通道／色团共用一个训练 RMS。评分另用逐特征训练 SD；这些相对坐标不是绝对浓度标定或噪声似然。"], "src/data/shared_driver_spatial.py; src/inference/observation_baselines.py")
+    report.body("隐藏整对 Hb 时，连参考段也只用于评分", "所有任务为离线条件重建或补全，不是实时预测。", [
+        "整对隐藏：目标 HbO/HbR 的整个 30 秒窗口都不进入拟合，包括前 5 秒参考；目标参考只定义评分坐标。其他 Hb 供体和完整 EEG 可见。",
+        "中心隐藏：仅隐藏事件后 7–13 秒的目标 Hb，对该 6 秒区间评分；目标自身的其他时间可见。完整重建：目标可见，评价事件后 0–25 秒。",
+        "整对隐藏和完整重建都在事件后 0–25 秒评分。隐藏先于输入组装和训练坐标变换；目标均值、幅度或参考不得用于校正预测。",
+        "训练模板和 ridge 始终排除目标对；因此只有整对隐藏时才与 SSM 同输入。中心任务另设目标自身上下文插值；完整可见时该插值复制目标，零误差没有预测意义。"], protocol)
+    report.equation("K1 与 K2 只改变局部动态维数",
+        r"r_k(t)=\sum_{m=1}^{16}\Phi_m(t)c_{mk},\qquad "
+        r"\dot{\mathbf x}_k=F(\mathbf x_k,r_k;\theta),\qquad "
+        r"\mathbf x_k=(s_k,f_k,v_k,p_k,q_k)^{\mathsf T}",
+        "state_dimensions",
+        "每个模式使用 16 个预定余弦时间系数，并拟合 5 个初态；K1 每窗 21 个未知量，K2 每窗 42 个。驱动 r 是条件模型输入，不能当作已测得神经活动。\n"
+        "s 为血流调节信号，f 为相对流量，v 为相对血容量，p 为归一化总 Hb 状态，q 为归一化去氧 Hb 状态。血管参数共享且冻结；没有每通道自由生理参数、额外 Hb 时间残差或网络连接。", model_source)
+    report.equation("每个核心独立传播同一守恒动力学",
+        r"\begin{aligned}"
+        r"\dot s&=r-\kappa s-\gamma(f-1),&\dot f&=s,\\"
+        r"\tau\dot v&=f-v^{1/\alpha},&\tau\dot p&=f-v^{1/\alpha}p/v,\\"
+        r"\tau\dot q&=fE(f)/E_0-v^{1/\alpha}q/v,&E(f)&=1-(1-E_0)^{1/f}."
+        r"\end{aligned}", "balloon",
+        "冻结取值：通过时间常数为 2 秒，阻尼系数为 0.64，反馈系数为 0.32，流出指数参数为 0.32，静息提取率为 0.32；有效神经血管增益为 1。这些是条件模型假设，不是逐被试生理估计。\n"
+        "流量、血容量及 Hb 状态保持正值，并检查绝对 HbO/HbR 的物理关系。RK4 在每个 0.25 秒间隔内积分四步；用八步重放检查输出误差。总 Hb 状态与血容量没有被预先强制相等。", model_source)
+    report.equation("Hb 在独立传播之后混合，EEG 使用统计读出",
+        r"\begin{aligned}"
+        r"h(\mathbf x_k)&=\begin{bmatrix}P_0(p_k-1)-Q_0(q_k-1)\\Q_0(q_k-1)\end{bmatrix},\\"
+        r"\widehat{\mathbf H}_j&=\mathcal P_H\!\left[\sum_k W_{jk}h(\mathbf x_k)\right],\qquad "
+        r"\widehat E_{cb}=\mathcal P_E\!\left[\sum_k G_{ck}a_{bk}r_k\right]."
+        r"\end{aligned}", "observation",
+        "Hb 两行依次为 HbO 和 HbR；静息总 Hb 常数为 1，去氧 Hb 常数为 0.35。W 为非负、逐行和为 1 的冻结几何矩阵；K1 的每个 Hb 权重都是 1，多个读出不能独立产生不同峰形。\n"
+        "G 是固定高斯空间核，每列按欧氏范数归一；核宽由正的传感器到锚点距离中位数确定。a 是每模式五个训练拟合的带符号频带系数。它们映射 log-power，不能称为 EEG 电压 leadfield 或脑源定位。", "src/inference/observation_baselines.py; "+model_source)
+    report.body("训练对象、选择对象和当前窗未知量不同", "训练与选择完成后，评价过程不再重新校准读出或尺度。", [
+        "训练被试：拟合共同坐标与逐特征 SD；用所有训练 Hb 做条件拟合，得到驱动参考，再回归五个带符号频带系数／模式。该驱动参考不是神经真值。",
+        "选择被试：分别评价 EEG 权重 0、0.1、1，以隐藏 Hb 的被试等权误差选择；数值失败使用预定惩罚，平局优先较小权重。",
+        "评价被试：冻结训练尺度、空间矩阵、频带系数、基线和选定权重；当前窗口只拟合驱动系数及核心初态。训练目标通道可用于训练，这不是未见传感器泛化。",
+        "空间 ridge 输入其他 Hb；联合 ridge 输入其他 Hb 加 EEG；训练模板是训练窗平均目标。ridge 使用相同训练分区与正则，独立于 SSM 拟合成功与否。"], str(measured/"calibration"))
+    report.equation("数据项按可见数量归一，正则保持固定",
+        r"J=\lambda_E\frac{T}{n_E}\sum_{\mathcal V_E}\left(\frac{\widehat E-E}{\sigma_E}\right)^2"
+        r"+\frac{T}{n_H}\sum_{\mathcal V_H}\left(\frac{\widehat H-H}{\sigma_H}\right)^2"
+        r"+J_{\rm curve}+J_{\rm init}+J_{\rm flow}",
+        "objective",
+        "T 为 120；n 是该模态实际可见标量数量，σ 为冻结训练 SD。EEG 权重为零时，该模态在变换与初始化之前就被忽略。通道增加不会自动提高某模态的总数据权重。\n"
+        "曲率系数 0.01、物理初态系数 100、对数流量先验系数 1；流量对数标准差为 0.693147。最多 180 次目标求值，梯度阈值为十万分之一。本目标是工程准则，训练 SD 不是传感器噪声标准差。", protocol)
+    report.equation("先计算窗口误差，再按被试等权汇总",
+        r"M_w=\frac{1}{2|I|}\sum_{c\in\{O,R\}}\sum_{t\in I}"
+        r"\left(\frac{\widehat H_{wtc}-H_{wtc}}{\sigma_c}\right)^2,\qquad "
+        r"N_s=\sqrt{\frac{1}{|W_s|}\sum_{w\in W_s}M_w},\qquad "
+        r"\overline N=\frac1S\sum_s N_s",
+        "metric",
+        "I 是本任务预定评分时间，W 是同一被试的可用窗口，S 是独立被试数。HbO/HbR 在窗口内等权；先平均归一化均方误差，再开方，再平均被试，不能改成全部时间点直接池化。\n"
+        "数值失败的窗口均方误差固定为 100。不可用错配供体保留在计划分母，但不进入共同可用配对收益；成功子集另外展示，不能替代含失败惩罚的主结果。", "experiments/scripts/evaluate_shared_driver_spatial.py:score_prediction/subject_endpoint")
+    report.equation("收益为参考减候选，区间按人重采样",
+        r"\Delta=\frac1S\sum_s\left(N_{s,\rm reference}-N_{s,\rm candidate}\right),\qquad "
+        r"CI_{95}=\operatorname{quantile}_{.025,.975}\!\left(\Delta^{*(1)},\ldots,\Delta^{*(1000)}\right)",
+        "paired",
+        "正收益表示候选误差更低；单位是训练 SD 归一化误差的绝对差，不是百分比。先取双方共同可用的同身份窗口，再进行被试内聚合。\n"
+        "评价仅有 6 名被试，自助重采样（bootstrap）每次抽取整人，训练与选择冻结。区间为描述性逐项 95% 区间，未做多重比较校正；跨零表示方向不确定，排除零也不等于新的确认性证据。", "experiments/scripts/evaluate_shared_driver_spatial.py:compare_cells/paired_bootstrap")
+    scenarios = config["synthetic"]["scenarios"]
+    scenario_labels = ["单源", "双源", "相同双源", "无信息 EEG", "几何失配", "共同 Hb 干扰"]
+    fig, ax = plt.subplots(figsize=(12.2, 3.9))
+    x = np.arange(len(scenarios))
+    for offset, arm, method, label, color in [
+        (-.25,"K1_true_H4_E12","SSM","K1",BLUE),
+        (0,"K2_true_H4_E12","SSM","K2",ORANGE),
+        (.25,"K1_true_H4_E12","joint_ridge","联合 ridge","#278C79")]:
+        vals = [_report_group(synthetic[name],arm=arm,method=method)["mean_subject_nrmse_with_failure_penalty"] for name in scenarios]
+        bars = ax.bar(x+offset,vals,.24,label=label,color=color)
+        for bar,val in zip(bars,vals):
+            ax.text(bar.get_x()+bar.get_width()/2,val+.015,f"{val:.3f}",ha="center",fontsize=10)
+    ax.set_xticks(x,scenario_labels)
+    ax.set(ylabel="隐藏 Hb 的平均 NRMSE（训练 SD）",ylim=(0,1.22))
+    ax.legend(ncol=3,loc="upper left");ax.grid(axis="y",alpha=.15)
+    fig.subplots_adjust(left=.07,right=.98,bottom=.18,top=.94)
+    report.figure("合成双源可以恢复，失配仍会破坏预测", "每场景独立训练／选择／评价；评价为 4 个生成身份、每身份 2 条记录。", fig,
+        "各场景 2,632 个评价单元均成功。双源 K2 为 0.0201，优于 K1 的 0.8127 和联合 ridge 的 0.2048；几何失配时 K2 为 1.0084。相同双源表示时间秩塌缩，EEG 读出家族并不等于 K1。", str(synthetic_root/"summary.json"), "synthetic_primary")
+    report.body("无信息 EEG 和共同干扰限制机制解释", "已知生成器状态是合成真值；实测没有对应潜变量真值。", [
+        "无信息 EEG 场景使用独立生成的同谱／同空间结构 EEG。Hb 供体仍含双源信息，因此 K2 可以在主要依赖 Hb 的条件下恢复隐藏目标，不能据此声称 EEG 有效。",
+        "共同 Hb 干扰为向 HbO/HbR 同向添加的已知成分；K2 误差 0.0519，K1 为 0.7104。更低的总波形误差可以伴随对干扰的吸收。",
+        "几何失配条件下，生成器使用冻结置换的空间映射，真实几何候选因假设不匹配而恶化。该反例检验模型脆弱性，不是一个新的生理机制。",
+        "完整合成采用训练 Hb 条件驱动来校准 EEG，已经不使用上一轮冒烟检查的已知读出；两轮配置、时长与随机样本不同，数值不直接作前后改善比较。"], str(synthetic_root/"summary.json"))
+    recovery = []
+    for name in scenarios:
+        arm = "K1_true_H4_E12" if name == "single_source" else "K2_true_H4_E12"
+        rows = [r for r in synthetic[name]["cells"] if r["arm"]==arm and r["mode"]=="heldout_pair"
+                and r["pairing"]=="paired" and r["method"]=="SSM" and r["status"]=="completed"]
+        subject = {}
+        for row in rows:
+            truth = row["known_truth_diagnostics"]
+            values = [float(np.mean([v["reference_centered_nrmse"] for v in truth["drivers"]]))]
+            values += [float(np.mean([v["coordinates"][state]["reference_centered_nrmse"] for v in truth["states"]]))
+                       for state in ("f","q")]
+            subject.setdefault(row["subject"],[]).append(values)
+        medians = np.median([np.mean(v,axis=0) for v in subject.values()],axis=0)
+        recovery.append(dict(scenario=name,driver=float(medians[0]),flow=float(medians[1]),deoxy_state=float(medians[2]),
+            subjects=len(subject),records=len(rows),pooling="mean modes within record, mean two records within identity, median four identities",
+            denominator="own reference-centered generator trajectory RMS"))
+    _report_csv(report.output,"synthetic_latent_recovery",recovery)
+    fig, ax = plt.subplots(figsize=(12.2,3.9))
+    matrix=np.asarray([[r[k] for k in ("driver","flow","deoxy_state")] for r in recovery])
+    im=ax.imshow(matrix.T,aspect="auto",cmap="YlOrRd",vmin=0,vmax=max(1.,float(matrix.max())))
+    ax.set_xticks(range(6),scenario_labels);ax.set_yticks(range(3),["驱动","相对流量状态","去氧 Hb 状态"])
+    for i in range(6):
+        for j in range(3):ax.text(i,j,f"{matrix[i,j]:.3f}",ha="center",va="center",fontsize=11)
+    fig.colorbar(im,ax=ax,label="参考中心化误差 / 真值轨迹 RMS")
+    fig.subplots_adjust(left=.16,right=.95,bottom=.17,top=.93)
+    report.figure("隐藏波形误差与潜变量恢复分别判断","每格为四个生成身份的中位数；颜色是归一化误差，不是相关系数。",fig,
+        "先平均记录内模式，再平均身份内两记录，最后取四身份中位数。无信息 EEG 和共同干扰下，驱动误差约 0.45，隐藏 Hb 误差仍可很低。此处分母是真值轨迹的参考中心化 RMS，区别于 Hb 评分的训练 SD。",str(synthetic_root/"scenarios"),"latent_recovery")
+    arm_labels={"K1_true_H4_E12":"K1 真 · 4Hb/12EEG","K1_sham_H4_E12":"K1 置换 · 4Hb/12EEG",
+        "K1_uniform_H4_E12":"K1 均匀 · 4Hb/12EEG","K2_true_H4_E12":"K2 真 · 4Hb/12EEG",
+        "K2_sham_H4_E12":"K2 置换 · 4Hb/12EEG","K1_true_H2_E12":"K1 真 · 2Hb/12EEG",
+        "K1_true_H4_E6":"K1 真 · 4Hb/6EEG"}
+    arms=sorted(main["calibration"],key=lambda a:list(arm_labels).index(a))
+    selection=np.array([[c["subject_mean_nmse"] for c in main["calibration"][a]["candidates"]] for a in arms])
+    fig,ax=plt.subplots(figsize=(12.2,3.9))
+    im=ax.imshow(selection,aspect="auto",cmap="YlOrRd",vmin=0,vmax=4)
+    ax.set_yticks(range(7),[arm_labels[a] for a in arms])
+    ax.set_xticks(range(3),["EEG 权重 0","EEG 权重 0.1","EEG 权重 1"])
+    for i,a in enumerate(arms):
+        c=main["calibration"][a]
+        for j,row in enumerate(c["candidates"]):
+            star=" ★" if row["eeg_weight"]==c["selected_eeg_weight"] else ""
+            ax.text(j,i,f"{row['subject_mean_nmse']:.4f}；成功 {row['succeeded']}/36{star}",
+                    ha="center",va="center",fontsize=11,color="white" if row["subject_mean_nmse"]>2.5 else INK)
+    fig.colorbar(im,ax=ax,label="选择集平均 NMSE（含失败惩罚）")
+    fig.subplots_adjust(left=.23,right=.95,bottom=.15,top=.94)
+    report.figure("五个 K1 候选均选择忽略 EEG","星号标出冻结选择；选择使用平均 NMSE，主报告使用被试平均 NRMSE。",fig,
+        "K2 真几何选择权重 1，置换几何选择 0.1。真几何的权重 0 和 0.1 各有一次选择窗失败，惩罚影响了选择；不能将选中较大权重解释为更强生理耦合。",str(measured/"calibration"),"selection")
+    report.body("成功、数值失败与缺失对照分别保留","完整计划为 11,844 单元；一个单元是窗口×模型×隐藏方式×配对×方法。",[
+        "评价共有 11,042 个成功单元、67 个数值失败单元、735 个错配 EEG 不可用单元。735 个不可用单元来自 7 个缺少匹配供体的窗口及其全部相关比较。",
+        "67 个数值失败均达到 180 次目标求值预算，不能作为缺失删除。K2 置换模型占 40 个，K2 真几何占 21 个，K1 两 Hb 面板占 6 个；它们不是独立被试计数。",
+        "训练条件拟合：每个 K1 候选为 102/102 成功；K2 真几何为 98/102，置换为 96/102。EEG 读出使用成功训练子集，原始观测基线仍使用全部训练窗口。",
+        "没有追加评价调参、重试困难窗口或扩大优化预算。正式运行使用 24 进程、单线程数值库和独立 user systemd 服务；失败与资源先导记录均保留。"],source)
+
+
+    model_defs=[("训练模板","K1_true_H4_E12","training_template",GRAY),
+        ("空间 ridge","K1_true_H4_E12","spatial_ridge","#775DA6"),
+        ("联合 ridge","K1_true_H4_E12","joint_ridge","#278C79"),
+        ("K1","K1_true_H4_E12","SSM",BLUE),("K2","K2_true_H4_E12","SSM",ORANGE)]
+    fig,ax=plt.subplots(figsize=(12.2,3.9))
+    highest=0.
+    for i,(label,arm,method,color) in enumerate(model_defs):
+        g=_report_group(main,arm=arm,method=method)
+        val=g["mean_subject_nrmse_with_failure_penalty"]
+        ax.bar(i,val,color=color,width=.58,label=label)
+        ax.text(i,val+.045,f"{val:.4f}\n成功 {g['succeeded']}/36",ha="center",fontsize=10)
+        subject=np.asarray(list(g["subject_nrmse_with_failure_penalty"].values()))
+        highest=max(highest,float(subject.max()))
+        ax.scatter(i+np.linspace(-.17,.17,len(subject)),subject,color=INK,s=20,alpha=.8,marker="o")
+    ax.set_xticks(range(5),[d[0] for d in model_defs])
+    ax.set(ylabel="被试平均 NRMSE（含失败惩罚）",ylim=(0,max(3.,highest*1.16)))
+    ax.grid(axis="y",alpha=.15);fig.subplots_adjust(left=.08,right=.98,bottom=.15,top=.95)
+    report.figure("线性空间基线优于两个守恒候选","柱为六名被试等权均值；黑点各代表一名被试，不是窗口。",fig,
+        f"联合 ridge {joint:.4f}、空间 ridge {spatial:.4f}、K1 {k1:.4f}、K2 {k2:.4f}。所有方法预测同一隐藏目标；K2 的两个失败窗按冻结 NMSE 惩罚进入主结果。",source,"measured_primary")
+    cs=[_report_contrast(main,"model_vs_joint_ridge"),
+        _report_contrast(main,"model_vs_joint_ridge","K2_true_H4_E12"),
+        _report_contrast(main,"model_vs_training_template"),
+        _report_contrast(main,"K2_vs_K1","K2_true_H4_E12")]
+    report.figure("K1 超过模板，但没有超过强线性基线","共同可用 36 窗、6 人；误差收益及描述性 95% 被试 bootstrap 区间。",_report_forest(cs,
+        ["K1 相对联合 ridge","K2 相对联合 ridge","K1 相对训练模板","K2 相对 K1"]),
+        "K1 相对联合 ridge 的收益为 −0.1746；K2 相对 K1 为 −0.9762。负值有利于参考方法。区间未做多重比较校正，结论限定于冻结面板和算法预算。",source,"baseline_contrasts")
+    cs=[_report_contrast(main,"paired_vs_Hb_only","K2_true_H4_E12"),
+        _report_contrast(main,"paired_vs_wrong_EEG","K2_true_H4_E12"),
+        _report_contrast(main,"paired_vs_Hb_only"),
+        _report_contrast(main,"paired_vs_wrong_EEG")]
+    report.figure("没有确认正确 EEG 配对的稳定增量","Hb-only 对照有 36 共同可用窗；错配 EEG 对照有 29 共同可用窗；均为 6 人。",_report_forest(cs,
+        ["K2：正确相对 Hb-only","K2：正确相对错配 EEG","K1：正确相对 Hb-only","K1：正确相对错配 EEG"]),
+        "K2 相对 Hb-only 收益 0.0647，区间 [−1.4459, 1.4178]；相对错配 EEG 为 0.5023，区间 [−0.0005, 1.4851]，均跨零。K1 权重为 0，因此配对对照在共同窗口上严格相同。",source,"eeg_contrasts")
+    cs=[_report_contrast(main,"true_vs_sham_K2","K2_true_H4_E12"),
+        _report_contrast(main,"true_vs_sham_K1"),
+        _report_contrast(main,"true_vs_uniform_K1"),
+        _report_contrast(main,"multi_vs_small_Hb"),
+        _report_contrast(main,"multi_vs_small_EEG")]
+    report.figure("几何与通道数量的额外收益仍不确定","每项固定目标、时间支持和训练尺度；零收益需要结合选定策略解释。",_report_forest(cs,
+        ["K2：真几何相对置换","K1：真几何相对置换","K1：真几何相对均匀","四对 Hb 相对两对","十二 EEG 相对六 EEG"]),
+        "K2 真实几何收益 0.4534，但区间跨零。增加 Hb 的收益 0.0729，区间 [−0.0194, 0.1830]。K1 的几何及 EEG 数量对照为零，是忽略 EEG 后的相同模型，不能泛化为几何信息无价值。",source,"geometry_count")
+    cs=[_report_contrast(main,"K2_free_vs_tied_fixed1","K2_true_H4_E12"),
+        _report_contrast(main,"K2_vs_K1","K2_true_H4_E12")]
+    report.figure("同一读出下，独立轨迹也没有稳定收益","固定 EEG 权重 1；两核自由模型与轨迹及初态相等的限制模型配对。",_report_forest(cs,
+        ["同读出：自由 K2 相对相等限制","不同读出家族：K2 相对 K1"]),
+        "严格限制模型保留 K2 的加载两列之和，并将曲率、初态和流量先验各乘 2。解除轨迹与初态相等约束的收益为 −0.9769，区间 [−2.3024, 0.0005]；不支持为当前预测任务增加动态复杂度。",source,"tied")
+    fig,axes=plt.subplots(1,2,figsize=(12.2,3.9))
+    modes=["full","heldout_pair","center_pair"];mode_names=["完整可见","整对隐藏","中心隐藏"]
+    for i,arm in enumerate(["K1_true_H4_E12","K2_true_H4_E12"]):
+        gs=[_report_group(main,arm=arm,mode=m) for m in modes]
+        axes[0].plot(range(3),[g["mean_subject_nrmse_with_failure_penalty"] for g in gs],marker=("o","s")[i],color=(BLUE,ORANGE)[i],label=("K1","K2")[i])
+        axes[1].plot(range(3),[g["success_subset_mean_subject_nrmse"] for g in gs],marker=("o","s")[i],color=(BLUE,ORANGE)[i],label=("K1","K2")[i])
+    for ax,title in zip(axes,["主结果：含数值失败惩罚","成功子集：仅作补充诊断"]):
+        ax.set_xticks(range(3),mode_names);ax.set(title=title,ylabel="被试平均 NRMSE",ylim=(0,2.5));ax.grid(alpha=.15);ax.legend()
+    fig.subplots_adjust(left=.07,right=.97,bottom=.18,top=.87,wspace=.25)
+    report.figure("更低的成功子集拟合误差不能掩盖失败","中心任务只评 6 秒；其他任务评事件后 25 秒，跨任务数值不能解释为同一难度。",fig,
+        "K2 完整可见成功子集误差 0.6920，含失败后为 1.2893；整对隐藏成功子集为 1.2734，含失败后为 2.1478。两种汇总的窗口集合不同，成功子集不是新的配对优势证据。",source,"failure_sensitivity")
+    center_defs=[("自身上下文插值","K1_true_H4_E12","own_context_interpolation",GRAY),
+        ("联合 ridge","K1_true_H4_E12","joint_ridge","#278C79"),("K1","K1_true_H4_E12","SSM",BLUE),
+        ("K2","K2_true_H4_E12","SSM",ORANGE)]
+    fig,ax=plt.subplots(figsize=(12.2,3.9))
+    for i,(name,arm,method,color) in enumerate(center_defs):
+        g=_report_group(main,arm=arm,mode="center_pair",method=method)
+        v=g["mean_subject_nrmse_with_failure_penalty"];ax.bar(i,v,color=color,width=.6)
+        ax.text(i,v+.03,f"{v:.4f}\n成功 {g['succeeded']}/36",ha="center")
+    ax.set_xticks(range(4),[x[0] for x in center_defs]);ax.set(ylabel="中心隐藏 NRMSE（含失败惩罚）",ylim=(0,1.65))
+    ax.grid(axis="y",alpha=.15);fig.subplots_adjust(left=.07,right=.98,bottom=.15,top=.94)
+    report.figure("中心补全仍以自身上下文插值最强","目标事件后 7–13 秒隐藏；目标区间外的时间可见。",fig,
+        "自身上下文插值为 0.4910，联合 ridge 为 0.7686，K1 为 0.8570，K2 为 1.2575。插值只使用可见目标上下文；ridge 全程排除目标，因此不能把中心任务当作所有方法同输入的主比较。",source,"center_prediction")
+    fig,axes=plt.subplots(1,3,figsize=(12.2,3.9),sharex=True,sharey=True)
+    for ax,(label,arm,method,color) in zip(axes,[model_defs[3],model_defs[4],model_defs[2]]):
+        rows=[r for r in main["cells"] if r["arm"]==arm and r["method"]==method and r["mode"]=="heldout_pair"
+              and r["pairing"]=="paired" and r["status"]=="completed"]
+        xy=np.asarray([r["correlation"] for r in rows],float)
+        ax.scatter(xy[:,0],xy[:,1],color=color,alpha=.65,s=25)
+        ax.axhline(0,color=GRAY,linestyle="--");ax.axvline(0,color=GRAY,linestyle="--")
+        ax.set(xlim=(-1.05,1.05),ylim=(-1.05,1.05),xlabel="HbO：预测与目标的 Pearson 相关",
+               title=f"{label}；成功 {len(rows)}/36")
+    axes[0].set_ylabel("HbR：预测与目标的 Pearson 相关")
+    fig.subplots_adjust(left=.07,right=.98,bottom=.2,top=.86,wspace=.12)
+    report.figure("误差、波形相关与成分归属不能互相替代","每点是一个成功窗口，同一人的多个点相互依赖；两条零线只表示相关符号。",fig,
+        "相关在各色团的评分时间内单独计算，不受正比例幅值变化影响；较高相关仍可有幅度偏差。K2 两个失败窗不出现在本图，但保留在主风险中。相关也不能给潜在成分指定生理来源。",source,"correlations")
+    examples=_report_examples(main)
+    _report_csv(report.output,"selected_examples",[{k:v for k,v in r.items() if k!="known_truth_diagnostics"} for r in examples])
+    for index,example in enumerate(examples):
+        identity=main["identities"][example["record_id"]]
+        fig,metrics=_report_waveforms(main,example)
+        caption=f"按 K1 主任务误差选择第 {example['rank']}/{example['denominator']} 窗，三例来自不同被试。目标全程隐藏，事件时刻为 0；各色团用固定训练 SD 表示幅值。窗口 NRMSE：{metrics}。"
+        report.figure(f"{example['label']}样例：同输入预测的波形差异",
+            f"{identity['subject']} / {identity['record']} / 事件 {identity['event_id']} / {identity['task']} / {identity['condition']}",
+            fig,caption,example["record_id"],f"example_{index+1}")
+        report.body(f"{example['label']}样例：峰形、幅度与评分的对应",
+                    "与前页使用同一窗口和同一评分区间；幅度比与相关分别解释。",
+                    _report_waveform_explanation(main, example), example["record_id"], size=18)
+    fig,metrics=_report_waveforms(main,examples[1],mode="center_pair")
+    report.figure("同一居中样例：局部隐藏与整对隐藏不同","保持样例不变，但模型按中心隐藏任务独立重新拟合；阴影为评分区间。",fig,
+        f"阴影为事件后 7–13 秒，其余目标可见；灰色插值只显示隐藏段。NRMSE：{metrics}。各任务独立重拟合，跨任务差异不能解释为同输入条件下的预测收益。",
+        examples[1]["record_id"],"center_example")
+    report.body("结构与优化都是可能的限制","以下是与实现相容的解释，尚未通过新增干预实验区分。",[
+        "K1 的四个 Hb 读出共享同一对波形，只增加联合约束，无法独立表示不同位置的峰形。困难样例中，HbR 的均值和幅度偏差明显；这与结构约束相容，但不能据此确定真实成因。",
+        "K2 放开第二套轨迹后，在匹配合成中有效，在几何失配中失效。实测失败又集中于冻结求值预算；模型失配与优化不足都可能限制当前结果。",
+        "EEG log-power 是带伪迹的统计特征，训练 Hb 条件驱动也不是神经真值。没有额外独立来源锚点，不能将拟合加载符号、空间模式或峰时差赋予唯一生理含义。",
+        "当前最稳妥的用途是保留空间 ridge 作为强预测基线、保留 K1 作为受约束的条件参考。来源解释、个体参数估计及下游 tokenizer 价值都需要各自独立证据。"],protocol)
+    report.body("结论：先保留可预测信息，暂不增加机制主张","结果对应固定前额面板、固定生理参数、当前求解预算和公开开发人群。",[
+        "空间 Hb 的直接线性信息是当前最有用的预测基线。K1 超过训练模板，但未超过同输入联合 ridge；K2 的复杂度和数值失败没有换来稳定隐藏预测收益。",
+        "K1 自动选择忽略 EEG；K2 的正确 EEG 相对 Hb-only 和错配对照的区间跨零。当前结果不建立额外的跨模态耦合资格。",
+        "真实几何与置换几何未形成稳定差异；两套独立轨迹与初态也未超过同读出的相等限制模型。不能据此命名两个皮层源或推断连接方向。",
+        "后续如继续 K2，应先在训练／合成支持上解决预算内收敛和失配问题，再定义新的冻结比较；本轮没有根据评价结果重调模型，也没有自动启动下一轮实验。"],source)
+    report.body("交付与独立核验","PPT 与 PDF 正文可选择；图表和公式均嵌入 PNG，保留 LaTeX 源码。",[
+        "独立复算全部 11,042 个成功实测单元和 15,792 个合成单元的误差；被试聚合、共同窗口配对与 1,000 次 bootstrap 区间均与保留摘要一致。",
+        "完整表格位于 tables：逐评价单元、各组汇总、所有配对比较、权重选择、合成潜变量恢复及样例选择。逐页来源在 slide_sources.json，原运行保持唯一事实源。",
+        "数值失败及错配缺失均保留；资源先导的解释器启动错误单独保留，正式实测使用新的 v2 目录及仓库环境，没有混用失败先导的准备文件。",
+        "配套技术报告提供本套页面的完整文字、方法补充和读取入口；delivery_checks.json 记录数值复算、图像对象、可选文本及页面边界检查。"],str(report.output/"delivery_checks.json"))
+    checks={"measured":main["checks"],"synthetic":{name:e["checks"] for name,e in synthetic.items()}}
+    appendix=[
+        ("技术补充：输入与复现",[
+            "冻结配置："+str(measured/"resolved_config.json")+"；拟合源码快照："+str(measured/"source_snapshot")+
+            "。运行入口 evaluate_shared_driver_spatial.py 依次执行 plan、prepare、calibrate、measured、summarize；完整合成另用 synthetic 阶段。",
+            "PPT 中的训练 SD 是经过共同训练 RMS 缩放后的逐特征标准差。Hb 的共同正尺度保留通道和色团幅比；各样例图以对应色团的同一训练 SD 显示，未逐窗或逐帧归一。",
+            "空间核为模板坐标下的高斯距离核，默认宽度为正距离中位数；EEG 列按欧氏范数归一，Hb 行按和归一。K2 锚点固定为目标与最远的已选供体。sham 固定目标 Hb 行，只置换其他 Hb 行及 EEG 行。",
+            "signed EEG 系数的 ridge 为 0.1 倍训练 Gram 平均对角线，不新增逐通道自由系数、截距或评价期再定标。基础 ridge 也仅在训练数据拟合；不会继承 SSM 的数值失败。",
+            "错配 EEG 的供体只提供 EEG，不读取其 Hb 作为目标输入。隐藏目标及参考对输入不变、零 EEG 权重忽略、K2 同轨迹等价、解析导数和积分精度均有 fixture 测试。"]),
+        ("技术补充：统计与解释限制",[
+            "主输出是被试内平均窗口 NMSE 后开方，再平均被试。选择阶段使用被试等权 NMSE，以便按预定失败惩罚选择；它与报告 NRMSE 的开方顺序不同，不是同一个统计量。",
+            "区间固定训练和选择，仅反映六名评价被试在当前面板的重采样不确定性；不是覆盖训练不确定性的总体置信声明。全部比较均为开发性描述，没有对报告中的多项区间进行家族错误率校正。",
+            "评价任务分布不平衡：心算 4 窗、基线 14 窗、左手想象 8 窗、右手想象 10 窗。没有把这些条件当作独立被试，也没有基于条件差异另行调整参数。",
+            "数值失败均达到冻结目标求值预算。当前负结果同时反映模型、优化和预算，不证明所有双源模型都无效；增加预算或改变参数属于后续版本实验。",
+            "合成驱动和状态的真值来自生成器；实测目标是真实测量经声明变换后的隐藏 Hb，实测驱动和状态只是条件估计。模板几何、未共享光极及预测增益均不能排除组织重叠、浅层或系统性干扰。"]),
+        ("文件与复核入口",[
+            "主实测："+str(measured)+"；完整合成："+str(synthetic_root)+"。",
+            "原始数据说明：data/EEG+NIRS Single-Trial/Open access dataset for simultaneous EEG and NIRS Brain-Computer Interfaces (BCIs).html。数据单位、时钟和来源合同：docs/DATA_CONTRACT.md。",
+            "报告图表的底层数值保存在 tables/*.csv；PPT/PDF 的每页证据路径见 slide_sources.json。误差为参考减候选时正值有利于候选；所有成功率与缺失均有原计划分母。",
+            "报告不是新的状态源；项目状态继续由 research_state/registry.json 及其生成视图持有。保留旧冒烟、资源先导和正式运行，不将通信导出替代原始运行证据。"])]
+    return report.finish(checks,appendix)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--demo", action="store_true", help="generate a toy forward-only bundle; no measured data")
     source.add_argument("--whole-head-demo", action="store_true", help="public 64-EEG/51-Hb geometry with independent synthetic relations")
     source.add_argument("--bundle", type=Path, help="one explicit visualization manifest.json")
+    source.add_argument("--experiment-report", action="store_true", help="2026-10-20 PPT and technical PDF from completed spatial experiment runs")
+    parser.add_argument("--measured-run", type=Path)
+    parser.add_argument("--synthetic-run", type=Path)
     parser.add_argument("--output", type=Path, required=True, help="fresh output directory; existing paths are refused")
     parser.add_argument("--seed", type=int, default=20261016, help="demo Gaussian-noise seed")
     args = parser.parse_args(argv)
-    if args.demo or args.whole_head_demo:
+    if args.experiment_report:
+        if args.measured_run is None or args.synthetic_run is None:
+            parser.error("--experiment-report requires --measured-run and --synthetic-run")
+        audit = render_experiment_report(args.measured_run, args.synthetic_run, args.output)
+    elif args.demo or args.whole_head_demo:
         output = _fresh(args.output)
         creator = create_whole_head_demo_bundle if args.whole_head_demo else create_demo_bundle
         manifest_path = creator(output/"bundle", seed=args.seed)

@@ -277,7 +277,8 @@ sealed 脚本与配置不原地修改。实际结果以后由
 `SSM-LOCAL-SPATIAL-v1` 的数值合同由
 [`shared_driver_spatial_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_spatial_v1.yaml)
 持有，入口为 [`evaluate_shared_driver_spatial.py`](../experiments/scripts/evaluate_shared_driver_spatial.py)。
-本轮请求为实验设计、实现及软件／小规模合成验证，不启动新的实测 campaign。
+2026-10-16 的首次交付只含设计、实现及软件／小规模合成验证；后续运行记录与
+科学判读以 registry 及其生成视图为准，不从本节的设计描述推断执行状态。
 它是独立版本的公开开发诊断，不继承历史 T5 的资格、受保护授权或已撤回的几何结论。
 
 **问题与最小结构。** 区分增加通道、使用正确空间关系和增加动态维数三种收益。

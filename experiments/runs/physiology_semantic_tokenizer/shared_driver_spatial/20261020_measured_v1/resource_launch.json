@@ -1,0 +1,35 @@
+{
+  "created_utc": "2026-10-20T09:36:12.652216+00:00",
+  "unit": "spatial-resource-20261020-v1.service",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--unit=spatial-resource-20261020-v1",
+    "--property=Type=exec",
+    "--property=WorkingDirectory=/SSD_2/pid-mcm-implementation",
+    "--property=StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v1/resource.log",
+    "--property=StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v1/resource.log",
+    "--property=CPUAccounting=yes",
+    "--property=MemoryAccounting=yes",
+    "--property=Nice=5",
+    "--setenv=OMP_NUM_THREADS=1",
+    "--setenv=MKL_NUM_THREADS=1",
+    "--setenv=OPENBLAS_NUM_THREADS=1",
+    "--setenv=NUMEXPR_NUM_THREADS=1",
+    "/home/uais0/anaconda3/bin/python3.12",
+    "-c",
+    "\nimport os,time,json,resource\nfrom pathlib import Path\nfrom concurrent.futures import ProcessPoolExecutor\nfrom experiments.scripts import evaluate_shared_driver_spatial as r\nimport numpy as np\nout=Path('experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v1').resolve()\ncfg=r.read_config(r.DEFAULT_CONFIG)\ndef numerical(i):\n    started=time.monotonic();scenario=cfg['synthetic']['scenarios'][(i//2)%6];k=1+i%2\n    tr,trec=r.synthetic_record(cfg,scenario,'training',0)\n    co=r.smoke_coordinate(tr,trec)\n    row,rec=r.synthetic_record(cfg,scenario,'evaluation',i//12)\n    arm=next(a for a in r.arm_specs(cfg) if a['K']==k and a['geometry']=='true' and a['hb_pairs']==4 and a['eeg_channels']==12)\n    design=r.spatial_design(cfg,row['patch'],arm)\n    bands=np.asarray([[1.,-.7],[-.6,1.],[1.2,.8],[.4,-.8],[-.8,.5]])[:,:k]\n    loading=(np.asarray(design['spatial_eeg'])[:,None,:]*bands[None]).reshape(60,k)\n    fit=r.fit_record(cfg,rec,co,arm,design,loading,'heldout_pair','paired',1.)\n    return dict(index=i,scenario=scenario,K=k,status=fit['status'],elapsed_s=time.monotonic()-started,peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)\nresult=dict(schema='spatial_resource_benchmark_v1',scope='resource_sizing_not_scientific_comparison',resources=r.resource_metadata(),warmup=numerical(0),numerical=[],preparation=[])\nfor workers in [1,8,24]:\n    started=time.monotonic()\n    if workers==1: fits=[numerical(i) for i in range(48)]\n    else:\n        with ProcessPoolExecutor(max_workers=workers) as pool: fits=list(pool.map(numerical,range(48)))\n    elapsed=time.monotonic()-started\n    result['numerical'].append(dict(workers=workers,wall_s=elapsed,fits_per_s=48/elapsed,fits=fits))\n    r.write_json(out/'resource_benchmark.json',result)\n    print('numerical',workers,elapsed,48/elapsed,flush=True)\nplan=r.read_json(out/'plan.json');training=[x for x in plan['rows'] if x['split']=='train']\nposition=0\nfor workers in [1,8,24]:\n    rows=training[position:position+workers];position+=workers;started=time.monotonic()\n    payloads=[(cfg,str(r.CODE_ROOT),str(out),row) for row in rows]\n    if workers==1: values=[r._prepare_job(p) for p in payloads]\n    else:\n        with ProcessPoolExecutor(max_workers=workers) as pool: values=list(pool.map(r._prepare_job,payloads))\n    elapsed=time.monotonic()-started\n    result['preparation'].append(dict(workers=workers,wall_s=elapsed,windows_per_s=len(rows)/elapsed,rows=[dict(id=x['row']['id'],status=x['status'],error=x.get('error')) for x in values]))\n    r.write_json(out/'resource_benchmark.json',result)\n    print('prepare',workers,elapsed,len(rows)/elapsed,flush=True)\nresult['status']='completed';r.write_json(out/'resource_benchmark.json',result)\n"
+  ],
+  "working_directory": "/SSD_2/pid-mcm-implementation",
+  "user_linger": true,
+  "cpu_physical_cores": 52,
+  "cpu_logical": 104,
+  "competing_service": "downstream-rebench-20261016-v2.service",
+  "bounds": "registered <=24 workers; numerical libraries 1 thread; 48 independent synthetic fits per throughput setting, then 33 distinct training-window preparation tasks",
+  "resource_commands": {
+    "processes": "    PID    PPID %CPU %MEM ELAPSED COMMAND\n 203218  203203  175  1.6  321193 python\n 203214  203203  174  1.6  321193 python\n 203209  203203  174  1.5  321193 python\n2156619  203203  170  2.3     684 python\n1574063  203203  147  1.2   28460 python\n2165704  203203  136  1.0     231 python\n2168931  542478  109  0.6     139 python\n2164818  327008  103  0.6     257 python\n   3317       1  5.7  0.0  432252 ToDesk_Service\n 203203    2366  5.6  0.0  321193 python\n2177035 2164818  5.0  0.4       1 pt_data_worker\n2177038 2164818  5.0  0.4       1 pt_data_worker\n2177040 2164818  5.0  0.4       1 pt_data_worker\n2177047 2164818  5.0  0.4       1 pt_data_worker\n2177048 2164818  5.0  0.4       1 pt_data_worker\n2177051 2164818  5.0  0.4       1 pt_data_worker\n2177034 2164818  4.0  0.4       1 pt_data_worker\n2177036 2164818  4.0  0.4       1 pt_data_worker\n2177039 2164818  4.0  0.4       1 pt_data_worker",
+    "storage": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme3n1p1  1.9T  455G  1.3T  26% /SSD_2\n",
+    "disk": "Linux 6.8.0-45-generic (uais502-Precision-7920-Tower) \t10/20/26 \t_x86_64_\t(104 CPU)\n\nDevice            r/s     rkB/s   rrqm/s  %rrqm r_await rareq-sz     w/s     wkB/s   wrqm/s  %wrqm w_await wareq-sz     d/s     dkB/s   drqm/s  %drqm d_await dareq-sz     f/s f_await  aqu-sz  %util\nnvme3n1          0.89     47.98     0.32  26.11    0.22    53.76   69.08   7827.61    30.45  30.59    2.50   113.31    0.12   3473.39     0.00   0.00    1.07 28240.05    2.57    1.07    0.18   1.44\n\n\nDevice            r/s     rkB/s   rrqm/s  %rrqm r_await rareq-sz     w/s     wkB/s   wrqm/s  %wrqm w_await wareq-sz     d/s     dkB/s   drqm/s  %drqm d_await dareq-sz     f/s f_await  aqu-sz  %util\nnvme3n1          0.00      0.00     0.00   0.00    0.00     0.00   20.00     84.00     1.00   4.76    8.55     4.20    0.00      0.00     0.00   0.00    0.00     0.00    0.00    0.00    0.17   0.80\n\n\n",
+    "memory": "               total        used        free      shared  buff/cache   available\nMem:           251Gi        36Gi       7.0Gi       176Mi       207Gi       212Gi\nSwap:           28Gi       1.0Mi        28Gi\n"
+  }
+}

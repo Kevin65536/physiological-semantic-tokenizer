@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-16T16:23:32.510257+00:00",
+  "updated_at": "2026-10-20T10:31:38.817309+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1773,6 +1773,48 @@
       "label": "新版下游比较初版中断与修复身份",
       "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/revision.json",
       "role": "run_manifest"
+    },
+    {
+      "id": "e.local_spatial_synthetic_full",
+      "label": "局部空间完整合成机制评价",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_synthetic_v1/summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.local_spatial_measured_launch",
+      "label": "局部空间实测完整执行与持久服务",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.local_spatial_resources",
+      "label": "局部空间实测资源与吞吐依据",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2/resources.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.local_spatial_measured_full",
+      "label": "局部空间实测完整结果与全部失败分母",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.local_spatial_verification",
+      "label": "局部空间实测独立数组评分与区间复算",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.local_spatial_report",
+      "label": "局部空间完整实验36页PPT/PDF报告",
+      "path": "docs/report/20261020_local_spatial_v5/LOCAL_SPATIAL_REPORT.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.local_spatial_report_checks",
+      "label": "局部空间报告逐页、位图与数值核验",
+      "path": "docs/report/20261020_local_spatial_v5/delivery_checks.json",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -5336,6 +5378,37 @@
       ],
       "headline": true,
       "next_step": "通过同一冻结任务矩阵和持久服务监控、恢复，保持所有计划分母和失败；完整轨道终态后核验被试/种子等权统计、REFED训练均值误差、输入与目标覆盖、REVE重叠及方法准入。预估数月至一年以上，待持续epoch吞吐细化；不因低外折分数改候选或扩大数据范围。"
+    },
+    {
+      "state_id": "main.local_spatial@2026-10-20.v1",
+      "entity": "main.local_spatial",
+      "label": "局部多通道观测与空间动态维数",
+      "track": "main",
+      "order": 182,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "完整公开实测11844单元均终态：11042成功、67预算内数值失败、735错配EEG不可用。主评价6人36窗，联合/空间ridge NRMSE为0.9971/0.9978，K1为1.1716（36/36成功），K2为2.1478（34/36；含失败惩罚）。五个K1候选均选EEG权重0；K2几何、正确EEG配对及同读出独立轨迹收益未稳定排除零。完整合成15792/15792成功但几何失配与共同干扰限制来源解释。独立数组复算、被试聚合和区间一致；36页PPT/PDF与39页技术文档已完成，图表/公式位图且正文可选。",
+      "evidence_ids": [
+        "e.local_spatial_contract",
+        "e.local_spatial_synthetic_full",
+        "e.local_spatial_measured_launch",
+        "e.local_spatial_resources",
+        "e.local_spatial_measured_full",
+        "e.local_spatial_verification",
+        "e.local_spatial_report",
+        "e.local_spatial_report_checks"
+      ],
+      "supersedes": [
+        "main.local_spatial@2026-10-16.v1"
+      ],
+      "updated_at": "2026-10-20T10:31:38.817309+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "本轮完整实验与报告已交付。保留数值失败、错配缺失和旧先导；若继续K2，应先在训练/合成支持解决收敛与失配，再定义新冻结比较，不自动扩大本轮评价预算或来源主张。"
     }
   ]
 }

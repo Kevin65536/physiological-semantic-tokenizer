@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-16; payload-pruning record retained from
+_Evidence surface updated 2026-10-20; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -26,7 +26,7 @@ explains the path hierarchy and reading order.
 
 | Research question | Suite root | Evidence entry |
 | --- | --- | --- |
-| Do local channels, geometry and independent dynamics contribute separately? | `shared_driver_spatial/` | [Spatial software and metadata evidence](#local-spatial-software-and-metadata--2026-10-16) |
+| Do local channels, geometry and independent dynamics contribute separately? | `shared_driver_spatial/` | [Complete spatial experiment](#local-spatial-complete-experiment--2026-10-20), [initial software evidence](#local-spatial-software-and-metadata--2026-10-16) |
 | How do the diagnostic families compare across datasets? | Multiple suites, resolved by the report evidence map | [REFED and four-dataset comparison](#refed-backfill-and-four-dataset-comparison--2026-10-13) |
 | What does a fixed shared driver reconstruct, and how do observation and solver choices affect it? | `shared_driver_reconstruction/` | [Fixed-structure semantics](#fixed-structure-physiology-semantics--2026-09-28), [EEG proxy rates](#eeg-proxy-sampling-rate-comparison--2026-10-10), [reconstruction diagnostics](#reconstruction-and-measurement-diagnostics) |
 | Are fitted parameters repeatable and supported away from boundaries? | `shared_driver_parameter_stability/` | [Parameter stability and common interior](#parameter-stability-and-common-interior--2026-10-10) |
@@ -49,6 +49,39 @@ Some run and checkpoint paths below point to local Git-ignored artifacts that re
 useful in this workspace but are not part of the tracked paper record. For manuscript
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
+
+## Local spatial complete experiment — 2026-10-20
+
+The frozen `SSM-LOCAL-SPATIAL-v1` contract was executed on its registered public
+Single-Trial panel, following the separate learned-calibration synthetic controls.
+
+- [Complete synthetic summary](runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_synthetic_v1/summary.json)
+  links the six independently calibrated scenario summaries, plans, training/selection
+  records and terminal cells. Keep their known-truth diagnostics, resolved configuration,
+  source snapshot, launch/resources records and independent `verification.json`.
+- [Complete measured summary](runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2/summary.json)
+  retains numerical failures and unavailable wrong-EEG controls separately. Keep the
+  immutable plan, coordinates, calibration/selection records, per-cell scores and arrays,
+  [independent verification](runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2/verification.json),
+  [supervised launch](runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2/launch.json),
+  resources, execution history and source snapshot.
+- `20261020_measured_v1` is resource-pilot evidence, not the final measured experiment.
+  Its initial base-interpreter preparation failures and corrected repository-environment
+  throughput measurements remain intact; final v2 preparation did not reuse those files.
+- Communication export:
+  [36-page PPT](../docs/report/20261020_local_spatial_v5/LOCAL_SPATIAL_REPORT.pptx),
+  [slide PDF](../docs/report/20261020_local_spatial_v5/LOCAL_SPATIAL_REPORT.pdf),
+  [39-page technical document](../docs/report/20261020_local_spatial_v5/TECHNICAL_REPORT.pdf)
+  and [complete delivery bundle](../docs/report/20261020_local_spatial_v5/LOCAL_SPATIAL_DELIVERY.zip).
+  The export retains per-page evidence links, full CSV tables, LaTeX source, PNG figures,
+  and [numeric/layout/bitmap checks](../docs/report/20261020_local_spatial_v5/delivery_checks.json).
+  Earlier report-export attempts remain local with their original identities.
+
+Git retains the final plans, calibration/selection records, summaries, source snapshots,
+execution and verification records, complete measured-cell CSV, report files and source
+assets, plus the resource pilot's failure records. Prepared signal arrays, per-cell
+JSON/NPZ payloads, preview images and the duplicate delivery ZIP remain in their existing
+local directories; array-level verification requires those retained local payloads.
 
 ## Local spatial software and metadata — 2026-10-16
 
