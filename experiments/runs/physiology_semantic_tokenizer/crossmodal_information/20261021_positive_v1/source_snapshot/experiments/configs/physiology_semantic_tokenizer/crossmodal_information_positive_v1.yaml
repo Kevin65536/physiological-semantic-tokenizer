@@ -1,0 +1,67 @@
+schema: crossmodal_information_positive_v1
+experiment_id: CROSSMODAL-INFORMATION-POSITIVE-v1
+artifact_root: experiments/runs/physiology_semantic_tokenizer/crossmodal_information
+scope: synthetic_oracle_observation_conditional_information_control
+metadata_source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2
+measured_arrays: forbidden
+protected_data: forbidden
+seed:
+  calibration_base: 30261021
+  evaluation_base: 31261021
+  calibration_count: 16
+  evaluation_count: 16
+model:
+  modes: 2
+  steps: 120
+  dt_s: 0.25
+  temporal_modes_fit: 16
+  driver_DCT_indices: [1, 2, 3, 4]
+  driver_rms: 0.04
+  initial_states: known_generator_rest_fitter_free_with_original_rest_prior
+  readout: known_engineering_orthogonal_60_by_2_rows0to29_mode1_rows30to59_mode2
+  eeg_loading: parent_training_EEG_SD_divided_by_0.04
+  target_hb_row: [0.0, 1.0]
+  full_donor_rows: [[0.75, 0.25], [0.5, 0.5], [0.25, 0.75]]
+  private_donor_rows: [[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]]
+  full_gain_multipliers: [1.0, 1.0, 1.0, 1.0]
+  private_gain_multipliers: [1.0, 0.75, 0.5, 0.25]
+  gain_fit: reciprocal_mean_calibration_clean_ON_target_training_SD_RMS
+  gain_shared: all_doses_regimes_conditions_and_evaluation_seeds
+  frozen_solver: original_parent180_budget_priors_and_training_scales
+noise:
+  pre_reference_training_sd: 0.05
+  reference_steps: 20
+  fixed_across: [dose, regime]
+  condition_policy: identical_Hb_noise_all_arms_paired_and_wrong_EEG_have_fixed_independent_noise_draws
+  wrong_eeg: same_mode1_independent_mode2_and_independent_EEG_noise
+matrix:
+  regimes: [full_donors, private_donors]
+  evaluation_doses: [0.0, 1.0]
+  calibration_doses: [0.0]
+  conditions: [Hb_only, paired, wrong_EEG]
+  methods: [SSM_known_readout]
+evaluation:
+  eeg_support: [32, 88]
+  score_steps: [20, 120]
+  target: noisy_hidden_Hb_primary_and_clean_hidden_Hb_secondary
+  failure_penalty_nmse: 100.0
+  independent_unit: seed
+  bootstrap_repeats: 2000
+  threshold_quantile: 0.95
+  criterion: per_seed_min_Hb_only_minus_paired_and_wrong_minus_paired_NMSE
+  threshold: max0_empirical_calibration_zero_dose_q95_per_regime
+  report: planned16_denominator_failure_is_nondetection_and_success_conditional_rate
+  verdict: private_ON_vs_private_OFF_sensitivity_full_ON_redundancy_control_not_population_power
+resources:
+  max_workers: 24
+  numerical_threads: 1
+  in_flight_per_worker: 2
+stopping: fixed288_terminal_cells_no_result_driven_tuning
+claim_limits:
+  - known_orthogonal_EEG_readout_and_Hb_gain_are_favorable_oracle_observation_conditions
+  - no_measured_record_is_generated_refitted_or_accessed
+  - common_gain_uses_independent_calibration_seeds_not_evaluation_scales
+  - dose0_and_dose1_share_seed_and_noise_and_are_not_independent_samples
+  - true_forward_is_shared_but_only_private_donors_remove_the_target_source_direction
+  - empirical_threshold_and_sixteen_evaluation_seeds_do_not_establish_population_power
+  - positive_synthetic_detection_does_not_calibrate_the_original_measured_readout

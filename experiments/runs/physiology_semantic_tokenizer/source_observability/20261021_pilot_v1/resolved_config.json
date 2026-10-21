@@ -1,0 +1,234 @@
+{
+  "schema": "source_observability_v1",
+  "experiment_id": "SOURCE-OBSERVABILITY-v1",
+  "artifact_root": "experiments/runs/physiology_semantic_tokenizer/source_observability",
+  "scope": "synthetic_recovery_and_explicit_retained_public_local_information",
+  "data": {
+    "protected_data": "forbidden",
+    "raw_data": "forbidden",
+    "spatial_run": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2",
+    "output_support_run": "experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1",
+    "retained_arms": [
+      "K1_true_H4_E12",
+      "K2_true_H4_E12"
+    ],
+    "retained_mode": "full",
+    "retained_pairing": "paired",
+    "retained_method": "SSM"
+  },
+  "synthetic": {
+    "steps": 120,
+    "dt_s": 0.25,
+    "temporal_modes": 12,
+    "tau_truths": [
+      1.3,
+      2.7
+    ],
+    "kappa_truths": [
+      0.45,
+      0.9
+    ],
+    "seeds": [
+      2026102101,
+      2026102102,
+      2026102103,
+      2026102104
+    ],
+    "noise_multipliers": [
+      0.0,
+      1.0
+    ],
+    "noise_sd": [
+      0.00125,
+      0.00125,
+      0.00125,
+      0.00015,
+      7e-05
+    ],
+    "weighting_sd": [
+      0.025,
+      0.025,
+      0.025,
+      0.01,
+      0.005
+    ],
+    "feature_weights": [
+      0.5773502691896258,
+      0.5773502691896258,
+      0.5773502691896258,
+      0.7071067811865475,
+      0.7071067811865475
+    ],
+    "driver_rms": 0.025,
+    "coefficient_decay": 1.3,
+    "initial_coordinates": [
+      0.01,
+      0.012,
+      -0.006,
+      0.004,
+      -0.003
+    ],
+    "eeg_loadings": [
+      [
+        1.0
+      ],
+      [
+        -0.7
+      ],
+      [
+        0.45
+      ]
+    ],
+    "hb_loadings": [
+      [
+        1.0
+      ]
+    ],
+    "generator_substeps": 8,
+    "recovery_modalities": [
+      "Hb_only",
+      "EEG_Hb"
+    ],
+    "local_modalities": [
+      "EEG_only",
+      "HbO_only",
+      "Hb_half_rate",
+      "Hb_only",
+      "EEG_Hb"
+    ]
+  },
+  "priors": {
+    "multipliers": [
+      0.0,
+      0.1,
+      1.0,
+      10.0
+    ],
+    "driver_curvature_weight": 0.01,
+    "initial_weight": 100.0,
+    "flow_prior_weight": 1.0,
+    "flow_log_sd": 0.6931471805599453,
+    "physiology_prior_weight": 0.0,
+    "physiology_prior_center": [
+      2.0,
+      0.64
+    ],
+    "physiology_prior_log_sd": 0.5,
+    "shifted_prior_centers": [
+      [
+        1.0,
+        0.35
+      ],
+      [
+        3.4,
+        1.1
+      ]
+    ],
+    "shifted_prior_weight": 10.0
+  },
+  "solver": {
+    "starts": [
+      [
+        1.0,
+        0.35
+      ],
+      [
+        2.0,
+        0.65
+      ],
+      [
+        3.4,
+        1.05
+      ]
+    ],
+    "tau_bounds": [
+      0.6,
+      4.0
+    ],
+    "kappa_bounds": [
+      0.2,
+      1.3
+    ],
+    "max_nfev": 180,
+    "gradient_tolerance": 1e-05,
+    "substeps": 4,
+    "numerical_backend": "numba",
+    "finite_difference_step": 0.0001
+  },
+  "information": {
+    "coefficient_scale": 0.025,
+    "initial_coordinate_scales": [
+      0.02,
+      0.02,
+      0.02,
+      0.02,
+      0.02
+    ],
+    "log_physiology_scales": [
+      0.5,
+      0.5
+    ],
+    "rank_relative_tolerance": 1e-08,
+    "driver_mode_controls": [
+      12,
+      120
+    ],
+    "normalization": "fixed_coordinate_scales_no_column_normalization"
+  },
+  "profiles": {
+    "seeds": [
+      2026102101
+    ],
+    "noise_multiplier": 1.0,
+    "prior_multipliers": [
+      0.0,
+      1.0
+    ],
+    "tau_grid": [
+      0.6,
+      0.86,
+      1.24,
+      1.78,
+      2.25,
+      2.85,
+      4.0
+    ],
+    "kappa_grid": [
+      0.2,
+      0.28,
+      0.4,
+      0.57,
+      0.76,
+      1.0,
+      1.3
+    ],
+    "other_parameter": "jointly_refit_with_driver_and_initial_at_every_grid_node",
+    "interpretation": "nonlinear_engineering_objective_profile_not_likelihood_CI"
+  },
+  "controls": {
+    "oracle_noise_multiplier": 1.0,
+    "oracle_prior_multiplier": 0.0,
+    "oracles": [
+      "known_driver",
+      "known_driver_initial"
+    ],
+    "shifted_prior_seed": 2026102101,
+    "shifted_prior_noise_multiplier": 1.0,
+    "shifted_prior_base_multiplier": 1.0
+  },
+  "resources": {
+    "numerical_threads": 1,
+    "max_in_flight_per_worker": 2,
+    "supervisor": "user_systemd_or_existing_durable_scheduler"
+  },
+  "stopping": "finite_manifest_all_terminal_tasks_no_result_dependent_expansion",
+  "claim_limits": [
+    "local_sensitivity_is_not_global_identifiability",
+    "engineering_weights_are_not_calibrated_measurement_likelihoods",
+    "nonlinear_profiles_are_not_confidence_intervals",
+    "fixed_physiology_retained_fits_do_not_demonstrate_parameter_recovery",
+    "public_retained_subjects_are_development_not_new_confirmation",
+    "good_prediction_does_not_guarantee_physiological_truth",
+    "failures_and_each_start_remain_in_complete_planned_denominators"
+  ]
+}

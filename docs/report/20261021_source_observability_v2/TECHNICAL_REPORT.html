@@ -1,0 +1,298 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>套件一：良好拟合为何不保证生理参数恢复</title><style>
+body{max-width:960px;margin:40px auto;padding:0 24px;color:#18324d;font:18px/1.75 "Noto Sans CJK SC",sans-serif}h1,h2,h3{line-height:1.4}h2{margin-top:2.5em}p,td,th{overflow-wrap:anywhere}figure{margin:1.7em 0}img{display:block;max-width:100%;height:auto;margin:auto}figcaption{font-size:16px;line-height:1.65;margin-top:12px}.source,.provenance{font-size:14px;color:#52616f}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px;line-height:1.5}th,td{padding:9px;border:1px solid #bbc8d4;vertical-align:top}th{background:#e8eff6}caption{text-align:left;font-weight:bold;margin:10px 0}.equation img{max-width:100%}@media print{body{margin:0;font-size:11pt}h2{break-after:avoid}figure{break-inside:avoid}thead{display:table-header-group}}
+</style></head><body><h1>套件一：良好拟合为何不保证生理参数恢复</h1>
+<p>数据可观测性、先验约束与非线性恢复的独立诊断</p>
+<p class="provenance">2026-10-21</p>
+<p class="provenance">新数值owner：SOURCE-OBSERVABILITY-v1，experiments/runs/physiology_semantic_tokenizer/source_observability/20261021_v1。</p>
+<p class="provenance">解析配置、任务manifest、逐起点记录、系数/状态数组、summary和三张CSV均保留；报告仅重述与解释这些冻结证据。</p>
+<p class="provenance">原公开实测信息来自明确保留的shared_driver_spatial/20261020_measured_v2；没有读取原始或受保护数据，也没有从原实测重新估计生理参数。</p>
+<p class="provenance">verification.json重算全部560个拟合任务、16个生成病例局部信息和71个原拟合，算术与积分核验通过；它不改变失败分类。</p>
+<h2>研究摘要</h2>
+<p>648个有限任务全部终态：567完成、80数值失败、1旧源拟合不可用；1680个优化起点中1414收敛。失败保留，不把数值失败当作科学不可辨识的直接证据。</p>
+<p>有噪声、零显式先验时，Hb-only与EEG+Hb的clean Hb标准化NRMSE几乎相同（0.003699/0.003688），但κ绝对误差0.109765→0.006525 /s，driver NRMSE0.059017→0.007378。输出拟合相近不保证潜变量相近。</p>
+<p>同一真驱动从M12扩展为M120后，Hb-only参数投影信息最小特征值由约1.83e-4降至数值近零；EEG+Hb保持约0.897。低维驱动是一项结构先验，已知EEG读出约束了不同的信息方向。</p>
+<p>无噪声M12下，Hb-only及EEG+Hb均16/16近真恢复。加EEG主要改善κ和driver，不保证τ或每个血管状态都改善；因此不能得出普遍不可恢复或普遍恢复的结论。</p>
+<p>非线性κ profile显示大幅参数变化可保持很小Hb误差，同时改变driver；先验又可移动估计或造成失败。原实测固定τ、κ的重建仅提供条件局部诊断，不是生理参数恢复证据。</p>
+<section><h2>研究问题与可以回答的范围</h2>
+<p>本报告区分四个不同问题：输出是否贴近观测、隐藏观测能否预测、潜在驱动和状态是否接近生成真值、参数是否由数据而非先验决定。它们使用不同的评分对象，不能互相替代。实测数据没有本研究所需的个体生理真值；实测部分只能报告补全、稳定性和条件敏感性，参数恢复必须由已知生成真值的合成实验评价。</p>
+<p>本轮是解释性开发研究。合成生成器是受控的模型世界；既有 Single-Trial 面板是已研究的公开开发人群，不是新的确认性或受保护测试集。生成种子、被试、记录、窗口和通道的层级分别保留；同一生成样本的多种拟合条件不充当独立样本。没有进行受保护数据访问。</p>
+<p>核心问题是：在同一条观测轨迹上，若驱动、初态和 τ、κ 都允许变化，数据是否能把它们分别约束？如果某个参数方向的输出变化能够由驱动或初态抵消，拟合误差可能很低，但参数仍可离开生成真值。先验可能从这一组近似等价解中选出一个稳定解；稳定不自动等于正确。</p>
+</section>
+<section><h2>实际生成器与状态、参数、读出的含义</h2>
+<p>数值计算复用 src/inference/shared_driver_reconstruction.py 的 nonlinear_driver_forward 和同一守恒 Balloon 核心。拟合的驱动 r(t) 是外加的分段常值输入；这里不把原 SSM 接口的驱动衰减方程当作已执行的驱动动力学。每个核心独立传播五个血管状态 s、f、v、p、q，初态为 s0、f0、v0、p0、q0。后四项通过对数坐标保持正值；非法中间 RK4 状态必须拒绝，不能裁剪成合法轨迹。</p>
+<figure class="equation"><img src="formulas/equation_01.png" style="width:264.7px" alt="式 1：神经驱动到血流变化的前半段。">
+<figcaption>式 1　神经驱动到血流变化的前半段。</figcaption>
+
+<p class="source"><a href="formulas/equation_01.tex">LaTeX 源文件</a></p>
+</figure>
+<p>r 为声明坐标中的驱动；β 为固定神经血管增益；κ 为信号衰减参数，γ 为固定血流反馈系数；f 是相对基线血流，s 为其时间导数。κ 的单位为每秒；本报告的 κ 恢复是在其余固定常数和驱动尺度成立时的条件恢复。</p>
+<figure class="equation"><img src="formulas/equation_02.png" style="width:394.4px" alt="式 2：血容量、总血红蛋白和脱氧血红蛋白的守恒传播。">
+<figcaption>式 2　血容量、总血红蛋白和脱氧血红蛋白的守恒传播。</figcaption>
+
+<p class="source"><a href="formulas/equation_02.tex">LaTeX 源文件</a></p>
+</figure>
+<p>τ 是以秒计的模型转运时间常数，α 和 E0 固定；v、p、q 是相对基线的血容量、总血红蛋白和脱氧血红蛋白状态。这里使用当前代码的 inlet-balance p 方程，不能把别处形式不同的 p 方程或 BOLD 读出拼入解释。τ 和 κ 不等于所有生理机制的充分参数。</p>
+<figure class="equation"><img src="formulas/equation_03.png" style="width:216.5px" alt="式 3：核心读出先形成 EEG 代理、HbR 与 HbO。">
+<figcaption>式 3　核心读出先形成 EEG 代理、HbR 与 HbO。</figcaption>
+
+<p class="source"><a href="formulas/equation_03.tex">LaTeX 源文件</a></p>
+</figure>
+<p>P0、Q0 和 EEG loading 固定，定义潜变量的单位和尺度规范。HbO+HbR=P0(p-1)。EEG 读出是项目的功率代理模型，不是电位 lead field；固定尺度下的合成真值不能直接解释为个体绝对代谢标定。</p>
+<p>新合成与拟合共同固定β=1、γ=0.32、α=0.32、E0=0.32、P0=1、Q0=0.35，核心EEG尺度为1；三个空间EEG读出系数在矩阵表中列出。这里没有未知Hb增益或可学习的观测算子。τ、κ在主恢复中自由估计，其他常数不随拟合改变。</p>
+</section>
+<section><h2>一个可以直接代回方程验证的补偿机制</h2>
+<p>有一个范围明确的连续时间等价关系，说明为何驱动和参数可能互相补偿。只观察 Hb、驱动没有额外独立动力学限制时，假设某组 r、s、f、v、p、q 满足上述方程。保持五个血管状态、τ 和其余常数不变，仅改变 κ，同时按下式调整 r，便得到完全相同的 Hb 轨迹。</p>
+<figure class="equation"><img src="formulas/equation_04.png" style="width:264.1px" alt="式 4：Hb-only 条件下的一种参数与驱动补偿。">
+<figcaption>式 4　Hb-only 条件下的一种参数与驱动补偿。</figcaption>
+
+<p class="source"><a href="formulas/equation_04.tex">LaTeX 源文件</a></p>
+</figure>
+<p>代回得到 βr′-κ′s=βr-κs，因此 s 的导数和其余血管状态不变，HbO/HbR 也不变。若已知 EEG 读出直接观测 r，或者额外限制 r 的时间基或动力学，该等价关系可能被打破。它证明的是这个连续时间、自由驱动、Hb-only条件下的等价，不是所有实验设计都不可识别。</p>
+<p>实际实验采用有限时间基及分段常值驱动、离散 RK4 传播，补偿函数 s(t) 未必恰好属于允许的驱动空间。因此有限维 Jacobian 可以满秩，局部 profile 也可以呈曲率；这既可能来自有用的观测约束，也可能来自驱动基截断。必须在报告中注明允许的驱动自由度，并用相同轨迹的敏感性与实际重拟合核验离散条件，而不能将连续等价未经检查地称作数值模型的精确零空间。</p>
+</section>
+<section><h2>数据约束与先验约束分别计算</h2>
+<p>令 θ 表示需要恢复的对数生理参数，η 表示每个窗口的驱动系数或驱动采样值及五个初态。先按照实际可见掩码提取模型预测，再施加预定尺度和权重，得到加权数据残差。Jacobian 必须对应这条真实输入到残差的路径；隐藏通道、隐藏参考段和生成真值不进入拟合输入。</p>
+<figure class="equation"><img src="formulas/equation_05.png" style="width:256.2px" alt="式 5：同一个总目标包含两个证据来源。">
+<figcaption>式 5　同一个总目标包含两个证据来源。</figcaption>
+
+<p class="source"><a href="formulas/equation_05.tex">LaTeX 源文件</a></p>
+</figure>
+<p>r_d 是数据残差，r_p 包含驱动曲率、初态、血流及合同声明的参数先验。改变先验会改变总目标的最小点，但不会增加真实观测。这里的加权平方误差是工程目标；未校准的权重不能自动解释为噪声精度。</p>
+<figure class="equation"><img src="formulas/equation_06.png" style="width:497.0px" alt="式 6：分别保留数据与先验的局部 Gauss–Newton 曲率。">
+<figcaption>式 6　分别保留数据与先验的局部 Gauss–Newton 曲率。</figcaption>
+
+<p class="source"><a href="formulas/equation_06.tex">LaTeX 源文件</a></p>
+</figure>
+<p>这是局部一阶残差几何，不是包含残差二阶项的完整 Hessian，更不是已经校准的后验置信度。H_d+H_p 变得可逆，只表明合并后的目标约束更强，不能证明 H_d 自身识别了所有参数。</p>
+<figure class="equation"><img src="formulas/equation_07.png" style="width:291.6px" alt="式 7：允许驱动和初态补偿后，生理参数还留下多少数据变化。">
+<figcaption>式 7　允许驱动和初态补偿后，生理参数还留下多少数据变化。</figcaption>
+
+<p class="source"><a href="formulas/equation_07.tex">LaTeX 源文件</a></p>
+</figure>
+<p>Jθ 和 Jη 必须只取数据残差的列；加号表示按记录阈值求得的伪逆。若剩余列很小，改变 θ 对输出的影响可被 η 在局部抵消。固定 η 的敏感性通常高估参数独立可恢复性。非线性约束、参数边界和较大扰动可能改变局部结果，因此后续必须进行真实非线性重拟合。</p>
+<p>奇异值与特征值受变量单位影响。对 τ、κ 使用对数参数，驱动和初态使用预先声明的共同坐标；不逐个条件把 Jacobian 列重新单位化后再宣称信息变强。数值秩必须同时给出阈值、列数和奇异值谱；“接近零”表示本尺度和本轨迹附近的弱敏感，不等于在所有生理条件下严格不可识别。</p>
+<p>新增局部自由度对照将同一个真实驱动精确重表示为12维与120维离散余弦基，保持观测、τ、κ、初态和尺度不变，只扩大允许的驱动补偿空间。每个生成身份均核对重表示前后的驱动一致。主非线性恢复仍使用12维驱动；120维只用于局部敏感性分析，不能将其结果误报为已完成120维非线性参数恢复。</p>
+</section>
+<section><h2>已知真值的恢复实验为何不可省略</h2>
+<p>现有 local-spatial 实验将 τ=2、κ=0.64 固定，合成初态也在静息点。因此，旧实验中这些参数没有变化不能被列作“参数恢复成功”。本套件生成了不同于名义值的τ、κ和非静息初态，并让拟合器真正估计参数、驱动和初态；使用固定且不依赖真值的多个初值。</p>
+<p>同一生成信号及噪声实现用于不同可见模态和先验强度的配对比较。真值仅供生成和评分。模态消融回答额外观测是否缩小补偿空间；先验消融回答最优解是否主要由规则选定。生成参数、噪声、时间支持、积分步长和各项权重均记录于正式解析配置。</p>
+<p>恢复评价至少并列：观测或隐藏目标误差；τ、κ 的绝对或对数误差；驱动相对真值的误差和直流偏移；各物理初态及传播状态误差。驱动不允许事后任意缩放、翻转符号或调整偏置来制造恢复。只有波形相关提高而幅度或偏移错误时，不能宣称潜变量完整恢复。</p>
+<div class="table-wrap"><table>
+<colgroup><col style="width:33.333%"><col style="width:33.333%"><col style="width:33.333%"></colgroup>
+<thead><tr><th>项目</th><th>冻结设置</th><th>科学含义</th></tr></thead><tbody>
+<tr><td>生成参数</td><td>τ∈{1.3,2.7} s；κ∈{0.45,0.9} s^-1，四种组合</td><td>不等于固定名义值；估计器真正释放两参数</td></tr>
+<tr><td>时间与驱动</td><td>T=120，Δt=0.25 s，12 个时间基函数；驱动 RMS=0.025</td><td>有限维驱动不是每个时间点任意变化</td></tr>
+<tr><td>初态坐标</td><td>[s0,log f0,log v0,log p0,log q0]=±[0.01,0.012,-0.006,0.004,-0.003]</td><td>由种子奇偶固定符号；非静息真值</td></tr>
+<tr><td>观测</td><td>3 个 EEG 线性读出 [1,-0.7,0.45]；1 对 HbO/HbR</td><td>生成与拟合使用相同已知读出</td></tr>
+<tr><td>生成身份</td><td>四个预定种子；无噪声与一次固定高斯噪声两种条件</td><td>所有参数、模态、先验变体按种子配对</td></tr>
+<tr><td>噪声 SD</td><td>EEG 每路 0.00125；HbO 0.00015；HbR 0.00007</td><td>噪声大小与拟合的工程尺度不同</td></tr>
+<tr><td>拟合尺度</td><td>EEG 0.025；HbO 0.01；HbR 0.005</td><td>EEG 行再乘 1/√3，Hb 行乘 1/√2</td></tr>
+<tr><td>多初值</td><td>(τ,κ)=(1,0.35),(2,0.65),(3.4,1.05)</td><td>均不等于任何生成参数对；每次 profile 保留同规则</td></tr>
+<tr><td>参数范围</td><td>τ∈[0.6,4] s；κ∈[0.2,1.3] s^-1</td><td>工程搜索界，不是个体生理可信区间</td></tr>
+<tr><td>积分</td><td>生成 RK4 每采样间隔 8 子步；拟合 4 子步</td><td>通过加密比较核验数值误差</td></tr>
+</tbody></table></div>
+<p>本套件新增合成的解析配置。最终运行使用的 resolved config 为唯一数值合同。</p>
+<p class="source">来源：experiments/configs/physiology_semantic_tokenizer/source_observability_v1.yaml</p>
+<p>本套件的新增恢复合成直接观察声明模型坐标，不减去前五秒参考；保留实测分析则沿用其原有参考算子。这两个条件不能混作同一信息边界。合成中已知 EEG loading、Hb gain 与读出坐标构成较有利的恢复条件；结果需同时报告这一前提。</p>
+<p>显式先验乘数为 0、0.1、1、10，同时缩放驱动曲率、初态回归静息及 log-flow 惩罚。基准权重为 0.01、100、1，log-flow 尺度为 log 2。零乘数并非完全无先验：12 个时间基函数、固定读出与尺度、正状态域及参数边界仍是结构约束。主恢复不设置 τ、κ 直接先验；偏置先验对照另施加两个预定 log 参数中心，以检查好拟合是否可被先验拉向不同参数。</p>
+<p>局部线性化另比较 EEG-only、HbO-only、Hb 每隔一点采样、全部 Hb 与 EEG+Hb。非线性恢复主面板只比较 Hb-only 与 EEG+Hb。两个 oracle 对照分别把真实驱动、真实驱动和初态交给估计器，是额外信息上界，不能当作可部署方法，也不能与普通方法的同维数据秩直接混比。</p>
+</section>
+<section><h2>非线性 profile：区分暂时敏感与可补偿变化</h2>
+<figure class="equation"><img src="formulas/equation_08.png" style="width:237.4px" alt="式 8：每个 profile 节点是真实的条件重拟合。">
+<figcaption>式 8　每个 profile 节点是真实的条件重拟合。</figcaption>
+
+<p class="source"><a href="formulas/equation_08.tex">LaTeX 源文件</a></p>
+</figure>
+<p>固定一个 τ 或 κ 节点后，另外的生理参数、驱动和初态均按本实验的明确设置重新拟合。若某条件实际固定了其他参数，必须单独标为条件 profile。把同一驱动前向扫参得到的输出变化不能替代该 profile。</p>
+<p>曲线同时展示总目标、纯数据项和每一先验项。最低点可能因规则而移动，数据项在宽范围内几乎不变则提示补偿自由度。图中不能把经验代价阈值标为置信区间，不能跨失败节点连线，也不能仅展示成功且接近真值的节点。多初值之间的不同最低点与预算未收敛都属于结果。</p>
+<p>实际节点按相应先验乘数下的总工程目标重新拟合；图中“数据 SSE”和“先验项”是在该同一个总目标解处拆开计算。先验为1时的数据曲线不是另行最小化纯数据项得到的曲线。每节点比较三个预定初值，优先选择已收敛解中的最低目标；若全未收敛，只保留最低有限目标作为失败记录，不把它作有效最小值。</p>
+<p>本次求解器按完整梯度检查收敛，没有将盒约束边界处的 KKT 投影梯度用作成功判据。因此到达参数边界可能仍被记为失败；达到迭代或前向调用预算也不能推断参数在科学意义上不可识别。必须分别报告数值失败、先验偏移及数据可补偿性，不用其中一项替代另一项。</p>
+</section>
+<section><h2>有限矩阵已完整执行，数值失败单独保留</h2>
+<div class="table-wrap"><table>
+<colgroup><col style="width:25.000%"><col style="width:25.000%"><col style="width:25.000%"><col style="width:25.000%"></colgroup>
+<thead><tr><th>任务类别</th><th>计划</th><th>成功/可用</th><th>未成功</th></tr></thead><tbody>
+<tr><td>局部信息与M12/M120对照</td><td>16</td><td>16</td><td>0</td></tr>
+<tr><td>参数/驱动/初态联合恢复</td><td>256</td><td>203</td><td>53</td></tr>
+<tr><td>知道真驱动/初态的oracle</td><td>64</td><td>64</td><td>0</td></tr>
+<tr><td>非线性profile节点</td><td>224</td><td>197</td><td>27</td></tr>
+<tr><td>偏置参数先验对照</td><td>16</td><td>16</td><td>0</td></tr>
+<tr><td>保留实测局部诊断</td><td>72</td><td>71</td><td>1</td></tr>
+<tr><td>合计</td><td>648</td><td>567</td><td>81</td></tr>
+</tbody></table></div>
+<p>648个任务全部进入终态；其中80个为新数值拟合失败，1个为旧实测源拟合已经失败而不能提供线性化点。每次拟合3个初值，共1680个优化起点，1414个满足收敛条件。</p>
+<p class="source">来源：summary.json; manifest.json; optimizer_starts.csv</p>
+<p>失败不是从结果表中消失的样本。主恢复256格有53格失败，profile224节点有27个失败。所选有限候选的失败原因包括52次未满足梯度收敛的停滞和28次评估预算耗尽。每个失败格保存三个起点、轨迹和目标分项；不能把低有限目标等同于有效最优解，也不能因失败发生在强先验或参数边界而直接宣称生理不可辨识。</p>
+<p>独立核验覆盖全部560个拟合任务的前向重放、目标分项、真值误差、全部16个生成病例的局部信息和71个保留实测拟合点。生成积分8→16子步的最大标准化预测差5.99e-8；拟合4→8子步最大差3.53e-5；总目标重算差不超过1.42e-14；恢复分组的计划数、成功数和各中位数重算一致。该核验只证明算术与证据一致，未把80个失败重新分类成成功。</p>
+</section>
+<section><h2>恢复指标：观测、参数、驱动与状态各自计分</h2>
+<figure class="equation"><img src="formulas/equation_09.png" style="width:242.5px" alt="式 9：两个生理参数的对数误差先在一个拟合格内合并。">
+<figcaption>式 9　两个生理参数的对数误差先在一个拟合格内合并。</figcaption>
+
+<p class="source"><a href="formulas/equation_09.tex">LaTeX 源文件</a></p>
+</figure>
+<p>星号为生成真值。对数误差无量纲，用于同表比较不同数量级参数；同时分别报告τ绝对误差（秒）与κ绝对误差（每秒），不让一个联合指标掩盖某一参数未改善。</p>
+<figure class="equation"><img src="formulas/equation_10.png" style="width:474.2px" alt="式 10：无噪声Hb预测误差与原始驱动恢复误差。">
+<figcaption>式 10　无噪声Hb预测误差与原始驱动恢复误差。</figcaption>
+
+<p class="source"><a href="formulas/equation_10.tex">LaTeX 源文件</a></p>
+</figure>
+<p>Hb评分使用完整120点、生成器无噪声输出，以及预定尺度HbO=0.01、HbR=0.005；该尺度不是当前窗口SD或噪声SD。它不含优化目标的1/√2模态因子。驱动使用真值RMS为分母，保留幅度、符号和偏置，不进行事后对齐。真实拟合输入仍含已声明噪声，真值只供评分。</p>
+<p>表中的中位数先来自每个成功拟合格，再对四个真值组合×四个种子的16格取中位数。相同种子的驱动和噪声在各参数、模态、先验条件间配对；16格不是16个独立被试。这里不提供总体置信区间。各物理状态的误差分别计算；初态混合坐标的总体RMSE仅作诊断，本报告另列各初态分量的绝对误差。</p>
+</section>
+<section><h2>增加驱动自由度使Hb-only的参数约束接近消失</h2>
+<div class="table-wrap"><table>
+<colgroup><col style="width:20.000%"><col style="width:20.000%"><col style="width:20.000%"><col style="width:20.000%"><col style="width:20.000%"></colgroup>
+<thead><tr><th>可见模态</th><th>驱动基数M</th><th>数据秩/总未知数</th><th>τ/κ投影信息最小特征值中位数</th><th>生成格</th></tr></thead><tbody>
+<tr><td>EEG_only</td><td>12</td><td>12/19</td><td>0</td><td>16/16</td></tr>
+<tr><td>EEG_only</td><td>120</td><td>120/127</td><td>0</td><td>16/16</td></tr>
+<tr><td>HbO_only</td><td>12</td><td>18/19</td><td>1.38181e-06</td><td>16/16</td></tr>
+<tr><td>HbO_only</td><td>120</td><td>120/127</td><td>7.95993e-30</td><td>16/16</td></tr>
+<tr><td>Hb_half_rate</td><td>12</td><td>19/19</td><td>8.23483e-05</td><td>16/16</td></tr>
+<tr><td>Hb_half_rate</td><td>120</td><td>120/127</td><td>2.74832e-29</td><td>16/16</td></tr>
+<tr><td>Hb_only</td><td>12</td><td>19/19</td><td>0.000183375</td><td>16/16</td></tr>
+<tr><td>Hb_only</td><td>120</td><td>126/127</td><td>1.49166e-12</td><td>16/16</td></tr>
+<tr><td>EEG_Hb</td><td>12</td><td>19/19</td><td>0.896927</td><td>16/16</td></tr>
+<tr><td>EEG_Hb</td><td>120</td><td>127/127</td><td>0.896549</td><td>16/16</td></tr>
+</tbody></table></div>
+<p>在相同真实驱动、初态、参数和读出下计算。总未知数为M+5个初态+2个log生理参数。数据列按固定物理/对数扰动尺度变换；秩阈值为最大奇异值的1e-8。极小特征值只表示数值近零，不具备所列小数的高精度意义。</p>
+<p class="source">来源：information_metrics.csv; tasks/*.npz</p>
+<figure class="figure"><img src="figures/figure_01.png" style="width:671.0px" alt="图 1：横轴分别是Hb-only和EEG+Hb在M=12、M=120下的相同轨迹线性化；每个点为一个真值组合×种子，共16格，但只有4个生成种子。纵轴为投影掉驱动和初态后的logτ/logκ数据敏感矩阵最小特征值，对数刻度。箱体表示四分位范围，横线中位数，须线为1.5倍四分位距范围；不是置信区间。">
+<figcaption>图 1　横轴分别是Hb-only和EEG+Hb在M=12、M=120下的相同轨迹线性化；每个点为一个真值组合×种子，共16格，但只有4个生成种子。纵轴为投影掉驱动和初态后的logτ/logκ数据敏感矩阵最小特征值，对数刻度。箱体表示四分位范围，横线中位数，须线为1.5倍四分位距范围；不是置信区间。</figcaption>
+<p class="source">来源：information_metrics.csv; verification.json</p>
+</figure>
+<p>Hb-only在M12时16格均为19/19满秩，投影后最小特征值中位数1.83375e-4；把同一r(t)精确重表示为M120后，全部变为126/127，最小特征值约1.5e-12。该极小量的独立重算差可达2.7e-11，应只解释为数值近零；不能据某一末位正数声称精确可识别或用其倒数计算可信误差条。</p>
+<p>EEG+Hb的同一对照为19/19→127/127，最小特征值中位数0.896927→0.896549，几乎不变。原因与前述连续时间补偿关系一致：仅Hb允许κ变化被驱动补偿，而正确且已知的EEG读出直接约束驱动。M12的限制也能压缩补偿空间，所以它是一项真实的结构先验，而不只是实现细节。</p>
+<p>EEG-only可以约束驱动，但没有直接约束五个血管初态与τ、κ，投影参数信息为零。HbO-only及Hb降采样在M120下也出现数值近零的参数信息。此处各模态使用相同预定权重并删去不可见行，没有为了模态缺失重新放大剩余行。结果是本模型、本尺度和轨迹的局部比较，不是跨模态信息的通用排序。</p>
+<figure class="figure"><img src="figures/figure_02.png" style="width:671.0px" alt="图 2：选例固定为τ=1.3 s、κ=0.45 /s、种子2026102101、M12。上图实线为数据Jacobian奇异值、虚线为叠加基准先验后的奇异值，分别显示Hb-only与EEG+Hb。下图沿总信息自身的右奇异方向计算先验Rayleigh贡献/总贡献；横轴各面板的排序方向不是一一相同物理变量。先验抬高弱方向不等于新增了观测。">
+<figcaption>图 2　选例固定为τ=1.3 s、κ=0.45 /s、种子2026102101、M12。上图实线为数据Jacobian奇异值、虚线为叠加基准先验后的奇异值，分别显示Hb-only与EEG+Hb。下图沿总信息自身的右奇异方向计算先验Rayleigh贡献/总贡献；横轴各面板的排序方向不是一一相同物理变量。先验抬高弱方向不等于新增了观测。</figcaption>
+<p class="source">来源：tasks/b3ef8ba31a3467eae2c49929.json; information_metrics.csv</p>
+</figure>
+</section>
+<section><h2>几乎相同的Hb拟合误差对应很不相同的κ与驱动恢复</h2>
+<div class="table-wrap"><table>
+<colgroup><col style="width:12.500%"><col style="width:12.500%"><col style="width:12.500%"><col style="width:12.500%"><col style="width:12.500%"><col style="width:12.500%"><col style="width:12.500%"><col style="width:12.500%"></colgroup>
+<thead><tr><th>噪声倍数</th><th>可见模态</th><th>成功/计划</th><th>Hb标准化NRMSE</th><th>参数log-RMSE</th><th>τ绝对误差(s)</th><th>κ绝对误差(/s)</th><th>driver NRMSE</th></tr></thead><tbody>
+<tr><td>0</td><td>Hb_only</td><td>16/16</td><td>3.12052e-08</td><td>8.70693e-07</td><td>5.52425e-08</td><td>8.91295e-07</td><td>4.75538e-07</td></tr>
+<tr><td>0</td><td>EEG_Hb</td><td>16/16</td><td>2.55248e-08</td><td>3.93296e-08</td><td>5.87483e-08</td><td>2.48642e-08</td><td>9.29439e-09</td></tr>
+<tr><td>1</td><td>Hb_only</td><td>16/16</td><td>0.00369858</td><td>0.138513</td><td>0.00591793</td><td>0.109765</td><td>0.0590173</td></tr>
+<tr><td>1</td><td>EEG_Hb</td><td>16/16</td><td>0.00368774</td><td>0.0084305</td><td>0.00793525</td><td>0.00652481</td><td>0.00737849</td></tr>
+</tbody></table></div>
+<p>零显式先验、M12、固定已知读出；全部32个无噪声格和32个有噪声格均成功。数值均为16格中位数，不是将种子或重复真值当独立被试的统计检验。</p>
+<p class="source">来源：summary.json; recovery_metrics.csv</p>
+<p>无噪声条件下，Hb-only与EEG+Hb均在16/16格恢复到很小的误差：Hb-only的τ绝对误差中位数5.52e-8 s、κ误差8.91e-7 /s，driver NRMSE4.76e-7。这是重要的正对照，表明在匹配模型、已知尺度、低维驱动与充分精度条件下，并不存在“永远无法恢复”的结论。</p>
+<p>加入同一固定噪声实现后，Hb-only与EEG+Hb的无噪声Hb标准化NRMSE分别仅0.0036986、0.0036877，几乎相同；但参数log-RMSE从0.138513降至0.008431，driver NRMSE从0.059017降至0.007378，κ绝对误差从0.109765 /s降至0.006525 /s。也就是说，输出拟合本身几乎看不出差别，驱动及κ的恢复却明显不同。</p>
+<p>这种改善并非所有生理量一致受益：τ绝对误差中位数从0.005918 s变为0.007935 s；血流f的时间RMSE中位数从0.0001663变为0.0002201，v从5.20e-5变为5.46e-5。不能用driver和κ的收益概括为所有潜状态或所有生理参数都更准。当前结果支持的是特定补偿方向被额外观测约束。</p>
+<figure class="figure"><img src="figures/figure_03.png" style="width:625.1px" alt="图 3：128个有噪声恢复条件的散点，每点是一种真值×种子×模态×先验条件，不是独立被试。横轴为无噪声Hb原始模型坐标RMSE（注意科学计数因子1e-4），不同于表中按0.01/0.005标准化的NRMSE。上图纵轴为两参数log误差RMS，下图为原始driver NRMSE；圆点Hb-only、三角EEG+Hb，离散颜色条给出先验乘数0/0.1/1/10。红×为27个未收敛但有有限候选的条件，只展示失败位置，不计入成功误差中位数。近左侧同样小Hb误差的点仍可有不同参数与驱动误差。">
+<figcaption>图 3　128个有噪声恢复条件的散点，每点是一种真值×种子×模态×先验条件，不是独立被试。横轴为无噪声Hb原始模型坐标RMSE（注意科学计数因子1e-4），不同于表中按0.01/0.005标准化的NRMSE。上图纵轴为两参数log误差RMS，下图为原始driver NRMSE；圆点Hb-only、三角EEG+Hb，离散颜色条给出先验乘数0/0.1/1/10。红×为27个未收敛但有有限候选的条件，只展示失败位置，不计入成功误差中位数。近左侧同样小Hb误差的点仍可有不同参数与驱动误差。</figcaption>
+<p class="source">来源：recovery_metrics.csv; tasks/*.json; figures/readable_v4/fit_versus_recovery.png</p>
+</figure>
+</section>
+<section><h2>先验可以选定一个解，也可以把可恢复参数拉离真值</h2>
+<div class="table-wrap"><table>
+<colgroup><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"></colgroup>
+<thead><tr><th>可见模态</th><th>s0误差(/s)</th><th>f0误差</th><th>v0误差</th><th>p0误差</th><th>q0误差</th></tr></thead><tbody>
+<tr><td>Hb_only</td><td>0.00165285</td><td>0.000860465</td><td>0.00019715</td><td>9.59569e-05</td><td>8.99151e-05</td></tr>
+<tr><td>EEG_Hb</td><td>0.000480432</td><td>0.000266014</td><td>0.000193343</td><td>0.000161566</td><td>9.70972e-05</td></tr>
+</tbody></table></div>
+<p>有噪声、零显式先验、16/16成功；每个初态单独取绝对误差中位数。f0/v0/p0/q0是相对基线的无量纲状态，不能和s0混成具有统一物理单位的误差。</p>
+<p class="source">来源：tasks/*.npz; recovery_metrics.csv</p>
+<p>在有噪声Hb-only主恢复中，显式先验乘数从0增至0.1后，所有16格仍成功；Hb标准化NRMSE中位数只从0.003699变为0.003731，κ误差却从0.109765升至0.195483 /s，driver NRMSE从0.059017升至0.105104。近似相同的好输出可以由先验偏好的不同潜变量解释。</p>
+<div class="table-wrap"><table>
+<colgroup><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"></colgroup>
+<thead><tr><th>模态</th><th>先验倍数</th><th>成功/计划</th><th>Hb标准化NRMSE中位数</th><th>参数log-RMSE中位数</th><th>driver NRMSE中位数</th></tr></thead><tbody>
+<tr><td>Hb_only</td><td>0</td><td>16/16</td><td>0.00369858</td><td>0.138513</td><td>0.0590173</td></tr>
+<tr><td>Hb_only</td><td>0.1</td><td>16/16</td><td>0.00373059</td><td>0.232348</td><td>0.105104</td></tr>
+<tr><td>Hb_only</td><td>1</td><td>5/16</td><td>0.00517838</td><td>0.675838</td><td>0.224076</td></tr>
+<tr><td>Hb_only</td><td>10</td><td>0/16</td><td>不可估计</td><td>不可估计</td><td>不可估计</td></tr>
+<tr><td>EEG_Hb</td><td>0</td><td>16/16</td><td>0.00368774</td><td>0.0084305</td><td>0.00737849</td></tr>
+<tr><td>EEG_Hb</td><td>0.1</td><td>16/16</td><td>0.00359187</td><td>0.00884522</td><td>0.00737225</td></tr>
+<tr><td>EEG_Hb</td><td>1</td><td>16/16</td><td>0.00435832</td><td>0.0101388</td><td>0.00772554</td></tr>
+<tr><td>EEG_Hb</td><td>10</td><td>16/16</td><td>0.0205719</td><td>0.0362614</td><td>0.0171852</td></tr>
+</tbody></table></div>
+<p>有噪声主面板。只对成功子集计算中位数，并把成功/计划放在同一行。Hb-only倍数1的5/16子集不能与其他16/16行当作同一总体比较；倍数10为0/16，误差不可估计。</p>
+<p class="source">来源：summary.json</p>
+<p>无噪声Hb-only同样出现先验偏移：乘数0.1时16/16成功，κ误差中位数0.145063 /s，而Hb标准化NRMSE仍仅0.0008863。这排除了“先验导致的误差完全是噪声偶然”的解释。但乘数1和10的严重失败还涉及求解器收敛及边界判据，不能把全部差异都归给统计不可辨识。</p>
+<p>EEG+Hb在所有显式先验倍数、两种噪声下均16/16成功，但有噪声倍数10的参数log-RMSE升至0.036261，Hb标准化NRMSE升至0.020572。额外观测减少了先验的影响，却没有使错误或过强先验无害。</p>
+<figure class="figure"><img src="figures/figure_04.png" style="width:647.4px" alt="图 4：按预先声明的最小τ/κ真值及首种子选择的Hb-only有噪声例子：真值τ=1.3 s、κ=0.45 /s。上、中、下分别为HbO、驱动r与相对血流f；黑虚线是无噪声生成真值，其他线为同一观测在不同显式先验乘数下的联合重拟合。图例给出生成τ、κ与各曲线收敛状态，相邻正文给出拟合参数；先验1和10的候选标为FAILED并用点线，不能当成有效最优解。三个面板共享时间，纵轴各自按物理/模型坐标定义，未做事后对齐。">
+<figcaption>图 4　按预先声明的最小τ/κ真值及首种子选择的Hb-only有噪声例子：真值τ=1.3 s、κ=0.45 /s。上、中、下分别为HbO、驱动r与相对血流f；黑虚线是无噪声生成真值，其他线为同一观测在不同显式先验乘数下的联合重拟合。图例给出生成τ、κ与各曲线收敛状态，相邻正文给出拟合参数；先验1和10的候选标为FAILED并用点线，不能当成有效最优解。三个面板共享时间，纵轴各自按物理/模型坐标定义，未做事后对齐。</figcaption>
+<p class="source">来源：tasks/*.json; tasks/*.npz; figures/readable_v3/prediction_driver_state_example.png</p>
+</figure>
+<p>该例中，先验0与0.1的两条有效HbO几乎重叠，拟合κ却由0.36435变为0.30736 /s，driver NRMSE由0.06171变为0.10270；τ均约1.295 s。先验1和10的有限失败候选分别停在κ=0.2 /s边界，不能据其曲线推断该边界具有生理意义。图中的f波形与r不必以同样幅度变化，说明输出、驱动和血管状态是不同的恢复对象。</p>
+</section>
+<section><h2>已知驱动的上界对照定位了主要混淆来源</h2>
+<div class="table-wrap"><table>
+<colgroup><col style="width:20.000%"><col style="width:20.000%"><col style="width:20.000%"><col style="width:20.000%"><col style="width:20.000%"></colgroup>
+<thead><tr><th>Hb-only条件</th><th>成功/计划</th><th>参数log-RMSE</th><th>κ绝对误差(/s)</th><th>Hb标准化NRMSE</th></tr></thead><tbody>
+<tr><td>全部未知</td><td>16/16</td><td>0.138513</td><td>0.109765</td><td>0.00369858</td></tr>
+<tr><td>给定真实driver</td><td>16/16</td><td>0.00156923</td><td>0.000774769</td><td>0.00221078</td></tr>
+<tr><td>给定真实driver和初态</td><td>16/16</td><td>0.00153897</td><td>0.000597093</td><td>0.00125883</td></tr>
+</tbody></table></div>
+<p>噪声倍数1、零显式先验。oracle向估计器额外提供真值，只有上界诊断意义。固定量的零误差不计作恢复成功。</p>
+<p class="source">来源：summary.json; recovery_metrics.csv</p>
+<p>仅提供真实驱动后，Hb-only参数log-RMSE由0.138513降至0.001569，κ绝对误差由0.109765降至0.000775 /s；再给真实初态仅把联合参数误差轻微降至0.001539。当前有限矩阵中，未知驱动是κ恢复的重要混淆来源，初态的额外约束仍改善预测但没有同量级的参数收益。这个上界结果不等于实测EEG能提供真实驱动；前提还包括正确的已知读出和固定尺度。</p>
+<p>显式偏置参数先验进一步显示估计会被外部约束牵引。第一生成病例真值τ=1.3、κ=0.45时，Hb-only以[1,0.35]为强先验中心得到约[1.04275,0.34999]，换成[3.4,1.1]得到约[2.44099,1.09994]。对应Hb标准化NRMSE为0.05956与0.23695，明显高于零先验的0.003339。因此这个极端对照同时付出了输出代价，不能描述成“任何错误先验都能保持完全同样的拟合”；它检验的是先验能否压过数据。</p>
+</section>
+<section><h2>非线性profile确认：κ变化可被驱动补偿，EEG使代价变大</h2>
+<div class="table-wrap"><table>
+<colgroup><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"><col style="width:16.667%"></colgroup>
+<thead><tr><th>固定κ(/s)</th><th>状态</th><th>Hb-only数据目标</th><th>重拟合τ(s)</th><th>Hb标准化NRMSE</th><th>driver NRMSE</th></tr></thead><tbody>
+<tr><td>0.2</td><td>completed</td><td>0.0229179</td><td>1.29604</td><td>0.00373561</td><td>0.179747</td></tr>
+<tr><td>0.28</td><td>completed</td><td>0.0228076</td><td>1.29603</td><td>0.00349653</td><td>0.122284</td></tr>
+<tr><td>0.4</td><td>completed</td><td>0.0227757</td><td>1.29603</td><td>0.00330336</td><td>0.0361333</td></tr>
+<tr><td>0.57</td><td>completed</td><td>0.0229745</td><td>1.29604</td><td>0.00337745</td><td>0.086203</td></tr>
+<tr><td>0.76</td><td>completed</td><td>0.023456</td><td>1.29608</td><td>0.00380533</td><td>0.22281</td></tr>
+<tr><td>1.0</td><td>completed</td><td>0.0243021</td><td>1.29615</td><td>0.0045471</td><td>0.395497</td></tr>
+<tr><td>1.3</td><td>completed</td><td>0.0255093</td><td>1.29626</td><td>0.00546578</td><td>0.611511</td></tr>
+</tbody></table></div>
+<p>固定首个病例τ*=1.3、κ*=0.45、seed=2026102101、噪声1、先验0；每节点另外的τ、12维驱动和五初态均从3个预定初值重新拟合。没有利用真值选择节点。</p>
+<p class="source">来源：tasks/*.json; recovery_metrics.csv</p>
+<p>在这一病例中，κ从0.2变为1.3 /s，Hb-only数据目标仅从0.022918变为0.025509，Hb标准化NRMSE保持0.00374至0.00547；但driver NRMSE从0.17975变化至0.61151。表中κ=0.4附近最接近真值且驱动误差较小，而宽范围κ也能保持很小的Hb预测误差。它是“拟合好而参数/驱动不同”的直接非线性反例，不仅是Jacobian推断。</p>
+<p>相同病例加入已知EEG读出后，κ=0.4的数据目标约0.425，κ=1.3增至15.681；对应Hb标准化NRMSE从0.00913升至0.19184。跨模态约束使错误κ通过驱动补偿的代价明显增加。两个模态的数据目标包含不同观测行，不能直接用0.023与0.425比较拟合优劣；应在各自可见范围内看参数变化造成的目标增量，并以同一无噪声Hb评分作横向参照。</p>
+<p>完整224个profile节点有27个未收敛。图中只把有效节点连接，失败用独立标记并断线。固定τ的节点可能更容易触发边界或数值困难；这不证明τ缺乏所有数据支持。profile是总工程目标下的有限多起点条件重拟合，不是保证全域最小、校准似然比或生理置信区间。</p>
+<figure class="figure"><img src="figures/figure_05.png" style="width:671.0px" alt="图 5：同一首病例的非线性profile。左列固定τ，右列固定κ；上排为可见数据SSE，下排为同一总目标解处的独立先验代价。曲线区分Hb-only/EEG+Hb与先验0/1；黑色竖虚线为生成真值，横轴是实际参数值的对数刻度。每节点另一个生理参数及驱动、初态均重新拟合。失败节点用×表示并断线，不在失败之间连线或把有限失败值当最优。图中不同模态的数据项观测行不同，不能直接拿绝对高度排名；沿各曲线的变化及前表的统一Hb评分才回答本问题。">
+<figcaption>图 5　同一首病例的非线性profile。左列固定τ，右列固定κ；上排为可见数据SSE，下排为同一总目标解处的独立先验代价。曲线区分Hb-only/EEG+Hb与先验0/1；黑色竖虚线为生成真值，横轴是实际参数值的对数刻度。每节点另一个生理参数及驱动、初态均重新拟合。失败节点用×表示并断线，不在失败之间连线或把有限失败值当最优。图中不同模态的数据项观测行不同，不能直接拿绝对高度排名；沿各曲线的变化及前表的统一Hb评分才回答本问题。</figcaption>
+<p class="source">来源：tasks/*.json; figures/readable_v3/nonlinear_profiles.png</p>
+</figure>
+</section>
+<section><h2>保留实测中的局部诊断不能升级为参数恢复</h2>
+<div class="table-wrap"><table>
+<colgroup><col style="width:20.000%"><col style="width:20.000%"><col style="width:20.000%"><col style="width:20.000%"><col style="width:20.000%"></colgroup>
+<thead><tr><th>模型</th><th>可见支持</th><th>可用拟合点</th><th>数据投影最小特征值中位数</th><th>含先验投影最小特征值中位数</th></tr></thead><tbody>
+<tr><td>K1</td><td>retained_fit_support</td><td>36</td><td>6.64315e-05</td><td>0.000153678</td></tr>
+<tr><td>K1</td><td>Hb_only</td><td>36</td><td>6.64315e-05</td><td>0.000153678</td></tr>
+<tr><td>K1</td><td>EEG_Hb</td><td>36</td><td>0.00298205</td><td>0.00369643</td></tr>
+<tr><td>K2</td><td>retained_fit_support</td><td>35</td><td>0.00169382</td><td>0.00286696</td></tr>
+<tr><td>K2</td><td>Hb_only</td><td>35</td><td>0.000511649</td><td>0.00156127</td></tr>
+<tr><td>K2</td><td>EEG_Hb</td><td>35</td><td>0.00169382</td><td>0.00286696</td></tr>
+</tbody></table></div>
+<p>原实测full条件拟合的共同解处释放logτ/logκ作局部敏感性；36个K1、35个K2来自6被试，另1个旧K2拟合失败。数字为窗口中位数，无独立窗口总体推断。</p>
+<p class="source">来源：information_metrics.csv</p>
+<p>原K1选择的EEG权重为0，所以retained_fit_support与Hb-only相同；在相同解处假设加入正权重EEG后，最小投影特征值中位数6.64e-5变为0.002982。这个变化只表示固定读出下的假设局部约束，未重新拟合，也没有验证该EEG读出在当前实测窗口上正确。K2原本已使用正权重，因而其retained支持与EEG+Hb一致。</p>
+<p>全部71个可用原解的前向复现误差为零。原拟合中τ=2、κ=0.64固定；新增导数并不等于从实测估计出了它们，更没有生理真值用来评分。数据与先验合并后局部信息增加，可以解释条件拟合稳定，却不能作为生理参数准确的证据。</p>
+</section>
+<section><h2>结论：冲突来自哪些环节，以及下一步该验证什么</h2>
+<p>本套件识别了三个可以分别检验的机制。第一，Hb-only下κ与驱动存在连续时间补偿关系，扩大驱动自由度后局部参数信息接近消失；低维驱动的可恢复性部分来自结构限制。第二，主恢复表明相似的Hb拟合误差可以对应相差很大的κ及驱动误差，正确已知EEG读出能针对性约束这些方向。第三，先验可在输出差异很小时移动潜变量；更强先验还引入明显偏差与数值失败，不能用稳定优化或满秩目标替代真值恢复。</p>
+<p>同时，匹配无噪声M12条件下两种模态均能近真恢复，说明结论不是“生理参数永远不能恢复”。它要求把可恢复条件写清：观测/读出正确、尺度固定、驱动空间适当、激励与时间支持足够，且求解器通过收敛和积分核验。对实测，这些条件需要独立证据，不能由拟合残差小来反向证明。</p>
+<p>下一步优先检查驱动基选择与采样支持是否人为收紧参数，而不是直接扩大网络；对每个待解释参数分别做数据-only nuisance projection和真正重拟合profile；把独立驱动观测、初态测量或读出校准作为有明确机制的额外信息。若应用只需要波形补全，可保留条件表征的用途，但应将生理参数输出与已验证恢复范围分开。</p>
+<p>本轮只有4个生成种子和4个预定参数组合，未评估更广生理分布、未知增益或真实个体头模；M120只进行了局部分析，没有运行其完整非线性恢复。工程尺度、局部秩阈值和有限多初值不支持校准后验或全局唯一性结论。负结果、边界限制和失败均保留，后续工作应针对这些具体限制而非重写本轮结论。</p>
+</section>
+<section><h2>证据与实现入口</h2>
+<p class="source">src/inference/shared_driver_reconstruction.py</p>
+<p class="source">src/inference/t3a_balloon_robust_ssm.py</p>
+<p class="source">src/inference/source_observability.py</p>
+<p class="source">experiments/configs/physiology_semantic_tokenizer/shared_driver_spatial_v1.yaml</p>
+<p class="source">experiments/configs/physiology_semantic_tokenizer/source_observability_v1.yaml</p>
+<p class="source">summary.json</p>
+<p class="source">manifest.json</p>
+<p class="source">resolved_config.json</p>
+<p class="source">recovery_metrics.csv</p>
+<p class="source">optimizer_starts.csv</p>
+<p class="source">information_metrics.csv</p>
+<p class="source">tasks/*.json</p>
+<p class="source">tasks/*.npz</p>
+<p class="source">verification.json</p>
+</section>
+</body></html>

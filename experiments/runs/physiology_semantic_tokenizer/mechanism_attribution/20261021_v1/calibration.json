@@ -1,0 +1,69 @@
+{
+  "schema": "mechanism_attribution_calibration_v1",
+  "scales": {
+    "observation": [
+      0.03999999999999998,
+      0.04430150616303185,
+      0.013477004655861992
+    ],
+    "driver": 0.04,
+    "state": [
+      0.041298005423862194,
+      0.1076232550082224,
+      0.03271236230127805,
+      0.03279396312352837,
+      0.0385057275881771
+    ]
+  },
+  "resolved_reference_parameters": {
+    "fixed": {
+      "alpha": 0.32,
+      "E0": 0.32,
+      "gamma": 0.32,
+      "P0": 1.0,
+      "Q0": 0.35,
+      "driver_decay_per_s": 0.45,
+      "process_std": [
+        0.08,
+        0.01,
+        0.006,
+        0.004,
+        0.004,
+        0.004
+      ],
+      "observation_scale": [
+        0.08,
+        0.025,
+        0.015
+      ],
+      "student_nu": 5.0,
+      "eeg_loading": 1.0,
+      "eeg_offset": 0.0,
+      "neurovascular_gain": 1.0
+    },
+    "free": {
+      "kappa": 0.65,
+      "tau": 2.0
+    }
+  },
+  "observation_coordinate": "direct_canonical_model_output; no_reference_subtraction_or_filter",
+  "scale_definition": "training_clean_signal_RMS_about_zero; vascular_RMS_of_departure_from_rest; not_SD",
+  "training_seeds": [
+    101,
+    102,
+    103,
+    104
+  ],
+  "evaluation_seeds_used": false,
+  "selection": "mean_physical_Hb_NMSE_plus_driver_NMSE_failure_score100",
+  "multiplier_scores": {
+    "0.5": 0.04891853313962621,
+    "1.0": 0.044901935655890575,
+    "2.0": 0.04446020637139557
+  },
+  "selected_multiplier": 2.0,
+  "coefficient_sd": 0.03,
+  "status_counts": {
+    "completed": 96
+  }
+}

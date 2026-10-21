@@ -1,0 +1,61 @@
+schema: mechanism_attribution_v1
+experiment_id: MECHANISM-ATTRIBUTION-v1
+artifact_root: experiments/runs/physiology_semantic_tokenizer/mechanism_attribution
+protected_data: forbidden
+data_boundary: synthetic_and_explicit_retained_public_endpoint_tables_only
+seed: 20261021
+tensor:
+  steps: 120
+  dt_s: 0.25
+  observation_order: [EEG, HbO, HbR]
+  state_order: [r, s, f, v, p, q]
+synthetic:
+  training_seeds: [101, 102, 103, 104]
+  evaluation_seeds: [201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216]
+  noiseless_seeds: [201, 202, 203, 204, 205, 206, 207, 208]
+  tau_s: [2.0, 3.0]
+  hb_gain: [1.0, 1.25]
+  common_present: [false, true]
+  driver_rms: 0.04
+  common_coefficient_rms: 0.015
+  common_loading: [0.65, 0.35]
+  common_modes: 4
+  claim_limit: known_matched_HbT_direction_and_temporal_basis_not_measured_source_discovery
+  noisy_sd_training_scale: 0.2
+  pairing: same_driver_physical_initial_state_and_standard_normal_noise_within_seed
+fit:
+  tau_grid_s: [1.0, 1.5, 2.0, 3.0, 4.0]
+  fixed_tau_s: 2.0
+  parameter_selection: minimum_total_penalized_objective_among_converged_profile_nodes
+  driver_policy: refit_all_120_driver_values_and_five_physical_initial_coordinates
+  penalty: 1.0
+  initial_penalty: 1.0
+  component_sd_multipliers: [0.5, 1.0, 2.0]
+  component_selection: synthetic_training_only_mean_physical_Hb_and_driver_NMSE_known_training_tau
+  max_evaluations: 100
+  gradient_tolerance: 0.00001
+  substeps: 4
+  numerical_backend: numba
+endpoints:
+  primary: [tau_absolute_log_error, absolute_delta_tau_error_s, physical_Hb_nrmse, driver_nrmse]
+  secondary: [state_nrmse, component_nrmse, tau_change_extra_projection, nuisance_physical_compensation_projection]
+  diagnostic: [observed_nrmse, weighted_data_sse, objective, full_tau_profiles]
+  independent_unit: synthetic_seed_or_retained_measured_subject
+  uncertainty: paired_seed_percentile_bootstrap_2000_conditional_fixed_generator_and_grid
+  failure_policy: retain_every_profile_failure_and_planned_endpoint_denominator_no_success_replacement
+  null: no_benefit_in_true_tau_or_physical_recovery_despite_better_observation_fit
+  stopping_rule: all_declared_cells_once_fixed_budget_no_evaluation_tuning
+retained:
+  attribution_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_attribution/20261002_v1
+  observation_run: experiments/runs/physiology_semantic_tokenizer/observation_semantics/20261009_v2
+  spatial_summary: experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2/summary.json
+  source_audit: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260924_hbo_hbr_calibration_v2/source_audit.json
+  auxiliary_reader: src/data/unified_physiology.py
+  original_documentation: data/EEG+NIRS Single-Trial/Open access dataset for simultaneous EEG and NIRS Brain-Computer Interfaces (BCIs).html
+  use: new_event_burden_stratification_of_frozen_EOG_predictions_and_source_availability_audit
+  limitation: EOG_association_is_not_cardiac_respiratory_or_tissue_ground_truth
+resources:
+  max_workers: 24
+  numerical_threads: 1
+  in_flight_per_worker: 1
+  supervisor: user_systemd

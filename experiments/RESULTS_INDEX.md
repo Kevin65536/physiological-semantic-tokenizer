@@ -50,6 +50,37 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Four independent fit/recovery diagnostics — 2026-10-21
+
+The [owning design](../docs/EXPERIMENT_PLAN.md#拟合观测信息与生理恢复的四套独立诊断2026-10-21)
+separates four scientific questions. Each suite retains its own fixed task plan,
+resolved configuration, source snapshot, supervisor/resource records, complete
+failures, endpoint tables and independent numerical verification. Current execution
+and interpretation remain in the project registry.
+
+| Question / suite | Owning numeric evidence | Independent technical report |
+| --- | --- | --- |
+| Data, priors and physiological recovery / `source_observability` | [Summary](runs/physiology_semantic_tokenizer/source_observability/20261021_v1/summary.json), [verification](runs/physiology_semantic_tokenizer/source_observability/20261021_v1/verification.json) | [PDF](../docs/report/20261021_source_observability_v2/TECHNICAL_REPORT.pdf), [HTML](../docs/report/20261021_source_observability_v2/TECHNICAL_REPORT.html) |
+| Channels, geometry and dynamic dimension / `spatial_information` | [Summary](runs/physiology_semantic_tokenizer/spatial_information/20261021_v1/summary.json), [verification](runs/physiology_semantic_tokenizer/spatial_information/20261021_v1/verification.json) | [PDF](../docs/report/20261021_spatial_information_v3/TECHNICAL_REPORT.pdf), [HTML](../docs/report/20261021_spatial_information_v3/TECHNICAL_REPORT.html) |
+| Conditional cross-modal information / `crossmodal_information` | [Summary](runs/physiology_semantic_tokenizer/crossmodal_information/20261021_v1/summary.json), [verification](runs/physiology_semantic_tokenizer/crossmodal_information/20261021_v1/verification.json); separately versioned matched-generator positive control under `20261021_positive_v1/` | [PDF](../docs/report/20261021_crossmodal_information_v3/TECHNICAL_REPORT.pdf), [HTML](../docs/report/20261021_crossmodal_information_v3/TECHNICAL_REPORT.html) |
+| Physiological change versus observation mismatch / `mechanism_attribution` | [Summary](runs/physiology_semantic_tokenizer/mechanism_attribution/20261021_v1/summary.json), [verification](runs/physiology_semantic_tokenizer/mechanism_attribution/20261021_v1/verification.json) | [PDF](../docs/report/20261021_mechanism_attribution_v2/TECHNICAL_REPORT.pdf), [HTML](../docs/report/20261021_mechanism_attribution_v2/TECHNICAL_REPORT.html) |
+
+The reports retain portable content JSON, searchable body text and tables, PNG
+figures/formulas, LaTeX source, figure atlases and delivery checks. Retained measured
+parents keep their original identity; no historical evidence is rewritten. Compact
+plans, task/endpoint tables, summaries, verification scripts/results and source
+snapshots are retained in Git. Each run's `terminal_records.zip` losslessly retains
+the original terminal JSON (and mechanism task CSV) files with their relative paths;
+the archive was checked byte-for-byte against the local records. The spatial suite's
+large `plan.json`, `information_results.json` and `profile_results.json` are retained
+as lossless `.json.gz` copies; their working originals remain unchanged. A checkout
+can decompress these copies beside the archives before an explicit evidence replay.
+Large per-task arrays and intermediate previews stay
+local at the named run/export paths. Source-level replays require the explicit parent
+arrays recorded by each contract; default tests use synthetic fixtures instead.
+Resource pilots, including the mechanism suite's initial CLI startup rejection, stay
+at their original versioned paths and do not count as formal scientific evidence.
+
 ## Local spatial complete experiment — 2026-10-20
 
 The frozen `SSM-LOCAL-SPATIAL-v1` contract was executed on its registered public

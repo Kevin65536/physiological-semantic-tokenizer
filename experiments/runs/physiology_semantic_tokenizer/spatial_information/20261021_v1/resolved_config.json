@@ -1,0 +1,177 @@
+{
+  "schema": "spatial_information_v1",
+  "experiment_id": "SPATIAL-INFORMATION-v1",
+  "seed": 20261021,
+  "artifact_root": "experiments/runs/physiology_semantic_tokenizer/spatial_information",
+  "scope": "retained_public_conditional_information_and_new_synthetic_controls",
+  "sources": {
+    "measured_run": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2",
+    "synthetic_run": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_synthetic_v1",
+    "protected_data": "forbidden",
+    "raw_or_cache_reads": "forbidden",
+    "measured_partition": "evaluation"
+  },
+  "information": {
+    "arms": [
+      "K1_true_H4_E12",
+      "K2_true_H4_E12"
+    ],
+    "method": "SSM_fixed1",
+    "mode": "heldout_pair",
+    "panels": [
+      {
+        "hb_pairs": 2,
+        "eeg_channels": 12
+      },
+      {
+        "hb_pairs": 4,
+        "eeg_channels": 6
+      },
+      {
+        "hb_pairs": 4,
+        "eeg_channels": 12
+      }
+    ],
+    "weighting": [
+      "raw",
+      "training_sd_independent_rows",
+      "legacy_modality_mean_objective"
+    ],
+    "covariance_assumption": "independent_rows_for_sensitivity_only_not_calibrated_Fisher",
+    "rcond": 1e-08,
+    "weak_directions": 5,
+    "physiology_log_difference": 0.0001,
+    "nuisance_columns": "all_driver_coefficients_and_initial_coordinates",
+    "parameter_scales": "native_fixed_coordinates_no_per_panel_column_normalization"
+  },
+  "nonlinear": {
+    "representatives": 3,
+    "selection": "retained_K2_fixed1_success_error_low_median_high_distinct_subjects",
+    "profile_parameters": [
+      "tau",
+      "kappa"
+    ],
+    "multipliers": [
+      0.5,
+      0.7,
+      0.85,
+      1.0,
+      1.15,
+      1.4,
+      2.0
+    ],
+    "fixed_parameters": "all_other_physiology",
+    "nuisance_refit": "all_driver_coefficients_and_initial_coordinates",
+    "interpretation": "conditional_profile_not_joint_identifiability_or_posterior",
+    "weak_direction_steps": [
+      0.0001,
+      0.001,
+      0.01
+    ]
+  },
+  "synthetic": {
+    "scenarios": [
+      "identical_sources",
+      "near_tied_sources",
+      "two_sources"
+    ],
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "training_seeds": [
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107
+    ],
+    "steps": 120,
+    "temporal_modes": 16,
+    "dt_s": 0.25,
+    "reference_steps": 20,
+    "score_steps": [
+      20,
+      120
+    ],
+    "driver_rms": 0.025,
+    "near_tied_fraction": 0.1,
+    "noise_sd": {
+      "eeg": 0.001,
+      "HbO": 0.0005,
+      "HbR": 0.0002
+    },
+    "controls": [
+      "true",
+      "sham",
+      "generic_equal_rank"
+    ],
+    "generic_control": "orthogonal_EEG_left_mixing_and_all_Hb_rows_permutation_signals_unchanged",
+    "geometry_fit": "frozen_known_truth_readouts_no_evaluation_calibration",
+    "models": [
+      "free_K2",
+      "tied_K2"
+    ],
+    "tied": "exact_same_K2_readout_priors_times_two",
+    "panels": [
+      {
+        "hb_pairs": 2,
+        "eeg_channels": 12
+      },
+      {
+        "hb_pairs": 4,
+        "eeg_channels": 6
+      },
+      {
+        "hb_pairs": 4,
+        "eeg_channels": 12
+      }
+    ]
+  },
+  "solver": {
+    "max_nfev": 180,
+    "gradient_tolerance": 1e-05,
+    "substeps": 4,
+    "validation_substeps": 8,
+    "integration_tolerance_training_sd": 0.005,
+    "numerical_backend": "numba",
+    "driver_curvature_weight": 0.01,
+    "initial_weight": 100.0,
+    "flow_prior_weight": 1.0,
+    "flow_log_sd": 0.6931471805599453
+  },
+  "statistics": {
+    "failure_penalty_nmse": 100.0,
+    "bootstrap_repeats": 2000,
+    "bootstrap_unit_measured": "subject_all_windows_together",
+    "bootstrap_unit_synthetic": "generator_seed",
+    "interval": "descriptive_percentile_95_frozen_conditions_not_confirmatory",
+    "pooling": "within_unit_mean_NMSE_then_sqrt_then_equal_unit_mean"
+  },
+  "resources": {
+    "library_threads": 1,
+    "in_flight_per_worker": 2
+  },
+  "stopping": "execute_frozen_manifest_once_retain_all_failures",
+  "claim_limits": [
+    "data_J_is_local_conditional_sensitivity_not_global_or_physiological_identifiability",
+    "training_SD_standardization_does_not_whiten_cross_channel_or_temporal_correlations",
+    "observation_count_information_is_unrenormalized_legacy_objective_is_reported_separately",
+    "common_full_panel_fit_coordinates_and_nuisance_columns_are_fixed_across_panels",
+    "generic_and_sham_are_operator_mismatch_controls_with_unchanged_signals_and_targets",
+    "equal_loading_singular_values_do_not_match_full_nonlinear_J_conditioning",
+    "fixed_physiology_and_true_synthetic_readouts_do_not_establish_parameter_or_source_recovery_in_measured_data",
+    "nonlinear_profiles_fix_other_physiology_and_are_not_joint_confidence_regions",
+    "synthetic_geometry_advantage_only_shows_assumed_generator_information_not_real_geometry_validity",
+    "repeated_windows_are_not_independent_subjects"
+  ]
+}

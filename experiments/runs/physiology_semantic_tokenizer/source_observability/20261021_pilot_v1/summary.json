@@ -1,0 +1,154 @@
+{
+  "schema": "source_observability_summary_v1",
+  "experiment_id": "SOURCE-OBSERVABILITY-v1",
+  "execution": "completed",
+  "planned": 8,
+  "terminal": 8,
+  "status_counts": {
+    "completed": 7,
+    "failed_numerical": 1
+  },
+  "task_counts": {
+    "local_information": 1,
+    "oracle": 1,
+    "profile": 1,
+    "recovery": 3,
+    "retained_information": 1,
+    "shifted_prior": 1
+  },
+  "optimizer_starts": 18,
+  "successful_optimizer_starts": 15,
+  "groups": {
+    "recovery|Hb_only|prior=0|noise=0": {
+      "planned": 1,
+      "terminal": 1,
+      "succeeded": 1,
+      "failures": 0,
+      "pending": 0,
+      "summary_scope": "successful_subset_with_complete_failure_denominator_shown",
+      "medians": {
+        "theta_log_rmse": 2.3393969825331254e-06,
+        "tau_absolute_error": 9.130283684655183e-08,
+        "kappa_absolute_error": 1.4884451601249182e-06,
+        "driver_nrmse": 1.0908367169695865e-06,
+        "initial_physical_rmse": 2.3645507342894588e-08,
+        "hb_clean_rmse": 5.571317652133446e-10,
+        "hb_clean_standardized_nrmse": 7.397475273455782e-08
+      }
+    },
+    "recovery|EEG_Hb|prior=1|noise=0": {
+      "planned": 1,
+      "terminal": 1,
+      "succeeded": 1,
+      "failures": 0,
+      "pending": 0,
+      "summary_scope": "successful_subset_with_complete_failure_denominator_shown",
+      "medians": {
+        "theta_log_rmse": 0.0038674350913230813,
+        "tau_absolute_error": 0.006602766428019713,
+        "kappa_absolute_error": 0.0008992885896149105,
+        "driver_nrmse": 0.0015422941304298217,
+        "initial_physical_rmse": 0.00018261679628374467,
+        "hb_clean_rmse": 2.388458477323623e-05,
+        "hb_clean_standardized_nrmse": 0.0026159130314839744
+      }
+    },
+    "recovery|Hb_only|prior=10|noise=0": {
+      "planned": 1,
+      "terminal": 1,
+      "succeeded": 0,
+      "failures": 1,
+      "pending": 0,
+      "summary_scope": "successful_subset_with_complete_failure_denominator_shown",
+      "medians": {
+        "theta_log_rmse": null,
+        "tau_absolute_error": null,
+        "kappa_absolute_error": null,
+        "driver_nrmse": null,
+        "initial_physical_rmse": null,
+        "hb_clean_rmse": null,
+        "hb_clean_standardized_nrmse": null
+      }
+    },
+    "profile|Hb_only|prior=0|noise=1|tau=0.6": {
+      "planned": 1,
+      "terminal": 1,
+      "succeeded": 1,
+      "failures": 0,
+      "pending": 0,
+      "summary_scope": "successful_subset_with_complete_failure_denominator_shown",
+      "medians": {
+        "theta_log_rmse": 0.5674956495658718,
+        "tau_absolute_error": 0.7000000000000001,
+        "kappa_absolute_error": 0.10800922873121571,
+        "driver_nrmse": 0.12059671411939006,
+        "initial_physical_rmse": 0.005298327910649427,
+        "hb_clean_rmse": 0.0011814740521321704,
+        "hb_clean_standardized_nrmse": 0.16596746551161096
+      }
+    },
+    "oracle|Hb_only|prior=0|noise=1|known_driver": {
+      "planned": 1,
+      "terminal": 1,
+      "succeeded": 1,
+      "failures": 0,
+      "pending": 0,
+      "summary_scope": "successful_subset_with_complete_failure_denominator_shown",
+      "medians": {
+        "theta_log_rmse": 0.0009659237494904532,
+        "tau_absolute_error": 0.001772207483946353,
+        "kappa_absolute_error": 4.5302439751537804e-05,
+        "driver_nrmse": 0.0,
+        "initial_physical_rmse": 0.00010396444638431166,
+        "hb_clean_rmse": 1.107429410170848e-05,
+        "hb_clean_standardized_nrmse": 0.001527591928880661
+      }
+    },
+    "shifted_prior|Hb_only|prior=1|noise=1|center=[1.0, 0.35]": {
+      "planned": 1,
+      "terminal": 1,
+      "succeeded": 1,
+      "failures": 0,
+      "pending": 0,
+      "summary_scope": "successful_subset_with_complete_failure_denominator_shown",
+      "medians": {
+        "theta_log_rmse": 0.23643113573515473,
+        "tau_absolute_error": 0.25725321760741293,
+        "kappa_absolute_error": 0.10001223488007693,
+        "driver_nrmse": 0.09969547457573576,
+        "initial_physical_rmse": 0.0012139958041344717,
+        "hb_clean_rmse": 0.0004299435700595218,
+        "hb_clean_standardized_nrmse": 0.05956015090192519
+      }
+    }
+  },
+  "finite_manifest": true,
+  "raw_data_read": false,
+  "protected_data_read": false,
+  "evidence_tables": [
+    "recovery_metrics.csv",
+    "optimizer_starts.csv",
+    "information_metrics.csv"
+  ],
+  "figures": [
+    "figures/data_prior_information.png",
+    "figures/nonlinear_profiles.png"
+  ],
+  "claim_limits": [
+    "local_sensitivity_is_not_global_identifiability",
+    "engineering_weights_are_not_calibrated_measurement_likelihoods",
+    "nonlinear_profiles_are_not_confidence_intervals",
+    "fixed_physiology_retained_fits_do_not_demonstrate_parameter_recovery",
+    "public_retained_subjects_are_development_not_new_confirmation",
+    "good_prediction_does_not_guarantee_physiological_truth",
+    "failures_and_each_start_remain_in_complete_planned_denominators"
+  ],
+  "implementation_semantics": {
+    "data": "fixed_SD_and_fixed_feature_weight_standardized_sum_of_squares",
+    "priors": "curvature_physical_initial_departure_logflow_separate_with_optional_logtheta_anchor",
+    "profile": "each_fixed_tau_or_kappa_refits_all_other_free_coordinates_from_three_starts",
+    "truth": "noise_free_nonlinear_generator_with_nonrest_initials_substeps8_fit_substeps4",
+    "local": "analytic_driver_initial_plus_central_logtau_logkappa_derivatives",
+    "retained": "old_fixed_physiology_fits_local_diagnostics_only_no_measured_physiology_recovery"
+  }
+}

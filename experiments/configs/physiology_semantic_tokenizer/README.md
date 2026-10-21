@@ -14,6 +14,7 @@ are intentionally excluded from Git.
 | --- | --- |
 | Measurement preparation, coordinates, scale and preprocessing | [Data and observation checks](../../README.md#data-preparation-and-observation-checks) |
 | Shared dynamics, reconstruction and parameter reliability | [Shared-driver diagnostics](../../README.md#shared-driver-reconstruction-and-reliability) |
+| Data/prior observability, spatial information, cross-modal information and mechanism attribution | [Four independent fit/recovery contracts](../../../docs/EXPERIMENT_PLAN.md#拟合观测信息与生理恢复的四套独立诊断2026-10-21); command/test mapping stays in [shared-driver diagnostics](../../README.md#shared-driver-reconstruction-and-reliability) |
 | Conditional Hb constraints and observation effects | [Hb diagnostics](../../README.md#hb-conditional-diagnostics) |
 | Response/component semantics and conditional tokenizer development | [Semantic and tokenizer entries](../../README.md#semantic-and-tokenizer-development) |
 | Figure, report and parameter-explanation exports | [Visualization entries](../../README.md#visualization-and-report-exports) |

@@ -46,6 +46,7 @@ measured result exists.
 
 | Reading task | Sections |
 | --- | --- |
+| Explain reconstruction versus physiological recovery | [Four independent diagnostics](#拟合观测信息与生理恢复的四套独立诊断2026-10-21) |
 | Reacquire downstream task performance | [Downstream rebenchmark design](#downstream-rebench-v1); retained comparison contracts remain separate |
 | Local spatial structure and independent dynamics | [Spatial observation design](#局部多通道观测与空间动态维数2026-10-16) |
 | Dataset extensions and conditional tokenizer probes | [REFED extension](#refed-公开实验补齐与四数据集比较2026-10-13), [TK-FUNCTIONAL](#条件功能监督与-hard-token-开发矩阵2026-10-10) |
@@ -60,6 +61,119 @@ measured result exists.
 | Qualification and tokenizer design | [P0](#p0-software-and-synthetic-qualification), [teacher selection](#t-physical-teacher-selection), [tokenizer](#bq-source-and-observation-tokenizer), [coupling prior](#c-coupling-prior-return) |
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
+
+## 拟合、观测信息与生理恢复的四套独立诊断（2026-10-21）
+
+本轮用户明确要求把此前讨论的四个问题分别建立为独立实验套件，执行实验、整理
+证据、交付四篇详细技术报告并作本地 Git 提交。四套各有配置、入口、运行目录和
+科学结论；下面是设计 owner，执行状态仍由 registry 及其生成视图持有。实验使用
+新生成的已知真值合成数据及明确列出的保留公开开发数据，不接入比较协议的受保护
+评价，不修改历史配置、数组或结果。公开数据已经有研究使用历史，不能称新确认集。
+
+| 独立套件 | 配置与入口 | 主问题与独立交付 |
+| --- | --- | --- |
+| `SOURCE-OBSERVABILITY-v1` | `source_observability_v1.yaml`；`evaluate_source_observability.py` | 数据与先验各约束哪些驱动、初态和生理参数；非名义参数的已知真值恢复、联合重拟合与剖面 |
+| `SPATIAL-INFORMATION-v1` | `spatial_information_v1.yaml`；`evaluate_spatial_information.py` | 更多通道、正确几何及独立动态分别增加了什么信息；弱方向、新观测和容量匹配对照 |
+| `CROSSMODAL-INFORMATION-v1` | `crossmodal_information_v1.yaml`；`evaluate_crossmodal_information.py` | 真实 EEG 是否提供超出 Hb 供体与条件模板的独立信息；配对破坏及共享信号剂量校准 |
+| `MECHANISM-ATTRIBUTION-v1` | `mechanism_attribution_v1.yaml`；`evaluate_mechanism_attribution.py` | 生理变化与观测失配如何互相补偿；已知反事实中的参数、驱动和共同项归属 |
+
+配置位于 `experiments/configs/physiology_semantic_tokenizer/`，入口位于
+`experiments/scripts/`；四个 artifact root 分别为既有
+`experiments/runs/physiology_semantic_tokenizer/` 下的 `source_observability/`、
+`spatial_information/`、`crossmodal_information/` 和 `mechanism_attribution/`。
+每个根中的新日期运行保存自己的 resolved config、固定任务矩阵、源码身份、
+监督服务、完整终态分母、逐任务数值与摘要。报告输出到 `docs/report/` 下四个
+独立版本目录；报告汇总 owning evidence，不另作实验状态源。
+
+### 共同科学问题与数据边界
+
+“良好拟合”指声明的可见或隐藏观测误差；“恢复”指已知生成器参数、驱动、状态
+和成分的误差，两者分别评分。实测潜变量没有对应真值，因此不能用实测拟合
+授予恢复资格，也不能从有限模型中的负结果推导生理恢复普遍不可能。四篇报告均
+区分数据的非唯一性、低信息量、模型/观测失配、先验偏置及数值未收敛。
+
+直接保留数据入口为 `shared_driver_spatial/20261020_measured_v2` 和
+`shared_driver_spatial/20261020_synthetic_v1` 的计划、训练坐标、冻结校准、
+prepared/fit 数组与完整任务表；补充旧输出支持、归属和观测语义证据只读取各配置
+明确列出的公开结果路径。训练、选择、评价身份沿原计划继承，新的合成生成身份
+彼此分开。读取前检查 parent schema、数据集、计划身份与允许的相对路径；不递归
+搜索历史根或从未列明的原始记录补齐缺失材料。失配 EEG 的不可用记录保留，不
+改变条件定义来制造供体。没有建立读取接口的 ECG/呼吸标为当前不可用，不等同
+于原数据集未采集这些信号；EOG 不命名为浅表血流真值。
+
+### 一：观测约束与生理参数恢复
+
+新合成使用非名义 tau/kappa 与非静息初态，固定训练确定的尺度，分别比较 Hb-only
+和联合 EEG/Hb、数据项和不同预先固定的先验、多初值以及有明确额外信息的 oracle。
+实际释放 tau/kappa、驱动时间系数和五个初态；冻结参数的零误差不能记为估计恢复。
+每个剖面固定一个参数，重新优化其余实际未知量；必要时保留二维节点及多个初值。
+报告训练尺度观测误差、driver/state 误差、参数相对/对数误差、边界命中、成功数和
+优化终止原因。离散网格最低值是该搜索内的最佳见证，不是全局最优证明。
+
+可观测性分析使用实际观测雅可比，明示参数尺度和观测尺度，分别分析纯数据与
+加入先验的矩阵；初态或共同项作为 nuisance 联合消元/重拟合。弱奇异方向通过
+有限扰动和非线性回放核验。工程容差内的替代解是非唯一性见证，不是置信区间；
+先验稳定性不等于数据识别，固定生理参数的历史实测只提供条件敏感性证据。
+
+### 二：空间观测是否打破旧歧义
+
+同一拟合点、同一坐标和目标支持上比较嵌套 Hb/EEG 面板，保留 raw、按声明尺度
+加权及原工程目标三种雅可比度量。原目标按可见数量归一，增加通道并不自动增加
+模态总权重，不能把其谱直接称 Fisher 信息。检查旧弱方向在新增通道上的响应，
+并在预定代表单元上做非线性扰动验证。
+
+新合成在同一驱动/初态/噪声下比较正确、置换及相同秩的非物理读出，固定 EEG
+权重以免选到零权重后将相同模型误读为几何无效。K2 自由模型与同一读出下驱动、
+初态严格相等的模型配对；生成器含可分双源、相同双源与失配。隐藏预测、真实
+动态恢复、弱方向和失败分母分别解释，不以可见拟合下降授予更多生理源。
+
+### 三：跨模态独立信息与检出能力
+
+在同一 Hb 供体与目标上新增固定 EEG 权重的真实配对、同条件错配以及非环绕
+时间移位实验；不同移位比较使用相同有效支持，丢失端点不补零冒充观测。Hb-only、
+原始空间 ridge 和 EEG+Hb ridge 使用相同输入边界；selected-weight 历史结果只作
+策略参照。主终点是整对隐藏 Hb 的被试配对误差差异，原生目标和参考仅评分，不能
+进入归一化、特征或拟合。弱方向变化只作为与隐藏预测并列的诊断。
+
+独立合成以训练记录背景和已知共享动态构造预定信号剂量，固定各剂量间噪声，
+分别报告零注入假阳性与各剂量的检出比例及其生成单元数。有限重复的经验检出率
+不能称总体功效保证；阴性结论只在已校准的动态、背景、观测和模型范围内解释。
+
+**条件独立信息的定位补充。** 原注入改变共享动态强度，但供体也可能看见同一
+动态，不能预设它必定增加 EEG 的条件增量。独立版本
+`crossmodal_information_positive_v1.yaml` 在同套件的新运行中设置有利的已知
+读出、模型匹配合成控制：目标仅看第二动态，供体分别覆盖两个动态或仅第一动态；
+移除供体第二动态时以已知增益保持第一动态贡献不变。正确、错配 EEG 与 Hb-only
+使用相同目标及支持，零/非零剂量固定同一噪声和初态。训练生成身份确定共同尺度
+与增益，校准和评价生成流独立；有限矩阵、既有求解预算和失败处理在补充运行前
+冻结。此控制检验分析链在确有目标独有信息时的行为，不能替代实测背景的功效，
+也不覆写原阴性或按其结果修改实测权重。报告并列区分共享动态与条件独立增量。
+
+### 四：真实参数变化与观测失配的归属
+
+新合成固定驱动、初态与噪声作配对反事实，独立改变 tau、共同 Hb 增益和额外
+共同成分，保留组合条件。比较固定/释放 tau、无/有有限共同项以及知晓真实失配
+或驱动的 oracle；每个 tau 节点重新拟合实际未知量。并列呈现带噪观测拟合、无噪
+物理 Hb、driver、tau 与共同成分恢复，并统计“拟合改善而恢复恶化”的配对现象。
+共同项对观测失配的吸收不能命名为真实浅表来源；实测归属证据保留其来源未决状态。
+
+### 执行、统计与报告验收
+
+先运行针对性软件、导数、隐藏污染、形状与已知真值检查，再用独立 pilot 测量
+耗时/内存并确定并发。较大阶段在 user systemd 下运行、确认 linger，限制数值库
+线程与在途任务，不干扰已有下游作业。各套固定矩阵独立完成，不按评价结果临时
+扩大参数网格或挑选较优生成身份；数值失败、域失败和不可用单元全部保留。
+
+实测先窗口/记录配对、再被试内汇总，bootstrap 整块重采样被试；合成以独立生成
+seed/identity 重采样，同一 seed 的反事实和多个窗口保持成组。各套预先指定主比较，
+其他结果标探索性；区间条件于冻结训练坐标和当前生成/评价面板。成功子集与完整
+失败分母并列，不用成功子集的好拟合掩盖困难单元。
+
+四篇报告各自说明研究问题、数据/真值类型、可见支持、生成与推断路径、公式符号、
+尺度与指标、计划/可用/独立分母、基线差异、数值失败、机制解释及未解决边界。
+每个图表逐项可追溯到本套结果；图与公式以高分辨率 PNG 嵌入 PDF，正文、表格和
+图注可搜索。检查 PDF 图像对象、文字边界及实际尺寸可读性；交付时在对话中逐套
+汇报主要数值和结论，并本地提交代码、合同、精简证据和四篇报告。
 
 <a id="downstream-rebench-v1"></a>
 

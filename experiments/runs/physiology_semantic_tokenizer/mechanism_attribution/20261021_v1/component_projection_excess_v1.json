@@ -1,0 +1,20 @@
+{
+  "schema": "component_projection_excess_v1",
+  "status": "posthoc_semantic_clarification_not_new_confirmatory_endpoint",
+  "input": "endpoints.csv",
+  "output_files": [
+    "component_projection_excess_v1.csv",
+    "component_projection_excess_summary_v1.csv"
+  ],
+  "source": "experiments/scripts/render_mechanism_attribution.py::projection_excess_audit",
+  "baseline_tau_s": 2.0,
+  "formula": "raw_component_change_projection_arm - raw_component_change_projection_oracle_mismatch",
+  "equivalent_numerator": "estimated_component_change_minus_true_component_change_projected_on_true_physical_change",
+  "oracle_reason": "oracle_mismatch saves the exact generating common component; its raw projection is the true component projection",
+  "contrast": "world_minus_same_seed_tau2_gain1_common0_baseline",
+  "denominator": "sum_squared_true_physical_Hb_change_in_fixed_training_RMS_coordinates",
+  "zero_denominator": "NaN for unchanged true tau; no epsilon substitution",
+  "interval": "2000_percentile_seed_bootstrap_within_each_noise_and_world_stratum; no_multiplicity_confirmation",
+  "interpretation": "signed_regression_coefficient_not_energy_fraction_or_proof_that_tau_change_was_causally_stolen",
+  "frozen_evidence": "no_refit; endpoints/profiles/summary_and_original_figure_export_preserved"
+}

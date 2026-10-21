@@ -1,0 +1,26 @@
+{
+  "schema": "mechanism_attribution_artifacts_v1",
+  "task_directory": "tasks/<seed_noise_key>/",
+  "terminal_record": "status.json",
+  "tables": [
+    "endpoints.csv",
+    "profiles.csv"
+  ],
+  "array_file": "trajectories.npz",
+  "array_key": "w<world_index>_<arm_or_truth>_<field>",
+  "world_order": "product(tau_s,hb_gain,common_present) in resolved_config.yaml",
+  "physical_coordinate": "canonical EEG,HbO,HbR before gain and additive common",
+  "saved_prediction": "canonical model+component; oracle_mismatch/oracle_both save corrected-coordinate model prediction",
+  "endpoint_observed_nrmse": "original observation coordinates including known gain/component for mismatch oracles",
+  "profile_families": {
+    "plain": "refit driver+5 initial, no common",
+    "common": "refit driver+5 initial+four profiled common coefficients",
+    "oracle_mismatch": "known gain/common correction, refit driver+5 initial",
+    "oracle_driver_plain": "known true driver AND true five initial, no common",
+    "oracle_driver_common": "known true driver AND true five initial, refit common with same coefficient penalty",
+    "oracle_both": "known true driver AND initial AND gain/common correction"
+  },
+  "profile_denominator": "192 worlds x5 tau nodes x6 profile families =5760; pilot16x5x6=480",
+  "oracle_penalties": "known driver/initial receive no optimization priors; ordinary fits retain all declared priors",
+  "incomplete_profile": "minimum over available converged nodes only, explicitly flagged; no interval interpretation"
+}

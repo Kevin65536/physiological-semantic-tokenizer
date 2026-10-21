@@ -1,0 +1,98 @@
+{
+  "schema": "crossmodal_information_v1",
+  "experiment_id": "CROSSMODAL-INFORMATION-v1",
+  "artifact_root": "experiments/runs/physiology_semantic_tokenizer/crossmodal_information",
+  "scope": "retained_public_development_arrays_only",
+  "source_run": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2",
+  "source_schema": "shared_driver_spatial_v1",
+  "protected_data": "forbidden",
+  "seed": 20261021,
+  "model": {
+    "arms": [
+      "K1_true_H4_E12",
+      "K2_true_H4_E12"
+    ],
+    "fixed_eeg_weight": 1.0,
+    "hidden_target_pair": 0,
+    "baseline": "frozen_training_spatial_and_joint_ridge",
+    "initialization": "original_fitter_deterministic_same_budget"
+  },
+  "perturbations": {
+    "conditions": [
+      "Hb_only",
+      "paired",
+      "wrong_EEG",
+      "shift_m4s",
+      "shift_p4s",
+      "shift_m8s",
+      "shift_p8s"
+    ],
+    "shift_steps": {
+      "shift_m4s": -16,
+      "shift_p4s": 16,
+      "shift_m8s": -32,
+      "shift_p8s": 32
+    },
+    "eeg_support": [
+      32,
+      88
+    ],
+    "eeg_support_policy": "same_56_feature_rows_for_every_positive_weight_condition",
+    "timing_interpretation": "feature_space_shift_of_already_referenced_EEG_not_physical_delay",
+    "wrong_policy": "parent_frozen_same_subject_task_condition_montage_nonoverlap",
+    "no_wrong_fallback": true
+  },
+  "evaluation": {
+    "score_steps": [
+      20,
+      120
+    ],
+    "failure_penalty_nmse": 100.0,
+    "aggregation": "mean_time_equal_Hb_components_then_mean_windows_then_sqrt_then_equal_subjects",
+    "primary": "paired_vs_wrong_and_Hb_only_fixed_weight1",
+    "secondary": "paired_vs_nonwrapping_feature_shifts",
+    "independent_unit": "subject",
+    "bootstrap_repeats": 2000,
+    "statistics": "paired_subject_bootstrap_and_exact_two_sided_sign_flip",
+    "selection_policy": "frozen_no_evaluation_selection_or_refitting"
+  },
+  "synthetic": {
+    "arm": "K2_true_H4_E12",
+    "doses_training_target_sd_rms": [
+      0.0,
+      0.25,
+      0.5,
+      1.0
+    ],
+    "calibration_seeds": 16,
+    "evaluation_seeds": 16,
+    "seed_offset": 100000,
+    "background_windows_per_modality": 4,
+    "background": "independent_disjoint_train_row_signed_mixtures_EEG_and_whole_Hb",
+    "signal": "scalar_times_known_nonlinear_K2_forward_EEG_Hb_preserving_shared_component",
+    "conditions": [
+      "Hb_only",
+      "paired",
+      "wrong_EEG"
+    ],
+    "threshold_quantile": 0.95,
+    "threshold_interpretation": "exploratory_empirical_zero_dose_not_nominal_typeI_or_calibrated_power",
+    "independent_unit": "generation_seed"
+  },
+  "resources": {
+    "max_workers": 24,
+    "numerical_threads": 1,
+    "in_flight_per_worker": 2
+  },
+  "stopping": "fixed_manifest_all_terminal_cells_no_evaluation_tuning",
+  "claim_limits": [
+    "frozen_selected_zero_EEG_weight_is_policy_silence_not_an_independent_information_null",
+    "public_previously_examined_subjects_are_development_not_fresh_confirmation",
+    "shifts_perturb_preprocessed_features_not_identify_physical_neurovascular_delay",
+    "pairing_destruction_preserves_inputs_but_not_all_unmeasured_confounders",
+    "local_Jacobian_constraint_is_not_neural_source_or_parameter_identification",
+    "injection_sensitivity_depends_on_fixed_background_generator_and_frozen_readout",
+    "sixteen_calibration_and_sixteen_evaluation_seeds_do_not_establish_calibrated_population_power",
+    "failed_or_unavailable_cells_remain_in_full_planned_denominators"
+  ]
+}
