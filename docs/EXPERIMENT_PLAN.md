@@ -62,6 +62,38 @@ measured result exists.
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
 
+## 单一血流驱动的 Hb 相容性与 30/90 秒持续波动（2026-10-22）
+
+用户要求调查独立拟合初态仍缺少持续独立血容量激励的局限，并在当前公开实测
+数据上比较 30 s 与 90 s。可执行合同为
+[`shared_driver_volume_drive_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_volume_drive_v1.yaml)，
+复用 `evaluate_shared_driver_reconstruction.py --volume-drive-diagnostic`。
+读取两个合同列明的已完成 output-support 父运行的 plan、prepared 和训练坐标；
+不重建原始缓存，不访问其他比较协议。每条原生连续 90 s 记录与其中间 30 s
+配对，保留父运行的全部评价身份、原生通道和记录依赖。训练 PCA、共同 Hb 缩放
+和分项训练 SD 冻结；每个长度仅重设可见前 5 s 参考。模型算子逐行检查裁窗外
+依赖，末端插值 bin 不进入拟合或评分。
+
+当前确定性动力学中 `p-v` 是无外源的衰减模式；独立初态不增加持续输入。
+全矩阵线性筛查比较绑定/独立初态及额外共同/交换方向，并保留每窗口
+tau/alpha/E0 工程网格内的最佳无正则残差，作为对原模型有利的表达能力诊断。
+这个有限线性子空间的下界不是非线性全局不可能性证明。
+
+非线性主比较固定原生理参数，重新拟合逐时点驱动和五个独立初态；额外共同项
+与等自由度氧交换项使用相同物理截止频率（0.1 Hz）、训练 SD 加权列范数及系数
+先验。共同项可以实现为独立固定饱和度血容量室的连续状态及其持续输入，不修改
+原 Balloon 室的方程；它也可能吸收浅表或观测失配，不能据拟合命名其真实来源。
+30/90 s 各为 6/18 个余弦系数，按时长保持自由度密度。联合完整、Hb-only 完整
+和联合分块遮挡三个条件分别检验 EEG 妥协、Hb 内部相容性和离线插值收益；
+隐藏 Hb 不进入拟合或初值，参考区保持可见，不能称未来预测。
+
+先独立软件及合成检查，再在 user systemd 下计时 pilot、完成固定合成矩阵和
+实测配对矩阵。4/8 子步复核、未收敛和缺失记录完整保留。主终点为训练 SD
+归一的双 Hb 误差，另列单 Hb、共同中间区间、尾段、局部 SD 及固定频带误差。
+先时间/色团均方，再记录内配对、被试内平均、被试等权开方；区间整块重采样
+被试，同一被试的两条记录不当作独立样本。10% 相对 RMSE 改善仅是本轮描述性
+重要程度标准；所有结果为已使用公开开发材料的探索性重分析。
+
 ## 拟合、观测信息与生理恢复的四套独立诊断（2026-10-21）
 
 本轮用户明确要求把此前讨论的四个问题分别建立为独立实验套件，执行实验、整理

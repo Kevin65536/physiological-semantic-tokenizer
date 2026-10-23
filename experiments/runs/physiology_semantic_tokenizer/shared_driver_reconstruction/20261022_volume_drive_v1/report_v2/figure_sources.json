@@ -1,0 +1,210 @@
+{
+  "figures": [
+    {
+      "file": "formulas/delta.png",
+      "source": "formula LaTeX retained beside PNG",
+      "caption": "delta"
+    },
+    {
+      "file": "formulas/compatibility.png",
+      "source": "formula LaTeX retained beside PNG",
+      "caption": "compatibility"
+    },
+    {
+      "file": "formulas/hb_map.png",
+      "source": "formula LaTeX retained beside PNG",
+      "caption": "hb_map"
+    },
+    {
+      "file": "formulas/extra_compartment.png",
+      "source": "formula LaTeX retained beside PNG",
+      "caption": "extra_compartment"
+    },
+    {
+      "file": "formulas/metric.png",
+      "source": "formula LaTeX retained beside PNG",
+      "caption": "metric"
+    },
+    {
+      "file": "figures/synthetic.png",
+      "caption": "每柱汇总6个生成seed；先seed内均方、再seed等权开方。已知真值只用于生成和评分，未用于拟合初值。",
+      "source": "summary.json groups: synthetic / joint_full"
+    },
+    {
+      "file": "figures/linear.png",
+      "caption": "每数据集12条记录、6名被试；相同目标、无正则最小残差。网格在每窗口选择最优tau/alpha/E0，仅作对原模型有利的表达能力上界检查。",
+      "source": "metrics.csv stage=linear; individual parameter_profile JSON"
+    },
+    {
+      "file": "figures/joint_full.png",
+      "caption": "全部柱采用统一纵轴，12/12记录、6名被试进入每个比较；所有实测拟合均通过数值检查。颜色与其他图一致。",
+      "source": "summary.json groups and paired; condition=joint_full"
+    },
+    {
+      "file": "figures/Hb_only_full.png",
+      "caption": "全部柱采用统一纵轴，12/12记录、6名被试进入每个比较；所有实测拟合均通过数值检查。颜色与其他图一致。",
+      "source": "summary.json groups and paired; condition=Hb_only_full"
+    },
+    {
+      "file": "figures/joint_blocked.png",
+      "caption": "全部柱采用统一纵轴，12/12记录、6名被试进入每个比较；所有实测拟合均通过数值检查。颜色与其他图一致。",
+      "source": "summary.json groups and paired; condition=joint_blocked"
+    },
+    {
+      "file": "figures/waveform_eeg_fnirs_single_trial.png",
+      "caption": "黑线为处理后实测目标，橙/蓝/绿分别为完整模型预测；额外成分已包含在蓝/绿线中。阴影为相同中间30秒，30秒输出加回参考差后显示在相同坐标。每行两图同刻度，不同数据集独立纵轴。",
+      "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/measured/eeg_fnirs_single_trial__subject_07__prefrontal__r0_90_joint_full.npz"
+    },
+    {
+      "file": "figures/waveform_simultaneous_eeg_nirs.png",
+      "caption": "黑线为处理后实测目标，橙/蓝/绿分别为完整模型预测；额外成分已包含在蓝/绿线中。阴影为相同中间30秒，30秒输出加回参考差后显示在相同坐标。每行两图同刻度，不同数据集独立纵轴。",
+      "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/measured/simultaneous_eeg_nirs__VP004__prefrontal__r0_90_joint_full.npz"
+    },
+    {
+      "file": "figures/waveform_visual_cognitive_motivation.png",
+      "caption": "黑线为处理后实测目标，橙/蓝/绿分别为完整模型预测；额外成分已包含在蓝/绿线中。阴影为相同中间30秒，30秒输出加回参考差后显示在相同坐标。每行两图同刻度，不同数据集独立纵轴。",
+      "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/measured/visual_cognitive_motivation__S08__prefrontal__montage0__r0_90_joint_full.npz"
+    },
+    {
+      "file": "figures/waveform_refed.png",
+      "caption": "黑线为处理后实测目标，橙/蓝/绿分别为完整模型预测；额外成分已包含在蓝/绿线中。阴影为相同中间30秒，30秒输出加回参考差后显示在相同坐标。每行两图同刻度，不同数据集独立纵轴。",
+      "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/measured/refed__14__prefrontal__r0_90_joint_full.npz"
+    }
+  ],
+  "examples": [
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "id": "eeg_fnirs_single_trial__subject_07__prefrontal__r0",
+      "selection": "upper median by baseline 90s joint-full error, lexical id tie-break",
+      "denominator": 12
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "id": "simultaneous_eeg_nirs__VP004__prefrontal__r0",
+      "selection": "upper median by baseline 90s joint-full error, lexical id tie-break",
+      "denominator": 12
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "id": "visual_cognitive_motivation__S08__prefrontal__montage0__r0",
+      "selection": "upper median by baseline 90s joint-full error, lexical id tie-break",
+      "denominator": 12
+    },
+    {
+      "dataset": "refed",
+      "id": "refed__14__prefrontal__r0",
+      "selection": "upper median by baseline 90s joint-full error, lexical id tie-break",
+      "denominator": 12
+    }
+  ],
+  "pages": [
+    {
+      "section": 1,
+      "pdf_pages": [
+        1
+      ]
+    },
+    {
+      "section": 2,
+      "pdf_pages": [
+        2
+      ]
+    },
+    {
+      "section": 3,
+      "pdf_pages": [
+        3
+      ]
+    },
+    {
+      "section": 4,
+      "pdf_pages": [
+        4
+      ]
+    },
+    {
+      "section": 5,
+      "pdf_pages": [
+        5
+      ]
+    },
+    {
+      "section": 6,
+      "pdf_pages": [
+        6
+      ]
+    },
+    {
+      "section": 7,
+      "pdf_pages": [
+        7
+      ]
+    },
+    {
+      "section": 8,
+      "pdf_pages": [
+        8
+      ]
+    },
+    {
+      "section": 9,
+      "pdf_pages": [
+        9
+      ]
+    },
+    {
+      "section": 10,
+      "pdf_pages": [
+        10
+      ]
+    },
+    {
+      "section": 11,
+      "pdf_pages": [
+        11
+      ]
+    },
+    {
+      "section": 12,
+      "pdf_pages": [
+        12
+      ]
+    },
+    {
+      "section": 13,
+      "pdf_pages": [
+        13
+      ]
+    },
+    {
+      "section": 14,
+      "pdf_pages": [
+        14
+      ]
+    },
+    {
+      "section": 15,
+      "pdf_pages": [
+        15
+      ]
+    },
+    {
+      "section": 16,
+      "pdf_pages": [
+        16
+      ]
+    },
+    {
+      "section": 17,
+      "pdf_pages": [
+        17
+      ]
+    },
+    {
+      "section": 18,
+      "pdf_pages": [
+        18
+      ]
+    }
+  ]
+}

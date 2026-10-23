@@ -1,0 +1,97 @@
+schema: shared_driver_volume_drive_v1
+experiment_id: SSM-VOLUME-DRIVE-v1
+seed: 20261022
+scope: exploratory_public_retained_continuous_record_reconstruction
+parents:
+  - experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1
+  - experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261013_refed_v2
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+data:
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation, refed]
+  protected_data: forbidden
+  arrays: exact_parent_plan_prepared_and_training_coordinates_only
+  partition: parent_evaluation_all_records
+  raw_reads: false
+  labels_as_inputs: false
+tensor:
+  dt_s: 0.25
+  lengths_s: [30, 90]
+  slices: [[120, 240], [0, 360]]
+  components: [EEG, HbO, HbR]
+  reference_steps: 20
+  last_bin: excluded_from_fit_and_score_to_avoid_30s_interpolation_halo
+parameters:
+  tau: 2.0
+  kappa: 0.64
+  gamma: 0.32
+  alpha: 0.32
+  E0: 0.32
+  P0: 1.0
+  Q0: 0.35
+  neurovascular_gain: 1.0
+  policy: fixed_reference_in_nonlinear_fits
+linear:
+  arms: [tied_initial, free_initial, volume, exchange]
+  rconds: [1.0e-10, 1.0e-12]
+  parameter_grid: {tau: [0.5, 2.0, 8.0], alpha: [0.2, 0.32, 0.6], E0: [0.15, 0.32, 0.6]}
+  grid_policy: per_window_Hb_only_best_residual_generous_exploratory_capacity_screen_not_parameter_estimate
+  grid_domain: engineering_stress_range_not_population_physiological_range
+component:
+  arms: [base, volume, exchange]
+  highest_frequency_hz: 0.1
+  modes: {30: 6, 90: 18}
+  volume_HbR_fraction: 0.35
+  loading: {volume: [0.65, 0.35], exchange: [-0.5, 0.5]}
+  basis_normalization: unit_RMS_in_training_SD_weighted_Hb_coordinates_per_column
+  coefficient_sd: 1.0
+  interpretation: independent_smooth_fixed_saturation_extra_compartment_not_identified_intracerebral_volume
+  state_realization: b_dot_equals_minus_b_over_2s_plus_independent_input
+  input_realization: exact_derivative_of_cosine_trajectory_plus_b_over_2s
+solver:
+  penalty: 0.01
+  initial_penalty: 100.0
+  flow_prior_weight: 1.0
+  flow_prior_log_sd: 0.6931471805599453
+  max_evaluations: 500
+  gradient_tolerance: 0.00001
+  substeps: 4
+  validation_substeps: 8
+  maximum_integration_difference_training_sd: 0.005
+  numerical_backend: numba
+  starts: rest_and_fitted_base
+  initial_state: five_independent_physical_coordinates
+conditions: [joint_full, Hb_only_full, joint_blocked]
+hidden:
+  block_s: [[10, 15], [20, 25]]
+  repeat_every_s: 30
+  components: [HbO, HbR]
+  interpretation: within_record_offline_blocked_interpolation_not_future_prediction
+synthetic:
+  seeds: [0, 1, 2, 3, 4, 5]
+  scenarios: [matched, nonrest, volume, exchange]
+  amplitude_training_sd: 1.0
+  noise_training_sd: 0.03
+  truth_in_fitting: false
+endpoints:
+  primary: paired_full_Hb_NRMSE_base_minus_volume_separate_length_and_dataset
+  secondary: [blocked_Hb_NRMSE, Hb_only_Hb_NRMSE, HbO_NRMSE, HbR_NRMSE, common_center_error, tail_error, volume_vs_exchange]
+  diagnostic: [linear_free_vs_tied_initial, linear_parameter_grid_best, local_SD_error, HbT_error, oscillation_band_error, p_minus_v_decay, numerical_failure]
+  improvement_sign: base_error_minus_candidate_error
+  normalization: exact_parent_training_SD_no_per_window_refit
+  aggregation: time_and_Hb_mean_NMSE_then_records_mean_within_subject_then_subject_mean_then_square_root
+  intervals: paired_subject_block_bootstrap_95pct_percentile_conditional_on_frozen_training_coordinates
+  bootstrap_repeats: 2000
+  materiality: descriptive_10pct_relative_RMSE_reduction_no_confirmatory_significance_claim
+  failure: all_planned_rows_retained_successful_pairs_and_full_failure_denominator
+  stopping: fixed_matrix_no_result_driven_expansion
+resources:
+  max_workers: 36
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  supervisor: user_systemd
+claim_limits:
+  - deterministic_Hb_compatibility_not_all_stochastic_state_space_models
+  - positive_common_component_does_not_identify_scalp_arterial_venous_or_metabolic_source
+  - lower_in_sample_error_with_more_capacity_is_not_independent_evidence_of_physiological_truth
+  - linear_residual_minimum_is_not_a_global_nonlinear_impossibility_proof
+  - all_evaluation_subjects_are_public_development_reanalysis_not_unseen_confirmation

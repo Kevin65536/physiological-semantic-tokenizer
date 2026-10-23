@@ -1,0 +1,93 @@
+{
+  "schema": "volume_drive_literature_v1",
+  "accessed_date": "2026-10-22",
+  "scope": "targeted_primary_source_review_not_systematic_prevalence_census",
+  "search_terms": [
+    "EEG fNIRS state space blood volume independent fluctuations Balloon",
+    "Croce 2017 neurovascular coupling state space",
+    "fNIRS DCM physiological confounds Mayer waves",
+    "Fantini blood volume flow velocity oxygen consumption independent",
+    "short separation state space systemic physiology"
+  ],
+  "conclusion": "单神经驱动确定性Balloon分支有此类输入/输出维数约束；完整观测层、外源生理输入、独立状态创新、多血管室与数据驱动SSM可以放宽。未检索到将本仓库p-v衰减式及30/90秒影响作为同一命题直接实测检验的文献，不作首创性断言。",
+  "sources": [
+    {
+      "id": "Tak2015",
+      "authors": "Tak et al.",
+      "year": 2015,
+      "title": "Dynamic causal modelling for functional near-infrared spectroscopy",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4401444/",
+      "doi": "10.1016/j.neuroimage.2015.02.035",
+      "verified": "Hemodynamics Eq. (3), Confounds, Discussion; full-text XML and SPM manual",
+      "finding": "神经活动驱动血流，再生成血容量与两种Hb。文章明确用8–12秒周期的DCT混杂项及常数项描述Mayer波和基线，并讨论加入血压、CO2及短距通道观测。",
+      "limit": "论文印出的p方程保持p/v，仓库入口平衡变体使p-v衰减；两者在p0=v0时一致。完整DCM的混杂观测模型不能等同于本次纯共享驱动基线。"
+    },
+    {
+      "id": "Croce2017",
+      "authors": "Croce et al.",
+      "year": 2017,
+      "title": "Exploiting neurovascular coupling: a Bayesian sequential Monte Carlo approach applied to simulated EEG fNIRS data",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/28504643/",
+      "doi": "10.1088/1741-2552/aa7321",
+      "verified": "PubMed indexed abstract; full original noise-injection specification not independently retrieved",
+      "finding": "建立联合EEG–fNIRS状态空间模型，用粒子滤波估计模拟的电与血流动力状态。是本项目模型家族的相关实例。",
+      "limit": "该文主要为模拟研究；不能用摘要判定全部状态的过程噪声秩，也不能声称其原始随机模型严格满足本仓库的确定性Hb约束。"
+    },
+    {
+      "id": "Fantini2014",
+      "authors": "Fantini",
+      "year": 2014,
+      "online_year": 2013,
+      "title": "Dynamic model for the tissue concentration and oxygen saturation of hemoglobin in relation to blood volume, flow velocity, and oxygen consumption: Implications for functional neuroimaging and coherent hemodynamics spectroscopy",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3760999/",
+      "doi": "10.1016/j.neuroimage.2013.03.065",
+      "verified": "Article abstract and indexed full-text discussion; author CHS model description",
+      "finding": "明确将血容量、流速和氧提取/代谢作为独立变量建模，并区分血容量与流速/代谢对HbO、HbR和HbT振荡的贡献。",
+      "limit": "这是不同的血管室建模选择，不是对当前数据已经鉴定出独立血容量来源的证明。"
+    },
+    {
+      "id": "Diamond2006",
+      "authors": "Diamond et al.",
+      "year": 2006,
+      "title": "Dynamic physiological modeling for functional diffuse optical tomography",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2670202/",
+      "doi": "10.1016/j.neuroimage.2005.09.016",
+      "verified": "PubMed abstract and author-hosted paper metadata",
+      "finding": "状态空间/Kalman建模使用血压及心率变异等辅助输入来描述背景生理动态，说明状态空间模型本身可容纳非任务、非单神经驱动过程。",
+      "limit": "DOT/fNIRS背景生理建模，不能直接当作本项目EEG–fNIRS生理源恢复验收。"
+    },
+    {
+      "id": "Gagnon2011",
+      "authors": "Gagnon et al.",
+      "year": 2011,
+      "title": "Improved recovery of the hemodynamic response in diffuse optical imaging using short optode separations and state-space modeling",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3085546/",
+      "doi": "10.1016/j.neuroimage.2011.03.001",
+      "verified": "Abstract and Introduction full text",
+      "finding": "短源探距观测配合动态状态空间估计，同时估计响应和系统生理干扰。文章指出系统波动与神经血流响应频谱重叠，单纯频率过滤会损伤响应。",
+      "limit": "用6名被试静息背景加合成响应验证；额外独立观测是关键，不能由增加任意自由成分替代。"
+    },
+    {
+      "id": "Caldwell2016",
+      "authors": "Caldwell et al.",
+      "year": 2016,
+      "title": "Modelling confounding effects from extracerebral contamination and systemic factors on functional near-infrared spectroscopy",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5139986/",
+      "doi": "10.1016/j.neuroimage.2016.08.058",
+      "verified": "Full-text XML: haemodynamic inputs, scalp model and simulated simultaneous inputs",
+      "finding": "BrainSignals扩展用血压、CO2、血氧和代谢需求驱动脑内过程，并加入并行头皮血管室；其输入变化可产生不同血流与容积响应，模拟显示系统因素能够掩盖或模仿功能激活。",
+      "limit": "作者同样强调输入相关、噪声及观测不完备会限制来源分离；本次共同成分不能据此直接命名为头皮血流。"
+    },
+    {
+      "id": "Hong2014",
+      "authors": "Hong and Nguyen",
+      "year": 2014,
+      "title": "State-space models of impulse hemodynamic responses over motor, somatosensory, and visual cortices",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4052911/",
+      "doi": "10.1364/BOE.5.001778",
+      "verified": "Published article abstract and methods description",
+      "finding": "从19名被试的平均脉冲响应通过子空间辨识构造状态空间模型；说明SSM也可以是数据驱动响应模型，不必使用Balloon内部相容式。",
+      "limit": "并非连续双Hb物理源识别，亦不证明两种Hb可以生理上任意独立变化。"
+    }
+  ]
+}

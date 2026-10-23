@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-20; payload-pruning record retained from
+_Evidence surface updated 2026-10-22; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -26,6 +26,7 @@ explains the path hierarchy and reading order.
 
 | Research question | Suite root | Evidence entry |
 | --- | --- | --- |
+| Does the missing independent common-volume direction restrict sustained 30/90 s Hb reconstruction? | `shared_driver_reconstruction/` | [30/90 s volume-drive diagnostic](#continuous-hb-compatibility-and-independent-volume-direction--2026-10-22) |
 | Do local channels, geometry and independent dynamics contribute separately? | `shared_driver_spatial/` | [Complete spatial experiment](#local-spatial-complete-experiment--2026-10-20), [initial software evidence](#local-spatial-software-and-metadata--2026-10-16) |
 | How do the diagnostic families compare across datasets? | Multiple suites, resolved by the report evidence map | [REFED and four-dataset comparison](#refed-backfill-and-four-dataset-comparison--2026-10-13) |
 | What does a fixed shared driver reconstruct, and how do observation and solver choices affect it? | `shared_driver_reconstruction/` | [Fixed-structure semantics](#fixed-structure-physiology-semantics--2026-09-28), [EEG proxy rates](#eeg-proxy-sampling-rate-comparison--2026-10-10), [reconstruction diagnostics](#reconstruction-and-measurement-diagnostics) |
@@ -49,6 +50,29 @@ Some run and checkpoint paths below point to local Git-ignored artifacts that re
 useful in this workspace but are not part of the tracked paper record. For manuscript
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
+
+## Continuous Hb compatibility and independent volume direction — 2026-10-22
+
+The versioned [contract](configs/physiology_semantic_tokenizer/shared_driver_volume_drive_v1.yaml)
+reads the exact public continuous-record parents named in its
+[plan](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/plan.json).
+Retain the [owning summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/summary.json),
+[paired endpoints](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/metrics.csv),
+[primary-source literature audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/literature.json),
+[Chinese bitmap report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/report_v2/REPORT.pdf),
+and [independent score/observation checks](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/report_v2/verification.json).
+The original run's resolved configuration, source snapshot, launch records,
+resource choices, complete synthetic/linear/measured task JSON and trajectory NPZ
+remain the audit package. Git retains the byte-preserving `source_snapshot.tar.gz`;
+extract it in this run directory to restore the recorded source paths and patch.
+Report v1 is the retained first export; v2 corrects one
+unsupported superscript glyph without changing numerical evidence.
+
+Full-window reconstruction, Hb-only compatibility, blocked interpolation,
+same-center shape comparisons and equal-capacity exchange controls have distinct
+endpoints. A fitted common component does not identify its anatomical source;
+linear minimum residuals may require nonphysical state excursions. This package
+does not qualify a physiological teacher or replace the original measured data.
 
 ## Four independent fit/recovery diagnostics — 2026-10-21
 

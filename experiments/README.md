@@ -63,6 +63,17 @@ Measurement caches, coordinate and scale audits, native Hb summaries and optical
 
 ### Shared-driver reconstruction and reliability
 
+Continuous 30/90 s Hb compatibility and independent common-volume diagnostics use
+[`scripts/evaluate_shared_driver_reconstruction.py`](scripts/evaluate_shared_driver_reconstruction.py)
+`--volume-drive-diagnostic --volume-stage <pilot|synthetic|linear|measured|summarize>`
+with [`shared_driver_volume_drive_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_volume_drive_v1.yaml).
+Run `--check-only` and `tests/test_shared_driver_volume_drive.py` first; substantial
+stages use a durable supervisor. The [protocol](../docs/EXPERIMENT_PLAN.md#单一血流驱动的-hb-相容性与-3090-秒持续波动2026-10-22)
+restricts reads to the two named public output-support parents and distinguishes
+reconstruction, blocked interpolation and source attribution.
+The existing renderer accepts `--volume-drive-diagnostic --run <completed_run>
+--output <fresh_export>` for the Chinese bitmap PDF/HTML report and figure atlas.
+
 Shared dynamics, conditional reconstruction, input/geometry controls and parameter or state reliability.
 
 The [four independent fit/recovery diagnostics](../docs/EXPERIMENT_PLAN.md#拟合观测信息与生理恢复的四套独立诊断2026-10-21)

@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-21T09:41:52.571546+00:00",
+  "updated_at": "2026-10-22T10:24:24.248931+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1970,6 +1970,42 @@
       "id": "e.mechanism_attribution_report_checks",
       "label": "mechanism_attribution报告位图可读性核验",
       "path": "docs/report/20261021_mechanism_attribution_v2/delivery_checks.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_volume_drive_contract",
+      "label": "30/90秒共同血容量方向诊断合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_volume_drive_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.shared_driver_volume_drive_summary",
+      "label": "30/90秒共同方向诊断完整结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_volume_drive_literature",
+      "label": "血流动力独立输入的原始文献核查",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/literature.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_volume_drive_verification",
+      "label": "30/90秒结果独立复算与数值核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/report_v2/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_volume_drive_report",
+      "label": "30/90秒共同方向诊断中文报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/report_v2/REPORT.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_volume_drive_resources",
+      "label": "30/90秒诊断监督运行与资源选择",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/resources.json",
       "role": "diagnostic"
     }
   ],
@@ -5679,6 +5715,33 @@
       ],
       "headline": false,
       "next_step": null
+    },
+    {
+      "state_id": "main.shared_driver_volume_drive@2026-10-22.v1",
+      "entity": "main.shared_driver_volume_drive",
+      "label": "独立共同血容量方向与30/90秒Hb重建",
+      "track": "main",
+      "order": 188,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "4公开数据集24评价被试48连续记录，30/90秒配对；432合成及864实测拟合全部收敛并通过积分复核。共同方向使联合Hb重建RMSE在Single-Trial降低25.4%/29.8%，Simultaneous降低18.4%/41.9%，Visual降低8.4%/11.3%，REFED降低2.0%/3.2%。同区间与等容量交换对照支持前两者的动态限制，但部分遮挡收益区间跨零，额外项真实来源未识别；不授予生理资格。",
+      "evidence_ids": [
+        "e.shared_driver_volume_drive_contract",
+        "e.shared_driver_volume_drive_summary",
+        "e.shared_driver_volume_drive_literature",
+        "e.shared_driver_volume_drive_verification",
+        "e.shared_driver_volume_drive_report",
+        "e.shared_driver_volume_drive_resources"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-22T10:24:24.248931+00:00",
+      "depends_on": [
+        "main.ssm_output_support"
+      ],
+      "headline": false,
+      "next_step": "无已启动的后续运行；建议用短距通道或系统生理参照约束额外共同过程，再检验跨记录泛化及来源归属。"
     }
   ]
 }

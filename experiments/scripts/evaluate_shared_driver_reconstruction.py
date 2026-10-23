@@ -7137,6 +7137,436 @@ def attribution_main(args):
     finally:write_json(manifest,state)
 
 
+def volume_drive_config(path):
+    cfg = yaml.safe_load(Path(path).read_text())
+    expected = ['experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1',
+                'experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261013_refed_v2']
+    if (cfg.get('schema') != 'shared_driver_volume_drive_v1'
+            or cfg.get('experiment_id') != 'SSM-VOLUME-DRIVE-v1'
+            or cfg['parents'] != expected or cfg['data']['protected_data'] != 'forbidden'
+            or cfg['data']['raw_reads'] or cfg['data']['labels_as_inputs']
+            or cfg['tensor']['lengths_s'] != [30, 90] or cfg['tensor']['dt_s'] != .25
+            or cfg['tensor']['slices'] != [[120, 240], [0, 360]]
+            or cfg['component']['modes'] != {30: 6, 90: 18}
+            or cfg['conditions'] != ['joint_full', 'Hb_only_full', 'joint_blocked']):
+        raise ValueError('volume-drive contract boundary violated')
+    return cfg
+
+
+def volume_drive_parameters(cfg, **changes):
+    p = dict(cfg['parameters']); p.pop('policy')
+    p.update(changes)
+    free = BalloonFreeParameters(tau=p.pop('tau'), kappa=p.pop('kappa'))
+    return BalloonParameters(fixed=BalloonFixedParameters(**p), free=free)
+
+
+def volume_drive_plan(cfg, root):
+    """Metadata-only admission of exact completed public parent records."""
+    refs = []
+    for relative in cfg['parents']:
+        parent = Path(root)/relative
+        summary = json.loads((parent/'summary.json').read_text())
+        plan = json.loads((parent/'plan.json').read_text())
+        pcfg = yaml.safe_load((parent/'resolved_config.yaml').read_text())
+        coordinates = json.loads((parent/'coordinates.json').read_text())
+        if (summary['schema'] != 'ssm_output_support_summary_v1' or summary['status'] != 'completed'
+                or plan['schema'] != 'ssm_output_support_plan_v1'
+                or pcfg['data']['protected_data'] != 'forbidden'
+                or pcfg['schema'] not in ('ssm_output_support_v1', 'ssm_output_support_refed_v2')):
+            raise ValueError('completed public output-support parent boundary violated')
+        for record in plan['records']:
+            if record['partition'] != 'evaluation':
+                continue
+            if (record['dataset'] not in cfg['data']['datasets'] or record['duration_s'] != 90
+                    or Path(record['id']).name != record['id']
+                    or record['subject'] in coordinates[record['coordinate']]['training_subjects']
+                    or record['subject'] not in plan['evaluation_subjects'][record['dataset']]):
+                raise ValueError('public evaluation identity or training-coordinate boundary violated')
+            refs.append(dict(record, parent=relative))
+    identities = [(r['dataset'], r['id']) for r in refs]
+    if len(identities) != len(set(identities)):
+        raise ValueError('duplicate public record identity')
+    return dict(schema='shared_driver_volume_drive_plan_v1', records=refs,
+        measured_arrays_read=0, sample_lengths_s=cfg['tensor']['lengths_s'],
+        independent_subjects={ds: len({r['subject'] for r in refs if r['dataset'] == ds})
+                              for ds in cfg['data']['datasets']},
+        paired_windows='middle_30_seconds_and_whole_original_90_seconds',
+        source='parent native continuous record; no concatenation of independent trials')
+
+
+def volume_drive_crop(y, operators, length_s):
+    """Re-reference the same retained samples; drop the final interpolation bin.
+
+    Cancellation of the old constant reference is checked in the FULL operator,
+    before restricting its columns. Every used row has zero dependence outside
+    the cropped model support. No new interpolation of measured data occurs.
+    """
+    if length_s not in (30, 90) or np.shape(y) != (360, 3):
+        raise ValueError('expected a 90s parent and 30/90s sample length')
+    left, right = (120, 240) if length_s == 30 else (0, 360)
+    n = right-left
+    reference = np.eye(n); reference[:, :20] -= 1/20
+    target = reference@np.asarray(y)[left:right]
+    operator = np.zeros((3*n, 3*n))
+    outside = np.r_[np.arange(left), np.arange(right, 360)]
+    for column, name in enumerate(('eeg', 'hb', 'hb')):
+        original = np.asarray(operators[name], float)
+        if original.shape != (360, 360) or not np.isfinite(original).all():
+            raise ValueError('invalid parent observation operator')
+        complete = reference@original[left:right]
+        if outside.size and np.max(np.abs(complete[:-1, outside])) > 1e-12:
+            raise ValueError('cropped visible bins depend on outside-window values')
+        operator[column::3, column::3] = complete[:, left:right]
+    if not np.isfinite(target).all():
+        raise ValueError('nonfinite retained public target')
+    return target, operator
+
+
+def volume_drive_arrays(cfg, root, ref, length_s):
+    # This reader consumes the parent producer's prepared schema, never raw data.
+    if ref['parent'] not in cfg['parents'] or ref['partition'] != 'evaluation':
+        raise ValueError('unregistered prepared-array boundary')
+    parent = Path(root)/ref['parent']
+    identity = next((r for r in json.loads((parent/'plan.json').read_text())['records']
+                     if r['id'] == ref['id']), None)
+    if identity is None or any(identity[k] != ref[k] for k in ('dataset','subject','coordinate','partition')):
+        raise ValueError('parent identity mismatch before array read')
+    co = json.loads((parent/'coordinates.json').read_text())[ref['coordinate']]
+    if ref['subject'] in co['training_subjects']:
+        raise ValueError('training/evaluation overlap')
+    prepared = json.loads((parent/'tasks'/'prepare'/(ref['id']+'.json')).read_text())
+    if prepared['status'] != 'completed':
+        raise ValueError('parent preparation failed')
+    with np.load(parent/'prepared'/(ref['id']+'.npz'), allow_pickle=False) as a:
+        if a['eeg'].shape != (360,30) or a['hb'].shape != (360,2):
+            raise ValueError('parent prepared shape mismatch')
+        y = np.column_stack((a['eeg']@np.asarray(co['pc'])*co['eeg_factor'], a['hb']*co['hb_factor']))
+        ops = dict(eeg=a['eeg_operator'], hb=a['hb_operator'])
+        target, operator = volume_drive_crop(y, ops, length_s)
+    sd = np.asarray(co['sd'], float)
+    if sd.shape != (3,) or not np.isfinite(sd).all() or np.any(sd <= 0):
+        raise ValueError('invalid frozen training scale')
+    return target, operator, sd
+
+
+def volume_drive_basis(cfg, operator, sd, arm):
+    from src.inference.shared_driver_reconstruction import waveform_component_basis
+    if arm == 'base':
+        return None
+    n = len(operator)//3
+    basis = waveform_component_basis(volume_drive_parameters(cfg), n, .25, operator,
+        arm, modes=cfg['component']['modes'][int(n*.25)])
+    scale = np.sqrt(np.mean((basis.reshape(n,3,-1)[:-1,1:]/sd[None,1:,None])**2, axis=(0,1)))
+    if np.any(scale <= 1e-12):
+        raise ValueError('degenerate independent component')
+    return basis/scale
+
+
+def volume_drive_mask(n, condition):
+    if n not in (120,360) or condition not in ('joint_full','Hb_only_full','joint_blocked'):
+        raise ValueError('unregistered sample shape or condition')
+    mask = np.ones((n,3), bool); mask[-1] = False
+    if condition == 'Hb_only_full':
+        mask[:,0] = False
+    if condition == 'joint_blocked':
+        for start in range(0,n,120):
+            mask[start+40:start+60,1:] = False
+            mask[start+80:start+100,1:] = False
+    return mask
+
+
+def volume_drive_metrics(target, prediction, sd, condition):
+    from scipy.fft import dct
+    y, pred = np.asarray(target), np.asarray(prediction)
+    n = len(y); error = (pred-y)/sd
+    valid = np.ones(n,bool); valid[-1] = False
+    mask = volume_drive_mask(n,condition)
+    score = ~mask[:,1] & valid if condition == 'joint_blocked' else valid
+    center = np.zeros(n,bool); center[120:239] = True if n == 360 else False
+    if n == 120: center = valid.copy()
+    tail = np.zeros(n,bool); tail[-120:-1] = True
+    result = dict(full_hb_nmse=float(np.mean(error[valid,1:]**2)),
+        score_hb_nmse=float(np.mean(error[score,1:]**2)),
+        center_hb_nmse=float(np.mean(error[center,1:]**2)),
+        tail_hb_nmse=float(np.mean(error[tail,1:]**2)),
+        full_hbo_nmse=float(np.mean(error[valid,1]**2)),
+        full_hbr_nmse=float(np.mean(error[valid,2]**2)),
+        eeg_nmse=float(np.mean(error[valid,0]**2)),
+        hbt_training_component_scale_nmse=float(np.mean((pred[valid,1:].sum(1)-y[valid,1:].sum(1))**2)/np.sum(sd[1:]**2)),
+        target_hb_correlation=float(np.corrcoef(y[valid,1:].T)[0,1]),
+        local_hb_nmse=float(np.mean(((pred[valid,1:]-y[valid,1:])/np.maximum(y[valid,1:].std(0),1e-12))**2)))
+    # DCT on the scored support, identical for target and reconstruction. The
+    # narrow physical band is a descriptive waveform endpoint, not a fit filter.
+    spectrum = dct(error[valid,1:], axis=0, norm='ortho')
+    freq = np.arange(valid.sum())/(2*valid.sum()*.25)
+    band = (freq >= 1/30-1e-12)&(freq <= .1+1e-12)
+    result['oscillation_band_nmse'] = float(np.sum(spectrum[band]**2)/(2*valid.sum()))
+    return result
+
+
+def volume_drive_synthetic(cfg, seed, scenario, length_s):
+    from src.inference.observation_baselines import disjoint_native_bin_operator
+    from src.inference.shared_driver_rk4 import compiled_forward
+    p = volume_drive_parameters(cfg); t = np.arange(360)*.25
+    rng = np.random.default_rng(np.random.SeedSequence([cfg['seed'],seed,9101]))
+    driver = .024*np.sin(2*np.pi*.043*t+rng.uniform(-np.pi,np.pi))+.012*np.cos(2*np.pi*.077*t)
+    initial = np.array([0.,1.,1.,1.,1.])
+    if scenario == 'nonrest': initial = np.array([.01,1.03,.98,1.03,1.01])
+    forward = compiled_forward(driver,initial,p,.25,8,False,False,state=True)
+    ops = disjoint_native_bin_operator(np.arange(900)/10.)
+    operators = dict(eeg=ops['eeg'],hb=ops['model'])
+    canonical = forward['canonical_prediction'].copy()
+    sd = np.array([.025,.025,.015])
+    extra = np.zeros_like(canonical)
+    if scenario in ('volume','exchange'):
+        direction = np.array(cfg['component']['loading'][scenario])
+        direction /= np.sqrt(np.mean((direction/sd[1:])**2))
+        wave = np.sqrt(2)*np.cos(np.pi*(np.arange(360)+.5)*9/360)
+        extra[:,1:] = wave[:,None]*direction
+    clean = canonical+extra
+    noise = rng.normal(size=clean.shape)*sd*cfg['synthetic']['noise_training_sd']
+    observed = np.column_stack((operators['eeg']@(clean[:,0]+noise[:,0]),
+                               operators['hb']@(clean[:,1:]+noise[:,1:])))
+    target, operator = volume_drive_crop(observed,operators,length_s)
+    truth, _ = volume_drive_crop(np.column_stack((operators['eeg']@clean[:,0],operators['hb']@clean[:,1:])),operators,length_s)
+    return target, operator, sd, truth
+
+
+def volume_drive_linear(cfg, target, operator, sd):
+    from itertools import product
+    from scipy.linalg import svd
+    from src.inference.shared_driver_reconstruction import _volume_tied_initial_embedding
+    n = len(target); rows = []
+    def project(p, condition, arm, rcond):
+        d = build_shared_driver_design(p,n,.25,processed_mean_operator=operator)
+        x = d.observation_design
+        if arm == 'tied_initial': x = x@_volume_tied_initial_embedding(n)
+        if arm in ('volume','exchange'): x = np.column_stack((x,volume_drive_basis(cfg,operator,sd,arm)))
+        mask = volume_drive_mask(n,condition); scale = np.tile(sd,(n,1))
+        w = scale[mask]
+        u,s,vt = svd(x[mask.ravel()]/w[:,None],full_matrices=False,check_finite=False)
+        keep = s > s[0]*rcond
+        b = ((target-d.offset)[mask]/w)
+        coef = (vt[keep].T/s[keep])@(u[:,keep].T@b)
+        pred = (x@coef).reshape(n,3)+d.offset
+        canonical_coef = _volume_tied_initial_embedding(n)@coef if arm == 'tied_initial' else coef[:n+5]
+        states = np.einsum('tij,j->ti',d.state_design,canonical_coef)
+        return dict(**volume_drive_metrics(target,pred,sd,condition),rank=int(keep.sum()),
+            max_linear_state_excursion=float(np.max(np.abs(states[:,1:]))))
+    p = volume_drive_parameters(cfg)
+    for condition in ('joint_full','Hb_only_full'):
+        for arm in cfg['linear']['arms']:
+            for rcond in cfg['linear']['rconds']:
+                rows.append(dict(condition=condition,arm=arm,rcond=rcond,**project(p,condition,arm,rcond)))
+    grid = cfg['linear']['parameter_grid']; profile = []
+    for tau,alpha,e0 in product(grid['tau'],grid['alpha'],grid['E0']):
+        pp = volume_drive_parameters(cfg,tau=tau,alpha=alpha,E0=e0)
+        profile.append(dict(tau=tau,alpha=alpha,E0=e0,
+            **project(pp,'Hb_only_full','free_initial',cfg['linear']['rconds'][0])))
+    best = min(profile,key=lambda r:r['full_hb_nmse'])
+    rows.append(dict(condition='Hb_only_full',arm='parameter_grid_best',rcond=cfg['linear']['rconds'][0],**best))
+    return rows, profile
+
+
+def volume_drive_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
+    from src.inference.shared_driver_rk4 import compiled_forward
+    cfg,root,out,stage,spec = payload
+    start = time.perf_counter(); out = Path(out)
+    folder = out/stage; folder.mkdir(parents=True,exist_ok=True)
+    result = dict(spec=spec,key=spec['key'],rows=[],status='failed',started_at=datetime.now(timezone.utc).isoformat())
+    arrays = {}
+    try:
+        if spec.get('synthetic'):
+            y,op,sd,truth = volume_drive_synthetic(cfg,spec['seed'],spec['scenario'],spec['length_s'])
+        else:
+            y,op,sd = volume_drive_arrays(cfg,root,spec['ref'],spec['length_s']); truth = None
+        arrays.update(target=y,operator=op,sd=sd)
+        if stage == 'linear':
+            result['rows'],result['parameter_profile'] = volume_drive_linear(cfg,y,op,sd)
+        else:
+            p = volume_drive_parameters(cfg); condition = spec['condition']
+            mask = volume_drive_mask(len(y),condition); visible_y = y.copy(); visible_y[~mask] = np.nan
+            arrays['visible'] = mask
+            base = None
+            for arm in cfg['component']['arms']:
+                starts = [dict(driver=np.zeros(len(y)),initial_state=np.r_[0.,np.ones(4)])]
+                if base is not None and 'driver' in base:
+                    starts.insert(0,dict(driver=base['driver'],initial_state=base['initial_state']))
+                basis = volume_drive_basis(cfg,op,sd,arm)
+                s = cfg['solver']
+                fit = fit_nonlinear_shared_driver(visible_y,p,.25,sd=sd,mean_operator=op,visible=mask,
+                    starts=starts,penalty=s['penalty'],initial_penalty=s['initial_penalty'],
+                    flow_prior_weight=s['flow_prior_weight'],flow_prior_log_sd=s['flow_prior_log_sd'],
+                    max_evaluations=s['max_evaluations'],gradient_tolerance=s['gradient_tolerance'],
+                    substeps=s['substeps'],numerical_backend=s['numerical_backend'],
+                    observation_basis=basis,observation_coefficient_sd=cfg['component']['coefficient_sd'])
+                if arm == 'base': base = fit
+                row = dict(arm=arm,condition=condition,converged=fit['converged'],fit_status=fit['status'],
+                    starts=fit['starts'],evaluations=fit['evaluations'])
+                if 'prediction' in fit:
+                    finer = compiled_forward(fit['driver'],fit['initial_state'],p,.25,s['validation_substeps'],False,False)
+                    fine_pred = (op@finer['canonical_prediction'].ravel()).reshape(y.shape)+fit['observation_component']
+                    integration = float(np.max(np.abs((fine_pred-fit['prediction'])[:-1]/sd)))
+                    row.update(integration_max_training_sd=integration,
+                        qualified=bool(fit['converged'] and integration <= s['maximum_integration_difference_training_sd']),
+                        objective=fit['objective'],scaled_gradient=fit['scaled_gradient_inf_norm'],
+                        **volume_drive_metrics(y,fit['prediction'],sd,condition))
+                    delta = fit['states'][:,4]-fit['states'][:,3]
+                    row['p_minus_v_abs_increases'] = int(np.sum(np.diff(np.abs(delta))>1e-8))
+                    row['initial_p_minus_v'] = float(delta[0])
+                    row['final_p_minus_v'] = float(delta[-1])
+                    if truth is not None:
+                        row['noiseless_hb_nmse'] = volume_drive_metrics(truth,fit['prediction'],sd,condition)['full_hb_nmse']
+                    for name in ('prediction','physical_prediction','observation_component','states','driver','initial_state','observation_coefficients'):
+                        arrays[arm+'_'+name] = fit[name]
+                else:
+                    row['qualified'] = False
+                result['rows'].append(row)
+        result['status'] = 'completed'
+    except Exception:
+        result['error'] = traceback.format_exc()
+    result.update(seconds=time.perf_counter()-start,max_rss_mb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    if arrays:
+        np.savez_compressed(folder/(spec['key']+'.npz'),**arrays)
+    write_json(folder/(spec['key']+'.json'),result)
+    return dict(key=spec['key'],status=result['status'],seconds=result['seconds'],max_rss_mb=result['max_rss_mb'])
+
+
+def volume_drive_specs(cfg,plan,stage):
+    specs = []
+    if stage in ('synthetic','pilot'):
+        for seed in (cfg['synthetic']['seeds'] if stage == 'synthetic' else [0]):
+            for scenario in (cfg['synthetic']['scenarios'] if stage == 'synthetic' else ['matched','volume']):
+                for length in cfg['tensor']['lengths_s']:
+                    for condition in (cfg['conditions'] if stage == 'synthetic' else ['joint_full']):
+                        specs.append(dict(synthetic=True,seed=seed,scenario=scenario,length_s=length,condition=condition,
+                            dataset='synthetic',subject=str(seed),id=f'seed{seed}_{scenario}',
+                            key=f's{seed}_{scenario}_{length}_{condition}'))
+    else:
+        for ref in plan['records']:
+            for length in cfg['tensor']['lengths_s']:
+                for condition in (['all'] if stage == 'linear' else cfg['conditions']):
+                    specs.append(dict(ref=ref,length_s=length,condition=condition,dataset=ref['dataset'],
+                        subject=ref['subject'],id=ref['id'],key=f'{ref["id"]}_{length}_{condition}'))
+    return specs
+
+
+def volume_drive_summarize(cfg,out,plan):
+    out = Path(out); all_rows = []; manifests = {}
+    for stage in ('pilot','synthetic','linear','measured'):
+        specs = volume_drive_specs(cfg,plan,stage); counts = dict(planned=len(specs),terminal=0,completed=0,failed=0)
+        for spec in specs:
+            path = out/stage/(spec['key']+'.json')
+            if not path.exists(): continue
+            task = json.loads(path.read_text()); counts['terminal'] += 1
+            counts['completed' if task['status']=='completed' else 'failed'] += 1
+            for row in task['rows']:
+                all_rows.append(dict(stage=stage,dataset=spec['dataset'],subject=spec['subject'],id=spec['id'],
+                    length_s=spec['length_s'],key=spec['key'],scenario=spec.get('scenario','measured'),
+                    **{k:v for k,v in row.items() if k!='starts'}))
+        manifests[stage] = counts
+    frame = pd.DataFrame(all_rows); frame.to_csv(out/'metrics.csv',index=False)
+    summaries = []; paired = []
+    metrics = ['full_hb_nmse','score_hb_nmse','center_hb_nmse','tail_hb_nmse','full_hbo_nmse','full_hbr_nmse',
+               'oscillation_band_nmse','local_hb_nmse','hbt_training_component_scale_nmse','eeg_nmse']
+    for keys,g in frame.groupby(['stage','dataset','scenario','length_s','condition','arm'],dropna=False):
+        if keys[0]=='linear': g = g[np.isclose(g.rcond,cfg['linear']['rconds'][0])]
+        good = g if keys[0]=='linear' else g[g.qualified==True]
+        row = dict(zip(['stage','dataset','scenario','length_s','condition','arm'],keys))
+        row.update(planned=len(g),qualified=len(good),subjects=int(good.subject.nunique()))
+        for metric in metrics:
+            row[metric.replace('nmse','nrmse')] = float(np.sqrt(good.groupby('subject')[metric].mean().mean())) if len(good) else None
+        summaries.append(row)
+    for keys,g in frame[frame.stage.isin(['measured','synthetic'])].groupby(['stage','dataset','scenario','length_s','condition']):
+        for candidate in ('volume','exchange'):
+            base=g[g.arm=='base']; extra=g[g.arm==candidate]
+            merged=base.merge(extra,on=['subject','id'],suffixes=('_base','_extra'))
+            good=merged[(merged.qualified_base==True)&(merged.qualified_extra==True)]
+            item=dict(zip(['stage','dataset','scenario','length_s','condition'],keys),candidate=candidate,
+                planned_pairs=len(base),qualified_pairs=len(good),subjects=int(good.subject.nunique()))
+            for metric in metrics:
+                if not len(good): continue
+                units=good.groupby('subject')[[metric+'_base',metric+'_extra']].mean().to_numpy()
+                br,er=np.sqrt(units.mean(0));delta=br-er
+                rng=np.random.default_rng(cfg['seed'])
+                indices=rng.integers(0,len(units),size=(cfg['endpoints']['bootstrap_repeats'],len(units)))
+                boot=np.sqrt(units[indices].mean(1)); ci=np.quantile(boot[:,0]-boot[:,1],[.025,.975])
+                item[metric]=dict(base_nrmse=br,candidate_nrmse=er,improvement=delta,ci95=ci,
+                    relative_rmse_reduction=delta/br if br>0 else None)
+            paired.append(item)
+    write_json(out/'summary.json',dict(schema='shared_driver_volume_drive_summary_v1',experiment_id=cfg['experiment_id'],
+        status='completed' if all(manifests[s]['terminal']==manifests[s]['planned'] for s in ('synthetic','linear','measured')) else 'in_progress',
+        stages=manifests,independent_subjects=plan['independent_subjects'],groups=summaries,paired=paired,
+        inference='conditional public reanalysis; extra compartment source unidentifiable; no confirmation or teacher qualification'))
+    pd.DataFrame(summaries).to_csv(out/'group_summary.csv',index=False)
+    return manifests
+
+
+def volume_drive_main(args):
+    cfg = volume_drive_config(args.config)
+    if args.check_only:
+        print(json.dumps(dict(experiment_id=cfg['experiment_id'],measured_arrays_read=0,config_valid=True)))
+        return
+    if args.run_dir is None: raise ValueError('fresh explicit run directory required')
+    root=args.project_root.resolve();out=args.run_dir.resolve()
+    if not out.is_relative_to(root/cfg['output_root']): raise ValueError('volume-drive output namespace mismatch')
+    out.mkdir(parents=True,exist_ok=True)
+    config_path=out/'resolved_config.yaml'
+    if config_path.exists() and yaml.safe_load(config_path.read_text())!=cfg:
+        raise ValueError('resume configuration mismatch')
+    if not config_path.exists(): config_path.write_text(yaml.safe_dump(cfg,sort_keys=False,allow_unicode=True))
+    plan=volume_drive_plan(cfg,root)
+    if (out/'plan.json').exists() and json.loads((out/'plan.json').read_text())!=serial(plan):
+        raise ValueError('resume parent plan mismatch')
+    write_json(out/'plan.json',plan)
+    stage=args.volume_stage
+    if stage=='summarize':
+        print(volume_drive_summarize(cfg,out,plan));return
+    if stage in ('linear','measured'):
+        synthetic=out/'synthetic'
+        expected=volume_drive_specs(cfg,plan,'synthetic')
+        if not all((synthetic/(s['key']+'.json')).is_file() for s in expected):
+            raise ValueError('complete independent synthetic controls required before measured array reads')
+        for spec in expected:
+            task=json.loads((synthetic/(spec['key']+'.json')).read_text())
+            if task['status']!='completed': raise ValueError('synthetic software failure before measured read')
+    specs=volume_drive_specs(cfg,plan,stage)
+    workers=min(args.workers,cfg['resources']['max_workers'],len(specs))
+    if workers<1: raise ValueError('positive worker count required')
+    folder=out/stage;folder.mkdir(exist_ok=True)
+    with (out/'run.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        pending=[s for s in specs if not (folder/(s['key']+'.json')).exists()]
+        write_json(out/(stage+'_manifest.json'),dict(status='running',planned=len(specs),previous_terminal=len(specs)-len(pending),
+            workers=workers,numerical_threads=1,pid=os.getpid(),started_at=datetime.now(timezone.utc).isoformat()))
+        completed=len(specs)-len(pending);iterator=iter(pending)
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            active={}
+            def submit():
+                spec=next(iterator,None)
+                if spec is None:return False
+                active[pool.submit(volume_drive_worker,(cfg,str(root),str(out),stage,spec))]=spec
+                return True
+            for _ in range(workers*cfg['resources']['in_flight_per_worker']):
+                if not submit():break
+            while active:
+                done,_=wait(active,return_when=FIRST_COMPLETED)
+                for future in done:
+                    spec=active.pop(future)
+                    try: result=future.result()
+                    except Exception:
+                        result=dict(key=spec['key'],status='failed',spec=spec,rows=[],error=traceback.format_exc())
+                        write_json(folder/(spec['key']+'.json'),result)
+                    completed+=1
+                    print(json.dumps(dict(stage=stage,terminal=completed,total=len(specs),**result)),flush=True)
+                    write_json(out/'progress.json',dict(stage=stage,terminal=completed,total=len(specs),last=result))
+                    submit()
+        write_json(out/(stage+'_manifest.json'),dict(status='completed',planned=len(specs),terminal=completed,
+            workers=workers,numerical_threads=1,completed_at=datetime.now(timezone.utc).isoformat()))
+    print(volume_drive_summarize(cfg,out,plan))
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config',type=Path,default=DEFAULT)
@@ -7157,6 +7587,8 @@ def main():
     ap.add_argument('--conditional-optical-gain-fit',action='store_true')
     ap.add_argument('--conditional-step-control',action='store_true')
     ap.add_argument('--waveform-diagnostic',action='store_true')
+    ap.add_argument('--volume-drive-diagnostic',action='store_true')
+    ap.add_argument('--volume-stage',choices=['pilot','synthetic','linear','measured','summarize'],default='synthetic')
     ap.add_argument('--physiology-semantics',action='store_true')
     ap.add_argument('--teacher-robustness',action='store_true')
     ap.add_argument('--component-attribution',action='store_true')
@@ -7166,6 +7598,13 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.volume_drive_diagnostic:
+        if any((args.component_attribution,args.teacher_robustness,args.physiology_semantics,args.waveform_diagnostic,
+                args.conditional_step_control,args.conditional_optical_gain_fit,args.fixed_roi_optical_fit,
+                args.fixed_roi_initial_fit,args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,args.gain_prior_fit,
+                args.nonlinear_fit,args.replay_of is not None)):
+            ap.error('volume-drive diagnostic has a separate versioned contract')
+        return volume_drive_main(args)
     if args.component_attribution:
         if any((args.teacher_robustness,args.physiology_semantics,args.waveform_diagnostic,args.conditional_step_control,
                 args.conditional_optical_gain_fit,args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,

@@ -7470,6 +7470,311 @@ def render_refed_comparison(config_path, out):
     print(json.dumps(dict(ppt=str(ppt),pdf=str(ppt.with_suffix('.pdf')),**audit),ensure_ascii=False))
 
 
+def render_volume_drive(run, out):
+    """Read-only 30/90s audit: searchable prose and complete PNG figures."""
+    import html
+    import shutil
+    import subprocess
+    import yaml
+    if out.exists() and any(out.iterdir()):
+        raise ValueError('choose a fresh versioned volume-drive export')
+    summary=json.loads((run/'summary.json').read_text())
+    cfg=yaml.safe_load((run/'resolved_config.yaml').read_text())
+    plan=json.loads((run/'plan.json').read_text())
+    literature=json.loads((run/'literature.json').read_text())
+    if summary['schema']!='shared_driver_volume_drive_summary_v1' or summary['status']!='completed':
+        raise ValueError('completed volume-drive evidence required')
+    out.mkdir(parents=True,exist_ok=True);figdir=out/'figures';figdir.mkdir();formdir=out/'formulas';formdir.mkdir()
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':10,'axes.unicode_minus':False,'axes.spines.top':False,'axes.spines.right':False,'mathtext.fontset':'stix'})
+    frame=pd.read_csv(run/'metrics.csv');groups=pd.DataFrame(summary['groups'])
+    datasets=cfg['data']['datasets'];names=dict(zip(datasets,['Single-Trial','Simultaneous','Visual','REFED']))
+    colors={'base':'#C66B24','volume':'#2476B4','exchange':'#41856B'}
+    labels={'base':'原模型','volume':'加共同成分','exchange':'加交换成分'}
+    images=[];image_sources=[];pages=[]
+    def paragraph(s):return '<p>'+s+'</p>'
+    def tab(headers,rows):
+        return '<table><tr>'+''.join('<th>'+html.escape(str(x))+'</th>' for x in headers)+'</tr>'+''.join('<tr>'+''.join('<td>'+html.escape(str(x))+'</td>' for x in row)+'</tr>' for row in rows)+'</table>'
+    def image_tag(path,width=520):
+        return '<p class="figure"><img width="'+str(width)+'" src="'+str(path.relative_to(out))+'"></p>'
+    def page(title,body):pages.append('<h1>'+title+'</h1>'+body)
+    def save(fig,name,caption,source):
+        fig.tight_layout(rect=(0,0,1,.94));path=figdir/(name+'.png')
+        fig.savefig(path,dpi=240,bbox_inches='tight');plt.close(fig);images.append(path)
+        image_sources.append(dict(file=str(path.relative_to(out)),caption=caption,source=source))
+        return image_tag(path)+paragraph(caption)
+    def equation(name,latex):
+        tex=formdir/(name+'.tex')
+        tex.write_text(r'\documentclass[12pt]{article}'+'\n'+r'\usepackage{amsmath,amssymb}'+'\n'
+            +r'\usepackage[paperwidth=14in,paperheight=4in,margin=.2in]{geometry}'+'\n'
+            +r'\pagestyle{empty}\begin{document}\fontsize{22}{28}\selectfont\['+latex+r'\]\end{document}'+'\n')
+        command=[shutil.which('pdflatex') or '/home/uais0/.local/bin/pdflatex','-interaction=nonstopmode','-halt-on-error',tex.name]
+        result=subprocess.run(command,cwd=formdir,text=True,capture_output=True)
+        if result.returncode:raise RuntimeError(result.stdout[-1800:])
+        with fitz.open(tex.with_suffix('.pdf')) as doc:
+            boxes=[fitz.Rect(b[:4]) for b in doc[0].get_text('blocks')];clip=boxes[0]
+            for box in boxes[1:]:clip|=box
+            path=tex.with_suffix('.png');doc[0].get_pixmap(clip=clip+(-7,-7,7,7),dpi=300,alpha=False).save(path)
+        images.append(path);image_sources.append(dict(file=str(path.relative_to(out)),source='formula LaTeX retained beside PNG',caption=name))
+        return image_tag(path)
+    def paired(dataset,length,condition,candidate='volume'):
+        return next(r for r in summary['paired'] if r['stage']=='measured' and r['dataset']==dataset and r['length_s']==length and r['condition']==condition and r['candidate']==candidate)
+    def ci_text(v):return f"{v['improvement']:.3f} [{v['ci95'][0]:.3f}, {v['ci95'][1]:.3f}]"
+    def bootstrap_pair(g,a,b):
+        units=g.groupby('subject')[[a,b]].mean().to_numpy();means=np.sqrt(units.mean(0))
+        rng=np.random.default_rng(cfg['seed']);ix=rng.integers(0,len(units),(2000,len(units)))
+        boots=np.sqrt(units[ix].mean(1));interval=np.quantile(boots[:,0]-boots[:,1],[.025,.975])
+        return dict(reference=float(means[0]),candidate=float(means[1]),improvement=float(means[0]-means[1]),ci95=interval.tolist())
+
+    # Independently rederive scores and observation closure from every saved fit.
+    checked=0;max_score_diff=0.;max_closure=0.;center_rows=[]
+    measured=frame[frame.stage=='measured']
+    for key,g in measured.groupby('key'):
+        with np.load(run/'measured'/(key+'.npz'),allow_pickle=False) as data:
+            y=data['target'];sd=data['sd'];n=len(y);valid=np.ones(n,bool);valid[-1]=False
+            expected=np.ones((n,3),bool);expected[-1]=False
+            condition=g.condition.iloc[0]
+            if condition=='Hb_only_full':expected[:,0]=False
+            if condition=='joint_blocked':
+                for start in range(0,n,120):expected[start+40:start+60,1:]=False;expected[start+80:start+100,1:]=False
+            np.testing.assert_array_equal(data['visible'],expected)
+            score=(~expected[:,1])&valid if condition=='joint_blocked' else valid
+            center=slice(120,239) if n==360 else slice(0,119)
+            item=dict(dataset=g.dataset.iloc[0],subject=str(g.subject.iloc[0]),id=g.id.iloc[0],length_s=int(g.length_s.iloc[0]))
+            for row in g.itertuples():
+                pred=data[row.arm+'_prediction'];physical=data[row.arm+'_physical_prediction'];extra=data[row.arm+'_observation_component']
+                error=(pred-y)/sd
+                scores=[np.mean(error[valid,1:]**2),np.mean(error[score,1:]**2)]
+                max_score_diff=max(max_score_diff,float(np.max(np.abs(np.array(scores)-[row.full_hb_nmse,row.score_hb_nmse]))))
+                max_closure=max(max_closure,float(np.max(np.abs(pred-physical-extra))))
+                states=data[row.arm+'_states'];delta=states[:,4]-states[:,3]
+                if np.any(np.diff(abs(delta))>1e-8):raise AssertionError('unforced delta increased')
+                canonical=np.column_stack((states[:,0],states[:,4]-1-.35*(states[:,5]-1),.35*(states[:,5]-1)))
+                np.testing.assert_allclose((data['operator']@canonical.ravel()).reshape(n,3),physical,atol=1e-11,rtol=1e-11)
+                centered=error[center,1:];item[row.arm]=float(np.mean((centered-centered.mean(0))**2))
+                checked+=1
+            if condition=='joint_full':center_rows.append(item)
+    if max_score_diff>1e-11 or max_closure>1e-11:raise AssertionError('saved evidence does not reproduce scores')
+    center_frame=pd.DataFrame(center_rows);center_summary=[];direction_summary=[]
+    for (ds,length),g in center_frame.groupby(['dataset','length_s']):
+        center_summary.append(dict(dataset=ds,length_s=int(length),**bootstrap_pair(g,'base','volume')))
+    for (ds,length),g in measured[measured.condition=='joint_full'].groupby(['dataset','length_s']):
+        wide=g.pivot(index=['subject','id'],columns='arm',values='full_hb_nmse').reset_index()
+        direction_summary.append(dict(dataset=ds,length_s=int(length),**bootstrap_pair(wide,'exchange','volume')))
+    verification=dict(schema='volume_drive_report_verification_v1',checked_measured_fits=checked,
+        max_score_recompute_difference=max_score_diff,max_prediction_component_closure=max_closure,
+        qualified_measured_fits=int(truth(measured.qualified).sum()),planned_measured_fits=len(measured),
+        max_integration_difference_training_sd=float(measured.integration_max_training_sd.max()),
+        p_minus_v_monotonicity_verified=True,hidden_masks_verified=True,
+        full_parent_and_30s_same_targets='crop outside-support cancellation covered by software tests',
+        synthetic_terminal=summary['stages']['synthetic'],linear_terminal=summary['stages']['linear'])
+    analysis=dict(schema='volume_drive_export_analysis_v1',source_summary=str(run/'summary.json'),
+        matched_center_shape=center_summary,volume_vs_exchange=direction_summary,
+        center_definition='same original seconds 30 to 59.5; residual mean removed within each Hb, frozen training SD; no refitting',
+        uncertainty='2000 paired subject-block bootstrap, six subjects per dataset, pointwise 95% intervals; no multiple-comparison correction')
+    (out/'verification.json').write_text(json.dumps(verification,ensure_ascii=False,indent=2)+'\n')
+    (out/'analysis.json').write_text(json.dumps(analysis,ensure_ascii=False,indent=2)+'\n')
+    center_frame.to_csv(out/'matched_center_per_record.csv',index=False)
+
+    main_rows=[]
+    for ds in datasets:
+        for length in (30,90):
+            v=paired(ds,length,'joint_full')['full_hb_nmse']
+            main_rows.append([names[ds],length,f"{v['base_nrmse']:.3f} → {v['candidate_nrmse']:.3f}",f"{100*v['relative_rmse_reduction']:.1f}%",ci_text(v)])
+    page('独立血容量驱动缺失：30 / 90 秒实测诊断',
+        paragraph('<b>结论：当前确定性模型的相容性限制确实存在；它对 Single-Trial 与 Simultaneous 的重建有较大影响，但不能视为四个数据集的统一主因。</b>')
+        +paragraph('2026-10-22 · 四个公开数据集，各6名评价被试、每人2条连续记录；共24名被试、48条90秒记录与其48条中间30秒样本。两种长度、三种观测条件、三个模型共864次实测拟合，全部收敛并通过4/8积分子步复核。')
+        +tab(['数据集','秒','双Hb NRMSE：原→共同','相对下降','绝对下降 [95%区间]'],main_rows)
+        +paragraph('上表为联合EEG/Hb全窗口条件重建。误差以父运行训练SD归一，先时间与Hb均方，再被试内记录平均、被试等权开平方；小值更好。区间以被试整块重采样，条件于冻结尺度，每数据集只有6个独立单元，未做多重比较校正。')
+        +paragraph('新增共同成分的符号和幅度关系与固定饱和度血容量变化一致；其真实解剖来源仍未识别。它优于等容量交换成分的证据集中在前两个数据集。隐藏Hb检查的收益较弱，不能把完整窗口拟合改善直接宣称为预测能力或生理源恢复。')
+        +paragraph('事实源：本运行 summary.json、metrics.csv、逐任务JSON/NPZ；本报告只汇总这些保留证据。'))
+
+    math=equation('delta',r'\delta=p-v,\qquad \tau\dot\delta=-v^{1/\alpha-1}\delta,\qquad \delta(t)=\delta(0)\exp\!\left[-\frac{1}{\tau}\int_0^t v(u)^{1/\alpha-1}\,du\right]')
+    math+=equation('compatibility',r'p_0=v_0\ \Longrightarrow\ p=v,\quad f=\tau\dot p+p^{1/\alpha},\qquad \tau\dot q+p^{1/\alpha-1}q=\Phi\!\left(\tau\dot p+p^{1/\alpha}\right)')
+    math+=equation('hb_map',r'H_O=P_0(p-1)-Q_0(q-1),\qquad H_R=Q_0(q-1),\qquad \Phi(f)=\frac{f}{E_0}\left[1-(1-E_0)^{1/f}\right]')
+    page('初态只增加衰减模式，不增加持续独立输入',
+        paragraph('以上关系直接由当前仓库入口平衡方程相减得到；独立ODE及正、负初差的软件测试均验证了它。')+math
+        +paragraph('f、v、p、q分别为相对静息值归一的流量、血容量、总Hb和去氧Hb；τ为秒，α、E0无量纲，P0/Q0是模型坐标的基线尺度。p−v在v&gt;0、τ&gt;0时保持初始符号且绝对值不增加；近静息、τ=2秒时，30秒后初差只剩初值约0.00000031。')
+        +paragraph('上式相容关系仅在p0=v0时直接适用；独立p0和v0须保留上述衰减项。因此本轮主拟合始终释放五个初态，并另做绑定初态的线性对照。')
+        +paragraph('Hb内部约束不含上游驱动r、β、κ、γ，单纯增加r的灵活性不能消除违反该约束的目标。但独立血管状态创新、参数随时间变化或额外观测室会改变这个结论。本报告讨论当前确定性共享驱动路径，不能直接外推到仓库旧版具有血管过程噪声的滤波器。')
+        +paragraph('实现：src/inference/t3a_balloon_robust_ssm.py 的 balloon_rhs 与 observation_map；src/inference/shared_driver_reconstruction.py 的无血管逐点创新拟合。'))
+
+    for part,selection in enumerate([literature['sources'][:3],literature['sources'][3:]]):
+        body=paragraph('这是针对性原始文献核查，不是量化“多少比例模型存在此问题”的系统综述。确定性单输入血管核心常见此类限制；完整测量模型可能已加入补偿项。')
+        for source in selection:
+            body+='<h2>'+source['authors']+' · '+str(source['year'])+'</h2>'
+            body+=paragraph('<a href="'+source['url']+'">'+html.escape(source['title'])+'</a>')
+            body+=paragraph(source['finding'])+paragraph('与当前问题的边界：'+source['limit'])
+        if part==0:
+            body+=paragraph('尤其需要区分方程版本：Tak论文印出的总Hb方程保持p/v为常数，当前仓库变体使p−v衰减。二者均未通过独立初态创造持续独立输入，但数学不变量不同。')
+        else:
+            body+=paragraph('检索未找到把本仓库的p−v衰减式与30/90秒实测损失作为同一命题直接检验的文献；这不构成首创性证明。SSM只是一种建模形式，不能据此断言所有EEG–fNIRS SSM都有相同局限。')
+        page('其他研究如何处理额外血流动力过程（'+str(part+1)+'）',body)
+
+    model=equation('extra_compartment',r'\begin{aligned} \widehat{\boldsymbol H}(t)&=\boldsymbol H_{\rm Balloon}(t)+\boldsymbol\ell\,b(t),& \boldsymbol\ell_V&=(0.65,0.35)^\top,\quad\boldsymbol\ell_X=(-0.5,0.5)^\top,\\ b(t)&=\sum_{k=1}^{K}c_k\cos\!\left[\frac{\pi k(t+\Delta t/2)}{L}\right],& \dot b&=-b/\tau_b+u_b,\quad u_b=\dot b+b/\tau_b.\end{aligned}')
+    page('对照只改变额外动态方向，其他拟合条件配对',
+        paragraph('原模型仅拟合逐时点共享驱动和五个独立初态。额外成分使用30/90秒各6/18个余弦模式，最高频率0.1 Hz，保持每秒自由度密度相同；所有模式先经过与模型相同的观测算子。')+model
+        +paragraph('V为共同血容量方向，X为总Hb不变的交换方向。每列按训练SD加权后的Hb RMS归一为1，两个方向使用相同系数先验SD=1。τb=2秒仅是任一拟合b(t)的状态实现，不是已识别的生理时间常数；代码拟合b的系数，没有测得独立输入ub。系数对应有正有负的相对变化，没有对额外血管室做生理资格鉴定。')
+        +tab(['条件','模型可见数据','评分与用途'],[
+            ['联合完整','整个窗口EEG、HbO、HbR','全窗条件重建；原→V为主比较'],
+            ['Hb-only完整','整个窗口HbO、HbR','排除EEG目标妥协后检查内部限制'],
+            ['联合遮挡','EEG全可见；每30秒遮住10–15和20–25秒两Hb','隐藏Hb仅评分；离线分块插值，不是未来预测']])
+        +paragraph('τ=2秒、κ=0.64、γ=0.32、α=E0=0.32、β=P0=1、Q0=0.35冻结；驱动曲率惩罚0.01，初态惩罚100，log-flow惩罚1。各新增模型从静息和已拟合原模型两起点优化，保留全部终态和梯度。'))
+
+    metric=equation('metric',r'{\rm NRMSE}=\sqrt{\frac1S\sum_{s=1}^{S}\frac1{R_s}\sum_{r=1}^{R_s}\frac1{2|I_r|}\sum_{t\in I_r}\sum_{c\in\{O,R\}}\left(\frac{\widehat H_{srtc}-H_{srtc}}{\sigma_{c,\rm train}}\right)^2}')
+    page('长度、预处理和统计：相同原生记录的配对重分析',
+        paragraph('直接读取已完成公开 output-support 运行20261010_v1及20261013_refed_v2的prepared数组、plan和训练坐标。Single-Trial由光强经保留光学变换获得相对Hb；其他数据集沿用发布Hb及其原单位语义。没有读取新的原始数据、比较协议的保护样本或重拟合归一化。')
+        +paragraph('EEG为原生连续功率特征经训练PCA的标量代理；Hb为不重叠原生时间bin均值，没有新增双向Hb滤波。时间网格0.25秒。30秒取90秒的中段，每个长度重设前5秒的可见参考；它是数值参考，不是静息或生理初态假设。')
+        +paragraph('裁窗后检查完整观测算子在窗外的依赖确实相消；最后一个bin因需要窗外模型插值支持而排除。30秒使用119个评分bin，90秒359个；共同中间区间都是原记录30到59.5秒的119个点。')+metric
+        +paragraph('σ为父运行训练SD，全实验固定；S为独立被试数，Rs为被试内记录数，Ir为该终点的评分点。不能把时间点、两条记录或两种长度当作独立被试。绝对收益为原模型NRMSE减候选NRMSE，百分比再除以原模型NRMSE；各表均先聚合均方再开方。')
+        +paragraph('完整拟合有更多自由度时误差自然可下降，所以同时保留等容量X、Hb-only、隐藏块及已知真值合成。10%相对RMSE下降只作为描述性重要程度，不是确认性检验阈值。置信区间整块bootstrap被试2000次，保留同人的两条记录；没有修正多重比较。'))
+
+    fig,axes=plt.subplots(1,2,figsize=(7.3,3.6),sharey=True)
+    scenarios=['matched','nonrest','volume','exchange'];cn=['匹配模型','独立初态','共同波动','交换波动']
+    for ax,length in zip(axes,(30,90)):
+        for j,arm in enumerate(('base','volume','exchange')):
+            vals=[float(groups[(groups.stage=='synthetic')&(groups.scenario==sc)&(groups.length_s==length)&(groups.condition=='joint_full')&(groups.arm==arm)].full_hb_nrmse.iloc[0]) for sc in scenarios]
+            ax.bar(np.arange(4)+(j-1)*.24,vals,.24,color=colors[arm],label=labels[arm])
+        ax.set_xticks(range(4),cn,rotation=20);ax.set_title(str(length)+'秒');ax.set_ylabel('双Hb NRMSE（训练SD）');ax.set_ylim(0,1.02)
+    fig.legend(*axes[0].get_legend_handles_labels(),loc='upper center',ncol=3,frameon=False)
+    body=save(fig,'synthetic','每柱汇总6个生成seed；先seed内均方、再seed等权开方。已知真值只用于生成和评分，未用于拟合初值。','summary.json groups: synthetic / joint_full')
+    body+=paragraph('共144个条件任务、432个非线性拟合，全部收敛。共同真值下，V将30/90秒误差从0.844/0.902降至0.025/0.021；交换真值下，X降至0.025/0.021，V仍为0.251/0.260。匹配模型与非静息初态条件下原模型约0.02，未出现大幅虚假收益。')
+    page('合成对照能区分独立共同波动与初态偏离',body)
+
+    linear=frame[(frame.stage=='linear')&np.isclose(frame.rcond,1e-10)&(frame.condition=='Hb_only_full')]
+    fig,axes=plt.subplots(2,2,figsize=(7.3,5),sharey=True)
+    linear_labels={'tied_initial':'绑定初态','free_initial':'独立初态','parameter_grid_best':'网格最小残差','volume':'加共同成分','exchange':'加交换成分'}
+    linear_colors={'tied_initial':'#A6A6A6','free_initial':colors['base'],'parameter_grid_best':'#3A374C',**colors}
+    for ax,ds in zip(axes.flat,datasets):
+        for j,arm in enumerate(linear_labels):
+            vals=[float(np.sqrt(linear[(linear.dataset==ds)&(linear.length_s==length)&(linear.arm==arm)].groupby('subject').full_hb_nmse.mean().mean())) for length in (30,90)]
+            ax.bar(np.arange(2)+(j-2)*.15,vals,.15,color=linear_colors[arm],label=linear_labels[arm])
+        ax.set_title(names[ds]);ax.set_xticks([0,1],['30秒','90秒']);ax.set_ylim(0,1.12);ax.set_ylabel('Hb-only线性 NRMSE')
+    fig.legend(*axes.flat[0].get_legend_handles_labels(),loc='upper center',ncol=3,frameon=False,fontsize=9)
+    body=save(fig,'linear','每数据集12条记录、6名被试；相同目标、无正则最小残差。网格在每窗口选择最优tau/alpha/E0，仅作对原模型有利的表达能力上界检查。','metrics.csv stage=linear; individual parameter_profile JSON')
+    body+=paragraph('独立初态优于绑定初态，但没有消除持续残差。额外V与X在线性Hb-only中几乎等效，提示单凭两个Hb的全窗拟合无法唯一归属额外方向。两个SVD截断1e−10与1e−12给出的误差相同。')
+    body+=paragraph('线性最小二乘允许非物理状态：最大相对状态偏离约'+f"{linear.max_linear_state_excursion.max():.1f}"+'。这些数值只说明保留线性子空间的最小残差，不是可实现的生理估计或全局非线性不可能性证明。')
+    page('初态与参数灵活性只能解释一部分实测不相容',body)
+
+    for condition,title,metric_name in [('joint_full','完整联合拟合：前两个数据集收益较大','full_hb_nrmse'),('Hb_only_full','移除EEG约束后，共同成分收益仍存在','full_hb_nrmse'),('joint_blocked','隐藏Hb检验：完整拟合收益不能直接当作预测收益','score_hb_nrmse')]:
+        fig,axes=plt.subplots(2,2,figsize=(7.3,4.6),sharey=True)
+        for ax,ds in zip(axes.flat,datasets):
+            for j,arm in enumerate(('base','volume','exchange')):
+                vals=[float(groups[(groups.stage=='measured')&(groups.dataset==ds)&(groups.length_s==length)&(groups.condition==condition)&(groups.arm==arm)][metric_name].iloc[0]) for length in (30,90)]
+                ax.bar(np.arange(2)+(j-1)*.23,vals,.23,color=colors[arm],label=labels[arm])
+            ax.set_title(names[ds]);ax.set_xticks([0,1],['30秒','90秒']);ax.set_ylim(0,1.4);ax.set_ylabel('双Hb NRMSE（训练SD）')
+        fig.legend(*axes.flat[0].get_legend_handles_labels(),loc='upper center',ncol=3,frameon=False)
+        body=save(fig,condition,'全部柱采用统一纵轴，12/12记录、6名被试进入每个比较；所有实测拟合均通过数值检查。颜色与其他图一致。','summary.json groups and paired; condition='+condition)
+        rows=[]
+        for ds in datasets:
+            for length in (30,90):
+                v=paired(ds,length,condition)['score_hb_nmse'];rows.append([names[ds],length,f"{v['base_nrmse']:.3f} → {v['candidate_nrmse']:.3f}",f"{100*v['relative_rmse_reduction']:.1f}%",ci_text(v)])
+        body+=tab(['数据集','秒','原→共同','相对下降','绝对下降 [95%区间]'],rows)
+        if condition=='joint_full':body+=paragraph('V在Single-Trial与Simultaneous优于X；Visual的30秒样本中X的平均拟合更好，V并非普适正确方向。REFED整体变化小，另见频带诊断。')
+        elif condition=='Hb_only_full':body+=paragraph('Single-Trial与Simultaneous的改善没有随着移除EEG目标而消失，支持Hb内部动态限制确实贡献了误差；本对照仍保留相同的初态、驱动与flow工程惩罚。')
+        else:body+=paragraph('Single-Trial两种长度的V收益区间均高于零；Simultaneous 30秒没有收益，90秒虽平均改善12.5%，区间跨零。Visual与REFED收益较小或不确定。各时间段在同一记录内拟合，不能称跨记录预测。')
+        page(title,body)
+
+    center_table=[];direction_table=[]
+    for ds in datasets:
+        for length in (30,90):
+            r=next(v for v in center_summary if v['dataset']==ds and v['length_s']==length)
+            center_table.append([names[ds],length,f"{r['reference']:.3f} → {r['candidate']:.3f}",f"{100*r['improvement']/r['reference']:.1f}%"])
+            v=next(v for v in direction_summary if v['dataset']==ds and v['length_s']==length)
+            direction_table.append([names[ds],length,ci_text(v)])
+    page('在同一30秒区间比较，避免把样本内容差异当作时长效应',
+        paragraph('下表只评分原记录中间同一119个时间点，并去除每个Hb的残差均值以排除不同参考的常量差；训练SD保持不变。30秒拟合只看该段，90秒拟合还受到前后30秒数据的约束。')
+        +tab(['数据集','拟合支持/秒','相同中段形状误差：原→共同','相对下降'],center_table)
+        +paragraph('Simultaneous的同区间收益为18.3%和25.3%，而90秒全窗为41.9%；因此长窗全体更难还包含额外时间段的影响。更长支持确实强化了部分残差限制，但本轮不把这一差异视为纯粹、普适的时长因果效应。')
+        +'<h2>等容量方向比较：交换成分误差减共同成分误差</h2>'
+        +tab(['数据集','秒','差值 [95%被试bootstrap区间]'],direction_table)
+        +paragraph('正数表示V更好。Single-Trial与Simultaneous有较一致的共同方向优势；Visual区间跨零。这个对照增加方向证据，仍不能识别脑内/头皮来源或排除观测映射误差。'))
+
+    band_rows=[]
+    for ds in datasets:
+        for length in (30,90):
+            v=paired(ds,length,'joint_full')['oscillation_band_nmse'];base=paired(ds,length,'joint_full')['full_hb_nmse']['base_nrmse']
+            band_rows.append([names[ds],length,f"{v['base_nrmse']:.3f} → {v['candidate_nrmse']:.3f}",f"{100*v['relative_rmse_reduction']:.1f}%",f"{100*v['base_nrmse']**2/base**2:.1f}%"])
+    page('持续波动频带有改善，但不一定主导总误差',
+        paragraph('在固定评分支持上对训练SD标准化残差作正交DCT，累计频率中心位于1/30至0.1 Hz的平方系数，再除以原时间点数和两个Hb分量数、开方。这是该频带对全窗误差的RMS贡献，不是逐频带重新归一化，也不是相关系数。30秒支持包含约1–3个周期，90秒约3–9个周期；离散频点随时长变化。')
+        +tab(['数据集','秒','波动频带误差：原→共同','该频带相对下降','基线残差能量中的频带比例'],band_rows)
+        +paragraph('REFED的这一频带残差下降约41%–49%，但该频带只占其基线总残差能量的约3%–4%，所以全窗RMSE仅下降2%–3%。这支持“对慢波动有影响”与“不是总误差主要来源”可以同时成立；未测得的高频、噪声或其他失配不能在本轮作唯一归因。')
+        +paragraph('Single-Trial与Simultaneous在此频带的改善较明显，与下一组保留波形对应。该频带是预先固定的描述终点，不按结果选择频率，也不把时间点当作独立重复。'))
+
+    chosen=[]
+    for ds in datasets:
+        baseline=measured[(measured.dataset==ds)&(measured.length_s==90)&(measured.condition=='joint_full')&(measured.arm=='base')].sort_values(['full_hb_nmse','id'])
+        example=baseline.iloc[len(baseline)//2];record=next(r for r in plan['records'] if r['id']==example.id)
+        example_arrays={}
+        for length in (30,90):
+            key=f'{example.id}_{length}_joint_full'
+            with np.load(run/'measured'/(key+'.npz')) as a:example_arrays[length]={k:a[k].copy() for k in a.files}
+        fig,axes=plt.subplots(2,2,figsize=(7.3,5.0),sharey='row')
+        for col,length in enumerate((90,30)):
+            a=example_arrays[length];time=np.arange(len(a['target']))*.25+(30 if length==30 else 0)
+            offset=example_arrays[90]['target'][120:140].mean(0) if length==30 else np.zeros(3)
+            for row,c in enumerate((1,2)):
+                ax=axes[row,col];ax.plot(time[:-1],(a['target'][:-1,c]+offset[c])/a['sd'][c],color='#272727',lw=.8,label='实测目标')
+                for arm in ('base','volume','exchange'):
+                    ax.plot(time[:-1],(a[arm+'_prediction'][:-1,c]+offset[c])/a['sd'][c],color=colors[arm],lw=1.15,ls='--' if arm=='exchange' else '-',label=labels[arm])
+                if length==90:ax.axvspan(30,60,color='#D6DEE8',alpha=.3,zorder=-1)
+                ax.set_title(f'{length}秒拟合 · '+('HbO' if c==1 else 'HbR'));ax.set_xlabel('相对90秒记录起点 / 秒');ax.set_ylabel('幅值 / 对应Hb训练SD')
+        fig.legend(*axes[0,0].get_legend_handles_labels(),loc='upper center',ncol=4,frameon=False,fontsize=9)
+        body=save(fig,'waveform_'+ds,'黑线为处理后实测目标，橙/蓝/绿分别为完整模型预测；额外成分已包含在蓝/绿线中。阴影为相同中间30秒，30秒输出加回参考差后显示在相同坐标。每行两图同刻度，不同数据集独立纵轴。',str(run/'measured'/f'{example.id}_90_joint_full.npz'))
+        sentences=[]
+        for length in (30,90):
+            a=example_arrays[length];scores={arm:np.sqrt(np.mean(((a[arm+'_prediction'][:-1,1:]-a['target'][:-1,1:])/a['sd'][1:])**2)) for arm in ('base','volume','exchange')}
+            sentences.append(f'{length}秒双Hb误差：原模型{scores["base"]:.3f}，共同{scores["volume"]:.3f}，交换{scores["exchange"]:.3f}。')
+        body+=paragraph(' '.join(sentences))
+        body+=paragraph('样例为12条记录中按90秒基线误差排序的第7条（偶数分母的上中位数；并列按身份排序），仅作解释。'+html.escape(str(example.id))+'；任务 '+html.escape(record['task'])+'；通道 '+html.escape(record['anchor']['hb_channel'])+'。完整候选分母与选择规则保存在 figure_sources.json。')
+        page(names[ds]+'：固定选择的连续波形样例',body)
+        chosen.append(dict(dataset=ds,id=example.id,selection='upper median by baseline 90s joint-full error, lexical id tie-break',denominator=12))
+
+    page('结论、尚未解决的边界与复核',
+        paragraph('<b>本轮支持：</b>独立p0、v0只提供衰减初态模式；当前确定性单驱动模型缺少持续独立共同方向。额外共同方向对前两个数据集具有实质性条件重建收益，并能减少固定慢频带残差。Hb-only仍有收益，说明不只是EEG目标之间的折中。')
+        +paragraph('<b>本轮不支持：</b>所有EEG–fNIRS状态空间模型都存在同样限制；所有数据集总误差主要由它导致；拟合出的额外项已被识别为真实脑血容量；或完整窗口拟合收益必然转化为隐藏目标预测。Visual的方向对照未能区分V与X，REFED总体收益小，部分遮挡区间跨零。')
+        +paragraph('下一步由这些结果支持的改动是：保留单驱动神经血流核心，同时把独立共同血流/观测过程作为显式候选；采用短距通道或已测系统生理输入来限制它，再做跨记录泛化与来源归属。应分别检验观测增益与额外室动力学，避免把共享项吸收的误差直接当作生理恢复。本轮没有自动启动新的昂贵训练、原始数据生产或受保护评价。')
+        +tab(['复核项目','结果'],[
+            ['实测/合成非线性拟合','864/864 与 432/432 均收敛并通过积分检查'],
+            ['实测误差独立重算最大差',f'{max_score_diff:.2e}'],
+            ['物理预测+额外项闭合最大差',f'{max_closure:.2e}'],
+            ['4/8子步最大预测差 / 训练SD',f'{verification["max_integration_difference_training_sd"]:.2e}；预定阈值0.005'],
+            ['初差衰减、隐藏mask、观测闭合','逐实测解全部通过'],
+            ['运行资源','36个单数值线程worker；user systemd与linger；源快照、命令、日志保留'],
+            ['图与公式','PNG 240/300 dpi；正文与表格可搜索；WPS实际操作未检验']])
+        +paragraph('证据根：'+html.escape(str(run))+ '。主结果由summary.json与逐任务JSON/NPZ持有；本导出的analysis.json仅持有共同中段与V/X配对补充统计。源码在source_snapshot，资源在resources.json，七篇原始文献及核验边界在literature.json。'))
+
+    css='body{font-family:sans-serif;font-size:10pt;line-height:1.45;color:#17212e}h1{font-size:18pt;color:#123e59;margin-bottom:14pt}h2{font-size:12pt;margin-top:12pt}p{margin:7pt 0}table{width:100%;border-collapse:collapse;font-size:8.4pt;margin:10pt 0}td,th{border:0.4pt solid #c1cad3;padding:4pt}th{background:#eef3f7}img{max-width:100%}a{color:#195f9c}.figure{margin:7pt 0}'
+    document='<!doctype html><html lang="zh"><meta charset="utf-8"><style>'+css+'.section{page-break-before:always;max-width:760px;margin:24px auto}</style><body>'+''.join('<section class="section">'+p+'</section>' for p in pages)+'</body></html>'
+    (out/'REPORT.html').write_text(document)
+    pdf=fitz.open();page_sources=[]
+    def rectfn(number,filled):
+        rect=fitz.paper_rect('a4');return rect,rect+(36,34,-36,-34),None
+    for index,body in enumerate(pages):
+        story=fitz.Story(body,user_css=css,archive=fitz.Archive(str(out)))
+        part=story.write_with_links(rectfn);page_sources.append(dict(section=index+1,pdf_pages=list(range(len(pdf)+1,len(pdf)+len(part)+1))))
+        pdf.insert_pdf(part);part.close()
+    pdf.save(out/'REPORT.pdf',garbage=4,deflate=True)
+    for index in range(len(pdf)):
+        pdf[index].get_pixmap(dpi=90).save(out/f'preview_{index+1:02d}.png')
+    validation=dict(pages=len(pdf),sections=len(pages),image_objects=sum(len(p.get_images()) for p in pdf),
+        expected_images=len(images),searchable_characters=sum(len(p.get_text()) for p in pdf),wps_checked=False,
+        all_figures_and_formulas_embedded_as_bitmap=True,formula_dpi=300,chart_dpi=240)
+    if validation['image_objects']!=len(images) or validation['searchable_characters']<1000:
+        raise AssertionError('report image/text export failed')
+    pdf.close()
+    atlas=fitz.open()
+    for path in images:
+        p=atlas.new_page();p.insert_image(p.rect+(30,30,-30,-30),filename=str(path),keep_proportion=True)
+    atlas.save(out/'FIGURES.pdf',garbage=4,deflate=True);atlas.close()
+    (out/'figure_sources.json').write_text(json.dumps(dict(figures=image_sources,examples=chosen,pages=page_sources),ensure_ascii=False,indent=2)+'\n')
+    (out/'export_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+    shutil.copy2(Path(__file__),out/'renderer_source.py')
+    print(json.dumps(validation,ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path)
@@ -7488,6 +7793,7 @@ def main():
     parser.add_argument("--fixed-roi-flow", action="store_true", help="Render fixed ROI log-flow soft regularization diagnostic")
     parser.add_argument("--fixed-roi-tau", action="store_true", help="Render fixed AF7Fp1 shared nonlinear tau diagnostic")
     parser.add_argument("--waveform-diagnostic", action="store_true")
+    parser.add_argument('--volume-drive-diagnostic', action='store_true')
     parser.add_argument("--fitting-explainer", action="store_true", help="Export an offline interactive lesson from the retained public waveform cases")
     parser.add_argument("--parameter-explorer", action="store_true", help="Export three public examples with forward-only physiology parameter sweeps")
     parser.add_argument("--boundary-run", type=Path, help="Add the retained optical shared-tau lower-bound example to --parameter-explorer")
@@ -7497,6 +7803,14 @@ def main():
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.volume_drive_diagnostic:
+        if args.run is None:parser.error('--volume-drive-diagnostic requires --run')
+        if any((args.refed_comparison,args.replay,args.nonlinear_fit,args.gain_prior_fit,args.fixed_roi_tau,
+                args.fixed_roi_flow,args.fixed_roi_initial,args.fixed_roi_optical,args.conditional_optical_gain,
+                args.waveform_diagnostic,args.step_control,args.teacher_robustness,args.component_attribution,
+                args.semantic_response,args.fitting_explainer,args.parameter_explorer)):
+            parser.error('Choose one report mode')
+        render_volume_drive(args.run.resolve(),args.output.resolve());return
     if args.refed_comparison:
         if args.comparison_config is None:
             parser.error('--refed-comparison requires --comparison-config')
