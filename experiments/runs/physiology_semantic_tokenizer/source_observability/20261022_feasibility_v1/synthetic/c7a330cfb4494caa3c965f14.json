@@ -1,0 +1,2658 @@
+{
+  "kind": "synthetic",
+  "scenario": "shared_driver_conflict",
+  "seed": 2026102201,
+  "arm": "K1_true_H4_E12",
+  "id": "c7a330cfb4494caa3c965f14",
+  "status": "completed",
+  "success": true,
+  "bounds": {
+    "EEG": {
+      "nmse": 3.1402430000726626e-34,
+      "nrmse": 1.772073079777655e-17,
+      "centered_nrmse": 1.7554393534091107e-17,
+      "centered_local_nrmse": 9.077015380843253e-16,
+      "centered_amplitude_ratio": 0.9999999999999996,
+      "mean_feature_correlation": 1.0,
+      "feature_correlations": [
+        1.0000000000000002,
+        1.0,
+        0.9999999999999998,
+        0.9999999999999999,
+        1.0000000000000002,
+        1.0000000000000002,
+        1.0000000000000002,
+        0.9999999999999999,
+        1.0,
+        0.9999999999999999,
+        1.0,
+        0.9999999999999998,
+        1.0000000000000002,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0000000000000002,
+        1.0000000000000002,
+        1.0,
+        0.9999999999999997,
+        1.0,
+        1.0,
+        1.0000000000000002,
+        1.0,
+        1.0,
+        1.0,
+        1.0000000000000002,
+        1.0,
+        1.0,
+        1.0000000000000002,
+        1.0,
+        1.0,
+        0.9999999999999999,
+        1.0000000000000002,
+        0.9999999999999999,
+        0.9999999999999998,
+        1.0,
+        0.9999999999999997,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0000000000000002,
+        0.9999999999999998,
+        0.9999999999999999,
+        0.9999999999999997,
+        1.0,
+        1.0000000000000004,
+        1.0000000000000002,
+        1.0000000000000002,
+        1.0,
+        0.9999999999999999,
+        0.9999999999999999,
+        0.9999999999999998,
+        0.9999999999999998,
+        0.9999999999999998,
+        1.0,
+        1.0
+      ],
+      "amplitude_rms_ratio": 0.9999999999999999,
+      "n_scored": 6000,
+      "denominator": "frozen_parent_training_SD",
+      "morphology": "time_centering_per_feature_only_for_centered_error_and_correlation"
+    },
+    "HbO": {
+      "nmse": 4.23033324474159e-30,
+      "nrmse": 2.0567773930937665e-15,
+      "centered_nrmse": 2.0193012970083946e-15,
+      "centered_local_nrmse": 2.798788729170817e-15,
+      "centered_amplitude_ratio": 1.0000000000000004,
+      "mean_feature_correlation": 1.0,
+      "feature_correlations": [
+        1.0,
+        0.9999999999999999,
+        0.9999999999999999,
+        1.0
+      ],
+      "amplitude_rms_ratio": 0.9999999999999998,
+      "n_scored": 400,
+      "denominator": "frozen_parent_training_SD",
+      "morphology": "time_centering_per_feature_only_for_centered_error_and_correlation"
+    },
+    "HbR": {
+      "nmse": 3.824477746176736e-30,
+      "nrmse": 1.955627200203744e-15,
+      "centered_nrmse": 1.9149807712823802e-15,
+      "centered_local_nrmse": 2.9354739151986044e-15,
+      "centered_amplitude_ratio": 1.0000000000000002,
+      "mean_feature_correlation": 0.9999999999999997,
+      "feature_correlations": [
+        1.0,
+        0.9999999999999997,
+        0.9999999999999997,
+        0.9999999999999997
+      ],
+      "amplitude_rms_ratio": 0.9999999999999998,
+      "n_scored": 400,
+      "denominator": "frozen_parent_training_SD",
+      "morphology": "time_centering_per_feature_only_for_centered_error_and_correlation"
+    }
+  },
+  "vascular": null,
+  "frontier": {
+    "fixed": {
+      "epsilon": 0.5,
+      "validation_tolerance": 0.005,
+      "constraint_tolerance": 1e-08,
+      "eeg_representation_lower_bound": 1.7720730797776546e-17,
+      "eeg_numerical_projection_nrmse": 2.834401100415395e-17,
+      "eeg_representation_lower_bound_relaxed": true,
+      "free_physiology": false,
+      "substeps": 4,
+      "verification_substeps": 8,
+      "joint_tolerance": 0.5,
+      "prediction": {
+        "array_shape": [
+          120,
+          68
+        ]
+      },
+      "states": {
+        "array_shape": [
+          120,
+          1,
+          6
+        ]
+      },
+      "drivers": {
+        "array_shape": [
+          120,
+          1
+        ]
+      },
+      "coefficients": {
+        "array_shape": [
+          16,
+          1
+        ]
+      },
+      "initial_coordinates": {
+        "array_shape": [
+          1,
+          5
+        ]
+      },
+      "tau": 2.0,
+      "kappa": 0.64,
+      "scores": {
+        "EEG": {
+          "weighted_sse": 12.061235259320329,
+          "n_scored": 6000,
+          "nmse": 0.002010205876553388,
+          "nrmse": 0.04483531952103596
+        },
+        "Hb": {
+          "weighted_sse": 7.470560874680159e-06,
+          "n_scored": 800,
+          "nmse": 9.3382010933502e-09,
+          "nrmse": 9.663436807549475e-05
+        },
+        "HbO": {
+          "weighted_sse": 6.538912388061533e-06,
+          "n_scored": 400,
+          "nmse": 1.6347280970153832e-08,
+          "nrmse": 0.0001278564858353061
+        },
+        "HbR": {
+          "weighted_sse": 9.316484866186262e-07,
+          "n_scored": 400,
+          "nmse": 2.3291212165465656e-09,
+          "nrmse": 4.826096990888772e-05
+        }
+      },
+      "optimization_scores": {
+        "EEG": {
+          "weighted_sse": 12.061235259320329,
+          "n_scored": 6000,
+          "nmse": 0.002010205876553388,
+          "nrmse": 0.04483531952103596
+        },
+        "Hb": {
+          "weighted_sse": 7.469138248656619e-06,
+          "n_scored": 800,
+          "nmse": 9.336422810820774e-09,
+          "nrmse": 9.662516655002864e-05
+        },
+        "HbO": {
+          "weighted_sse": 6.539020329661811e-06,
+          "n_scored": 400,
+          "nmse": 1.634755082415453e-08,
+          "nrmse": 0.0001278575411313487
+        },
+        "HbR": {
+          "weighted_sse": 9.301179189948088e-07,
+          "n_scored": 400,
+          "nmse": 2.3252947974870222e-09,
+          "nrmse": 4.822131061560876e-05
+        }
+      },
+      "witness_feasible": true,
+      "physical_valid": true,
+      "integration_error": 2.1091850476156837e-07,
+      "integration_error_by_modality": {
+        "EEG": 0.0,
+        "HbO": 1.7050334113683788e-07,
+        "HbR": 2.1091850476156837e-07
+      },
+      "physical_checks": [
+        {
+          "finite": true,
+          "positive_fvpq": true,
+          "oxygen_extraction_in_unit_interval": true,
+          "absolute_hb_nonnegative": true,
+          "hbr_not_above_hbt": true,
+          "rest_equilibrium": true,
+          "minimum_f": 0.8778159472487894,
+          "minimum_v": 0.9609789534466764,
+          "minimum_p": 0.9612747861219748,
+          "minimum_q": 0.9840370137463078,
+          "minimum_extraction": 0.2943963914153114,
+          "maximum_extraction": 0.35554044678896407,
+          "extraction_float_saturation_count": 0,
+          "minimum_log_one_minus_extraction": -0.4393432154208526,
+          "flow_below_0_01_count": 0
+        }
+      ],
+      "optimization_physical_checks": [
+        {
+          "finite": true,
+          "positive_fvpq": true,
+          "oxygen_extraction_in_unit_interval": true,
+          "absolute_hb_nonnegative": true,
+          "hbr_not_above_hbt": true,
+          "rest_equilibrium": true,
+          "minimum_f": 0.8778159463850398,
+          "minimum_v": 0.9609789521364105,
+          "minimum_p": 0.9612747848187205,
+          "minimum_q": 0.984037013169411,
+          "minimum_extraction": 0.2943963914153114,
+          "maximum_extraction": 0.35554044706756593,
+          "extraction_float_saturation_count": 0,
+          "minimum_log_one_minus_extraction": -0.43934321585315567,
+          "flow_below_0_01_count": 0
+        }
+      ],
+      "source_start_label": "EEG_projection_rest",
+      "eeg_nmse": 0.002010205876553388,
+      "eeg_nrmse": 0.04483531952103596,
+      "hb_nmse": 9.3382010933502e-09,
+      "hb_nrmse": 9.663436807549475e-05,
+      "hbo_nmse": 1.6347280970153832e-08,
+      "hbo_nrmse": 0.0001278564858353061,
+      "hbr_nmse": 2.3291212165465656e-09,
+      "hbr_nrmse": 4.826096990888772e-05,
+      "optimizer_success": true,
+      "optimizer_converged": true,
+      "status": "feasible_witness",
+      "joint_witness": {
+        "prediction": {
+          "array_shape": [
+            120,
+            68
+          ]
+        },
+        "states": {
+          "array_shape": [
+            120,
+            1,
+            6
+          ]
+        },
+        "drivers": {
+          "array_shape": [
+            120,
+            1
+          ]
+        },
+        "coefficients": {
+          "array_shape": [
+            16,
+            1
+          ]
+        },
+        "initial_coordinates": {
+          "array_shape": [
+            1,
+            5
+          ]
+        },
+        "tau": 2.0,
+        "kappa": 0.64,
+        "scores": {
+          "EEG": {
+            "weighted_sse": 12.061235259320329,
+            "n_scored": 6000,
+            "nmse": 0.002010205876553388,
+            "nrmse": 0.04483531952103596
+          },
+          "Hb": {
+            "weighted_sse": 7.470560874680159e-06,
+            "n_scored": 800,
+            "nmse": 9.3382010933502e-09,
+            "nrmse": 9.663436807549475e-05
+          },
+          "HbO": {
+            "weighted_sse": 6.538912388061533e-06,
+            "n_scored": 400,
+            "nmse": 1.6347280970153832e-08,
+            "nrmse": 0.0001278564858353061
+          },
+          "HbR": {
+            "weighted_sse": 9.316484866186262e-07,
+            "n_scored": 400,
+            "nmse": 2.3291212165465656e-09,
+            "nrmse": 4.826096990888772e-05
+          }
+        },
+        "optimization_scores": {
+          "EEG": {
+            "weighted_sse": 12.061235259320329,
+            "n_scored": 6000,
+            "nmse": 0.002010205876553388,
+            "nrmse": 0.04483531952103596
+          },
+          "Hb": {
+            "weighted_sse": 7.469138248656619e-06,
+            "n_scored": 800,
+            "nmse": 9.336422810820774e-09,
+            "nrmse": 9.662516655002864e-05
+          },
+          "HbO": {
+            "weighted_sse": 6.539020329661811e-06,
+            "n_scored": 400,
+            "nmse": 1.634755082415453e-08,
+            "nrmse": 0.0001278575411313487
+          },
+          "HbR": {
+            "weighted_sse": 9.301179189948088e-07,
+            "n_scored": 400,
+            "nmse": 2.3252947974870222e-09,
+            "nrmse": 4.822131061560876e-05
+          }
+        },
+        "witness_feasible": true,
+        "physical_valid": true,
+        "integration_error": 2.1091850476156837e-07,
+        "integration_error_by_modality": {
+          "EEG": 0.0,
+          "HbO": 1.7050334113683788e-07,
+          "HbR": 2.1091850476156837e-07
+        },
+        "physical_checks": [
+          {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.8778159472487894,
+            "minimum_v": 0.9609789534466764,
+            "minimum_p": 0.9612747861219748,
+            "minimum_q": 0.9840370137463078,
+            "minimum_extraction": 0.2943963914153114,
+            "maximum_extraction": 0.35554044678896407,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.4393432154208526,
+            "flow_below_0_01_count": 0
+          }
+        ],
+        "optimization_physical_checks": [
+          {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.8778159463850398,
+            "minimum_v": 0.9609789521364105,
+            "minimum_p": 0.9612747848187205,
+            "minimum_q": 0.984037013169411,
+            "minimum_extraction": 0.2943963914153114,
+            "maximum_extraction": 0.35554044706756593,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.43934321585315567,
+            "flow_below_0_01_count": 0
+          }
+        ],
+        "source_start_label": "EEG_projection_rest",
+        "eeg_nmse": 0.002010205876553388,
+        "eeg_nrmse": 0.04483531952103596,
+        "hb_nmse": 9.3382010933502e-09,
+        "hb_nrmse": 9.663436807549475e-05,
+        "hbo_nmse": 1.6347280970153832e-08,
+        "hbo_nrmse": 0.0001278564858353061,
+        "hbr_nmse": 2.3291212165465656e-09,
+        "hbr_nrmse": 4.826096990888772e-05,
+        "state_diagnostics": {
+          "cores": [
+            {
+              "flow": {
+                "min": 0.8778159472487894,
+                "max": 1.105995539873755
+              },
+              "v": {
+                "min": 0.9609789534466764,
+                "max": 1.0171641837646233
+              },
+              "p": {
+                "min": 0.9612747861219748,
+                "max": 1.017165990211447
+              },
+              "q": {
+                "min": 0.9840370137463078,
+                "max": 1.052113412972782
+              }
+            }
+          ],
+          "physical_initials": [
+            [
+              -0.10451618471726458,
+              1.105995539873755,
+              0.9715244531262417,
+              0.9815440870113036,
+              0.9941813133364618
+            ]
+          ],
+          "flow_outside_engineering_reference": false,
+          "initial_outside_engineering_reference": false,
+          "parameter_bound_hits": {
+            "tau": false,
+            "kappa": false
+          },
+          "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+        }
+      },
+      "starts": [
+        {
+          "label": "EEG_projection_rest",
+          "optimizer_success": true,
+          "optimizer_converged": true,
+          "optimizer_status": 0,
+          "optimizer_message": "Optimization terminated successfully",
+          "best_candidate": {
+            "prediction": {
+              "array_shape": [
+                120,
+                68
+              ]
+            },
+            "states": {
+              "array_shape": [
+                120,
+                1,
+                6
+              ]
+            },
+            "drivers": {
+              "array_shape": [
+                120,
+                1
+              ]
+            },
+            "coefficients": {
+              "array_shape": [
+                16,
+                1
+              ]
+            },
+            "initial_coordinates": {
+              "array_shape": [
+                1,
+                5
+              ]
+            },
+            "tau": 2.0,
+            "kappa": 0.64,
+            "scores": {
+              "EEG": {
+                "weighted_sse": 12.061235259320329,
+                "n_scored": 6000,
+                "nmse": 0.002010205876553388,
+                "nrmse": 0.04483531952103596
+              },
+              "Hb": {
+                "weighted_sse": 7.470560874680159e-06,
+                "n_scored": 800,
+                "nmse": 9.3382010933502e-09,
+                "nrmse": 9.663436807549475e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.538912388061533e-06,
+                "n_scored": 400,
+                "nmse": 1.6347280970153832e-08,
+                "nrmse": 0.0001278564858353061
+              },
+              "HbR": {
+                "weighted_sse": 9.316484866186262e-07,
+                "n_scored": 400,
+                "nmse": 2.3291212165465656e-09,
+                "nrmse": 4.826096990888772e-05
+              }
+            },
+            "optimization_scores": {
+              "EEG": {
+                "weighted_sse": 12.061235259320329,
+                "n_scored": 6000,
+                "nmse": 0.002010205876553388,
+                "nrmse": 0.04483531952103596
+              },
+              "Hb": {
+                "weighted_sse": 7.469138248656619e-06,
+                "n_scored": 800,
+                "nmse": 9.336422810820774e-09,
+                "nrmse": 9.662516655002864e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.539020329661811e-06,
+                "n_scored": 400,
+                "nmse": 1.634755082415453e-08,
+                "nrmse": 0.0001278575411313487
+              },
+              "HbR": {
+                "weighted_sse": 9.301179189948088e-07,
+                "n_scored": 400,
+                "nmse": 2.3252947974870222e-09,
+                "nrmse": 4.822131061560876e-05
+              }
+            },
+            "witness_feasible": true,
+            "physical_valid": true,
+            "integration_error": 2.1091850476156837e-07,
+            "integration_error_by_modality": {
+              "EEG": 0.0,
+              "HbO": 1.7050334113683788e-07,
+              "HbR": 2.1091850476156837e-07
+            },
+            "physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778159472487894,
+                "minimum_v": 0.9609789534466764,
+                "minimum_p": 0.9612747861219748,
+                "minimum_q": 0.9840370137463078,
+                "minimum_extraction": 0.2943963914153114,
+                "maximum_extraction": 0.35554044678896407,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393432154208526,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "optimization_physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778159463850398,
+                "minimum_v": 0.9609789521364105,
+                "minimum_p": 0.9612747848187205,
+                "minimum_q": 0.984037013169411,
+                "minimum_extraction": 0.2943963914153114,
+                "maximum_extraction": 0.35554044706756593,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.43934321585315567,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "source_start_label": "EEG_projection_rest",
+            "eeg_nmse": 0.002010205876553388,
+            "eeg_nrmse": 0.04483531952103596,
+            "hb_nmse": 9.3382010933502e-09,
+            "hb_nrmse": 9.663436807549475e-05,
+            "hbo_nmse": 1.6347280970153832e-08,
+            "hbo_nrmse": 0.0001278564858353061,
+            "hbr_nmse": 2.3291212165465656e-09,
+            "hbr_nrmse": 4.826096990888772e-05,
+            "state_diagnostics": {
+              "cores": [
+                {
+                  "flow": {
+                    "min": 0.8778159472487894,
+                    "max": 1.105995539873755
+                  },
+                  "v": {
+                    "min": 0.9609789534466764,
+                    "max": 1.0171641837646233
+                  },
+                  "p": {
+                    "min": 0.9612747861219748,
+                    "max": 1.017165990211447
+                  },
+                  "q": {
+                    "min": 0.9840370137463078,
+                    "max": 1.052113412972782
+                  }
+                }
+              ],
+              "physical_initials": [
+                [
+                  -0.10451618471726458,
+                  1.105995539873755,
+                  0.9715244531262417,
+                  0.9815440870113036,
+                  0.9941813133364618
+                ]
+              ],
+              "flow_outside_engineering_reference": false,
+              "initial_outside_engineering_reference": false,
+              "parameter_bound_hits": {
+                "tau": false,
+                "kappa": false
+              },
+              "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+            }
+          },
+          "joint_witness": {
+            "prediction": {
+              "array_shape": [
+                120,
+                68
+              ]
+            },
+            "states": {
+              "array_shape": [
+                120,
+                1,
+                6
+              ]
+            },
+            "drivers": {
+              "array_shape": [
+                120,
+                1
+              ]
+            },
+            "coefficients": {
+              "array_shape": [
+                16,
+                1
+              ]
+            },
+            "initial_coordinates": {
+              "array_shape": [
+                1,
+                5
+              ]
+            },
+            "tau": 2.0,
+            "kappa": 0.64,
+            "scores": {
+              "EEG": {
+                "weighted_sse": 12.061235259320329,
+                "n_scored": 6000,
+                "nmse": 0.002010205876553388,
+                "nrmse": 0.04483531952103596
+              },
+              "Hb": {
+                "weighted_sse": 7.470560874680159e-06,
+                "n_scored": 800,
+                "nmse": 9.3382010933502e-09,
+                "nrmse": 9.663436807549475e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.538912388061533e-06,
+                "n_scored": 400,
+                "nmse": 1.6347280970153832e-08,
+                "nrmse": 0.0001278564858353061
+              },
+              "HbR": {
+                "weighted_sse": 9.316484866186262e-07,
+                "n_scored": 400,
+                "nmse": 2.3291212165465656e-09,
+                "nrmse": 4.826096990888772e-05
+              }
+            },
+            "optimization_scores": {
+              "EEG": {
+                "weighted_sse": 12.061235259320329,
+                "n_scored": 6000,
+                "nmse": 0.002010205876553388,
+                "nrmse": 0.04483531952103596
+              },
+              "Hb": {
+                "weighted_sse": 7.469138248656619e-06,
+                "n_scored": 800,
+                "nmse": 9.336422810820774e-09,
+                "nrmse": 9.662516655002864e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.539020329661811e-06,
+                "n_scored": 400,
+                "nmse": 1.634755082415453e-08,
+                "nrmse": 0.0001278575411313487
+              },
+              "HbR": {
+                "weighted_sse": 9.301179189948088e-07,
+                "n_scored": 400,
+                "nmse": 2.3252947974870222e-09,
+                "nrmse": 4.822131061560876e-05
+              }
+            },
+            "witness_feasible": true,
+            "physical_valid": true,
+            "integration_error": 2.1091850476156837e-07,
+            "integration_error_by_modality": {
+              "EEG": 0.0,
+              "HbO": 1.7050334113683788e-07,
+              "HbR": 2.1091850476156837e-07
+            },
+            "physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778159472487894,
+                "minimum_v": 0.9609789534466764,
+                "minimum_p": 0.9612747861219748,
+                "minimum_q": 0.9840370137463078,
+                "minimum_extraction": 0.2943963914153114,
+                "maximum_extraction": 0.35554044678896407,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393432154208526,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "optimization_physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778159463850398,
+                "minimum_v": 0.9609789521364105,
+                "minimum_p": 0.9612747848187205,
+                "minimum_q": 0.984037013169411,
+                "minimum_extraction": 0.2943963914153114,
+                "maximum_extraction": 0.35554044706756593,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.43934321585315567,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "source_start_label": "EEG_projection_rest",
+            "eeg_nmse": 0.002010205876553388,
+            "eeg_nrmse": 0.04483531952103596,
+            "hb_nmse": 9.3382010933502e-09,
+            "hb_nrmse": 9.663436807549475e-05,
+            "hbo_nmse": 1.6347280970153832e-08,
+            "hbo_nrmse": 0.0001278564858353061,
+            "hbr_nmse": 2.3291212165465656e-09,
+            "hbr_nrmse": 4.826096990888772e-05,
+            "state_diagnostics": {
+              "cores": [
+                {
+                  "flow": {
+                    "min": 0.8778159472487894,
+                    "max": 1.105995539873755
+                  },
+                  "v": {
+                    "min": 0.9609789534466764,
+                    "max": 1.0171641837646233
+                  },
+                  "p": {
+                    "min": 0.9612747861219748,
+                    "max": 1.017165990211447
+                  },
+                  "q": {
+                    "min": 0.9840370137463078,
+                    "max": 1.052113412972782
+                  }
+                }
+              ],
+              "physical_initials": [
+                [
+                  -0.10451618471726458,
+                  1.105995539873755,
+                  0.9715244531262417,
+                  0.9815440870113036,
+                  0.9941813133364618
+                ]
+              ],
+              "flow_outside_engineering_reference": false,
+              "initial_outside_engineering_reference": false,
+              "parameter_bound_hits": {
+                "tau": false,
+                "kappa": false
+              },
+              "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+            }
+          },
+          "evaluations": 128,
+          "forward_calls": 235,
+          "finite_difference_calls": 0,
+          "verification_calls": 107,
+          "cache_hits": 79,
+          "invalid_trials": 21
+        }
+      ],
+      "failure_log": [
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 2,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 3,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 4,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 7,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 8,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 9,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 12,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 13,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 17,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 18,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 22,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 23,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 26,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 27,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 30,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 31,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 34,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 37,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 40,
+          "phase": "optimization",
+          "error": "nonlinear absolute Hb balance violated"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 43,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 46,
+          "phase": "optimization",
+          "error": "nonlinear absolute Hb balance violated"
+        }
+      ],
+      "evaluations": 128,
+      "forward_calls": 235,
+      "finite_difference_calls": 0,
+      "verification_calls": 107,
+      "cache_hits": 79,
+      "invalid_trials": 21,
+      "state_diagnostics": {
+        "cores": [
+          {
+            "flow": {
+              "min": 0.8778159472487894,
+              "max": 1.105995539873755
+            },
+            "v": {
+              "min": 0.9609789534466764,
+              "max": 1.0171641837646233
+            },
+            "p": {
+              "min": 0.9612747861219748,
+              "max": 1.017165990211447
+            },
+            "q": {
+              "min": 0.9840370137463078,
+              "max": 1.052113412972782
+            }
+          }
+        ],
+        "physical_initials": [
+          [
+            -0.10451618471726458,
+            1.105995539873755,
+            0.9715244531262417,
+            0.9815440870113036,
+            0.9941813133364618
+          ]
+        ],
+        "flow_outside_engineering_reference": false,
+        "initial_outside_engineering_reference": false,
+        "parameter_bound_hits": {
+          "tau": false,
+          "kappa": false
+        },
+        "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+      }
+    },
+    "free_tau_kappa": {
+      "epsilon": 0.5,
+      "validation_tolerance": 0.005,
+      "constraint_tolerance": 1e-08,
+      "eeg_representation_lower_bound": 1.7720730797776546e-17,
+      "eeg_numerical_projection_nrmse": 2.834401100415395e-17,
+      "eeg_representation_lower_bound_relaxed": true,
+      "free_physiology": true,
+      "substeps": 4,
+      "verification_substeps": 8,
+      "joint_tolerance": 0.5,
+      "prediction": {
+        "array_shape": [
+          120,
+          68
+        ]
+      },
+      "states": {
+        "array_shape": [
+          120,
+          1,
+          6
+        ]
+      },
+      "drivers": {
+        "array_shape": [
+          120,
+          1
+        ]
+      },
+      "coefficients": {
+        "array_shape": [
+          16,
+          1
+        ]
+      },
+      "initial_coordinates": {
+        "array_shape": [
+          1,
+          5
+        ]
+      },
+      "tau": 2.000065436233578,
+      "kappa": 0.5697253252044512,
+      "scores": {
+        "EEG": {
+          "weighted_sse": 11.724152735607495,
+          "n_scored": 6000,
+          "nmse": 0.0019540254559345825,
+          "nrmse": 0.04420436014619579
+        },
+        "Hb": {
+          "weighted_sse": 5.110088397655354e-06,
+          "n_scored": 800,
+          "nmse": 6.387610497069193e-09,
+          "nrmse": 7.992252809483189e-05
+        },
+        "HbO": {
+          "weighted_sse": 3.765476953244688e-06,
+          "n_scored": 400,
+          "nmse": 9.41369238311172e-09,
+          "nrmse": 9.702418452690917e-05
+        },
+        "HbR": {
+          "weighted_sse": 1.3446114444106676e-06,
+          "n_scored": 400,
+          "nmse": 3.361528611026669e-09,
+          "nrmse": 5.797869100822016e-05
+        }
+      },
+      "optimization_scores": {
+        "EEG": {
+          "weighted_sse": 11.724152735607495,
+          "n_scored": 6000,
+          "nmse": 0.0019540254559345825,
+          "nrmse": 0.04420436014619579
+        },
+        "Hb": {
+          "weighted_sse": 5.111423678586295e-06,
+          "n_scored": 800,
+          "nmse": 6.389279598232868e-09,
+          "nrmse": 7.9932969407078e-05
+        },
+        "HbO": {
+          "weighted_sse": 3.7647048357204744e-06,
+          "n_scored": 400,
+          "nmse": 9.411762089301185e-09,
+          "nrmse": 9.701423652898158e-05
+        },
+        "HbR": {
+          "weighted_sse": 1.3467188428658194e-06,
+          "n_scored": 400,
+          "nmse": 3.3667971071645487e-09,
+          "nrmse": 5.802410798249766e-05
+        }
+      },
+      "witness_feasible": true,
+      "physical_valid": true,
+      "integration_error": 1.684243800531486e-07,
+      "integration_error_by_modality": {
+        "EEG": 0.0,
+        "HbO": 1.25356219424409e-07,
+        "HbR": 1.684243800531486e-07
+      },
+      "physical_checks": [
+        {
+          "finite": true,
+          "positive_fvpq": true,
+          "oxygen_extraction_in_unit_interval": true,
+          "absolute_hb_nonnegative": true,
+          "hbr_not_above_hbt": true,
+          "rest_equilibrium": true,
+          "minimum_f": 0.8778865342851963,
+          "minimum_v": 0.9609975327489619,
+          "minimum_p": 0.9612982268275246,
+          "minimum_q": 0.9840070522201022,
+          "minimum_extraction": 0.29924593120776805,
+          "maximum_extraction": 0.3555176804172798,
+          "extraction_float_saturation_count": 0,
+          "minimum_log_one_minus_extraction": -0.4393078897445484,
+          "flow_below_0_01_count": 0
+        }
+      ],
+      "optimization_physical_checks": [
+        {
+          "finite": true,
+          "positive_fvpq": true,
+          "oxygen_extraction_in_unit_interval": true,
+          "absolute_hb_nonnegative": true,
+          "hbr_not_above_hbt": true,
+          "rest_equilibrium": true,
+          "minimum_f": 0.8778865332358841,
+          "minimum_v": 0.9609975315354798,
+          "minimum_p": 0.9612982256211189,
+          "minimum_q": 0.9840070516788275,
+          "minimum_extraction": 0.29924593120776805,
+          "maximum_extraction": 0.3555176807556923,
+          "extraction_float_saturation_count": 0,
+          "minimum_log_one_minus_extraction": -0.4393078902696403,
+          "flow_below_0_01_count": 0
+        }
+      ],
+      "source_start_label": "EEG_projection_rest",
+      "eeg_nmse": 0.0019540254559345825,
+      "eeg_nrmse": 0.04420436014619579,
+      "hb_nmse": 6.387610497069193e-09,
+      "hb_nrmse": 7.992252809483189e-05,
+      "hbo_nmse": 9.41369238311172e-09,
+      "hbo_nrmse": 9.702418452690917e-05,
+      "hbr_nmse": 3.361528611026669e-09,
+      "hbr_nrmse": 5.797869100822016e-05,
+      "optimizer_success": true,
+      "optimizer_converged": true,
+      "status": "feasible_witness",
+      "joint_witness": {
+        "prediction": {
+          "array_shape": [
+            120,
+            68
+          ]
+        },
+        "states": {
+          "array_shape": [
+            120,
+            1,
+            6
+          ]
+        },
+        "drivers": {
+          "array_shape": [
+            120,
+            1
+          ]
+        },
+        "coefficients": {
+          "array_shape": [
+            16,
+            1
+          ]
+        },
+        "initial_coordinates": {
+          "array_shape": [
+            1,
+            5
+          ]
+        },
+        "tau": 2.000065436233578,
+        "kappa": 0.5697253252044512,
+        "scores": {
+          "EEG": {
+            "weighted_sse": 11.724152735607495,
+            "n_scored": 6000,
+            "nmse": 0.0019540254559345825,
+            "nrmse": 0.04420436014619579
+          },
+          "Hb": {
+            "weighted_sse": 5.110088397655354e-06,
+            "n_scored": 800,
+            "nmse": 6.387610497069193e-09,
+            "nrmse": 7.992252809483189e-05
+          },
+          "HbO": {
+            "weighted_sse": 3.765476953244688e-06,
+            "n_scored": 400,
+            "nmse": 9.41369238311172e-09,
+            "nrmse": 9.702418452690917e-05
+          },
+          "HbR": {
+            "weighted_sse": 1.3446114444106676e-06,
+            "n_scored": 400,
+            "nmse": 3.361528611026669e-09,
+            "nrmse": 5.797869100822016e-05
+          }
+        },
+        "optimization_scores": {
+          "EEG": {
+            "weighted_sse": 11.724152735607495,
+            "n_scored": 6000,
+            "nmse": 0.0019540254559345825,
+            "nrmse": 0.04420436014619579
+          },
+          "Hb": {
+            "weighted_sse": 5.111423678586295e-06,
+            "n_scored": 800,
+            "nmse": 6.389279598232868e-09,
+            "nrmse": 7.9932969407078e-05
+          },
+          "HbO": {
+            "weighted_sse": 3.7647048357204744e-06,
+            "n_scored": 400,
+            "nmse": 9.411762089301185e-09,
+            "nrmse": 9.701423652898158e-05
+          },
+          "HbR": {
+            "weighted_sse": 1.3467188428658194e-06,
+            "n_scored": 400,
+            "nmse": 3.3667971071645487e-09,
+            "nrmse": 5.802410798249766e-05
+          }
+        },
+        "witness_feasible": true,
+        "physical_valid": true,
+        "integration_error": 1.684243800531486e-07,
+        "integration_error_by_modality": {
+          "EEG": 0.0,
+          "HbO": 1.25356219424409e-07,
+          "HbR": 1.684243800531486e-07
+        },
+        "physical_checks": [
+          {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.8778865342851963,
+            "minimum_v": 0.9609975327489619,
+            "minimum_p": 0.9612982268275246,
+            "minimum_q": 0.9840070522201022,
+            "minimum_extraction": 0.29924593120776805,
+            "maximum_extraction": 0.3555176804172798,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.4393078897445484,
+            "flow_below_0_01_count": 0
+          }
+        ],
+        "optimization_physical_checks": [
+          {
+            "finite": true,
+            "positive_fvpq": true,
+            "oxygen_extraction_in_unit_interval": true,
+            "absolute_hb_nonnegative": true,
+            "hbr_not_above_hbt": true,
+            "rest_equilibrium": true,
+            "minimum_f": 0.8778865332358841,
+            "minimum_v": 0.9609975315354798,
+            "minimum_p": 0.9612982256211189,
+            "minimum_q": 0.9840070516788275,
+            "minimum_extraction": 0.29924593120776805,
+            "maximum_extraction": 0.3555176807556923,
+            "extraction_float_saturation_count": 0,
+            "minimum_log_one_minus_extraction": -0.4393078902696403,
+            "flow_below_0_01_count": 0
+          }
+        ],
+        "source_start_label": "EEG_projection_rest",
+        "eeg_nmse": 0.0019540254559345825,
+        "eeg_nrmse": 0.04420436014619579,
+        "hb_nmse": 6.387610497069193e-09,
+        "hb_nrmse": 7.992252809483189e-05,
+        "hbo_nmse": 9.41369238311172e-09,
+        "hbo_nrmse": 9.702418452690917e-05,
+        "hbr_nmse": 3.361528611026669e-09,
+        "hbr_nrmse": 5.797869100822016e-05,
+        "state_diagnostics": {
+          "cores": [
+            {
+              "flow": {
+                "min": 0.8778865342851963,
+                "max": 1.084545397621353
+              },
+              "v": {
+                "min": 0.9609975327489619,
+                "max": 1.017184902289214
+              },
+              "p": {
+                "min": 0.9612982268275246,
+                "max": 1.0171867383342352
+              },
+              "q": {
+                "min": 0.9840070522201022,
+                "max": 1.0520810219858405
+              }
+            }
+          ],
+          "physical_initials": [
+            [
+              -0.07508824324383112,
+              1.084545397621353,
+              0.9754555475492737,
+              0.9856345838085491,
+              0.994331860294038
+            ]
+          ],
+          "flow_outside_engineering_reference": false,
+          "initial_outside_engineering_reference": false,
+          "parameter_bound_hits": {
+            "tau": false,
+            "kappa": false
+          },
+          "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+        }
+      },
+      "starts": [
+        {
+          "label": "EEG_projection_rest",
+          "optimizer_success": true,
+          "optimizer_converged": true,
+          "optimizer_status": 0,
+          "optimizer_message": "Optimization terminated successfully",
+          "best_candidate": {
+            "prediction": {
+              "array_shape": [
+                120,
+                68
+              ]
+            },
+            "states": {
+              "array_shape": [
+                120,
+                1,
+                6
+              ]
+            },
+            "drivers": {
+              "array_shape": [
+                120,
+                1
+              ]
+            },
+            "coefficients": {
+              "array_shape": [
+                16,
+                1
+              ]
+            },
+            "initial_coordinates": {
+              "array_shape": [
+                1,
+                5
+              ]
+            },
+            "tau": 2.000065436233578,
+            "kappa": 0.5697253252044512,
+            "scores": {
+              "EEG": {
+                "weighted_sse": 11.724152735607495,
+                "n_scored": 6000,
+                "nmse": 0.0019540254559345825,
+                "nrmse": 0.04420436014619579
+              },
+              "Hb": {
+                "weighted_sse": 5.110088397655354e-06,
+                "n_scored": 800,
+                "nmse": 6.387610497069193e-09,
+                "nrmse": 7.992252809483189e-05
+              },
+              "HbO": {
+                "weighted_sse": 3.765476953244688e-06,
+                "n_scored": 400,
+                "nmse": 9.41369238311172e-09,
+                "nrmse": 9.702418452690917e-05
+              },
+              "HbR": {
+                "weighted_sse": 1.3446114444106676e-06,
+                "n_scored": 400,
+                "nmse": 3.361528611026669e-09,
+                "nrmse": 5.797869100822016e-05
+              }
+            },
+            "optimization_scores": {
+              "EEG": {
+                "weighted_sse": 11.724152735607495,
+                "n_scored": 6000,
+                "nmse": 0.0019540254559345825,
+                "nrmse": 0.04420436014619579
+              },
+              "Hb": {
+                "weighted_sse": 5.111423678586295e-06,
+                "n_scored": 800,
+                "nmse": 6.389279598232868e-09,
+                "nrmse": 7.9932969407078e-05
+              },
+              "HbO": {
+                "weighted_sse": 3.7647048357204744e-06,
+                "n_scored": 400,
+                "nmse": 9.411762089301185e-09,
+                "nrmse": 9.701423652898158e-05
+              },
+              "HbR": {
+                "weighted_sse": 1.3467188428658194e-06,
+                "n_scored": 400,
+                "nmse": 3.3667971071645487e-09,
+                "nrmse": 5.802410798249766e-05
+              }
+            },
+            "witness_feasible": true,
+            "physical_valid": true,
+            "integration_error": 1.684243800531486e-07,
+            "integration_error_by_modality": {
+              "EEG": 0.0,
+              "HbO": 1.25356219424409e-07,
+              "HbR": 1.684243800531486e-07
+            },
+            "physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778865342851963,
+                "minimum_v": 0.9609975327489619,
+                "minimum_p": 0.9612982268275246,
+                "minimum_q": 0.9840070522201022,
+                "minimum_extraction": 0.29924593120776805,
+                "maximum_extraction": 0.3555176804172798,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393078897445484,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "optimization_physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778865332358841,
+                "minimum_v": 0.9609975315354798,
+                "minimum_p": 0.9612982256211189,
+                "minimum_q": 0.9840070516788275,
+                "minimum_extraction": 0.29924593120776805,
+                "maximum_extraction": 0.3555176807556923,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393078902696403,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "source_start_label": "EEG_projection_rest",
+            "eeg_nmse": 0.0019540254559345825,
+            "eeg_nrmse": 0.04420436014619579,
+            "hb_nmse": 6.387610497069193e-09,
+            "hb_nrmse": 7.992252809483189e-05,
+            "hbo_nmse": 9.41369238311172e-09,
+            "hbo_nrmse": 9.702418452690917e-05,
+            "hbr_nmse": 3.361528611026669e-09,
+            "hbr_nrmse": 5.797869100822016e-05,
+            "state_diagnostics": {
+              "cores": [
+                {
+                  "flow": {
+                    "min": 0.8778865342851963,
+                    "max": 1.084545397621353
+                  },
+                  "v": {
+                    "min": 0.9609975327489619,
+                    "max": 1.017184902289214
+                  },
+                  "p": {
+                    "min": 0.9612982268275246,
+                    "max": 1.0171867383342352
+                  },
+                  "q": {
+                    "min": 0.9840070522201022,
+                    "max": 1.0520810219858405
+                  }
+                }
+              ],
+              "physical_initials": [
+                [
+                  -0.07508824324383112,
+                  1.084545397621353,
+                  0.9754555475492737,
+                  0.9856345838085491,
+                  0.994331860294038
+                ]
+              ],
+              "flow_outside_engineering_reference": false,
+              "initial_outside_engineering_reference": false,
+              "parameter_bound_hits": {
+                "tau": false,
+                "kappa": false
+              },
+              "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+            }
+          },
+          "joint_witness": {
+            "prediction": {
+              "array_shape": [
+                120,
+                68
+              ]
+            },
+            "states": {
+              "array_shape": [
+                120,
+                1,
+                6
+              ]
+            },
+            "drivers": {
+              "array_shape": [
+                120,
+                1
+              ]
+            },
+            "coefficients": {
+              "array_shape": [
+                16,
+                1
+              ]
+            },
+            "initial_coordinates": {
+              "array_shape": [
+                1,
+                5
+              ]
+            },
+            "tau": 2.000065436233578,
+            "kappa": 0.5697253252044512,
+            "scores": {
+              "EEG": {
+                "weighted_sse": 11.724152735607495,
+                "n_scored": 6000,
+                "nmse": 0.0019540254559345825,
+                "nrmse": 0.04420436014619579
+              },
+              "Hb": {
+                "weighted_sse": 5.110088397655354e-06,
+                "n_scored": 800,
+                "nmse": 6.387610497069193e-09,
+                "nrmse": 7.992252809483189e-05
+              },
+              "HbO": {
+                "weighted_sse": 3.765476953244688e-06,
+                "n_scored": 400,
+                "nmse": 9.41369238311172e-09,
+                "nrmse": 9.702418452690917e-05
+              },
+              "HbR": {
+                "weighted_sse": 1.3446114444106676e-06,
+                "n_scored": 400,
+                "nmse": 3.361528611026669e-09,
+                "nrmse": 5.797869100822016e-05
+              }
+            },
+            "optimization_scores": {
+              "EEG": {
+                "weighted_sse": 11.724152735607495,
+                "n_scored": 6000,
+                "nmse": 0.0019540254559345825,
+                "nrmse": 0.04420436014619579
+              },
+              "Hb": {
+                "weighted_sse": 5.111423678586295e-06,
+                "n_scored": 800,
+                "nmse": 6.389279598232868e-09,
+                "nrmse": 7.9932969407078e-05
+              },
+              "HbO": {
+                "weighted_sse": 3.7647048357204744e-06,
+                "n_scored": 400,
+                "nmse": 9.411762089301185e-09,
+                "nrmse": 9.701423652898158e-05
+              },
+              "HbR": {
+                "weighted_sse": 1.3467188428658194e-06,
+                "n_scored": 400,
+                "nmse": 3.3667971071645487e-09,
+                "nrmse": 5.802410798249766e-05
+              }
+            },
+            "witness_feasible": true,
+            "physical_valid": true,
+            "integration_error": 1.684243800531486e-07,
+            "integration_error_by_modality": {
+              "EEG": 0.0,
+              "HbO": 1.25356219424409e-07,
+              "HbR": 1.684243800531486e-07
+            },
+            "physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778865342851963,
+                "minimum_v": 0.9609975327489619,
+                "minimum_p": 0.9612982268275246,
+                "minimum_q": 0.9840070522201022,
+                "minimum_extraction": 0.29924593120776805,
+                "maximum_extraction": 0.3555176804172798,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393078897445484,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "optimization_physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778865332358841,
+                "minimum_v": 0.9609975315354798,
+                "minimum_p": 0.9612982256211189,
+                "minimum_q": 0.9840070516788275,
+                "minimum_extraction": 0.29924593120776805,
+                "maximum_extraction": 0.3555176807556923,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393078902696403,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "source_start_label": "EEG_projection_rest",
+            "eeg_nmse": 0.0019540254559345825,
+            "eeg_nrmse": 0.04420436014619579,
+            "hb_nmse": 6.387610497069193e-09,
+            "hb_nrmse": 7.992252809483189e-05,
+            "hbo_nmse": 9.41369238311172e-09,
+            "hbo_nrmse": 9.702418452690917e-05,
+            "hbr_nmse": 3.361528611026669e-09,
+            "hbr_nrmse": 5.797869100822016e-05,
+            "state_diagnostics": {
+              "cores": [
+                {
+                  "flow": {
+                    "min": 0.8778865342851963,
+                    "max": 1.084545397621353
+                  },
+                  "v": {
+                    "min": 0.9609975327489619,
+                    "max": 1.017184902289214
+                  },
+                  "p": {
+                    "min": 0.9612982268275246,
+                    "max": 1.0171867383342352
+                  },
+                  "q": {
+                    "min": 0.9840070522201022,
+                    "max": 1.0520810219858405
+                  }
+                }
+              ],
+              "physical_initials": [
+                [
+                  -0.07508824324383112,
+                  1.084545397621353,
+                  0.9754555475492737,
+                  0.9856345838085491,
+                  0.994331860294038
+                ]
+              ],
+              "flow_outside_engineering_reference": false,
+              "initial_outside_engineering_reference": false,
+              "parameter_bound_hits": {
+                "tau": false,
+                "kappa": false
+              },
+              "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+            }
+          },
+          "evaluations": 127,
+          "forward_calls": 657,
+          "finite_difference_calls": 424,
+          "verification_calls": 106,
+          "cache_hits": 76,
+          "invalid_trials": 21
+        },
+        {
+          "label": "nested_fixed_candidate",
+          "optimizer_success": true,
+          "optimizer_converged": true,
+          "optimizer_status": 0,
+          "optimizer_message": "Optimization terminated successfully",
+          "best_candidate": {
+            "prediction": {
+              "array_shape": [
+                120,
+                68
+              ]
+            },
+            "states": {
+              "array_shape": [
+                120,
+                1,
+                6
+              ]
+            },
+            "drivers": {
+              "array_shape": [
+                120,
+                1
+              ]
+            },
+            "coefficients": {
+              "array_shape": [
+                16,
+                1
+              ]
+            },
+            "initial_coordinates": {
+              "array_shape": [
+                1,
+                5
+              ]
+            },
+            "tau": 1.9999999994641495,
+            "kappa": 0.6400000000797382,
+            "scores": {
+              "EEG": {
+                "weighted_sse": 12.061221441841344,
+                "n_scored": 6000,
+                "nmse": 0.0020102035736402238,
+                "nrmse": 0.04483529383911991
+              },
+              "Hb": {
+                "weighted_sse": 7.4535916790501216e-06,
+                "n_scored": 800,
+                "nmse": 9.316989598812652e-09,
+                "nrmse": 9.65245543828753e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.54245551194542e-06,
+                "n_scored": 400,
+                "nmse": 1.635613877986355e-08,
+                "nrmse": 0.00012789112080149878
+              },
+              "HbR": {
+                "weighted_sse": 9.11136167104702e-07,
+                "n_scored": 400,
+                "nmse": 2.277840417761755e-09,
+                "nrmse": 4.772672645134752e-05
+              }
+            },
+            "optimization_scores": {
+              "EEG": {
+                "weighted_sse": 12.061221441841344,
+                "n_scored": 6000,
+                "nmse": 0.0020102035736402238,
+                "nrmse": 0.04483529383911991
+              },
+              "Hb": {
+                "weighted_sse": 7.452227543722035e-06,
+                "n_scored": 800,
+                "nmse": 9.315284429652543e-09,
+                "nrmse": 9.651572115283884e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.5419305072625665e-06,
+                "n_scored": 400,
+                "nmse": 1.6354826268156417e-08,
+                "nrmse": 0.00012788598933486192
+              },
+              "HbR": {
+                "weighted_sse": 9.102970364594693e-07,
+                "n_scored": 400,
+                "nmse": 2.275742591148673e-09,
+                "nrmse": 4.7704743906121886e-05
+              }
+            },
+            "witness_feasible": true,
+            "physical_valid": true,
+            "integration_error": 2.1091846627699106e-07,
+            "integration_error_by_modality": {
+              "EEG": 0.0,
+              "HbO": 1.7050326848870386e-07,
+              "HbR": 2.1091846627699106e-07
+            },
+            "physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778157963970719,
+                "minimum_v": 0.9609789009456108,
+                "minimum_p": 0.9612747334228894,
+                "minimum_q": 0.9840371450312698,
+                "minimum_extraction": 0.2943963895365872,
+                "maximum_extraction": 0.35554049544608873,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393432909215202,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "optimization_physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778157955333198,
+                "minimum_v": 0.9609788996353442,
+                "minimum_p": 0.9612747321196349,
+                "minimum_q": 0.9840371444543731,
+                "minimum_extraction": 0.2943963895365872,
+                "maximum_extraction": 0.3555404957246915,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.43934329135382466,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "source_start_label": "nested_fixed_candidate",
+            "eeg_nmse": 0.0020102035736402238,
+            "eeg_nrmse": 0.04483529383911991,
+            "hb_nmse": 9.316989598812652e-09,
+            "hb_nrmse": 9.65245543828753e-05,
+            "hbo_nmse": 1.635613877986355e-08,
+            "hbo_nrmse": 0.00012789112080149878,
+            "hbr_nmse": 2.277840417761755e-09,
+            "hbr_nrmse": 4.772672645134752e-05,
+            "state_diagnostics": {
+              "cores": [
+                {
+                  "flow": {
+                    "min": 0.8778157963970719,
+                    "max": 1.1059955483187929
+                  },
+                  "v": {
+                    "min": 0.9609789009456108,
+                    "max": 1.017164101468673
+                  },
+                  "p": {
+                    "min": 0.9612747334228894,
+                    "max": 1.0171659079160231
+                  },
+                  "q": {
+                    "min": 0.9840371450312698,
+                    "max": 1.0521135417049514
+                  }
+                }
+              ],
+              "physical_initials": [
+                [
+                  -0.10451617878967563,
+                  1.1059955483187929,
+                  0.9715244605771639,
+                  0.9815440888221815,
+                  0.9941812989060735
+                ]
+              ],
+              "flow_outside_engineering_reference": false,
+              "initial_outside_engineering_reference": false,
+              "parameter_bound_hits": {
+                "tau": false,
+                "kappa": false
+              },
+              "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+            }
+          },
+          "joint_witness": {
+            "prediction": {
+              "array_shape": [
+                120,
+                68
+              ]
+            },
+            "states": {
+              "array_shape": [
+                120,
+                1,
+                6
+              ]
+            },
+            "drivers": {
+              "array_shape": [
+                120,
+                1
+              ]
+            },
+            "coefficients": {
+              "array_shape": [
+                16,
+                1
+              ]
+            },
+            "initial_coordinates": {
+              "array_shape": [
+                1,
+                5
+              ]
+            },
+            "tau": 1.9999999994641495,
+            "kappa": 0.6400000000797382,
+            "scores": {
+              "EEG": {
+                "weighted_sse": 12.061221441841344,
+                "n_scored": 6000,
+                "nmse": 0.0020102035736402238,
+                "nrmse": 0.04483529383911991
+              },
+              "Hb": {
+                "weighted_sse": 7.4535916790501216e-06,
+                "n_scored": 800,
+                "nmse": 9.316989598812652e-09,
+                "nrmse": 9.65245543828753e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.54245551194542e-06,
+                "n_scored": 400,
+                "nmse": 1.635613877986355e-08,
+                "nrmse": 0.00012789112080149878
+              },
+              "HbR": {
+                "weighted_sse": 9.11136167104702e-07,
+                "n_scored": 400,
+                "nmse": 2.277840417761755e-09,
+                "nrmse": 4.772672645134752e-05
+              }
+            },
+            "optimization_scores": {
+              "EEG": {
+                "weighted_sse": 12.061221441841344,
+                "n_scored": 6000,
+                "nmse": 0.0020102035736402238,
+                "nrmse": 0.04483529383911991
+              },
+              "Hb": {
+                "weighted_sse": 7.452227543722035e-06,
+                "n_scored": 800,
+                "nmse": 9.315284429652543e-09,
+                "nrmse": 9.651572115283884e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.5419305072625665e-06,
+                "n_scored": 400,
+                "nmse": 1.6354826268156417e-08,
+                "nrmse": 0.00012788598933486192
+              },
+              "HbR": {
+                "weighted_sse": 9.102970364594693e-07,
+                "n_scored": 400,
+                "nmse": 2.275742591148673e-09,
+                "nrmse": 4.7704743906121886e-05
+              }
+            },
+            "witness_feasible": true,
+            "physical_valid": true,
+            "integration_error": 2.1091846627699106e-07,
+            "integration_error_by_modality": {
+              "EEG": 0.0,
+              "HbO": 1.7050326848870386e-07,
+              "HbR": 2.1091846627699106e-07
+            },
+            "physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778157963970719,
+                "minimum_v": 0.9609789009456108,
+                "minimum_p": 0.9612747334228894,
+                "minimum_q": 0.9840371450312698,
+                "minimum_extraction": 0.2943963895365872,
+                "maximum_extraction": 0.35554049544608873,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393432909215202,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "optimization_physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778157955333198,
+                "minimum_v": 0.9609788996353442,
+                "minimum_p": 0.9612747321196349,
+                "minimum_q": 0.9840371444543731,
+                "minimum_extraction": 0.2943963895365872,
+                "maximum_extraction": 0.3555404957246915,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.43934329135382466,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "source_start_label": "nested_fixed_candidate",
+            "eeg_nmse": 0.0020102035736402238,
+            "eeg_nrmse": 0.04483529383911991,
+            "hb_nmse": 9.316989598812652e-09,
+            "hb_nrmse": 9.65245543828753e-05,
+            "hbo_nmse": 1.635613877986355e-08,
+            "hbo_nrmse": 0.00012789112080149878,
+            "hbr_nmse": 2.277840417761755e-09,
+            "hbr_nrmse": 4.772672645134752e-05,
+            "state_diagnostics": {
+              "cores": [
+                {
+                  "flow": {
+                    "min": 0.8778157963970719,
+                    "max": 1.1059955483187929
+                  },
+                  "v": {
+                    "min": 0.9609789009456108,
+                    "max": 1.017164101468673
+                  },
+                  "p": {
+                    "min": 0.9612747334228894,
+                    "max": 1.0171659079160231
+                  },
+                  "q": {
+                    "min": 0.9840371450312698,
+                    "max": 1.0521135417049514
+                  }
+                }
+              ],
+              "physical_initials": [
+                [
+                  -0.10451617878967563,
+                  1.1059955483187929,
+                  0.9715244605771639,
+                  0.9815440888221815,
+                  0.9941812989060735
+                ]
+              ],
+              "flow_outside_engineering_reference": false,
+              "initial_outside_engineering_reference": false,
+              "parameter_bound_hits": {
+                "tau": false,
+                "kappa": false
+              },
+              "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+            }
+          },
+          "evaluations": 6,
+          "forward_calls": 36,
+          "finite_difference_calls": 24,
+          "verification_calls": 6,
+          "cache_hits": 2,
+          "invalid_trials": 0
+        },
+        {
+          "label": "nested_fixed_joint_witness",
+          "optimizer_success": true,
+          "optimizer_converged": true,
+          "optimizer_status": 0,
+          "optimizer_message": "Optimization terminated successfully",
+          "best_candidate": {
+            "prediction": {
+              "array_shape": [
+                120,
+                68
+              ]
+            },
+            "states": {
+              "array_shape": [
+                120,
+                1,
+                6
+              ]
+            },
+            "drivers": {
+              "array_shape": [
+                120,
+                1
+              ]
+            },
+            "coefficients": {
+              "array_shape": [
+                16,
+                1
+              ]
+            },
+            "initial_coordinates": {
+              "array_shape": [
+                1,
+                5
+              ]
+            },
+            "tau": 1.9999999994641495,
+            "kappa": 0.6400000000797382,
+            "scores": {
+              "EEG": {
+                "weighted_sse": 12.061221441841344,
+                "n_scored": 6000,
+                "nmse": 0.0020102035736402238,
+                "nrmse": 0.04483529383911991
+              },
+              "Hb": {
+                "weighted_sse": 7.4535916790501216e-06,
+                "n_scored": 800,
+                "nmse": 9.316989598812652e-09,
+                "nrmse": 9.65245543828753e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.54245551194542e-06,
+                "n_scored": 400,
+                "nmse": 1.635613877986355e-08,
+                "nrmse": 0.00012789112080149878
+              },
+              "HbR": {
+                "weighted_sse": 9.11136167104702e-07,
+                "n_scored": 400,
+                "nmse": 2.277840417761755e-09,
+                "nrmse": 4.772672645134752e-05
+              }
+            },
+            "optimization_scores": {
+              "EEG": {
+                "weighted_sse": 12.061221441841344,
+                "n_scored": 6000,
+                "nmse": 0.0020102035736402238,
+                "nrmse": 0.04483529383911991
+              },
+              "Hb": {
+                "weighted_sse": 7.452227543722035e-06,
+                "n_scored": 800,
+                "nmse": 9.315284429652543e-09,
+                "nrmse": 9.651572115283884e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.5419305072625665e-06,
+                "n_scored": 400,
+                "nmse": 1.6354826268156417e-08,
+                "nrmse": 0.00012788598933486192
+              },
+              "HbR": {
+                "weighted_sse": 9.102970364594693e-07,
+                "n_scored": 400,
+                "nmse": 2.275742591148673e-09,
+                "nrmse": 4.7704743906121886e-05
+              }
+            },
+            "witness_feasible": true,
+            "physical_valid": true,
+            "integration_error": 2.1091846627699106e-07,
+            "integration_error_by_modality": {
+              "EEG": 0.0,
+              "HbO": 1.7050326848870386e-07,
+              "HbR": 2.1091846627699106e-07
+            },
+            "physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778157963970719,
+                "minimum_v": 0.9609789009456108,
+                "minimum_p": 0.9612747334228894,
+                "minimum_q": 0.9840371450312698,
+                "minimum_extraction": 0.2943963895365872,
+                "maximum_extraction": 0.35554049544608873,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393432909215202,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "optimization_physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778157955333198,
+                "minimum_v": 0.9609788996353442,
+                "minimum_p": 0.9612747321196349,
+                "minimum_q": 0.9840371444543731,
+                "minimum_extraction": 0.2943963895365872,
+                "maximum_extraction": 0.3555404957246915,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.43934329135382466,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "source_start_label": "nested_fixed_joint_witness",
+            "eeg_nmse": 0.0020102035736402238,
+            "eeg_nrmse": 0.04483529383911991,
+            "hb_nmse": 9.316989598812652e-09,
+            "hb_nrmse": 9.65245543828753e-05,
+            "hbo_nmse": 1.635613877986355e-08,
+            "hbo_nrmse": 0.00012789112080149878,
+            "hbr_nmse": 2.277840417761755e-09,
+            "hbr_nrmse": 4.772672645134752e-05,
+            "state_diagnostics": {
+              "cores": [
+                {
+                  "flow": {
+                    "min": 0.8778157963970719,
+                    "max": 1.1059955483187929
+                  },
+                  "v": {
+                    "min": 0.9609789009456108,
+                    "max": 1.017164101468673
+                  },
+                  "p": {
+                    "min": 0.9612747334228894,
+                    "max": 1.0171659079160231
+                  },
+                  "q": {
+                    "min": 0.9840371450312698,
+                    "max": 1.0521135417049514
+                  }
+                }
+              ],
+              "physical_initials": [
+                [
+                  -0.10451617878967563,
+                  1.1059955483187929,
+                  0.9715244605771639,
+                  0.9815440888221815,
+                  0.9941812989060735
+                ]
+              ],
+              "flow_outside_engineering_reference": false,
+              "initial_outside_engineering_reference": false,
+              "parameter_bound_hits": {
+                "tau": false,
+                "kappa": false
+              },
+              "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+            }
+          },
+          "joint_witness": {
+            "prediction": {
+              "array_shape": [
+                120,
+                68
+              ]
+            },
+            "states": {
+              "array_shape": [
+                120,
+                1,
+                6
+              ]
+            },
+            "drivers": {
+              "array_shape": [
+                120,
+                1
+              ]
+            },
+            "coefficients": {
+              "array_shape": [
+                16,
+                1
+              ]
+            },
+            "initial_coordinates": {
+              "array_shape": [
+                1,
+                5
+              ]
+            },
+            "tau": 1.9999999994641495,
+            "kappa": 0.6400000000797382,
+            "scores": {
+              "EEG": {
+                "weighted_sse": 12.061221441841344,
+                "n_scored": 6000,
+                "nmse": 0.0020102035736402238,
+                "nrmse": 0.04483529383911991
+              },
+              "Hb": {
+                "weighted_sse": 7.4535916790501216e-06,
+                "n_scored": 800,
+                "nmse": 9.316989598812652e-09,
+                "nrmse": 9.65245543828753e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.54245551194542e-06,
+                "n_scored": 400,
+                "nmse": 1.635613877986355e-08,
+                "nrmse": 0.00012789112080149878
+              },
+              "HbR": {
+                "weighted_sse": 9.11136167104702e-07,
+                "n_scored": 400,
+                "nmse": 2.277840417761755e-09,
+                "nrmse": 4.772672645134752e-05
+              }
+            },
+            "optimization_scores": {
+              "EEG": {
+                "weighted_sse": 12.061221441841344,
+                "n_scored": 6000,
+                "nmse": 0.0020102035736402238,
+                "nrmse": 0.04483529383911991
+              },
+              "Hb": {
+                "weighted_sse": 7.452227543722035e-06,
+                "n_scored": 800,
+                "nmse": 9.315284429652543e-09,
+                "nrmse": 9.651572115283884e-05
+              },
+              "HbO": {
+                "weighted_sse": 6.5419305072625665e-06,
+                "n_scored": 400,
+                "nmse": 1.6354826268156417e-08,
+                "nrmse": 0.00012788598933486192
+              },
+              "HbR": {
+                "weighted_sse": 9.102970364594693e-07,
+                "n_scored": 400,
+                "nmse": 2.275742591148673e-09,
+                "nrmse": 4.7704743906121886e-05
+              }
+            },
+            "witness_feasible": true,
+            "physical_valid": true,
+            "integration_error": 2.1091846627699106e-07,
+            "integration_error_by_modality": {
+              "EEG": 0.0,
+              "HbO": 1.7050326848870386e-07,
+              "HbR": 2.1091846627699106e-07
+            },
+            "physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778157963970719,
+                "minimum_v": 0.9609789009456108,
+                "minimum_p": 0.9612747334228894,
+                "minimum_q": 0.9840371450312698,
+                "minimum_extraction": 0.2943963895365872,
+                "maximum_extraction": 0.35554049544608873,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.4393432909215202,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "optimization_physical_checks": [
+              {
+                "finite": true,
+                "positive_fvpq": true,
+                "oxygen_extraction_in_unit_interval": true,
+                "absolute_hb_nonnegative": true,
+                "hbr_not_above_hbt": true,
+                "rest_equilibrium": true,
+                "minimum_f": 0.8778157955333198,
+                "minimum_v": 0.9609788996353442,
+                "minimum_p": 0.9612747321196349,
+                "minimum_q": 0.9840371444543731,
+                "minimum_extraction": 0.2943963895365872,
+                "maximum_extraction": 0.3555404957246915,
+                "extraction_float_saturation_count": 0,
+                "minimum_log_one_minus_extraction": -0.43934329135382466,
+                "flow_below_0_01_count": 0
+              }
+            ],
+            "source_start_label": "nested_fixed_joint_witness",
+            "eeg_nmse": 0.0020102035736402238,
+            "eeg_nrmse": 0.04483529383911991,
+            "hb_nmse": 9.316989598812652e-09,
+            "hb_nrmse": 9.65245543828753e-05,
+            "hbo_nmse": 1.635613877986355e-08,
+            "hbo_nrmse": 0.00012789112080149878,
+            "hbr_nmse": 2.277840417761755e-09,
+            "hbr_nrmse": 4.772672645134752e-05,
+            "state_diagnostics": {
+              "cores": [
+                {
+                  "flow": {
+                    "min": 0.8778157963970719,
+                    "max": 1.1059955483187929
+                  },
+                  "v": {
+                    "min": 0.9609789009456108,
+                    "max": 1.017164101468673
+                  },
+                  "p": {
+                    "min": 0.9612747334228894,
+                    "max": 1.0171659079160231
+                  },
+                  "q": {
+                    "min": 0.9840371450312698,
+                    "max": 1.0521135417049514
+                  }
+                }
+              ],
+              "physical_initials": [
+                [
+                  -0.10451617878967563,
+                  1.1059955483187929,
+                  0.9715244605771639,
+                  0.9815440888221815,
+                  0.9941812989060735
+                ]
+              ],
+              "flow_outside_engineering_reference": false,
+              "initial_outside_engineering_reference": false,
+              "parameter_bound_hits": {
+                "tau": false,
+                "kappa": false
+              },
+              "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+            }
+          },
+          "evaluations": 6,
+          "forward_calls": 36,
+          "finite_difference_calls": 24,
+          "verification_calls": 6,
+          "cache_hits": 2,
+          "invalid_trials": 0
+        }
+      ],
+      "failure_log": [
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 2,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 3,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 4,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 7,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 8,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 9,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 12,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 13,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 17,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 18,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 22,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 23,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 26,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 27,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 30,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 31,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 34,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 37,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 40,
+          "phase": "optimization",
+          "error": "nonlinear absolute Hb balance violated"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 43,
+          "phase": "optimization",
+          "error": "invalid physical RK stage"
+        },
+        {
+          "start": "EEG_projection_rest",
+          "evaluation": 46,
+          "phase": "optimization",
+          "error": "nonlinear absolute Hb balance violated"
+        }
+      ],
+      "evaluations": 139,
+      "forward_calls": 729,
+      "finite_difference_calls": 472,
+      "verification_calls": 118,
+      "cache_hits": 80,
+      "invalid_trials": 21,
+      "state_diagnostics": {
+        "cores": [
+          {
+            "flow": {
+              "min": 0.8778865342851963,
+              "max": 1.084545397621353
+            },
+            "v": {
+              "min": 0.9609975327489619,
+              "max": 1.017184902289214
+            },
+            "p": {
+              "min": 0.9612982268275246,
+              "max": 1.0171867383342352
+            },
+            "q": {
+              "min": 0.9840070522201022,
+              "max": 1.0520810219858405
+            }
+          }
+        ],
+        "physical_initials": [
+          [
+            -0.07508824324383112,
+            1.084545397621353,
+            0.9754555475492737,
+            0.9856345838085491,
+            0.994331860294038
+          ]
+        ],
+        "flow_outside_engineering_reference": false,
+        "initial_outside_engineering_reference": false,
+        "parameter_bound_hits": {
+          "tau": false,
+          "kappa": false
+        },
+        "reference": "descriptive_engineering_flow_[.25,4]_initial_[.5,2];not_a_physiological_gate"
+      }
+    }
+  },
+  "recovery": {
+    "fixed": {
+      "driver_nrmse": 0.3457927962892511,
+      "initial_coordinate_rmse": 0.06638338393039482,
+      "tau": 2.0,
+      "kappa": 0.64,
+      "truth_tau": 2.0,
+      "truth_kappa": 0.64,
+      "interpretation": "nominal_truth_conditional_recovery_not_non_nominal_parameter_qualification"
+    },
+    "free_tau_kappa": {
+      "driver_nrmse": 0.2915815947966765,
+      "initial_coordinate_rmse": 0.05045179979126213,
+      "tau": 2.000065436233578,
+      "kappa": 0.5697253252044512,
+      "truth_tau": 2.0,
+      "truth_kappa": 0.64,
+      "interpretation": "nominal_truth_conditional_recovery_not_non_nominal_parameter_qualification"
+    }
+  },
+  "measured_arrays_read": 0,
+  "truth_as_start": false,
+  "interpretation": "known_truth_finite_solver_and_exclusion_controls_no_measured_or_individual_qualification",
+  "elapsed_s": 5.5208812589989975
+}

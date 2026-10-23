@@ -1,0 +1,254 @@
+{
+  "schema": "shared_driver_feasibility_v1",
+  "experiment_id": "SSM-FEASIBILITY-v1",
+  "artifact_root": "experiments/runs/physiology_semantic_tokenizer/source_observability",
+  "scope": "conditional_feasibility_of_current_inlet_balance_implementation",
+  "seed": 2026102201,
+  "sources": {
+    "source_run": "experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2",
+    "protected_data": "forbidden",
+    "raw_or_cache_reads": "forbidden",
+    "split": "evaluation",
+    "policy": "explicit_completed_public_parent_identity_before_array_read"
+  },
+  "model": {
+    "arms": [
+      "K1_true_H4_E12",
+      "K2_true_H4_E12"
+    ],
+    "steps": 120,
+    "dt_s": 0.25,
+    "temporal_modes": 16,
+    "parameters": "inherited_exactly_from_parent_fixed",
+    "coordinates": "frozen_parent_training_only",
+    "observation": "actual_EEG_and_Hb_operators_no_per_window_rescaling",
+    "initial_conditions": "independent_s_f_v_p_q_per_core"
+  },
+  "scoring": {
+    "score_steps": [
+      20,
+      120
+    ],
+    "primary_tolerance": 0.5,
+    "tolerances": [
+      0.25,
+      0.5,
+      0.75,
+      1.0,
+      1.5
+    ],
+    "metric": "sqrt_mean_squared_residual_divided_by_fixed_training_SD",
+    "primary": "separate_EEG_HbO_HbR_joint_engineering_feasibility",
+    "secondary": [
+      "Hb_joint_NRMSE",
+      "centered_local_NRMSE",
+      "correlation",
+      "amplitude_ratio"
+    ],
+    "scale_interpretation": "training_variability_not_sensor_noise",
+    "aggregation": "time_feature_MSE_then_record_mean_then_subject_mean_then_square_root",
+    "bootstrap_repeats": 1000,
+    "bootstrap_unit": "subject_all_records_windows_and_conditions",
+    "uncertainty": "descriptive_frozen_panel_not_population_confirmation"
+  },
+  "representation": {
+    "EEG": "exact_temporal_spatial_linear_projection_on_scored_support",
+    "Hb": "arbitrary_core_HbO_HbR_curves_preserving_spatial_readout_and_time_operator",
+    "numerical_rank": "machine_precision_SVD_with_residual_and_rank_diagnostics",
+    "exclusion_margin": 1e-07,
+    "interpretation": "lower_bound_for_frozen_observation_family_not_all_Balloon_models"
+  },
+  "vascular": {
+    "target_pair": 0,
+    "temporal_modes": 120,
+    "flow": "positive_logflow_linear_interpolation_between_4Hz_nodes",
+    "log_flow_bounds": [
+      -1.3862943611198906,
+      1.3862943611198906
+    ],
+    "initial_log_bounds": [
+      -0.6931471805599453,
+      0.6931471805599453
+    ],
+    "starts": [
+      {
+        "label": "rest",
+        "initial_physical": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "label": "unequal_p_v",
+        "initial_physical": [
+          0.95,
+          1.05,
+          1.0
+        ]
+      }
+    ],
+    "parameter_nodes": [
+      {
+        "label": "nominal",
+        "tau": 2.0,
+        "alpha": 0.32,
+        "E0": 0.32
+      },
+      {
+        "label": "short_tau",
+        "tau": 0.6,
+        "alpha": 0.32,
+        "E0": 0.32
+      },
+      {
+        "label": "long_tau",
+        "tau": 4.0,
+        "alpha": 0.32,
+        "E0": 0.32
+      },
+      {
+        "label": "low_alpha",
+        "tau": 2.0,
+        "alpha": 0.2,
+        "E0": 0.32
+      },
+      {
+        "label": "high_alpha",
+        "tau": 2.0,
+        "alpha": 0.5,
+        "E0": 0.32
+      },
+      {
+        "label": "low_E0",
+        "tau": 2.0,
+        "alpha": 0.32,
+        "E0": 0.2
+      },
+      {
+        "label": "high_E0",
+        "tau": 2.0,
+        "alpha": 0.32,
+        "E0": 0.5
+      },
+      {
+        "label": "sign_changed_engineering",
+        "tau": 2.0,
+        "alpha": 0.85,
+        "E0": 0.32
+      }
+    ],
+    "interpretation": "finite_engineering_witness_search_not_certified_nonlinear_lower_bound",
+    "original_model_relation": "upstream_relaxed_while_finite_flow_basis_and_engineering_bounds_remain"
+  },
+  "frontier": {
+    "parameter_branches": [
+      "fixed",
+      "free_tau_kappa"
+    ],
+    "tau_bounds": [
+      0.6,
+      4.0
+    ],
+    "kappa_bounds": [
+      0.2,
+      1.3
+    ],
+    "epsilon_values": [
+      0.25,
+      0.5,
+      0.75,
+      1.0,
+      1.5
+    ],
+    "EEG_constraint": "hard_fixed_training_SD_NRMSE_upper_bound",
+    "objective": "HbO_HbR_equal_standardized_MSE_without_prior_terms",
+    "starts": [
+      "retained_full_fit",
+      "EEG_projection_rest"
+    ],
+    "nesting": "retain_fixed_candidate_in_free_branch_and_narrow_epsilon_candidate_in_wider_branch",
+    "Hb_gate": "diagnostic_only_no_execution_gate",
+    "search_scope": "every_window_arm_with_EEG_representation_bound_below_current_epsilon",
+    "interpretation": "best_found_feasible_envelope_not_global_Pareto_frontier"
+  },
+  "profiles": {
+    "gate": "all_three_modalities_below_primary_tolerance_and_verified_physical_integration",
+    "tau_grid": [
+      0.6,
+      1.0,
+      2.0,
+      3.0,
+      4.0
+    ],
+    "kappa_grid": [
+      0.2,
+      0.4,
+      0.64,
+      1.0,
+      1.3
+    ],
+    "nuisance": "refit_driver_and_independent_initials_at_each_fixed_parameter_pair",
+    "interpretation": "discovered_admissible_grid_nodes_not_confidence_or_identified_intervals",
+    "transfer_gate": "joint_feasibility_known_truth_recovery_and_comparable_independent_records",
+    "transfer_execution": "no_automatic_transfer_without_non_nominal_recovery_and_comparable_pair_contract"
+  },
+  "synthetic": {
+    "seeds": [
+      2026102201,
+      2026102202,
+      2026102203
+    ],
+    "scenarios": [
+      "matched_noiseless",
+      "matched_noisy",
+      "EEG_orthogonal",
+      "Hb_spatial_orthogonal",
+      "shared_driver_conflict"
+    ],
+    "steps": 120,
+    "temporal_modes": 16,
+    "dt_s": 0.25,
+    "initial_coordinates": [
+      0.01,
+      0.012,
+      -0.006,
+      0.004,
+      -0.003
+    ],
+    "driver_rms": 0.025,
+    "noise_training_SD": 0.02,
+    "orthogonal_RMS_training_SD": 0.6,
+    "generator_substeps": 8,
+    "truth_as_start": "forbidden",
+    "purpose": "known_truth_software_and_exclusion_calibration_not_measured_qualification"
+  },
+  "solver": {
+    "max_nfev": 300,
+    "vascular_max_nfev": 300,
+    "substeps": 4,
+    "validation_substeps": 8,
+    "integration_tolerance": 0.005,
+    "constraint_tolerance": 1e-08,
+    "ftol": 1e-09,
+    "numerical_backend": "numba",
+    "infeasible_trial": "reject_and_retain_failure_count_never_clip"
+  },
+  "resources": {
+    "max_workers": 24,
+    "numerical_threads": 1,
+    "max_in_flight_per_worker": 2,
+    "supervisor": "user_systemd_with_linger"
+  },
+  "stopping": "fixed_tasks_all_terminal_no_result_dependent_capacity_or_threshold_expansion",
+  "claim_limits": [
+    "engineering_tolerances_and_parameter_ranges_are_not_physiological_qualification",
+    "numerical_optimization_failure_is_undetermined_not_proof_of_incompatibility",
+    "lawful_low_error_candidate_is_a_witness_even_without_optimizer_convergence",
+    "inlet_balance_p_minus_v_identity_applies_to_current_implementation_only",
+    "separate_Hb_target_feasibility_does_not_prove_joint_spatial_or_EEG_feasibility",
+    "low_amplitude_zero_predictor_passes_do_not_establish_waveform_recovery",
+    "no_individual_physiology_claim_without_joint_feasibility_and_transfer_evidence",
+    "original_evaluation_subjects_are_reused_public_development_not_new_confirmation"
+  ]
+}

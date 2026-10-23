@@ -62,6 +62,58 @@ measured result exists.
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
 
+## 当前共享驱动模型的表达边界与联合可行性（2026-10-22）
+
+`SSM-FEASIBILITY-v1` 根据用户提供的详细分析，将表示限制、Hb 内部相容性、
+跨模态冲突和参数信息分开检验。可执行合同为
+[`shared_driver_feasibility_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_feasibility_v1.yaml)，
+复用 `evaluate_source_observability.py --feasibility`；新证据写入既有
+`source_observability/` 下的版本运行。执行状态和科学裁决由 registry 持有，
+各阶段数值及终态由本轮运行记录持有，不重写 10 月 20/21 日证据。
+
+输入限于已完成公开空间运行 `shared_driver_spatial/20261020_measured_v2`
+列明的评价身份、prepared 数组、训练尺度、冻结读出及完整拟合；不重读原始数据、
+不触及比较协议受保护评价，也不重选 EEG 权重。沿用六名被试各六窗、K1/K2
+主面板，全部观测可见，评分支持为 30 s 窗内的 5–30 s。这是已使用公开材料的
+条件重分析，不是新的确认性评价；完整重建也不是隐藏通道预测。
+
+1. **表示下界。** EEG 用实际时间算子作用于原 16 维时间基，并保留冻结空间
+   读出；对评分支持上的固定训练 SD 加权矩阵求最小二乘投影。Hb 松弛为每核
+   任意 HbO/HbR 时间曲线，保留空间混合、增益及实际时间算子。分别报告三模态
+   数值投影残差、秩和保守下界。数值最小范数解可能截断极小奇异方向；用于
+   排除的证书把这些方向保留在更大的观测子空间中，避免截断抬高下界造成误判。
+   同时校验评分支持和观察算子。保守下界不冒称原预测空间的精确最短距离。
+   Hb 的这个下界只检验观察映射，不能冒充血管动力学的下界。
+2. **Hb 内部见证。** 在预定目标光学位置，直接以正流量驱动当前 inlet-balance
+   血管方程，保留独立的 v/p/q 初态和完整观测算子。冻结八个 tau/alpha/E0
+   工程敏感性节点，含原参数及改变低频符号的宽 alpha 节点；参数和流量范围
+   均不命名为正常生理范围。逐节点优化 4 Hz log-flow，检查两色团误差和 4/8
+   子步一致性。找到合法低误差解是存在性见证；有限节点、有限流量范围内未找到
+   解仍为未决。当前实现的 p−v 衰减关系不泛化为所有 Balloon 方程的限制。
+3. **联合容限。** 直接约束 EEG NRMSE，而不是选择一个 EEG 权重。预先固定
+   0.25/0.5/0.75/1.0/1.5 的 EEG 容限，最小化两色团等权训练 SD 标准化均方
+   残差；低于 EEG 表示下界的节点直接排除。对固定生理参数与释放 tau/kappa
+   比较，保留同一目标下的固定解和更窄容限解，保证见证集合嵌套。结果称已找到
+   可行解的包络，不称全局最优边界。alpha/E0 敏感性属于上一阶段，不混入
+   原固定 alpha/E0 类的联合结论。
+4. **参数信息的条件入口。** 仅当 EEG、HbO、HbR 各自 NRMSE≤0.5，且物理和
+   积分检查通过，才在固定 tau/kappa 网格重新拟合驱动与初态，报告已发现的
+   容许参数节点。它们不是置信区间；没有找到远端节点不证明参数已被识别。
+   个体迁移比较另须满足已知真值恢复及任务、区域、校准可比的独立记录条件；
+   任何前置条件未满足都明确报告未进入，不用稳定点估计替代证据。
+
+主标准是三模态分别小于 0.5 个训练 SD，完整报告其余容限的覆盖。训练 SD
+不当成传感器噪声；并列零预测、中心化形态误差、相关和幅比，防止低振幅曲线
+靠小幅预测被解释为波形恢复。统计先时间/特征均方，再记录内、被试内平均，
+最后被试等权开方；描述性区间整块重采样被试。完整保留表示排除、合法见证、
+数值未决、失败及条件未进入的分母，不把六窗当六名独立受试者。
+
+独立合成包含非静息且 p0≠v0 的匹配正例、固定噪声正例、已知 EEG/Hb 空间
+正交残差及分模态可行但驱动不同的冲突控制，真值不作普通初始化。先通过
+软件和合成检查，再在持久 user systemd 服务中计时、选并发并执行完整有限矩阵。
+优化收敛状态与可行性状态分开；预算耗尽但经细积分核验满足要求的解仍可证明
+存在性，预算耗尽而未找到解不能证明无解。
+
 ## 单一血流驱动的 Hb 相容性与 30/90 秒持续波动（2026-10-22）
 
 用户要求调查独立拟合初态仍缺少持续独立血容量激励的局限，并在当前公开实测

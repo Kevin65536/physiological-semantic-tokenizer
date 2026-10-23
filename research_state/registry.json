@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-22T10:24:24.248931+00:00",
+  "updated_at": "2026-10-22T10:54:39.905673+00:00",
   "tracks": [
     {
       "id": "main",
@@ -1973,6 +1973,12 @@
       "role": "diagnostic"
     },
     {
+      "id": "e.shared_driver_feasibility_contract",
+      "label": "当前共享驱动模型表达边界与联合可行性合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_feasibility_v1.yaml",
+      "role": "protocol"
+    },
+    {
       "id": "e.shared_driver_volume_drive_contract",
       "label": "30/90秒共同血容量方向诊断合同",
       "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_volume_drive_v1.yaml",
@@ -2006,6 +2012,48 @@
       "id": "e.shared_driver_volume_drive_resources",
       "label": "30/90秒诊断监督运行与资源选择",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/resources.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_feasibility_launch",
+      "label": "可行性诊断持久监督启动",
+      "path": "experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_feasibility_plan",
+      "label": "可行性诊断固定身份计划",
+      "path": "experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_feasibility_summary",
+      "label": "可行性诊断完整分阶段数值摘要",
+      "path": "experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_feasibility_verification",
+      "label": "可行性诊断独立数组及配对统计复核",
+      "path": "experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_feasibility_resources",
+      "label": "可行性诊断资源测量与并发选择",
+      "path": "experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/resources_resolved.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_feasibility_report",
+      "label": "共享驱动表示边界与联合可行性中文报告",
+      "path": "docs/report/20261022_shared_driver_feasibility_v1/TECHNICAL_REPORT.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_feasibility_report_checks",
+      "label": "可行性报告位图及正文可选检查",
+      "path": "docs/report/20261022_shared_driver_feasibility_v1/delivery_checks.json",
       "role": "diagnostic"
     }
   ],
@@ -5715,6 +5763,36 @@
       ],
       "headline": false,
       "next_step": null
+    },
+    {
+      "state_id": "main.shared_driver_feasibility@2026-10-22.v1",
+      "entity": "main.shared_driver_feasibility",
+      "label": "当前共享驱动模型表达边界与联合可行性",
+      "track": "main",
+      "order": 187,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "exploratory",
+      "summary": "447项正式任务全部终态，无程序异常；主判定限于当前冻结表示及工程容限。6人36窗中K1/K2 EEG保守数值下界汇总0.981/0.940，每窗均超过0.75，主容限0.5联合目标被表示必要条件排除。单位置正流量放松在名义参数下33/36窗得到双Hb合格见证，八节点合计34/36；576初值中518耗尽预算，不称全局最优或Hb普遍不相容。宽EEG容限同子集释放tau/kappa只改善Hb约1.7%–3.4%，状态越工程参考及参数贴边保留。720节点中466表示排除、233 EEG合法见证、21未决；主联合资格0，profile/个体迁移未进入。独立数组、聚合、区间和嵌套检查一致；15页位图图表中文PDF/HTML已导出。",
+      "evidence_ids": [
+        "e.shared_driver_feasibility_contract",
+        "e.shared_driver_feasibility_launch",
+        "e.shared_driver_feasibility_plan",
+        "e.shared_driver_feasibility_summary",
+        "e.shared_driver_feasibility_verification",
+        "e.shared_driver_feasibility_resources",
+        "e.shared_driver_feasibility_report",
+        "e.shared_driver_feasibility_report_checks"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-22T10:54:39.905673+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.local_spatial"
+      ],
+      "headline": false,
+      "next_step": "本轮有限矩阵已交付。后续先验证EEG特征与时间/空间读出的表达下界，再讨论血管参数识别；不能用放宽误差容限或数学合法性授予个体生理解释。"
     },
     {
       "state_id": "main.shared_driver_volume_drive@2026-10-22.v1",

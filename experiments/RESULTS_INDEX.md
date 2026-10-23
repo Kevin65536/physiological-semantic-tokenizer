@@ -26,6 +26,7 @@ explains the path hierarchy and reading order.
 
 | Research question | Suite root | Evidence entry |
 | --- | --- | --- |
+| Can the frozen observation family meet separate EEG/Hb tolerances, and which failures remain numerical? | `source_observability/` | [Shared-driver conditional feasibility](#shared-driver-conditional-feasibility--2026-10-22) |
 | Does the missing independent common-volume direction restrict sustained 30/90 s Hb reconstruction? | `shared_driver_reconstruction/` | [30/90 s volume-drive diagnostic](#continuous-hb-compatibility-and-independent-volume-direction--2026-10-22) |
 | Do local channels, geometry and independent dynamics contribute separately? | `shared_driver_spatial/` | [Complete spatial experiment](#local-spatial-complete-experiment--2026-10-20), [initial software evidence](#local-spatial-software-and-metadata--2026-10-16) |
 | How do the diagnostic families compare across datasets? | Multiple suites, resolved by the report evidence map | [REFED and four-dataset comparison](#refed-backfill-and-four-dataset-comparison--2026-10-13) |
@@ -50,6 +51,27 @@ Some run and checkpoint paths below point to local Git-ignored artifacts that re
 useful in this workspace but are not part of the tracked paper record. For manuscript
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
+
+## Shared-driver conditional feasibility — 2026-10-22
+
+The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_feasibility_v1.yaml)
+and [design](../docs/EXPERIMENT_PLAN.md#当前共享驱动模型的表达边界与联合可行性2026-10-22)
+use the explicit retained public spatial parent. Evidence is owned by the
+[run summary](runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json),
+its fixed stage manifests and task JSON/NPZ arrays. Preserve the resolved config,
+source snapshot, [supervised launches](runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/launch.json),
+[resource choice](runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/resources_resolved.json),
+and [independent verification](runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/verification.json).
+The Chinese [PDF](../docs/report/20261022_shared_driver_feasibility_v1/TECHNICAL_REPORT.pdf)
+and [HTML](../docs/report/20261022_shared_driver_feasibility_v1/TECHNICAL_REPORT.html)
+are communication exports of this evidence.
+
+Conservative float64 representation bounds, numerical minimum-norm residuals,
+single-position vascular witnesses and hard-EEG-tolerance searches have distinct
+interpretations. A legal low-error trajectory need not be an optimizer optimum
+or a physiologically identified solution. The report retains numerical failures,
+the separate strict joint criterion, conditional non-entry of parameter profiles,
+and the mismatch controls that pass observation tolerances despite driver error.
 
 ## Continuous Hb compatibility and independent volume direction — 2026-10-22
 

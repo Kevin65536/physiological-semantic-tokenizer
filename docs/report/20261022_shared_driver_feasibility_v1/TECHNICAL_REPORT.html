@@ -1,0 +1,250 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>当前共享驱动模型的表示边界与联合可行性</title><style>
+body{max-width:960px;margin:40px auto;padding:0 24px;color:#18324d;font:18px/1.75 "Noto Sans CJK SC",sans-serif}h1,h2,h3{line-height:1.4}h2{margin-top:2.5em}p,td,th{overflow-wrap:anywhere}figure{margin:1.7em 0}img{display:block;max-width:100%;height:auto;margin:auto}figcaption{font-size:16px;line-height:1.65;margin-top:12px}.source,.provenance{font-size:14px;color:#52616f}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:15px;line-height:1.5}th,td{padding:9px;border:1px solid #bbc8d4;vertical-align:top}th{background:#e8eff6}caption{text-align:left;font-weight:bold;margin:10px 0}.equation img{max-width:100%}@media print{body{margin:0;font-size:11pt}h2{break-after:avoid}figure{break-inside:avoid}thead{display:table-header-group}}
+</style></head><body><h1>当前共享驱动模型的表示边界与联合可行性</h1>
+<p>SSM-FEASIBILITY-v1：保留公开面板的条件重分析；中文技术报告</p>
+<p class="provenance">2026-10-22</p>
+<p class="provenance">唯一数值来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json及manifest明确列出的终态任务。</p>
+<p class="provenance">本报告是沟通导出，不是新的状态或结果事实源；没有读取原始数据或受保护评价。</p>
+<h2>研究摘要</h2>
+<p>本轮主问题没有达到：K1与K2的EEG保守数值下界分别为0.981和0.940个训练SD，全部36窗的下界均超过0.75，因此主容限0.5及敏感性容限0.75的联合目标已被当前冻结EEG表示的必要条件排除；这个排除不依赖血管局部优化。</p>
+<p>单个目标位置、放松为120个正流量节点并独立拟合血管初态的全窗口条件重建中，名义参数有33/36窗达到双Hb工程容限。它不证明四位置联合可达或16基共享驱动可达。</p>
+<p>在更宽EEG容限下，释放tau/kappa在各自共同EEG合格子集中仅使可见Hb拟合误差小幅下降；状态/初态超工程参考和参数贴边仍存在。未发现三模态主容限联合见证，条件profile及个体迁移均未进入。</p>
+<p>15项合成无任务异常；但共享驱动关系冲突例仍3/3通过容限且驱动恢复误差升高，说明容限合格不能替代生成关系与潜变量恢复证据。</p>
+<section><h2>一、研究问题、模型可见信息与比较对象</h2>
+<p>本轮把三个问题分开：冻结观测表示是否已经排除目标；放松上游后能否找到当前血管方程的低误差轨迹；在明确限制 EEG 误差时能否找到同时满足三模态容限的完整模型轨迹。只有第三步获得经细积分核验的联合见证，才讨论条件参数网格。</p>
+<div class="table-wrap"><table>
+<caption>观察条件与比较合同</caption>
+<colgroup><col style="width:25.000%"><col style="width:75.000%"></colgroup>
+<thead><tr><th>项目</th><th>本轮实际条件</th></tr></thead><tbody>
+<tr><td>数据与独立单元</td><td>Single-Trial 原空间运行的 6 名评价被试、36 个窗口；每人六窗。原划分为17/6/6人，本轮复用已使用的公开评价材料。</td></tr>
+<tr><td>观测与可见范围</td><td>12个EEG通道×5个频带（60个特征），4个Hb光学位置×2色团；完整窗口全部可见。完整重建不是隐藏目标预测。</td></tr>
+<tr><td>时间支持</td><td>30 s、4 Hz，共120点；前5 s保留原参考及完整观察算子，新拟合目标与评分均仅第20至119点，即5≤t&lt;30 s。前5 s不单独纳入残差。</td></tr>
+<tr><td>K1 / K2</td><td>分别为一个/两个共享驱动核心；冻结真实几何读出、训练坐标、增益及alpha/E0等参数；每核五个初态独立。</td></tr>
+<tr><td>旧完整拟合</td><td>从10月20日原full/paired/SSM结果保留预测重新评分；使用当时选出的EEG权重，不能作为新硬约束问题的全局最优。其原优化目标与正则保持不变，本报告只按共同评分支持重算误差。</td></tr>
+<tr><td>零预测</td><td>在冻结父坐标中逐点输出0；与新结果使用同一目标、固定训练SD及评分支持。</td></tr>
+</tbody></table></div>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/manifest.json</p>
+<p>训练标准差（SD）描述训练信号变异，未被证明等于传感器噪声。0.5等误差容限及tau/alpha/E0范围均为工程诊断设定，不赋予正常生理或生理恢复资格。</p>
+</section>
+<section><h2>二、指标怎么算：固定尺度、同支持和被试等权</h2>
+<figure class="equation"><img src="formulas/equation_01.png" style="width:371.6px" alt="式 1：逐窗口、逐模态的训练SD标准化误差。">
+<figcaption>式 1　逐窗口、逐模态的训练SD标准化误差。</figcaption>
+
+<p class="source"><a href="formulas/equation_01.tex">LaTeX 源文件</a></p>
+</figure>
+<p>m为EEG、HbO或HbR；Omega为5≤t&lt;30 s内该模态全部特征，y为保留实测目标，预测值用同一观测处理，s为父运行训练分区冻结的逐特征SD。误差越小越好；三个模态必须分别检查。</p>
+<figure class="equation"><img src="formulas/equation_02.png" style="width:325.9px" alt="式 2：面板汇总先均方，再按记录和被试等权，最后开方。">
+<figcaption>式 2　面板汇总先均方，再按记录和被试等权，最后开方。</figcaption>
+
+<p class="source"><a href="formulas/equation_02.tex">LaTeX 源文件</a></p>
+</figure>
+<p>s为被试，r为该被试的原生记录，w为记录内窗口。六个窗口不构成六名独立被试。95%描述性区间在冻结面板上整块重采样被试1000次，保留其全部记录、窗口和条件，不是人群确认区间。</p>
+<p>中心化误差先对每个特征沿时间去均值。中心化局部NRMSE再除以目标中心化能量的平方根；它描述局部形态误差，与训练SD归一误差使用不同分母。相关是逐特征中心化相关的平均；幅比是预测与目标的训练SD加权RMS之比。零幅度预测可能获得小训练SD误差，但不能恢复峰谷；无预测方差时相关未定义。</p>
+<p>下面的表示下界仅证明某类冻结观测映射的必要条件。非线性优化给出的有限合法轨迹只构成可达误差的上界；没有找到好解应保留为数值或搜索未决，不能倒置为不可能性证明。</p>
+</section>
+<section><h2>三、保守数值下界：先检查冻结表示的必要条件</h2>
+<p>EEG把原16维时间基先通过实际时间算子，再与冻结空间读出组合，在评分行上按固定训练SD加权投影。Hb允许每核拥有任意HbO/HbR曲线，但保留空间混合、增益和完整时间算子。为避免机器精度截断把未解析方向错误丢弃，下界计算保留这些方向并扩大投影空间：这是float64保守数值下界，不是原空间精确距离，也不是严格区间算术证书。其拟合曲线不保证能由原模型参数表示。两者分别松弛，合并后低误差不是联合见证；Hb下界也未检验血管动力学。</p>
+<p>EEG保守数值下界的最小值在K1为0.768024、K2为0.756189；两个模型的36/36窗口均高于0.75，因此0.5和0.75容限下没有窗口通过三模态共同必要条件。K2降低了部分Hb表示残差，但不能据此宣称联合可行或生理恢复。</p>
+<figure class="figure"><img src="figures/figure_01.png" style="width:671.0px" alt="图 1：每点一个窗口，蓝菱形为可用于必要条件判别的保守数值下界，橙三角为机器精度截断后的minnorm数值拟合残差。EEG数值秩为K1=15、K2=30，保守空间维数为16/32，分别保留1/2个未解析方向。下界因此更宽松；数值拟合残差自身不能用于排除。两条水平线为0.5及0.75工程容限。">
+<figcaption>图 1　每点一个窗口，蓝菱形为可用于必要条件判别的保守数值下界，橙三角为机器精度截断后的minnorm数值拟合残差。EEG数值秩为K1=15、K2=30，保守空间维数为16/32，分别保留1/2个未解析方向。下界因此更宽松；数值拟合残差自身不能用于排除。两条水平线为0.5及0.75工程容限。</figcaption>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/bounds/&lt;manifest-task-id&gt;.json</p>
+</figure>
+<div class="table-wrap"><table>
+<caption>投影下界与同支持对照：NRMSE [被试描述性95%区间]</caption>
+<colgroup><col style="width:8.696%"><col style="width:8.696%"><col style="width:23.188%"><col style="width:23.188%"><col style="width:23.188%"><col style="width:13.043%"></colgroup>
+<thead><tr><th>模型</th><th>模态</th><th>表示下界</th><th>旧完整拟合</th><th>零预测</th><th>有效/计划窗</th></tr></thead><tbody>
+<tr><td>K1</td><td>EEG</td><td>0.981 [0.898, 1.107]</td><td>1.121 [0.975, 1.329]</td><td>1.122 [0.974, 1.331]</td><td>36/36</td></tr>
+<tr><td>K1</td><td>HbO</td><td>0.613 [0.344, 0.825]</td><td>0.752 [0.457, 0.973]</td><td>1.411 [1.031, 1.825]</td><td>36/36</td></tr>
+<tr><td>K1</td><td>HbR</td><td>0.760 [0.389, 1.151]</td><td>0.874 [0.490, 1.275]</td><td>1.162 [0.660, 1.648]</td><td>36/36</td></tr>
+<tr><td>K2</td><td>EEG</td><td>0.940 [0.875, 1.034]</td><td>1.116 [0.972, 1.322]</td><td>1.122 [0.974, 1.331]</td><td>36/36</td></tr>
+<tr><td>K2</td><td>HbO</td><td>0.459 [0.271, 0.608]</td><td>0.657 [0.429, 0.836]</td><td>1.411 [1.031, 1.825]</td><td>36/36</td></tr>
+<tr><td>K2</td><td>HbR</td><td>0.641 [0.254, 1.013]</td><td>0.785 [0.437, 1.161]</td><td>1.162 [0.660, 1.648]</td><td>36/36</td></tr>
+</tbody></table></div>
+<p>表中下界只对当前冻结表示成立。旧K1完整拟合36/36成功；K2为35/36成功，表中36个有限预测包含一个旧预算/数值失败候选，不能描述成36次成功拟合。所有对照使用相同评分支持。</p>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json</p>
+<div class="table-wrap"><table>
+<caption>数值minnorm拟合的形态诊断：被试等权均值</caption>
+<colgroup><col style="width:7.143%"><col style="width:7.143%"><col style="width:21.429%"><col style="width:21.429%"><col style="width:21.429%"><col style="width:21.429%"></colgroup>
+<thead><tr><th>模型</th><th>模态</th><th>局部中心化误差</th><th>平均相关</th><th>中心化幅比</th><th>未中心化RMS幅比</th></tr></thead><tbody>
+<tr><td>K1</td><td>EEG</td><td>0.932</td><td>0.344</td><td>0.343</td><td>0.391</td></tr>
+<tr><td>K1</td><td>HbO</td><td>0.399</td><td>0.921</td><td>0.903</td><td>0.876</td></tr>
+<tr><td>K1</td><td>HbR</td><td>0.630</td><td>0.747</td><td>0.756</td><td>0.686</td></tr>
+<tr><td>K2</td><td>EEG</td><td>0.909</td><td>0.362</td><td>0.398</td><td>0.448</td></tr>
+<tr><td>K2</td><td>HbO</td><td>0.304</td><td>0.955</td><td>0.945</td><td>0.932</td></tr>
+<tr><td>K2</td><td>HbR</td><td>0.467</td><td>0.854</td><td>0.869</td><td>0.838</td></tr>
+</tbody></table></div>
+<p>本表来自numerical_projection（截断minnorm拟合），不是保守下界的可表曲线。局部误差除以当前目标中心化能量，越小越好；幅比接近1表示幅度相近，相关接近1表示中心化形状一致。两者与训练SD误差分开解释。未定义相关不填0。完整描述性区间见summary.groups.morphology。</p>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json</p>
+<figure class="figure"><img src="figures/figure_02.png" style="width:671.0px" alt="图 2：每个点对应一个窗口；每行36个横轴位置按被试、记录、身份排序。蓝菱形是独立松弛且保留未解析方向的保守数值下界，橙圆是旧完整拟合，红色空方框标出一个未成功的旧有限候选，灰叉为零预测。虚线为0.5个冻结训练SD；六面板共用纵轴，低于线只表示该项必要条件未排除。">
+<figcaption>图 2　每个点对应一个窗口；每行36个横轴位置按被试、记录、身份排序。蓝菱形是独立松弛且保留未解析方向的保守数值下界，橙圆是旧完整拟合，红色空方框标出一个未成功的旧有限候选，灰叉为零预测。虚线为0.5个冻结训练SD；六面板共用纵轴，低于线只表示该项必要条件未排除。</figcaption>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/bounds/&lt;manifest-task-id&gt;.json</p>
+</figure>
+<figure class="figure"><img src="figures/figure_03.png" style="width:671.0px" alt="图 3：每点汇总相同36个窗口中同时满足EEG/HbO/HbR表示必要条件的个数；横轴共同容限越大越宽松。两条线分别是K1和K2，0.5竖线是主标准；本图是窗口计数，未把窗口当独立被试。">
+<figcaption>图 3　每点汇总相同36个窗口中同时满足EEG/HbO/HbR表示必要条件的个数；横轴共同容限越大越宽松。两条线分别是K1和K2，0.5竖线是主标准；本图是窗口计数，未把窗口当独立被试。</figcaption>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json</p>
+</figure>
+</section>
+<section><h2>四、当前inlet-balance状态关系的适用范围</h2>
+<figure class="equation"><img src="formulas/equation_03.png" style="width:252.6px" alt="式 3：当前实现中p与v之差仅有衰减初值模式。">
+<figcaption>式 3　当前实现中p与v之差仅有衰减初值模式。</figcaption>
+
+<p class="source"><a href="formulas/equation_03.tex">LaTeX 源文件</a></p>
+</figure>
+<p>f为相对静息的血流，v为归一血管容量，p为归一总Hb量状态，tau为时间常数，alpha为幂指数；delta不是两个血容量之差。在同一核心、正v、正tau和常参数下，delta保持初始符号且绝对值衰减；独立p0/v0增加初值自由度，未增加持续独立输入。</p>
+<figure class="equation"><img src="formulas/equation_04.png" style="width:278.6px" alt="式 4：该恒等式只属于当前inlet-balance方程。">
+<figcaption>式 4　该恒等式只属于当前inlet-balance方程。</figcaption>
+
+<p class="source"><a href="formulas/equation_04.tex">LaTeX 源文件</a></p>
+</figure>
+<p>当前归一状态经P0/Q0映射为HbO与HbR，再通过空间和时间观测算子。其他Balloon实现可能使用不同的p方程，因此不能从此关系推出所有Balloon模型或生理学目标不可能。</p>
+<figure class="equation"><img src="formulas/equation_05.png" style="width:373.2px" alt="式 5：当前模型的两色团观测变化。">
+<figcaption>式 5　当前模型的两色团观测变化。</figcaption>
+
+<p class="source"><a href="formulas/equation_05.tex">LaTeX 源文件</a></p>
+</figure>
+<p>P0 p为绝对总Hb模型尺度，Q0 q为去氧Hb模型量；H_O/H_R是相对静息的两色团变化。它们是模型条件估计，不是已测得的血管状态真值。</p>
+</section>
+<section><h2>五、目标位置Hb：有限工程搜索中的合法轨迹见证</h2>
+<p>本阶段只取预先固定的目标光学位置0（FpzFp1），直接拟合4 Hz正流量及独立v/p/q初态，去掉EEG与上游神经动力学限制。log-flow在相邻节点间线性插值，流量限制为0.25–4倍静息，三个初态限制为0.5–2倍静息；这仍是有限时间基、有限工程边界内的局部搜索，不是整个非线性血管模型的下界。</p>
+<p>tau以秒计，alpha与E0无量纲；E0为静息氧提取分数。八个tau/alpha/E0节点预先固定；改变低频符号的宽alpha节点属于工程敏感性。它们不与原alpha/E0固定模型的联合可行性混合。每节点从静息和p0不等于v0的初态出发；4子步优化后以8子步重新计算误差，并检查物理域及积分差。合法轨迹且HbO和HbR均≤0.5，才是本阶段低误差见证。</p>
+<div class="table-wrap"><table>
+<caption>逐节点完整分母与目标位置误差</caption>
+<colgroup><col style="width:18.405%"><col style="width:15.951%"><col style="width:12.270%"><col style="width:14.110%"><col style="width:7.362%"><col style="width:15.951%"><col style="width:15.951%"></colgroup>
+<thead><tr><th>节点</th><th>tau/alpha/E0</th><th>合法/计划</th><th>双Hb合格/计划</th><th>异常</th><th>HbO误差</th><th>HbR误差</th></tr></thead><tbody>
+<tr><td>nominal</td><td>2/0.32/0.32</td><td>36/36</td><td>33/36</td><td>0</td><td>0.392</td><td>0.427</td></tr>
+<tr><td>short_tau</td><td>0.6/0.32/0.32</td><td>36/36</td><td>30/36</td><td>0</td><td>0.563</td><td>0.563</td></tr>
+<tr><td>long_tau</td><td>4/0.32/0.32</td><td>36/36</td><td>34/36</td><td>0</td><td>0.293</td><td>0.312</td></tr>
+<tr><td>low_alpha</td><td>2/0.2/0.32</td><td>36/36</td><td>30/36</td><td>0</td><td>0.600</td><td>0.429</td></tr>
+<tr><td>high_alpha</td><td>2/0.5/0.32</td><td>36/36</td><td>34/36</td><td>0</td><td>0.217</td><td>0.318</td></tr>
+<tr><td>low_E0</td><td>2/0.32/0.2</td><td>36/36</td><td>31/36</td><td>0</td><td>0.476</td><td>0.519</td></tr>
+<tr><td>high_E0</td><td>2/0.32/0.5</td><td>36/36</td><td>34/36</td><td>0</td><td>0.288</td><td>0.296</td></tr>
+<tr><td>sign_changed_engineering</td><td>2/0.85/0.32</td><td>36/36</td><td>34/36</td><td>0</td><td>0.113</td><td>0.219</td></tr>
+</tbody></table></div>
+<p>误差仅汇总合法轨迹的子集；优化收敛与合法见证分开。单位置Hb可行不证明四位置空间联合可行，更不证明与EEG共享驱动可行。</p>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json</p>
+<figure class="figure"><img src="figures/figure_04.png" style="width:671.0px" alt="图 4：每点一个相同窗口×目标光学位置0；两面板为HbO和HbR。横轴为同一目标/SD/评分支持的零预测误差，纵轴为名义参数直接流量搜索所得合法轨迹误差，斜线表示误差相等，点在下方表示拟合更小；水平/竖直虚线为0.5容限。两个模态共用刻度，不以窗口充当独立被试。">
+<figcaption>图 4　每点一个相同窗口×目标光学位置0；两面板为HbO和HbR。横轴为同一目标/SD/评分支持的零预测误差，纵轴为名义参数直接流量搜索所得合法轨迹误差，斜线表示误差相等，点在下方表示拟合更小；水平/竖直虚线为0.5容限。两个模态共用刻度，不以窗口充当独立被试。</figcaption>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/vascular/&lt;manifest-task-id&gt;.npz</p>
+</figure>
+<p>同一目标位置0上，零预测的HbO/HbR NRMSE为1.817/1.090，双Hb为1.499；两个色团均≤0.5仅1/36窗，而名义血管搜索为33/36。合格覆盖增加因此不能全部由低幅值零预测解释；这仍不等于驱动或血管状态恢复。</p>
+<p>名义参数下，36/36窗均有合法血管轨迹，33/36窗的HbO和HbR分别达到0.5容限；被试等权HbO/HbR NRMSE为0.392/0.427。全部八节点中至少一个节点合格的覆盖为34/36窗；其余两窗仍是有限局部搜索未决，不是血管不相容证明。</p>
+<p>宽alpha=0.85工程节点的HbO/HbR误差为0.113/0.219。它与名义参数比较保持同一单位置、同样流量和初态优化合同，更适合解释模型内工程敏感性；不能把该节点称为生理修复。与旧完整模型的误差差异同时改变了上游、EEG与多位置约束，不能单因果归于移除EEG。</p>
+<figure class="figure"><img src="figures/figure_05.png" style="width:671.0px" alt="图 5：每点为一个窗口在一个固定参数节点的选中合法候选残差。圆点表示通过物理和积分核验的合法轨迹，叉号表示未获合法见证但返回有限误差的候选。虚线为0.5训练SD；未返回有限残差的任务通过相邻表的异常及完整分母报告。">
+<figcaption>图 5　每点为一个窗口在一个固定参数节点的选中合法候选残差。圆点表示通过物理和积分核验的合法轨迹，叉号表示未获合法见证但返回有限误差的候选。虚线为0.5训练SD；未返回有限残差的任务通过相邻表的异常及完整分母报告。</figcaption>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/vascular/&lt;manifest-task-id&gt;.json</p>
+</figure>
+<p>本阶段576个普通初值中58个收敛、518个耗尽预算；288个选中候选中31个来自收敛初值。全部288个候选满足合法与积分核验，任务异常为0，但有限预算残差仍只是可达上界。各节点的完整区间、初值终止原因和状态极值见summary.vascular与逐任务JSON。</p>
+</section>
+<section><h2>六、EEG硬约束下已找到的双Hb可行包络</h2>
+<figure class="equation"><img src="formulas/equation_06.png" style="width:271.3px" alt="式 6：本轮直接限制EEG误差，优化两色团等权标准化均方误差。">
+<figcaption>式 6　本轮直接限制EEG误差，优化两色团等权标准化均方误差。</figcaption>
+
+<p class="source"><a href="formulas/equation_06.tex">LaTeX 源文件</a></p>
+</figure>
+<p>c为16维时间基下每核驱动系数；x0为每核独立五初态。固定分支不释放生理参数；自由分支只释放tau与kappa，范围分别为0.6–4.0和0.2–1.3。alpha/E0和其他参数保持父值。不加入驱动或初态先验项。 tau为血管转运时间常数（s），kappa为上游血管信号衰减系数（每秒）。</p>
+<p>epsilon依次为0.25、0.5、0.75、1.0、1.5，越大允许越多EEG残差。EEG表示下界大于当前epsilon的节点可直接排除；其余节点都进入固定预算搜索，单位置Hb结果不作执行门。旧完整拟合与EEG投影静息解作为初值；固定解加入自由分支，窄容限解加入宽容限，保留见证集合嵌套。</p>
+<p>返回预测以8子步积分评分，4/8子步各模态标准化RMS差最大值须≤0.005。满足EEG硬约束及物理/积分检查的轨迹可进入包络；优化预算耗尽仍可能拥有合法见证。全部搜索历程中三模态各≤0.5的候选另行保留，避免平均Hb最优点遗漏某个单色团合格候选。</p>
+<figure class="figure"><img src="figures/figure_06.png" style="width:671.0px" alt="图 6：每条细线连接同一窗口、同一参数分支在不同EEG容限下找到的合法EEG合格轨迹；每点为一个窗口×容限×分支。缺失或未决节点不跨点连接。纵轴为双Hb等权NRMSE，越低越好；曲线是已找到见证的误差上界，不能称全局Pareto前沿。">
+<figcaption>图 6　每条细线连接同一窗口、同一参数分支在不同EEG容限下找到的合法EEG合格轨迹；每点为一个窗口×容限×分支。缺失或未决节点不跨点连接。纵轴为双Hb等权NRMSE，越低越好；曲线是已找到见证的误差上界，不能称全局Pareto前沿。</figcaption>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/frontier/&lt;manifest-task-id&gt;.json</p>
+</figure>
+<div class="table-wrap"><table>
+<caption>同一epsilon、共同EEG合法子集：固定与自由分支严格配对</caption>
+<colgroup><col style="width:5.714%"><col style="width:6.857%"><col style="width:8.571%"><col style="width:13.714%"><col style="width:13.714%"><col style="width:17.143%"><col style="width:17.143%"><col style="width:17.143%"></colgroup>
+<thead><tr><th>模型</th><th>EEG容限</th><th>配对窗；被试</th><th>固定双Hb</th><th>自由双Hb</th><th>双Hb差</th><th>HbO差</th><th>HbR差</th></tr></thead><tbody>
+<tr><td>K1</td><td>1.0</td><td>24/36；5人</td><td>0.485</td><td>0.470</td><td>0.014 [0.008, 0.024]</td><td>0.021 [0.011, 0.038]</td><td>0.007 [0.004, 0.010]</td></tr>
+<tr><td>K1</td><td>1.5</td><td>34/36；6人</td><td>0.770</td><td>0.744</td><td>0.039 [0.010, 0.069]</td><td>0.040 [0.011, 0.077]</td><td>0.038 [0.010, 0.075]</td></tr>
+<tr><td>K2</td><td>1.0</td><td>23/36；5人</td><td>0.386</td><td>0.379</td><td>0.005 [0.002, 0.009]</td><td>0.004 [0.001, 0.008]</td><td>0.006 [0.003, 0.011]</td></tr>
+<tr><td>K2</td><td>1.5</td><td>33/36；6人</td><td>0.694</td><td>0.670</td><td>0.032 [0.005, 0.082]</td><td>0.037 [0.004, 0.097]</td><td>0.028 [0.005, 0.068]</td></tr>
+</tbody></table></div>
+<p>固定双Hb、自由双Hb两列为NRMSE；后三差值列为“固定NMSE减自由NMSE”的被试等权均值及描述性95%区间，正值偏向自由分支。区间跨零保留不确定性。不同epsilon的可行子集不同，不能把跨epsilon均值下降称为Pareto改善。 epsilon=1配对含5名被试，epsilon=1.5含6名；窗数不等于独立人数。</p>
+<p class="source">来源：summary.json: paired_frontier</p>
+<div class="table-wrap"><table>
+<caption>全部节点分母；Hb误差仅汇总EEG合法合格子集</caption>
+<colgroup><col style="width:6.790%"><col style="width:12.346%"><col style="width:7.407%"><col style="width:9.877%"><col style="width:9.877%"><col style="width:8.025%"><col style="width:7.407%"><col style="width:7.407%"><col style="width:15.432%"><col style="width:15.432%"></colgroup>
+<thead><tr><th>模型</th><th>分支</th><th>EEG容限</th><th>EEG排除</th><th>合法合格</th><th>未决</th><th>异常</th><th>计划</th><th>HbO</th><th>HbR</th></tr></thead><tbody>
+<tr><td>K1</td><td>固定参数</td><td>1.0</td><td>8</td><td>24</td><td>4</td><td>0</td><td>36</td><td>0.468</td><td>0.501</td></tr>
+<tr><td>K1</td><td>参数自由</td><td>1.0</td><td>8</td><td>26</td><td>2</td><td>0</td><td>36</td><td>0.622</td><td>0.582</td></tr>
+<tr><td>K1</td><td>固定参数</td><td>1.5</td><td>1</td><td>34</td><td>1</td><td>0</td><td>36</td><td>0.707</td><td>0.828</td></tr>
+<tr><td>K1</td><td>参数自由</td><td>1.5</td><td>1</td><td>35</td><td>0</td><td>0</td><td>36</td><td>0.674</td><td>0.804</td></tr>
+<tr><td>K2</td><td>固定参数</td><td>1.0</td><td>8</td><td>23</td><td>5</td><td>0</td><td>36</td><td>0.376</td><td>0.396</td></tr>
+<tr><td>K2</td><td>参数自由</td><td>1.0</td><td>8</td><td>24</td><td>4</td><td>0</td><td>36</td><td>0.377</td><td>0.388</td></tr>
+<tr><td>K2</td><td>固定参数</td><td>1.5</td><td>0</td><td>33</td><td>3</td><td>0</td><td>36</td><td>0.571</td><td>0.798</td></tr>
+<tr><td>K2</td><td>参数自由</td><td>1.5</td><td>0</td><td>34</td><td>2</td><td>0</td><td>36</td><td>0.564</td><td>0.696</td></tr>
+</tbody></table></div>
+<p>每行同一36窗计划分母。排除来自保守EEG表示数值下界；未决表示局部搜索未找到合格轨迹。成功子集误差不能掩盖失败或用于不同分母的排名。</p>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json</p>
+<p>完整720个窗口×容限×分支节点中，466个由EEG表示下界排除、254个执行搜索；其中233个找到合法EEG合格轨迹，21个为局部搜索未决，任务异常为0。主容限0.5及敏感性容限0.75均全部排除；0.25也全部排除。747个初值中296个收敛、175个耗尽预算、254个初始域非法、22个无法获得有效生理参数差分；非法试探未被裁剪成有效值。</p>
+<p>同epsilon=1共同EEG合格子集中，K1的24窗双Hb NRMSE由0.485降至0.470（-3.07%），K2的23窗由0.386降至0.379（-1.71%）。这是可见条件拟合的小幅下降；自由模型包含固定候选，正收益本身不检验生理可信度。不能跨epsilon或跨K1/K2不同子集比较均值优劣。</p>
+<p>仅在K2自由参数、epsilon=1的24个EEG合格窗口中，流量范围为0.00244–15.986倍静息；按1e-8舍入余量，23/24窗流量超出用于描述的0.25–4工程参考，20/24窗初态超出0.5–2参考。tau在18/24窗贴边，kappa在3/24窗贴边；这不是“任一参数18/24”的并集，也不是生理异常检验。联合模型没有将这些参考界限设为血管放松阶段那样的硬约束。这里的状态与初态范围来自完整30 s轨迹，不仅是图中的评分段。</p>
+</section>
+<section><h2>七、同支持波形样例：误差小是否保留形态</h2>
+<p>本页仅展示旧K2双Hb误差居中的一个解释窗口。30 s窗口保留参考和完整观察算子，新优化目标与评分均为5≤t&lt;30 s；前5 s作为参考而不单独计入残差。图只显示评分段，不同模态分别使用各自纵轴。</p>
+<figure class="figure"><img src="figures/figure_07.png" style="width:671.0px" alt="图 7：按全部36窗旧K2完整拟合的双Hb均方误差排序，选取居中窗口：subject_21、session_00、event=4、条件LMI；只用于解释，不作调参或确认评价。黑线为实测目标，橙线为旧完整拟合，蓝线为截断minnorm数值投影，紫线为新自由参数分支（EEG容限1.5），灰虚线为零预测；均使用冻结训练SD。图只显示新损失与评分支持5≤t&lt;30 s，不同模态分别缩放。图中三个单特征（EEG特征0/目标位置HbO/HbR）NRMSE：旧拟合1.070/0.398/0.484，新分支1.032/0.304/0.410，数值投影0.622/0.156/0.372。这些不是全60个EEG特征或全部四Hb位置的模态汇总。Hb数值投影放松了动力学，不能当合法血管轨迹；新分支仅在更宽EEG容限下合法，主容限0.5仍由EEG下界排除。">
+<figcaption>图 7　按全部36窗旧K2完整拟合的双Hb均方误差排序，选取居中窗口：subject_21、session_00、event=4、条件LMI；只用于解释，不作调参或确认评价。黑线为实测目标，橙线为旧完整拟合，蓝线为截断minnorm数值投影，紫线为新自由参数分支（EEG容限1.5），灰虚线为零预测；均使用冻结训练SD。图只显示新损失与评分支持5≤t&lt;30 s，不同模态分别缩放。图中三个单特征（EEG特征0/目标位置HbO/HbR）NRMSE：旧拟合1.070/0.398/0.484，新分支1.032/0.304/0.410，数值投影0.622/0.156/0.372。这些不是全60个EEG特征或全部四Hb位置的模态汇总。Hb数值投影放松了动力学，不能当合法血管轨迹；新分支仅在更宽EEG容限下合法，主容限0.5仍由EEG下界排除。</figcaption>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/bounds/b8726204f77086320ae4c3e6.json</p>
+</figure>
+<p>这个样例中，新解的目标HbO主峰较旧拟合更接近实测，HbR也减少了旧拟合在约15–20 s的负谷；但HbR后半段仍偏低。新旧完整模型的EEG特征0都接近零，未恢复可见峰谷。数值投影能追随更多波动，但未施加、也未被验证满足共享血管动力学；单特征误差改善不能改变主联合目标的排除结果。</p>
+</section>
+<section><h2>八、参数信息入口：条件profile与迁移止步</h2>
+<p>在全部72个窗口×模型身份中，发现三模态各≤0.5且通过物理/积分核验的联合见证 0 个；条件profile计划 0 个tau×kappa节点，终态 0 个，已发现容许节点 0 个。入口状态为 not_entered。</p>
+<p>若进入条件profile，每个网格节点将固定tau/kappa，重新拟合驱动和独立初态，继续分别检查三个模态及细积分。合格远端节点证明存在参数替代解；搜索失败不缩窄参数集合。已发现网格节点不构成置信区间，也不建立生理参数已被识别。</p>
+<p>本轮不进入个人参数迁移：尚缺非名义参数已知真值恢复及任务、区域和校准可比的独立记录合同。合成匹配观测拟合成功不足以替代这两项；实测隐状态和参数也没有可用于“恢复误差”的生理真值。</p>
+</section>
+<section><h2>九、软件与已知真值控制、失败和解释边界</h2>
+<p>独立合成包含无噪声/固定噪声匹配例、已知EEG正交残差、Hb空间正交残差，以及分模态可行但共享驱动不同的冲突例；真值不作普通初值。其作用是检查软件、表示排除及有限搜索行为，不能将生成器条件下的拟合成功直接转成实测资格。</p>
+<div class="table-wrap"><table>
+<caption>已知真值控制：全部15个生成任务的场景汇总</caption>
+<colgroup><col style="width:18.841%"><col style="width:10.145%"><col style="width:23.188%"><col style="width:14.493%"><col style="width:14.493%"><col style="width:18.841%"></colgroup>
+<thead><tr><th>场景</th><th>终态/计划</th><th>下界E/O/R中位</th><th>固定joint/执行</th><th>自由joint/执行</th><th>driver误差固定/自由</th></tr></thead><tbody>
+<tr><td>匹配无噪声</td><td>3/3</td><td>0.000/0.000/0.000</td><td>3/3</td><td>3/3</td><td>0.045/0.040</td></tr>
+<tr><td>匹配带噪声</td><td>3/3</td><td>0.020/0.018/0.017</td><td>3/3</td><td>3/3</td><td>0.112/0.165</td></tr>
+<tr><td>EEG正交残差</td><td>3/3</td><td>0.600/0.000/0.000</td><td>0/0</td><td>0/0</td><td>未定义/未定义</td></tr>
+<tr><td>Hb空间正交残差</td><td>3/3</td><td>0.000/0.595/0.605</td><td>0/3</td><td>0/3</td><td>0.045/0.040</td></tr>
+<tr><td>驱动关系冲突</td><td>3/3</td><td>0.000/0.000/0.000</td><td>3/3</td><td>3/3</td><td>0.346/0.222</td></tr>
+</tbody></table></div>
+<p>每场景三个独立生成种子；0/0表示因EEG下界被排除而未执行，不是优化失败。零附近数值按三位小数显示。driver误差相对Hb生成驱动RMS归一；生成参数均为名义值，不能授予非名义参数恢复资格。</p>
+<p class="source">来源：summary.json: synthetic.scenarios</p>
+<figure class="figure"><img src="figures/figure_08.png" style="width:671.0px" alt="图 8：每点为一个场景×生成种子；圆、方、三角分别为三个种子。横轴五个预先固定场景，纵轴为三模态保守数值下界；虚线0.5为主容限。EEG正交例在EEG被排除，Hb空间正交例在Hb被排除；没有下界排除不等于联合可行。">
+<figcaption>图 8　每点为一个场景×生成种子；圆、方、三角分别为三个种子。横轴五个预先固定场景，纵轴为三模态保守数值下界；虚线0.5为主容限。EEG正交例在EEG被排除，Hb空间正交例在Hb被排除；没有下界排除不等于联合可行。</figcaption>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/synthetic/&lt;manifest-task-id&gt;.json</p>
+</figure>
+<figure class="figure"><img src="figures/figure_09.png" style="width:671.0px" alt="图 9：每点是一个独立生成种子×参数分支，蓝色固定参数、紫色自由tau/kappa。左图为EEG误差与0.5工程容限，右图为相对Hb生成驱动的恢复误差。关系冲突例仍能满足容限，其驱动误差升高；不能声称本轮检测了所有共享关系冲突。">
+<figcaption>图 9　每点是一个独立生成种子×参数分支，蓝色固定参数、紫色自由tau/kappa。左图为EEG误差与0.5工程容限，右图为相对Hb生成驱动的恢复误差。关系冲突例仍能满足容限，其驱动误差升高；不能声称本轮检测了所有共享关系冲突。</figcaption>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/synthetic/&lt;manifest-task-id&gt;.json</p>
+</figure>
+<p>匹配无噪声与带噪声例在固定/自由分支均为3/3联合合格。EEG正交例因表示下界约0.600而未执行联合拟合；Hb空间正交例执行了联合拟合且EEG合格，但双Hb下界约0.595/0.605，使主容限无法满足。它们不能统称优化失败。</p>
+<p>共享驱动关系冲突例的固定/自由分支均3/3通过三模态容限，但相对Hb生成驱动的恢复误差中位数分别为0.346和0.222，明显高于无噪声匹配例0.045/0.040。该冲突例的EEG实际误差约0.044–0.047，远低于0.5，说明工程容限合格仍容许错误生成关系和驱动偏差。非匹配场景的vascular为空，表示未执行，不能记为0/3失败。</p>
+<div class="table-wrap"><table>
+<caption>各阶段完整执行分母</caption>
+<colgroup><col style="width:25.000%"><col style="width:25.000%"><col style="width:25.000%"><col style="width:25.000%"></colgroup>
+<thead><tr><th>阶段</th><th>计划</th><th>终态</th><th>执行状态</th></tr></thead><tbody>
+<tr><td>pilot</td><td>4</td><td>4</td><td>completed</td></tr>
+<tr><td>synthetic</td><td>15</td><td>15</td><td>completed</td></tr>
+<tr><td>bounds</td><td>72</td><td>72</td><td>completed</td></tr>
+<tr><td>vascular</td><td>288</td><td>288</td><td>completed</td></tr>
+<tr><td>frontier</td><td>72</td><td>72</td><td>completed</td></tr>
+<tr><td>profiles</td><td>0</td><td>0</td><td>not_entered</td></tr>
+</tbody></table></div>
+<p class="source">来源：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json</p>
+<p>合成计划 15 项，终态 15 项，任务异常 0 项。完整逐任务误差、终止原因和失败轨迹保留在本轮synthetic任务JSON；任务无异常不等价于每项科学控制达到预期，需逐场景核对。</p>
+<p>独立核验检查了全部447个正式任务终态和720个联合节点的固定分母，并以保留数组重算指标、分层汇总与描述性区间；最大数值差约4e-12。保留端点状态与嵌套见证一致，六个监督服务均正常结束。该核验没有重新积分或重放未保留的RK中间阶段，不能升级为新的全局或生理证明。详见verification.json及分阶段核验文件。</p>
+<p>所有结论仅涉及当前inlet-balance实现、冻结观测和声明工程范围。表示排除、局部未决、低误差见证、波形恢复、潜变量准确性及成分归属是不同证据层次。任何负结果都不能推广成所有Balloon模型或生理学目标不可能。</p>
+</section>
+<section><h2>证据与实现入口</h2>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/summary.json</p>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/resolved_config.json</p>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/manifest.json</p>
+<p class="source">实现：experiments/scripts/evaluate_source_observability.py --feasibility；src/inference/source_observability.py；src/inference/shared_driver_reconstruction.py。</p>
+<p class="source">设计：docs/EXPERIMENT_PLAN.md“当前共享驱动模型的表达边界与联合可行性”；合同：experiments/configs/physiology_semantic_tokenizer/shared_driver_feasibility_v1.yaml。</p>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/report_source_v1/waveform_example_01.png</p>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/report_source_v1/waveform_example_03.png</p>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/verification.json</p>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/verification_bounds.json</p>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/verification_vascular.json</p>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/verification_frontier.json</p>
+<p class="source">/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/source_observability/20261022_feasibility_v1/supervisor_completion.json</p>
+</section>
+</body></html>

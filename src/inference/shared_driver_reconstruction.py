@@ -468,6 +468,364 @@ def nonlinear_driver_forward(driver, initial_physical, parameters, dt, *,
     return result
 
 
+def _vascular_flow_rk4(log_flow, basis, initial, tau, alpha, e0, p0, q0,
+                       dt, substeps, derivative):
+    """Three physical states and exact tangents of this discrete RK4 map."""
+    steps, modes = basis.shape
+    count = modes+3
+    width = count if derivative else 0
+    states = np.empty((steps, 3))
+    tangents = np.zeros((steps, 3, width))
+    point = initial.copy()
+    tangent = np.zeros((3, width))
+    if derivative:
+        for j in range(3):
+            tangent[j, modes+j] = initial[j]
+    states[0] = point
+    tangents[0] = tangent
+    h = dt/substeps
+    exponent = 1/alpha-1
+    log_complement = np.log1p(-e0)
+
+    def slope(state, sensitivity, step, fraction):
+        if (not np.isfinite(state).all() or np.any(state <= 0)
+                or p0*state[1] < q0*state[2]):
+            raise FloatingPointError('invalid vascular RK4 state or absolute Hb balance')
+        value = (1-fraction)*log_flow[step]+fraction*log_flow[step+1]
+        flow = np.exp(value)
+        if not np.isfinite(flow) or flow <= 0:
+            raise FloatingPointError('invalid vascular flow or extraction')
+        a = log_complement/flow
+        extraction = -np.expm1(a)
+        if not np.isfinite(a) or a >= 0 or not 0 < extraction <= 1:
+            raise FloatingPointError('invalid vascular flow or extraction')
+        g = state[0]**exponent
+        velocity = np.array([(flow-g*state[0])/tau,
+                             (flow-g*state[1])/tau,
+                             (flow*extraction/e0-g*state[2])/tau])
+        ds = np.zeros((3, width))
+        if derivative:
+            dg = exponent*g/state[0]
+            ds[0] = -(exponent+1)*g*sensitivity[0]/tau
+            ds[1] = -(dg*state[1]*sensitivity[0]+g*sensitivity[1])/tau
+            ds[2] = -(dg*state[2]*sensitivity[0]+g*sensitivity[2])/tau
+            # Stable d(f*E(f)/E0)/d(log f), as in the core extraction owner.
+            if abs(a) < 1e-3:
+                polynomial = .5+a*(1/3+a*(1/8+a*(1/30+a/144)))
+                dphi = (flow*extraction/e0)*a*(a/extraction)*polynomial
+            else:
+                dphi = flow*(extraction+a*np.exp(a))/e0
+            for j in range(modes):
+                weight = (1-fraction)*basis[step, j]+fraction*basis[step+1, j]
+                ds[0, j] += flow*weight/tau
+                ds[1, j] += flow*weight/tau
+                ds[2, j] += dphi*weight/tau
+        if not np.isfinite(velocity).all() or not np.isfinite(ds).all():
+            raise FloatingPointError('nonfinite vascular slope or tangent')
+        return velocity, ds
+
+    for step in range(steps-1):
+        for substep in range(substeps):
+            left, middle, right = substep/substeps, (substep+.5)/substeps, (substep+1)/substeps
+            k1, d1 = slope(point, tangent, step, left)
+            k2, d2 = slope(point+h*k1/2, tangent+h*d1/2, step, middle)
+            k3, d3 = slope(point+h*k2/2, tangent+h*d2/2, step, middle)
+            k4, d4 = slope(point+h*k3, tangent+h*d3, step, right)
+            point = point+h*(k1+2*k2+2*k3+k4)/6
+            tangent = tangent+h*(d1+2*d2+2*d3+d4)/6
+            if (not np.isfinite(point).all() or np.any(point <= 0)
+                    or p0*point[1] < q0*point[2]):
+                raise FloatingPointError('invalid vascular RK4 endpoint or absolute Hb balance')
+        states[step+1] = point
+        tangents[step+1] = tangent
+    return states, tangents
+
+
+def vascular_flow_forward(coefficients, initial_physical, parameters, dt, *,
+                          temporal_basis=None, substeps=4, derivative=True,
+                          numerical_backend='numba'):
+    """Externally prescribed positive flow, independent initial [v,p,q].
+
+    ``log f = temporal_basis @ coefficients``; omitted basis is the identity.
+    Log flow is linearly interpolated at every RK4 stage. Parameters, including
+    tau/alpha/E0 and P0/Q0, stay fixed. No EEG/upstream state, measured derivative,
+    vascular innovation, clipping, or data access is involved. Jacobian columns
+    are [flow coefficients,log(v0),log(p0),log(q0)].
+    """
+    parameters.validate()
+    a, initial = np.asarray(coefficients, float), np.asarray(initial_physical, float)
+    if a.ndim != 1 or not len(a) or not np.isfinite(a).all():
+        raise ValueError('coefficients must be nonempty finite [K]')
+    basis = np.eye(len(a)) if temporal_basis is None else np.asarray(temporal_basis, float)
+    if (basis.ndim != 2 or basis.shape[0] < 2 or basis.shape[1] != len(a)
+            or not np.isfinite(basis).all()):
+        raise ValueError('temporal_basis must be finite [T,K] with T >= 2')
+    if initial.shape != (3,) or not np.isfinite(initial).all():
+        raise ValueError('initial_physical must be finite [v,p,q]')
+    if not np.isfinite(dt) or dt <= 0:
+        raise ValueError('dt must be finite and positive')
+    if isinstance(substeps, bool) or not isinstance(substeps, (int, np.integer)) or substeps < 1:
+        raise ValueError('substeps must be a positive integer')
+    if not isinstance(derivative, (bool, np.bool_)):
+        raise ValueError('derivative must be boolean')
+    if numerical_backend not in ('python', 'numba'):
+        raise ValueError('numerical_backend must be python or numba')
+    kernel = _vascular_flow_rk4
+    if numerical_backend == 'numba':
+        if not hasattr(vascular_flow_forward, '_compiled_kernel'):
+            from numba import njit
+            vascular_flow_forward._compiled_kernel = njit(cache=True)(_vascular_flow_rk4)
+        kernel = vascular_flow_forward._compiled_kernel
+    log_flow = basis@a
+    fixed = parameters.fixed
+    states, tangent = kernel(log_flow, basis, initial, parameters.free.tau,
+        fixed.alpha, fixed.E0, fixed.P0, fixed.Q0, float(dt), int(substeps), bool(derivative))
+    full = np.column_stack((np.zeros((len(states), 2)), np.exp(log_flow), states))
+    spec = core.BalloonObservationSpec().resolved(fixed)
+    canonical = np.array([core._observation_map_unchecked(s, parameters, spec)[1:] for s in full])
+    observation = core._observation_physical_matrix(parameters, spec)[1:, 3:]
+    jacobian = (np.einsum('ij,tjk->tik', observation, tangent).reshape(2*len(states), -1)
+                if derivative else None)
+    return dict(states=states, flow=np.exp(log_flow), log_flow=log_flow,
+                canonical_prediction=canonical, jacobian=jacobian,
+                state_jacobian=tangent if derivative else None,
+                physical_checks=core.run_physical_checks(full, parameters))
+
+
+def fit_vascular_flow_relaxation(hb, parameters, dt, *, temporal_basis=None,
+        hb_operator=None, sd=(1., 1.), score_mask=None, starts=None, max_nfev=300,
+        substeps=4, validation_substeps=8, log_flow_bounds=(-np.log(4), np.log(4)),
+        initial_log_bounds=(-np.log(2), np.log(2)), integration_tolerance=1e-4,
+        optimizer_tolerance=1e-12, joint_hb_tolerance=.5):
+    """Search a fixed-physiology Hb subsystem for legal forward trajectories.
+
+    Minimize unregularized, training-SD-weighted Hb residuals after the complete
+    [2T,2T] observation operator. Only score_mask entries of hb are read. The
+    pointwise log-flow bounds constrain ``B@a``, including for a supplied DCT
+    basis; the three initial log coordinates remain independent.
+
+    The default deterministic starts use no target or truth information. The
+    max_nfev budget applies separately to each start. Retain every coarse-SSE
+    improvement and every candidate whose two coarse NRMSEs are at most
+    joint_hb_tolerance+integration_tolerance; the latter cannot exclude a joint
+    witness passing the fine/coarse integration check. Fine-validate all retained
+    candidates, even at the optimization budget. Prefer a legal candidate meeting
+    both chromophore tolerances, then minimize its fine weighted SSE. A legal
+    witness certifies mathematical/integration checks only; its reported error
+    must be compared with a caller-declared tolerance. Finite basis, engineering
+    bounds and local optimization cannot certify incompatibility or a global
+    lower bound when no good witness is found. No physiological parameters fit.
+    """
+    from scipy.optimize import Bounds, LinearConstraint, minimize
+
+    parameters.validate()
+    y, scale = np.asarray(hb, float), np.asarray(sd, float)
+    if y.ndim != 2 or y.shape[0] < 3 or y.shape[1] != 2:
+        raise ValueError('hb must have shape [T,2], T >= 3')
+    n = len(y)
+    basis = np.eye(n) if temporal_basis is None else np.asarray(temporal_basis, float)
+    if (basis.ndim != 2 or basis.shape[0] != n or not 1 <= basis.shape[1] <= n
+            or not np.isfinite(basis).all()):
+        raise ValueError('temporal_basis must be finite [T,K], 1 <= K <= T')
+    operator = np.eye(2*n) if hb_operator is None else np.asarray(hb_operator, float)
+    if operator.shape != (2*n, 2*n) or not np.isfinite(operator).all():
+        raise ValueError('hb_operator must be finite [2T,2T]')
+    mask = np.ones(y.shape, bool) if score_mask is None else np.asarray(score_mask)
+    if mask.shape != y.shape or mask.dtype != np.bool_ or not mask.any():
+        raise ValueError('score_mask must be nonempty boolean [T,2]')
+    if scale.shape != (2,) or not np.isfinite(scale).all() or np.any(scale <= 0):
+        raise ValueError('sd must be positive finite [2]')
+    if not np.isfinite(y[mask]).all():
+        raise ValueError('scored hb values must be finite')
+    flow_bounds, initial_bounds = np.asarray(log_flow_bounds, float), np.asarray(initial_log_bounds, float)
+    if (flow_bounds.shape != (2,) or initial_bounds.shape != (2,)
+            or not np.isfinite(np.r_[flow_bounds, initial_bounds]).all()
+            or flow_bounds[0] >= flow_bounds[1] or initial_bounds[0] >= initial_bounds[1]):
+        raise ValueError('log-flow and initial-log bounds must be finite increasing pairs')
+    for name, value in (('max_nfev', max_nfev), ('substeps', substeps),
+                        ('validation_substeps', validation_substeps)):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
+            raise ValueError(name+' must be a positive integer')
+    if validation_substeps <= substeps:
+        raise ValueError('validation_substeps must exceed substeps')
+    if (not np.isfinite([integration_tolerance, optimizer_tolerance, joint_hb_tolerance]).all()
+            or integration_tolerance <= 0 or optimizer_tolerance <= 0 or joint_hb_tolerance <= 0):
+        raise ValueError('integration, optimizer and joint Hb tolerances must be positive finite')
+    modes = basis.shape[1]
+    if starts is None:
+        neutral = np.full(3, initial_bounds.mean())
+        delta = .05*np.diff(initial_bounds)[0]
+        baseline = np.linalg.lstsq(basis, np.full(n, flow_bounds.mean()), rcond=None)[0]
+        starts = [dict(coefficients=baseline, initial_state=np.exp(neutral+direction*delta*np.array([1., .5, .5])))
+                  for direction in (0, -1, 1)]
+    else:
+        starts = list(starts)
+    if not starts:
+        raise ValueError('starts must be nonempty')
+    vectors = []
+    for start in starts:
+        if not isinstance(start, dict) or 'coefficients' not in start or 'initial_state' not in start:
+            raise ValueError('each start requires coefficients and initial_state')
+        a, initial = np.asarray(start['coefficients'], float), np.asarray(start['initial_state'], float)
+        if (a.shape != (modes,) or initial.shape != (3,) or not np.isfinite(a).all()
+                or not np.isfinite(initial).all() or np.any(initial <= 0)):
+            raise ValueError('start requires finite coefficients[K] and positive initial_state[3]')
+        vectors.append(np.r_[a, np.log(initial)])
+    constraint_matrix = np.column_stack((basis, np.zeros((n, 3))))
+    constraints = [LinearConstraint(constraint_matrix, *flow_bounds)]
+    bounds = Bounds(np.r_[np.full(modes, -np.inf), np.full(3, initial_bounds[0])],
+                    np.r_[np.full(modes, np.inf), np.full(3, initial_bounds[1])])
+    selected_operator = operator[mask.ravel()]/np.broadcast_to(scale, y.shape)[mask, None]
+    observed = y[mask]/np.broadcast_to(scale, y.shape)[mask]
+    attempts, candidates = [], []
+
+    def chromophore_scores(prediction):
+        scores = {}
+        for j, name in enumerate(('HbO', 'HbR')):
+            residual = prediction[mask[:, j], j]-y[mask[:, j], j]
+            rmse = float(np.sqrt(np.mean(residual**2))) if len(residual) else None
+            scores[name] = dict(n_scored=len(residual), rmse=rmse,
+                nrmse=float(rmse/scale[j]) if rmse is not None else None,
+                weighted_sse=float(np.sum((residual/scale[j])**2)))
+        return scores
+
+    class EvaluationBudget(Exception):
+        pass
+
+    for index, x0 in enumerate(vectors):
+        record = dict(start=index, evaluations=0, domain_rejections=0,
+                      optimizer_converged=False, status='infeasible_initial', message='',
+                      retained_candidates=0, legal_witness=False, joint_hb_witness=False)
+        best = None
+        cache_x, cache_value = None, None
+
+        def in_bounds(x):
+            flow = basis@x[:modes]
+            return bool(np.all(flow >= flow_bounds[0]-1e-10) and np.all(flow <= flow_bounds[1]+1e-10)
+                and np.all(x[modes:] >= initial_bounds[0]-1e-10)
+                and np.all(x[modes:] <= initial_bounds[1]+1e-10))
+
+        def objective(x):
+            nonlocal best, cache_x, cache_value
+            if cache_x is not None and np.array_equal(x, cache_x):
+                return cache_value
+            if record['evaluations'] >= max_nfev:
+                raise EvaluationBudget
+            record['evaluations'] += 1
+            try:
+                forward = vascular_flow_forward(x[:modes], np.exp(x[modes:]), parameters, dt,
+                    temporal_basis=basis, substeps=substeps)
+                residual = selected_operator@forward['canonical_prediction'].ravel()-observed
+                jacobian = selected_operator@forward['jacobian']
+                sse = float(residual@residual)
+                value = sse/(2*len(residual)), jacobian.T@residual/len(residual)
+                if in_bounds(x):
+                    improvement = best is None or sse < best['sse']
+                    coarse_prediction = (operator@forward['canonical_prediction'].ravel()).reshape(n, 2)
+                    coarse_scores = chromophore_scores(coarse_prediction)
+                    possible_joint_witness = all(item['nrmse'] is not None and
+                        item['nrmse'] <= joint_hb_tolerance+integration_tolerance
+                        for item in coarse_scores.values())
+                    if improvement or possible_joint_witness:
+                        # Retained candidates need trajectories, not large derivative arrays.
+                        retained_forward = {key: item for key, item in forward.items()
+                                            if key not in ('jacobian', 'state_jacobian')}
+                        candidate = dict(x=x.copy(), sse=sse, forward=retained_forward,
+                            gradient_inf_norm=float(np.max(np.abs(value[1]))), start=index,
+                            evaluation=record['evaluations'])
+                        candidates.append(candidate)
+                        record['retained_candidates'] += 1
+                        if improvement:
+                            best = candidate
+            except (FloatingPointError, OverflowError):
+                record['domain_rejections'] += 1
+                value = (np.inf, np.zeros_like(x))
+            cache_x, cache_value = x.copy(), value
+            return value
+
+        if in_bounds(x0):
+            try:
+                initial_value = objective(x0)[0]
+                if np.isfinite(initial_value):
+                    result = minimize(objective, x0, method='SLSQP', jac=True, bounds=bounds,
+                        constraints=constraints, options=dict(maxiter=max_nfev, ftol=optimizer_tolerance))
+                    record.update(optimizer_converged=bool(result.success),
+                        status='converged' if result.success else 'optimizer_failed',
+                        message=str(result.message), optimizer_status=int(result.status),
+                        iterations=int(result.nit))
+            except EvaluationBudget:
+                record.update(status='evaluation_budget', message='forward evaluation budget exhausted')
+        if best is not None:
+            record['weighted_data_sse'] = best['sse']
+        attempts.append(record)
+    common = dict(starts=attempts, evaluations=sum(a['evaluations'] for a in attempts),
+        parameters=parameters, temporal_basis=basis, log_flow_bounds=flow_bounds,
+        initial_log_bounds=initial_bounds, score_mask=mask, sd=scale,
+        joint_hb_tolerance=joint_hb_tolerance, retained_candidates=len(candidates),
+        validation_evaluations=len(candidates),
+        search_scope='finite_basis_bounded_flow_subsystem_local_search',
+        incompatibility_certified=False, global_lower_bound_certified=False)
+    if not candidates:
+        return dict(common, status='failed_domain', legal_witness=False,
+                    optimizer_converged=False, converged=False, prediction=None,
+                    joint_hb_witness=False)
+    required = ('finite', 'positive_fvpq', 'oxygen_extraction_in_unit_interval',
+                'absolute_hb_nonnegative', 'hbr_not_above_hbt')
+    for candidate in candidates:
+        x, coarse = candidate['x'], candidate['forward']
+        prediction_coarse = (operator@coarse['canonical_prediction'].ravel()).reshape(n, 2)
+        fine, integration_error, validation_message = None, np.inf, ''
+        try:
+            fine = vascular_flow_forward(x[:modes], np.exp(x[modes:]), parameters, dt,
+                temporal_basis=basis, substeps=validation_substeps, derivative=False)
+            prediction_fine = (operator@fine['canonical_prediction'].ravel()).reshape(n, 2)
+            integration_error = float(np.max(np.abs((prediction_fine-prediction_coarse)[mask]
+                                                   /np.broadcast_to(scale, y.shape)[mask])))
+        except (FloatingPointError, OverflowError) as error:
+            validation_message = str(error)
+        forward = fine if fine is not None else coarse
+        prediction = (operator@forward['canonical_prediction'].ravel()).reshape(n, 2)
+        physical = all(forward['physical_checks'][key] for key in required)
+        integration_passed = bool(fine is not None and integration_error <= integration_tolerance)
+        legal = bool(physical and integration_passed)
+        scores = chromophore_scores(prediction)
+        joint = bool(legal and all(item['nrmse'] is not None and item['nrmse'] <= joint_hb_tolerance
+                                  for item in scores.values()))
+        residual = (prediction[mask]-y[mask])/np.broadcast_to(scale, y.shape)[mask]
+        candidate.update(validated_forward=forward, prediction=prediction,
+            prediction_coarse=prediction_coarse, validation_sse=float(residual@residual),
+            legal=legal, joint=joint, by_chromophore=scores,
+            integration=dict(passed=integration_passed, substeps=substeps,
+                validation_substeps=validation_substeps, tolerance=integration_tolerance,
+                max_abs_training_sd_difference=integration_error, message=validation_message))
+        record = attempts[candidate['start']]
+        record.update(legal_witness=bool(record['legal_witness'] or legal),
+            joint_hb_witness=bool(record['joint_hb_witness'] or joint),
+            validation_weighted_data_sse=min(record.get('validation_weighted_data_sse', np.inf),
+                                             candidate['validation_sse']))
+    valid = [candidate for candidate in candidates if candidate['legal']]
+    joint = [candidate for candidate in valid if candidate['joint']]
+    best = min(joint or valid or candidates, key=lambda item: item['validation_sse'])
+    x, forward, prediction = best['x'], best['validated_forward'], best['prediction']
+    per_chromophore = best['by_chromophore']
+    converged = attempts[best['start']]['optimizer_converged']
+    return dict(common, status='completed' if best['legal'] else 'failed_integration_validation',
+        legal_witness=best['legal'], optimizer_converged=converged, converged=converged,
+        joint_hb_witness=bool(joint), selected_evaluation=best['evaluation'],
+        selection='joint_hb_witness_then_weighted_sse',
+        minimum_legal_weighted_data_sse=min((item['validation_sse'] for item in valid), default=None),
+        selected_start=best['start'], coefficients=x[:modes].copy(),
+        initial_state=np.exp(x[modes:]), states=forward['states'], flow=forward['flow'],
+        log_flow=forward['log_flow'], prediction=prediction,
+        canonical_prediction=forward['canonical_prediction'],
+        optimization_prediction=best['prediction_coarse'], optimization_weighted_data_sse=best['sse'],
+        objective_gradient_inf_norm=best['gradient_inf_norm'],
+        weighted_data_sse=sum(item['weighted_sse'] for item in per_chromophore.values()),
+        by_chromophore=per_chromophore, physical_checks=forward['physical_checks'],
+        integration=best['integration'],
+        optimizer_status=attempts[best['start']]['status'])
+
+
 def _volume_tied_initial_embedding(steps):
     """Map [r, s0, logf0, logv0, logq0] into the existing full coordinates."""
     embedding = np.eye(steps+5)[:, np.r_[np.arange(steps+3), steps+4]]

@@ -63,6 +63,16 @@ Measurement caches, coordinate and scale audits, native Hb summaries and optical
 
 ### Shared-driver reconstruction and reliability
 
+Representation lower bounds and conditional joint feasibility use
+[`evaluate_source_observability.py --feasibility`](scripts/evaluate_source_observability.py),
+the [`feasibility contract`](configs/physiology_semantic_tokenizer/shared_driver_feasibility_v1.yaml),
+and its [design](../docs/EXPERIMENT_PLAN.md#当前共享驱动模型的表达边界与联合可行性2026-10-22).
+Run `--stage check`, synthetic controls, then supervised bounds, vascular and
+frontier stages; parameter profiles require a verified joint witness. Targeted
+tests are `test_shared_driver_feasibility.py`, `test_hb_vascular_feasibility.py`
+and `test_shared_driver_feasibility_runner.py`. The only measured input is the
+explicit retained public spatial parent; no new raw-data or protected reader.
+
 Continuous 30/90 s Hb compatibility and independent common-volume diagnostics use
 [`scripts/evaluate_shared_driver_reconstruction.py`](scripts/evaluate_shared_driver_reconstruction.py)
 `--volume-drive-diagnostic --volume-stage <pilot|synthetic|linear|measured|summarize>`

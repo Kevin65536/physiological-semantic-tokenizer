@@ -1,0 +1,81 @@
+{
+  "schema": "shared_driver_feasibility_independent_verification_v1",
+  "status": "passed_with_float64_finite_budget_and_scope_diagnostics",
+  "result_owner": "summary.json",
+  "scope": "independent_array_scores_subject_aggregation_and_retained_endpoint_state_checks_for_bounds_vascular_frontier;pilot_synthetic_terminal_metadata_only",
+  "components": [
+    {
+      "path": "verification_bounds.json",
+      "status": "passed_with_numerical_diagnostics",
+      "issues": []
+    },
+    {
+      "path": "verification_vascular.json",
+      "status": "passed_with_finite_budget_and_roundoff_diagnostics",
+      "issues": []
+    },
+    {
+      "path": "verification_frontier.json",
+      "status": "passed_with_finite_budget_and_physical_diagnostics",
+      "issues": []
+    }
+  ],
+  "lifecycle_metadata": {
+    "pilot": {
+      "planned": 4,
+      "terminal": 4,
+      "task_exceptions": 0,
+      "execution": "completed",
+      "audit_scope": "terminal_metadata_only"
+    },
+    "synthetic": {
+      "planned": 15,
+      "terminal": 15,
+      "task_exceptions": 0,
+      "execution": "completed",
+      "audit_scope": "terminal_metadata_only"
+    },
+    "bounds": {
+      "planned": 72,
+      "terminal": 72,
+      "task_exceptions": 0,
+      "execution": "completed",
+      "audit_scope": "array_audit_referenced_below"
+    },
+    "vascular": {
+      "planned": 288,
+      "terminal": 288,
+      "task_exceptions": 0,
+      "execution": "completed",
+      "audit_scope": "array_audit_referenced_below"
+    },
+    "frontier": {
+      "planned": 72,
+      "terminal": 72,
+      "task_exceptions": 0,
+      "execution": "completed",
+      "audit_scope": "array_audit_referenced_below"
+    },
+    "profiles": {
+      "planned": 0,
+      "terminal": 0,
+      "task_exceptions": 0,
+      "execution": "not_entered",
+      "audit_scope": "array_audit_referenced_below"
+    }
+  },
+  "summary_completion_and_denominator_consistent": true,
+  "fixed_witness_preserved_in_free_branch": true,
+  "notes": [
+    "Float64 conservative projection certificates are not interval arithmetic and need not be realizable coefficient predictions; see bounds audit.",
+    "Baseline K2 comparisons contain 35 successful and one failed-but-finite original candidate, all 36 retained.",
+    "Vascular reference-range flags include roundoff at active engineering bounds; no tolerance-exceeding flow bound violation was observed.",
+    "Frontier endpoint state checks are mathematical checks only; the unconstrained flow extremes are not physiological qualification.",
+    "Finite-budget, invalid-domain, derivative and undetermined outcomes remain in denominators.",
+    "Fine/coarse frontier trajectories and RK stages were not independently replayed; this audit does not certify global optimality or physiological parameter recovery."
+  ],
+  "issues": [],
+  "raw_data_read": false,
+  "protected_data_read": false,
+  "forward_replays": 0
+}
