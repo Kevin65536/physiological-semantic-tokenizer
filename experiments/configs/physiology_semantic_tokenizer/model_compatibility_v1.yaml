@@ -1,0 +1,80 @@
+schema: model_compatibility_v1
+experiment_id: model_compatibility_v1
+seed: 20261023
+output_namespace: experiments/runs/physiology_semantic_tokenizer/model_compatibility
+data_contract: docs/DATA_CONTRACT.md
+data_documentation: docs/DATASETS_DESCRIPTION.md
+purpose: Descriptive public Hb model-compatibility inventory; no prediction or physiological identification.
+primary_endpoint: native_Hb_weak_closure_energy_ratio_nominal_and_tau_profile
+secondary_endpoints: [retained_output_support_linear_nonlinear, retained_spatial_projection]
+null_and_baseline: The same measured Hb window at nominal tau=2 seconds; no zero-distance acceptance threshold.
+stopping_rule: Every planned record reaches completed or explicit failed; no result-driven expansion.
+training: none
+protected_data: No protected split is opened; public descriptive inventory and already retained public panels only.
+census:
+  metadata_cache: data/cache/physiology_semantic_clean_v5
+  expected_records: 786
+  expected_subjects: 103
+  datasets: [eeg_fnirs_single_trial, refed, simultaneous_eeg_nirs, visual_cognitive_motivation]
+  excluded_join_keys: [visual_cognitive_motivation|S06|S06_Part1_Probe1]
+  lengths_s: [30, 90]
+  stride: nonoverlap_same_as_length
+  tail_policy: drop_without_padding
+  boundary_policy: exclude_windows_crossing_known_event_fnirs_alignment_support
+  pair_support: complete_finite_both_chromophores
+  reader: src.data.unified_physiology.load_native_fnirs_record
+  signal: native_released_HbO_HbR_or_explicit_relative_MBLL
+  temporal_processing: none_added
+  cache_signal_policy: metadata_only_no_v5_filtered_arrays
+  units: preserve_native_provenance_REFED_and_visual_physical_units_unknown
+  input_shape: [time, physical_pair, HbO_HbR]
+  eeg_access: none
+  pilot_records_per_dataset: 1
+metric:
+  nominal_tau: 2.0
+  tau_min: 0.5
+  tau_max: 8.0
+  tau_step: 0.25
+  rho: 0.35
+  xi: null
+  zeta: null
+  fixed_E0: 0.32
+  fixed_alpha: 0.32
+  coefficient_rule: b=-(1-E0)*log(1-E0)/E0; xi=1-b; zeta=1-b/alpha
+  half_widths_s: [4.0, 8.0]
+  center_spacing_s: 2.0
+  rcond: 1.0e-10
+  denominator: sum_over_kernels[(integral_phi_centered_HbR)^2+rho^2*(integral_phi_centered_total_Hb)^2]
+  nuisance: independently_profiled_constant_and_exponential_initial_transient_at_each_tau
+  interpretation: descriptive_weak_closure_energy_ratio_not_noise_fraction_or_parameter_confidence
+summary:
+  metrics: [nominal_D, best_D, best_tau, improvement]
+  hierarchy: equal_valid_pairs_per_window_then_equal_windows_per_record_then_equal_records_per_subject_then_equal_subjects
+  missing_policy: preserve_denominators_exclude_NA_without_zero_imputation
+  bootstrap_unit: dataset_native_subject_identity
+  bootstrap_replicates: 1000
+  confidence: 0.95
+  ecdf_points: 2049
+  quantiles: [0.05, 0.25, 0.5, 0.75, 0.9, 0.95]
+  quantile_rule: exact_inverse_weighted_empirical_CDF_no_interpolation
+panels:
+  output_support_runs:
+    - experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1
+    - experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261013_refed_v2
+  spatial_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial/20261020_measured_v2
+  lengths_s: [30, 90]
+  linear:
+    tau_grid: [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0]
+    kappa_grid: [0.2, 0.4, 0.64, 1.0, 1.5]
+    nominal_tau: 2.0
+    nominal_kappa: 0.64
+    tolerances: [0.25, 0.5, 1.0]
+    rcond: 1.0e-12
+  nonlinear:
+    max_nfev: 100
+    substeps: 4
+    validation_substeps: 8
+    integration_tolerance: 1.0e-4
+    optimizer_tolerance: 1.0e-10
+    log_flow_bounds: [-1.3862943611198906, 1.3862943611198906]
+    initial_log_bounds: [-0.6931471805599453, 0.6931471805599453]

@@ -1,0 +1,285 @@
+{
+  "schema": "model_compatibility_census_verification_v1",
+  "verification_status": "passed_with_explicit_scope_limits",
+  "record_created_at": "2026-10-23T11:10:20.721709+00:00",
+  "run_dir": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+  "record_purpose": "Persist the already completed independent read-only census audit; no experiment, metric computation or full bootstrap was rerun to create this record.",
+  "source_path_bases": {
+    "evidence": "relative to run_dir",
+    "implementation": "relative to repository root"
+  },
+  "sources": {
+    "evidence": [
+      "plan.json",
+      "summary.json",
+      "summary.csv",
+      "records/*.meta.json"
+    ],
+    "implementation": [
+      "experiments/scripts/evaluate_model_compatibility.py",
+      "src/inference/model_compatibility.py"
+    ],
+    "implementation_functions_reviewed": [
+      "evaluate_record",
+      "_record_distribution",
+      "weighted_quantile",
+      "summarize",
+      "weak_hb_profiles"
+    ]
+  },
+  "access_scope": {
+    "raw_signal_reads": 0,
+    "native_signal_reads": 0,
+    "new_experiment_launches": 0,
+    "modified_existing_results": false,
+    "record_metadata_files_read": 786,
+    "sample_record_csv_files_read": 8,
+    "sample_record_profile_npz_files_read": 8
+  },
+  "coverage": {
+    "planned_records": 786,
+    "completed_records": 786,
+    "failed_records": 0,
+    "unique_join_keys": 786,
+    "unique_dataset_subject_identities": 103,
+    "dataset_record_counts": {
+      "eeg_fnirs_single_trial": 174,
+      "refed": 480,
+      "simultaneous_eeg_nirs": 78,
+      "visual_cognitive_motivation": 54
+    },
+    "dataset_subject_counts": {
+      "eeg_fnirs_single_trial": 29,
+      "refed": 32,
+      "simultaneous_eeg_nirs": 26,
+      "visual_cognitive_motivation": 16
+    },
+    "excluded_join_keys_absent_from_records": [
+      "visual_cognitive_motivation|S06|S06_Part1_Probe1"
+    ],
+    "planned_pair_windows": 618216,
+    "status_counts": {
+      "ok": 590470,
+      "missing_support": 254,
+      "insufficient_energy": 132,
+      "excluded_alignment_boundary": 22464,
+      "missing_time_support": 4896
+    },
+    "by_length_s": {
+      "30": {
+        "planned_pair_windows": 473088,
+        "ok": 457738,
+        "missing_support": 170,
+        "insufficient_energy": 108,
+        "excluded_alignment_boundary": 11232,
+        "missing_time_support": 3840
+      },
+      "90": {
+        "planned_pair_windows": 145128,
+        "ok": 132732,
+        "missing_support": 84,
+        "insufficient_energy": 24,
+        "excluded_alignment_boundary": 11232,
+        "missing_time_support": 1056
+      }
+    },
+    "records_with_at_least_one_complete_window_by_dataset": {
+      "eeg_fnirs_single_trial": {
+        "30": 174,
+        "90": 174
+      },
+      "refed": {
+        "30": 480,
+        "90": 320
+      },
+      "simultaneous_eeg_nirs": {
+        "30": 78,
+        "90": 78
+      },
+      "visual_cognitive_motivation": {
+        "30": 54,
+        "90": 54
+      }
+    },
+    "checks_passed": [
+      "record identities unique; all planned records terminal and completed",
+      "sum of each metadata status table equals rows equals windows times physical_pairs",
+      "metadata status totals equal summary.json and sum to planned_pair_windows",
+      "every summary.csv row has valid plus excluded plus missing plus insufficient-energy plus numerical-failure counts equal to its planned denominator",
+      "summary.csv planned length denominators match metadata windows_by_length times physical_pairs",
+      "no recorded numerical_window_failures; all 103 dataset-subject identities have valid scores for each reported length"
+    ],
+    "interpretation_notes": [
+      "summary.csv planned_records and completed_records describe all source records and are repeated across lengths; they do not count only records contributing that length.",
+      "REFED 90-second distributions have complete windows in 320 of 480 records; the remaining 160 records are shorter than 90 seconds and contribute no padded window.",
+      "103 refers to dataset-native subject identities and does not establish biological independence across datasets."
+    ]
+  },
+  "profile_sample_audit": {
+    "selection": "For each dataset, the lexicographically first record plus the other record maximizing non-ok rows, then 90-second-window count and join key; deterministic coverage of missing-support, zero-energy, alignment-boundary and time-gap cases.",
+    "records": 8,
+    "valid_pair_window_rows": 12304,
+    "samples": [
+      {
+        "dataset_id": "eeg_fnirs_single_trial",
+        "subject_id": "subject_01",
+        "record_id": "session_00",
+        "join_key": "eeg_fnirs_single_trial|subject_01|session_00",
+        "rows": 1080,
+        "status_counts": {
+          "ok": 1037,
+          "missing_support": 43
+        },
+        "metadata_path": "records/1be9a515f7aeb6a9.meta.json",
+        "csv_path": "records/1be9a515f7aeb6a9.csv.gz",
+        "profiles_path": "records/1be9a515f7aeb6a9.profiles.npz"
+      },
+      {
+        "dataset_id": "eeg_fnirs_single_trial",
+        "subject_id": "subject_01",
+        "record_id": "session_04",
+        "join_key": "eeg_fnirs_single_trial|subject_01|session_04",
+        "rows": 1152,
+        "status_counts": {
+          "ok": 1104,
+          "missing_support": 48
+        },
+        "metadata_path": "records/d63a50b5c7b8d04b.meta.json",
+        "csv_path": "records/d63a50b5c7b8d04b.csv.gz",
+        "profiles_path": "records/d63a50b5c7b8d04b.profiles.npz"
+      },
+      {
+        "dataset_id": "refed",
+        "subject_id": "1",
+        "record_id": "video_10_hbo_hbr",
+        "join_key": "refed|1|video_10",
+        "rows": 102,
+        "status_counts": {
+          "ok": 102
+        },
+        "metadata_path": "records/d03a1750403d4eaf.meta.json",
+        "csv_path": "records/d03a1750403d4eaf.csv.gz",
+        "profiles_path": "records/d03a1750403d4eaf.profiles.npz"
+      },
+      {
+        "dataset_id": "refed",
+        "subject_id": "18",
+        "record_id": "video_15_hbo_hbr",
+        "join_key": "refed|18|video_15",
+        "rows": 306,
+        "status_counts": {
+          "ok": 300,
+          "insufficient_energy": 6
+        },
+        "metadata_path": "records/8cbebb41b88051e6.meta.json",
+        "csv_path": "records/8cbebb41b88051e6.csv.gz",
+        "profiles_path": "records/8cbebb41b88051e6.profiles.npz"
+      },
+      {
+        "dataset_id": "simultaneous_eeg_nirs",
+        "subject_id": "VP001",
+        "record_id": "cnt_dsr",
+        "join_key": "simultaneous_eeg_nirs|VP001|cnt_dsr",
+        "rows": 2340,
+        "status_counts": {
+          "ok": 2052,
+          "excluded_alignment_boundary": 288
+        },
+        "metadata_path": "records/28a2f0edb974d9b0.meta.json",
+        "csv_path": "records/28a2f0edb974d9b0.csv.gz",
+        "profiles_path": "records/28a2f0edb974d9b0.profiles.npz"
+      },
+      {
+        "dataset_id": "simultaneous_eeg_nirs",
+        "subject_id": "VP025",
+        "record_id": "cnt_nback",
+        "join_key": "simultaneous_eeg_nirs|VP025|cnt_nback",
+        "rows": 3312,
+        "status_counts": {
+          "ok": 3024,
+          "excluded_alignment_boundary": 288
+        },
+        "metadata_path": "records/b988406a8a04de73.meta.json",
+        "csv_path": "records/b988406a8a04de73.csv.gz",
+        "profiles_path": "records/b988406a8a04de73.profiles.npz"
+      },
+      {
+        "dataset_id": "visual_cognitive_motivation",
+        "subject_id": "S01",
+        "record_id": "S01_Part1_Probe1",
+        "join_key": "visual_cognitive_motivation|S01|S01_Part1_Probe1",
+        "rows": 1680,
+        "status_counts": {
+          "ok": 1661,
+          "insufficient_energy": 19
+        },
+        "metadata_path": "records/24ca7ff248f4fbe4.meta.json",
+        "csv_path": "records/24ca7ff248f4fbe4.csv.gz",
+        "profiles_path": "records/24ca7ff248f4fbe4.profiles.npz"
+      },
+      {
+        "dataset_id": "visual_cognitive_motivation",
+        "subject_id": "S07",
+        "record_id": "S07_Probe2",
+        "join_key": "visual_cognitive_motivation|S07|S07_Probe2",
+        "rows": 3408,
+        "status_counts": {
+          "missing_time_support": 384,
+          "ok": 3024
+        },
+        "metadata_path": "records/3da644c8f8b711fe.meta.json",
+        "csv_path": "records/3da644c8f8b711fe.csv.gz",
+        "profiles_path": "records/3da644c8f8b711fe.profiles.npz"
+      }
+    ],
+    "tau_grid_seconds": {
+      "minimum": 0.5,
+      "maximum": 8.0,
+      "step": 0.25,
+      "nominal": 2.0
+    },
+    "absolute_tolerance": 1e-11,
+    "max_abs_profile_min_minus_best_D": 4.440892098500626e-16,
+    "max_abs_profile_argmin_tau_minus_best_tau": 0.0,
+    "max_abs_profile_nominal_tau_node_minus_nominal_D": 8.881784197001252e-16,
+    "max_abs_nominal_D_minus_best_D_minus_improvement": 1.3322676295501878e-15,
+    "all_nominal_minus_best_at_least_negative_tolerance": true,
+    "checks_passed": [
+      "profile dimensions and window start/stop arrays match sampled CSV rows",
+      "all ok-row profiles finite; all non-ok profiles and reported nominal/best/tau/improvement entries missing",
+      "best_D equals profile minimum; best_tau equals first argmin node",
+      "nominal_D equals the profile node at tau=2 seconds",
+      "improvement equals nominal_D minus best_D and is nonnegative within tolerance",
+      "sample record weights sum to one and assign equal mass to each window with valid scores"
+    ]
+  },
+  "summary_weighting_audit": {
+    "hierarchy": "equal valid pairs per contributing window; equal contributing windows per record; equal records with valid scores per subject; equal contributing dataset-native subjects",
+    "max_abs_grand_mean_minus_dataset_means_weighted_by_valid_subjects": 4.3076653355456074e-14,
+    "max_abs_summary_mean_nominal_minus_best_minus_improvement": 1.0547118733938987e-15,
+    "all_summary_quantiles_monotonic": true,
+    "all_reported_interval_bounds_ordered": true,
+    "quantiles": "q05/q25/q50/q75/q90/q95 are inverse weighted empirical-CDF quantiles without interpolation; raw_median/raw_p90 and subject_median are distinct estimands.",
+    "missing_policy": "Rows without valid scores remain in coverage denominators and are omitted from score distributions; no zero imputation."
+  },
+  "interval_semantics_review": {
+    "bootstrap_unit": "dataset_native_subject_identity",
+    "replicates": 1000,
+    "confidence": 0.95,
+    "interval_method": "percentile subject bootstrap",
+    "mean_ci_estimand": "mean of subject means",
+    "subject_median_ci_estimand": "median of subject weighted medians",
+    "not_intervals_for": [
+      "pooled weighted q50",
+      "individual tau confidence domain",
+      "physiological parameter confidence"
+    ],
+    "basis": "Reviewed implementation of summarize and checked declared metadata and interval bound ordering."
+  },
+  "limitations": [
+    "Did not numerically reproduce the full 1000-replicate bootstrap or all-record weighted quantiles/subject statistics.",
+    "Profile-to-CSV numerical checks cover exactly the eight listed records, not all 590470 valid pair-window rows.",
+    "Audit compares retained profile arrays, row tables, metadata and summaries; it does not recompute weak Hb closure from native signals.",
+    "Passing this verification establishes internal consistency within the audited scope, not model qualification, physiological truth or a scientific acceptance threshold."
+  ]
+}

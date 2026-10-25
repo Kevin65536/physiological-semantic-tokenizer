@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-22T10:54:39.905673+00:00",
+  "updated_at": "2026-10-23T11:30:08.336797+00:00",
   "tracks": [
     {
       "id": "main",
@@ -2055,6 +2055,66 @@
       "label": "可行性报告位图及正文可选检查",
       "path": "docs/report/20261022_shared_driver_feasibility_v1/delivery_checks.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.model_compatibility_contract",
+      "label": "实验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/model_compatibility_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.model_compatibility_plan",
+      "label": "原生Hb普查计划",
+      "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/plan.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.model_compatibility_summary",
+      "label": "原生Hb普查汇总",
+      "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.model_compatibility_launch",
+      "label": "监督任务启动",
+      "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.model_compatibility_resources",
+      "label": "资源与吞吐",
+      "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/resources_resolved.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.model_compatibility_panels",
+      "label": "冻结观测面板结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.model_compatibility_verification",
+      "label": "独立复算、保留失败与数值修正",
+      "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.model_compatibility_spatial_migration",
+      "label": "稳健空间投影修正",
+      "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/derived_spatial_stability_v1/migration.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.model_compatibility_dynamic_migration",
+      "label": "常数基与动态能量修正",
+      "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/dynamic_diagnostics_v2_migration.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.model_compatibility_report",
+      "label": "总体分布与典型曲线中文报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/report_v4/TECHNICAL_REPORT.pdf",
+      "role": "result_summary"
     }
   ],
   "records": [
@@ -5820,6 +5880,39 @@
       ],
       "headline": false,
       "next_step": "无已启动的后续运行；建议用短距通道或系统生理参照约束额外共同过程，再检验跨记录泛化及来源归属。"
+    },
+    {
+      "state_id": "main.model_compatibility@2026-10-23.v1",
+      "entity": "main.model_compatibility",
+      "label": "五项模型相容性总体分布与典型曲线",
+      "track": "main",
+      "order": 189,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "descriptive",
+      "summary": "完成四库786记录、103库内被试身份的原生Hb普查，618216计划配对窗中590470有效；另完成96线性、96非线性和72空间面板。0.5工程容限下59/96找到同参数同系数联合见证，其中41组全部80节点通过，不能识别参数。K2固定空间残差在36/36窗降低；96非线性均有合法轨迹但0收敛，只构成已找到误差上界。两处数值诊断以版本化修正保留，原失败不删；43页报告区分总体与面板、实际算子离散距离与连续弱式，不授予生理资格。",
+      "evidence_ids": [
+        "e.model_compatibility_contract",
+        "e.model_compatibility_plan",
+        "e.model_compatibility_summary",
+        "e.model_compatibility_launch",
+        "e.model_compatibility_resources",
+        "e.model_compatibility_panels",
+        "e.model_compatibility_verification",
+        "e.model_compatibility_spatial_migration",
+        "e.model_compatibility_dynamic_migration",
+        "e.model_compatibility_report"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-23T11:30:08.336797+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.ssm_output_support",
+        "main.local_spatial"
+      ],
+      "headline": false,
+      "next_step": "本轮描述性套件与图线分析已交付。后续优先复核观测映射、尺度和跨记录稳定性，再以独立预算稳定性判断非线性最优误差；未启动新的保护评价。"
     }
   ]
 }

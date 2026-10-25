@@ -1,0 +1,82 @@
+{
+  "schema": "model_compatibility_dynamic_diagnostics_overlay_v2",
+  "created_at": "2026-10-23T11:13:36.475887+00:00",
+  "parent_run": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+  "source": "panels/dynamic_diagnostics_v2_model_compatibility.py",
+  "source_sha256": "c0dd88ca65bb1457374136042a0a01a920f7466d2099b3f098a2ca44fc031c9e",
+  "overlay": "panels/dynamic_diagnostics_v2.csv",
+  "scope": "96 retained public linear panel target/operator/sd/mask arrays; no model or nonlinear fits; no raw dataset access",
+  "cause": "Relative SVD of op@constant columns used only their roundoff-scale singular maximum and invented rank-three nuisance directions after the actual operator had annihilated constants.",
+  "correction": "Constant-only SVD cutoff = rcond * max(smax(op@C / SD), norm(abs(op)@C / SD)); C=tile(I3,T), on the same score mask. Main model basis and scoring calculations are unchanged.",
+  "function": "src.inference.model_compatibility.linear_panel_dynamic_diagnostics",
+  "function_options": {
+    "rcond": 1e-12
+  },
+  "affected_fields": [
+    "constant_rank",
+    "dynamic_energy",
+    "dynamic_nmse"
+  ],
+  "checked_but_unchanged_fields": [
+    "dynamic_support",
+    "evidence_interpretation",
+    "zero_prediction_energy",
+    "zero_prediction_nmse"
+  ],
+  "unchanged_scientific_outputs": [
+    "all per-theta Hb/joint/EEG/component scores",
+    "nominal and best theta scores",
+    "stored predictions and coefficients",
+    "compatibility witness node membership",
+    "spatial scores",
+    "nonlinear fits",
+    "Hb inventory scores"
+  ],
+  "validation": {
+    "rows": 96,
+    "old_constant_rank_counts": {
+      "3": 96
+    },
+    "new_constant_rank_counts": {
+      "0": 96
+    },
+    "dynamic_support_changes": 0,
+    "all_corrected_dynamic_energy_equals_retained_zero_prediction_energy": true,
+    "previously_removed_energy_min_median_max": [
+      0.08714476765107904,
+      31.643329585288896,
+      9439.190441965271
+    ],
+    "previously_removed_fraction_min_median_max": [
+      0.0021063397261185113,
+      0.06982888226782324,
+      0.699149412135174
+    ],
+    "retained_task_old_diagnostic_reproduced_without_fitting": true,
+    "main_model_design_loop_AST_identical_to_retained_source": true,
+    "main_per_node_scoring_loop_AST_identical_to_retained_source": true,
+    "prediction_branch_AST_identical_to_retained_source": true,
+    "basis_default_cutoff_unchanged_for_main_model_calls": true,
+    "retained_files_checked_unchanged": 198,
+    "retained_content_SHA256_aggregate": "ceb89f4e8342cc4d9562008ca6593a2d005a16168041a55eb3c975ded572fe41"
+  },
+  "retained_table_SHA256": {
+    "panels/linear_profile.csv": "880f357862d76559356aa5b8b539ca5cea9e42470157c63a00bbf153120a2b8f",
+    "panels/linear_summary.csv": "5be38dd603c426a8ef98627d2802c84ecd12ed672d7ddcaec06660dc4259eec8",
+    "panels/compatibility_sets.csv": "3668d818564a983f6477e955530c66a77fef16807f726907ff2379e8785cf54c",
+    "panels/nonlinear.csv": "2547785b8d0df93e2b11c82205cf2277bea353c9138f5869afd765319fc4d237",
+    "panels/space.csv": "223d12937b04b9e6b11bdde77c15f123f3cad16afd7f7c3f2fc87b05af2cc91b",
+    "panels/summary.json": "33dbbb3b210b49c9180011e22509f137e63e1800051260b9d34f7cfaeea0c699"
+  },
+  "tests": {
+    "targeted_command": ".venv/bin/python -m pytest -q tests/test_model_compatibility.py",
+    "passed": 14,
+    "additions": [
+      "annihilated-constant rank-zero regression at T=6,10,40",
+      "main profile and joint prediction exact equality with old diagnostic basis",
+      "real constant survival and unit/operator scaling",
+      "mixed annihilated and surviving modality constants"
+    ]
+  },
+  "report_effect": "Report panel figures and tables consume fit distances, centered training-SD RMS and witness nodes, not these dynamic energy diagnostics; figures and conclusions are unchanged. This overlay supersedes only the affected diagnostic fields, preserving every dated source artifact."
+}

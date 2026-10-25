@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-22; payload-pruning record retained from
+_Evidence surface updated 2026-10-23; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -26,6 +26,7 @@ explains the path hierarchy and reading order.
 
 | Research question | Suite root | Evidence entry |
 | --- | --- | --- |
+| How do model-compatibility scores vary across the registered public inventory and frozen observation panels? | `model_compatibility/` | [Population distributions and typical curves](#model-compatibility-distributions-and-typical-curves--2026-10-23) |
 | Can the frozen observation family meet separate EEG/Hb tolerances, and which failures remain numerical? | `source_observability/` | [Shared-driver conditional feasibility](#shared-driver-conditional-feasibility--2026-10-22) |
 | Does the missing independent common-volume direction restrict sustained 30/90 s Hb reconstruction? | `shared_driver_reconstruction/` | [30/90 s volume-drive diagnostic](#continuous-hb-compatibility-and-independent-volume-direction--2026-10-22) |
 | Do local channels, geometry and independent dynamics contribute separately? | `shared_driver_spatial/` | [Complete spatial experiment](#local-spatial-complete-experiment--2026-10-20), [initial software evidence](#local-spatial-software-and-metadata--2026-10-16) |
@@ -51,6 +52,42 @@ Some run and checkpoint paths below point to local Git-ignored artifacts that re
 useful in this workspace but are not part of the tracked paper record. For manuscript
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
+
+## Model-compatibility distributions and typical curves — 2026-10-23
+
+The [versioned contract](configs/physiology_semantic_tokenizer/model_compatibility_v1.yaml)
+and [design](../docs/EXPERIMENT_PLAN.md#五项模型相容性指标的总体分布与典型曲线2026-10-23)
+separate the native public Hb inventory from the retained frozen output-support
+and spatial panels. The numerical owners are the
+[census summary](runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/summary.json),
+its record/subject tables and per-record profiles, and the
+[panel summary](runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/summary.json)
+with task JSON/NPZ and common-parameter tables. Keep the resolved configuration,
+explicit identities, source snapshots, synthetic controls,
+[supervised launches](runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/launch.json),
+[resource measurements](runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/resources_resolved.json),
+and [verification](runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/verification.json).
+
+The Chinese [report](runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/report_v4/TECHNICAL_REPORT.pdf)
+and [bitmap figure atlas](runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/report_v4/FIGURE_ATLAS.pdf)
+show full distributions, subject weighting and explicitly selected waveform examples.
+The [spatial stability migration](runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/derived_spatial_stability_v1/migration.json)
+owns corrected raw spatial projections, and the
+[dynamic-energy migration](runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/dynamic_diagnostics_v2_migration.json)
+owns corrected constant-nuisance diagnostics; original arrays, failed checks and
+earlier exports remain retained. The cross-modal distance uses the actual discrete
+observation operators; it is not the continuous third-order weak-form value.
+Nonlinear values are legal conditional reconstruction witnesses under a finite
+optimization budget, not converged optima. Wide common-parameter sets do not
+identify physiology, and unscorable windows remain in the denominator record.
+
+Git retains the census rows/profiles, panel task records and arrays, selected
+examples, correction overlays, source snapshots, verification and launch logs,
+and the final v4 PDF/HTML, bitmap figures and formula sources. The earlier
+[synthetic visual guide](runs/physiology_semantic_tokenizer/model_compatibility_guide/20261023_v7/report/TECHNICAL_REPORT.pdf)
+is retained with its arrays and provenance as a separate educational example.
+Superseded report exports, rendered page previews and duplicate ZIP bundles
+remain local; no retained experiment evidence is deleted by this selection.
 
 ## Shared-driver conditional feasibility — 2026-10-22
 

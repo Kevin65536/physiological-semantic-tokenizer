@@ -1,0 +1,82 @@
+{
+  "schema": "model_compatibility_delivery_verification_v1",
+  "created_at": "2026-10-23T11:30:08.336797+00:00",
+  "status": "completed_with_retained_failures_versioned_numerical_corrections_and_explicit_scientific_limits",
+  "scope": "registered public native Hb census and explicitly retained public frozen panels only",
+  "components": {
+    "synthetic_controls": "synthetic_checks.json",
+    "census_independent_audit": "verification_census.json",
+    "panel_arithmetic_audit_with_retained_diagnostic_failures": "verification_panels.json",
+    "spatial_failure_investigation": "verification_panels_space_numerics.json",
+    "stable_spatial_result_owner": "derived_spatial_stability_v1/migration.json",
+    "stable_spatial_verification": "derived_spatial_stability_v1/verification.json",
+    "dynamic_diagnostic_result_owner": "panels/dynamic_diagnostics_v2_migration.json",
+    "report_generation": "report_v4/report_generation.json",
+    "report_delivery_checks": "report_v4/delivery_checks.json"
+  },
+  "numerical_corrections": [
+    {
+      "issue": "roundoff-only transformed constants incorrectly retained as a rank-three nuisance basis",
+      "scope": "96 panel dynamic-energy diagnostics only",
+      "resolution": "versioned external-reference SVD diagnostic overlay; zero baseline, main fit scores, predictions and common-node sets unchanged",
+      "existing_evidence_preserved": true
+    },
+    {
+      "issue": "12 original raw spatial normal-equation checks fail at the retained 1e-7 threshold under ill-conditioned latent-coordinate replay",
+      "scope": "raw fixed-space residual energies and fractions",
+      "resolution": "72-row stable fixed-loading QR spatial projection, relaxing temporal constraints; original failed audit retained without changing its threshold",
+      "maximum_joint_fraction_correction": 3.63545573645041e-08,
+      "weighted_certified_and_free_rank_bounds_unchanged": true,
+      "existing_evidence_preserved": true
+    }
+  ],
+  "tests": {
+    "targeted_command": ".venv/bin/python -m pytest -q tests/test_model_compatibility.py tests/test_model_compatibility_runner.py tests/test_model_compatibility_panels.py tests/test_model_compatibility_report.py",
+    "targeted_passed": 49,
+    "targeted_failed": 0,
+    "targeted_log": "logs/pytest_targeted.log",
+    "final_report_file_after_display_and_owner_updates": {
+      "passed": 8,
+      "failed": 0
+    },
+    "collection_command": ".venv/bin/python -m pytest --collect-only -q",
+    "collected": 1975,
+    "total_before_default_deselection": 1986,
+    "deselected": 11,
+    "collection_log": "logs/pytest_collect.log"
+  },
+  "report": {
+    "version": "report_v4",
+    "pages": 43,
+    "figure_atlas_pages": 36,
+    "figures": 31,
+    "latex_formula_images": 5,
+    "figures_bitmap": true,
+    "body_and_tables_selectable": true,
+    "full_page_raster_images": 0,
+    "visual_review": "Full v3 page review plus final changed-page review; root inspected v4 pages 6,31,38 and v3 typical examples 14,39 at display size. Labels, formulas and masks readable without clipping.",
+    "supervisor": {
+      "unit": "model-compatibility-report-20261023-v1.service",
+      "final_state": "inactive/dead",
+      "exit_status": 0,
+      "log": "logs/report.log"
+    }
+  },
+  "limits": [
+    "96 nonlinear legal trajectories; 0 optimizer convergence. Values are found conditional Hb reconstruction upper bounds, not global optima or joint EEG-Hb witnesses.",
+    "Continuous third-order weak cross closure is not directly evaluated under unequal retained observation operators; the discrete operator-consistent joint distance is a distinct measurable quantity.",
+    "Conditional nonlinear forward reconstruction is distinct from absolute-coordinate nonlinear inversion.",
+    "Census profile audit samples 12304 valid rows in 8 records plus whole-inventory coverage and weighted means; the complete bootstrap was not independently rerun.",
+    "All 7680 grid nodes receive algebraic checks; saved coefficient replay covers three retained selections per record-length, and nonlinear fine/coarse forward replay covers eight strata representatives.",
+    "30/90-second census windows have different support and eligibility; window/channel counts are not independent subjects.",
+    "Training SD and engineering tolerances are not calibrated measurement-noise levels or physiological acceptance thresholds."
+  ],
+  "new_protected_data_access": false,
+  "additional_measured_fitting_for_numerical_corrections": false,
+  "repository_checks": {
+    "project_state_validate": "passed: research_state_registry_v1, 143 records, 79 current entities",
+    "project_state_render": "completed: generated project status and README views",
+    "git_diff_check": "passed",
+    "working_tree_review": "completed; pre-existing unrelated shared-driver/decay edits preserved; no commit or push performed"
+  }
+}

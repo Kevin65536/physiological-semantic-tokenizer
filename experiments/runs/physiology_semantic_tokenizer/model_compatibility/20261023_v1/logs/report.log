@@ -1,0 +1,31 @@
+Traceback (most recent call last):
+  File "/SSD_2/pid-mcm-implementation/experiments/scripts/render_model_compatibility.py", line 860, in <module>
+    main()
+  File "/SSD_2/pid-mcm-implementation/experiments/scripts/render_model_compatibility.py", line 854, in main
+    checks = build_report(args.run, args.output or args.run / "report_v1")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/SSD_2/pid-mcm-implementation/experiments/scripts/render_model_compatibility.py", line 800, in build_report
+    panel_examples, panel_choices = panel_example_blocks(panels, paired, staging)
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/SSD_2/pid-mcm-implementation/experiments/scripts/render_model_compatibility.py", line 737, in panel_example_blocks
+    f"该θ EEG/HbO/HbR NRMSE={number(best['joint_eeg_nrmse'])}/{number(best['joint_hbo_nrmse'])}/{number(best['joint_hbr_nrmse'])}。"
+                                    ~~~~^^^^^^^^^^^^^^^^^^^
+KeyError: 'joint_eeg_nrmse'
+Traceback (most recent call last):
+  File "/SSD_2/pid-mcm-implementation/experiments/scripts/render_model_compatibility.py", line 860, in <module>
+    main()
+  File "/SSD_2/pid-mcm-implementation/experiments/scripts/render_model_compatibility.py", line 854, in main
+    checks = build_report(args.run, args.output or args.run / "report_v1")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/SSD_2/pid-mcm-implementation/experiments/scripts/render_model_compatibility.py", line 840, in build_report
+    checks = render_report(content_path, output)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/SSD_2/pid-mcm-implementation/experiments/scripts/render_source_diagnostics_report.py", line 556, in render_report
+    path, width, height, tex = _formula(block, output, equation_index)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/SSD_2/pid-mcm-implementation/experiments/scripts/render_source_diagnostics_report.py", line 404, in _formula
+    raise RuntimeError("pdflatex is required to render equation PNGs")
+RuntimeError: pdflatex is required to render equation PNGs
+{"output": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/report_v2", "pages": 42, "figures": 31}
+{"output": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/report_v3", "pages": 43, "figures": 31}
+{"output": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/report_v4", "pages": 43, "figures": 31}

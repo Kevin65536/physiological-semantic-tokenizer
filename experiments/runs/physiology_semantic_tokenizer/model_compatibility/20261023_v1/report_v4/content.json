@@ -1,0 +1,1841 @@
+{
+  "schema": "source_diagnostics_report_v1",
+  "title": "实测模型相容性：全库存分布与条件面板复核",
+  "subtitle": "相对 Hb 闭合、冻结 EEG–Hb 约束、共同参数节点、空间读出和条件非线性重建",
+  "date": "2026-10-23",
+  "summary": [
+    "Hb 普查保留 786 条登记记录，实际原生时钟上共枚举 618,216 个计划配对窗；其中 590,470 个得到有效闭合评分，其余 27,746 个保留具体状态。各窗长有整窗记录数另列，计划记录不等于该窗长的评分记录。分布必须结合被试等权汇总和支持分母阅读。",
+    "非线性限制：96 个条件Hb前向拟合中 96 个保留合法轨迹，但优化收敛仅 0 个、未收敛 96 个。这些误差是本次预算内找到的上界，不能称最优解，也不能用高误差排除模型；该放松没有同时满足上游EEG动力学的要求。",
+    "冻结四库面板共96个记录×支持任务。按各分量NRMSE≤0.5个训练SD的工程阈值，59/96 个任务发现同θ共同见证节点，37 个任务未发现节点；其中 41 个任务的全部80节点均通过，不能据此声称参数已识别。此结果限定于离散工程节点，不是连续参数域排除或噪声校准检验。",
+    "Single-Trial 的90秒原生Hb：被试等权混合分布中位 D 从固定参数 1.66 到逐窗网格最优 1.41；配对绝对改善 D固定-D最优的中位数为 0.104。有效配对窗 46,068 个，覆盖 29 名库内被试。这是同窗离线拟合收益。",
+    "Simultaneous 的90秒原生Hb：被试等权混合分布中位 D 从固定参数 1.69 到逐窗网格最优 1.43；配对绝对改善 D固定-D最优的中位数为 0.114。有效配对窗 45,792 个，覆盖 26 名库内被试。这是同窗离线拟合收益。",
+    "Visual 的90秒原生Hb：被试等权混合分布中位 D 从固定参数 1.76 到逐窗网格最优 1.19；配对绝对改善 D固定-D最优的中位数为 0.359。有效配对窗 24,563 个，覆盖 16 名库内被试。这是同窗离线拟合收益。",
+    "REFED 的90秒原生Hb：被试等权混合分布中位 D 从固定参数 1.86 到逐窗网格最优 1.39；配对绝对改善 D固定-D最优的中位数为 0.261。有效配对窗 16,309 个，覆盖 32 名库内被试。这是同窗离线拟合收益。",
+    "较低的闭合残差仅支持指定读出、支持和尺度下的观测相容性。它不验证潜变量真实性，不证明参数唯一，也不提供噪声校准的显著性结论。"
+  ],
+  "provenance": [
+    "唯一数值输入：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+    "报告只汇总保留证据；不新增实测拟合、不改变冻结参数或样本分区。"
+  ],
+  "sections": [
+    {
+      "title": "覆盖范围、状态和分母",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "本报告先给出全登记公开库存的 Hb 配对闭合分布，再在保留冻结坐标、训练尺度和观测算子的子面板检验 EEG–Hb、共同参数及条件非线性重建。两类分母分别计算。空间映射仅适用于其 Single-Trial 冻结评价面板。全库存主分析使用原生 Hb 读取器，不沿用 v5 的额外滤波轨迹；原始发布处理和单位保留在逐记录 provenance。"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "窗长 / 秒",
+            "计划被试",
+            "计划记录",
+            "原生配对窗",
+            "有效评分",
+            "其余状态（完整计数）"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              30,
+              29,
+              174,
+              146376,
+              146206,
+              "missing_support: 170"
+            ],
+            [
+              "Single-Trial",
+              90,
+              29,
+              174,
+              46152,
+              46068,
+              "missing_support: 84"
+            ],
+            [
+              "Simultaneous",
+              30,
+              26,
+              78,
+              172440,
+              161208,
+              "excluded_alignment_boundary: 11232"
+            ],
+            [
+              "Simultaneous",
+              90,
+              26,
+              78,
+              57024,
+              45792,
+              "excluded_alignment_boundary: 11232"
+            ],
+            [
+              "Visual",
+              30,
+              16,
+              54,
+              79200,
+              75316,
+              "insufficient_energy: 44; missing_time_support: 3840"
+            ],
+            [
+              "Visual",
+              90,
+              16,
+              54,
+              25632,
+              24563,
+              "insufficient_energy: 13; missing_time_support: 1056"
+            ],
+            [
+              "REFED",
+              30,
+              32,
+              480,
+              75072,
+              75008,
+              "insufficient_energy: 64"
+            ],
+            [
+              "REFED",
+              90,
+              32,
+              480,
+              16320,
+              16309,
+              "insufficient_energy: 11"
+            ]
+          ],
+          "caption": "一个配对窗是一个记录中的一个时间窗与一个物理 HbO/HbR 对。窗口、通道和重复记录不构成独立被试。库内被试身份只在各数据集内部计数。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+          "widths": [
+            1.1,
+            0.7,
+            0.75,
+            0.65,
+            1.1,
+            1,
+            2.2
+          ]
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "窗长/秒",
+            "计划记录",
+            "有整窗记录",
+            "有有效评分记录",
+            "已读但无整窗"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              30,
+              174,
+              174,
+              174,
+              0
+            ],
+            [
+              "Single-Trial",
+              90,
+              174,
+              174,
+              174,
+              0
+            ],
+            [
+              "Simultaneous",
+              30,
+              78,
+              78,
+              78,
+              0
+            ],
+            [
+              "Simultaneous",
+              90,
+              78,
+              78,
+              78,
+              0
+            ],
+            [
+              "Visual",
+              30,
+              54,
+              54,
+              54,
+              0
+            ],
+            [
+              "Visual",
+              90,
+              54,
+              54,
+              54,
+              0
+            ],
+            [
+              "REFED",
+              30,
+              480,
+              480,
+              480,
+              0
+            ],
+            [
+              "REFED",
+              90,
+              480,
+              320,
+              320,
+              160
+            ]
+          ],
+          "caption": "有整窗记录按该窗长 CSV 中不同 record_token 计数，包含随后被排除或不可评分的整窗；有有效评分记录要求至少一个 status=ok 配对窗。已成功读取但长度不足一个完整窗口的记录只进入计划记录，不冒充该窗长的实测评分记录。这类支持不足与整记录读取失败分别保留。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/records/*.csv.gz",
+          "widths": [
+            1.2,
+            0.7,
+            0.9,
+            1,
+            1.2,
+            1.1
+          ]
+        },
+        {
+          "type": "paragraph",
+          "text": "30秒与90秒的非重叠窗口并非相同观测单元，且可用记录集合可能不同。因此两种窗长的分布差异仅作描述，不能归因为窗长的因果效应。合法初态贡献、弱核边缘支持或激励频率可能参与这些差异，但本组实验没有隔离这些机制，相关解释只能作为推断。"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "整记录读取/计算失败",
+            "保留失败身份和类型"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              0,
+              "无"
+            ],
+            [
+              "Simultaneous",
+              0,
+              "无"
+            ],
+            [
+              "Visual",
+              0,
+              "无"
+            ],
+            [
+              "REFED",
+              0,
+              "无"
+            ]
+          ],
+          "caption": "原生配对窗数在实际读取原生时钟后确定。若整条记录读取失败，其真实窗口分母未知，不能用缓存时长估计冒充有效实测分母；计划记录仍保留。末尾不足整窗部分不补齐，拼接边界跨窗排除。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "metadata原生单位标注",
+            "实际原生读出变换",
+            "实际采样率/Hz"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              "V",
+              "positive_intensity_natural_log_OD_relative_MBLL_only",
+              "10"
+            ],
+            [
+              "Simultaneous",
+              "mmol/L",
+              "released_HbO_HbR_no_project_temporal_processing",
+              "10"
+            ],
+            [
+              "Visual",
+              "unreported_ETG7100_export",
+              "released_HbO_HbR_no_project_temporal_processing",
+              "10"
+            ],
+            [
+              "REFED",
+              "unreported_LABNIRS_export",
+              "released_HbO_HbR_no_project_temporal_processing",
+              "47.6"
+            ]
+          ],
+          "caption": "单位和变换逐字来自保留 provenance。Single-Trial 从正双波长强度经自然对数光密度和相对 MBLL 得到 Hb；原生测量单位标注不构成变换后 Hb 的绝对标定。Visual/REFED 的物理单位未知时保留未知，跨库不汇集原幅值。普查无新增项目时间滤波；冻结面板另用原父算子。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/records/*.meta.json",
+          "widths": [
+            1,
+            1.6,
+            3,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "title": "这些量如何计算，以及它们能回答什么",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "这份报告使用实测保留结果。此前教学图中存在生成器状态和无噪声已知真值；本报告的 HbO/HbR 是数据集发布或既有原生读出得到的相对观测，EEG 是冻结模型所用的观测特征。两者的数值大小和可识别含义不能直接互换。所有当前窗拟合都使用完整可见窗口，属于离线相容性检查。"
+        },
+        {
+          "type": "equation",
+          "latex": "R=\\mathrm{HbR},\\quad H=\\mathrm{HbO}+\\mathrm{HbR},\\qquad \\bar R=R-\\langle R\\rangle_t,\\quad \\bar H=H-\\langle H\\rangle_t",
+          "explanation": "每个物理 Hb 对共享其原始相对幅度。去除的是各量的窗口时间均值；没有分别把 HbO/HbR 除以自身标准差。H 与 R 的单位来自原生读出。",
+          "source": "src/inference/model_compatibility.py"
+        },
+        {
+          "type": "equation",
+          "latex": "\\ell_j(\\tau)=\\int\\phi_j\\bar R\\,dt-\\tau\\int\\phi'_j\\bar R\\,dt,\\qquad r_j(\\tau)=\\rho\\!\\left[\\zeta\\!\\int\\phi_j\\bar H\\,dt-\\xi\\tau\\!\\int\\phi'_j\\bar H\\,dt\\right]",
+          "explanation": "φ 是支撑半宽为 4 或 8 秒的平滑紧支撑核；中心间距 2 秒。导数作用于测试函数而非实测 Hb。ρ、ξ、ζ 来自当前 Balloon 核心固定参数；τ 以秒计。同一窗口内核互相重叠，不能当作独立样本。",
+          "source": "src/inference/model_compatibility.py"
+        },
+        {
+          "type": "equation",
+          "latex": "D_{\\mathrm{Hb}}(\\tau)=\\frac{\\min_{a,b}\\sum_j[\\ell_j-r_j-a\\!\\int\\phi_jdt-b\\!\\int\\phi_je^{-(t-t_0)/\\tau}dt]^2}{\\sum_j[(\\int\\phi_j\\bar Rdt)^2+\\rho^2(\\int\\phi_j\\bar Hdt)^2]}",
+          "explanation": "分子为独立 profile 的未知常数零点与合法指数初态项之后的残差能量。分母是整个窗口固定的中心化动态能量，在 τ 扫描中保持不变。这个动态闭合能量比可以大于1；它不是残差百分比或解释方差，不能读成超过100%的噪声。分母不是噪声方差，也没有 χ² 或显著性含义。固定参数 τ=2 秒；网格为 0.5 到 8 秒、间隔 0.25 秒。",
+          "source": "src/inference/model_compatibility.py"
+        },
+        {
+          "type": "paragraph",
+          "text": "跨模态实测面板采用离散前向设计的子空间投影与 joint-Hb-only 平方残差增量，以准确保留父实验的真实时间算子。这是离散观测空间的工程距离，与教学示例中的连续时间三阶弱闭合 D_EEG-Hb 分开命名；本报告没有将实测投影增量称为三阶弱闭合值。"
+        },
+        {
+          "type": "paragraph",
+          "text": "具体而言，保留面板的EEG使用参考算子，Hb使用参考、原生分箱和线性插值的复合算子，裁窗后还排除末评分点。直接对两种已处理目标套用连续三阶弱式会混入时间算子差。在没有额外逆算子或插值假设时，原连续弱式在本面板记N/A；本轮报告与真实算子一致的离散前向距离，两者数值不等同。"
+        },
+        {
+          "type": "equation",
+          "latex": "\\widehat y_\\theta=L\\!\\left[c_\\theta+G_\\theta r+H_\\theta z_0+(\\mathbf1_T\\otimes I_3)b\\right],\\qquad r\\in\\mathbb R^T,\\ z_0\\in\\mathbb R^5,\\ b\\in\\mathbb R^3",
+          "explanation": "θ=(τ,κ)。T 是该面板模型时间点数（间隔0.25秒）。r 为每步分段常数的共享驱动，z0 为五个自由线性初始坐标，b 为三个观测分量的未知常数；它们在完整当前窗重拟合。G、H 和静息偏置 c 由冻结模型生成，L 是原父实验保留的观测/参考算子。所有分量按时间交错排列，先经过 L 再选评分 mask。没有为血管状态增加逐点创新项。",
+          "source": "src/inference/shared_driver_reconstruction.py:build_shared_driver_design; src/inference/model_compatibility.py:prepare_linear_panel_profiles"
+        },
+        {
+          "type": "equation",
+          "latex": "\\mathrm{NMSE}_m=\\frac1{N_m}\\sum_{i\\in\\Omega_m}\\left(\\frac{y_i-\\hat y_i}{s_m^{\\rm train}}\\right)^2,\\qquad \\mathrm{NRMSE}_m=\\sqrt{\\mathrm{NMSE}_m}",
+          "explanation": "冻结面板中的 s 是原训练分区 SD，Ω 是保留评分 mask，m 为 EEG、HbO 或 HbR。分母既不是当前窗 SD，也不是传感器噪声。每个参数节点重拟合原线性初态/允许驱动及经同一观测算子传播的常数项；训练坐标、增益、算子和训练尺度固定。",
+          "source": "src/inference/model_compatibility.py"
+        },
+        {
+          "type": "paragraph",
+          "text": "Hb-only 与 joint 在同一 θ=(τ,κ) 节点评分。joint 同时承担 Hb 与 EEG 约束；cross increment 是 joint 总标准化平方残差减去 Hb-only 平方残差，再除以 EEG 评分点数，包含为兼容 EEG 产生的 Hb 折中，不能解释为独立的 EEG 似然。共同集合要求三个分量 NRMSE 同时低于同一工程阈值。网格为空只表示没有发现符合条件的离散节点。阈值 0.25、0.5、1 不是统计拒绝线或生理范围。"
+        },
+        {
+          "type": "paragraph",
+          "text": "条件非线性前向重建复用已有血管流量松弛拟合器，在选定同一 θ 下寻找 Hb 观测重建。它使用相同冻结读出、观测算子和评分尺度，是已找到的残差上界；既不是相对 Hb 的绝对状态反演，也不保证全局最优。优化状态、数值积分差异、失败和分母必须与误差一起阅读。空间量将固定空间读出距离与自由 rank-K 下界分别报告。"
+        }
+      ]
+    },
+    {
+      "title": "全库存固定参数与逐窗最优闭合分布",
+      "blocks": [
+        {
+          "type": "figure",
+          "path": "figures/figure_01.png",
+          "caption": "30 秒全库存 Hb 闭合分布。上排每个配对窗等权；下排仍显示逐窗 D，但将同窗通道、同记录窗口、同被试记录分别等权，再使每名被试总权重相同。这样长记录和通道多的记录不会主导下排分布。零值保留，横轴0至0.1线性、其余对数；0.1只是显示转换点，不是接收阈值。30/90秒与固定/最优图统一完整横轴范围，不删尾部。最优值是在同一观测窗口重新选择 τ，因而可小于固定参数值，不能解释为未来泛化收益。30/90秒使用不同窗口及可能不同的可用记录集合，跨窗长差异不作因果解释。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/summary.csv"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_02.png",
+          "caption": "90 秒全库存 Hb 闭合分布。上排每个配对窗等权；下排仍显示逐窗 D，但将同窗通道、同记录窗口、同被试记录分别等权，再使每名被试总权重相同。这样长记录和通道多的记录不会主导下排分布。零值保留，横轴0至0.1线性、其余对数；0.1只是显示转换点，不是接收阈值。30/90秒与固定/最优图统一完整横轴范围，不删尾部。最优值是在同一观测窗口重新选择 τ，因而可小于固定参数值，不能解释为未来泛化收益。30/90秒使用不同窗口及可能不同的可用记录集合，跨窗长差异不作因果解释。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/summary.csv"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "秒",
+            "固定D中位",
+            "最优D中位",
+            "配对改善中位",
+            "有效被试"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              30,
+              "1.26",
+              "0.86",
+              "0.217",
+              29
+            ],
+            [
+              "Single-Trial",
+              90,
+              "1.66",
+              "1.41",
+              "0.104",
+              29
+            ],
+            [
+              "Simultaneous",
+              30,
+              "1.23",
+              "0.839",
+              "0.209",
+              26
+            ],
+            [
+              "Simultaneous",
+              90,
+              "1.69",
+              "1.43",
+              "0.114",
+              26
+            ],
+            [
+              "Visual",
+              30,
+              "1.46",
+              "0.856",
+              "0.454",
+              16
+            ],
+            [
+              "Visual",
+              90,
+              "1.76",
+              "1.19",
+              "0.359",
+              16
+            ],
+            [
+              "REFED",
+              30,
+              "1.66",
+              "1.01",
+              "0.49",
+              32
+            ],
+            [
+              "REFED",
+              90,
+              "1.86",
+              "1.39",
+              "0.261",
+              32
+            ]
+          ],
+          "caption": "均为通道→窗口→记录→被试等权混合分布的精确中位数，直接引用 summary.csv q50。配对改善先对同一配对窗算固定D-最优D，再按相同层级汇总；它不同于两列中位数之差。30/90秒是不同支持分布。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/summary.csv"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "秒",
+            "参数",
+            "有效配对窗",
+            "被试",
+            "原始中位 D",
+            "被试等权均值",
+            "均值 95% 区间"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              30,
+              "固定参数",
+              146206,
+              29,
+              "1.27",
+              "1.35",
+              "[1.27, 1.43]"
+            ],
+            [
+              "Simultaneous",
+              30,
+              "固定参数",
+              161208,
+              26,
+              "1.22",
+              "1.3",
+              "[1.24, 1.36]"
+            ],
+            [
+              "Visual",
+              30,
+              "固定参数",
+              75316,
+              16,
+              "1.46",
+              "1.54",
+              "[1.49, 1.59]"
+            ],
+            [
+              "REFED",
+              30,
+              "固定参数",
+              75008,
+              32,
+              "1.66",
+              "1.72",
+              "[1.67, 1.77]"
+            ],
+            [
+              "Single-Trial",
+              30,
+              "窗内最优",
+              146206,
+              29,
+              "0.86",
+              "1",
+              "[0.928, 1.07]"
+            ],
+            [
+              "Simultaneous",
+              30,
+              "窗内最优",
+              161208,
+              26,
+              "0.839",
+              "0.961",
+              "[0.919, 1.01]"
+            ],
+            [
+              "Visual",
+              30,
+              "窗内最优",
+              75316,
+              16,
+              "0.856",
+              "0.941",
+              "[0.907, 0.979]"
+            ],
+            [
+              "REFED",
+              30,
+              "窗内最优",
+              75008,
+              32,
+              "1.02",
+              "1.11",
+              "[1.06, 1.15]"
+            ],
+            [
+              "Single-Trial",
+              90,
+              "固定参数",
+              46068,
+              29,
+              "1.67",
+              "1.67",
+              "[1.55, 1.8]"
+            ],
+            [
+              "Simultaneous",
+              90,
+              "固定参数",
+              45792,
+              26,
+              "1.69",
+              "1.69",
+              "[1.59, 1.79]"
+            ],
+            [
+              "Visual",
+              90,
+              "固定参数",
+              24563,
+              16,
+              "1.76",
+              "1.75",
+              "[1.69, 1.8]"
+            ],
+            [
+              "REFED",
+              90,
+              "固定参数",
+              16309,
+              32,
+              "1.86",
+              "1.84",
+              "[1.76, 1.93]"
+            ],
+            [
+              "Single-Trial",
+              90,
+              "窗内最优",
+              46068,
+              29,
+              "1.41",
+              "1.46",
+              "[1.34, 1.58]"
+            ],
+            [
+              "Simultaneous",
+              90,
+              "窗内最优",
+              45792,
+              26,
+              "1.43",
+              "1.48",
+              "[1.39, 1.56]"
+            ],
+            [
+              "Visual",
+              90,
+              "窗内最优",
+              24563,
+              16,
+              "1.19",
+              "1.31",
+              "[1.24, 1.37]"
+            ],
+            [
+              "REFED",
+              90,
+              "窗内最优",
+              16309,
+              32,
+              "1.39",
+              "1.49",
+              "[1.41, 1.58]"
+            ]
+          ],
+          "caption": "数值直接来自 owning summary.csv。95% 区间为保留合同定义的被试整簇百分位 bootstrap。通道→窗口→记录→被试的汇总顺序先固定，然后重采样被试；区间不刻画模型参数不确定性或传感器噪声。原始中位数与被试等权均值是不同统计量。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/summary.csv",
+          "widths": [
+            1.05,
+            0.4,
+            0.75,
+            1,
+            0.5,
+            0.95,
+            1.05,
+            1.35
+          ]
+        }
+      ]
+    },
+    {
+      "title": "参数边界与动态激励",
+      "blocks": [
+        {
+          "type": "figure",
+          "path": "figures/figure_03.png",
+          "caption": "每个有效配对窗在同一离散网格内选择最小 D 对应的 τ。该值是相对 Hb 条件闭合的拟合参数，不是生理真值估计。边界集中只说明工程网格内的最优节点靠边；它既可能来自观测失配，也可能来自低激励或弱识别，不能直接当作异常生理。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "秒",
+            "有效配对窗",
+            "τ=0.5秒",
+            "τ=8秒",
+            "τ中位数/秒"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              30,
+              146206,
+              34414,
+              22151,
+              "2.75"
+            ],
+            [
+              "Single-Trial",
+              90,
+              46068,
+              9803,
+              9073,
+              "3.25"
+            ],
+            [
+              "Simultaneous",
+              30,
+              161208,
+              37207,
+              23967,
+              "3"
+            ],
+            [
+              "Simultaneous",
+              90,
+              45792,
+              9331,
+              10877,
+              "3.75"
+            ],
+            [
+              "Visual",
+              30,
+              75316,
+              44397,
+              2146,
+              "0.5"
+            ],
+            [
+              "Visual",
+              90,
+              24563,
+              15721,
+              1478,
+              "0.5"
+            ],
+            [
+              "REFED",
+              30,
+              75008,
+              48020,
+              445,
+              "0.5"
+            ],
+            [
+              "REFED",
+              90,
+              16309,
+              10450,
+              526,
+              "0.5"
+            ]
+          ],
+          "caption": "最优参数触边计数的分母包含全部有效配对窗；不可评分窗不纳入最优参数分布，已在覆盖表保留。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_04.png",
+          "caption": "固定动态能量分母与最优闭合比。每个六边形汇总有效配对窗，颜色表示数量。纵轴 asinh 显示保留零值；横轴保留各库原生单位，跨库横轴量值不可直接比较。30/90 秒合并仅作能量关联诊断，完整窗长分布见前图。分母很小时较小或较大 D 都不能单独证明识别充分；不可评分的零能量另列状态。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1"
+        }
+      ]
+    },
+    {
+      "title": "原始通道身份和记录内时间异质性",
+      "blocks": [
+        {
+          "type": "figure",
+          "path": "figures/figure_05.png",
+          "caption": "每条线上的点对应原始物理 Hb 对序号，而非脑区。中位数在该通道全部有效 90 秒窗上计算，不把不同通道当作独立被试。跨库的同序号不表示同一空间位置；曲线高低可能同时受记录组成、幅度和闭合失配影响。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "原生分层变量",
+            "有效层数",
+            "固定参数描述"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              "被试",
+              29,
+              "各层中位 D 的范围 [0.887, 2.31]；各层分母不同"
+            ],
+            [
+              "Single-Trial",
+              "记录",
+              6,
+              "各层中位 D 的范围 [1.62, 1.72]；各层分母不同"
+            ],
+            [
+              "Single-Trial",
+              "原始通道身份",
+              36,
+              "各层中位 D 的范围 [1.25, 2.03]；各层分母不同"
+            ],
+            [
+              "Single-Trial",
+              "原始任务标签",
+              "N/A",
+              "未保留该标签；不由记录名推断"
+            ],
+            [
+              "Simultaneous",
+              "被试",
+              26,
+              "各层中位 D 的范围 [1.07, 2.22]；各层分母不同"
+            ],
+            [
+              "Simultaneous",
+              "记录",
+              3,
+              "各层中位 D 的范围 [1.67, 1.72]；各层分母不同"
+            ],
+            [
+              "Simultaneous",
+              "原始通道身份",
+              36,
+              "各层中位 D 的范围 [1.24, 2.2]；各层分母不同"
+            ],
+            [
+              "Simultaneous",
+              "原始任务标签",
+              "N/A",
+              "未保留该标签；不由记录名推断"
+            ],
+            [
+              "Visual",
+              "被试",
+              16,
+              "各层中位 D 的范围 [1.48, 1.96]；各层分母不同"
+            ],
+            [
+              "Visual",
+              "记录",
+              54,
+              "各层中位 D 的范围 [1.45, 2]；各层分母不同"
+            ],
+            [
+              "Visual",
+              "原始通道身份",
+              24,
+              "各层中位 D 的范围 [1.06, 2.19]；各层分母不同"
+            ],
+            [
+              "Visual",
+              "原始任务标签",
+              "N/A",
+              "未保留该标签；不由记录名推断"
+            ],
+            [
+              "REFED",
+              "被试",
+              32,
+              "各层中位 D 的范围 [1.24, 2.4]；各层分母不同"
+            ],
+            [
+              "REFED",
+              "记录",
+              10,
+              "各层中位 D 的范围 [1.78, 1.92]；各层分母不同"
+            ],
+            [
+              "REFED",
+              "原始通道身份",
+              51,
+              "各层中位 D 的范围 [1.25, 2.25]；各层分母不同"
+            ],
+            [
+              "REFED",
+              "原始任务标签",
+              "N/A",
+              "未保留该标签；不由记录名推断"
+            ]
+          ],
+          "caption": "只使用保留 metadata 中已有的身份或标签。层内中位数仅描述异质性，未进行通道、被试或任务间的统计检验。任务未保留时明确 N/A。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_06.png",
+          "caption": "每个点汇总相同原生窗起点的有效 90 秒配对窗；各点包含的记录数可因记录长短而变化。时间零点是各记录起点，未统一成刺激或生理事件，因而这些线只描述记录内时间位置，不能称为任务诱发轨迹或时间因果效应。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1"
+        }
+      ]
+    },
+    {
+      "title": "每库较好、中部与困难的精确原生波形",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "以下每库三例按全库 90 秒有效配对窗的固定参数 D，分别选择最接近第 10、50、90 百分位的窗口，尽量来自不同被试。选择仅用于解释，未使用最优参数误差挑例，也未把样例用于调参。每例的原生窗身份和精确数值数组保留在 examples/。原始 Hb 纵轴保留该记录的发布相对单位；闭合纵轴是中心化后的弱积分量，两者不可直接比较幅值。"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_07.png",
+          "caption": "固定评分 q=0.1 附近的解释样例，候选分母 46,068 个配对窗。原生支持 [450, 540) 秒；第 16 个 Hb 对；900 个时间点。固定 D=0.679，网格最优 D=0.636、τ=0.75 秒，绝对差=0.0426。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.0796/0.0203 个发布相对单位。固定参数最大绝对弱残差位于窗内 52 秒、半宽 4 秒的核，左-右=0.00357。选择τ后 38/78 个弱核的残差平方下降、40 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格内部节点，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/777b2f4e52ed2ea3_w5_p15.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_08.png",
+          "caption": "固定评分 q=0.5 附近的解释样例，候选分母 46,068 个配对窗。原生支持 [450, 540) 秒；第 30 个 Hb 对；900 个时间点。固定 D=1.67，网格最优 D=1.5、τ=0.5 秒，绝对差=0.164。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.0135/0.0114 个发布相对单位。固定参数最大绝对弱残差位于窗内 82 秒、半宽 4 秒的核，左-右=0.00456。选择τ后 53/78 个弱核的残差平方下降、25 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格下界，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/d8560338071349a8_w5_p29.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_09.png",
+          "caption": "固定评分 q=0.9 附近的解释样例，候选分母 46,068 个配对窗。原生支持 [540, 630) 秒；第 32 个 Hb 对；900 个时间点。固定 D=2.67，网格最优 D=2.38、τ=0.5 秒，绝对差=0.292。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.0424/0.0372 个发布相对单位。固定参数最大绝对弱残差位于窗内 76 秒、半宽 4 秒的核，左-右=-0.00517。选择τ后 47/78 个弱核的残差平方下降、31 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格下界，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/30d65c314083dece_w6_p31.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_10.png",
+          "caption": "固定评分 q=0.1 附近的解释样例，候选分母 45,792 个配对窗。原生支持 [0, 90) 秒；第 28 个 Hb 对；900 个时间点。固定 D=0.72，网格最优 D=0.683、τ=0.5 秒，绝对差=0.0367。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.0194/0.00916 个发布相对单位。固定参数最大绝对弱残差位于窗内 20 秒、半宽 4 秒的核，左-右=-0.00167。选择τ后 40/78 个弱核的残差平方下降、38 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格下界，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/e986deb4ce569b34_w0_p27.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_11.png",
+          "caption": "固定评分 q=0.5 附近的解释样例，候选分母 45,792 个配对窗。原生支持 [1.89e+03, 1.98e+03) 秒；第 14 个 Hb 对；900 个时间点。固定 D=1.69，网格最优 D=0.968、τ=8 秒，绝对差=0.726。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.0214/0.00629 个发布相对单位。固定参数最大绝对弱残差位于窗内 70 秒、半宽 4 秒的核，左-右=-0.00412。选择τ后 52/78 个弱核的残差平方下降、26 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格上界，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/498bf1eea36de72f_w21_p13.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_12.png",
+          "caption": "固定评分 q=0.9 附近的解释样例，候选分母 45,792 个配对窗。原生支持 [360, 450) 秒；第 2 个 Hb 对；900 个时间点。固定 D=2.65，网格最优 D=2.52、τ=8 秒，绝对差=0.129。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.00838/0.00155 个发布相对单位。固定参数最大绝对弱残差位于窗内 26 秒、半宽 4 秒的核，左-右=0.00185。选择τ后 44/78 个弱核的残差平方下降、34 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格上界，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/ec2e107d1fbf0520_w4_p1.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_13.png",
+          "caption": "固定评分 q=0.1 附近的解释样例，候选分母 24,563 个配对窗。原生支持 [810, 900) 秒；第 1 个 Hb 对；900 个时间点。固定 D=0.847，网格最优 D=0.662、τ=0.5 秒，绝对差=0.185。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.776/0.469 个发布相对单位。固定参数最大绝对弱残差位于窗内 66 秒、半宽 4 秒的核，左-右=-0.0783。选择τ后 44/78 个弱核的残差平方下降、34 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格下界，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/c3ceee4decedf842_w9_p0.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_14.png",
+          "caption": "固定评分 q=0.5 附近的解释样例，候选分母 24,563 个配对窗。原生支持 [1.08e+03, 1.17e+03) 秒；第 6 个 Hb 对；900 个时间点。固定 D=1.76，网格最优 D=1.04、τ=0.5 秒，绝对差=0.721。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 85.8/47.2 个发布相对单位。固定参数最大绝对弱残差位于窗内 62 秒、半宽 4 秒的核，左-右=-5.53。选择τ后 48/78 个弱核的残差平方下降、30 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格下界，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/e8afdd59c9b78d48_w12_p5.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_15.png",
+          "caption": "固定评分 q=0.9 附近的解释样例，候选分母 24,563 个配对窗。原生支持 [540, 630) 秒；第 12 个 Hb 对；900 个时间点。固定 D=2.59，网格最优 D=2.53、τ=3.75 秒，绝对差=0.0645。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.583/0.265 个发布相对单位。固定参数最大绝对弱残差位于窗内 20 秒、半宽 4 秒的核，左-右=0.129。选择τ后 40/78 个弱核的残差平方下降、38 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格内部节点，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/3da644c8f8b711fe_w6_p11.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_16.png",
+          "caption": "固定评分 q=0.1 附近的解释样例，候选分母 16,309 个配对窗。原生支持 [0, 90) 秒；第 41 个 Hb 对；4286 个时间点。固定 D=0.952，网格最优 D=0.673、τ=0.5 秒，绝对差=0.278。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.737/0.679 个发布相对单位。固定参数最大绝对弱残差位于窗内 74 秒、半宽 4 秒的核，左-右=0.0197。选择τ后 41/78 个弱核的残差平方下降、37 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格下界，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/1e0c18825fbace53_w0_p40.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_17.png",
+          "caption": "固定评分 q=0.5 附近的解释样例，候选分母 16,309 个配对窗。原生支持 [0, 90) 秒；第 41 个 Hb 对；4286 个时间点。固定 D=1.86，网格最优 D=1.84、τ=1.5 秒，绝对差=0.0249。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.138/0.112 个发布相对单位。固定参数最大绝对弱残差位于窗内 46 秒、半宽 4 秒的核，左-右=0.00676。选择τ后 45/78 个弱核的残差平方下降、33 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格内部节点，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/fb26d8f75c3d1a7a_w0_p40.npz"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_18.png",
+          "caption": "固定评分 q=0.9 附近的解释样例，候选分母 16,309 个配对窗。原生支持 [0, 90) 秒；第 2 个 Hb 对；4286 个时间点。固定 D=2.71，网格最优 D=2.5、τ=0.5 秒，绝对差=0.212。闭合两侧与局部残差均来自该精确窗重放；残差平方和/固定动态能量分母已复现保留 D。观测幅值、局部偏差和 profile 平坦/触边应一起判断；此例不代表独立被试统计或生成器真值。 本例HbO/HbR峰峰幅分别为 0.25/0.275 个发布相对单位。固定参数最大绝对弱残差位于窗内 36 秒、半宽 4 秒的核，左-右=0.0104。选择τ后 43/78 个弱核的残差平方下降、35 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格下界，右下profile采用线性D轴。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/98a85aeeee2e7d2a_w0_p1.npz"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "被试",
+            "记录",
+            "Hb对",
+            "原生秒支持",
+            "选择分位",
+            "固定 D",
+            "最优 D"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              "subject_24",
+              "session_03",
+              "FC3FC5",
+              "[450,540)",
+              0.1,
+              "0.679",
+              "0.636"
+            ],
+            [
+              "Single-Trial",
+              "subject_03",
+              "session_02",
+              "FC4FC6",
+              "[450,540)",
+              0.5,
+              "1.67",
+              "1.5"
+            ],
+            [
+              "Single-Trial",
+              "subject_28",
+              "session_03",
+              "CP4CP2",
+              "[540,630)",
+              0.9,
+              "2.67",
+              "2.38"
+            ],
+            [
+              "Simultaneous",
+              "VP026",
+              "cnt_nback",
+              "CCP4",
+              "[0,90)",
+              0.1,
+              "0.72",
+              "0.683"
+            ],
+            [
+              "Simultaneous",
+              "VP022",
+              "cnt_wg",
+              "C5h",
+              "[1.89e+03,1.98e+03)",
+              0.5,
+              "1.69",
+              "0.968"
+            ],
+            [
+              "Simultaneous",
+              "VP021",
+              "cnt_nback",
+              "AFF5",
+              "[360,450)",
+              0.9,
+              "2.65",
+              "2.52"
+            ],
+            [
+              "Visual",
+              "S13",
+              "S13_Part1_Probe1",
+              "CH1",
+              "[810,900)",
+              0.1,
+              "0.847",
+              "0.662"
+            ],
+            [
+              "Visual",
+              "S14",
+              "S14_Part2_Probe1",
+              "CH6",
+              "[1.08e+03,1.17e+03)",
+              0.5,
+              "1.76",
+              "1.04"
+            ],
+            [
+              "Visual",
+              "S07",
+              "S07_Probe2",
+              "CH12",
+              "[540,630)",
+              0.9,
+              "2.59",
+              "2.53"
+            ],
+            [
+              "REFED",
+              9,
+              "video_8_hbo_hbr",
+              "CH41",
+              "[0,90)",
+              0.1,
+              "0.952",
+              "0.673"
+            ],
+            [
+              "REFED",
+              7,
+              "video_14_hbo_hbr",
+              "CH41",
+              "[0,90)",
+              0.5,
+              "1.86",
+              "1.84"
+            ],
+            [
+              "REFED",
+              24,
+              "video_3_hbo_hbr",
+              "CH2",
+              "[0,90)",
+              0.9,
+              "2.71",
+              "2.5"
+            ]
+          ],
+          "caption": "完整 join key、源文件、原生通道名、采样点边界、选择目标分数与数值核验见 examples/hb_selection.json。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/examples/hb_selection.json"
+        }
+      ]
+    },
+    {
+      "title": "冻结面板的同参数联合约束",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "四库冻结面板来自已有 output-support 公开评价身份：每库 12 条 90 秒记录、6 名被试，总计 48 条记录、24 个库内被试身份。30 秒支持取原 90 秒记录的中部；90 秒支持使用完整记录，共 96 个记录×支持任务。它们是已选定且拥有冻结读出的面板，不能代表全库存分布。原父 run 的滤波/参考算子被显式裁剪并保留，不能把面板分数与原生普查 D 直接相减。"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "秒",
+            "计划",
+            "完成",
+            "失败",
+            "低幅标记",
+            "固定 joint NMSE",
+            "最优 joint NMSE",
+            "同θ Hb-only NMSE",
+            "同θ cross增量 NMSE"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              30,
+              12,
+              12,
+              0,
+              3,
+              "0.041",
+              "0.0346",
+              "0.0059",
+              "0.0913"
+            ],
+            [
+              "Single-Trial",
+              90,
+              12,
+              12,
+              0,
+              1,
+              "0.0764",
+              "0.0691",
+              "0.0233",
+              "0.171"
+            ],
+            [
+              "Simultaneous",
+              30,
+              12,
+              12,
+              0,
+              0,
+              "0.0945",
+              "0.0625",
+              "0.0331",
+              "0.123"
+            ],
+            [
+              "Simultaneous",
+              90,
+              12,
+              12,
+              0,
+              0,
+              "0.269",
+              "0.23",
+              "0.136",
+              "0.352"
+            ],
+            [
+              "Visual",
+              30,
+              12,
+              12,
+              0,
+              0,
+              "0.0857",
+              "0.0691",
+              "0.0335",
+              "0.167"
+            ],
+            [
+              "Visual",
+              90,
+              12,
+              12,
+              0,
+              0,
+              "0.229",
+              "0.219",
+              "0.0539",
+              "0.508"
+            ],
+            [
+              "REFED",
+              30,
+              12,
+              12,
+              0,
+              0,
+              "0.742",
+              "0.718",
+              "0.829",
+              "0.553"
+            ],
+            [
+              "REFED",
+              90,
+              12,
+              12,
+              0,
+              0,
+              "0.749",
+              "0.738",
+              "0.846",
+              "0.644"
+            ]
+          ],
+          "caption": "各误差格为该组完整任务的原始中位数。低幅标记：任一观测分量的中心化 RMS 小于 0.1 个冻结训练 SD；它是工程幅度标记，不是估计噪声。失败不以零值补齐。最优 θ 仅按同窗 joint NMSE 选择，后两列都在这个同一节点计算。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/linear_summary.csv",
+          "widths": [
+            1.1,
+            0.4,
+            0.5,
+            0.5,
+            0.5,
+            0.7,
+            1,
+            1,
+            1.05,
+            1.1
+          ]
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_19.png",
+          "caption": "每个点是一个记录×支持任务；同一被试和同一记录的点有依赖。横轴仅拟合 Hb，纵轴在同一 θ 下同时拟合 EEG 与 Hb。点在对角线上方说明兼容 EEG 后 Hb 拟合有折中；这不是独立因果效应或参数估计偏差。两个坐标均为训练 SD 标准化平方误差，零值保留。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/linear_summary.csv"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "秒",
+            "阈值",
+            "可评任务",
+            "空集合",
+            "节点中位数",
+            "非空τ宽/秒",
+            "非空κ宽",
+            "非空触边",
+            "仅边界"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              30,
+              "0.25",
+              12,
+              7,
+              "0",
+              "7.5",
+              "1.3",
+              5,
+              1
+            ],
+            [
+              "Single-Trial",
+              30,
+              "0.5",
+              12,
+              0,
+              "80",
+              "7.5",
+              "1.3",
+              12,
+              1
+            ],
+            [
+              "Single-Trial",
+              30,
+              "1",
+              12,
+              0,
+              "80",
+              "7.5",
+              "1.3",
+              12,
+              0
+            ],
+            [
+              "Single-Trial",
+              90,
+              "0.25",
+              12,
+              10,
+              "0",
+              "7.25",
+              "1.05",
+              2,
+              0
+            ],
+            [
+              "Single-Trial",
+              90,
+              "0.5",
+              12,
+              1,
+              "80",
+              "7.5",
+              "1.3",
+              11,
+              1
+            ],
+            [
+              "Single-Trial",
+              90,
+              "1",
+              12,
+              0,
+              "80",
+              "7.5",
+              "1.3",
+              12,
+              0
+            ],
+            [
+              "Simultaneous",
+              30,
+              "0.25",
+              12,
+              8,
+              "0",
+              "4.75",
+              "1.05",
+              4,
+              1
+            ],
+            [
+              "Simultaneous",
+              30,
+              "0.5",
+              12,
+              2,
+              "80",
+              "7.5",
+              "1.3",
+              10,
+              1
+            ],
+            [
+              "Simultaneous",
+              30,
+              "1",
+              12,
+              0,
+              "80",
+              "7.5",
+              "1.3",
+              12,
+              0
+            ],
+            [
+              "Simultaneous",
+              90,
+              "0.25",
+              12,
+              12,
+              "0",
+              "N/A",
+              "N/A",
+              0,
+              0
+            ],
+            [
+              "Simultaneous",
+              90,
+              "0.5",
+              12,
+              6,
+              "7",
+              "6.75",
+              "1.3",
+              6,
+              0
+            ],
+            [
+              "Simultaneous",
+              90,
+              "1",
+              12,
+              1,
+              "80",
+              "7.5",
+              "1.3",
+              11,
+              0
+            ],
+            [
+              "Visual",
+              30,
+              "0.25",
+              12,
+              12,
+              "0",
+              "N/A",
+              "N/A",
+              0,
+              0
+            ],
+            [
+              "Visual",
+              30,
+              "0.5",
+              12,
+              3,
+              "80",
+              "7.5",
+              "1.3",
+              9,
+              0
+            ],
+            [
+              "Visual",
+              30,
+              "1",
+              12,
+              0,
+              "80",
+              "7.5",
+              "1.3",
+              12,
+              0
+            ],
+            [
+              "Visual",
+              90,
+              "0.25",
+              12,
+              12,
+              "0",
+              "N/A",
+              "N/A",
+              0,
+              0
+            ],
+            [
+              "Visual",
+              90,
+              "0.5",
+              12,
+              8,
+              "0",
+              "7.5",
+              "1.3",
+              4,
+              0
+            ],
+            [
+              "Visual",
+              90,
+              "1",
+              12,
+              0,
+              "80",
+              "7.5",
+              "1.3",
+              12,
+              0
+            ],
+            [
+              "REFED",
+              30,
+              "0.25",
+              12,
+              12,
+              "0",
+              "N/A",
+              "N/A",
+              0,
+              0
+            ],
+            [
+              "REFED",
+              30,
+              "0.5",
+              12,
+              8,
+              "0",
+              "7.5",
+              "1.3",
+              4,
+              0
+            ],
+            [
+              "REFED",
+              30,
+              "1",
+              12,
+              8,
+              "0",
+              "7.5",
+              "1.3",
+              4,
+              0
+            ],
+            [
+              "REFED",
+              90,
+              "0.25",
+              12,
+              12,
+              "0",
+              "N/A",
+              "N/A",
+              0,
+              0
+            ],
+            [
+              "REFED",
+              90,
+              "0.5",
+              12,
+              9,
+              "0",
+              "7.5",
+              "1.3",
+              3,
+              0
+            ],
+            [
+              "REFED",
+              90,
+              "1",
+              12,
+              8,
+              "0",
+              "7.5",
+              "1.3",
+              4,
+              0
+            ]
+          ],
+          "caption": "每个集合都在相同 τ、κ 节点、相同 joint 系数解上同时要求 EEG/HbO/HbR 三个 NRMSE 不超过阈值。τ/κ 宽度是离散节点投影的最大值减最小值，可能跨越不连续空洞，不是置信区间。空集合保留；宽度和触边只在非空集合中定义，不能用这个成功子集掩盖空集合。线性任务失败时共同集不可评，完整失败分母见前表。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/compatibility_sets.csv"
+        }
+      ]
+    },
+    {
+      "title": "条件非线性前向重建与线性对照",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "本次 96 个非线性任务中，96 个保留合法轨迹，优化收敛 0 个、未收敛 96 个。未收敛任务的误差仅为本次预算内找到的合法残差上界，不能作为最优解；较高误差也不能据此排除非线性模型。合法轨迹与优化收敛是两个独立状态，以下全部比较均保留此限制。"
+        },
+        {
+          "type": "paragraph",
+          "text": "与同θ线性Hb-only逐任务配对后，条件NL误差较低 54/96，较高 42/96，完全相同 0/96。这反映有限预算下不同函数族找到的误差，不能判定线性或非线性模型整体优劣。"
+        },
+        {
+          "type": "paragraph",
+          "text": "非线性阶段对全部 96 个记录×支持任务，在各自线性 joint 最小 NMSE 所选 θ 上寻找合法 Hb 前向轨迹。每个保留模型时间点有一个自由 log-flow 系数；流量与初态受既有数值边界约束。这个放松不要求上游 EEG 驱动动力学，κ 不作用于此血管子系统，因此它不能构成 EEG–Hb 联合见证。"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_20.png",
+          "caption": "横纵坐标使用同一 Hb 目标、mask、训练 SD 和同一 θ，但允许的轨迹族不同：横轴是线性 Hb-only 投影；纵轴是条件非线性自由流量前向拟合。低于对角线表示已找到的非线性残差更小，不代表非线性全局最小值或参数真值。图只画合法见证，完整失败分母在下表。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/nonlinear.csv"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "数据集",
+            "秒",
+            "计划",
+            "合法轨迹",
+            "无合法/失败",
+            "优化收敛",
+            "线性中位",
+            "NL中位",
+            "配对差中位",
+            "NL较小",
+            "最大积分差"
+          ],
+          "rows": [
+            [
+              "Single-Trial",
+              30,
+              12,
+              12,
+              0,
+              0,
+              "0.0059",
+              "0.00313",
+              "0.00153",
+              8,
+              "9.89e-05"
+            ],
+            [
+              "Single-Trial",
+              90,
+              12,
+              12,
+              0,
+              0,
+              "0.0233",
+              "0.0124",
+              "0.0015",
+              9,
+              "9.99e-05"
+            ],
+            [
+              "Simultaneous",
+              30,
+              12,
+              12,
+              0,
+              0,
+              "0.0331",
+              "0.0146",
+              "0.00455",
+              10,
+              "0.0001"
+            ],
+            [
+              "Simultaneous",
+              90,
+              12,
+              12,
+              0,
+              0,
+              "0.136",
+              "0.123",
+              "0.0656",
+              12,
+              "0.0001"
+            ],
+            [
+              "Visual",
+              30,
+              12,
+              12,
+              0,
+              0,
+              "0.0335",
+              "0.0307",
+              "0.000858",
+              6,
+              "9.93e-05"
+            ],
+            [
+              "Visual",
+              90,
+              12,
+              12,
+              0,
+              0,
+              "0.0539",
+              "0.0479",
+              "0.000237",
+              6,
+              "9.89e-05"
+            ],
+            [
+              "REFED",
+              30,
+              12,
+              12,
+              0,
+              0,
+              "0.829",
+              "0.866",
+              "-0.0407",
+              1,
+              "9.93e-05"
+            ],
+            [
+              "REFED",
+              90,
+              12,
+              12,
+              0,
+              0,
+              "0.846",
+              "0.889",
+              "-0.043",
+              2,
+              "9.98e-05"
+            ]
+          ],
+          "caption": "误差列均为 NMSE；配对差=每任务线性 Hb-only NMSE-非线性 NMSE，再取中位，不能由两组中位数相减替代。优化收敛与轨迹合法分别计数；未收敛但合法的轨迹仍仅提供误差上界。积分差按保留 4/8 子步核验，单位为训练 SD。无合法轨迹不补零。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/nonlinear.csv",
+          "widths": [
+            1,
+            0.35,
+            0.45,
+            0.65,
+            0.8,
+            0.65,
+            0.75,
+            0.7,
+            0.8,
+            0.55,
+            0.8
+          ]
+        }
+      ]
+    },
+    {
+      "title": "固定空间读出与自由秩下界",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "空间量只覆盖 Single-Trial 原冻结 K1/K2 面板的 36 个评价窗、6 名被试、4 个局部 Hb 对。固定 loading 来自原训练校准，不在当前窗重新学习。rawD允许各色团自由时间曲线并放松时间与血管动力学约束；评价支持保留原mask。weighted误差与其下界沿用原实际算子。其他三库没有这个冻结空间映射，空间结论为 N/A。"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_21.png",
+          "caption": "左图每点为一个窗口×K。横轴是将 HbO/HbR 上下堆叠后在当前窗自由学习共同 rank-K 子空间的最优残差比；纵轴是固定loading下的稳健空间投影残差。横轴更自由，不能用来替换纵轴。两种比值的分母为原始观测能量，不是生理成分占比；右图另示训练 SD 标准化 NMSE，两套尺度不混合。 原raw拟合的latent回放受时间算子病态性影响；本图rawD采用冻结loading的稳健QR空间投影，允许自由时间曲线并放松时间约束，相对原值最大绝对差为3.64e-08，rank下界与weighted量不改。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/space.csv; rawD数值复核：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/derived_spatial_stability_v1/migration.json"
+        },
+        {
+          "type": "table",
+          "columns": [
+            "K",
+            "计划窗",
+            "完成",
+            "失败",
+            "固定读出中位比",
+            "自由rank中位比",
+            "标准化NMSE中位",
+            "放松下界NMSE中位"
+          ],
+          "rows": [
+            [
+              1,
+              36,
+              36,
+              0,
+              "0.191",
+              "0.101",
+              "0.114",
+              "0.114"
+            ],
+            [
+              2,
+              36,
+              36,
+              0,
+              "0.0797",
+              "0.0233",
+              "0.0659",
+              "0.0659"
+            ]
+          ],
+          "caption": "72 个 arm×窗口来自同一组 36 窗而非 72 个独立样本。原始能量比、训练 SD 误差和放松下界分别保留其定义；下界不是已实现动力学重建的误差。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/space.csv; rawD数值复核：/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/derived_spatial_stability_v1/migration.json"
+        }
+      ]
+    },
+    {
+      "title": "面板失配、空共同集和非线性改善的具体曲线",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "本节按明示结果规则选取失配、空共同集与非线性改善样例，以解释总体结果；这些挑例不构成额外独立评价，也没有用来改变参数网格或阈值。每库先选 90 秒面板中最优 joint NMSE 最大的一例，再补充 0.5 阈值空共同集和非线性绝对改善最大的例子；同一身份只展示一次。"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_22.png",
+          "caption": "Single-Trial｜subject_04｜eeg_fnirs_single_trial__subject_04__prefrontal__r1｜90秒。选择理由：本库90秒面板中最优joint NMSE最大，用于解释失配。固定θ joint NMSE=0.259；最优θ=(τ=8秒，κ=0.2)，joint NMSE=0.217。该θ EEG/HbO/HbR NRMSE=0.411/0.568/0.399。所有目标与预测经过相同父观测算子/参考；训练尺度固定。灰底为不评分末点，主图不展示该点的目标与预测，完整数组仍保留，未评分尾值不决定主轴。完整预测包含允许初态与常数项，残差是目标减预测。 本例逐模态读图：EEG评分观测峰峰幅3.02个训练SD；joint最大5秒段RMS在[5,10)秒，为0.738；HbO评分观测峰峰幅6.96个训练SD；joint最大5秒段RMS在[45,50)秒，为0.977；HbR评分观测峰峰幅3.12个训练SD；joint最大5秒段RMS在[0,5)秒，为0.944。局部RMS使用原评分mask，在相对原90秒起点的5秒非重叠段内计算，不是任务条件标签。 条件NL Hb NMSE=0.0848，同θ线性Hb-only NMSE=0.11；本例NL误差较小，线性-NL绝对差=0.0255。 NL的HbO最大局部RMS在[0,5)秒，为0.419。 NL的HbR最大局部RMS在[0,5)秒，为0.763。 NL未收敛误差只作已找到上界，不验证上游EEG驱动约束。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/0e783ec24664c01da4380c33.json"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_23.png",
+          "caption": "每个方块对应实际求解的离散 τ/κ 节点，没有插值。左图颜色是该节点 EEG/HbO/HbR 三个标准化 RMS 的最大值；右图要求三者同时≤0.5。灰色是未满足节点，绿色是共同节点。星号按最小 joint NMSE 选取，未必位于共同集合。投影跨度与触边不能当作置信区间；没有绿色节点不证明连续参数域全局无解。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/0e783ec24664c01da4380c33.json"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_24.png",
+          "caption": "Simultaneous｜VP001｜simultaneous_eeg_nirs__VP001__prefrontal__r1｜90秒。选择理由：本库90秒面板中最优joint NMSE最大，用于解释失配。固定θ joint NMSE=0.886；最优θ=(τ=4.5秒，κ=0.64)，joint NMSE=0.773。该θ EEG/HbO/HbR NRMSE=0.629/1.07/0.883。所有目标与预测经过相同父观测算子/参考；训练尺度固定。灰底为不评分末点，主图不展示该点的目标与预测，完整数组仍保留，未评分尾值不决定主轴。完整预测包含允许初态与常数项，残差是目标减预测。 本例逐模态读图：EEG评分观测峰峰幅3.68个训练SD；joint最大5秒段RMS在[75,80)秒，为1.13；HbO评分观测峰峰幅7.19个训练SD；joint最大5秒段RMS在[5,10)秒，为1.86；HbR评分观测峰峰幅7.29个训练SD；joint最大5秒段RMS在[5,10)秒，为2.34。局部RMS使用原评分mask，在相对原90秒起点的5秒非重叠段内计算，不是任务条件标签。 条件NL Hb NMSE=0.621，同θ线性Hb-only NMSE=0.73；本例NL误差较小，线性-NL绝对差=0.109。 NL的HbO最大局部RMS在[5,10)秒，为1.21。 NL的HbR最大局部RMS在[5,10)秒，为2.26。 NL未收敛误差只作已找到上界，不验证上游EEG驱动约束。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/2e9b2586a2b2c64b173a6569.json"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_25.png",
+          "caption": "每个方块对应实际求解的离散 τ/κ 节点，没有插值。左图颜色是该节点 EEG/HbO/HbR 三个标准化 RMS 的最大值；右图要求三者同时≤0.5。灰色是未满足节点，绿色是共同节点。星号按最小 joint NMSE 选取，未必位于共同集合。投影跨度与触边不能当作置信区间；没有绿色节点不证明连续参数域全局无解。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/2e9b2586a2b2c64b173a6569.json"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_26.png",
+          "caption": "Visual｜S02｜visual_cognitive_motivation__S02__prefrontal__montage0__r1｜90秒。选择理由：本库90秒面板中最优joint NMSE最大，用于解释失配。固定θ joint NMSE=0.494；最优θ=(τ=1.5秒，κ=0.4)，joint NMSE=0.491。该θ EEG/HbO/HbR NRMSE=0.563/0.604/0.89。所有目标与预测经过相同父观测算子/参考；训练尺度固定。灰底为不评分末点，主图不展示该点的目标与预测，完整数组仍保留，未评分尾值不决定主轴。完整预测包含允许初态与常数项，残差是目标减预测。 本例逐模态读图：EEG评分观测峰峰幅3.14个训练SD；joint最大5秒段RMS在[50,55)秒，为1.12；HbO评分观测峰峰幅5.45个训练SD；joint最大5秒段RMS在[55,60)秒，为0.841；HbR评分观测峰峰幅6.9个训练SD；joint最大5秒段RMS在[80,85)秒，为1.28。局部RMS使用原评分mask，在相对原90秒起点的5秒非重叠段内计算，不是任务条件标签。 条件NL Hb NMSE=0.394，同θ线性Hb-only NMSE=0.395；本例NL误差较小，线性-NL绝对差=0.00104。 NL的HbO最大局部RMS在[80,85)秒，为0.503。 NL的HbR最大局部RMS在[45,50)秒，为1.11。 NL未收敛误差只作已找到上界，不验证上游EEG驱动约束。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/88d29c017b218fd8db1a30dd.json"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_27.png",
+          "caption": "每个方块对应实际求解的离散 τ/κ 节点，没有插值。左图颜色是该节点 EEG/HbO/HbR 三个标准化 RMS 的最大值；右图要求三者同时≤0.5。灰色是未满足节点，绿色是共同节点。星号按最小 joint NMSE 选取，未必位于共同集合。投影跨度与触边不能当作置信区间；没有绿色节点不证明连续参数域全局无解。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/88d29c017b218fd8db1a30dd.json"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_28.png",
+          "caption": "REFED｜12｜refed__12__prefrontal__r0｜90秒。选择理由：本库90秒面板中最优joint NMSE最大，用于解释失配；0.5阈值未发现共同节点。固定θ joint NMSE=2.36；最优θ=(τ=8秒，κ=1)，joint NMSE=2.25。该θ EEG/HbO/HbR NRMSE=0.217/1.24/2.27。所有目标与预测经过相同父观测算子/参考；训练尺度固定。灰底为不评分末点，主图不展示该点的目标与预测，完整数组仍保留，未评分尾值不决定主轴。完整预测包含允许初态与常数项，残差是目标减预测。 本例逐模态读图：EEG评分观测峰峰幅3.85个训练SD；joint最大5秒段RMS在[30,35)秒，为0.509；HbO评分观测峰峰幅7.04个训练SD；joint最大5秒段RMS在[25,30)秒，为1.72；HbR评分观测峰峰幅14.6个训练SD；joint最大5秒段RMS在[80,85)秒，为2.83。局部RMS使用原评分mask，在相对原90秒起点的5秒非重叠段内计算，不是任务条件标签。 条件NL Hb NMSE=2.95，同θ线性Hb-only NMSE=2.85；本例NL误差较大，线性-NL绝对差=-0.095。 NL的HbO最大局部RMS在[30,35)秒，为1.34。 NL的HbR最大局部RMS在[70,75)秒，为2.88。 NL未收敛误差只作已找到上界，不验证上游EEG驱动约束。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/b5d3d000e7b276ce21b70cb9.json"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_29.png",
+          "caption": "每个方块对应实际求解的离散 τ/κ 节点，没有插值。左图颜色是该节点 EEG/HbO/HbR 三个标准化 RMS 的最大值；右图要求三者同时≤0.5。灰色是未满足节点，绿色是共同节点。星号按最小 joint NMSE 选取，未必位于共同集合。投影跨度与触边不能当作置信区间；没有绿色节点不证明连续参数域全局无解。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/b5d3d000e7b276ce21b70cb9.json"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_30.png",
+          "caption": "Simultaneous｜VP005｜simultaneous_eeg_nirs__VP005__prefrontal__r1｜90秒。选择理由：合法NL相对同θ线性Hb-only的绝对NMSE改善最大。固定θ joint NMSE=0.951；最优θ=(τ=8秒，κ=0.64)，joint NMSE=0.751。该θ EEG/HbO/HbR NRMSE=0.825/0.839/0.932。所有目标与预测经过相同父观测算子/参考；训练尺度固定。灰底为不评分末点，主图不展示该点的目标与预测，完整数组仍保留，未评分尾值不决定主轴。完整预测包含允许初态与常数项，残差是目标减预测。 本例逐模态读图：EEG评分观测峰峰幅3.74个训练SD；joint最大5秒段RMS在[15,20)秒，为1.94；HbO评分观测峰峰幅7.99个训练SD；joint最大5秒段RMS在[15,20)秒，为2.15；HbR评分观测峰峰幅5.06个训练SD；joint最大5秒段RMS在[15,20)秒，为2.28。局部RMS使用原评分mask，在相对原90秒起点的5秒非重叠段内计算，不是任务条件标签。 条件NL Hb NMSE=0.189，同θ线性Hb-only NMSE=0.518；本例NL误差较小，线性-NL绝对差=0.329。 NL的HbO最大局部RMS在[10,15)秒，为0.787。 NL的HbR最大局部RMS在[5,10)秒，为1.29。 NL未收敛误差只作已找到上界，不验证上游EEG驱动约束。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/e644fde8c35736cbab097692.json"
+        },
+        {
+          "type": "figure",
+          "path": "figures/figure_31.png",
+          "caption": "每个方块对应实际求解的离散 τ/κ 节点，没有插值。左图颜色是该节点 EEG/HbO/HbR 三个标准化 RMS 的最大值；右图要求三者同时≤0.5。灰色是未满足节点，绿色是共同节点。星号按最小 joint NMSE 选取，未必位于共同集合。投影跨度与触边不能当作置信区间；没有绿色节点不证明连续参数域全局无解。",
+          "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/tasks/linear/e644fde8c35736cbab097692.json"
+        }
+      ]
+    },
+    {
+      "title": "本组证据的结论与使用边界",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "全库存按被试等权混合分布汇总的固定→逐窗最优D中位数为：Single-Trial：30秒 1.26→0.86，90秒 1.66→1.41；Simultaneous：30秒 1.23→0.839，90秒 1.69→1.43；Visual：30秒 1.46→0.856，90秒 1.76→1.19；REFED：30秒 1.66→1.01，90秒 1.86→1.39。原始配对窗等权分布另保留，不能与本段被试等权中位数混用。最优网格包含固定节点，较低残差是同窗参数profile的收益。30/90秒窗口和可用记录组成不同，跨窗长差异不作因果解释。"
+        },
+        {
+          "type": "paragraph",
+          "text": "冻结面板在0.5工程阈值下，59/96 个任务发现共同节点，37 个未发现；41 个任务全80节点均可行。这支持部分观测在指定尺度下可由当前离散模型容纳，同时说明宽可行集合不能用于声称τ/κ已识别。REFED与其他库的具体差异见同分母表，不把跨库成功率当作相同观测难度。"
+        },
+        {
+          "type": "paragraph",
+          "text": "空间Single-Trial面板中，固定读出残差能量比中位数K1=0.1914、K2=0.07975；36/36 个配对窗口在K2下降。自由共同rank下界中位数分别为0.1015/0.02332，仍与固定映射有差。该比较只涉及6人36窗的表示维数，不能把K直接等同生理成分数。"
+        },
+        {
+          "type": "paragraph",
+          "text": "非线性 96/96 个任务找到合法前向轨迹，但优化收敛 0/96。因此本轮非线性误差统一作为预算内的上界，既不宣布优于线性，也不用高误差排除非线性模型；它没有提供联合EEG-Hb动力学见证。"
+        },
+        {
+          "type": "paragraph",
+          "text": "全库存分布回答相对 Hb 观测在当前线性闭合下的描述性相容程度；冻结面板回答指定 EEG–Hb 读出和训练尺度下的共同约束；空间面板回答局部冻结 loading 的表示能力。三者具有不同分母、算子和归一化，不能拼成一个生理解释百分比。"
+        },
+        {
+          "type": "paragraph",
+          "text": "对每条记录分别最小化不同指标不能替代共同 θ 的节点检验。较小 D、宽参数 profile 或满格共同节点都不能单独证明参数可识别；低激励和自由 nuisance 会降低排除能力。空共同集只表示工程网格未发现见证。非线性较小残差仍只提供已找到的条件重建上界，不能据此恢复绝对血容量、去氧量或神经驱动真值。"
+        },
+        {
+          "type": "paragraph",
+          "text": "这些结果可用于定位需要复核的观测通道、时间支持和模型限制，或在既有冻结面板上比较读出。任何新的数据范围、映射训练、参数选择或正式保护评价，均需另按 owning protocol 执行；本报告没有进行此类后续实验。"
+        }
+      ]
+    }
+  ],
+  "sources": [
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/plan.json",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/record_inventory.jsonl",
+    "src/inference/model_compatibility.py",
+    "experiments/scripts/render_model_compatibility.py"
+  ]
+}

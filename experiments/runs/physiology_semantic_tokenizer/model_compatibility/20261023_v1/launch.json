@@ -1,0 +1,109 @@
+{
+  "cwd": "/SSD_2/pid-mcm-implementation",
+  "supervisor": "user_systemd",
+  "linger_verified": true,
+  "environment": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1"
+  },
+  "launches": [
+    {
+      "unit": "model-compatibility-census-pilot-20261023-v1.service",
+      "stage": "pilot",
+      "workers": 4,
+      "log": "logs/census_pilot.log",
+      "command": [
+        ".venv/bin/python",
+        "experiments/scripts/evaluate_model_compatibility.py",
+        "--output",
+        "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+        "--stage",
+        "pilot",
+        "--workers",
+        "4"
+      ]
+    },
+    {
+      "unit": "model-compatibility-census-20261023-v1.service",
+      "stage": "census",
+      "workers": 24,
+      "log": "logs/census.log",
+      "command": [
+        ".venv/bin/python",
+        "experiments/scripts/evaluate_model_compatibility.py",
+        "--output",
+        "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+        "--stage",
+        "census",
+        "--workers",
+        "24"
+      ]
+    },
+    {
+      "unit": "model-compatibility-summary-20261023-v1.service",
+      "stage": "summarize",
+      "workers": 1,
+      "command": [
+        ".venv/bin/python",
+        "experiments/scripts/evaluate_model_compatibility.py",
+        "--output",
+        "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+        "--stage",
+        "summarize"
+      ]
+    },
+    {
+      "unit": "model-compatibility-panel-pilot-20261023-v1.service",
+      "stage": "pilot-linear",
+      "workers": 4,
+      "command": [
+        ".venv/bin/python",
+        "experiments/scripts/evaluate_model_compatibility.py",
+        "--output",
+        "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+        "--stage",
+        "panels",
+        "--panel-stage",
+        "pilot-linear",
+        "--workers",
+        "4"
+      ]
+    },
+    {
+      "unit": "model-compatibility-panel-nl-pilot-20261023-v1.service",
+      "stage": "pilot-nonlinear",
+      "workers": 4,
+      "command": [
+        ".venv/bin/python",
+        "experiments/scripts/evaluate_model_compatibility.py",
+        "--output",
+        "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+        "--stage",
+        "panels",
+        "--panel-stage",
+        "pilot-nonlinear",
+        "--workers",
+        "4"
+      ]
+    },
+    {
+      "unit": "model-compatibility-panels-20261023-v1.service",
+      "stage": "all_panels",
+      "workers": 24,
+      "log": "logs/panels.log",
+      "command": [
+        ".venv/bin/python",
+        "experiments/scripts/evaluate_model_compatibility.py",
+        "--output",
+        "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+        "--stage",
+        "panels",
+        "--panel-stage",
+        "all",
+        "--workers",
+        "24"
+      ]
+    }
+  ]
+}

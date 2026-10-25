@@ -1,0 +1,53 @@
+{
+  "schema": "model_compatibility_spatial_stability_migration_v1",
+  "version": "derived_spatial_stability_v1",
+  "status": "completed",
+  "created_at_utc": "2026-10-23T11:20:47.182504+00:00",
+  "parent_run": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1",
+  "source_table": "panels/space.csv",
+  "source_tasks": "panels/tasks/space/*.json and same-stem NPZ",
+  "derived_table": "derived_spatial_stability_v1/space_stable.csv",
+  "rows": 72,
+  "distinct_windows": 36,
+  "independent_subjects": 6,
+  "row_join_key": "id",
+  "source_owner": "experiments/scripts/evaluate_model_compatibility_panels.py:spatial_distances",
+  "source_snapshots": [
+    "source_snapshot/experiments/scripts/evaluate_model_compatibility_panels.py",
+    "source_snapshot/tests/test_model_compatibility_panels.py"
+  ],
+  "correction": "Replace only raw-space residual energy and joint/per-chromophore D_space_fraction_raw with stable fixed-loading QR spatial projection; relax temporal constraints instead of inverting the ill-conditioned temporal operator. Require identical temporal operators and scoring rows across physical Hb channels.",
+  "interpretation": "stable_fixed_spatial_projection_relax_temporal_constraints",
+  "preserved": {
+    "original_task_JSON_NPZ_and_space_csv": true,
+    "original_failed_arithmetic_audit": "verification_panels.json",
+    "numerical_followup": "verification_panels_space_numerics.json",
+    "weighted_nmse_and_certified_lower_bound": true,
+    "free_rank_K_lower_bounds": true,
+    "linear_and_nonlinear_results": true
+  },
+  "legacy_value_columns": [
+    "legacy_D_space_fraction_raw",
+    "legacy_raw_residual_energy",
+    "legacy_HbO_D_space_fraction_raw",
+    "legacy_HbR_D_space_fraction_raw",
+    "legacy_HbO_raw_residual_energy",
+    "legacy_HbR_raw_residual_energy"
+  ],
+  "source_calculation": [
+    "spatial_basis = np.linalg.qr(loading, mode=\"reduced\")[0]",
+    "raw_prediction = np.stack([raw_hb[:, :, j] @ spatial_basis @ spatial_basis.T for j in range(2)], axis=2)",
+    "D_space_fraction_raw = sum((raw_prediction - raw_hb)[score_mask]**2) / sum(raw_hb[score_mask]**2)"
+  ],
+  "numerical_reason": "Time-factor condition number reaches 2.80448e11; retained latent-coordinate replay loses raw normal-equation accuracy, reaching 1.10045e-6 absolute. Original failure threshold and 12 failures remain unchanged.",
+  "tests": {
+    "command": ".venv/bin/python -m pytest -q tests/test_model_compatibility_panels.py",
+    "passed": 17,
+    "failed": 0,
+    "regression": "common time operator with condition number 1e12 and rank-deficient variant; stable spatial residual and orthogonality, plus rejection of different channel operators"
+  },
+  "verification": "verification.json",
+  "maximum_absolute_joint_fraction_change": 3.63545573645041e-08,
+  "maximum_absolute_chromophore_fraction_change": 6.439333272156844e-08,
+  "report_instruction": "Join this table by id for raw D_space fields. Keep weighted and rank lower-bound fields from their retained owner. Explain the temporal relaxation and retain the original failed numerical diagnostic alongside this migration."
+}

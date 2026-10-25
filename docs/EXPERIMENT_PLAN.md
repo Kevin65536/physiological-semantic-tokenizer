@@ -62,6 +62,64 @@ measured result exists.
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
 
+## 五项模型相容性指标的总体分布与典型曲线（2026-10-23）
+
+用户明确要求实现完整指标套件、获取实测结果并分析总体分布和典型样例。
+`MODEL-COMPATIBILITY-v1` 的执行合同由
+[`model_compatibility_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/model_compatibility_v1.yaml)
+持有，数值由 `src/inference/model_compatibility.py` 持有，主入口为
+`experiments/scripts/evaluate_model_compatibility.py`。冻结模型面板的独立读取与执行
+由 `evaluate_model_compatibility_panels.py` 承担；证据写入
+`experiments/runs/physiology_semantic_tokenizer/model_compatibility/<version>/`。
+这是公开开发材料的描述性相容性分析，不接入比较协议保护数据，不授予生理资格。
+
+**普查与面板分母分开。** 普查范围是 v5 通用缓存登记且符合现行数据合同的
+四库公开记录，沿用 Visual S06 Part1 的明确排除。登记库存不是原发布材料的所有
+可能分支，例如 REFED 只含登记视频，不额外纳入 baseline 文件。原生 Hb 由统一
+`load_native_fnirs_record` 读取，不自行解析或把缓存当原始绝对浓度。主分析不新增
+滤波，避免把 v5 全记录双向滤波后的瞬态当成未滤波指数。按原生时间分别划分
+30/90 秒不重叠完整窗，丢弃尾部，保留跨拼接边界、缺支持、低激励与失败状态。
+单库的 Hb 单位及两色团相对标度保持不变，不将各色团分别 z-score 后相加。
+
+Hb 弱闭合剖面同时消去常数偏置与允许的初态指数项。归一化分母由该窗口中心化
+动态量确定，对全部候选参数固定；报告固定参数与剖面最优值、完整 τ 剖面和
+动态能量。此量可能超过一，不是异常成分占比，也不是噪声白化统计量。单窗
+参数剖面是条件描述，不是训练后预测。合成控制包含合法初态、共同缩放/偏置、
+相对色团变化、独立成分和不同噪声水平，先验证数值及已知响应，再读取实测信号。
+
+具有冻结 EEG 特征、训练尺度及确切时间算子的四库 output-support 评价面板
+读取两个既有公共父：`ssm_output_support/20261010_v1` 与 `20261013_refed_v2`。
+保留连续 90 秒与同一记录中部 30 秒，参考与末端插值支持遵循父入口。每个
+相同 τ/κ 节点计算 Hb-only 与 EEG+Hb 离散设计投影，保留自由驱动和独立初态，
+按同一节点的各模态误差形成共同容许网格。工程容限敏感性、秩与低振幅基线
+同时报告；训练 SD 不是传感器噪声，网格范围不是置信区间，空网格不是连续域
+无解证明。不得把各项分别最优值拼成共同参数解。
+
+固定空间检查仅应用于有核验几何和冻结 loading 的 Single-Trial 空间父面板
+`shared_driver_spatial/20261020_measured_v2` 的评价身份及 K1/K2 读出。保留完整
+观测算子、增益、评分支持，比较固定子空间和自由秩残差。原生能量比例直接投影
+到固定空间子空间，放松时间限制以避免病态潜曲线反演；实际时间算子下的训练
+尺度保守下界另列，不把有限精度潜曲线回放残差冒称精确下界。其他普查记录没有
+对应冻结空间映射时标为不适用，不临时拟合新 loading 冒充原模型。
+
+非线性层在 output-support 面板的同一选定参数节点，复用
+`fit_vascular_flow_relaxation` 生成合法血管轨迹，再经过原观测算子评分。
+记为条件非线性前向重建距离 `D_Hb,NL,recon`，与教学版绝对坐标反演残差区分。
+保留独立 v/p/q 初态、数值域、双精度积分复核与优化状态；这是已找到误差上界，
+不是全局最优或生理不可能性的证明。未具备坐标的全库存直接非线性指标标不适用；
+不将空间面板的独立单通道拟合拼成多核联合结论。
+
+统计保留全部计划和状态分母，分别呈现窗口分布与先通道/窗口到记录、记录到
+被试、再被试等权的分布。区间以被试整簇重采样，四数据集分开；不把重叠观测
+或多个通道当独立被试。典型曲线依据预先声明的固定参数误差，在每库选择接近
+P10、中位和 P90 的可用窗口，尽量来自不同被试，另展示失败或共同集为空样例。
+这种选择只用于解释，不用于调参；原生身份、时间支持、分母与选择规则一并保留。
+
+数值测试和合成检查之后，以 user systemd（验证 lingering）运行实测 pilot。
+记录 CPU/内存/存储、竞争任务、吞吐和峰值内存，再选 bounded 并发完成有限任务
+矩阵；保留失败与可恢复任务记录，不在 Codex 前台会话里启动长期 producer。
+执行状态由 registry 持有，指标与分布由本轮运行的 summary/逐条结果持有。
+
 ## 当前共享驱动模型的表达边界与联合可行性（2026-10-22）
 
 `SSM-FEASIBILITY-v1` 根据用户提供的详细分析，将表示限制、Hb 内部相容性、
