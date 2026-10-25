@@ -7567,6 +7567,642 @@ def volume_drive_main(args):
     print(volume_drive_summarize(cfg,out,plan))
 
 
+def decay_config(path):
+    """Admit only the fixed six-arm retained-public decay diagnostic."""
+    cfg = yaml.safe_load(Path(path).read_text())
+    expected_arms = [dict(name=name, multiplier=multiplier, input=driven)
+        for driven in (False, True)
+        for name, multiplier in zip(('driven_original','driven_slow','driven_no_decay') if driven
+                                    else ('original','slow','no_decay'), (1., .1, 0.))]
+    expected_parents = ['experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1',
+                        'experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261013_refed_v2']
+    expected_parameters = dict(tau=2., kappa=.64, gamma=.32, alpha=.32, E0=.32,
+        P0=1., Q0=.35, neurovascular_gain=1., policy='fixed_reference_in_all_fits')
+    if (cfg.get('schema') != 'shared_driver_decay_v1' or cfg.get('experiment_id') != 'SSM-DECAY-v1'
+            or cfg.get('seed') != 20261023
+            or cfg.get('parents') != expected_parents
+            or cfg.get('output_root') != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction'
+            or cfg.get('run_name') != '20261023_decay_v1'
+            or cfg['data']['protected_data'] != 'forbidden' or cfg['data']['raw_reads']
+            or cfg['data']['labels_as_inputs'] or cfg['data']['expected_records'] != 48
+            or cfg['data']['datasets'] != ['eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation','refed']
+            or cfg['data']['arrays'] != 'exact_parent_plan_prepared_and_training_coordinates_only'
+            or cfg['data']['partition'] != 'parent_evaluation_all_records'
+            or cfg['tensor'] != dict(dt_s=.25, lengths_s=[30,90], slices=[[120,240],[0,360]],
+                components=list(MODALITIES), reference_steps=20,
+                last_bin='excluded_from_fit_and_score_to_avoid_30s_interpolation_halo')
+            or cfg['parameters'] != expected_parameters or cfg['decay']['arms'] != expected_arms
+            or cfg['conditions'] != ['joint_full','Hb_only_full','joint_blocked']
+            or cfg['forcing']['modes'] != {30:7,90:19}
+            or cfg['forcing']['basis'] != 'DC_plus_cosine_k_1_to_6_or_18_at_physical_time_plus_dt_over_two_continuous_RK_stages'
+            or cfg['forcing']['units'] != 'state_per_second'
+            or cfg['forcing']['prior_sd'] != .025 or cfg['forcing']['prior_weight'] != 1.
+            or cfg['forcing']['prior'] != 'weight_times_dt_sum_u_squared_divided_by_sd_squared'
+            or cfg['forcing']['prior_interpretation'] != 'engineering_input_energy_scale_not_physiological_noise_SD'
+            or cfg['forcing']['normalization'] != 'none_no_length_or_lambda_specific_rescaling'
+            or cfg['synthetic']['seeds'] != list(range(6))
+            or cfg['synthetic']['scenarios'] != ['matched','original_transient','slow_transient','sustained_input']
+            or cfg['synthetic']['truth_in_fitting'] is not False
+            or cfg['synthetic']['training_sd'] != [.025,.025,.015]
+            or cfg['resources']['numerical_threads'] != 1
+            or cfg['resources']['in_flight_per_worker'] != 2
+            or not 1 <= cfg['resources']['max_workers'] <= 36
+            or cfg['resources']['supervisor'] != 'user_systemd'):
+        raise ValueError('decay diagnostic contract boundary violated')
+    s = cfg['solver']
+    if (s['penalty'] != .01 or s['initial_penalty'] != 100. or s['flow_prior_weight'] != 1.
+            or s['flow_prior_log_sd'] != float(np.log(2)) or s['max_evaluations'] != 600
+            or s['gradient_tolerance'] != 1e-5 or s['substeps'] != 4 or s['validation_substeps'] != 8
+            or s['maximum_integration_difference_training_sd'] != .005
+            or s['numerical_backend'] != 'numba'
+            or s['starts'] != 'rest_then_original_fit_and_rest_for_alternatives'
+            or s['initial_state'] != 'five_independent_physical_coordinates'
+            or cfg['decay']['replay_hbr_tolerance'] != 1e-10
+            or cfg['endpoints']['bootstrap_repeats'] != 2000
+            or cfg['synthetic']['transient_delta0'] != .08
+            or cfg['synthetic']['sustained_mode_90s'] != 9
+            or cfg['synthetic']['sustained_amplitude_state_per_s'] != .012
+            or cfg['synthetic']['amplitude_seed_relative_step'] != .03
+            or cfg['synthetic']['noise_training_sd'] != .03
+            or cfg['synthetic']['generation_substeps'] != 8
+            or cfg['synthetic']['same_90s_driver_and_noise_within_seed'] is not True
+            or cfg['hidden'] != dict(block_s=[[10,15],[20,25]], repeat_every_s=30,
+                components=['HbO','HbR'], interpretation='within_record_offline_blocked_interpolation_not_future_prediction')):
+        raise ValueError('decay diagnostic numerical contract boundary violated')
+    return cfg
+
+
+def decay_plan(cfg, root):
+    plan = volume_drive_plan(cfg, root)
+    if len(plan['records']) != cfg['data']['expected_records']:
+        raise ValueError('decay diagnostic retained public record count mismatch')
+    if len({record['id'] for record in plan['records']}) != len(plan['records']):
+        raise ValueError('decay diagnostic task identity collision')
+    return dict(plan, schema='shared_driver_decay_plan_v1',
+        arms=cfg['decay']['arms'], planned_synthetic_tasks=144, planned_measured_tasks=288,
+        paired_windows_are_independent=False)
+
+
+def decay_synthetic(cfg, seed, scenario, length_s):
+    """One canonical 90s trajectory per seed/scenario; the 30s view is a crop.
+
+    Driver and noise depend on seed alone, and every target uses the existing
+    native-bin and reference operators. Truth is exported for scoring only.
+    """
+    from src.inference.observation_baselines import disjoint_native_bin_operator
+    from src.inference.shared_driver_rk4 import decay_forward
+    if seed not in cfg['synthetic']['seeds'] or scenario not in cfg['synthetic']['scenarios']:
+        raise ValueError('unregistered synthetic seed/scenario')
+    p = volume_drive_parameters(cfg); dt = cfg['tensor']['dt_s']; t = np.arange(360)*dt
+    rng = np.random.default_rng(np.random.SeedSequence([cfg['seed'],seed,9101]))
+    driver = .024*np.sin(2*np.pi*.043*t+rng.uniform(-np.pi,np.pi))+.012*np.cos(2*np.pi*.077*t)
+    initial = np.r_[0., np.ones(4)]
+    if scenario in ('original_transient','slow_transient'):
+        initial[3] += cfg['synthetic']['transient_delta0']
+    multiplier = .1 if scenario == 'slow_transient' else 1.
+    coefficients = None
+    if scenario == 'sustained_input':
+        coefficients = np.zeros(cfg['forcing']['modes'][90])
+        coefficients[cfg['synthetic']['sustained_mode_90s']] = (
+            cfg['synthetic']['sustained_amplitude_state_per_s']
+            *(1+cfg['synthetic']['amplitude_seed_relative_step']*seed)*(-1 if seed%2 else 1))
+    forward = decay_forward(driver,initial,p,dt,decay_multiplier=multiplier,
+        forcing_coefficients=coefficients,substeps=cfg['synthetic']['generation_substeps'])
+    clean = forward['canonical_prediction']; sd = np.asarray(cfg['synthetic']['training_sd'])
+    noise = rng.normal(size=clean.shape)*sd*cfg['synthetic']['noise_training_sd']
+    native = disjoint_native_bin_operator(np.arange(900)/10.)
+    operators = dict(eeg=native['eeg'],hb=native['model'])
+    def observe(values):
+        return np.column_stack((operators['eeg']@values[:,0],operators['hb']@values[:,1:]))
+    target, operator = volume_drive_crop(observe(clean+noise),operators,length_s)
+    noiseless, _ = volume_drive_crop(observe(clean),operators,length_s)
+    support = slice(120,240) if length_s == 30 else slice(0,360)
+    truth = dict(states=forward['states'][support], driver=driver[support],
+        forcing=forward['forcing'][support], delta=(forward['states'][:,4]-forward['states'][:,3])[support],
+        prediction=noiseless, canonical_prediction=clean[support], noise=noise[support],
+        decay_multiplier=float(multiplier), original_time_s=t[support],
+        original_90s_delta0=float(initial[3]-initial[2]))
+    return target, operator, sd, truth
+
+
+def decay_metrics(target, prediction, sd, condition, states, forcing, forward, cfg):
+    """Training-SD observation errors and explicitly separate state diagnostics."""
+    n = len(target); dt = cfg['tensor']['dt_s']; time_s = np.arange(n)*dt
+    result = volume_drive_metrics(target,prediction,sd,condition)
+    error = (np.asarray(prediction)-np.asarray(target))/sd
+    valid = np.arange(n) < n-1
+    score = ~volume_drive_mask(n,condition)[:,1] & valid if condition == 'joint_blocked' else valid
+    result['score_hbo_nmse'] = float(np.mean(error[score,1]**2))
+    result['score_hbr_nmse'] = float(np.mean(error[score,2]**2))
+    regions = {'first_0_5s':(0,5), 'next_5_10s':(5,10), 'ten_to_thirty_s':(10,30)}
+    if n == 360:
+        regions.update(middle_30s=(30,60),last_30s=(60,90))
+    for name,(left,right) in regions.items():
+        use = valid & (time_s >= left) & (time_s < right)
+        result[name+'_hb_nmse'] = float(np.mean(error[use,1:]**2))
+    late = valid & (time_s >= (10 if n == 120 else 60))
+    demeaned = error[late,1:]-np.mean(error[late,1:],axis=0)
+    result['late_demeaned_hb_nmse'] = float(np.mean(demeaned**2))
+    center = np.zeros(n,bool); center[120:239] = True
+    if n == 120: center = valid.copy()
+    center_error = error[center,1:]-np.mean(error[center,1:],axis=0)
+    result['center_demeaned_hb_nmse'] = float(np.mean(center_error**2))
+    result['late_hbo_nmse'] = float(np.mean(error[late,1]**2))
+    result['late_hbr_nmse'] = float(np.mean(error[late,2]**2))
+    delta = states[:,4]-states[:,3]
+    nonzero = np.sign(delta[np.abs(delta) > 1e-8])
+    late_nonzero = np.sign(delta[late & (np.abs(delta)>1e-8)])
+    retention = np.asarray(forward['decay_retention'])
+    def first_crossing(threshold):
+        crossings = np.flatnonzero(retention <= threshold)
+        return float(time_s[crossings[0]]) if crossings.size else None
+    result.update(initial_p_minus_v=float(delta[0]), final_p_minus_v=float(delta[-1]),
+        full_hb_nrmse=float(np.sqrt(result['full_hb_nmse'])),
+        late_hb_nmse=float(np.mean(error[late,1:]**2)),
+        late_hb_nrmse=float(np.sqrt(np.mean(error[late,1:]**2))),
+        delta_late_sd=float(np.std(delta[late])), delta_late_rms=float(np.sqrt(np.mean(delta[late]**2))),
+        delta_sign_changes=int(np.sum(nonzero[1:] != nonzero[:-1])),
+        delta_late_sign_changes=int(np.sum(late_nonzero[1:] != late_nonzero[:-1])),
+        sign_change_tolerance=1e-8,
+        retention_end=float(retention[-1]), retention_e_fold_s=first_crossing(np.exp(-1)),
+        retention_95_loss_s=first_crossing(.05),
+        retention_integral_end=float(forward['retention_integral'][-1]),
+        forcing_rms_state_per_s=float(np.sqrt(np.mean(np.asarray(forcing)[valid]**2))),
+        forcing_late_rms_state_per_s=float(np.sqrt(np.mean(np.asarray(forcing)[late]**2))))
+    return result
+
+
+def decay_delta_contributions(states, operator, parameters):
+    """Raw P0*(p-v) contributes to HbO/HbT only; reference can leave an offset."""
+    raw = np.zeros((len(states),3)); raw[:,1] = parameters.fixed.P0*(states[:,4]-states[:,3])
+    referenced = (operator@raw.ravel()).reshape(raw.shape)
+    return raw,referenced
+
+
+def decay_upstream_compensation(states, original):
+    result = {}
+    for name,column in (('driver',0),('s',1),('f',2),('v',3),('q',5)):
+        result[name+'_change_rms_from_original'] = float(np.sqrt(np.mean((states[:,column]-original[:,column])**2)))
+    return result
+
+
+def decay_fixed_upstream_replays(cfg, original, operator, sd):
+    """Change only lambda: driver, s/f/v/p/q initial values all stay fixed."""
+    from src.inference.shared_driver_rk4 import decay_forward
+    p = volume_drive_parameters(cfg); arrays = {}; audits = []
+    reference = None
+    for arm in cfg['decay']['arms'][:3]:
+        name = arm['name']
+        try:
+            forward = decay_forward(original['driver'],original['initial_state'],p,cfg['tensor']['dt_s'],
+                decay_multiplier=arm['multiplier'],substeps=cfg['solver']['substeps'])
+        except FloatingPointError as exc:
+            if name == 'original':
+                raise
+            audits.append(dict(arm=name,decay_multiplier=arm['multiplier'],
+                status='infeasible_counterfactual',error=repr(exc),
+                upstream_max_abs_difference=None,hbr_max_abs_difference=None,
+                identical_upstream_and_hbr=None,original_fit_prediction_max_training_sd=None))
+            continue
+        prediction = (operator@forward['canonical_prediction'].ravel()).reshape(-1,3)
+        states = forward['states']
+        if reference is None:
+            reference = (states,prediction)
+        upstream = float(np.max(np.abs(states[:,[0,1,2,3,5]]-reference[0][:,[0,1,2,3,5]])))
+        hbr = float(np.max(np.abs(prediction[:,2]-reference[1][:,2])))
+        if max(upstream,hbr) > cfg['decay']['replay_hbr_tolerance']:
+            raise AssertionError('fixed-upstream decay replay changed upstream states or HbR')
+        raw,ref = decay_delta_contributions(states,operator,p)
+        prefix = 'replay_'+name+'_'
+        arrays.update({prefix+key:value for key,value in dict(states=states,prediction=prediction,
+            delta=states[:,4]-states[:,3],forcing=forward['forcing'],
+            retention_integral=forward['retention_integral'],decay_retention=forward['decay_retention'],
+            raw_delta_contribution=raw,referenced_delta_contribution=ref).items()})
+        audits.append(dict(arm=name,decay_multiplier=arm['multiplier'],status='completed',
+            upstream_max_abs_difference=upstream,hbr_max_abs_difference=hbr,
+            identical_upstream_and_hbr=True,
+            original_fit_prediction_max_training_sd=float(np.max(np.abs((prediction-original['prediction'])[:-1]/sd)))
+                if name == 'original' else None))
+    return arrays,audits
+
+
+def decay_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_decay_shared_driver
+    from src.inference.shared_driver_rk4 import decay_forward
+    cfg,root,out,stage,spec = payload
+    begin = time.perf_counter(); folder = Path(out)/stage; folder.mkdir(parents=True,exist_ok=True)
+    result = dict(schema='shared_driver_decay_task_v1',spec=spec,key=spec['key'],rows=[],
+        status='failed',started_at=datetime.now(timezone.utc).isoformat(),replay_audits=[])
+    arrays = {}; original = None; arm_errors = 0
+    try:
+        if spec.get('synthetic'):
+            target,operator,sd,truth = decay_synthetic(cfg,spec['seed'],spec['scenario'],spec['length_s'])
+        else:
+            target,operator,sd = volume_drive_arrays(cfg,root,spec['ref'],spec['length_s']); truth = None
+        mask = volume_drive_mask(len(target),spec['condition'])
+        visible_target = target.copy(); visible_target[~mask] = np.nan
+        arrays.update(target=target,operator=operator,sd=sd,visible=mask)
+        if truth is not None:
+            arrays.update({'truth_'+name:value for name,value in truth.items()})
+        parameters_ = volume_drive_parameters(cfg); s = cfg['solver']; dt = cfg['tensor']['dt_s']
+        for arm in cfg['decay']['arms']:
+            name = arm['name']; row = dict(arm=name,condition=spec['condition'],
+                decay_multiplier=arm['multiplier'],input_present=arm['input'],
+                forcing_modes=cfg['forcing']['modes'][spec['length_s']] if arm['input'] else 0,
+                converged=False,qualified=False,software_error=False)
+            try:
+                starts = [dict(driver=np.zeros(len(target)),initial_state=np.r_[0.,np.ones(4)])]
+                if original is not None:
+                    starts.insert(0,dict(driver=original['driver'],initial_state=original['initial_state']))
+                if arm['input']:
+                    for start in starts:
+                        start['forcing_coefficients'] = np.zeros(row['forcing_modes'])
+                fit = fit_decay_shared_driver(visible_target,parameters_,dt,mean_operator=operator,sd=sd,visible=mask,
+                    decay_multiplier=arm['multiplier'],forcing_modes=row['forcing_modes'],
+                    forcing_sd=cfg['forcing']['prior_sd'],forcing_weight=cfg['forcing']['prior_weight'],
+                    penalty=s['penalty'],initial_penalty=s['initial_penalty'],
+                    flow_prior_weight=s['flow_prior_weight'],flow_prior_log_sd=s['flow_prior_log_sd'],
+                    max_evaluations=s['max_evaluations'],gradient_tolerance=s['gradient_tolerance'],
+                    substeps=s['substeps'],starts=starts)
+                row.update(converged=bool(fit['converged']),fit_status=fit['status'],starts=fit['starts'],
+                    evaluations=fit['evaluations'])
+                if 'prediction' in fit:
+                    coefficients = fit['forcing_coefficients']
+                    forward = decay_forward(fit['driver'],fit['initial_state'],parameters_,dt,
+                        decay_multiplier=arm['multiplier'],forcing_coefficients=coefficients,substeps=s['substeps'])
+                    fine = decay_forward(fit['driver'],fit['initial_state'],parameters_,dt,
+                        decay_multiplier=arm['multiplier'],forcing_coefficients=coefficients,substeps=s['validation_substeps'])
+                    fine_prediction = (operator@fine['canonical_prediction'].ravel()).reshape(target.shape)
+                    integration = float(np.max(np.abs((fine_prediction-fit['prediction'])[:-1]/sd)))
+                    row.update(integration_max_training_sd=integration,
+                        integration_passed=integration <= s['maximum_integration_difference_training_sd'],
+                        qualified=bool(fit['converged'] and integration <= s['maximum_integration_difference_training_sd']),
+                        objective=fit['objective'],scaled_gradient=fit['scaled_gradient_inf_norm'],
+                        costs=fit['costs'],**fit['costs'],
+                        **decay_metrics(target,fit['prediction'],sd,spec['condition'],fit['states'],forward['forcing'],forward,cfg))
+                    raw,referenced = decay_delta_contributions(fit['states'],operator,parameters_)
+                    late_start = 40 if len(target) == 120 else 240
+                    row.update(raw_delta_late_hbo_mean=float(np.mean(raw[late_start:-1,1])),
+                        referenced_delta_late_hbo_mean=float(np.mean(referenced[late_start:-1,1])))
+                    if truth is not None:
+                        row['noiseless_hb_nmse'] = volume_drive_metrics(truth['prediction'],fit['prediction'],sd,spec['condition'])['full_hb_nmse']
+                        for state,column in (('driver',0),('s',1),('f',2),('v',3),('p',4),('q',5)):
+                            row['truth_'+state+'_rmse'] = float(np.sqrt(np.mean((fit['states'][:-1,column]-truth['states'][:-1,column])**2)))
+                        row['truth_delta_rmse'] = float(np.sqrt(np.mean(((fit['states'][:,4]-fit['states'][:,3])-truth['delta'])[:-1]**2)))
+                        row['state_delta_rmse'] = row['truth_delta_rmse']
+                        row['truth_delta_initial'] = float(truth['delta'][0])
+                        row['truth_delta_final'] = float(truth['delta'][-1])
+                        row['truth_forcing_rmse_state_per_s'] = float(np.sqrt(np.mean((forward['forcing'][:-1]-truth['forcing'][:-1])**2)))
+                    for key in ('prediction','states','driver','initial_state','forcing_coefficients'):
+                        arrays[name+'_'+key] = fit[key]
+                    for key in ('forcing','retention_integral','decay_retention'):
+                        arrays[name+'_'+key] = forward[key]
+                    arrays[name+'_delta'] = fit['states'][:,4]-fit['states'][:,3]
+                    arrays[name+'_transient_delta'] = arrays[name+'_delta'][0]*forward['decay_retention']
+                    arrays[name+'_forced_delta'] = arrays[name+'_delta']-arrays[name+'_transient_delta']
+                    arrays[name+'_raw_delta_contribution'] = raw
+                    arrays[name+'_referenced_delta_contribution'] = referenced
+                    if name == 'original':
+                        original = fit
+                        replay_arrays,result['replay_audits'] = decay_fixed_upstream_replays(cfg,original,operator,sd)
+                        arrays.update(replay_arrays)
+                    if original is not None:
+                        row.update(decay_upstream_compensation(fit['states'],original['states']))
+            except Exception:
+                arm_errors += 1
+                row.update(software_error=True,qualified=False,fit_status='exception',error=traceback.format_exc())
+            result['rows'].append(row)
+        result['status'] = 'completed_with_arm_errors' if arm_errors else 'completed'
+    except Exception:
+        result['error'] = traceback.format_exc()
+    result.update(seconds=time.perf_counter()-begin,software_errors=arm_errors,
+        max_rss_mb=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    if arrays:
+        destination = folder/(spec['key']+'.npz'); temporary = folder/(spec['key']+'.tmp.npz')
+        np.savez_compressed(temporary,**arrays); temporary.replace(destination)
+    write_json(folder/(spec['key']+'.json'),result)
+    return dict(key=spec['key'],status=result['status'],seconds=result['seconds'],
+        qualified_arms=sum(row['qualified'] for row in result['rows']),software_errors=arm_errors,max_rss_mb=result['max_rss_mb'])
+
+
+def decay_specs(cfg,plan,stage):
+    if stage not in ('pilot','synthetic','measured'):
+        raise ValueError('unregistered decay task stage')
+    if stage == 'measured':
+        return volume_drive_specs(cfg,plan,'measured')
+    specs = []
+    for seed in (cfg['synthetic']['seeds'] if stage == 'synthetic' else [0]):
+        for scenario in (cfg['synthetic']['scenarios'] if stage == 'synthetic' else ['matched','sustained_input']):
+            for length in cfg['tensor']['lengths_s']:
+                for condition in (cfg['conditions'] if stage == 'synthetic' else ['joint_full']):
+                    specs.append(dict(synthetic=True,seed=seed,scenario=scenario,length_s=length,condition=condition,
+                        dataset='synthetic',subject=str(seed),id=f'seed{seed}_{scenario}',
+                        key=f's{seed}_{scenario}_{length}_{condition}'))
+    return specs
+
+
+def decay_paired_contrast(cfg,group,reference,candidate,metric):
+    """Whole-subject bootstrap after averaging paired records within subject."""
+    left = group[group.arm == reference]; right = group[group.arm == candidate]
+    item = dict(reference=reference,candidate=candidate,metric=metric,planned_pairs=len(left),
+        qualified_pairs=0,subjects=0)
+    if (not (left.qualified == True).any() or not (right.qualified == True).any()
+            or metric not in group or not group[metric].notna().any()):
+        return item
+    merged = left.merge(right,on=['subject','id'],suffixes=('_reference','_candidate'))
+    good = merged[(merged.qualified_reference == True)&(merged.qualified_candidate == True)]
+    item.update(qualified_pairs=len(good),subjects=int(good.subject.nunique()))
+    if not len(good) or metric+'_reference' not in good:
+        return item
+    units = good.groupby('subject')[[metric+'_reference',metric+'_candidate']].mean().to_numpy()
+    if not np.isfinite(units).all():
+        return item
+    ref,alt = np.sqrt(units.mean(0)); difference = ref-alt
+    rng = np.random.default_rng(cfg['seed'])
+    indices = rng.integers(0,len(units),size=(cfg['endpoints']['bootstrap_repeats'],len(units)))
+    boot = np.sqrt(units[indices].mean(1))
+    item.update(reference_nrmse=float(ref),candidate_nrmse=float(alt),improvement=float(difference),
+        relative_rmse_reduction=float(difference/ref) if ref>0 else None,
+        ci95=np.quantile(boot[:,0]-boot[:,1],[.025,.975]),bootstrap_unit='whole_subject',
+        multiplicity='descriptive_unadjusted_intervals_no_confirmatory_significance_claim')
+    return item
+
+
+def decay_summarize(cfg,out,plan,*,source_out=None):
+    out = Path(out); rows = []; stages = {}; replay_audits = []
+    source_out = Path(source_out) if source_out is not None else out
+    for stage in ('pilot','synthetic','measured'):
+        specs = decay_specs(cfg,plan,stage)
+        counts = dict(planned=len(specs),terminal=0,completed=0,software_failed_tasks=0,
+            planned_arms=len(specs)*len(cfg['decay']['arms']),qualified_arms=0,
+            nonconverged_arms=0,integration_failed_arms=0,software_error_arms=0,missing_arms=0,
+            completed_replays=0,infeasible_counterfactual_replays=0)
+        for spec in specs:
+            path = out/stage/(spec['key']+'.json')
+            if not path.exists(): path = source_out/stage/(spec['key']+'.json')
+            task = json.loads(path.read_text()) if path.exists() else None
+            if task is not None:
+                counts['terminal'] += 1
+                counts['completed' if task['status']=='completed' else 'software_failed_tasks'] += 1
+                for audit in task.get('replay_audits',[]):
+                    audit = dict(status='completed',**audit) if 'status' not in audit else audit
+                    counts['infeasible_counterfactual_replays' if audit['status']=='infeasible_counterfactual'
+                           else 'completed_replays'] += 1
+                    replay_audits.append(dict(stage=stage,key=spec['key'],**audit))
+            available = {row['arm']:row for row in task.get('rows',[])} if task else {}
+            for arm in cfg['decay']['arms']:
+                row = available.get(arm['name'])
+                if row is None:
+                    row = dict(arm=arm['name'],condition=spec['condition'],qualified=False,converged=False,
+                        software_error=task is not None,fit_status='task_failed' if task else 'pending')
+                    counts['missing_arms'] += 1
+                elif row['qualified']:
+                    counts['qualified_arms'] += 1
+                elif row.get('software_error'):
+                    counts['software_error_arms'] += 1
+                elif not row.get('converged'):
+                    counts['nonconverged_arms'] += 1
+                elif row.get('integration_passed') is False:
+                    counts['integration_failed_arms'] += 1
+                rows.append(dict(stage=stage,dataset=spec['dataset'],subject=spec['subject'],id=spec['id'],
+                    length_s=spec['length_s'],key=spec['key'],scenario=spec.get('scenario','measured'),
+                    task_status=task['status'] if task else 'pending',
+                    **{key:value for key,value in row.items() if key not in ('starts','costs','error')}))
+        stages[stage] = counts
+    frame = pd.DataFrame(rows)
+    groups = []; paired = []
+    metrics = ['full_hb_nmse','score_hb_nmse','full_hbo_nmse','full_hbr_nmse','score_hbo_nmse','score_hbr_nmse',
+        'center_hb_nmse','tail_hb_nmse','oscillation_band_nmse','local_hb_nmse',
+        'hbt_training_component_scale_nmse','eeg_nmse','first_0_5s_hb_nmse','next_5_10s_hb_nmse',
+        'ten_to_thirty_s_hb_nmse','middle_30s_hb_nmse','last_30s_hb_nmse','late_hb_nmse',
+        'late_demeaned_hb_nmse','center_demeaned_hb_nmse','late_hbo_nmse','late_hbr_nmse','noiseless_hb_nmse']
+    for metric in metrics:
+        if metric not in frame: frame[metric] = np.nan
+    frame.to_csv(out/'metrics.csv',index=False)
+    diagnostics = ['retention_end','retention_e_fold_s','retention_95_loss_s','initial_p_minus_v','final_p_minus_v',
+        'delta_late_sd','delta_late_rms','delta_sign_changes','delta_late_sign_changes',
+        'forcing_rms_state_per_s','forcing_late_rms_state_per_s',
+        'weighted_data_sse','driver_curvature_cost','initial_prior_cost','flow_prior_cost','forcing_prior_cost',
+        'driver_change_rms_from_original','s_change_rms_from_original','f_change_rms_from_original',
+        'v_change_rms_from_original','q_change_rms_from_original',
+        'truth_driver_rmse','truth_v_rmse','truth_p_rmse','truth_q_rmse','truth_delta_rmse','truth_forcing_rmse_state_per_s']
+    keys = ['stage','dataset','scenario','length_s','condition','arm']
+    for identity,group in frame.groupby(keys,dropna=False):
+        good = group[group.qualified == True]
+        item = dict(zip(keys,identity)); item.update(planned=len(group),terminal=int((group.task_status!='pending').sum()),
+            qualified=len(good),subjects=int(good.subject.nunique()),
+            nonconverged=int(((group.converged==False)&(group.software_error==False)&(group.task_status!='pending')).sum()),
+            software_errors=int((group.software_error==True).sum()))
+        for metric in metrics:
+            present = good[good[metric].notna()]
+            item[metric.replace('_nmse','_nrmse')] = float(np.sqrt(present.groupby('subject')[metric].mean().mean())) if len(present) else None
+        for metric in diagnostics:
+            if metric not in good: continue
+            values = good[metric].dropna()
+            item[metric+'_median'] = float(values.median()) if len(values) else None
+            item[metric+'_available'] = len(values)
+        groups.append(item)
+    contrasts = [('original','slow'),('original','no_decay'),('original','driven_original'),
+                 ('original','driven_slow'),('original','driven_no_decay'),
+                 ('slow','driven_slow'),('no_decay','driven_no_decay')]
+    contrast_keys = keys[:-1]
+    for identity,group in frame[frame.stage.isin(['synthetic','measured'])].groupby(contrast_keys,dropna=False):
+        for reference,candidate in contrasts:
+            for metric in metrics:
+                paired.append(dict(zip(contrast_keys,identity),
+                    **decay_paired_contrast(cfg,group,reference,candidate,metric)))
+    complete = all(stages[stage]['terminal']==stages[stage]['planned'] for stage in ('synthetic','measured'))
+    software_failed = any(stages[stage]['software_failed_tasks'] for stage in ('synthetic','measured'))
+    summary = dict(schema='shared_driver_decay_summary_v1',experiment_id=cfg['experiment_id'],
+        status=('completed_with_software_errors' if software_failed else 'completed') if complete else 'in_progress',
+        stages=stages,independent_subjects=plan.get('independent_subjects',{}),groups=groups,paired=paired,
+        fixed_upstream_replay_audits=replay_audits,
+        retention='exp_minus_lambda_times_integral_a_v_separate_from_forced_delta_and_optical_reference',
+        inference='conditional_public_reconstruction_not_physiological_truth_no_multiplicity_adjusted_inference')
+    if source_out != out:
+        summary.update(evidence_migration='migration.json',parent_run=os.path.relpath(source_out,out))
+    write_json(out/'summary.json',summary)
+    pd.DataFrame(groups).to_csv(out/'group_summary.csv',index=False)
+    write_json(out/'paired_contrasts.json',paired)
+    return stages
+
+
+def decay_replay_migrate(cfg,run,plan):
+    """Repair v1 replay-only misclassification without refitting or rewriting it.
+
+    Only affected task JSON and small replay-only NPZ files are written under
+    evidence_v2. All fitted arrays and unaffected tasks stay in the parent run.
+    """
+    run = Path(run).resolve(); out = run/'evidence_v2'
+    if out.exists():
+        raise ValueError('decay evidence_v2 already exists; retained evidence is never overwritten')
+    if yaml.safe_load((run/'resolved_config.yaml').read_text()) != cfg:
+        raise ValueError('decay replay migration configuration mismatch')
+    if json.loads((run/'plan.json').read_text()) != serial(plan):
+        raise ValueError('decay replay migration plan mismatch')
+    for stage in ('synthetic','measured'):
+        manifest = json.loads((run/(stage+'_manifest.json')).read_text())
+        if manifest['status'] not in ('completed','completed_with_software_errors'):
+            raise ValueError('complete parent matrix required before replay migration')
+        if not all((run/stage/(spec['key']+'.json')).is_file() for spec in decay_specs(cfg,plan,stage)):
+            raise ValueError('missing terminal parent task before replay migration')
+    solver_sources = ['src/inference/shared_driver_rk4.py','src/inference/t3a_balloon_robust_ssm.py']
+    for relative in solver_sources:
+        if (CODE_ROOT/relative).read_bytes() != (run/'source_snapshot'/relative).read_bytes():
+            raise ValueError('decay replay solver differs from immutable parent source')
+    out.mkdir()
+    runner_relative = 'experiments/scripts/evaluate_shared_driver_reconstruction.py'
+    snapshot = out/'source_snapshot'/runner_relative
+    snapshot.parent.mkdir(parents=True); shutil.copyfile(Path(__file__),snapshot)
+    migration = dict(schema='shared_driver_decay_replay_migration_v2',status='running',parent_run='..',
+        reason='v1_counterfactual_domain_failure_misclassified_valid_original_fit',
+        data_policy='exact_saved_fitted_arrays_only_no_refits_no_raw_reads',
+        parent_config='../resolved_config.yaml',parent_plan='../plan.json',
+        corrected_runner='source_snapshot/'+runner_relative,
+        parent_runner='../source_snapshot/'+runner_relative,
+        unchanged_solver_sources=['../source_snapshot/'+relative for relative in solver_sources],
+        solver_byte_equal_to_parent=True,command_argv=sys.argv,code_root=str(CODE_ROOT),
+        started_at=datetime.now(timezone.utc).isoformat(),task_overrides=[])
+    write_json(out/'migration.json',migration)
+    try:
+        for stage in ('pilot','synthetic','measured'):
+            for spec in decay_specs(cfg,plan,stage):
+                source = run/stage/(spec['key']+'.json')
+                if not source.is_file(): continue
+                task_bytes = source.read_bytes(); task = json.loads(task_bytes)
+                failed = [row for row in task['rows'] if row.get('software_error')]
+                if not failed: continue
+                if (len(failed) != 1 or failed[0]['arm'] != 'original'
+                        or 'decay_fixed_upstream_replays' not in failed[0].get('error','')
+                        or not failed[0]['error'].rstrip().endswith('FloatingPointError: invalid physical decay RK stage')):
+                    raise ValueError('unrecognized software failure; replay migration cannot repair fits')
+                row = failed[0]
+                if not row['converged'] or not row['integration_passed']:
+                    raise ValueError('replay migration cannot qualify an unconverged or integration-failed original fit')
+                selected = min((start for start in row['starts'] if start.get('converged')),
+                    key=lambda start:start['objective'])
+                if not np.isclose(selected['objective'],row['objective'],rtol=1e-12,atol=1e-10):
+                    raise ValueError('saved original selected-start objective mismatch')
+                arrays_path = source.with_suffix('.npz'); arrays_bytes = arrays_path.read_bytes()
+                with np.load(arrays_path,allow_pickle=False) as archive:
+                    original = {key:archive['original_'+key].copy()
+                        for key in ('driver','initial_state','states','prediction')}
+                    operator = archive['operator'].copy(); sd = archive['sd'].copy()
+                replay_arrays,audits = decay_fixed_upstream_replays(cfg,original,operator,sd)
+                np.testing.assert_allclose(replay_arrays['replay_original_states'],original['states'],rtol=0,atol=1e-12)
+                np.testing.assert_allclose(replay_arrays['replay_original_prediction'],original['prediction'],rtol=0,atol=1e-12)
+                row.update(legacy_error=row.pop('error'),legacy_fit_status=row['fit_status'],
+                    fit_status=selected['status'],software_error=False,
+                    qualified=bool(row['converged'] and row['integration_passed']),
+                    replay_migration=dict(source_task='../'+str(source.relative_to(run)),
+                        source_arrays='../'+str(arrays_path.relative_to(run)),no_refit=True),
+                    **decay_upstream_compensation(original['states'],original['states']))
+                task.update(schema='shared_driver_decay_task_evidence_v2',replay_audits=audits,
+                    legacy_status=task['status'],status='completed',software_errors=0,
+                    fit_arrays='../'+str(arrays_path.relative_to(run)),
+                    replay_arrays=str(arrays_path.relative_to(run)),evidence_migration='../migration.json')
+                destination = out/stage/(spec['key']+'.json'); destination.parent.mkdir(exist_ok=True)
+                np.savez_compressed(destination.with_suffix('.npz'),**replay_arrays)
+                write_json(destination,task)
+                if source.read_bytes() != task_bytes or arrays_path.read_bytes() != arrays_bytes:
+                    raise AssertionError('replay migration modified immutable parent evidence')
+                migration['task_overrides'].append(dict(stage=stage,key=spec['key'],
+                    task=str(destination.relative_to(out)),replay_arrays=str(destination.with_suffix('.npz').relative_to(out)),
+                    source_task='../'+str(source.relative_to(run)),fit_arrays='../'+str(arrays_path.relative_to(run)),
+                    original_fit_restored=True,fit_arrays_unchanged=True,
+                    replay_statuses={audit['arm']:audit['status'] for audit in audits}))
+        migration['stages'] = decay_summarize(cfg,out,plan,source_out=run)
+        migration.update(status='completed',completed_at=datetime.now(timezone.utc).isoformat(),
+            corrected_tasks=len(migration['task_overrides']),fitted_parameters_changed=0,refits=0)
+    except Exception:
+        migration.update(status='failed',error=traceback.format_exc())
+        raise
+    finally:
+        write_json(out/'migration.json',migration)
+    return migration
+
+
+def decay_main(args):
+    cfg = decay_config(args.config)
+    if args.check_only:
+        print(json.dumps(dict(experiment_id=cfg['experiment_id'],measured_arrays_read=0,config_valid=True,
+            pilot_tasks=4,synthetic_tasks=144,measured_tasks=288,arms=6)))
+        return
+    if args.run_dir is None:
+        raise ValueError('explicit decay run directory required')
+    root = args.project_root.resolve(); out = args.run_dir.resolve()
+    if out != root/cfg['output_root']/cfg['run_name']:
+        raise ValueError('decay diagnostic output namespace mismatch')
+    if args.decay_stage == 'replay-migrate':
+        plan = json.loads((out/'plan.json').read_text())
+        print(json.dumps(decay_replay_migrate(cfg,out,plan)))
+        return
+    out.mkdir(parents=True,exist_ok=True)
+    config_path = out/'resolved_config.yaml'
+    if config_path.exists() and yaml.safe_load(config_path.read_text()) != cfg:
+        raise ValueError('resume decay configuration mismatch')
+    if not config_path.exists():
+        config_path.write_text(yaml.safe_dump(cfg,sort_keys=False,allow_unicode=True))
+    plan = decay_plan(cfg,root)
+    if (out/'plan.json').exists() and json.loads((out/'plan.json').read_text()) != serial(plan):
+        raise ValueError('resume decay parent plan mismatch')
+    write_json(out/'plan.json',plan)
+    stage = args.decay_stage
+    if stage == 'check':
+        print(json.dumps(dict(experiment_id=cfg['experiment_id'],records=len(plan['records']),measured_arrays_read=0)))
+        return
+    if stage == 'summarize':
+        print(json.dumps(decay_summarize(cfg,out,plan)))
+        return
+    if stage == 'measured':
+        for spec in decay_specs(cfg,plan,'synthetic'):
+            path = out/'synthetic'/(spec['key']+'.json')
+            if not path.is_file() or json.loads(path.read_text())['status'] != 'completed':
+                raise ValueError('complete synthetic software controls required before measured array reads; nonconvergence is retained')
+    specs = decay_specs(cfg,plan,stage)
+    workers = min(args.workers,cfg['resources']['max_workers'],len(specs))
+    if workers < 1:
+        raise ValueError('positive worker count required')
+    folder = out/stage; folder.mkdir(exist_ok=True)
+    with (out/'run.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        pending = [spec for spec in specs if not (folder/(spec['key']+'.json')).exists()]
+        manifest = dict(schema='shared_driver_decay_stage_v1',stage=stage,status='running',planned=len(specs),
+            previous_terminal=len(specs)-len(pending),workers=workers,numerical_threads=1,
+            in_flight_limit=workers*cfg['resources']['in_flight_per_worker'],pid=os.getpid(),
+            code_root=str(CODE_ROOT),project_root=str(root),started_at=datetime.now(timezone.utc).isoformat())
+        write_json(out/(stage+'_manifest.json'),manifest)
+        completed = len(specs)-len(pending); iterator = iter(pending)
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            active = {}
+            def submit():
+                spec = next(iterator,None)
+                if spec is None: return False
+                active[pool.submit(decay_worker,(cfg,str(root),str(out),stage,spec))] = spec
+                return True
+            for _ in range(workers*cfg['resources']['in_flight_per_worker']):
+                if not submit(): break
+            while active:
+                done,_ = wait(active,return_when=FIRST_COMPLETED)
+                for future in done:
+                    spec = active.pop(future)
+                    try:
+                        result = future.result()
+                    except Exception:
+                        result = dict(schema='shared_driver_decay_task_v1',key=spec['key'],status='failed',
+                            spec=spec,rows=[],error=traceback.format_exc())
+                        write_json(folder/(spec['key']+'.json'),result)
+                    completed += 1
+                    print(json.dumps(dict(stage=stage,terminal=completed,total=len(specs),**result)),flush=True)
+                    write_json(out/'progress.json',dict(stage=stage,terminal=completed,total=len(specs),last=result))
+                    submit()
+        counts = decay_summarize(cfg,out,plan)[stage]
+        manifest.update(status='completed_with_software_errors' if counts['software_failed_tasks'] else 'completed',
+            terminal=completed,counts=counts,completed_at=datetime.now(timezone.utc).isoformat())
+        write_json(out/(stage+'_manifest.json'),manifest)
+    print(json.dumps(counts))
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config',type=Path,default=DEFAULT)
@@ -7589,6 +8225,8 @@ def main():
     ap.add_argument('--waveform-diagnostic',action='store_true')
     ap.add_argument('--volume-drive-diagnostic',action='store_true')
     ap.add_argument('--volume-stage',choices=['pilot','synthetic','linear','measured','summarize'],default='synthetic')
+    ap.add_argument('--decay-diagnostic',action='store_true')
+    ap.add_argument('--decay-stage',choices=['check','pilot','synthetic','measured','summarize','replay-migrate'],default='synthetic')
     ap.add_argument('--physiology-semantics',action='store_true')
     ap.add_argument('--teacher-robustness',action='store_true')
     ap.add_argument('--component-attribution',action='store_true')
@@ -7598,6 +8236,13 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.decay_diagnostic:
+        if any((args.volume_drive_diagnostic,args.component_attribution,args.teacher_robustness,args.physiology_semantics,
+                args.waveform_diagnostic,args.conditional_step_control,args.conditional_optical_gain_fit,
+                args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,
+                args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None)):
+            ap.error('decay diagnostic has a separate versioned contract')
+        return decay_main(args)
     if args.volume_drive_diagnostic:
         if any((args.component_attribution,args.teacher_robustness,args.physiology_semantics,args.waveform_diagnostic,
                 args.conditional_step_control,args.conditional_optical_gain_fit,args.fixed_roi_optical_fit,

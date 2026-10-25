@@ -1,0 +1,175 @@
+schema: shared_driver_decay_v1
+experiment_id: SSM-DECAY-v1
+seed: 20261023
+scope: exploratory_public_retained_continuous_record_reconstruction
+parents:
+- experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1
+- experiments/runs/physiology_semantic_tokenizer/ssm_output_support/20261013_refed_v2
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+run_name: 20261023_decay_v1
+data:
+  datasets:
+  - eeg_fnirs_single_trial
+  - simultaneous_eeg_nirs
+  - visual_cognitive_motivation
+  - refed
+  protected_data: forbidden
+  arrays: exact_parent_plan_prepared_and_training_coordinates_only
+  partition: parent_evaluation_all_records
+  expected_records: 48
+  raw_reads: false
+  labels_as_inputs: false
+tensor:
+  dt_s: 0.25
+  lengths_s:
+  - 30
+  - 90
+  slices:
+  - - 120
+    - 240
+  - - 0
+    - 360
+  components:
+  - EEG
+  - HbO
+  - HbR
+  reference_steps: 20
+  last_bin: excluded_from_fit_and_score_to_avoid_30s_interpolation_halo
+parameters:
+  tau: 2.0
+  kappa: 0.64
+  gamma: 0.32
+  alpha: 0.32
+  E0: 0.32
+  P0: 1.0
+  Q0: 0.35
+  neurovascular_gain: 1.0
+  policy: fixed_reference_in_all_fits
+decay:
+  equation: p_dot_equals_v_dot_minus_lambda_a_v_times_p_minus_v_plus_u_delta
+  a_v: v_power_one_over_alpha_minus_one_divided_by_tau
+  arms:
+  - name: original
+    multiplier: 1.0
+    input: false
+  - name: slow
+    multiplier: 0.1
+    input: false
+  - name: no_decay
+    multiplier: 0.0
+    input: false
+  - name: driven_original
+    multiplier: 1.0
+    input: true
+  - name: driven_slow
+    multiplier: 0.1
+    input: true
+  - name: driven_no_decay
+    multiplier: 0.0
+    input: true
+  upstream: unchanged_r_s_f_v_q_equations_and_observation_map
+  replay: original_fitted_driver_and_all_initial_states_fixed_no_input
+  replay_hbr_tolerance: 1.0e-10
+forcing:
+  modes:
+    30: 7
+    90: 19
+  basis: DC_plus_cosine_k_1_to_6_or_18_at_physical_time_plus_dt_over_two_continuous_RK_stages
+  units: state_per_second
+  prior_sd: 0.025
+  prior_weight: 1.0
+  prior: weight_times_dt_sum_u_squared_divided_by_sd_squared
+  normalization: none_no_length_or_lambda_specific_rescaling
+  prior_interpretation: engineering_input_energy_scale_not_physiological_noise_SD
+solver:
+  penalty: 0.01
+  initial_penalty: 100.0
+  flow_prior_weight: 1.0
+  flow_prior_log_sd: 0.6931471805599453
+  max_evaluations: 600
+  gradient_tolerance: 1.0e-05
+  substeps: 4
+  validation_substeps: 8
+  maximum_integration_difference_training_sd: 0.005
+  numerical_backend: numba
+  starts: rest_then_original_fit_and_rest_for_alternatives
+  initial_state: five_independent_physical_coordinates
+conditions:
+- joint_full
+- Hb_only_full
+- joint_blocked
+hidden:
+  block_s:
+  - - 10
+    - 15
+  - - 20
+    - 25
+  repeat_every_s: 30
+  components:
+  - HbO
+  - HbR
+  interpretation: within_record_offline_blocked_interpolation_not_future_prediction
+synthetic:
+  seeds:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  scenarios:
+  - matched
+  - original_transient
+  - slow_transient
+  - sustained_input
+  transient_delta0: 0.08
+  sustained_mode_90s: 9
+  sustained_amplitude_state_per_s: 0.012
+  amplitude_seed_relative_step: 0.03
+  noise_training_sd: 0.03
+  training_sd:
+  - 0.025
+  - 0.025
+  - 0.015
+  generation_substeps: 8
+  same_90s_driver_and_noise_within_seed: true
+  middle_30s_original_transient: post_decay_negative_control_not_a_fresh_initial_transient
+  truth_in_fitting: false
+endpoints:
+  primary: paired_full_Hb_NRMSE_original_minus_candidate_separate_length_dataset_and_condition
+  secondary:
+  - blocked_Hb_NRMSE
+  - HbO_NRMSE
+  - HbR_NRMSE
+  - first_5s
+  - next_5s
+  - ten_to_thirty_s
+  - middle_30s
+  - last_30s
+  - late_demeaned_error
+  diagnostic:
+  - fixed_band_error
+  - stable_transient_retention
+  - delta_and_input_recovery
+  - upstream_compensation
+  - numerical_failure
+  improvement_sign: reference_error_minus_candidate_error
+  normalization: exact_parent_training_SD_no_per_window_refit
+  aggregation: time_and_Hb_mean_NMSE_then_records_mean_within_subject_then_subject_mean_then_square_root
+  intervals: paired_whole_subject_bootstrap_95pct_percentile_conditional_on_frozen_training_coordinates
+  bootstrap_repeats: 2000
+  failure: all_planned_rows_retained_successful_pairs_and_full_failure_denominator
+  stopping: fixed_matrix_no_result_driven_expansion
+resources:
+  max_workers: 36
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  supervisor: user_systemd
+claim_limits:
+- fixed_parameter_conditional_reconstruction_not_physiological_parameter_recovery
+- no_decay_constant_raw_offset_may_cancel_under_referencing
+- stable_retention_is_hazard_exponential_not_ratio_of_cancellation_prone_observed_delta
+- sustained_input_adds_capacity_and_lower_error_does_not_identify_a_physiological_source
+- DC_plus_finite_cosine_input_is_band_limited_capacity_not_arbitrary_forcing
+- paired_windows_are_not_independent_subjects
+- public_development_reanalysis_not_unseen_confirmation

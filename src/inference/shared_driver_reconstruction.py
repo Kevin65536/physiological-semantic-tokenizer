@@ -4,6 +4,9 @@ Only the driver trajectory and five initial vascular coordinates are fitted.
 Vascular states have no per-sample innovations. Linear screening, fixed-driver
 nonlinear replay and nonlinear MAP-style fitting remain distinct diagnostics;
 none provides a calibrated SSM posterior or a physiological qualification.
+
+The explicit delta-decay intervention additionally supports fixed-bandwidth
+input forcing; it retains fixed physiology and has no added output component.
 """
 from __future__ import annotations
 
@@ -824,6 +827,261 @@ def fit_vascular_flow_relaxation(hb, parameters, dt, *, temporal_basis=None,
         by_chromophore=per_chromophore, physical_checks=forward['physical_checks'],
         integration=best['integration'],
         optimizer_status=attempts[best['start']]['status'])
+
+
+def _decay_trial_objective(x, parameters, dt, operator, y, mask, scale,
+                           regularizer, initial_weight, substeps, multiplier,
+                           forcing_regularizer, flow_weight, flow_log_sd, derivative):
+    """Visible-only objective with input forcing and unchanged baseline priors."""
+    from .shared_driver_rk4 import decay_forward
+
+    n, count = len(y), len(x)
+    with np.errstate(over='raise', invalid='raise', under='ignore'):
+        initial = np.r_[x[n], np.exp(x[n+1:n+5])]
+    forward = decay_forward(x[:n], initial, parameters, dt,
+        decay_multiplier=multiplier, forcing_coefficients=x[n+5:],
+        substeps=substeps, derivative=derivative)
+    clean = forward['canonical_prediction'].ravel()
+    prediction = (operator@clean if operator is not None else clean).reshape(y.shape)
+    data = (prediction[mask]-y[mask])/scale[mask]
+    curvature = regularizer@x
+    initial_residual = np.sqrt(initial_weight)*(initial-np.array([0., 1., 1., 1., 1.]))
+    residual = np.r_[data, curvature, initial_residual]
+    flow_residual, forcing_residual = np.empty(0), np.empty(0)
+    if flow_weight:
+        flow_factor = np.sqrt(flow_weight*dt)/flow_log_sd
+        flow = forward['states'][:, 2]
+        flow_residual = flow_factor*np.log(flow)
+        residual = np.r_[residual, flow_residual]
+    if forcing_regularizer.shape[1]:
+        forcing_residual = forcing_regularizer@x[n+5:]
+        residual = np.r_[residual, forcing_residual]
+    jacobian = None
+    if derivative:
+        jf = forward['jacobian']
+        jdata = ((operator@jf) if operator is not None else jf)[mask.ravel()]/scale[mask, None]
+        ji = np.zeros((5, count))
+        ji[:, n:n+5] = np.sqrt(initial_weight)*np.diag(np.r_[1., initial[1:]])
+        jacobian = np.vstack((jdata, regularizer, ji))
+        if flow_weight:
+            jacobian = np.vstack((jacobian, (flow_factor/flow)[:, None]*forward['flow_jacobian']))
+        if forcing_regularizer.shape[1]:
+            ju = np.zeros((len(forcing_residual), count))
+            ju[:, n+5:] = forcing_regularizer
+            jacobian = np.vstack((jacobian, ju))
+    if not np.isfinite(residual).all() or (derivative and not np.isfinite(jacobian).all()):
+        raise FloatingPointError('nonfinite decay objective')
+    costs = dict(weighted_data_sse=float(data@data), driver_curvature_cost=float(curvature@curvature),
+        initial_prior_cost=float(initial_residual@initial_residual),
+        flow_prior_cost=float(flow_residual@flow_residual),
+        forcing_prior_cost=float(forcing_residual@forcing_residual))
+    return dict(residual=residual, jacobian=jacobian, forward=forward, prediction=prediction,
+                initial=initial, costs=costs, objective=float(residual@residual))
+
+
+def fit_decay_shared_driver(target, parameters, dt, *, mean_operator=None, sd=None,
+        visible=None, decay_multiplier=1., forcing_modes=0, forcing_sd=.01,
+        forcing_weight=1., penalty=.01, initial_penalty=100., flow_prior_weight=1.,
+        flow_prior_log_sd=np.log(2), max_evaluations=600, gradient_tolerance=1e-5,
+        substeps=4, starts=None, return_jacobian=False):
+    """Fixed-physiology fit of a driver, five initial states and optional input.
+
+    The intervention is p_dot=v_dot-lambda*v**(1/alpha-1)*(p-v)/tau+u(t).
+    The finite input has M=forcing_modes, duration L=T*dt, frequencies
+    pi*k/L (k=0..M-1), and a fixed dt/2 phase. Its first coefficient is a
+    constant input; M=7/19 means DC plus 6/18 cosines for 30/90 s. It is
+    integrated continuously at RK stages. No output component or physiological
+    parameter is fitted. The same basis applies at every decay multiplier.
+    Input regularization is forcing_weight*dt*sum(u(t)**2)/forcing_sd**2 at
+    output times, including the initial time; coefficients have state/s units.
+    Driver curvature, physical initial-state and log-flow priors use precisely
+    the existing nonlinear objective conventions and stay the same for lambda.
+
+    Supplied starts require driver[T], physical initial_state[5], and, when
+    M>0, forcing_coefficients[M]. Only visible target values enter the fit.
+    Each start has a separate hard forward-evaluation budget. The same scaled
+    gradient criterion and damped Gauss--Newton steps as the baseline are used;
+    an exhausted budget or a small step cannot claim convergence. The caller
+    owns independent integration-resolution audits (for example 4/8 substeps).
+    """
+    parameters.validate()
+    y = np.asarray(target, float)
+    if y.ndim != 2 or y.shape[1] != 3 or len(y) < 3:
+        raise ValueError('target must be [T>=3,3]')
+    n = len(y)
+    if (isinstance(forcing_modes, (bool, np.bool_))
+            or not isinstance(forcing_modes, (int, np.integer)) or not 0 <= forcing_modes < n):
+        raise ValueError('forcing_modes must be an integer in [0,T)')
+    count = n+5+forcing_modes
+    if not np.isfinite(dt) or dt <= 0:
+        raise ValueError('dt must be finite and positive')
+    for name, value in (('substeps', substeps), ('max_evaluations', max_evaluations)):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < 1:
+            raise ValueError(name+' must be a positive integer')
+    if (not np.isfinite([decay_multiplier, forcing_sd, forcing_weight, penalty,
+            initial_penalty, flow_prior_weight, flow_prior_log_sd, gradient_tolerance]).all()
+            or min(decay_multiplier, forcing_weight, penalty, initial_penalty, flow_prior_weight) < 0
+            or min(forcing_sd, flow_prior_log_sd, gradient_tolerance) <= 0):
+        raise ValueError('invalid decay multiplier, regularization, scales or gradient tolerance')
+    mask = np.isfinite(y) if visible is None else np.asarray(visible)
+    if mask.shape != y.shape or mask.dtype != np.bool_ or not mask.any():
+        raise ValueError('visible must be nonempty boolean [T,3]')
+    if not np.isfinite(y[mask]).all() or (visible is None and np.isinf(y).any()):
+        raise ValueError('visible target values must be finite')
+    scale = np.ones_like(y) if sd is None else np.asarray(sd, float)
+    if scale.shape == (3,):
+        scale = np.broadcast_to(scale, y.shape)
+    if scale.shape != y.shape or not np.isfinite(scale).all() or np.any(scale <= 0):
+        raise ValueError('sd must be finite positive [3] or [T,3]')
+    operator = None if mean_operator is None else np.asarray(mean_operator, float)
+    if operator is not None and (operator.shape != (3*n, 3*n) or not np.isfinite(operator).all()):
+        raise ValueError('mean_operator must be finite [3T,3T]')
+    curvature = np.zeros((n-2, count))
+    curvature[:, :n] = np.diff(np.eye(n), n=2, axis=0)/dt**1.5
+    regularizer = np.sqrt(penalty)*curvature
+    basis = np.cos(np.pi*(np.arange(n)[:, None]+.5)*np.arange(forcing_modes)/n)
+    forcing_regularizer = np.sqrt(forcing_weight*dt)/forcing_sd*basis
+    starts = ([dict(driver=np.zeros(n), initial_state=np.array([0., 1., 1., 1., 1.]),
+                    forcing_coefficients=np.zeros(forcing_modes))]
+              if starts is None else list(starts))
+    if not starts:
+        raise ValueError('at least one start is required')
+
+    def evaluate(x, derivative):
+        return _decay_trial_objective(x, parameters, dt, operator, y, mask, scale,
+            regularizer, initial_penalty, substeps, decay_multiplier, forcing_regularizer,
+            flow_prior_weight, flow_prior_log_sd, derivative)
+
+    attempts, candidates = [], []
+    for index, start in enumerate(starts):
+        if (not isinstance(start, dict) or 'driver' not in start or 'initial_state' not in start
+                or (forcing_modes and 'forcing_coefficients' not in start)):
+            raise ValueError('each start requires driver, initial_state and enabled forcing_coefficients')
+        r0, i0 = np.asarray(start['driver'], float), np.asarray(start['initial_state'], float)
+        c0 = np.asarray(start.get('forcing_coefficients', np.empty(0)), float)
+        if (r0.shape != (n,) or i0.shape != (5,) or c0.shape != (forcing_modes,)
+                or not np.isfinite(r0).all() or not np.isfinite(i0).all() or not np.isfinite(c0).all()):
+            raise ValueError('start requires finite driver[T], initial_state[5], forcing_coefficients[M]')
+        evaluations, rejections, iterations = 0, 0, 0
+        domain_rejections, nondecreasing_rejections, derivative_rejections = 0, 0, 0
+        record = dict(start=index, converged=False, status='infeasible_initial', evaluations=0,
+            rejected_steps=0, domain_rejections=0, nondecreasing_rejections=0,
+            derivative_rejections=0, iterations=0)
+        try:
+            _require_nonlinear_domain(i0, parameters)
+            x = np.r_[r0, i0[0], np.log(i0[1:]), c0]
+            evaluations += 1
+            current = evaluate(x, True)
+        except (FloatingPointError, OverflowError, ValueError) as exc:
+            record.update(evaluations=evaluations, error=repr(exc))
+            attempts.append(record)
+            continue
+        damping, reason, converged = 1e-5, 'evaluation_budget', False
+        while True:
+            jac, residual = current['jacobian'], current['residual']
+            gradient = jac.T@residual
+            gram = jac.T@jac
+            diagonal = np.maximum(np.diag(gram), 1.)
+            gradient_inf = float(2*np.max(np.abs(gradient)))
+            scaled_gradient = float(np.max(np.abs(gradient)/np.sqrt(diagonal)))
+            if scaled_gradient <= gradient_tolerance:
+                converged, reason = True, 'scaled_gradient'
+                break
+            if evaluations+2 > max_evaluations:
+                break
+            iterations += 1
+            try:
+                delta = cho_solve(cho_factor(gram+damping*np.diag(diagonal), lower=True), -gradient)
+            except np.linalg.LinAlgError:
+                damping *= 10
+                if damping > 1e16:
+                    reason = 'singular_step'
+                    break
+                continue
+            accepted = False
+            for power in range(20):
+                if evaluations+2 > max_evaluations:
+                    break
+                fraction = 2.**(-power)
+                trial_x = x+fraction*delta
+                evaluations += 1
+                try:
+                    trial = evaluate(trial_x, False)
+                except (FloatingPointError, OverflowError, ValueError):
+                    rejections += 1
+                    domain_rejections += 1
+                    continue
+                armijo = current['objective']+2e-4*fraction*float(gradient@delta)
+                if trial['objective'] <= armijo and trial['objective'] < current['objective']:
+                    evaluations += 1
+                    try:
+                        differentiated = evaluate(trial_x, True)
+                    except (FloatingPointError, OverflowError, ValueError):
+                        rejections += 1
+                        derivative_rejections += 1
+                        continue
+                    x, current = trial_x, differentiated
+                    damping = max(damping/3, 1e-12)
+                    accepted = True
+                    break
+                rejections += 1
+                nondecreasing_rejections += 1
+            if not accepted:
+                if evaluations+2 > max_evaluations:
+                    reason = 'evaluation_budget'
+                    break
+                damping *= 10
+                if damping > 1e12 or np.linalg.norm(delta) <= 1e-12*(1+np.linalg.norm(x)):
+                    reason = 'stagnation_without_gradient_convergence'
+                    break
+        record.update(status='completed' if converged else 'failed_numerical',
+            converged=converged, convergence_reason=reason, objective=current['objective'],
+            gradient_inf_norm=gradient_inf, scaled_gradient_inf_norm=scaled_gradient,
+            evaluations=evaluations, rejected_steps=rejections, iterations=iterations,
+            domain_rejections=domain_rejections, nondecreasing_rejections=nondecreasing_rejections,
+            derivative_rejections=derivative_rejections)
+        attempts.append(record)
+        candidates.append((record, x, current))
+    common = dict(starts=attempts, evaluations=sum(a['evaluations'] for a in attempts),
+        rejected_steps=sum(a['rejected_steps'] for a in attempts),
+        domain_rejections=sum(a['domain_rejections'] for a in attempts),
+        nondecreasing_rejections=sum(a['nondecreasing_rejections'] for a in attempts),
+        derivative_rejections=sum(a['derivative_rejections'] for a in attempts),
+        decay_multiplier=float(decay_multiplier), forcing_modes=int(forcing_modes),
+        forcing_sd=float(forcing_sd), forcing_weight=float(forcing_weight),
+        penalty=float(penalty), initial_penalty=float(initial_penalty),
+        flow_prior_weight=float(flow_prior_weight), flow_prior_log_sd=float(flow_prior_log_sd),
+        visible_count=int(mask.sum()), total_free_parameters=count, substeps=int(substeps),
+        parameter_inference='fixed_parameters_no_posterior', uncertainty='NOT_ESTIMATED')
+    if not candidates:
+        return dict(common, status='failed_domain', converged=False)
+    converged_candidates = [candidate for candidate in candidates if candidate[0]['converged']]
+    record, x, best = min(converged_candidates or candidates, key=lambda candidate: candidate[0]['objective'])
+    forward = best['forward']
+    states = forward['states']
+    difference = best['prediction'][mask]-y[mask]
+    objective_gradient = 2*best['jacobian'].T@best['residual']
+    result = dict(common, status=record['status'], converged=record['converged'],
+        convergence_reason=record['convergence_reason'], selected_start=record['start'],
+        objective=best['objective'], costs=best['costs'], objective_components=best['costs'],
+        **best['costs'], gradient=objective_gradient, objective_gradient=objective_gradient,
+        gradient_inf_norm=record['gradient_inf_norm'], scaled_gradient_inf_norm=record['scaled_gradient_inf_norm'],
+        prediction=best['prediction'], physical_prediction=best['prediction'],
+        canonical_prediction=forward['canonical_prediction'], driver=x[:n].copy(),
+        initial_state=best['initial'], states=states, forcing_coefficients=x[n+5:].copy(),
+        forcing=forward['forcing'], forcing_basis=forward['forcing_basis'],
+        forcing_angular_frequencies=forward['forcing_angular_frequencies'],
+        forcing_phase_s=forward['forcing_phase_s'], forcing_duration_s=forward['forcing_duration_s'],
+        retention_integral=forward['retention_integral'], decay_retention=forward['decay_retention'],
+        roughness=float(np.sum((curvature@x)**2)), data_sse=float(difference@difference),
+        state_ranges=dict(minimum=states.min(axis=0), maximum=states.max(axis=0)),
+        physical_checks=dict(all_intermediate_valid=True, completed_samples=n, requested_samples=n,
+            completed_states=dict(core.run_physical_checks(states, parameters)), substeps=int(substeps),
+            dt=float(dt), integrator='classical_RK4_physical_coordinates_ZOH_driver_continuous_cosine_input'))
+    if return_jacobian:
+        result.update(canonical_jacobian=forward['jacobian'], residual_jacobian=best['jacobian'],
+                      residual=best['residual'])
+    return result
 
 
 def _volume_tied_initial_embedding(steps):

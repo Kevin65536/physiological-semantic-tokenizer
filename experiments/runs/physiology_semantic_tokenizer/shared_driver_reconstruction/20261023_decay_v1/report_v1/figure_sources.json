@@ -1,0 +1,1253 @@
+{
+  "figures": [
+    {
+      "file": "formulas/decay_dynamics.png",
+      "caption": "decay_dynamics",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "formulas/unforced_solution.png",
+      "caption": "unforced_solution",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "formulas/observation_mapping.png",
+      "caption": "observation_mapping",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "formulas/actual_input.png",
+      "caption": "actual_input",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "formulas/score_definition.png",
+      "caption": "score_definition",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "figures/retention.png",
+      "caption": "保留率由保存的累计衰减积分计算，不用易受抵消影响的两个状态差数值相除；每个点是记录中位数，不是置信区间。",
+      "source": "measured/*_90_joint_full.npz: *_retention_integral, *_decay_retention"
+    },
+    {
+      "file": "figures/synthetic.png",
+      "caption": "每种情形6个生成种子；柱为90秒联合完整拟合的观测误差。真值只用于生成与评分，拟合不可见；其余长度/条件见完整metrics.csv。",
+      "source": "synthetic/*.json/npz; metrics.csv stage=synthetic"
+    },
+    {
+      "file": "figures/joint_full.png",
+      "caption": "同页四数据集使用统一纵轴；六色定义在全报告保持一致。完整条件评分全窗，遮挡条件仅评分隐藏Hb；SD均来自冻结训练数据。",
+      "source": "metrics.csv stage=measured condition=joint_full; summary.json groups/paired"
+    },
+    {
+      "file": "figures/Hb_only_full.png",
+      "caption": "同页四数据集使用统一纵轴；六色定义在全报告保持一致。完整条件评分全窗，遮挡条件仅评分隐藏Hb；SD均来自冻结训练数据。",
+      "source": "metrics.csv stage=measured condition=Hb_only_full; summary.json groups/paired"
+    },
+    {
+      "file": "figures/joint_blocked.png",
+      "caption": "同页四数据集使用统一纵轴；六色定义在全报告保持一致。完整条件评分全窗，遮挡条件仅评分隐藏Hb；SD均来自冻结训练数据。",
+      "source": "metrics.csv stage=measured condition=joint_blocked; summary.json groups/paired"
+    },
+    {
+      "file": "figures/time_support.png",
+      "caption": "左图按时间段分别计算误差，不在各段重估SD。右图只评分两种拟合都覆盖的同一119个时间点，并在每条记录、每个Hb内去残差均值。各数据集被试等权；详细逐数据集比较在下表。",
+      "source": "measured/*.npz target/predictions/sd; matched original center indices"
+    },
+    {
+      "file": "formulas/reference_offset.png",
+      "caption": "reference_offset",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "figures/example_eeg_fnirs_single_trial.png",
+      "caption": "左列：目标与六臂完整预测、相应状态差；右列：固定上游、无输入的三种衰减率重放。实线为无输入，虚线为有输入；右下为对数轴。每行两图的物理量不同，纵轴依单位独立标明；HbR重放重合故不重复画。",
+      "source": "measured/eeg_fnirs_single_trial__subject_07__prefrontal__r0_90_joint_full.json/.npz"
+    },
+    {
+      "file": "figures/example_simultaneous_eeg_nirs.png",
+      "caption": "左列：目标与六臂完整预测、相应状态差；右列：固定上游、无输入的三种衰减率重放。实线为无输入，虚线为有输入；右下为对数轴。每行两图的物理量不同，纵轴依单位独立标明；HbR重放重合故不重复画。",
+      "source": "measured/simultaneous_eeg_nirs__VP004__prefrontal__r0_90_joint_full.json/.npz"
+    },
+    {
+      "file": "figures/example_visual_cognitive_motivation.png",
+      "caption": "左列：目标与六臂完整预测、相应状态差；右列：固定上游、无输入的三种衰减率重放。实线为无输入，虚线为有输入；右下为对数轴。每行两图的物理量不同，纵轴依单位独立标明；HbR重放重合故不重复画。",
+      "source": "measured/visual_cognitive_motivation__S08__prefrontal__montage0__r0_90_joint_full.json/.npz"
+    },
+    {
+      "file": "figures/example_refed.png",
+      "caption": "左列：目标与六臂完整预测、相应状态差；右列：固定上游、无输入的三种衰减率重放。实线为无输入，虚线为有输入；右下为对数轴。每行两图的物理量不同，纵轴依单位独立标明；HbR重放重合故不重复画。",
+      "source": "measured/refed__14__prefrontal__r0_90_joint_full.json/.npz"
+    }
+  ],
+  "examples": [
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "key": "eeg_fnirs_single_trial__subject_07__prefrontal__r0_90_joint_full",
+      "denominator": 12,
+      "selection": "upper median by original 90s joint_full full_hb_nmse; lexical key tie-break",
+      "identity": {
+        "id": "eeg_fnirs_single_trial__subject_07__prefrontal__r0",
+        "dataset": "eeg_fnirs_single_trial",
+        "subject": "subject_07",
+        "task": "motor_imagery",
+        "anchor": {
+          "region": "prefrontal",
+          "hb_pair": 0,
+          "hb_channel": "AF7Fp1",
+          "eeg_indices": [
+            1,
+            3,
+            0,
+            2,
+            4,
+            8
+          ],
+          "eeg_channels": [
+            "AFF5h",
+            "AFp1",
+            "F7",
+            "F3",
+            "AFp2",
+            "AFF1h"
+          ],
+          "hb_geometry": {
+            "schema": "canonical_channel_geometry_v1",
+            "channel_name": "AF7Fp1_HbO",
+            "base_channel_name": "AF7Fp1",
+            "component": "HbO",
+            "modality": "fnirs",
+            "x": -0.4539841719334849,
+            "y": 0.8910097469002305,
+            "z": 5.062267751265442e-05,
+            "coordinate_system": "dataset_mnt_pos_3d",
+            "coordinate_units": "normalized_head_unit",
+            "source_index": 2,
+            "detector_index": 1,
+            "position_available": true,
+            "coordinate_status": "source_geometry",
+            "measured_subject_coordinate": null,
+            "intended_use": null,
+            "source_file": "data/EEG+NIRS Single-Trial/NIRS_01-29/subject 07/mnt.mat"
+          },
+          "eeg_geometry": [
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "AFF5h",
+              "base_channel_name": "AFF5h",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.5417,
+              "y": 0.7777,
+              "z": 0.3163,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/EEG+NIRS Single-Trial/EEG_01-29/subject 07/mnt_artifact.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "AFp1",
+              "base_channel_name": "AFp1",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.1287,
+              "y": 0.9743,
+              "z": 0.1828,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/EEG+NIRS Single-Trial/EEG_01-29/subject 07/mnt_artifact.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "F7",
+              "base_channel_name": "F7",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.809,
+              "y": 0.5878,
+              "z": 0.0,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/EEG+NIRS Single-Trial/EEG_01-29/subject 07/mnt_artifact.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "F3",
+              "base_channel_name": "F3",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.5399,
+              "y": 0.6726,
+              "z": 0.5043,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/EEG+NIRS Single-Trial/EEG_01-29/subject 07/mnt_artifact.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "AFp2",
+              "base_channel_name": "AFp2",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": 0.1287,
+              "y": 0.9743,
+              "z": 0.1828,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/EEG+NIRS Single-Trial/EEG_01-29/subject 07/mnt_artifact.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "AFF1h",
+              "base_channel_name": "AFF1h",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.122,
+              "y": 0.8289,
+              "z": 0.5452,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/EEG+NIRS Single-Trial/EEG_01-29/subject 07/mnt_artifact.mat"
+            }
+          ],
+          "spatial_claim": "registered_dataset_geometry_not_individual_source_localization"
+        }
+      }
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "key": "simultaneous_eeg_nirs__VP004__prefrontal__r0_90_joint_full",
+      "denominator": 12,
+      "selection": "upper median by original 90s joint_full full_hb_nmse; lexical key tie-break",
+      "identity": {
+        "id": "simultaneous_eeg_nirs__VP004__prefrontal__r0",
+        "dataset": "simultaneous_eeg_nirs",
+        "subject": "VP004",
+        "task": "wg",
+        "anchor": {
+          "region": "prefrontal",
+          "hb_pair": 2,
+          "hb_channel": "AFp7",
+          "eeg_indices": [
+            0,
+            1,
+            2,
+            3,
+            16,
+            4
+          ],
+          "eeg_channels": [
+            "Fp1",
+            "AFF5h",
+            "AFz",
+            "F1",
+            "Fp2",
+            "FC5"
+          ],
+          "hb_geometry": {
+            "schema": "canonical_channel_geometry_v1",
+            "channel_name": "AFp7_HbO",
+            "base_channel_name": "AFp7",
+            "component": "HbO",
+            "modality": "fnirs",
+            "x": -0.454,
+            "y": 0.891,
+            "z": 0.0,
+            "coordinate_system": "dataset_mnt_pos_3d",
+            "coordinate_units": "normalized_head_unit",
+            "source_index": null,
+            "detector_index": null,
+            "position_available": true,
+            "coordinate_status": "source_geometry",
+            "measured_subject_coordinate": null,
+            "intended_use": null,
+            "source_file": "data/Simultaneous EEG&NIRS/VP004-NIRS/mnt_wg.mat"
+          },
+          "eeg_geometry": [
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "Fp1",
+              "base_channel_name": "Fp1",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.309,
+              "y": 0.9511,
+              "z": 0.0001,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/Simultaneous EEG&NIRS/VP004-EEG/mnt_wg.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "AFF5h",
+              "base_channel_name": "AFF5h",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.5417,
+              "y": 0.7777,
+              "z": 0.3163,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/Simultaneous EEG&NIRS/VP004-EEG/mnt_wg.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "AFz",
+              "base_channel_name": "AFz",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.0,
+              "y": 0.923,
+              "z": 0.3824,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/Simultaneous EEG&NIRS/VP004-EEG/mnt_wg.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "F1",
+              "base_channel_name": "F1",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.2888,
+              "y": 0.6979,
+              "z": 0.6542,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/Simultaneous EEG&NIRS/VP004-EEG/mnt_wg.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "Fp2",
+              "base_channel_name": "Fp2",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": 0.3091,
+              "y": 0.9511,
+              "z": 0.0,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/Simultaneous EEG&NIRS/VP004-EEG/mnt_wg.mat"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "FC5",
+              "base_channel_name": "FC5",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.8709,
+              "y": 0.3373,
+              "z": 0.3549,
+              "coordinate_system": "dataset_mnt_pos_3d",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/Simultaneous EEG&NIRS/VP004-EEG/mnt_wg.mat"
+            }
+          ],
+          "spatial_claim": "registered_dataset_geometry_not_individual_source_localization"
+        }
+      }
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "key": "visual_cognitive_motivation__S08__prefrontal__montage0__r0_90_joint_full",
+      "denominator": 12,
+      "selection": "upper median by original 90s joint_full full_hb_nmse; lexical key tie-break",
+      "identity": {
+        "id": "visual_cognitive_motivation__S08__prefrontal__montage0__r0",
+        "dataset": "visual_cognitive_motivation",
+        "subject": "S08",
+        "task": "visual_cognitive_motivation",
+        "anchor": {
+          "region": "prefrontal",
+          "hb_pair": 6,
+          "hb_channel": "CH7",
+          "eeg_indices": [
+            2,
+            0,
+            4,
+            14,
+            28,
+            16
+          ],
+          "eeg_channels": [
+            "AF3",
+            "Fp1",
+            "F3",
+            "F5",
+            "Fz",
+            "F7"
+          ],
+          "hb_geometry": {
+            "schema": "canonical_channel_geometry_v1",
+            "channel_name": "CH7_HbO",
+            "base_channel_name": "CH7",
+            "component": "HbO",
+            "modality": "fnirs",
+            "x": 0.885,
+            "y": 0.376,
+            "z": 0.276,
+            "coordinate_system": "referenced_visual_eeg_head_coordinates",
+            "coordinate_units": "normalized_head_unit",
+            "source_index": null,
+            "detector_index": null,
+            "position_available": true,
+            "coordinate_status": "graphical_template_eeg_anchor",
+            "measured_subject_coordinate": false,
+            "intended_use": "within_fnirs_adjacency_and_coarse_eeg_fnirs_alignment_only",
+            "source_file": "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/Graphical_recording_head_model.pdf"
+          },
+          "eeg_geometry": [
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "AF3",
+              "base_channel_name": "AF3",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": 0.885,
+              "y": 0.376,
+              "z": 0.276,
+              "coordinate_system": "EEGLAB_CED_cartesian",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/Location.ced"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "Fp1",
+              "base_channel_name": "Fp1",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": 0.95,
+              "y": 0.309,
+              "z": -0.0349,
+              "coordinate_system": "EEGLAB_CED_cartesian",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/Location.ced"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "F3",
+              "base_channel_name": "F3",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": 0.673,
+              "y": 0.545,
+              "z": 0.5,
+              "coordinate_system": "EEGLAB_CED_cartesian",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/Location.ced"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "F5",
+              "base_channel_name": "F5",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": 0.634,
+              "y": 0.729,
+              "z": 0.259,
+              "coordinate_system": "EEGLAB_CED_cartesian",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/Location.ced"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "Fz",
+              "base_channel_name": "Fz",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": 0.719,
+              "y": -0.0,
+              "z": 0.695,
+              "coordinate_system": "EEGLAB_CED_cartesian",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/Location.ced"
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "F7",
+              "base_channel_name": "F7",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": 0.587,
+              "y": 0.809,
+              "z": -0.0349,
+              "coordinate_system": "EEGLAB_CED_cartesian",
+              "coordinate_units": "normalized_head_unit",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "source_geometry",
+              "measured_subject_coordinate": null,
+              "intended_use": null,
+              "source_file": "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/Location.ced"
+            }
+          ],
+          "spatial_claim": "coarse_template"
+        }
+      }
+    },
+    {
+      "dataset": "refed",
+      "key": "refed__14__prefrontal__r0_90_joint_full",
+      "denominator": 12,
+      "selection": "upper median by original 90s joint_full full_hb_nmse; lexical key tie-break",
+      "identity": {
+        "id": "refed__14__prefrontal__r0",
+        "dataset": "refed",
+        "subject": "14",
+        "task": "emotion_video",
+        "anchor": {
+          "region": "prefrontal",
+          "hb_pair": 48,
+          "hb_channel": "CH49",
+          "eeg_indices": [
+            0,
+            3,
+            1,
+            7,
+            8,
+            6
+          ],
+          "eeg_channels": [
+            "FP1",
+            "AF3",
+            "FPZ",
+            "F3",
+            "F1",
+            "F5"
+          ],
+          "hb_geometry": {
+            "schema": "canonical_channel_geometry_v1",
+            "channel_name": "CH49_HbO",
+            "base_channel_name": "CH49",
+            "component": "HbO",
+            "modality": "fnirs",
+            "x": -0.25630142927165217,
+            "y": 0.8130932310063512,
+            "z": 0.0,
+            "coordinate_system": "refed_paper_layout_2d_v1",
+            "coordinate_units": "normalized_figure_radius",
+            "source_index": 5,
+            "detector_index": 6,
+            "position_available": true,
+            "coordinate_status": "paper_figure_optode_midpoint_2d",
+            "measured_subject_coordinate": false,
+            "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+            "source_file": "src/data/assets/refed_paper_layout_v1.json",
+            "metadata": {
+              "geometry_version": "refed_paper_layout_v1",
+              "source": {
+                "url": "https://proceedings.neurips.cc/paper_files/paper/2025/file/2bf0ed7c35d9d84128e7f7c72ab76402-Paper-Datasets_and_Benchmarks_Track.pdf",
+                "pdf_sha256": "f656f10271c953bb00db1036a310fc4c82eb0afebdbeaa61d18fec21e1e32ce8",
+                "page_1based": 5,
+                "figure": "2",
+                "extraction": "PyMuPDF vector drawing circle bounding-box midpoints and nearest PDF text labels. All spatial positions use the left combined EEG/fNIRS panel. Channel/source/detector incidence was independently recovered from right-inset yellow segment endpoints and black numbered labels before CSV comparison."
+              },
+              "source_files": {
+                "layout": "src/data/assets/refed_paper_layout_v1.json",
+                "eeg_channels": "data/REFED-dataset/EEG_channels.csv",
+                "native_fnirs_coordinates": "data/REFED-dataset/fNIRS_coordinates.csv"
+              },
+              "normalization": {
+                "center_page_pt": [
+                  248.02381896972656,
+                  151.20818328857422
+                ],
+                "radius_page_pt": 68.89944839477539,
+                "x_positive": "figure_right",
+                "y_positive": "figure_anterior",
+                "head_drawing_index": 110
+              },
+              "spatial_dimension": 2,
+              "z_meaning": "planar_embedding_not_measured_depth",
+              "measured_subject_coordinate": false,
+              "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+              "prohibited_interpretation": "individual_3d_registration_mm_distance_cortical_location_or_optical_sensitivity",
+              "reference_electrode": {
+                "channel_name": "AFZ",
+                "center_page_pt": [
+                  248.1295623779297,
+                  108.26562881469727
+                ],
+                "drawing_index": 163
+              },
+              "center_page_pt": [
+                230.3647918701172,
+                95.18650817871094
+              ],
+              "coordinate_status": "paper_figure_optode_midpoint_2d",
+              "source_marker": {
+                "index": 5,
+                "center_page_pt": [
+                  231.6324462890625,
+                  101.78358459472656
+                ],
+                "drawing_index": 245
+              },
+              "detector_marker": {
+                "index": 6,
+                "center_page_pt": [
+                  229.09713745117188,
+                  88.58943176269531
+                ],
+                "drawing_index": 244
+              },
+              "native_geometry": {
+                "coordinate_system": "dataset_head_coordinates",
+                "coordinate_units": "unknown_native",
+                "x": 29.0,
+                "y": -106.5,
+                "z": 32.9
+              }
+            }
+          },
+          "eeg_geometry": [
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "FP1",
+              "base_channel_name": "FP1",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.25434279631285794,
+              "y": 0.8114235539897762,
+              "z": 0.0,
+              "coordinate_system": "refed_paper_layout_2d_v1",
+              "coordinate_units": "normalized_figure_radius",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "paper_figure_digitized_2d",
+              "measured_subject_coordinate": false,
+              "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+              "source_file": "src/data/assets/refed_paper_layout_v1.json",
+              "metadata": {
+                "geometry_version": "refed_paper_layout_v1",
+                "source": {
+                  "url": "https://proceedings.neurips.cc/paper_files/paper/2025/file/2bf0ed7c35d9d84128e7f7c72ab76402-Paper-Datasets_and_Benchmarks_Track.pdf",
+                  "pdf_sha256": "f656f10271c953bb00db1036a310fc4c82eb0afebdbeaa61d18fec21e1e32ce8",
+                  "page_1based": 5,
+                  "figure": "2",
+                  "extraction": "PyMuPDF vector drawing circle bounding-box midpoints and nearest PDF text labels. All spatial positions use the left combined EEG/fNIRS panel. Channel/source/detector incidence was independently recovered from right-inset yellow segment endpoints and black numbered labels before CSV comparison."
+                },
+                "source_files": {
+                  "layout": "src/data/assets/refed_paper_layout_v1.json",
+                  "eeg_channels": "data/REFED-dataset/EEG_channels.csv",
+                  "native_fnirs_coordinates": "data/REFED-dataset/fNIRS_coordinates.csv"
+                },
+                "normalization": {
+                  "center_page_pt": [
+                    248.02381896972656,
+                    151.20818328857422
+                  ],
+                  "radius_page_pt": 68.89944839477539,
+                  "x_positive": "figure_right",
+                  "y_positive": "figure_anterior",
+                  "head_drawing_index": 110
+                },
+                "spatial_dimension": 2,
+                "z_meaning": "planar_embedding_not_measured_depth",
+                "measured_subject_coordinate": false,
+                "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+                "prohibited_interpretation": "individual_3d_registration_mm_distance_cortical_location_or_optical_sensitivity",
+                "reference_electrode": {
+                  "channel_name": "AFZ",
+                  "center_page_pt": [
+                    248.1295623779297,
+                    108.26562881469727
+                  ],
+                  "drawing_index": 163
+                },
+                "center_page_pt": [
+                  230.49974060058594,
+                  95.30154800415039
+                ],
+                "coordinate_status": "paper_figure_digitized_2d",
+                "figure_marker": {
+                  "channel_name": "FP1",
+                  "center_page_pt": [
+                    230.49974060058594,
+                    95.30154800415039
+                  ],
+                  "drawing_index": 206
+                }
+              }
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "AF3",
+              "base_channel_name": "AF3",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.2332148516156701,
+              "y": 0.6184798259864019,
+              "z": 0.0,
+              "coordinate_system": "refed_paper_layout_2d_v1",
+              "coordinate_units": "normalized_figure_radius",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "paper_figure_digitized_2d",
+              "measured_subject_coordinate": false,
+              "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+              "source_file": "src/data/assets/refed_paper_layout_v1.json",
+              "metadata": {
+                "geometry_version": "refed_paper_layout_v1",
+                "source": {
+                  "url": "https://proceedings.neurips.cc/paper_files/paper/2025/file/2bf0ed7c35d9d84128e7f7c72ab76402-Paper-Datasets_and_Benchmarks_Track.pdf",
+                  "pdf_sha256": "f656f10271c953bb00db1036a310fc4c82eb0afebdbeaa61d18fec21e1e32ce8",
+                  "page_1based": 5,
+                  "figure": "2",
+                  "extraction": "PyMuPDF vector drawing circle bounding-box midpoints and nearest PDF text labels. All spatial positions use the left combined EEG/fNIRS panel. Channel/source/detector incidence was independently recovered from right-inset yellow segment endpoints and black numbered labels before CSV comparison."
+                },
+                "source_files": {
+                  "layout": "src/data/assets/refed_paper_layout_v1.json",
+                  "eeg_channels": "data/REFED-dataset/EEG_channels.csv",
+                  "native_fnirs_coordinates": "data/REFED-dataset/fNIRS_coordinates.csv"
+                },
+                "normalization": {
+                  "center_page_pt": [
+                    248.02381896972656,
+                    151.20818328857422
+                  ],
+                  "radius_page_pt": 68.89944839477539,
+                  "x_positive": "figure_right",
+                  "y_positive": "figure_anterior",
+                  "head_drawing_index": 110
+                },
+                "spatial_dimension": 2,
+                "z_meaning": "planar_embedding_not_measured_depth",
+                "measured_subject_coordinate": false,
+                "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+                "prohibited_interpretation": "individual_3d_registration_mm_distance_cortical_location_or_optical_sensitivity",
+                "reference_electrode": {
+                  "channel_name": "AFZ",
+                  "center_page_pt": [
+                    248.1295623779297,
+                    108.26562881469727
+                  ],
+                  "drawing_index": 163
+                },
+                "center_page_pt": [
+                  231.9554443359375,
+                  108.59526443481445
+                ],
+                "coordinate_status": "paper_figure_digitized_2d",
+                "figure_marker": {
+                  "channel_name": "AF3",
+                  "center_page_pt": [
+                    231.9554443359375,
+                    108.59526443481445
+                  ],
+                  "drawing_index": 242
+                }
+              }
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "FPZ",
+              "base_channel_name": "FPZ",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": 0.001534749706517875,
+              "y": 0.8473214714307615,
+              "z": 0.0,
+              "coordinate_system": "refed_paper_layout_2d_v1",
+              "coordinate_units": "normalized_figure_radius",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "paper_figure_digitized_2d",
+              "measured_subject_coordinate": false,
+              "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+              "source_file": "src/data/assets/refed_paper_layout_v1.json",
+              "metadata": {
+                "geometry_version": "refed_paper_layout_v1",
+                "source": {
+                  "url": "https://proceedings.neurips.cc/paper_files/paper/2025/file/2bf0ed7c35d9d84128e7f7c72ab76402-Paper-Datasets_and_Benchmarks_Track.pdf",
+                  "pdf_sha256": "f656f10271c953bb00db1036a310fc4c82eb0afebdbeaa61d18fec21e1e32ce8",
+                  "page_1based": 5,
+                  "figure": "2",
+                  "extraction": "PyMuPDF vector drawing circle bounding-box midpoints and nearest PDF text labels. All spatial positions use the left combined EEG/fNIRS panel. Channel/source/detector incidence was independently recovered from right-inset yellow segment endpoints and black numbered labels before CSV comparison."
+                },
+                "source_files": {
+                  "layout": "src/data/assets/refed_paper_layout_v1.json",
+                  "eeg_channels": "data/REFED-dataset/EEG_channels.csv",
+                  "native_fnirs_coordinates": "data/REFED-dataset/fNIRS_coordinates.csv"
+                },
+                "normalization": {
+                  "center_page_pt": [
+                    248.02381896972656,
+                    151.20818328857422
+                  ],
+                  "radius_page_pt": 68.89944839477539,
+                  "x_positive": "figure_right",
+                  "y_positive": "figure_anterior",
+                  "head_drawing_index": 110
+                },
+                "spatial_dimension": 2,
+                "z_meaning": "planar_embedding_not_measured_depth",
+                "measured_subject_coordinate": false,
+                "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+                "prohibited_interpretation": "individual_3d_registration_mm_distance_cortical_location_or_optical_sensitivity",
+                "reference_electrode": {
+                  "channel_name": "AFZ",
+                  "center_page_pt": [
+                    248.1295623779297,
+                    108.26562881469727
+                  ],
+                  "drawing_index": 163
+                },
+                "center_page_pt": [
+                  248.1295623779297,
+                  92.82820129394531
+                ],
+                "coordinate_status": "paper_figure_digitized_2d",
+                "figure_marker": {
+                  "channel_name": "FPZ",
+                  "center_page_pt": [
+                    248.1295623779297,
+                    92.82820129394531
+                  ],
+                  "drawing_index": 182
+                }
+              }
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "F3",
+              "base_channel_name": "F3",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.34636742959930905,
+              "y": 0.4471135604604183,
+              "z": 0.0,
+              "coordinate_system": "refed_paper_layout_2d_v1",
+              "coordinate_units": "normalized_figure_radius",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "paper_figure_digitized_2d",
+              "measured_subject_coordinate": false,
+              "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+              "source_file": "src/data/assets/refed_paper_layout_v1.json",
+              "metadata": {
+                "geometry_version": "refed_paper_layout_v1",
+                "source": {
+                  "url": "https://proceedings.neurips.cc/paper_files/paper/2025/file/2bf0ed7c35d9d84128e7f7c72ab76402-Paper-Datasets_and_Benchmarks_Track.pdf",
+                  "pdf_sha256": "f656f10271c953bb00db1036a310fc4c82eb0afebdbeaa61d18fec21e1e32ce8",
+                  "page_1based": 5,
+                  "figure": "2",
+                  "extraction": "PyMuPDF vector drawing circle bounding-box midpoints and nearest PDF text labels. All spatial positions use the left combined EEG/fNIRS panel. Channel/source/detector incidence was independently recovered from right-inset yellow segment endpoints and black numbered labels before CSV comparison."
+                },
+                "source_files": {
+                  "layout": "src/data/assets/refed_paper_layout_v1.json",
+                  "eeg_channels": "data/REFED-dataset/EEG_channels.csv",
+                  "native_fnirs_coordinates": "data/REFED-dataset/fNIRS_coordinates.csv"
+                },
+                "normalization": {
+                  "center_page_pt": [
+                    248.02381896972656,
+                    151.20818328857422
+                  ],
+                  "radius_page_pt": 68.89944839477539,
+                  "x_positive": "figure_right",
+                  "y_positive": "figure_anterior",
+                  "head_drawing_index": 110
+                },
+                "spatial_dimension": 2,
+                "z_meaning": "planar_embedding_not_measured_depth",
+                "measured_subject_coordinate": false,
+                "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+                "prohibited_interpretation": "individual_3d_registration_mm_distance_cortical_location_or_optical_sensitivity",
+                "reference_electrode": {
+                  "channel_name": "AFZ",
+                  "center_page_pt": [
+                    248.1295623779297,
+                    108.26562881469727
+                  ],
+                  "drawing_index": 163
+                },
+                "center_page_pt": [
+                  224.15929412841797,
+                  120.40230560302734
+                ],
+                "coordinate_status": "paper_figure_digitized_2d",
+                "figure_marker": {
+                  "channel_name": "F3",
+                  "center_page_pt": [
+                    224.15929412841797,
+                    120.40230560302734
+                  ],
+                  "drawing_index": 209
+                }
+              }
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "F1",
+              "base_channel_name": "F1",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.17930372303592315,
+              "y": 0.43227914151682323,
+              "z": 0.0,
+              "coordinate_system": "refed_paper_layout_2d_v1",
+              "coordinate_units": "normalized_figure_radius",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "paper_figure_digitized_2d",
+              "measured_subject_coordinate": false,
+              "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+              "source_file": "src/data/assets/refed_paper_layout_v1.json",
+              "metadata": {
+                "geometry_version": "refed_paper_layout_v1",
+                "source": {
+                  "url": "https://proceedings.neurips.cc/paper_files/paper/2025/file/2bf0ed7c35d9d84128e7f7c72ab76402-Paper-Datasets_and_Benchmarks_Track.pdf",
+                  "pdf_sha256": "f656f10271c953bb00db1036a310fc4c82eb0afebdbeaa61d18fec21e1e32ce8",
+                  "page_1based": 5,
+                  "figure": "2",
+                  "extraction": "PyMuPDF vector drawing circle bounding-box midpoints and nearest PDF text labels. All spatial positions use the left combined EEG/fNIRS panel. Channel/source/detector incidence was independently recovered from right-inset yellow segment endpoints and black numbered labels before CSV comparison."
+                },
+                "source_files": {
+                  "layout": "src/data/assets/refed_paper_layout_v1.json",
+                  "eeg_channels": "data/REFED-dataset/EEG_channels.csv",
+                  "native_fnirs_coordinates": "data/REFED-dataset/fNIRS_coordinates.csv"
+                },
+                "normalization": {
+                  "center_page_pt": [
+                    248.02381896972656,
+                    151.20818328857422
+                  ],
+                  "radius_page_pt": 68.89944839477539,
+                  "x_positive": "figure_right",
+                  "y_positive": "figure_anterior",
+                  "head_drawing_index": 110
+                },
+                "spatial_dimension": 2,
+                "z_meaning": "planar_embedding_not_measured_depth",
+                "measured_subject_coordinate": false,
+                "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+                "prohibited_interpretation": "individual_3d_registration_mm_distance_cortical_location_or_optical_sensitivity",
+                "reference_electrode": {
+                  "channel_name": "AFZ",
+                  "center_page_pt": [
+                    248.1295623779297,
+                    108.26562881469727
+                  ],
+                  "drawing_index": 163
+                },
+                "center_page_pt": [
+                  235.66989135742188,
+                  121.42438888549805
+                ],
+                "coordinate_status": "paper_figure_digitized_2d",
+                "figure_marker": {
+                  "channel_name": "F1",
+                  "center_page_pt": [
+                    235.66989135742188,
+                    121.42438888549805
+                  ],
+                  "drawing_index": 210
+                }
+              }
+            },
+            {
+              "schema": "canonical_channel_geometry_v1",
+              "channel_name": "F5",
+              "base_channel_name": "F5",
+              "component": "eeg",
+              "modality": "eeg",
+              "x": -0.5003627313384651,
+              "y": 0.47357149378484503,
+              "z": 0.0,
+              "coordinate_system": "refed_paper_layout_2d_v1",
+              "coordinate_units": "normalized_figure_radius",
+              "source_index": null,
+              "detector_index": null,
+              "position_available": true,
+              "coordinate_status": "paper_figure_digitized_2d",
+              "measured_subject_coordinate": false,
+              "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+              "source_file": "src/data/assets/refed_paper_layout_v1.json",
+              "metadata": {
+                "geometry_version": "refed_paper_layout_v1",
+                "source": {
+                  "url": "https://proceedings.neurips.cc/paper_files/paper/2025/file/2bf0ed7c35d9d84128e7f7c72ab76402-Paper-Datasets_and_Benchmarks_Track.pdf",
+                  "pdf_sha256": "f656f10271c953bb00db1036a310fc4c82eb0afebdbeaa61d18fec21e1e32ce8",
+                  "page_1based": 5,
+                  "figure": "2",
+                  "extraction": "PyMuPDF vector drawing circle bounding-box midpoints and nearest PDF text labels. All spatial positions use the left combined EEG/fNIRS panel. Channel/source/detector incidence was independently recovered from right-inset yellow segment endpoints and black numbered labels before CSV comparison."
+                },
+                "source_files": {
+                  "layout": "src/data/assets/refed_paper_layout_v1.json",
+                  "eeg_channels": "data/REFED-dataset/EEG_channels.csv",
+                  "native_fnirs_coordinates": "data/REFED-dataset/fNIRS_coordinates.csv"
+                },
+                "normalization": {
+                  "center_page_pt": [
+                    248.02381896972656,
+                    151.20818328857422
+                  ],
+                  "radius_page_pt": 68.89944839477539,
+                  "x_positive": "figure_right",
+                  "y_positive": "figure_anterior",
+                  "head_drawing_index": 110
+                },
+                "spatial_dimension": 2,
+                "z_meaning": "planar_embedding_not_measured_depth",
+                "measured_subject_coordinate": false,
+                "intended_use": "coarse_eeg_fnirs_neighborhood_only",
+                "prohibited_interpretation": "individual_3d_registration_mm_distance_cortical_location_or_optical_sensitivity",
+                "reference_electrode": {
+                  "channel_name": "AFZ",
+                  "center_page_pt": [
+                    248.1295623779297,
+                    108.26562881469727
+                  ],
+                  "drawing_index": 163
+                },
+                "center_page_pt": [
+                  213.54910278320312,
+                  118.5793685913086
+                ],
+                "coordinate_status": "paper_figure_digitized_2d",
+                "figure_marker": {
+                  "channel_name": "F5",
+                  "center_page_pt": [
+                    213.54910278320312,
+                    118.5793685913086
+                  ],
+                  "drawing_index": 211
+                }
+              }
+            }
+          ],
+          "region_reference_eeg": "FP1",
+          "neighbor_boundary_gap": 0.048552756349108994,
+          "seventh_eeg_channel": "FZ",
+          "spatial_claim": "coarse_2d_paper_template_not_individual_3d_or_optical_sensitivity_centroid"
+        }
+      }
+    }
+  ],
+  "pages": [
+    {
+      "section": 1,
+      "pdf_pages": [
+        1
+      ]
+    },
+    {
+      "section": 2,
+      "pdf_pages": [
+        2
+      ]
+    },
+    {
+      "section": 3,
+      "pdf_pages": [
+        3
+      ]
+    },
+    {
+      "section": 4,
+      "pdf_pages": [
+        4
+      ]
+    },
+    {
+      "section": 5,
+      "pdf_pages": [
+        5
+      ]
+    },
+    {
+      "section": 6,
+      "pdf_pages": [
+        6
+      ]
+    },
+    {
+      "section": 7,
+      "pdf_pages": [
+        7
+      ]
+    },
+    {
+      "section": 8,
+      "pdf_pages": [
+        8
+      ]
+    },
+    {
+      "section": 9,
+      "pdf_pages": [
+        9
+      ]
+    },
+    {
+      "section": 10,
+      "pdf_pages": [
+        10
+      ]
+    },
+    {
+      "section": 11,
+      "pdf_pages": [
+        11
+      ]
+    },
+    {
+      "section": 12,
+      "pdf_pages": [
+        12
+      ]
+    },
+    {
+      "section": 13,
+      "pdf_pages": [
+        13
+      ]
+    },
+    {
+      "section": 14,
+      "pdf_pages": [
+        14,
+        15
+      ]
+    },
+    {
+      "section": 15,
+      "pdf_pages": [
+        16,
+        17
+      ]
+    },
+    {
+      "section": 16,
+      "pdf_pages": [
+        18,
+        19
+      ]
+    },
+    {
+      "section": 17,
+      "pdf_pages": [
+        20,
+        21,
+        22,
+        23
+      ]
+    },
+    {
+      "section": 18,
+      "pdf_pages": [
+        24
+      ]
+    }
+  ]
+}

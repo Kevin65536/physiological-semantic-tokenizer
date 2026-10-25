@@ -7775,6 +7775,822 @@ def render_volume_drive(run, out):
     print(json.dumps(validation,ensure_ascii=False))
 
 
+def render_decay_diagnostic(run, out, *, evidence=None):
+    """Export only retained decay evidence; never solve or refit a trajectory."""
+    import html
+    import shutil
+    import subprocess
+    import yaml
+
+    if out.exists() and any(out.iterdir()):
+        raise ValueError('choose a fresh versioned decay export')
+    evidence_root = evidence if evidence is not None else run
+    summary = json.loads((evidence_root / 'summary.json').read_text())
+    cfg = yaml.safe_load((run / 'resolved_config.yaml').read_text())
+    plan = json.loads((run / 'plan.json').read_text())
+    if summary.get('schema') != 'shared_driver_decay_summary_v1' or summary.get('status') not in ['completed', 'completed_with_software_errors']:
+        raise ValueError('completed shared_driver_decay_summary_v1 evidence required')
+    frame = pd.read_csv(evidence_root / 'metrics.csv')
+    if 'status' not in frame and 'fit_status' in frame:
+        frame['status'] = frame['fit_status']
+    frame = frame[frame.stage.isin(['synthetic', 'measured'])].copy()
+    required = {'stage', 'key', 'arm', 'dataset', 'subject', 'length_s', 'condition', 'status',
+                'full_hb_nmse', 'score_hb_nmse'}
+    if not required.issubset(frame):
+        raise ValueError(f'missing decay metrics: {sorted(required-set(frame))}')
+    arms = [a['name'] for a in cfg['decay']['arms']]
+    if arms != ['original', 'slow', 'no_decay', 'driven_original', 'driven_slow', 'driven_no_decay']:
+        raise ValueError('six-arm decay contract required')
+    multipliers = {a['name']: float(a['multiplier']) for a in cfg['decay']['arms']}
+    datasets = list(cfg['data']['datasets'])
+    names = dict(zip(datasets, ['Single-Trial', 'Simultaneous', 'Visual', 'REFED']))
+    labels = dict(zip(arms, ['原速·无输入', '慢速·无输入', '零衰减·无输入',
+                            '原速·有输入', '慢速·有输入', '零衰减·有输入']))
+    colors = dict(zip(arms, ['#B45F28', '#2479A2', '#62824D', '#B34D78', '#4B51A1', '#2E9994']))
+    dt = float(cfg['tensor']['dt_s'])
+    params = cfg['parameters']
+    p0, q0 = float(params['P0']), float(params['Q0'])
+    out.mkdir(parents=True, exist_ok=True)
+    figdir = out / 'figures'; figdir.mkdir()
+    formdir = out / 'formulas'; formdir.mkdir()
+    font = Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font))
+        plt.rcParams['font.family'] = font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size': 9, 'axes.unicode_minus': False,
+                         'axes.spines.top': False, 'axes.spines.right': False})
+    images, image_sources, pages = [], [], []
+
+    def esc(value):
+        return html.escape(str(value))
+
+    def paragraph(value):
+        return '<p>' + value + '</p>'
+
+    def tab(headers, rows):
+        return '<table><tr>' + ''.join('<th>' + esc(v) + '</th>' for v in headers) + '</tr>' + ''.join(
+            '<tr>' + ''.join('<td>' + esc(v).replace('\n', '<br>') + '</td>' for v in row) + '</tr>' for row in rows) + '</table>'
+
+    def image_tag(path, width=520):
+        return f'<p class="figure"><img width="{width}" src="{esc(path.relative_to(out))}"></p>'
+
+    def page(title, body):
+        pages.append('<h1>' + esc(title) + '</h1>' + body)
+
+    def save(fig, name, caption, sources):
+        fig.tight_layout(rect=(0, 0, 1, .925))
+        path = figdir / (name + '.png')
+        fig.savefig(path, dpi=240, bbox_inches='tight')
+        plt.close(fig)
+        images.append(path)
+        image_sources.append(dict(file=str(path.relative_to(out)), caption=caption, source=sources))
+        return image_tag(path) + paragraph(esc(caption)) + paragraph('<span class="source">证据：' + esc(sources) + '</span>')
+
+    def equation(name, latex):
+        tex = formdir / (name + '.tex')
+        tex.write_text(r'\documentclass[12pt]{article}' + '\n' + r'\usepackage{amsmath,amssymb}' + '\n'
+                       + r'\usepackage[paperwidth=14in,paperheight=4in,margin=.2in]{geometry}' + '\n'
+                       + r'\pagestyle{empty}\begin{document}\fontsize{22}{28}\selectfont\['
+                       + latex + r'\]\end{document}' + '\n')
+        command = [shutil.which('pdflatex') or '/home/uais0/.local/bin/pdflatex',
+                   '-interaction=nonstopmode', '-halt-on-error', tex.name]
+        result = subprocess.run(command, cwd=formdir, text=True, capture_output=True)
+        if result.returncode:
+            raise RuntimeError(result.stdout[-1800:])
+        with fitz.open(tex.with_suffix('.pdf')) as doc:
+            boxes = [fitz.Rect(b[:4]) for b in doc[0].get_text('blocks')]
+            if not boxes:
+                raise AssertionError('LaTeX formula has no visible content')
+            clip = boxes[0]
+            for box in boxes[1:]:
+                clip |= box
+            path = tex.with_suffix('.png')
+            doc[0].get_pixmap(clip=clip + (-7, -7, 7, 7), dpi=300, alpha=False).save(path)
+        images.append(path)
+        image_sources.append(dict(file=str(path.relative_to(out)), caption=name,
+                                  source='resolved_config.yaml; formula LaTeX retained beside PNG'))
+        return image_tag(path)
+
+    def number(value, digits=3):
+        return f'{float(value):.{digits}f}' if np.isfinite(float(value)) else '—'
+
+    def finite_median(values):
+        finite = np.asarray(values, float)
+        finite = finite[np.isfinite(finite)]
+        return float(np.median(finite)) if len(finite) else np.nan
+
+    def load_arrays(stage, key):
+        with np.load(run / stage / (str(key) + '.npz'), allow_pickle=False) as saved:
+            arrays = {k: saved[k].copy() for k in saved.files}
+        overlay_path = evidence_root / stage / (str(key) + '.npz')
+        if evidence_root != run and overlay_path.exists():
+            with np.load(overlay_path, allow_pickle=False) as saved:
+                if any(not k.startswith('replay_') for k in saved.files):
+                    raise AssertionError('decay evidence overlay may replace replay arrays only')
+                arrays.update({k: saved[k].copy() for k in saved.files})
+        return arrays
+
+    def aggregate(part, metric):
+        if 'qualified' in part:
+            part = part[part.qualified]
+        values = pd.to_numeric(part[metric], errors='coerce').replace([np.inf, -np.inf], np.nan)
+        valid = part.loc[values.notna()].copy()
+        valid[metric] = values[values.notna()]
+        return float(np.sqrt(valid.groupby(['dataset', 'subject'])[metric].mean().mean())) if len(valid) else np.nan
+
+    def paired(part, reference, candidate, metric):
+        if 'qualified' in part:
+            part = part[part.qualified]
+        wide = part.pivot(index=['subject', 'key'], columns='arm', values=metric)
+        if reference not in wide or candidate not in wide:
+            return dict(reference=np.nan, candidate=np.nan, improvement=np.nan, ci95=[np.nan, np.nan], n=0, subjects=0)
+        wide = wide[[reference, candidate]].replace([np.inf, -np.inf], np.nan).dropna()
+        units = wide.groupby('subject').mean().to_numpy()
+        if not len(units):
+            return dict(reference=np.nan, candidate=np.nan, improvement=np.nan, ci95=[np.nan, np.nan], n=0, subjects=0)
+        means = np.sqrt(units.mean(0))
+        rng = np.random.default_rng(int(cfg['seed']))
+        indices = rng.integers(0, len(units), (int(cfg['endpoints']['bootstrap_repeats']), len(units)))
+        boot = np.sqrt(units[indices].mean(1))
+        return dict(reference=float(means[0]), candidate=float(means[1]),
+                    improvement=float(means[0] - means[1]),
+                    ci95=np.quantile(boot[:, 0] - boot[:, 1], [.025, .975]).tolist(),
+                    n=len(wide), subjects=len(units))
+
+    def interval(result):
+        return (f"{number(result['improvement'])} [{number(result['ci95'][0])}, {number(result['ci95'][1])}]"
+                + f"\n{result['n']}记录/{result['subjects']}被试")
+
+    # All computations below use this run's retained arrays. No upstream files,
+    # loaders, fitted models, or integrators are accessed by this renderer.
+    audit = dict(schema='decay_report_verification_v1', checked_fits=0, checked_measured_fits=0,
+                 checked_synthetic_fits=0, checked_pilot_fits=0, max_score_recompute_difference=0.,
+                 max_observation_closure=0., max_delta_closure=0., max_retention_closure=0.,
+                 max_saved_delta_contribution_closure=0.,
+                 missing_failed_fit_arrays=0, unforced_monotonicity_violations=0,
+                 max_fixed_replay_HbR_difference=0., fixed_replay_array_arms=0,
+                 missing_fixed_replay_array_arms=0)
+    score_rows, retention_rows, replay_rows, task_records, replay_audits, counterfactual_rows = [], [], [], {}, [], []
+    for (stage, key), block in frame.groupby(['stage', 'key'], sort=True):
+        task_path = run / stage / (str(key) + '.json')
+        if (evidence_root / stage / (str(key) + '.json')).exists():
+            task_path = evidence_root / stage / (str(key) + '.json')
+        arrays_path = run / stage / (str(key) + '.npz')
+        record = json.loads(task_path.read_text())
+        task_records[(stage, str(key))] = record.get('spec', {})
+        replay_audits.extend(dict(stage=stage, key=str(key), **v) for v in record.get('replay_audits', []))
+        if not arrays_path.exists():
+            if block.status.isin(['completed', 'ok', 'success', 'converged']).any():
+                raise AssertionError(f'completed task lacks arrays: {arrays_path}')
+            audit['missing_failed_fit_arrays'] += len(block)
+            continue
+        a = load_arrays(stage, key)
+        y, sd, operator = a['target'], a['sd'], a['operator']
+        n = len(y); time = np.arange(n) * dt
+        for replay_audit in record.get('replay_audits', []):
+            if stage != 'measured' or replay_audit.get('status') != 'infeasible_counterfactual':
+                continue
+            detail = [str(key), labels[replay_audit['arm']]]
+            if replay_audit['arm'] == 'no_decay' and 'original_states' in a:
+                baseline_states = a['original_states']
+                constant_delta = baseline_states[0, 4] - baseline_states[0, 3]
+                hypothetical_p = baseline_states[:, 3] + constant_delta
+                oxygenated = p0 * hypothetical_p - q0 * baseline_states[:, 5]
+                detail.extend([number(np.min(hypothetical_p)), number(np.min(oxygenated), 5),
+                               number(time[int(np.argmin(oxygenated))], 2)])
+            else:
+                detail.extend(['—', '—', '—'])
+            counterfactual_rows.append(detail)
+        valid = np.arange(n) < n - 1
+        visible = a['visible'].astype(bool)
+        expected = np.ones((n, 3), bool); expected[-1] = False
+        condition = str(block.condition.iloc[0])
+        if condition == 'Hb_only_full':
+            expected[:, 0] = False
+        elif condition == 'joint_blocked':
+            local_time = time % float(cfg['hidden']['repeat_every_s'])
+            for start, end in cfg['hidden']['block_s']:
+                expected[(local_time >= start) & (local_time < end), 1:] = False
+        np.testing.assert_array_equal(visible, expected)
+        score = valid & ~visible[:, 1] if condition == 'joint_blocked' else valid
+        for row in block.to_dict('records'):
+            arm = row['arm']; prediction_key = arm + '_prediction'
+            if prediction_key not in a:
+                audit['missing_failed_fit_arrays'] += 1
+                continue
+            prediction, states = a[prediction_key], a[arm + '_states']
+            delta = states[:, 4] - states[:, 3]
+            canonical = np.column_stack((states[:, 0], p0 * (states[:, 4] - 1) - q0 * (states[:, 5] - 1),
+                                         q0 * (states[:, 5] - 1)))
+            reconstructed = (operator @ canonical.ravel()).reshape(n, 3)
+            error = (prediction - y) / sd
+            full_nmse = float(np.mean(error[valid, 1:] ** 2))
+            score_nmse = float(np.mean(error[score, 1:] ** 2))
+            differences = np.abs(np.asarray([full_nmse, score_nmse]) -
+                                    np.asarray([row['full_hb_nmse'], row['score_hb_nmse']]))
+            audit['max_score_recompute_difference'] = max(audit['max_score_recompute_difference'], float(np.max(differences)))
+            audit['max_observation_closure'] = max(audit['max_observation_closure'], float(np.max(abs(prediction - reconstructed))))
+            audit['max_delta_closure'] = max(audit['max_delta_closure'], float(np.max(abs(delta - a[arm + '_delta']))))
+            raw_delta = np.column_stack((np.zeros(n), p0 * delta, np.zeros(n)))
+            referenced_delta = (operator @ raw_delta.ravel()).reshape(n, 3)
+            for suffix, expected_contribution in [('raw_delta_contribution', raw_delta),
+                                                   ('referenced_delta_contribution', referenced_delta)]:
+                if arm + '_' + suffix in a:
+                    audit['max_saved_delta_contribution_closure'] = max(audit['max_saved_delta_contribution_closure'],
+                        float(np.max(abs(a[arm + '_' + suffix] - expected_contribution))))
+            retention = a[arm + '_decay_retention']
+            expected_retention = np.exp(-multipliers[arm] * a[arm + '_retention_integral'])
+            audit['max_retention_closure'] = max(audit['max_retention_closure'], float(np.max(abs(retention - expected_retention))))
+            if arm in arms[:3] and np.any(np.diff(abs(delta)) > 1e-8):
+                audit['unforced_monotonicity_violations'] += 1
+            item = {k: row.get(k) for k in ['stage', 'key', 'id', 'dataset', 'subject', 'length_s', 'condition', 'arm', 'status']}
+            item['qualified'] = str(row.get('qualified', row['status'] in ['completed', 'ok', 'success', 'converged'])).lower() in ['true', '1', '1.0']
+            item.update(full_hb_nmse=full_nmse, score_hb_nmse=score_nmse,
+                        full_HbO_nmse=float(np.mean(error[valid, 1] ** 2)),
+                        full_HbR_nmse=float(np.mean(error[valid, 2] ** 2)),
+                        score_HbO_nmse=float(np.mean(error[score, 1] ** 2)),
+                        score_HbR_nmse=float(np.mean(error[score, 2] ** 2)))
+            for name, mask in [('first5', (time < 5) & valid), ('next5', (time >= 5) & (time < 10) & valid),
+                               ('ten_to_thirty', (time >= 10) & (time < 30) & valid),
+                               ('late', (time >= max(10, n * dt - 30)) & valid)]:
+                residual = error[mask, 1:]
+                item[name + '_hb_nmse'] = float(np.mean(residual ** 2))
+                item[name + '_demeaned_hb_nmse'] = float(np.mean((residual - residual.mean(0)) ** 2))
+            center = (time >= 30) & (time < 59.75) if n * dt == 90 else valid
+            residual = error[center, 1:]
+            item['center_shape_hb_nmse'] = float(np.mean((residual - residual.mean(0)) ** 2))
+            if 'truth_delta' in a:
+                truth_delta = a['truth_delta']
+                item['delta_rmse'] = float(np.sqrt(np.mean((delta[valid] - truth_delta[valid]) ** 2)))
+                item['delta_truth_rms'] = float(np.sqrt(np.mean(truth_delta[valid] ** 2)))
+                delta_residual = delta[valid] - truth_delta[valid]
+                item['delta_bias'] = float(np.mean(delta_residual))
+                item['delta_demeaned_rmse'] = float(np.std(delta_residual))
+                item['scenario'] = row.get('scenario', record.get('spec', {}).get('scenario', 'unknown'))
+                item['forcing_rmse'] = float(np.sqrt(np.mean((a[arm + '_forcing'][valid] - a['truth_forcing'][valid]) ** 2)))
+            score_rows.append(item)
+            if stage == 'measured' and condition == 'joint_full' and arm in arms[:3]:
+                detail = dict(dataset=row['dataset'], subject=str(row['subject']), key=str(key),
+                              length_s=int(row['length_s']), arm=arm, qualified=item['qualified'])
+                for threshold, label in [(np.exp(-1), 'efold_s'), (.05, 'loss95_s')]:
+                    crossings = np.flatnonzero(retention <= threshold)
+                    detail[label] = float(np.interp(threshold, retention[max(0, crossings[0]-1):crossings[0]+1][::-1],
+                                                   time[max(0, crossings[0]-1):crossings[0]+1][::-1])) if len(crossings) else np.nan
+                for seconds in [5, 10, 20, 30, 60]:
+                    detail[f'retention_{seconds}s'] = float(np.interp(seconds, time, retention)) if seconds <= time[-1] else np.nan
+                retention_rows.append(detail)
+            audit['checked_fits'] += 1
+            audit['checked_' + stage + '_fits'] += 1
+        if stage == 'measured' and condition == 'joint_full':
+            original_key = 'replay_original_prediction'
+            if original_key in a:
+                for replay_arm in arms[:3]:
+                    prefix = 'replay_' + replay_arm
+                    if prefix + '_prediction' not in a:
+                        audit['missing_fixed_replay_array_arms'] += 1
+                        continue
+                    pred = a[prefix + '_prediction']
+                    state = a[prefix + '_states']
+                    difference = (pred - a[original_key]) / sd
+                    hbr = float(np.max(abs(pred[:, 2] - a[original_key][:, 2])))
+                    audit['max_fixed_replay_HbR_difference'] = max(audit['max_fixed_replay_HbR_difference'], hbr)
+                    tail = valid & (time >= max(10, n * dt - 30))
+                    contribution = a.get(prefix + '_referenced_delta_contribution')
+                    if contribution is None:
+                        raw = np.column_stack((np.zeros(n), p0*(state[:, 4]-state[:, 3]), np.zeros(n)))
+                        contribution = (operator @ raw.ravel()).reshape(n, 3)
+                    replay_rows.append(dict(dataset=block.dataset.iloc[0], subject=str(block.subject.iloc[0]),
+                                            key=str(key), length_s=int(block.length_s.iloc[0]), arm=replay_arm,
+                                            full_difference_hb_nmse=float(np.mean(difference[valid, 1:] ** 2)),
+                                            late_offset_HbO_training_sd=float(np.mean(contribution[tail, 1]/sd[1])),
+                                            late_fluctuation_HbO_training_sd=float(np.std(contribution[tail, 1]/sd[1])),
+                                            hbr_max_abs=hbr))
+                    audit['fixed_replay_array_arms'] += 1
+            else:
+                audit['missing_fixed_replay_array_arms'] += 3
+    for name in ['max_score_recompute_difference', 'max_observation_closure', 'max_delta_closure',
+                 'max_retention_closure', 'max_saved_delta_contribution_closure']:
+        if audit[name] > 1e-10:
+            raise AssertionError(f'decay retained-evidence audit failed: {name}={audit[name]}')
+    if audit['unforced_monotonicity_violations'] or audit['max_fixed_replay_HbR_difference'] > float(cfg['decay']['replay_hbr_tolerance']):
+        raise AssertionError('unforced decay or fixed-upstream replay invariant failed')
+    scores = pd.DataFrame(score_rows)
+    retention_frame, replay_frame = pd.DataFrame(retention_rows), pd.DataFrame(replay_rows)
+    measured = scores[scores.stage == 'measured'].copy()
+    synthetic = scores[scores.stage == 'synthetic'].copy()
+    if measured.empty or synthetic.empty:
+        raise ValueError('measured and synthetic terminal evidence required')
+    # Qualification is an explicit retained fit property, not inferred from a
+    # finite score. The full planned denominator remains visible throughout.
+    qualification = truth(frame['qualified']) if 'qualified' in frame else frame.status.isin(['completed', 'ok', 'success', 'converged'])
+    counts = []
+    for stage in ['measured', 'synthetic']:
+        sub = frame[frame.stage == stage]
+        counts.append([stage, len(sub), int(qualification.loc[sub.index].sum()),
+                       int((~qualification.loc[sub.index]).sum()), sub.key.nunique()])
+
+    paired_results = []
+    contrasts = [('original', 'slow'), ('original', 'no_decay'), ('original', 'driven_original'),
+                 ('slow', 'driven_slow'), ('no_decay', 'driven_no_decay')]
+    for (dataset, length, condition), group in measured.groupby(['dataset', 'length_s', 'condition']):
+        for reference, candidate in contrasts:
+            for metric in ['full_hb_nmse', 'score_hb_nmse', 'score_HbO_nmse', 'score_HbR_nmse',
+                           'center_shape_hb_nmse', 'late_demeaned_hb_nmse']:
+                paired_results.append(dict(dataset=dataset, length_s=int(length), condition=condition,
+                                           reference_arm=reference, candidate_arm=candidate, metric=metric,
+                                           **paired(group, reference, candidate, metric)))
+    def result(dataset, length, condition, reference, candidate, metric='score_hb_nmse'):
+        return next(v for v in paired_results if v['dataset'] == dataset and v['length_s'] == length
+                    and v['condition'] == condition and v['reference_arm'] == reference
+                    and v['candidate_arm'] == candidate and v['metric'] == metric)
+
+    # The runner owns primary aggregation and bootstrap. Recomputed report
+    # numbers must reproduce it, including the paired qualified subset.
+    owner_metric = {'score_HbO_nmse': 'score_hbo_nmse', 'score_HbR_nmse': 'score_hbr_nmse',
+                    'center_shape_hb_nmse': 'center_demeaned_hb_nmse'}
+    audit['paired_owner_comparisons'] = 0
+    audit['max_paired_owner_difference'] = 0.
+    for current in paired_results:
+        matches = [v for v in summary.get('paired', []) if v.get('stage') == 'measured'
+                   and v.get('dataset') == current['dataset'] and int(v.get('length_s', -1)) == current['length_s']
+                   and v.get('condition') == current['condition'] and v.get('reference') == current['reference_arm']
+                   and v.get('candidate') == current['candidate_arm']
+                   and v.get('metric') == owner_metric.get(current['metric'], current['metric'])]
+        if not matches:
+            if summary.get('paired'):
+                raise AssertionError('missing owning paired result: ' + str(current))
+            continue  # Disposable layout fixtures may omit primary summaries.
+        owner = matches[0]
+        if current['n'] != owner['qualified_pairs'] or current['subjects'] != owner['subjects']:
+            raise AssertionError('paired qualification denominator differs from owning summary')
+        if current['n']:
+            actual = [current['reference'], current['candidate'], current['improvement'], *current['ci95']]
+            expected_values = [owner['reference_nrmse'], owner['candidate_nrmse'], owner['improvement'], *owner['ci95']]
+            difference = float(np.max(abs(np.asarray(actual) - np.asarray(expected_values))))
+            audit['max_paired_owner_difference'] = max(audit['max_paired_owner_difference'], difference)
+            if difference > 1e-10:
+                raise AssertionError('report paired result differs from owning summary')
+        audit['paired_owner_comparisons'] += 1
+
+    def contrast_description(condition):
+        selected = [v for v in paired_results if v['condition'] == condition and v['metric'] == 'score_hb_nmse'
+                    and v['candidate_arm'] in ['slow', 'no_decay', 'driven_original'] and v['n']]
+        if not selected:
+            return '本条件没有双方数值合格的配对，不能从成功子集推断收益。'
+        best = max(selected, key=lambda v: v['improvement'])
+        worst = min(selected, key=lambda v: v['improvement'])
+        sentence = (f'本页最大绝对改善出现在{names[best["dataset"]]} {best["length_s"]}秒的'
+                    f'{labels[best["candidate_arm"]]}：{best["reference"]:.3f}降至{best["candidate"]:.3f}。'
+                    f'最不利比较为{names[worst["dataset"]]} {worst["length_s"]}秒的'
+                    f'{labels[worst["candidate_arm"]]}：改善{worst["improvement"]:+.3f}，'
+                    f'区间[{worst["ci95"][0]:+.3f}, {worst["ci95"][1]:+.3f}]。')
+        input_values = []
+        for reference, candidate in contrasts[2:]:
+            values = [v['improvement'] for v in paired_results if v['condition'] == condition
+                      and v['metric'] == 'score_hb_nmse' and v['reference_arm'] == reference
+                      and v['candidate_arm'] == candidate and v['n']]
+            input_values.append(f'{labels[reference]}下{np.median(values):+.3f}' if values else labels[reference] + '下无配对')
+        return sentence + '八个数据集×长度条件的同衰减率输入收益中位数为：' + '；'.join(input_values) + '。这些中位数仅描述条件差异。'
+
+    def median_gain(candidate):
+        values = [v['improvement'] / v['reference'] * 100 for v in paired_results
+                  if v['condition'] == 'joint_full' and v['candidate_arm'] == candidate
+                  and v['metric'] == 'score_hb_nmse' and v['reference'] > 0]
+        return float(np.median(values)) if values else np.nan
+
+    practical_summary = (f'八个数据集×长度条件中，减慢无输入衰减、去掉无输入衰减、原速下增加实际输入的'
+                         f'相对NRMSE改善中位数分别为{median_gain("slow"):+.1f}%、'
+                         f'{median_gain("no_decay"):+.1f}%、{median_gain("driven_original"):+.1f}%。'
+                         '前两项衡量延长初态记忆的实际收益，后一项检验持续输入容量；它们不能互相替代。')
+
+    headline_rows = []
+    for ds in datasets:
+        for length in cfg['tensor']['lengths_s']:
+            slow = result(ds, length, 'joint_full', 'original', 'slow')
+            no = result(ds, length, 'joint_full', 'original', 'no_decay')
+            driven = result(ds, length, 'joint_full', 'original', 'driven_original')
+            baseline = measured[(measured.dataset == ds) & (measured.length_s == length)
+                                & (measured.condition == 'joint_full') & (measured.arm == 'original')]
+            headline_rows.append([names[ds], length, number(aggregate(baseline, 'full_hb_nmse')),
+                                  interval(slow), interval(no), interval(driven)])
+    positive_slow = sum(v['ci95'][0] > 0 for v in paired_results if v['condition'] == 'joint_full'
+                        and v['candidate_arm'] == 'slow' and v['metric'] == 'score_hb_nmse')
+    positive_driven = sum(v['ci95'][0] > 0 for v in paired_results if v['condition'] == 'joint_full'
+                          and v['candidate_arm'] == 'driven_original' and v['metric'] == 'score_hb_nmse')
+    slow_crossing = sum(v['ci95'][0] <= 0 <= v['ci95'][1] for v in paired_results
+                        if v['condition'] == 'joint_full' and v['candidate_arm'] == 'slow' and v['metric'] == 'score_hb_nmse')
+    zero_worse = sum(v['ci95'][1] < 0 for v in paired_results if v['condition'] == 'joint_full'
+                     and v['candidate_arm'] == 'no_decay' and v['metric'] == 'score_hb_nmse')
+    hidden_input_positive = sum(v['ci95'][0] > 0 for v in paired_results if v['condition'] == 'joint_blocked'
+                                and v['candidate_arm'] == 'driven_original' and v['metric'] == 'score_hb_nmse')
+    outcome = (f'将无输入衰减减慢10倍，联合完整比较有{slow_crossing}/8个区间跨零；完全取消衰减有{zero_worse}/8个比较明确恶化。'
+               f'保持原速、增加实际状态输入，完整拟合有{positive_driven}/8、隐藏Hb有{hidden_input_positive}/8个比较的收益区间高于零。')
+    if slow_crossing == 8 and positive_driven == 8:
+        outcome += '当前条件重建中，这组实测证据支持持续状态方向容量不足，比“衰减速度太快是主要原因”更有依据。'
+    page('状态差的无输入衰减，会损害哪些重建？',
+         paragraph('本报告直接检验总Hb状态与体积状态之间的状态差，以及它在无外部输入时的衰减。它是方程中的形式平衡松弛量，不被命名为独立真实血容量室。')
+         + paragraph('<b>' + outcome + '</b>')
+         + paragraph(practical_summary)
+         + tab(['数据集', '秒', '原速NRMSE', '减慢衰减：改善 [95%区间]', '去掉衰减：改善 [95%区间]', '原速加输入：改善 [95%区间]'], headline_rows)
+         + paragraph('原速列使用全部数值合格基线；各改善列分别只用双方数值合格且评分有限的配对，格内列出记录数/被试数。双Hb NRMSE先对时间与Hb的训练SD标准化平方误差平均，再在被试内平均记录、对被试等权平均并开平方。区间按被试整块重采样，条件于冻结尺度，未做多重比较校正；每集仅6名独立被试。')
+         + tab(['阶段', '计划拟合', '合格', '失败/不合格', '任务'], counts)
+         + paragraph('48条公开90秒记录与各自中间30秒来自四数据集、每集6名被试、每人2条记录。两种长度、三种可见条件、六臂计划1728次实测拟合；四种合成情形、6种子、同矩阵计划864次。长度与窗口不增加独立被试数。')
+         + paragraph('汇总证据根：' + esc(evidence_root) + '；轨迹根：' + esc(run) + '。事实源为summary.json、metrics.csv和逐任务JSON/NPZ；本报告不启动新拟合、不读取原始数据。'))
+
+    dynamics = equation('decay_dynamics',
+        r'\begin{aligned}\delta&=p-v,&a(v)&=\frac{v^{1/\alpha-1}}{\tau},\\'
+        r'\dot p&=\dot v-\lambda a(v)(p-v)+u_\delta(t),&\dot\delta&=-\lambda a(v)\delta+u_\delta(t).\end{aligned}')
+    dynamics += equation('unforced_solution',
+        r'u_\delta=0:\quad R(t)=\exp\!\left[-\lambda\int_0^t a(v(s))\,ds\right],\qquad\delta(t)=\delta(0)R(t).')
+    dynamics += equation('observation_mapping',
+        r'H_O=P_0(p-1)-Q_0(q-1),\qquad H_R=Q_0(q-1),\qquad H_T=P_0(p-1).')
+    page('只改变状态差方程：衰减速度与持续输入分开比较', dynamics
+         + paragraph('p为相对静息归一的总Hb状态，v为相对体积状态，q为去氧Hb状态；三者无量纲。τ以秒计，α与λ无量纲，a为每秒，输入u以状态单位/秒计。r为上游共享驱动；本轮保持其余s、f、v、q方程与Hb映射不变。状态差不是Hb本身，也不是驱动r。')
+         + paragraph('正体积且非负衰减率时，无输入状态差保持符号、绝对值不增；减慢衰减只延长初态记忆，零衰减只保留常量，均不能让状态差自主振荡。r仍可通过v和q产生Hb振荡，因此本结论不禁止整个模型出现波形振荡。')
+         + paragraph('固定同一r和全部初态重放时，v、q与HbR必须相同，改变的是p、HbO与HbT。完整重新拟合中，r与初态会补偿，因此HbR也可能间接变化。后文将这两类结果分开解释。')
+         + tab(['τ / 秒', 'α', 'E0', 'κ', 'γ', 'P0', 'Q0', '神经血管增益'],
+               [[params[k] for k in ['tau', 'alpha', 'E0', 'kappa', 'gamma', 'P0', 'Q0', 'neurovascular_gain']]])
+         + paragraph('上表参数在所有拟合中冻结。每臂重新估计完整可见窗的驱动r和五个独立初态；驱动曲率惩罚权重为0.01，初态为100，log-flow先验SD为ln 2、权重为1。近静息体积时原速衰减时间尺度约为2秒，95%损失约为其3倍，实际保留率使用保存轨迹积分。')
+         + paragraph('实现与合同：运行source_snapshot及resolved_config.yaml。原速、慢速、零衰减分别使用λ为1、0.1、0；有输入三臂在各自相同λ下与无输入配对。所有臂均使用五个独立物理初态，没有额外输出项。'))
+
+    forcing = equation('actual_input',
+        r'u_\delta(t)=\sum_{k=0}^{M-1}c_k\cos\!\left[\frac{\pi k(t+\Delta t/2)}{L}\right],\quad '
+        r'J_u=\frac{w_u\Delta t}{\sigma_u^2}\sum_j u_\delta(t_j)^2.')
+    metric_formula = equation('score_definition',
+        r'e_{ijc}=\frac{\widehat H_{ijc}-H_{ijc}}{\mathrm{SD}_{c,\mathrm{train}}},\quad '
+        r'M_s=\frac{1}{N_s}\sum_i\frac{1}{2|T_i|}\sum_{j\in T_i}\sum_{c\in\{O,R\}}e_{ijc}^2,\quad '
+        r'\mathrm{NRMSE}=\sqrt{\frac{1}{S}\sum_s M_s}.')
+    page('输入在积分中生效；评分分母与可见目标冻结', forcing
+         + paragraph(f'30/90秒分别使用7/19个输入系数：一个常量输入加6/18个余弦模式，最高频率均为0.1 Hz。常量输入在零衰减下产生斜坡，参考不会抹去斜坡。输入在每个RK积分阶段按物理时间计算；输入先验工程尺度为{cfg["forcing"]["prior_sd"]}状态/秒，权重为{cfg["forcing"]["prior_weight"]}，无按长度或衰减率重标定。这个尺度不是经生理校准的SD；慢衰减维持同样响应可能消耗更少输入能量，臂间排名不能识别衰减率。它是进入p方程的实际输入。')
+         + metric_formula
+         + paragraph('评分中的s表示被试，i表示其记录，j表示评分时间点，c为HbO或HbR；训练SD来自冻结父运行坐标。单Hb指标用同一流程但只平均该分量。改善为参考NRMSE减候选NRMSE，是绝对差；百分比收益另外用参考误差作分母。')
+         + tab(['条件', '拟合可见量', '主要评分支持'], [
+             ['联合完整', 'EEG/HbO/HbR全窗', '除末采样点外全窗'],
+             ['Hb-only完整', 'HbO/HbR全窗', '同样全窗，EEG不参与目标'],
+             ['联合遮挡', 'EEG全窗；两Hb每30秒遮住10–15和20–25秒', '隐藏的两Hb点；全窗另作诊断']])
+         + paragraph('各窗先用最初5秒作参考；观测算子、训练SD、物理参数及原模型驱动/初态/flow惩罚配对固定。零衰减的常量状态差虽在参考下消失，初态先验和物理可行域仍可间接影响重新拟合，不能声称整个模型完全不变。末采样点排除，避免30秒插值边界借用窗口外信息。完整拟合是条件重建，遮挡拟合是同记录离线插值，均不是未来预测。')
+         + paragraph('95%区间为2000次整被试配对bootstrap百分位区间，6名被试及其全部记录一起抽取。失败全数保留在分母中；有限评分用于描述，不能代替数值合格比例。'))
+
+    fig, axes = plt.subplots(1, 2, figsize=(7.3, 3.1))
+    for arm in arms[:3]:
+        sub = retention_frame[(retention_frame.arm == arm) & (retention_frame.length_s == 90) & retention_frame.qualified]
+        values = []
+        for seconds in [5, 10, 20, 30, 60]:
+            values.append(float(sub[f'retention_{seconds}s'].median()))
+        axes[0].plot([5, 10, 20, 30, 60], values, 'o-', color=colors[arm], label=labels[arm])
+        x = np.arange(len(datasets))
+        median_times = [finite_median(sub[sub.dataset == ds].loss95_s) for ds in datasets]
+        axes[1].plot(x, median_times, 'o-', color=colors[arm], label=labels[arm])
+    axes[0].set_yscale('log'); axes[0].set_xlabel('窗口起点后的秒数'); axes[0].set_ylabel('状态差保留比例（对数轴）')
+    axes[0].set_title('90秒联合拟合；48记录中位数')
+    axes[1].set_xticks(np.arange(len(datasets)), [names[d] for d in datasets], rotation=15)
+    axes[1].set_ylabel('失去95%状态差所需时间 / 秒'); axes[1].set_title('未达到阈值时不绘点')
+    axes[0].legend(fontsize=7)
+    retention_table = []
+    for arm in arms[:3]:
+        sub = retention_frame[(retention_frame.arm == arm) & (retention_frame.length_s == 90) & retention_frame.qualified]
+        reached = sub.loss95_s.notna().sum()
+        retention_table.append([labels[arm], number(finite_median(sub.efold_s)), number(finite_median(sub.loss95_s)),
+                                f'{reached}/{len(sub)}'] + [f'{sub[f"retention_{seconds}s"].median():.2e}' for seconds in [5, 10, 20, 30, 60]])
+    body = save(fig, 'retention', '保留率由保存的累计衰减积分计算，不用易受抵消影响的两个状态差数值相除；每个点是记录中位数，不是置信区间。', 'measured/*_90_joint_full.npz: *_retention_integral, *_decay_retention')
+    body += tab(['无输入臂', 'e折/秒', '95%损失/秒', '达到95%损失', '5秒', '10秒', '20秒', '30秒', '60秒'], retention_table)
+    body += paragraph('e折时间表示状态差保留约36.8%；95%损失时间表示保留5%。阈值时间在保存节点间插值；未在本窗内达到的值记“—”，不外推。表中时间为达到阈值记录的中位数，必须结合达到数量解读。零衰减恒保留100%，其阈值时间为无穷。')
+    body += paragraph('原速的初态方向若在前几秒消失，后续波形仍可来自共享驱动；不能因此称后续Hb全部“无动态”。减慢或去掉状态差松弛是否减少实测误差，需要下一组配对结果决定。')
+    page('初态记忆多久消失：直接读取累计衰减率', body)
+
+    scenario_names = {'matched': '匹配原模型', 'original_transient': '原速初态瞬变',
+                      'slow_transient': '慢速初态瞬变', 'sustained_input': '持续输入'}
+    fig, axes = plt.subplots(2, 2, figsize=(7.3, 4.7), squeeze=False)
+    synth_rows = []
+    synthetic_input_rows = []
+    for ax, scenario in zip(axes.flat, cfg['synthetic']['scenarios']):
+        part = synthetic[(synthetic.scenario == scenario) & (synthetic.condition == 'joint_full') & (synthetic.length_s == 90)]
+        observation = [aggregate(part[part.arm == arm], 'full_hb_nmse') for arm in arms]
+        delta_error = []
+        for arm in arms:
+            good = part[(part.arm == arm) & part.qualified]
+            delta_error.append(number(good.delta_rmse.median()) + f'\n{len(good)}/6种子')
+        x = np.arange(len(arms))
+        ax.bar(x, observation, color=[colors[a] for a in arms]); ax.set_xticks(x, ['原无', '慢无', '零无', '原有', '慢有', '零有'])
+        ax.set_ylabel('双Hb NRMSE'); ax.set_title(scenario_names[scenario])
+        synth_rows.append([scenario_names[scenario]] + delta_error)
+        synthetic_input_rows.append([scenario_names[scenario]] + [number(part[(part.arm == arm) & part.qualified].forcing_rmse.median(), 4) for arm in arms])
+    body = save(fig, 'synthetic', '每种情形6个生成种子；柱为90秒联合完整拟合的观测误差。真值只用于生成与评分，拟合不可见；其余长度/条件见完整metrics.csv。', 'synthetic/*.json/npz; metrics.csv stage=synthetic')
+    body += tab(['状态差RMSE（状态单位）', '原无', '慢无', '零无', '原有', '慢有', '零有'], synth_rows)
+    body += paragraph('状态差RMSE在每个种子的完整时间支持计算，随后取数值合格种子的中位数；格内为可用种子/6。没有事后时间或幅度对齐。它与观测NRMSE的单位、分母和汇总方式不同。真值分别为生成器状态与无噪声Hb，观测目标另含固定噪声。')
+    page('合成检查：观测贴合与状态差恢复分别评分', body)
+    body = tab(['输入RMSE（状态/秒）', '原无', '慢无', '零无', '原有', '慢有', '零有'], synthetic_input_rows)
+    def synthetic_value(scenario, arm, metric):
+        part = synthetic[(synthetic.scenario == scenario) & (synthetic.length_s == 90)
+                         & (synthetic.condition == 'joint_full') & (synthetic.arm == arm) & synthetic.qualified]
+        return aggregate(part, metric) if metric.endswith('nmse') else float(part[metric].median())
+    body += paragraph('慢速瞬变中，原速与真实慢速无输入的双Hb NRMSE分别为'
+                      + number(synthetic_value('slow_transient', 'original', 'full_hb_nmse')) + '与'
+                      + number(synthetic_value('slow_transient', 'slow', 'full_hb_nmse')) + '；状态差RMSE分别为'
+                      + number(synthetic_value('slow_transient', 'original', 'delta_rmse'), 5) + '与'
+                      + number(synthetic_value('slow_transient', 'slow', 'delta_rmse'), 5) + '。这直接检查错误衰减率对状态和观测的影响。')
+    body += paragraph('持续输入真值的衰减率为原速。有输入原速/慢速/零衰减的观测NRMSE分别为'
+                      + '、'.join(number(synthetic_value('sustained_input', arm, 'full_hb_nmse')) for arm in arms[3:])
+                      + '，输入恢复RMSE分别为'
+                      + '、'.join(number(synthetic_value('sustained_input', arm, 'forcing_rmse'), 5) for arm in arms[3:])
+                      + '状态/秒。相同能量先验下，错误衰减率仍可能获得更低观测误差；需要同时核对输入恢复。')
+    body += paragraph('慢速瞬变的零衰减有输入臂，观测NRMSE为'
+                      + number(synthetic_value('slow_transient', 'driven_no_decay', 'full_hb_nmse'))
+                      + '，状态差RMSE为' + number(synthetic_value('slow_transient', 'driven_no_decay', 'delta_rmse'), 5)
+                      + '，状态差偏差中位数为' + number(synthetic_value('slow_transient', 'driven_no_decay', 'delta_bias'), 5)
+                      + '。参考后波形接近与绝对状态水平正确是不同要求。')
+    body += paragraph('匹配原模型检查增加容量是否改写已有正确解；瞬变情形检查记忆时间；持续输入情形检查减慢衰减能否替代实际驱动。输入误差与前页状态差误差使用相同数值合格子集，未将失败作为零误差。')
+    body += paragraph('30秒样本均从同一90秒生成记录的30–60秒裁出，不在裁出起点重造瞬变。原速瞬变在该段开始前已几乎消失，是预定负对照；慢速瞬变仍可保留。合成恢复不能把早于可见窗口的信息当作模型已看见。')
+    body += paragraph('所有24种子情形、两长度、三条件、六臂的失败分母保留在summary.json；本页只展示预先指定的90秒联合完整面板。低观测误差若未同时恢复状态差与输入，不构成潜状态恢复证据。')
+    page('低观测误差不保证衰减率、输入或绝对状态恢复', body)
+
+    for condition, title in [('joint_full', '完整联合拟合：减慢衰减与增加输入分别有什么收益？'),
+                             ('Hb_only_full', '仅拟合Hb：收益是否仍受内部动力学限制？'),
+                             ('joint_blocked', '隐藏Hb：完整重建的收益能否延伸到不可见点？')]:
+        fig, axes = plt.subplots(2, 2, figsize=(7.3, 4.05), sharey=True)
+        values_all = []
+        for ax, ds in zip(axes.flat, datasets):
+            for j, arm in enumerate(arms):
+                vals = [aggregate(measured[(measured.dataset == ds) & (measured.length_s == length)
+                                           & (measured.condition == condition) & (measured.arm == arm)], 'score_hb_nmse')
+                        for length in [30, 90]]
+                values_all.extend(vals)
+                ax.bar(np.arange(2) + (j - 2.5) * .13, vals, .13, color=colors[arm], label=labels[arm])
+            ax.set_title(names[ds]); ax.set_xticks([0, 1], ['30秒', '90秒']); ax.set_ylabel('双Hb NRMSE')
+        upper = max(1., float(np.nanmax(values_all)) * 1.12)
+        for ax in axes.flat: ax.set_ylim(0, upper)
+        fig.legend(*axes.flat[0].get_legend_handles_labels(), loc='upper center', ncol=3, frameon=False, fontsize=8)
+        body = save(fig, condition, '同页四数据集使用统一纵轴；六色定义在全报告保持一致。完整条件评分全窗，遮挡条件仅评分隐藏Hb；SD均来自冻结训练数据。', f'metrics.csv stage=measured condition={condition}; summary.json groups/paired')
+        body += paragraph(contrast_description(condition))
+        rows = []
+        for ds in datasets:
+            for length in [30, 90]:
+                rows.append([names[ds], length] + [interval(result(ds, length, condition, ref, cand))
+                                                  for ref, cand in contrasts])
+        body += tab(['数据集', '秒', '原→慢无输入', '原→零无输入', '原速：无→有', '慢速：无→有', '零衰减：无→有'], rows)
+        body += paragraph('单元格为参考NRMSE减候选NRMSE及95%被试配对区间；正数表示候选更好。“原→慢/零”检验无输入衰减率；后三列在相同衰减率下检验持续输入。不同衰减率的输入收益还受相同输入先验与系统滤波共同影响，不能只据有输入臂的排名识别真实时间常数。')
+        if condition == 'joint_blocked':
+            body += paragraph('隐藏段不进入拟合目标，但两侧Hb和整个EEG可见。此为离线条件插值，不能称实时或未来预测；区间跨零时，当前6名被试不足以确认一致收益。')
+        page(title, body)
+
+    # Explicit per-Hb intervals retain the two observable directions rather
+    # than allowing a combined-Hb mean to hide compensating deterioration.
+    hb_rows = []
+    for condition, condition_name in [('joint_full', '完整'), ('joint_blocked', '隐藏')]:
+        for ds in datasets:
+            for length in [30, 90]:
+                values = []
+                for component in ['HbO', 'HbR']:
+                    values.extend([interval(result(ds, length, condition, 'original', candidate, f'score_{component}_nmse'))
+                                   for candidate in ['slow', 'driven_original']])
+                hb_rows.append([condition_name, names[ds], length] + values)
+    page('HbO与HbR分开核对：完整重新拟合可改变上游',
+         tab(['支持', '数据集', '秒', 'HbO 原→慢', 'HbO 原速加输入', 'HbR 原→慢', 'HbR 原速加输入'], hb_rows)
+         + paragraph('Visual的原速加输入需要单独警惕：90秒完整拟合HbR改善为'
+                     + interval(result(datasets[2], 90, 'joint_full', 'original', 'driven_original', 'score_HbR_nmse')).split('\n')[0]
+                     + '；隐藏30/90秒分别为'
+                     + '、'.join(interval(result(datasets[2], length, 'joint_blocked', 'original', 'driven_original', 'score_HbR_nmse')).split('\n')[0] for length in [30, 90])
+                     + '。双Hb平均改善不能表述为两个Hb都改善；负差表示该分量受损。')
+         + paragraph('所有数值均为该分量的配对NRMSE改善及95%被试区间。HbR没有直接状态差贡献；完整重新拟合后HbR变化反映r与初态的联合补偿，不能说是状态差直接驱动了HbR。结合固定上游重放，才能区分直接数学效应与重新拟合后的整体折中。')
+         + paragraph('每行计划12条记录、6名被试；只在双方数值合格且评分有限的记录上计算配对区间，格内列出实际记录/被试数。失败全数保留在末页分母表，缺失不能当作零误差。'))
+
+    fig, axes = plt.subplots(1, 2, figsize=(7.3, 3.2))
+    for j, arm in enumerate(arms):
+        part = measured[(measured.length_s == 90) & (measured.condition == 'joint_full') & (measured.arm == arm)]
+        vals = [aggregate(part, name + '_hb_nmse') for name in ['first5', 'next5', 'ten_to_thirty', 'late']]
+        axes[0].plot(np.arange(4), vals, 'o-', color=colors[arm], label=labels[arm])
+    axes[0].set_xticks(np.arange(4), ['前5秒', '5–10秒', '10–30秒', '末30秒']); axes[0].set_ylabel('双Hb NRMSE')
+    axes[0].set_title('90秒联合完整；被试等权')
+    for arm in arms[:3] + ['driven_original']:
+        vals = [aggregate(measured[(measured.length_s == length) & (measured.condition == 'joint_full')
+                                   & (measured.arm == arm)], 'center_shape_hb_nmse') for length in [30, 90]]
+        axes[1].plot([0, 1], vals, 'o-', color=colors[arm], label=labels[arm])
+    axes[1].set_xticks([0, 1], ['30秒拟合', '90秒拟合']); axes[1].set_ylabel('同中段去均值形状NRMSE')
+    axes[1].set_title('同原记录30–59.5秒')
+    fig.legend(*axes[0].get_legend_handles_labels(), loc='upper center', ncol=3, frameon=False, fontsize=7)
+    body = save(fig, 'time_support', '左图按时间段分别计算误差，不在各段重估SD。右图只评分两种拟合都覆盖的同一119个时间点，并在每条记录、每个Hb内去残差均值。各数据集被试等权；详细逐数据集比较在下表。', 'measured/*.npz target/predictions/sd; matched original center indices')
+    rows = []
+    for ds in datasets:
+        for length in [30, 90]:
+            r = result(ds, length, 'joint_full', 'original', 'slow', 'center_shape_hb_nmse')
+            d = result(ds, length, 'joint_full', 'original', 'driven_original', 'center_shape_hb_nmse')
+            rows.append([names[ds], length, number(r['reference']), interval(r), interval(d)])
+    body += tab(['数据集', '拟合秒数', '原速同段形状误差', '减慢衰减改善', '原速加输入改善'], rows)
+    body += paragraph('两种长度使用同一原记录，但30秒窗以其起点前5秒重新参考。去残差均值能隔离常量参考差；它不更改原始主评分。90秒拟合多看前后数据，因此这不是只改变长度的纯因果对照。早段/晚段分割是描述性终点，时间点不是独立重复。')
+    shape_positive = sum(result(ds, length, 'joint_full', 'original', 'driven_original', 'center_shape_hb_nmse')['ci95'][0] > 0
+                         for ds in datasets for length in [30, 90])
+    body += paragraph(f'同一中段去均值后，原速加输入有{shape_positive}/8个条件的收益区间高于零。'
+                      '因此若全窗收益也存在，它不能全部归为参考常量；这仍是波形误差证据，不等于绝对状态或生理来源已恢复。')
+    page('将早期损失、晚期残差与相同中段分开', body)
+
+    cost_columns = ['weighted_data_sse', 'driver_curvature_cost', 'initial_prior_cost',
+                    'flow_prior_cost', 'forcing_prior_cost', 'driver_change_rms_from_original',
+                    'v_change_rms_from_original', 'q_change_rms_from_original']
+    cost_rows = []
+    cost_frame = frame[qualification & frame.stage.eq('measured') & frame.length_s.eq(90)
+                       & frame.condition.eq('joint_full')]
+    for arm in arms:
+        part = cost_frame[cost_frame.arm == arm]
+        values = []
+        for column in cost_columns:
+            if column not in part:
+                values.append('—')
+                continue
+            values.append(number(part.groupby(['dataset', 'subject'])[column].mean().mean()))
+        cost_rows.append([labels[arm], f'{len(part)}/48'] + values)
+    page('完整重新拟合怎样补偿：代价与上游变化一起看',
+         tab(['90秒联合完整', '可用', '数据', '驱动曲率', '初态', 'flow', '输入', '驱动变化', '体积v变化', '去氧q变化'], cost_rows)
+         + paragraph('前五个数值列为目标函数中已经加权的平方代价，单位为目标函数单位。数据项包含可见EEG与两Hb，不能当作双Hb主NRMSE；曲率、初态、flow与输入项的权重不同，其大小只反映当前优化合同。输入工程先验不是生理校准分布。')
+         + paragraph('最后三列先在每条记录对候选与该记录原速拟合的驱动、v、q之差计算全窗RMS，再在被试内平均记录、对“数据集×被试”等权平均。它们是状态坐标变化，未除以训练SD；v与q无量纲。数值更大表示重新拟合对上游作了更多补偿，不表示更接近真值。')
+         + paragraph('本表只使用双方没有缺失的保留指标与数值合格拟合；可用数量明确列出。固定上游重放中HbR保持不变；完整拟合中驱动和q可以移动，故HbR既可能受益也可能恶化。Visual的HbR负收益是这种折中的可见例子。')
+         + paragraph('证据：metrics.csv逐臂weighted_data_sse、各cost与*_change_rms_from_original；代价计算由运行的solver与任务记录拥有。'))
+
+    replay_table = []
+    for ds in datasets:
+        for arm in arms[:3]:
+            part = replay_frame[(replay_frame.dataset == ds) & (replay_frame.length_s == 90) & (replay_frame.arm == arm)] if not replay_frame.empty else pd.DataFrame()
+            if part.empty:
+                replay_table.append([names[ds], labels[arm], '不可用', '不可用', '0/12', '—'])
+                continue
+            replay_table.append([names[ds], labels[arm], number(part.late_offset_HbO_training_sd.median()),
+                                 number(part.late_fluctuation_HbO_training_sd.median()), f'{len(part)}/12', f'{part.hbr_max_abs.max():.1e}'])
+    reference_eq = equation('reference_offset',
+        r'H_{O,\delta}^{\rm ref}(t)=P_0\left[\delta(t)-\frac{1}{N_{\rm ref}}\sum_{j\in T_{\rm ref}}\delta(t_j)\right],'
+        r'\qquad\delta(t)\to0\ \not\Rightarrow\ H_{O,\delta}^{\rm ref}(t)\to0.')
+    page('衰减后仍可留下参考常量；它不是持续振荡', reference_eq
+         + paragraph('固定原速拟合的同一驱动和全部初态，只改变无输入衰减率后重放。表中每个数为90秒联合完整记录的中位数；晚段取最后30秒，先对每条记录计算，再汇总。偏移是该状态差贡献的晚段均值；波动是去晚段均值后的SD，单位均为HbO训练SD。')
+         + tab(['数据集', '无输入臂', '晚段偏移/训练SD', '晚段波动SD/训练SD', '可用记录', 'HbR最大绝对差'], replay_table)
+         + paragraph(f'联合完整条件的两种长度共计划288个无输入重放臂，保留可核对数组{audit["fixed_replay_array_arms"]}个、缺失{audit["missing_fixed_replay_array_arms"]}个。反事实若越出物理域则结果不可用；不会反过来把原模型已收敛且通过积分检查的拟合算作失败。JSON中的重放状态另行保留。')
+         + tab(['物理域失败的反事实任务', '臂', '最小p', '最小氧合可行量', '对应秒数'], counterfactual_rows)
+         + paragraph('失败仅属于固定原驱动/初态的反事实。本轮零衰减反事实可由保存的v加初始状态差直接核对：即使p仍为正，总Hb基线尺度乘p减去去氧基线尺度乘q仍可能为负，违反物理域。上表用保存时间节点的代数值，没有重新积分、裁剪或重新拟合。')
+         + paragraph('首5秒参考会减去状态差早期平均值；即便原速状态差随后衰减至零，参考后的HbO贡献仍可停在一个常量。零衰减的原始状态差恒定，理想参考会把它完全消掉。因此“状态差尚存”“参考输出尚有偏移”“仍在振荡”是三个不同判断。')
+         + paragraph('上式展示参考运算的直观形式，报告数值使用保存的完整观测算子，因此保留插值与处理约定。固定上游HbR不变由数组独立核验；全重新拟合中的HbR改善属于补偿结果，不能据此给状态差增加新物理来源。'))
+
+    chosen = []
+    for ds in datasets:
+        candidates = frame[(frame.stage == 'measured') & (frame.dataset == ds) & (frame.length_s == 90)
+                           & (frame.condition == 'joint_full') & (frame.arm == 'original')]
+        candidates = candidates.sort_values(['full_hb_nmse', 'key'], kind='stable', na_position='last')
+        if candidates.empty:
+            continue
+        example = candidates.iloc[len(candidates) // 2]
+        key = str(example.key)
+        example_path = run / 'measured' / (key + '.npz')
+        if not example_path.exists():
+            page(names[ds] + '：固定中位样例缺少可绘数组',
+                 paragraph('预定规则选中的记录未保存可绘数组；保留其失败身份，不改选更容易的记录。任务：' + esc(key)))
+            chosen.append(dict(dataset=ds, key=key, denominator=len(candidates), status='missing_arrays'))
+            continue
+        a = load_arrays('measured', key)
+        target, sd = a['target'], a['sd']; time = np.arange(len(target)) * dt
+        fig, axes = plt.subplots(3, 2, figsize=(7.3, 5.6), sharex=True)
+        for c, ax in enumerate(axes[:2, 0], start=1):
+            ax.plot(time[:-1], target[:-1, c] / sd[c], color='#222', lw=1, label='处理后实测目标')
+            for arm in arms:
+                if arm + '_prediction' in a:
+                    ax.plot(time[:-1], a[arm + '_prediction'][:-1, c] / sd[c], color=colors[arm],
+                            lw=1, ls='--' if arm.startswith('driven') else '-', label=labels[arm])
+            ax.set_ylabel(('HbO' if c == 1 else 'HbR') + ' / 训练SD'); ax.set_title('完整重新拟合')
+        for arm in arms:
+            if arm + '_delta' in a:
+                axes[2, 0].plot(time, a[arm + '_delta'], color=colors[arm], lw=1,
+                                ls='--' if arm.startswith('driven') else '-', label=labels[arm])
+        axes[2, 0].set_ylabel('状态差 / 状态单位'); axes[2, 0].set_title('拟合状态差（无量纲）')
+        for arm in arms[:3]:
+            prefix = 'replay_' + arm
+            if prefix + '_states' not in a:
+                continue
+            states = a[prefix + '_states']; delta = states[:, 4] - states[:, 3]
+            axes[0, 1].plot(time, delta, color=colors[arm], lw=1.1, label=labels[arm])
+            axes[1, 1].plot(time[:-1], a[prefix + '_prediction'][:-1, 1] / sd[1], color=colors[arm], lw=1.1)
+            axes[2, 1].plot(time, a[prefix + '_decay_retention'], color=colors[arm], lw=1.1)
+        missing_replays = [labels[arm] for arm in arms[:3] if 'replay_' + arm + '_states' not in a]
+        if missing_replays:
+            axes[0, 1].text(.03, .93, '重放不可用：' + '、'.join(missing_replays), transform=axes[0, 1].transAxes,
+                            va='top', fontsize=7, color='#8C3B27')
+        axes[0, 1].set_ylabel('状态差 / 状态单位'); axes[0, 1].set_title('固定原驱动和全部初态')
+        axes[1, 1].set_ylabel('HbO / 训练SD'); axes[1, 1].set_title('固定上游的直接输出效应')
+        axes[2, 1].set_ylabel('状态差保留比例'); axes[2, 1].set_yscale('log'); axes[2, 1].set_title('累计衰减率，非观测比值')
+        for ax in axes[-1]: ax.set_xlabel('记录起点后的秒数')
+        fig.legend(*axes[0, 0].get_legend_handles_labels(), loc='upper center', ncol=4, frameon=False, fontsize=7)
+        caption = ('左列：目标与六臂完整预测、相应状态差；右列：固定上游、无输入的三种衰减率重放。'
+                   '实线为无输入，虚线为有输入；右下为对数轴。每行两图的物理量不同，纵轴依单位独立标明；HbR重放重合故不重复画。')
+        body = save(fig, 'example_' + ds, caption, f'measured/{key}.json/.npz')
+        values = []
+        for arm in arms:
+            sample = measured[(measured.key == key) & (measured.arm == arm)]
+            values.append(number(np.sqrt(float(sample.full_hb_nmse.iloc[0]))) if len(sample) else '失败')
+        body += tab(['本记录双Hb NRMSE'] + [labels[a] for a in arms], [['数值'] + values])
+        spec = task_records[('measured', key)]
+        reference = spec.get('ref', spec)
+        identity = {k: reference[k] for k in ['id', 'dataset', 'subject', 'native_session', 'event_id', 'task',
+                                             'eeg_start_s', 'hb_start_s', 'duration_s'] if k in reference}
+        if reference.get('anchor'):
+            identity['anchor'] = {k: reference['anchor'][k] for k in ['region', 'hb_channel', 'eeg_channels']
+                                  if k in reference['anchor']}
+        body += paragraph('样例按本数据集90秒原速联合完整误差升序，取上中位数，并列按key排序；候选方法共享此规则，失败不从候选分母中消失。本页仅用于解释，不用于选模。身份：' + esc(identity or key) + '。')
+        findings = []
+        for component, c in [('HbO', 1), ('HbR', 2)]:
+            observed = target[:-1, c] / sd[c]
+            fragments = []
+            for arm in ['original', 'slow', 'driven_original']:
+                if arm + '_prediction' not in a:
+                    continue
+                prediction = a[arm + '_prediction'][:-1, c] / sd[c]
+                fragments.append(labels[arm] + f'峰谷差{np.ptp(prediction):.2f}、最大值时刻{time[int(np.argmax(prediction))]:.2f}秒')
+            findings.append(component + f'实测峰谷差{np.ptp(observed):.2f}训练SD、最大值在{time[int(np.argmax(observed))]:.2f}秒；' + '；'.join(fragments) + '。')
+        body += paragraph(' '.join(findings))
+        body += paragraph('峰谷差在同一冻结训练SD坐标计算；全窗最大值时刻仅为描述，不等同于生理潜伏期。右侧隔离衰减率直接效应；晚段常量输出按参考偏移解释，不能称新增振荡。')
+        page(names[ds] + '：按原速中位误差固定选择的90秒记录', body)
+        chosen.append(dict(dataset=ds, key=key, denominator=len(candidates), selection='upper median by original 90s joint_full full_hb_nmse; lexical key tie-break', identity=identity))
+
+    failures = frame.loc[~qualification]
+    failure_detail = '；'.join(str(r.id) + f' / {int(r.length_s)}秒 / ' + str(r.condition) + ' / ' + labels[r.arm] + ' / ' + str(r.status)
+                              for r in failures.itertuples()) or '无'
+    failure_rows = []
+    for (stage, arm), part in frame.groupby(['stage', 'arm'], sort=False):
+        failure_rows.append([stage, labels[arm], len(part), int(qualification.loc[part.index].sum()),
+                             int((~qualification.loc[part.index]).sum())])
+    integration_column = 'integration_max_training_sd'
+    maximum_integration = float(pd.to_numeric(frame[integration_column], errors='coerce').max()) if integration_column in frame else np.nan
+    full_pairs = [v for v in paired_results if v['condition'] == 'joint_full' and v['metric'] == 'score_hb_nmse']
+    hidden_pairs = [v for v in paired_results if v['condition'] == 'joint_blocked' and v['metric'] == 'score_hb_nmse']
+    qualified_fits = int(qualification.sum())
+    page('结论：将衰减限制、输入容量与生理归属分开',
+         paragraph('<b>' + outcome + '</b>')
+         + paragraph(practical_summary)
+         + paragraph(f'无输入的数学结果明确：状态差只携带衰减或常量记忆，不能自主产生持续振荡。实测联合完整比较中，减慢衰减的明确正收益为{positive_slow}/8，原速下增加输入为{positive_driven}/8；其余区间的具体方向与大小见结果表，不能以理论限制替代实际收益证据。')
+         + paragraph('实际输入改变了状态动力学并增加了容量。若它比仅延长初态记忆更能改善晚段或隐藏段误差，支持当前无输入状态差方向对这些条件重建不够灵活；这仍不能识别真实生理来源、证明已恢复独立血容量室，或排除观测映射、噪声和其他模型失配。')
+         + paragraph(f'全部五类预定比较中，联合完整95%区间完全高于零的比较共{sum(v["ci95"][0] > 0 for v in full_pairs)}/{len(full_pairs)}；隐藏段为{sum(v["ci95"][0] > 0 for v in hidden_pairs)}/{len(hidden_pairs)}。这些是描述性区间计数，相关比较未做多重检验校正，不是显著性发现总数。')
+         + tab(['阶段', '臂', '计划', '合格', '失败/不合格'], failure_rows)
+         + paragraph('不合格拟合身份：' + esc(failure_detail) + '。Hb-only的90秒零衰减相关配对因此使用11/12条记录、仍来自6名被试；其他比较的数量见各格。反事实重放的三次域失败另计，不混入优化未收敛分母。')
+         + tab(['独立复核', '结果'], [
+             ['保存预测重算双Hb全窗/评分NMSE最大差', f'{audit["max_score_recompute_difference"]:.2e}'],
+             ['状态→Hb→同一观测算子最大差', f'{audit["max_observation_closure"]:.2e}'],
+             ['状态差/累计保留率闭合最大差', f'{max(audit["max_delta_closure"], audit["max_retention_closure"]):.2e}'],
+             ['固定上游HbR最大差', f'{audit["max_fixed_replay_HbR_difference"]:.2e}'],
+             ['4/8积分子步最大差 / 训练SD', f'{maximum_integration:.2e}；合同上限 {cfg["solver"]["maximum_integration_difference_training_sd"]}'],
+             ['合格拟合 / 全计划', f'{qualified_fits}/{len(frame)}'],
+             ['交付', '完整PNG图240 dpi；LaTeX公式PNG300 dpi；正文/表格可搜索']])
+         + paragraph('下一步应依各数据集的隐藏段、状态差恢复与失败证据选择验证方向：先复核改善是否超出初态参考常量和上游补偿，再考虑独立观测或已测系统生理输入。当前公开开发记录的条件重建不等于未见数据确认，也没有授权或执行新的受保护评价。')
+         + paragraph('WPS实际交互未检查；PDF图像对象、文字提取与逐页实际尺寸预览单独保留。完整资源、监督单元、命令、源码和失败记录继续由本运行拥有。'))
+
+    analysis = dict(schema='shared_driver_decay_report_analysis_v1', source_summary=str(evidence_root / 'summary.json'),
+                    paired=paired_results, examples=chosen,
+                    same_center='original seconds 30 through 59.5, 119 samples, residual mean removed within Hb, frozen training SD; no refit',
+                    uncertainty='paired 2000 whole-subject bootstrap percentile 95%; conditional frozen training coordinates; no multiplicity correction')
+    (out / 'analysis.json').write_text(json.dumps(analysis, ensure_ascii=False, indent=2) + '\n')
+    (out / 'verification.json').write_text(json.dumps(audit, ensure_ascii=False, indent=2) + '\n')
+    css = ('body{font-family:sans-serif;font-size:9.6pt;line-height:1.42;color:#17212e}'
+           'h1{font-size:17.5pt;color:#123e59;margin-bottom:12pt}p{margin:6pt 0}'
+           'table{width:100%;border-collapse:collapse;font-size:7.35pt;margin:8pt 0}'
+           'td,th{border:.4pt solid #c1cad3;padding:3.4pt}th{background:#eef3f7}'
+           'img{max-width:100%}.figure{margin:6pt 0}.source{font-size:7pt;color:#536273}')
+    document = '<!doctype html><html lang="zh"><meta charset="utf-8"><style>' + css + '.section{max-width:760px;margin:24px auto;page-break-before:always}</style><body>'
+    document += ''.join('<section class="section">' + body + '</section>' for body in pages) + '</body></html>'
+    (out / 'REPORT.html').write_text(document)
+    pdf = fitz.open(); page_sources = []
+    def rectfn(number, filled):
+        if number > 3:
+            raise RuntimeError('decay report section overflow; split or simplify visible content')
+        rect = fitz.paper_rect('a4')
+        return rect, rect + (35, 32, -35, -32), None
+    for index, body in enumerate(pages):
+        story = fitz.Story(body, user_css=css, archive=fitz.Archive(str(out)))
+        part = story.write_with_links(rectfn)
+        page_sources.append(dict(section=index + 1, pdf_pages=list(range(len(pdf) + 1, len(pdf) + len(part) + 1))))
+        pdf.insert_pdf(part); part.close()
+    pdf.save(out / 'REPORT.pdf', garbage=4, deflate=True)
+    image_count = sum(len(p.get_images()) for p in pdf)
+    chars = sum(len(p.get_text()) for p in pdf)
+    vector_drawings = sum(len(p.get_drawings()) for p in pdf)
+    validation = dict(pages=len(pdf), sections=len(pages), image_objects=image_count,
+                      expected_images=len(images), searchable_characters=chars,
+                      chart_dpi=240, formula_dpi=300, wps_checked=False,
+                      figures_and_formulas_embedded_as_bitmap=True,
+                      vector_drawings_including_table_rules=vector_drawings,
+                      page_sources=page_sources)
+    if image_count != len(images) or chars < 2000:
+        raise AssertionError(f'decay report image/text verification failed: {validation}')
+    for index, page_obj in enumerate(pdf):
+        page_obj.get_pixmap(dpi=96).save(out / f'preview_{index+1:02d}.png')
+    pdf.close()
+    atlas = fitz.open()
+    for path in images:
+        image_page = atlas.new_page()
+        image_page.insert_image(image_page.rect + (28, 28, -28, -28), filename=str(path), keep_proportion=True)
+    atlas.save(out / 'FIGURES.pdf', garbage=4, deflate=True)
+    validation['atlas_image_objects'] = sum(len(p.get_images()) for p in atlas)
+    if validation['atlas_image_objects'] != len(images):
+        raise AssertionError('figure atlas does not contain each bitmap')
+    atlas.close()
+    (out / 'figure_sources.json').write_text(json.dumps(dict(figures=image_sources, examples=chosen,
+                                                          pages=page_sources), ensure_ascii=False, indent=2) + '\n')
+    (out / 'export_validation.json').write_text(json.dumps(validation, ensure_ascii=False, indent=2) + '\n')
+    shutil.copy2(Path(__file__), out / 'renderer_source.py')
+    print(json.dumps(validation, ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path)
@@ -7794,6 +8610,8 @@ def main():
     parser.add_argument("--fixed-roi-tau", action="store_true", help="Render fixed AF7Fp1 shared nonlinear tau diagnostic")
     parser.add_argument("--waveform-diagnostic", action="store_true")
     parser.add_argument('--volume-drive-diagnostic', action='store_true')
+    parser.add_argument('--decay-diagnostic', action='store_true', help='Render retained six-arm initial-difference decay and actual-input evidence')
+    parser.add_argument('--decay-evidence', type=Path, help='Versioned replay-only evidence overlay; trajectories and fixed config remain under --run')
     parser.add_argument("--fitting-explainer", action="store_true", help="Export an offline interactive lesson from the retained public waveform cases")
     parser.add_argument("--parameter-explorer", action="store_true", help="Export three public examples with forward-only physiology parameter sweeps")
     parser.add_argument("--boundary-run", type=Path, help="Add the retained optical shared-tau lower-bound example to --parameter-explorer")
@@ -7803,6 +8621,19 @@ def main():
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.decay_diagnostic:
+        if args.run is None:
+            parser.error('--decay-diagnostic requires --run')
+        if any((args.volume_drive_diagnostic, args.refed_comparison, args.replay, args.nonlinear_fit,
+                args.gain_prior_fit, args.fixed_roi_tau, args.fixed_roi_flow, args.fixed_roi_initial,
+                args.fixed_roi_optical, args.conditional_optical_gain, args.waveform_diagnostic,
+                args.step_control, args.teacher_robustness, args.component_attribution,
+                args.semantic_response, args.fitting_explainer, args.parameter_explorer)):
+            parser.error('Choose one report mode')
+        render_decay_diagnostic(args.run.resolve(), args.output.resolve(), evidence=args.decay_evidence.resolve() if args.decay_evidence else None)
+        return
+    if args.decay_evidence:
+        parser.error('--decay-evidence requires --decay-diagnostic')
     if args.volume_drive_diagnostic:
         if args.run is None:parser.error('--volume-drive-diagnostic requires --run')
         if any((args.refed_comparison,args.replay,args.nonlinear_fit,args.gain_prior_fit,args.fixed_roi_tau,

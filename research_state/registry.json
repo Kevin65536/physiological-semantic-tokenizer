@@ -2087,6 +2087,42 @@
       "role": "run_manifest"
     },
     {
+      "id": "e.shared_driver_decay_contract",
+      "label": "p−v衰减六臂直接诊断合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_decay_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.shared_driver_decay_summary",
+      "label": "p−v衰减诊断修正后完整结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/evidence_v2/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_decay_migration",
+      "label": "反事实重放与原拟合状态分离的保留证据迁移",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/evidence_v2/migration.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_decay_verification",
+      "label": "衰减诊断独立数组复算与物理边界核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/evidence_v2/independent_verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_decay_report",
+      "label": "p−v持续衰减影响的中文报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/report_v4/REPORT.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_decay_resources",
+      "label": "衰减诊断监督运行与资源测量",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/resources.json",
+      "role": "diagnostic"
+    },
+    {
       "id": "e.model_compatibility_panels",
       "label": "冻结观测面板结果",
       "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/panels/summary.json",
@@ -5913,6 +5949,33 @@
       ],
       "headline": false,
       "next_step": "本轮描述性套件与图线分析已交付。后续优先复核观测映射、尺度和跨记录稳定性，再以独立预算稳定性判断非线性最优误差；未启动新的保护评价。"
+    },
+    {
+      "state_id": "main.shared_driver_decay@2026-10-23.v1",
+      "entity": "main.shared_driver_decay",
+      "label": "p−v无源衰减速度与持续输入的直接诊断",
+      "track": "main",
+      "order": 190,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "4公开数据集24被试48记录的30/90秒六臂直接动力学对照；864合成拟合合格，1727/1728实测拟合合格，保留1个不收敛。原速初差损失95%的各数据集中位时间约6–7秒；慢衰减在全部8个联合完整比较及8个隐藏段比较中的配对区间均跨零，取消衰减在7/8个完整比较变差。原速加状态输入使90秒双Hb NRMSE在Single/Simultaneous/Visual/REFED降低31.3%/38.2%/7.4%/2.4%，隐藏段6/8正收益，REFED仍不确定；Visual部分HbR恶化。合成真值可检出过快衰减损害，但实测不支持将误差主要归因于衰减速度。3个固定上游零衰减重放违反物理域，与原拟合分开记录；版本化修正未重拟合或改动旧证据，不授予生理恢复资格。",
+      "evidence_ids": [
+        "e.shared_driver_decay_contract",
+        "e.shared_driver_decay_summary",
+        "e.shared_driver_decay_migration",
+        "e.shared_driver_decay_verification",
+        "e.shared_driver_decay_report",
+        "e.shared_driver_decay_resources"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-23T10:56:12.223234+00:00",
+      "depends_on": [
+        "main.ssm_output_support"
+      ],
+      "headline": false,
+      "next_step": "本轮固定矩阵已完成。后续应优先检验持续状态输入的可识别性及跨记录泛化，并保留HbR折中和失败；没有支持仅调慢衰减的实测证据，未启动新的受保护评价。"
     }
   ]
 }

@@ -1,0 +1,338 @@
+{
+  "schema": "shared_driver_decay_numerical_verification_v1",
+  "source": "frozen_source_snapshot_and_retained_task_arrays",
+  "refits_launched": 0,
+  "raw_or_protected_arrays_read": 0,
+  "stages": {
+    "pilot": {
+      "tasks": 4,
+      "arms": 24,
+      "qualified": 24,
+      "conditions": {
+        "joint_full": 4
+      },
+      "synthetic_pairs": 2
+    },
+    "synthetic": {
+      "tasks": 144,
+      "arms": 864,
+      "qualified": 864,
+      "conditions": {
+        "Hb_only_full": 48,
+        "joint_blocked": 48,
+        "joint_full": 48
+      },
+      "synthetic_pairs": 24
+    },
+    "measured": {
+      "tasks": 288,
+      "arms": 1728,
+      "qualified": 1724,
+      "conditions": {
+        "Hb_only_full": 96,
+        "joint_blocked": 96,
+        "joint_full": 96
+      },
+      "synthetic_pairs": 0
+    }
+  },
+  "maxima": {
+    "score_mask": 0.0,
+    "metric_full_hb_nmse": 0.0,
+    "metric_full_hbo_nmse": 0.0,
+    "metric_full_hbr_nmse": 0.0,
+    "metric_score_hb_nmse": 0.0,
+    "metric_score_hbo_nmse": 0.0,
+    "metric_score_hbr_nmse": 0.0,
+    "metric_eeg_nmse": 0.0,
+    "metric_retention_end": 0.0,
+    "metric_retention_integral_end": 0.0,
+    "metric_forcing_rms_state_per_s": 0.0,
+    "metric_late_hb_nmse": 0.0,
+    "metric_late_demeaned_hb_nmse": 0.0,
+    "metric_center_demeaned_hb_nmse": 0.0,
+    "cost_weighted_data_sse": 9.094947017729282e-13,
+    "cost_driver_curvature_cost": 1.0658141036401503e-14,
+    "cost_initial_prior_cost": 2.842170943040401e-14,
+    "cost_flow_prior_cost": 2.2737367544323206e-13,
+    "cost_forcing_prior_cost": 4.263256414560601e-14,
+    "objective_total": 9.094947017729282e-13,
+    "forcing_basis_units": 0.0,
+    "retention_exponential": 0.0,
+    "retention_monotone": 0.0,
+    "delta_definition": 0.0,
+    "noinput_abs_monotone": 4.440892098500626e-16,
+    "noinput_hazard_relation": 2.1119053061902093e-08,
+    "observation_closure": 0.0,
+    "raw_delta_contribution": 0.0,
+    "referenced_delta_contribution": 0.0,
+    "retained_forward_state": 2.220446049250313e-16,
+    "retained_forward_prediction": 1.1275702593849246e-16,
+    "no_decay_constant_delta": 8.43769498715119e-15,
+    "original_legacy_compiled_states": 2.220446049250313e-16,
+    "original_legacy_compiled_prediction": 9.71445146547012e-17,
+    "replay_upstream": 0.0,
+    "replay_hbr": 0.0,
+    "constant_delta_referenced_zero": 7.212112851373575e-15,
+    "paired_truth_states": 0.0,
+    "paired_truth_driver": 0.0,
+    "paired_truth_noise": 0.0,
+    "paired_truth_forcing": 0.0,
+    "paired_truth_delta": 0.0,
+    "paired_same_center_target": 4.163336342344337e-17,
+    "scenario_fixed_driver": 0.0,
+    "scenario_fixed_noise": 0.0,
+    "scenario_fixed_upstream": 0.0
+  },
+  "paired_windows": 26,
+  "baseline_forward_recomputations": 12,
+  "full_forward_recomputations": 36,
+  "findings": [
+    "No refits or source edits; frozen forward maps only used for selected recomputations.",
+    "All retained masks, selected metrics, all objective terms and forcing basis recompute within stated numerical tolerances.",
+    "All fixed-upstream replay identities and observation closures pass; no-input delta is monotone in absolute magnitude.",
+    "Paired synthetic 30s values are exact crops of the same 90s truth, driver and noise; referenced targets agree to floating-point precision.",
+    "Versioned evidence_v2 restores three valid original fits without changing fitted arrays, metrics or objectives; six successful replay arrays preserve upstream/HbR exactly and three zero-decay counterfactuals remain explicitly infeasible.",
+    "All effective group aggregates and eight measured whole-subject paired bootstrap comparisons independently recompute exactly."
+  ],
+  "missing_replay_tasks": [
+    {
+      "stage": "measured",
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full"
+    },
+    {
+      "stage": "measured",
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked"
+    },
+    {
+      "stage": "measured",
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full"
+    }
+  ],
+  "recorded_software_errors": [
+    {
+      "stage": "measured",
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full",
+      "arm": "original",
+      "converged": true,
+      "integration_passed": true,
+      "scaled_gradient": 9.14438149860992e-06
+    },
+    {
+      "stage": "measured",
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked",
+      "arm": "original",
+      "converged": true,
+      "integration_passed": true,
+      "scaled_gradient": 5.121828744089749e-06
+    },
+    {
+      "stage": "measured",
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full",
+      "arm": "original",
+      "converged": true,
+      "integration_passed": true,
+      "scaled_gradient": 4.720133813482253e-06
+    }
+  ],
+  "status": "passed_with_three_retained_infeasible_counterfactuals_and_one_nonconverged_fit",
+  "measured_paired_windows": {
+    "pairs": 144,
+    "conditions_per_record": 3,
+    "unique_records": 48,
+    "max_abs_differences": {
+      "target": 1.249000902703301e-16,
+      "operator_scored": 1.1102230246251565e-16,
+      "operator_outside_scored": 2.7755575615628914e-17,
+      "training_sd": 0.0
+    },
+    "training_split_identity_checks": 288
+  },
+  "counterfactual_domain_failures": [
+    {
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full",
+      "decay_multiplier": 1.0,
+      "delta0": -0.46972147736019354,
+      "min_p": 0.6826535274087737,
+      "min_absolute_hbo": 0.3071222208587656,
+      "min_hbo_time_s": 0.0,
+      "negative_absolute_hbo_samples": 0,
+      "calculation": "p=v+delta0*exp(-lambda*retained_integral);diagnostic_continuous_relation_not_refit",
+      "margin_status": "sampled_absolute_hbo_margin_positive"
+    },
+    {
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full",
+      "decay_multiplier": 0.1,
+      "delta0": -0.46972147736019354,
+      "min_p": 0.4962997557316009,
+      "min_absolute_hbo": 0.11027503957190199,
+      "min_hbo_time_s": 6.0,
+      "negative_absolute_hbo_samples": 0,
+      "calculation": "p=v+delta0*exp(-lambda*retained_integral);diagnostic_continuous_relation_not_refit",
+      "margin_status": "sampled_absolute_hbo_margin_positive"
+    },
+    {
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full",
+      "decay_multiplier": 0.0,
+      "delta0": -0.46972147736019354,
+      "min_p": 0.3832661174996199,
+      "min_absolute_hbo": -0.049559517454694,
+      "min_hbo_time_s": 35.25,
+      "negative_absolute_hbo_samples": 280,
+      "calculation": "p=v+delta0*exp(-lambda*retained_integral);diagnostic_continuous_relation_not_refit",
+      "margin_status": "infeasible_counterfactual_negative_absolute_hbo"
+    },
+    {
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full",
+      "decay_multiplier": 1.0,
+      "delta0": -0.38509516588434256,
+      "min_p": 0.6952679520330094,
+      "min_absolute_hbo": 0.310029434404733,
+      "min_hbo_time_s": 0.0,
+      "negative_absolute_hbo_samples": 0,
+      "calculation": "p=v+delta0*exp(-lambda*retained_integral);diagnostic_continuous_relation_not_refit",
+      "margin_status": "sampled_absolute_hbo_margin_positive"
+    },
+    {
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full",
+      "decay_multiplier": 0.1,
+      "delta0": -0.38509516588434256,
+      "min_p": 0.43126949495847094,
+      "min_absolute_hbo": 0.06684696406595758,
+      "min_hbo_time_s": 5.0,
+      "negative_absolute_hbo_samples": 0,
+      "calculation": "p=v+delta0*exp(-lambda*retained_integral);diagnostic_continuous_relation_not_refit",
+      "margin_status": "sampled_absolute_hbo_margin_positive"
+    },
+    {
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full",
+      "decay_multiplier": 0.0,
+      "delta0": -0.38509516588434256,
+      "min_p": 0.34953348902518644,
+      "min_absolute_hbo": -0.02912195045274818,
+      "min_hbo_time_s": 7.75,
+      "negative_absolute_hbo_samples": 5,
+      "calculation": "p=v+delta0*exp(-lambda*retained_integral);diagnostic_continuous_relation_not_refit",
+      "margin_status": "infeasible_counterfactual_negative_absolute_hbo"
+    },
+    {
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked",
+      "decay_multiplier": 1.0,
+      "delta0": -0.4735574420612261,
+      "min_p": 0.7019378400587858,
+      "min_absolute_hbo": 0.3417385295094751,
+      "min_hbo_time_s": 0.25,
+      "negative_absolute_hbo_samples": 0,
+      "calculation": "p=v+delta0*exp(-lambda*retained_integral);diagnostic_continuous_relation_not_refit",
+      "margin_status": "sampled_absolute_hbo_margin_positive"
+    },
+    {
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked",
+      "decay_multiplier": 0.1,
+      "delta0": -0.4735574420612261,
+      "min_p": 0.5105627960886909,
+      "min_absolute_hbo": 0.13993012411298467,
+      "min_hbo_time_s": 5.75,
+      "negative_absolute_hbo_samples": 0,
+      "calculation": "p=v+delta0*exp(-lambda*retained_integral);diagnostic_continuous_relation_not_refit",
+      "margin_status": "sampled_absolute_hbo_margin_positive"
+    },
+    {
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked",
+      "decay_multiplier": 0.0,
+      "delta0": -0.4735574420612261,
+      "min_p": 0.39560753066850385,
+      "min_absolute_hbo": -0.026924363931282336,
+      "min_hbo_time_s": 35.75,
+      "negative_absolute_hbo_samples": 147,
+      "calculation": "p=v+delta0*exp(-lambda*retained_integral);diagnostic_continuous_relation_not_refit",
+      "margin_status": "infeasible_counterfactual_negative_absolute_hbo"
+    }
+  ],
+  "physical_output_checks": {
+    "min_positive_compartment": 0.023967510395077826,
+    "min_absolute_hbo": 0.038006857610434985,
+    "max_4_8_difference_training_sd": 7.986190066299885e-05,
+    "observed_arrays": 2616,
+    "nonconverged": [
+      {
+        "stage": "measured",
+        "key": "simultaneous_eeg_nirs__VP005__prefrontal__r0_90_Hb_only_full",
+        "arm": "no_decay",
+        "reason": "evaluation_budget",
+        "best_gradient": 7.114651677854646e-05
+      }
+    ]
+  },
+  "evidence_v2_verification": {
+    "overrides": 3,
+    "successful_replays": 6,
+    "infeasible_counterfactual_replays": 3,
+    "max_fit_metric_difference": 0.0,
+    "max_original_replay_difference": 0.0,
+    "max_successful_replay_upstream_or_hbr_difference": 0.0,
+    "max_forward_replay_difference": 2.220446049250313e-16,
+    "counts": {
+      "pilot": {
+        "tasks": 4,
+        "arms": 24,
+        "qualified": 24,
+        "software_errors": 0,
+        "nonconverged": 0,
+        "integration_failed": 0,
+        "completed_replays": 12,
+        "infeasible_counterfactual_replays": 0
+      },
+      "synthetic": {
+        "tasks": 144,
+        "arms": 864,
+        "qualified": 864,
+        "software_errors": 0,
+        "nonconverged": 0,
+        "integration_failed": 0,
+        "completed_replays": 432,
+        "infeasible_counterfactual_replays": 0
+      },
+      "measured": {
+        "tasks": 288,
+        "arms": 1728,
+        "qualified": 1727,
+        "software_errors": 0,
+        "nonconverged": 1,
+        "integration_failed": 0,
+        "completed_replays": 861,
+        "infeasible_counterfactual_replays": 3
+      }
+    },
+    "aggregate_groups": 312,
+    "max_aggregate_nrmse_difference": 0.0,
+    "paired_bootstraps": 8,
+    "max_paired_estimate_or_interval_difference": 0.0,
+    "effective_summary": "summary.json",
+    "fitted_parameters_changed": 0,
+    "parent_task_classifications_preserved": true
+  },
+  "effective_qualified_arms": {
+    "pilot": 24,
+    "synthetic": 864,
+    "measured": 1727
+  },
+  "raw_v1_classification_warning": "Three valid original fits were misclassified by v1 replay exception handling; parent task JSON/NPZ remains intact and evidence_v2 overrides classification only.",
+  "evidence_owners": {
+    "original_v1_summary": "../summary.json",
+    "effective_v2_summary": "summary.json",
+    "original_v1_fitted_arrays": "../measured/{task}.npz",
+    "effective_task_overrides": "measured/{task}.json",
+    "additional_replays": "measured/{task}.npz",
+    "fixed_config": "../resolved_config.yaml",
+    "fixed_solver": "../source_snapshot/src/inference/shared_driver_rk4.py"
+  },
+  "counterfactual_margin_policy": {
+    "status": "three_infeasible_zero_decay_counterfactuals_retained_separately_from_fit_qualification",
+    "quantity": "absolute_HbO=P0*p-Q0*q_in_fixed_model_coordinates",
+    "evaluation": "sampled_hazard_relation_from_saved_original_v_q_delta0_and_integral",
+    "intervention": "only_decay_multiplier_changes_all_upstream_and_initial_coordinates_fixed",
+    "clipping": false,
+    "limitation": "continuous_hazard_relation_is_not_exact_discrete_RK4_identity;observed_original_p_discrepancy_at_most_2.12e-8_is_tiny_relative_to_negative_margins"
+  }
+}

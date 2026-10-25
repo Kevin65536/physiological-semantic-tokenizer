@@ -110,6 +110,35 @@ or a physiologically identified solution. The report retains numerical failures,
 the separate strict joint criterion, conditional non-entry of parameter profiles,
 and the mismatch controls that pass observation tolerances despite driver error.
 
+## Direct unforced p−v decay diagnostic — 2026-10-23
+
+The [six-arm contract](configs/physiology_semantic_tokenizer/shared_driver_decay_v1.yaml)
+changes only the p−v relaxation rate and its actual state-equation input, with
+the retained public identities fixed by the
+[plan](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/plan.json).
+The numerical owner is the versioned
+[corrected summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/evidence_v2/summary.json),
+with [paired endpoints](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/evidence_v2/paired_contrasts.json)
+and [fit metrics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/evidence_v2/metrics.csv).
+The [Chinese report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/report_v4/REPORT.pdf)
+and [bitmap figure atlas](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/report_v4/FIGURES.pdf)
+summarize the retained arrays; [independent verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/evidence_v2/independent_verification.json)
+checks their scores, dynamics, physical constraints and paired aggregation.
+Earlier exports remain retained; v4 includes concise example identities,
+visible fixed parameters and corrected comparison labels without changing results.
+The [migration record](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/evidence_v2/migration.json)
+separates physically infeasible fixed-upstream counterfactuals from valid original
+fits. It preserves the original task records and fitted arrays, with no refits.
+Keep both source snapshots, all original task JSON/NPZ and replay overlays,
+resolved configuration, launch records, and
+[resource measurements](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/resources.json).
+Git retains both source snapshots and the per-export renderer sources in
+`source_snapshot.tar.gz`; extract it in this run directory to restore their
+recorded paths. The archive preserves source bytes and excludes compiled caches.
+Fit failures, counterfactual failures, state recovery and observation errors have
+separate denominators. The older output-component experiment below remains a
+distinct retained result.
+
 ## Continuous Hb compatibility and independent volume direction — 2026-10-22
 
 The versioned [contract](configs/physiology_semantic_tokenizer/shared_driver_volume_drive_v1.yaml)

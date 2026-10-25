@@ -74,6 +74,19 @@ and `test_shared_driver_feasibility_runner.py`. The only measured input is the
 explicit retained public spatial parent; no new raw-data or protected reader.
 
 Continuous 30/90 s Hb compatibility and independent common-volume diagnostics use
+the historical output-direction comparison below. The direct follow-up on the
+unforced `p-v` decay uses the same runner with `--decay-diagnostic --decay-stage
+<check|pilot|synthetic|measured|summarize|replay-migrate>` and
+[`shared_driver_decay_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_decay_v1.yaml).
+It changes the p-state equation while retaining the original observation mapping;
+targeted tests are `test_shared_driver_decay.py` and
+`test_shared_driver_decay_experiment.py`. See the
+[direct dynamics protocol](../docs/EXPERIMENT_PLAN.md#pv-无源衰减的直接动力学检查2026-10-23).
+The replay-only migration preserves the original fits and writes `evidence_v2`;
+render its retained results with `--decay-diagnostic --run <run>
+--decay-evidence <run>/evidence_v2 --output <fresh_export>`.
+
+The retained output-direction comparison uses
 [`scripts/evaluate_shared_driver_reconstruction.py`](scripts/evaluate_shared_driver_reconstruction.py)
 `--volume-drive-diagnostic --volume-stage <pilot|synthetic|linear|measured|summarize>`
 with [`shared_driver_volume_drive_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_volume_drive_v1.yaml).

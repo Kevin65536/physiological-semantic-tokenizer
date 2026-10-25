@@ -1,0 +1,123 @@
+{
+  "schema": "shared_driver_decay_replay_migration_v2",
+  "status": "completed",
+  "parent_run": "..",
+  "reason": "v1_counterfactual_domain_failure_misclassified_valid_original_fit",
+  "data_policy": "exact_saved_fitted_arrays_only_no_refits_no_raw_reads",
+  "parent_config": "../resolved_config.yaml",
+  "parent_plan": "../plan.json",
+  "corrected_runner": "source_snapshot/experiments/scripts/evaluate_shared_driver_reconstruction.py",
+  "parent_runner": "../source_snapshot/experiments/scripts/evaluate_shared_driver_reconstruction.py",
+  "unchanged_solver_sources": [
+    "../source_snapshot/src/inference/shared_driver_rk4.py",
+    "../source_snapshot/src/inference/t3a_balloon_robust_ssm.py"
+  ],
+  "solver_byte_equal_to_parent": true,
+  "command_argv": [
+    "experiments/scripts/evaluate_shared_driver_reconstruction.py",
+    "--decay-diagnostic",
+    "--config",
+    "experiments/configs/physiology_semantic_tokenizer/shared_driver_decay_v1.yaml",
+    "--run-dir",
+    "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1",
+    "--decay-stage",
+    "replay-migrate"
+  ],
+  "code_root": "/SSD_2/pid-mcm-implementation",
+  "started_at": "2026-10-23T10:53:41.646955+00:00",
+  "task_overrides": [
+    {
+      "stage": "measured",
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full",
+      "task": "measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full.json",
+      "replay_arrays": "measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full.npz",
+      "source_task": "../measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full.json",
+      "fit_arrays": "../measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_full.npz",
+      "original_fit_restored": true,
+      "fit_arrays_unchanged": true,
+      "replay_statuses": {
+        "original": "completed",
+        "slow": "completed",
+        "no_decay": "infeasible_counterfactual"
+      }
+    },
+    {
+      "stage": "measured",
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full",
+      "task": "measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full.json",
+      "replay_arrays": "measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full.npz",
+      "source_task": "../measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full.json",
+      "fit_arrays": "../measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_Hb_only_full.npz",
+      "original_fit_restored": true,
+      "fit_arrays_unchanged": true,
+      "replay_statuses": {
+        "original": "completed",
+        "slow": "completed",
+        "no_decay": "infeasible_counterfactual"
+      }
+    },
+    {
+      "stage": "measured",
+      "key": "simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked",
+      "task": "measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked.json",
+      "replay_arrays": "measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked.npz",
+      "source_task": "../measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked.json",
+      "fit_arrays": "../measured/simultaneous_eeg_nirs__VP001__prefrontal__r1_90_joint_blocked.npz",
+      "original_fit_restored": true,
+      "fit_arrays_unchanged": true,
+      "replay_statuses": {
+        "original": "completed",
+        "slow": "completed",
+        "no_decay": "infeasible_counterfactual"
+      }
+    }
+  ],
+  "stages": {
+    "pilot": {
+      "planned": 4,
+      "terminal": 4,
+      "completed": 4,
+      "software_failed_tasks": 0,
+      "planned_arms": 24,
+      "qualified_arms": 24,
+      "nonconverged_arms": 0,
+      "integration_failed_arms": 0,
+      "software_error_arms": 0,
+      "missing_arms": 0,
+      "completed_replays": 12,
+      "infeasible_counterfactual_replays": 0
+    },
+    "synthetic": {
+      "planned": 144,
+      "terminal": 144,
+      "completed": 144,
+      "software_failed_tasks": 0,
+      "planned_arms": 864,
+      "qualified_arms": 864,
+      "nonconverged_arms": 0,
+      "integration_failed_arms": 0,
+      "software_error_arms": 0,
+      "missing_arms": 0,
+      "completed_replays": 432,
+      "infeasible_counterfactual_replays": 0
+    },
+    "measured": {
+      "planned": 288,
+      "terminal": 288,
+      "completed": 288,
+      "software_failed_tasks": 0,
+      "planned_arms": 1728,
+      "qualified_arms": 1727,
+      "nonconverged_arms": 1,
+      "integration_failed_arms": 0,
+      "software_error_arms": 0,
+      "missing_arms": 0,
+      "completed_replays": 861,
+      "infeasible_counterfactual_replays": 3
+    }
+  },
+  "completed_at": "2026-10-23T10:54:17.267073+00:00",
+  "corrected_tasks": 3,
+  "fitted_parameters_changed": 0,
+  "refits": 0
+}

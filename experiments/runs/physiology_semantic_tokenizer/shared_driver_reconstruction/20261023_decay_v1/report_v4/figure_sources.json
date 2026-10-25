@@ -1,0 +1,312 @@
+{
+  "figures": [
+    {
+      "file": "formulas/decay_dynamics.png",
+      "caption": "decay_dynamics",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "formulas/unforced_solution.png",
+      "caption": "unforced_solution",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "formulas/observation_mapping.png",
+      "caption": "observation_mapping",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "formulas/actual_input.png",
+      "caption": "actual_input",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "formulas/score_definition.png",
+      "caption": "score_definition",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "figures/retention.png",
+      "caption": "保留率由保存的累计衰减积分计算，不用易受抵消影响的两个状态差数值相除；每个点是记录中位数，不是置信区间。",
+      "source": "measured/*_90_joint_full.npz: *_retention_integral, *_decay_retention"
+    },
+    {
+      "file": "figures/synthetic.png",
+      "caption": "每种情形6个生成种子；柱为90秒联合完整拟合的观测误差。真值只用于生成与评分，拟合不可见；其余长度/条件见完整metrics.csv。",
+      "source": "synthetic/*.json/npz; metrics.csv stage=synthetic"
+    },
+    {
+      "file": "figures/joint_full.png",
+      "caption": "同页四数据集使用统一纵轴；六色定义在全报告保持一致。完整条件评分全窗，遮挡条件仅评分隐藏Hb；SD均来自冻结训练数据。",
+      "source": "metrics.csv stage=measured condition=joint_full; summary.json groups/paired"
+    },
+    {
+      "file": "figures/Hb_only_full.png",
+      "caption": "同页四数据集使用统一纵轴；六色定义在全报告保持一致。完整条件评分全窗，遮挡条件仅评分隐藏Hb；SD均来自冻结训练数据。",
+      "source": "metrics.csv stage=measured condition=Hb_only_full; summary.json groups/paired"
+    },
+    {
+      "file": "figures/joint_blocked.png",
+      "caption": "同页四数据集使用统一纵轴；六色定义在全报告保持一致。完整条件评分全窗，遮挡条件仅评分隐藏Hb；SD均来自冻结训练数据。",
+      "source": "metrics.csv stage=measured condition=joint_blocked; summary.json groups/paired"
+    },
+    {
+      "file": "figures/time_support.png",
+      "caption": "左图按时间段分别计算误差，不在各段重估SD。右图只评分两种拟合都覆盖的同一119个时间点，并在每条记录、每个Hb内去残差均值。各数据集被试等权；详细逐数据集比较在下表。",
+      "source": "measured/*.npz target/predictions/sd; matched original center indices"
+    },
+    {
+      "file": "formulas/reference_offset.png",
+      "caption": "reference_offset",
+      "source": "resolved_config.yaml; formula LaTeX retained beside PNG"
+    },
+    {
+      "file": "figures/example_eeg_fnirs_single_trial.png",
+      "caption": "左列：目标与六臂完整预测、相应状态差；右列：固定上游、无输入的三种衰减率重放。实线为无输入，虚线为有输入；右下为对数轴。每行两图的物理量不同，纵轴依单位独立标明；HbR重放重合故不重复画。",
+      "source": "measured/eeg_fnirs_single_trial__subject_07__prefrontal__r0_90_joint_full.json/.npz"
+    },
+    {
+      "file": "figures/example_simultaneous_eeg_nirs.png",
+      "caption": "左列：目标与六臂完整预测、相应状态差；右列：固定上游、无输入的三种衰减率重放。实线为无输入，虚线为有输入；右下为对数轴。每行两图的物理量不同，纵轴依单位独立标明；HbR重放重合故不重复画。",
+      "source": "measured/simultaneous_eeg_nirs__VP004__prefrontal__r0_90_joint_full.json/.npz"
+    },
+    {
+      "file": "figures/example_visual_cognitive_motivation.png",
+      "caption": "左列：目标与六臂完整预测、相应状态差；右列：固定上游、无输入的三种衰减率重放。实线为无输入，虚线为有输入；右下为对数轴。每行两图的物理量不同，纵轴依单位独立标明；HbR重放重合故不重复画。",
+      "source": "measured/visual_cognitive_motivation__S08__prefrontal__montage0__r0_90_joint_full.json/.npz"
+    },
+    {
+      "file": "figures/example_refed.png",
+      "caption": "左列：目标与六臂完整预测、相应状态差；右列：固定上游、无输入的三种衰减率重放。实线为无输入，虚线为有输入；右下为对数轴。每行两图的物理量不同，纵轴依单位独立标明；HbR重放重合故不重复画。",
+      "source": "measured/refed__14__prefrontal__r0_90_joint_full.json/.npz"
+    }
+  ],
+  "examples": [
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "key": "eeg_fnirs_single_trial__subject_07__prefrontal__r0_90_joint_full",
+      "denominator": 12,
+      "selection": "upper median by original 90s joint_full full_hb_nmse; lexical key tie-break",
+      "identity": {
+        "id": "eeg_fnirs_single_trial__subject_07__prefrontal__r0",
+        "dataset": "eeg_fnirs_single_trial",
+        "subject": "subject_07",
+        "native_session": 0,
+        "event_id": 0,
+        "task": "motor_imagery",
+        "eeg_start_s": 25.0,
+        "hb_start_s": 75.88,
+        "duration_s": 90,
+        "anchor": {
+          "region": "prefrontal",
+          "hb_channel": "AF7Fp1",
+          "eeg_channels": [
+            "AFF5h",
+            "AFp1",
+            "F7",
+            "F3",
+            "AFp2",
+            "AFF1h"
+          ]
+        }
+      }
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "key": "simultaneous_eeg_nirs__VP004__prefrontal__r0_90_joint_full",
+      "denominator": 12,
+      "selection": "upper median by original 90s joint_full full_hb_nmse; lexical key tie-break",
+      "identity": {
+        "id": "simultaneous_eeg_nirs__VP004__prefrontal__r0",
+        "dataset": "simultaneous_eeg_nirs",
+        "subject": "VP004",
+        "native_session": null,
+        "event_id": 2,
+        "task": "wg",
+        "eeg_start_s": 82.984,
+        "hb_start_s": 96.088,
+        "duration_s": 90,
+        "anchor": {
+          "region": "prefrontal",
+          "hb_channel": "AFp7",
+          "eeg_channels": [
+            "Fp1",
+            "AFF5h",
+            "AFz",
+            "F1",
+            "Fp2",
+            "FC5"
+          ]
+        }
+      }
+    },
+    {
+      "dataset": "visual_cognitive_motivation",
+      "key": "visual_cognitive_motivation__S08__prefrontal__montage0__r0_90_joint_full",
+      "denominator": 12,
+      "selection": "upper median by original 90s joint_full full_hb_nmse; lexical key tie-break",
+      "identity": {
+        "id": "visual_cognitive_motivation__S08__prefrontal__montage0__r0",
+        "dataset": "visual_cognitive_motivation",
+        "subject": "S08",
+        "native_session": null,
+        "event_id": 88,
+        "task": "visual_cognitive_motivation",
+        "eeg_start_s": 1117.718,
+        "hb_start_s": 1140.6250000000036,
+        "duration_s": 90,
+        "anchor": {
+          "region": "prefrontal",
+          "hb_channel": "CH7",
+          "eeg_channels": [
+            "AF3",
+            "Fp1",
+            "F3",
+            "F5",
+            "Fz",
+            "F7"
+          ]
+        }
+      }
+    },
+    {
+      "dataset": "refed",
+      "key": "refed__14__prefrontal__r0_90_joint_full",
+      "denominator": 12,
+      "selection": "upper median by original 90s joint_full full_hb_nmse; lexical key tie-break",
+      "identity": {
+        "id": "refed__14__prefrontal__r0",
+        "dataset": "refed",
+        "subject": "14",
+        "native_session": null,
+        "event_id": 12,
+        "task": "emotion_video",
+        "eeg_start_s": 0.0,
+        "hb_start_s": 0.0,
+        "duration_s": 90,
+        "anchor": {
+          "region": "prefrontal",
+          "hb_channel": "CH49",
+          "eeg_channels": [
+            "FP1",
+            "AF3",
+            "FPZ",
+            "F3",
+            "F1",
+            "F5"
+          ]
+        }
+      }
+    }
+  ],
+  "pages": [
+    {
+      "section": 1,
+      "pdf_pages": [
+        1
+      ]
+    },
+    {
+      "section": 2,
+      "pdf_pages": [
+        2
+      ]
+    },
+    {
+      "section": 3,
+      "pdf_pages": [
+        3
+      ]
+    },
+    {
+      "section": 4,
+      "pdf_pages": [
+        4
+      ]
+    },
+    {
+      "section": 5,
+      "pdf_pages": [
+        5
+      ]
+    },
+    {
+      "section": 6,
+      "pdf_pages": [
+        6
+      ]
+    },
+    {
+      "section": 7,
+      "pdf_pages": [
+        7
+      ]
+    },
+    {
+      "section": 8,
+      "pdf_pages": [
+        8
+      ]
+    },
+    {
+      "section": 9,
+      "pdf_pages": [
+        9
+      ]
+    },
+    {
+      "section": 10,
+      "pdf_pages": [
+        10
+      ]
+    },
+    {
+      "section": 11,
+      "pdf_pages": [
+        11
+      ]
+    },
+    {
+      "section": 12,
+      "pdf_pages": [
+        12
+      ]
+    },
+    {
+      "section": 13,
+      "pdf_pages": [
+        13
+      ]
+    },
+    {
+      "section": 14,
+      "pdf_pages": [
+        14
+      ]
+    },
+    {
+      "section": 15,
+      "pdf_pages": [
+        15
+      ]
+    },
+    {
+      "section": 16,
+      "pdf_pages": [
+        16
+      ]
+    },
+    {
+      "section": 17,
+      "pdf_pages": [
+        17
+      ]
+    },
+    {
+      "section": 18,
+      "pdf_pages": [
+        18
+      ]
+    }
+  ]
+}
