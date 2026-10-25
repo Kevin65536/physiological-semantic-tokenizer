@@ -160,6 +160,24 @@ Response semantics, component attribution and conditional continuous or discrete
 | Structured-component attribution, direction/spatial completion, known-truth counterfactuals and finite typed-token prototype; `--config <contract> --component-attribution --check-only`, then supervised `--attribution-stage` phases | [`scripts/evaluate_shared_driver_reconstruction.py`](scripts/evaluate_shared_driver_reconstruction.py); existing report renderer `--component-attribution` | [`shared_driver_attribution_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_attribution_v1.yaml); [protocol](../docs/EXPERIMENT_PLAN.md#结构性成分归属与分级语义检验2026-10-02) | `test_shared_driver_attribution.py`, `test_shared_driver_teacher_robustness.py` |
 | TK0–TK5 conditional functional tokenizer; `--stage plan`, `synthetic`, supervised `pilot` / `all`; resume the same immutable run; strict integer evaluation `--stage hard-probe --arm QT --seed 17` | [`scripts/run_functional_tokenizer.py`](scripts/run_functional_tokenizer.py); flags `--output`, `--project-root`, `--workers`, `--devices`, `--gpu-workers` | [`functional_tokenizer_v1.yaml`](configs/physiology_semantic_tokenizer/functional_tokenizer_v1.yaml); [protocol](../docs/EXPERIMENT_PLAN.md#条件功能监督与-hard-token-开发矩阵2026-10-10); public native measurements, independent S/O, frozen conditional teacher, hard VQ, grouped probes/nulls; no physical qualification | `test_functional_tokenizer.py`, `test_physiology_semantic_quantizer.py`, `test_ssm_output_support.py` |
 
+Frozen semantic and relationship probes reuse the TK entry above with
+`--stage relation-probe --parent-run <completed_parent> --output <fresh_run>`.
+The [versioned contract](configs/physiology_semantic_tokenizer/functional_relation_probe_v1.yaml)
+and [design](../docs/EXPERIMENT_PLAN.md#冻结-token-的语义读出与时空关系探针2026-10-25)
+bind the retained public exports, subject splits and descriptive interpretation;
+`test_functional_relation_probe.py` covers the new reader and scoring boundaries.
+Run `--relation-pilot --workers 1` under user systemd before choosing concurrency
+for the fixed nine-task panel. This path does not train a tokenizer or overwrite
+the completed parent. The same entry's `--stage shape-probe` tests a local
+conditional-waveform tokenizer with separate shape IDs and continuous scales;
+its [contract](configs/physiology_semantic_tokenizer/functional_shape_probe_v1.yaml)
+and `test_functional_shape_probe.py` bind the current-patch input and next-patch
+Hb scoring boundary. `--shape-pilot` measures one task before the six-task run.
+The final `--stage shape-relations --shape-parent-run <completed_shape_run>`
+uses the [pairing contract](configs/physiology_semantic_tokenizer/functional_shape_relations_v1.yaml)
+and the same shape tests to compare true history with matched temporal/regional
+donors, refitting only the readout. It preserves both completed parent runs.
+
 ### Visualization and report exports
 
 Explicit run/bundle exports and labeled synthetic illustrations; each entry retains its own input boundary.

@@ -1,0 +1,48 @@
+{
+  "schema": "functional_probe_verification_v1",
+  "status": "passed_with_documented_nested_baseline_schema_limit",
+  "relation": {
+    "tasks_completed": 9,
+    "new_failures": 0,
+    "semantic_rows": 2592,
+    "classification_rows": 1620,
+    "common_eligible_primary_task_trials": 2153,
+    "independent_recomputed_means_and_contrasts_match": true
+  },
+  "shape": {
+    "tasks_completed": 6,
+    "new_failures": 0,
+    "forecast_rows": 3888,
+    "conditional_fidelity_rows": 288,
+    "test_native_trials": 1075,
+    "test_independent_subjects": 12,
+    "independent_mean_interval_replay_max_absolute_difference": 0,
+    "frozen_model_replay": {
+      "model": "ssm__seed29/hb",
+      "windows": 15,
+      "partitions": [
+        "train",
+        "validation",
+        "test"
+      ],
+      "IDs_means_amplitudes_continuous_exact": true
+    },
+    "Hb_coordinate_input_target_max_absolute_difference": 0,
+    "direct_and_persistence_baselines_identical_across_arms_seeds": true,
+    "future_Hb_support": "native disjoint 250ms bins with earlier [-30,-25]s reference; encoder and readout access current/past only",
+    "known_schema_limit": {
+      "representation": "persistence",
+      "affected_rows": 648,
+      "issue": "nested region_scores MSE/NRMSE/ridge_alpha inherit direct-observation ridge; correct baseline is nested persistence_MSE/persistence_NRMSE and the top-level MSE/NRMSE",
+      "analysis_consumption": "top-level correct values only; all scientific means and intervals unaffected",
+      "retention": "completed summary and source archive preserved; future producer corrected separately"
+    }
+  },
+  "parent": {
+    "planned_native_trials": 5008,
+    "retained_native_trials": 4984,
+    "failed_native_trials": 24,
+    "success_subset_only": true
+  },
+  "claim_boundary": "observed and model-conditional information; no physiological source qualification"
+}

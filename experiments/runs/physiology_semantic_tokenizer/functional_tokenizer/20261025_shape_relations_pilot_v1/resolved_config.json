@@ -1,0 +1,261 @@
+{
+  "config": {
+    "schema": "functional_shape_relations_v1",
+    "experiment_id": "TK-SHAPE-RELATIONS-v1",
+    "scope": "final_frozen_public_relationship_specificity_probe",
+    "artifact_root": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer",
+    "parent_run": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1",
+    "shape_parent_run": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_v1",
+    "protected_data": "forbidden",
+    "input_boundary": "frozen_shape_hybrid_exports_and_original_parent_Hb_cache_only",
+    "split": "inherit_parent_subject_train_validation_test",
+    "arms": [
+      "ssm",
+      "smooth"
+    ],
+    "seeds": [
+      17,
+      29,
+      43
+    ],
+    "seed": 20261025,
+    "tensor": {
+      "regions": [
+        "prefrontal",
+        "left_motor",
+        "right_motor"
+      ],
+      "patches": 10,
+      "patch_samples": 8,
+      "dt_s": 0.25,
+      "forecast_current_indices": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "relations": {
+      "donor_strata": [
+        "dataset",
+        "subject",
+        "record",
+        "condition",
+        "split"
+      ],
+      "minimum_trials_per_stratum": 2,
+      "donor_unit": "distinct_native_trial_excluding_self_and_region_replicas",
+      "donor_seed": "fixed_across_teacher_and_optimization_seed",
+      "temporal": "replace_previous_target_ROI_patch_with_same_phase_donor_keep_current_true",
+      "spatial": "keep_target_ROI_previous_current_true_other_two_ROIs_share_one_whole_trial_donor",
+      "labels": "condition_used_only_for_descriptive_donor_matching_not_encoder_or_regression_features",
+      "support": "identical_donor_eligible_trial_population_for_all_true_and_surrogate_conditions",
+      "interpretation": "descriptive_pairing_perturbation_not_randomization_or_causal_test"
+    },
+    "evaluation": {
+      "contexts": [
+        "own_history",
+        "spatial_history"
+      ],
+      "representations": [
+        "hybrid",
+        "direct_observation"
+      ],
+      "perturbations": [
+        "real",
+        "wrong_previous",
+        "wrong_other_ROIs"
+      ],
+      "target": "measured_next_minus_current_patch_mean_X_T",
+      "ridge_alpha": [
+        0.01,
+        0.1,
+        1.0,
+        10.0,
+        100.0
+      ],
+      "bootstrap_repeats": 2000,
+      "fit": "refit_each_readout_training_subjects_select_alpha_validation_subjects",
+      "aggregation": "patch_region_to_trial_then_record_then_subject_equal_seeds_within_subject",
+      "interval": "exploratory_paired_subject_percentile_95pct_no_multiplicity_claim",
+      "primary_comparisons": [
+        "wrong_previous_minus_true_own_history",
+        "wrong_other_ROIs_minus_true_spatial_history"
+      ],
+      "stopping_rule": "two_fixed_pairing_controls_six_frozen_model_tasks_no_further_expansion_this_round",
+      "failure_denominator": "inherited_parent_failures_and_all_donor_exclusions_retained"
+    },
+    "resources": {
+      "max_cpu_workers": 6,
+      "numerical_threads": 1,
+      "supervisor": "user_systemd_linger"
+    }
+  },
+  "probe_config": {
+    "schema": "functional_shape_relations_v1",
+    "experiment_id": "TK-SHAPE-RELATIONS-v1",
+    "scope": "final_frozen_public_relationship_specificity_probe",
+    "artifact_root": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer",
+    "parent_run": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1",
+    "shape_parent_run": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_v1",
+    "protected_data": "forbidden",
+    "input_boundary": "frozen_shape_hybrid_exports_and_original_parent_Hb_cache_only",
+    "split": "inherit_parent_subject_train_validation_test",
+    "arms": [
+      "ssm",
+      "smooth"
+    ],
+    "seeds": [
+      17,
+      29,
+      43
+    ],
+    "seed": 20261025,
+    "tensor": {
+      "regions": [
+        "prefrontal",
+        "left_motor",
+        "right_motor"
+      ],
+      "patches": 10,
+      "patch_samples": 8,
+      "dt_s": 0.25,
+      "forecast_current_indices": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    "relations": {
+      "donor_strata": [
+        "dataset",
+        "subject",
+        "record",
+        "condition",
+        "split"
+      ],
+      "minimum_trials_per_stratum": 2,
+      "donor_unit": "distinct_native_trial_excluding_self_and_region_replicas",
+      "donor_seed": "fixed_across_teacher_and_optimization_seed",
+      "temporal": "replace_previous_target_ROI_patch_with_same_phase_donor_keep_current_true",
+      "spatial": "keep_target_ROI_previous_current_true_other_two_ROIs_share_one_whole_trial_donor",
+      "labels": "condition_used_only_for_descriptive_donor_matching_not_encoder_or_regression_features",
+      "support": "identical_donor_eligible_trial_population_for_all_true_and_surrogate_conditions",
+      "interpretation": "descriptive_pairing_perturbation_not_randomization_or_causal_test"
+    },
+    "evaluation": {
+      "contexts": [
+        "own_history",
+        "spatial_history"
+      ],
+      "representations": [
+        "hybrid",
+        "direct_observation"
+      ],
+      "perturbations": [
+        "real",
+        "wrong_previous",
+        "wrong_other_ROIs"
+      ],
+      "target": "measured_next_minus_current_patch_mean_X_T",
+      "ridge_alpha": [
+        0.01,
+        0.1,
+        1.0,
+        10.0,
+        100.0
+      ],
+      "bootstrap_repeats": 2000,
+      "fit": "refit_each_readout_training_subjects_select_alpha_validation_subjects",
+      "aggregation": "patch_region_to_trial_then_record_then_subject_equal_seeds_within_subject",
+      "interval": "exploratory_paired_subject_percentile_95pct_no_multiplicity_claim",
+      "primary_comparisons": [
+        "wrong_previous_minus_true_own_history",
+        "wrong_other_ROIs_minus_true_spatial_history"
+      ],
+      "stopping_rule": "two_fixed_pairing_controls_six_frozen_model_tasks_no_further_expansion_this_round",
+      "failure_denominator": "inherited_parent_failures_and_all_donor_exclusions_retained"
+    },
+    "resources": {
+      "max_cpu_workers": 6,
+      "numerical_threads": 1,
+      "supervisor": "user_systemd_linger"
+    },
+    "data": {
+      "cache_root": "data/cache/physiology_semantic_clean_v5",
+      "datasets": [
+        "eeg_fnirs_single_trial",
+        "simultaneous_eeg_nirs"
+      ],
+      "tasks": [
+        "motor_imagery",
+        "mental_arithmetic",
+        "nback",
+        "wg"
+      ],
+      "protected_data": "forbidden",
+      "labels_as_training_inputs": false,
+      "split": "seeded_subject_permutation_60_20_20_before_arrays",
+      "train_fraction": 0.6,
+      "validation_fraction": 0.2,
+      "regions": [
+        "prefrontal",
+        "left_motor",
+        "right_motor"
+      ],
+      "region_vectors": [
+        [
+          -0.45,
+          0.89,
+          0.1
+        ],
+        [
+          -0.65,
+          0.0,
+          0.72
+        ],
+        [
+          0.65,
+          0.0,
+          0.72
+        ]
+      ],
+      "eeg_channels_per_region": 6,
+      "input_eeg": "registered_native_voltage_200Hz_no_project_artifact_removal",
+      "input_hb": "disjoint_native_250ms_means_first_5s_reference",
+      "incomplete_window": "retain_failure_no_padding_or_imputation",
+      "task_labels": {
+        "motor_imagery": [
+          "LMI",
+          "RMI"
+        ],
+        "mental_arithmetic": [
+          "MA",
+          "BL"
+        ],
+        "nback": [
+          "0-back session",
+          "2-back session",
+          "3-back session"
+        ],
+        "wg": [
+          "WG",
+          "BL"
+        ]
+      }
+    }
+  },
+  "parent_run": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1",
+  "shape_parent_run": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_v1",
+  "parent_manifest_identity": "40037a8b6b91947c1459cfcf531b382b98be3088da4e4c6293e4fb5d29e02395",
+  "pilot": true
+}

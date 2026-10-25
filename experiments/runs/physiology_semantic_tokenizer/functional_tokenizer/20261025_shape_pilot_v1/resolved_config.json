@@ -1,0 +1,285 @@
+{
+  "config": {
+    "schema": "functional_shape_probe_v1",
+    "experiment_id": "TK-SHAPE-PROBE-v1",
+    "scope": "local_patch_architecture_public_development_probe_not_confirmation",
+    "artifact_root": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer",
+    "parent_run": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1",
+    "protected_data": "forbidden",
+    "input_boundary": "retained_parent_cache_only_no_raw_or_teacher_refit",
+    "split": "inherit_parent_subject_train_validation_test",
+    "seed": 20261025,
+    "arms": [
+      "ssm",
+      "smooth"
+    ],
+    "seeds": [
+      17,
+      29,
+      43
+    ],
+    "tensor": {
+      "regions": [
+        "prefrontal",
+        "left_motor",
+        "right_motor"
+      ],
+      "patches": 10,
+      "patch_samples": 8,
+      "dt_s": 0.25,
+      "forecast_current_indices": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "input": "own_modality_current_patch_only_shared_encoder_across_regions",
+      "EEG": "parent_observed_PCA_logpower_proxy_not_native_voltage",
+      "Hb": "parent_native_disjoint_bins_with_earlier_visible_reference"
+    },
+    "model": {
+      "encoder": "training_ridge_from_current_observation_to_conditional_patch_waveform",
+      "targets": "parent_physical_or_matched_smooth_in_identical_observation_coordinates",
+      "components": "conditional_prediction_and_observation_minus_prediction",
+      "component_interpretation": "conditional_estimate_and_unexplained_observation_not_source_and_noise",
+      "shape": "subtract_per_channel_mean_divide_by_positive_common_across_channel_RMS",
+      "codebook_size": 16,
+      "amplitude_floor": 1e-06,
+      "nearflat_policy": "zero_shape_positive_amplitude_floor",
+      "kmeans_batch_size": 1024,
+      "kmeans_max_iter": 100,
+      "sidecar": "per_component_channel_mean_and_common_RMS_float32",
+      "hard_ID_storage": "int16",
+      "inference_teacher": "forbidden"
+    },
+    "evaluation": {
+      "target": "measured_next_minus_current_patch_mean_X_T",
+      "contexts": [
+        "own_current",
+        "own_history",
+        "spatial_history"
+      ],
+      "representations": [
+        "id_only",
+        "sidecar_only",
+        "hybrid",
+        "continuous"
+      ],
+      "hybrid_readout": "fixed_dictionary_decode_mean_plus_amplitude_times_shape_per_component",
+      "feature_dimensions_Hb": {
+        "id_only": 32,
+        "sidecar_only": 6,
+        "hybrid": 32,
+        "continuous": 32
+      },
+      "baseline": [
+        "same_support_direct_observation_ridge",
+        "persistence_zero_change"
+      ],
+      "ridge_alpha": [
+        0.01,
+        0.1,
+        1.0,
+        10.0,
+        100.0
+      ],
+      "bootstrap_repeats": 2000,
+      "projection": "separate_fixed_region_readouts_no_PCA",
+      "normalization": "per_target_training_change_SD_only",
+      "selection": "validation_subject_equal_normalized_MSE",
+      "aggregation": "patch_region_to_trial_then_record_then_subject_equal_seeds_within_subject",
+      "information_boundary": "input_through_end_of_current_Hb_patch_next_Hb_patch_scoring_only",
+      "EEG_forecast": "not_scored_due_to_unverified_upstream_temporal_filter_support",
+      "claim_boundary": "forecast_of_processed_Hb_observation_not_causal_or_source_recovery",
+      "comparisons": "paired_ssm_vs_smooth_and_hybrid_vs_ID_sidecar_direct_on_identical_support",
+      "compression": "report_ID_only_and_full_continuous_sidecar_rate_separately",
+      "interval": "exploratory_subject_percentile_95pct_no_multiplicity_claim",
+      "missing_parent_trials": "inherit_all_failures_success_subset_only",
+      "stopping_rule": "fixed_six_teacher_seed_tasks_no_test_selection_or_architecture_sweep"
+    },
+    "resources": {
+      "max_cpu_workers": 6,
+      "numerical_threads": 1,
+      "supervisor": "user_systemd_linger"
+    }
+  },
+  "probe_config": {
+    "schema": "functional_shape_probe_v1",
+    "experiment_id": "TK-SHAPE-PROBE-v1",
+    "scope": "local_patch_architecture_public_development_probe_not_confirmation",
+    "artifact_root": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer",
+    "parent_run": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1",
+    "protected_data": "forbidden",
+    "input_boundary": "retained_parent_cache_only_no_raw_or_teacher_refit",
+    "split": "inherit_parent_subject_train_validation_test",
+    "seed": 20261025,
+    "arms": [
+      "ssm",
+      "smooth"
+    ],
+    "seeds": [
+      17,
+      29,
+      43
+    ],
+    "tensor": {
+      "regions": [
+        "prefrontal",
+        "left_motor",
+        "right_motor"
+      ],
+      "patches": 10,
+      "patch_samples": 8,
+      "dt_s": 0.25,
+      "forecast_current_indices": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "input": "own_modality_current_patch_only_shared_encoder_across_regions",
+      "EEG": "parent_observed_PCA_logpower_proxy_not_native_voltage",
+      "Hb": "parent_native_disjoint_bins_with_earlier_visible_reference"
+    },
+    "model": {
+      "encoder": "training_ridge_from_current_observation_to_conditional_patch_waveform",
+      "targets": "parent_physical_or_matched_smooth_in_identical_observation_coordinates",
+      "components": "conditional_prediction_and_observation_minus_prediction",
+      "component_interpretation": "conditional_estimate_and_unexplained_observation_not_source_and_noise",
+      "shape": "subtract_per_channel_mean_divide_by_positive_common_across_channel_RMS",
+      "codebook_size": 16,
+      "amplitude_floor": 1e-06,
+      "nearflat_policy": "zero_shape_positive_amplitude_floor",
+      "kmeans_batch_size": 1024,
+      "kmeans_max_iter": 100,
+      "sidecar": "per_component_channel_mean_and_common_RMS_float32",
+      "hard_ID_storage": "int16",
+      "inference_teacher": "forbidden"
+    },
+    "evaluation": {
+      "target": "measured_next_minus_current_patch_mean_X_T",
+      "contexts": [
+        "own_current",
+        "own_history",
+        "spatial_history"
+      ],
+      "representations": [
+        "id_only",
+        "sidecar_only",
+        "hybrid",
+        "continuous"
+      ],
+      "hybrid_readout": "fixed_dictionary_decode_mean_plus_amplitude_times_shape_per_component",
+      "feature_dimensions_Hb": {
+        "id_only": 32,
+        "sidecar_only": 6,
+        "hybrid": 32,
+        "continuous": 32
+      },
+      "baseline": [
+        "same_support_direct_observation_ridge",
+        "persistence_zero_change"
+      ],
+      "ridge_alpha": [
+        0.01,
+        0.1,
+        1.0,
+        10.0,
+        100.0
+      ],
+      "bootstrap_repeats": 2000,
+      "projection": "separate_fixed_region_readouts_no_PCA",
+      "normalization": "per_target_training_change_SD_only",
+      "selection": "validation_subject_equal_normalized_MSE",
+      "aggregation": "patch_region_to_trial_then_record_then_subject_equal_seeds_within_subject",
+      "information_boundary": "input_through_end_of_current_Hb_patch_next_Hb_patch_scoring_only",
+      "EEG_forecast": "not_scored_due_to_unverified_upstream_temporal_filter_support",
+      "claim_boundary": "forecast_of_processed_Hb_observation_not_causal_or_source_recovery",
+      "comparisons": "paired_ssm_vs_smooth_and_hybrid_vs_ID_sidecar_direct_on_identical_support",
+      "compression": "report_ID_only_and_full_continuous_sidecar_rate_separately",
+      "interval": "exploratory_subject_percentile_95pct_no_multiplicity_claim",
+      "missing_parent_trials": "inherit_all_failures_success_subset_only",
+      "stopping_rule": "fixed_six_teacher_seed_tasks_no_test_selection_or_architecture_sweep"
+    },
+    "resources": {
+      "max_cpu_workers": 6,
+      "numerical_threads": 1,
+      "supervisor": "user_systemd_linger"
+    },
+    "data": {
+      "cache_root": "data/cache/physiology_semantic_clean_v5",
+      "datasets": [
+        "eeg_fnirs_single_trial",
+        "simultaneous_eeg_nirs"
+      ],
+      "tasks": [
+        "motor_imagery",
+        "mental_arithmetic",
+        "nback",
+        "wg"
+      ],
+      "protected_data": "forbidden",
+      "labels_as_training_inputs": false,
+      "split": "seeded_subject_permutation_60_20_20_before_arrays",
+      "train_fraction": 0.6,
+      "validation_fraction": 0.2,
+      "regions": [
+        "prefrontal",
+        "left_motor",
+        "right_motor"
+      ],
+      "region_vectors": [
+        [
+          -0.45,
+          0.89,
+          0.1
+        ],
+        [
+          -0.65,
+          0.0,
+          0.72
+        ],
+        [
+          0.65,
+          0.0,
+          0.72
+        ]
+      ],
+      "eeg_channels_per_region": 6,
+      "input_eeg": "registered_native_voltage_200Hz_no_project_artifact_removal",
+      "input_hb": "disjoint_native_250ms_means_first_5s_reference",
+      "incomplete_window": "retain_failure_no_padding_or_imputation",
+      "task_labels": {
+        "motor_imagery": [
+          "LMI",
+          "RMI"
+        ],
+        "mental_arithmetic": [
+          "MA",
+          "BL"
+        ],
+        "nback": [
+          "0-back session",
+          "2-back session",
+          "3-back session"
+        ],
+        "wg": [
+          "WG",
+          "BL"
+        ]
+      }
+    }
+  },
+  "parent_run": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1",
+  "parent_manifest_identity": "40037a8b6b91947c1459cfcf531b382b98be3088da4e4c6293e4fb5d29e02395",
+  "pilot": true,
+  "hybrid_readout": "fixed_inverse_quantization_mu_plus_common_RMS_times_shape_center"
+}

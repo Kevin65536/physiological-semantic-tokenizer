@@ -18,14 +18,14 @@ from sklearn.metrics import balanced_accuracy_score, f1_score, adjusted_rand_sco
 from sklearn.preprocessing import StandardScaler
 
 
-def read_hard_tokens(path):
+def read_hard_tokens(path,*,return_ids=False):
     """Strict on-disk information boundary: no pre/soft/O vectors can enter."""
     required = {'ids_eeg','ids_hb','codebook_eeg','codebook_hb','identities'}
     with np.load(path,allow_pickle=False) as data:
         if set(data.files) != required:
             raise ValueError('hard export must contain only IDs, codebooks and identities')
         identities = data['identities'].astype(str)
-        values = {}
+        values,integer_ids = {},{}
         for m in ('eeg','hb'):
             ids,book = data['ids_'+m],data['codebook_'+m]
             if (ids.dtype.kind not in 'iu' or ids.ndim!=2 or book.ndim!=2
@@ -33,9 +33,10 @@ def read_hard_tokens(path):
                     or not np.isfinite(book).all()):
                 raise ValueError('invalid integer token/codebook contract')
             values[m]=book[ids]
+            integer_ids[m]=ids.copy()
         if len(set(identities))!=len(identities):
             raise ValueError('duplicate export identities')
-    return identities,values
+    return (identities,values,integer_ids) if return_ids else (identities,values)
 
 
 def join_export(expected,identities,arrays):
@@ -337,3 +338,416 @@ def frozen_prototypes(rows,ids,measurements,training=False):
             region_patch_counts=dict(Counter(rows[i]['anchor']['region'] for i in sample)),
             meaning='conditional_response_association_not_individual_physiological_parameter'))
     return result
+
+
+def relation_trial_layout(rows,regions):
+    """Join complete regional replicas by identity, never by array order."""
+    groups=defaultdict(list)
+    for i,row in enumerate(rows): groups[row['trial_id']].append(i)
+    metadata,indices=[],[]
+    for trial,group in sorted(groups.items()):
+        byregion={rows[i]['anchor']['region']:i for i in group}
+        if len(group)!=len(regions) or set(byregion)!=set(regions):
+            raise ValueError('relation probes require complete unique trial regions')
+        first=rows[group[0]]
+        fields=('dataset','subject','record','session','task','condition','split')
+        if any(any(rows[i][k]!=first[k] for k in fields) for i in group):
+            raise ValueError('regional trial metadata disagree')
+        metadata.append(first);indices.append([byregion[r] for r in regions])
+    return metadata,np.asarray(indices,dtype=int)
+
+
+def relation_patch_targets(values):
+    """Native/prepared E,HbO,HbR samples -> 2 s means in E,X,T coordinates."""
+    values=np.asarray(values,float)
+    if values.ndim!=3 or values.shape[1:]!=(80,3) or not np.isfinite(values).all():
+        raise ValueError('finite [regional windows,80,3] target required')
+    transformed=np.stack((values[...,0],.35*values[...,1]-.65*values[...,2],
+        values[...,1]+values[...,2]),axis=-1)
+    return transformed.reshape(len(values),10,8,3).mean(axis=2)
+
+
+def relation_subject_mse(rows,row_errors):
+    """Average patches upstream, then region -> trial -> record -> subject."""
+    row_errors=np.asarray(row_errors,float)
+    if row_errors.shape!=(len(rows),) or not np.isfinite(row_errors).all():
+        raise ValueError('one finite mean squared error per regional window required')
+    trials=defaultdict(list)
+    for row,error in zip(rows,row_errors):
+        key=(row['dataset'],row['subject'],row['record'],row['trial_id'])
+        trials[key].append(float(error))
+    records=defaultdict(list)
+    for (dataset,subject,record,trial),errors in trials.items():
+        records[(dataset,subject,record)].append(float(np.mean(errors)))
+    subjects=defaultdict(list)
+    for (dataset,subject,record),errors in records.items():
+        subjects[(dataset,subject)].append((float(np.mean(errors)),len(errors)))
+    return [dict(dataset=dataset,subject=subject,MSE=float(np.mean([e for e,_ in entries])),
+        NRMSE=float(np.sqrt(np.mean([e for e,_ in entries]))),records=len(entries),
+        trials=sum(n for _,n in entries)) for (dataset,subject),entries in sorted(subjects.items())]
+
+
+def _relation_partitions(rows):
+    if any(r['split'] not in ('train','validation','test') for r in rows):
+        raise ValueError('unknown relation probe partition')
+    partitions={s:np.array([r['split']==s for r in rows]) for s in ('train','validation','test')}
+    populations={s:{(r['dataset'],r['subject']) for r in rows if r['split']==s} for s in partitions}
+    if any(populations[a]&populations[b] for a,b in (('train','validation'),('train','test'),('validation','test'))):
+        raise ValueError('relation probe subjects overlap across partitions')
+    return partitions
+
+
+def relation_patch_readout(rows,features,target,cfg,coordinate_names):
+    """Train-fitted ridge on individual patches, subject-grouped selection/score.
+
+    Every target coordinate has its own training SD. Region and patch copies
+    contribute to fitting, but never count as independent subjects in scoring.
+    """
+    x,y=np.asarray(features,float),np.asarray(target,float)
+    if x.ndim!=3 or y.ndim!=3 or x.shape[:2]!=y.shape[:2] or len(x)!=len(rows):
+        raise ValueError('aligned [regional windows,patches,coordinates] required')
+    if not np.isfinite(x).all() or not np.isfinite(y).all() or len(coordinate_names)!=y.shape[-1]:
+        raise ValueError('finite features and named target coordinates required')
+    partitions=_relation_partitions(rows)
+    if any(not mask.any() for mask in partitions.values()): raise ValueError('missing grouped patch partition')
+    train=partitions['train'];val=partitions['validation'];test=partitions['test']
+    scaler=StandardScaler().fit(x[train].reshape(-1,x.shape[-1]))
+    standardized=scaler.transform(x.reshape(-1,x.shape[-1])).reshape(x.shape)
+    target_sd=np.maximum(y[train].reshape(-1,y.shape[-1]).std(0),1e-8)
+    normalized=y/target_sd
+    train_x=standardized[train].reshape(-1,x.shape[-1]);train_y=normalized[train].reshape(-1,y.shape[-1])
+    best=None
+    for alpha in cfg['evaluation']['ridge_alpha']:
+        fit=Ridge(alpha=float(alpha)).fit(train_x,train_y)
+        prediction=fit.predict(standardized[val].reshape(-1,x.shape[-1])).reshape(normalized[val].shape)
+        errors=np.square(prediction-normalized[val]).mean(axis=(1,2))
+        scores=relation_subject_mse([r for r,m in zip(rows,val) if m],errors)
+        score=float(np.mean([r['MSE'] for r in scores]))
+        if best is None or score<best[0]: best=(score,float(alpha),fit)
+    prediction=best[2].predict(standardized[test].reshape(-1,x.shape[-1])).reshape(normalized[test].shape)
+    errors=np.square(prediction-normalized[test]).mean(axis=1)
+    mean_prediction=normalized[train].mean(axis=(0,1))
+    mean_errors=np.square(normalized[test]-mean_prediction).mean(axis=1)
+    test_rows=[r for r,m in zip(rows,test) if m];result=[]
+    coordinates=[(name,errors[:,i],mean_errors[:,i]) for i,name in enumerate(coordinate_names)]
+    if len(coordinate_names)>1:
+        coordinates.append(('coordinate_mean',errors.mean(axis=1),mean_errors.mean(axis=1)))
+    for name,coordinate_errors,baseline_errors in coordinates:
+        scores=relation_subject_mse(test_rows,coordinate_errors)
+        baselines={(r['dataset'],r['subject']):r for r in relation_subject_mse(test_rows,baseline_errors)}
+        for score in scores:
+            result.append(dict(score,coordinate=name,ridge_alpha=best[1],validation_MSE=best[0],
+                mean_baseline_NRMSE=baselines[(score['dataset'],score['subject'])]['NRMSE'],
+                target_training_SD=dict(zip(coordinate_names,target_sd.tolist())),
+                patches_per_regional_window=x.shape[1]))
+    return result
+
+
+def relation_null_donors(rows,regions,seed):
+    """Whole-trial eligibility and no-self, within-record null donor indices."""
+    groups=defaultdict(list)
+    for i,row in enumerate(rows):
+        groups[tuple(row[k] for k in ('dataset','subject','record','condition','split'))].append(i)
+    eligible=np.array(sorted(i for group in groups.values() if len(group)>=2 for i in group),dtype=int)
+    kept=[rows[i] for i in eligible];local_groups=defaultdict(list)
+    for i,row in enumerate(kept):
+        local_groups[tuple(row[k] for k in ('dataset','subject','record','condition','split'))].append(i)
+    rng=np.random.default_rng(seed)
+    spatial=np.empty((len(kept),len(regions)),dtype=int)
+    temporal=np.empty((len(kept),len(regions),10),dtype=int)
+    for group in local_groups.values():
+        for region in range(len(regions)):
+            ordered=rng.permutation(group)
+            spatial[ordered,region]=np.roll(ordered,int(rng.integers(1,len(group))))
+            for patch in range(10):
+                ordered=rng.permutation(group)
+                temporal[ordered,region,patch]=np.roll(ordered,int(rng.integers(1,len(group))))
+    return eligible,spatial,temporal
+
+
+def relation_feature_blocks(values,ids=None,*,codebook_size=128):
+    """Trial [region,patch,dimension] marginals, temporal and spatial blocks.
+
+    Spatial lag-1 products retain both region directions; no covariance or
+    causal interpretation is implied by these uncentered products.
+    """
+    z=np.asarray(values,float)
+    if z.ndim!=4 or z.shape[2]!=10 or not np.isfinite(z).all():
+        raise ValueError('finite [trial,region,10,dimension] representation required')
+    n,regions,_,dimension=z.shape
+    base=[z.mean(axis=2).reshape(n,regions*dimension),z.std(axis=2).reshape(n,regions*dimension)]
+    if ids is not None:
+        ids=np.asarray(ids)
+        if ids.shape!=z.shape[:3] or ids.dtype.kind not in 'iu' or np.any(ids<0) or np.any(ids>=codebook_size):
+            raise ValueError('aligned integer IDs and complete codebook capacity required')
+        histogram=np.zeros((n,regions,codebook_size))
+        for token in range(codebook_size): histogram[:,:,token]=(ids==token).mean(axis=2)
+        base.append(histogram.reshape(n,regions*codebook_size))
+    temporal=np.concatenate([(z[:,:,:-lag]*z[:,:,lag:]).mean(axis=2) for lag in (1,2)]+
+        [np.abs(np.diff(z,axis=2)).mean(axis=2),z[:,:,-1]-z[:,:,0]],axis=-1).reshape(n,-1)
+    spatial=[]
+    for left in range(regions):
+        for right in range(left+1,regions):
+            spatial.extend([(z[:,left]*z[:,right]).mean(axis=1),
+                (z[:,left,:-1]*z[:,right,1:]).mean(axis=1),
+                (z[:,right,:-1]*z[:,left,1:]).mean(axis=1)])
+    return dict(marginal=np.concatenate(base,axis=-1),temporal=temporal,
+        spatial=np.concatenate(spatial,axis=-1) if spatial else np.empty((n,0)))
+
+
+def relation_classification(rows,features,integer_ids,cfg,*,seed):
+    """Fixed-budget relationship screen with one common eligible population."""
+    _relation_partitions(rows)
+    keep=np.array([i for i,r in enumerate(rows) if r['task'] in cfg['data']['tasks']],dtype=int)
+    rows=[rows[i] for i in keep]
+    features={m:np.asarray(z)[keep] for m,z in features.items()}
+    if integer_ids is not None: integer_ids={m:np.asarray(z)[keep] for m,z in integer_ids.items()}
+    regions=cfg['data']['regions'];meta,layout=relation_trial_layout(rows,regions)
+    eligible,spatial_donors,temporal_donors=relation_null_donors(meta,regions,seed)
+    selected=[meta[i] for i in eligible]
+    eligible_set=set(eligible.tolist())
+    exclusions=Counter((r['dataset'],r['split']) for i,r in enumerate(meta) if i not in eligible_set)
+    support=dict(planned_trials=len(meta),eligible_trials=len(eligible),excluded_trials=len(meta)-len(eligible),
+        excluded_by_dataset_split=[dict(dataset=k[0],split=k[1],trials=v) for k,v in sorted(exclusions.items())],
+        reason='fewer_than_two_trials_in_dataset_subject_record_condition_split',
+        eligibility='identical_trial_population_for_all_relationship_variants')
+    if not len(eligible): return [],[dict(reason='no_null_eligible_trials')],support
+    blocks={};region_index=np.arange(len(regions))[None,:]
+    for modality,z in features.items():
+        values=np.asarray(z)[layout][eligible]
+        token_ids=np.asarray(integer_ids[modality])[layout][eligible] if integer_ids is not None else None
+        real=relation_feature_blocks(values,token_ids)
+        spatial_values=values[spatial_donors,region_index]
+        temporal_values=values[temporal_donors,region_index[:,:,None],np.arange(10)[None,None,:]]
+        real['null_temporal']=relation_feature_blocks(temporal_values)['temporal']
+        real['null_spatial']=relation_feature_blocks(spatial_values)['spatial']
+        blocks[modality]=real
+    records,failures=[],[]
+    for modality in ('eeg','hb','both'):
+        names=('eeg','hb') if modality=='both' else (modality,)
+        combine=lambda name:np.concatenate([blocks[m][name] for m in names],axis=-1)
+        marginal,temporal,spatial=combine('marginal'),combine('temporal'),combine('spatial')
+        variants=dict(marginal=marginal,temporal=np.concatenate((marginal,temporal),axis=-1),
+            spatial=np.concatenate((marginal,temporal,spatial),axis=-1),
+            null_temporal=np.concatenate((marginal,combine('null_temporal')),axis=-1),
+            null_spatial=np.concatenate((marginal,temporal,combine('null_spatial')),axis=-1))
+        for variant,x in variants.items():
+            good,bad=classification_probe(selected,x,cfg,seed=cfg['seed'])
+            for row in good:
+                datasets={r['dataset'] for r in selected if r['subject']==row['subject'] and r['task']==row['task']}
+                if len(datasets)!=1: raise ValueError('classification subject/task identity spans datasets')
+                records.append(dict(row,dataset=next(iter(datasets)),modality=modality,
+                    variant=variant,input_dimensions=x.shape[1]))
+            failures.extend(dict(r,modality=modality,variant=variant) for r in bad)
+    return records,failures,support
+
+
+def shape_smooth_coordinates(smooth,manifest):
+    """Undo parent smooth standardization, then invert E,X,T -> E,HbO,HbR."""
+    values=np.asarray(smooth,float)
+    mean,scale=np.asarray(manifest['target_mean'],float),np.asarray(manifest['target_scale'],float)
+    if (values.ndim!=3 or values.shape[1:]!=(80,3) or mean.shape!=(3,) or scale.shape!=(3,)
+            or np.any(scale<=0) or not all(np.isfinite(v).all() for v in (values,mean,scale))):
+        raise ValueError('finite parent smooth arrays and positive training coordinate scales required')
+    original=values*scale+mean
+    eeg,x,total=np.moveaxis(original,-1,0)
+    return np.stack((eeg,x+.65*total,.35*total-x),axis=-1)
+
+
+def read_shape_tokens(path):
+    """Strict shape-ID consumer: no scales, ridge, continuous or soft fields."""
+    with np.load(path,allow_pickle=False) as data:
+        if set(data.files)!={'c_ids','r_ids','c_centers','r_centers','identities'}:
+            raise ValueError('shape hard export must contain only IDs, frozen centers and identities')
+        identities=data['identities'].astype(str);parts=[];shape=None
+        if identities.ndim!=1 or len(set(identities))!=len(identities): raise ValueError('unique shape identities required')
+        for name in ('c','r'):
+            ids,centers=data[name+'_ids'],data[name+'_centers']
+            if (ids.dtype.kind not in 'iu' or ids.shape!=(len(identities),10) or centers.ndim!=3
+                    or centers.shape[1]!=8 or np.any(ids<0) or np.any(ids>=len(centers))
+                    or not np.isfinite(centers).all()):
+                raise ValueError('invalid integer shape IDs or frozen centers')
+            if shape is not None and centers.shape!=shape: raise ValueError('shape component codebooks disagree')
+            shape=centers.shape
+            parts.append(centers[ids].reshape(len(identities),10,-1))
+    return identities,np.concatenate(parts,axis=-1)
+
+
+def read_shape_sidecars(path):
+    """Continuous scales are a separate consumed representation."""
+    required={'c_mu','r_mu','c_amplitude','r_amplitude','identities'}
+    with np.load(path,allow_pickle=False) as data:
+        if set(data.files)!=required: raise ValueError('scale export must contain only means, amplitudes and identities')
+        identities=data['identities'].astype(str);parts=[];shape=None
+        if identities.ndim!=1 or len(set(identities))!=len(identities): raise ValueError('unique scale identities required')
+        for name in ('c','r'):
+            mu,amplitude=data[name+'_mu'],data[name+'_amplitude']
+            if (mu.ndim!=3 or mu.shape[:2]!=(len(identities),10) or amplitude.shape!=mu.shape[:2]
+                    or not np.isfinite(mu).all() or not np.isfinite(amplitude).all() or np.any(amplitude<=0)):
+                raise ValueError('invalid continuous scale sidecars')
+            if shape is not None and mu.shape!=shape: raise ValueError('scale component supports disagree')
+            shape=mu.shape;parts.extend((mu,amplitude[...,None]))
+    return identities,np.concatenate(parts,axis=-1)
+
+
+def read_shape_hybrid(hard_path,sidecar_path):
+    """Fixed mu + RMS * shape decoder consuming both separate exports."""
+    identities,shape=read_shape_tokens(hard_path)
+    sidecar_ids,sidecars=read_shape_sidecars(sidecar_path)
+    sidecars=join_export(identities,sidecar_ids,dict(scales=sidecars))['scales']
+    channels=(sidecars.shape[-1]-2)//2
+    if channels<1 or sidecars.shape[-1]!=2*channels+2 or shape.shape[-1]!=16*channels:
+        raise ValueError('shape and scale modality dimensions disagree')
+    components=[]
+    for index in range(2):
+        start=index*(channels+1)
+        mu=sidecars[...,start:start+channels]
+        amplitude=sidecars[...,start+channels]
+        normalized=shape[...,index*8*channels:(index+1)*8*channels].reshape(shape.shape[:2]+(8,channels))
+        components.append((mu[...,None,:]+amplitude[...,None,None]*normalized).reshape(shape.shape[:2]+(8*channels,)))
+    return identities,np.concatenate(components,axis=-1)
+
+
+def shape_conditional_fidelity(rows,estimated,physical,coordinate_names):
+    """Same-patch waveform agreement with the common conditional model target."""
+    prediction,target=np.asarray(estimated,float),np.asarray(physical,float)
+    if (prediction.shape!=target.shape or prediction.ndim!=4 or prediction.shape[0]!=len(rows)
+            or prediction.shape[1:3]!=(10,8) or prediction.shape[-1]!=len(coordinate_names)
+            or not np.isfinite(prediction).all() or not np.isfinite(target).all()):
+        raise ValueError('aligned finite conditional waveforms required')
+    partitions=_relation_partitions(rows)
+    if not partitions['train'].any() or not partitions['test'].any(): raise ValueError('missing conditional fidelity partition')
+    sd=np.maximum(target[partitions['train']].std(axis=(0,1,2)),1e-8)
+    errors=np.square((prediction[partitions['test']]-target[partitions['test']])/sd).mean(axis=(1,2))
+    test_rows=[r for r,m in zip(rows,partitions['test']) if m];result=[]
+    coordinates=[(name,errors[:,i]) for i,name in enumerate(coordinate_names)]
+    if len(coordinate_names)>1: coordinates.append(('coordinate_mean',errors.mean(axis=1)))
+    for coordinate,coordinate_error in coordinates:
+        result.extend(dict(score,coordinate=coordinate,target_training_SD=dict(zip(coordinate_names,sd.tolist())),
+            target='same_parent_conditional_physical_waveform_not_physiological_truth')
+            for score in relation_subject_mse(test_rows,coordinate_error))
+    return result
+
+
+def shape_forecast_readout(rows,features,hb,cfg,context,*,donors=None,perturbation=None):
+    """Next-patch observed Hb changes from current/past local shape tokens.
+
+    Independent readouts and target scales are fitted for each target ROI.
+    Complete trial support makes the final equal-ROI subject MSE equivalent to
+    patch -> ROI -> trial -> record -> subject aggregation.
+    """
+    if context not in ('own_current','own_history','spatial_history'):
+        raise ValueError('unknown current/past shape readout context')
+    z,h=np.asarray(features,float),np.asarray(hb,float)
+    if (z.ndim!=3 or z.shape[:2]!=(len(rows),10) or h.shape!=(len(rows),10,8,2)
+            or not np.isfinite(z).all() or not np.isfinite(h).all()):
+        raise ValueError('finite aligned ten-patch features and native-bin Hb targets required')
+    regions=cfg['data']['regions'];meta,layout=relation_trial_layout(rows,regions)
+    if perturbation is not None:
+        if (context,perturbation) not in (('own_history','wrong_previous'),('spatial_history','wrong_other_ROIs')):
+            raise ValueError('relationship perturbation does not match readout context')
+        donors=np.asarray(donors)
+        if (donors.shape!=(len(meta),len(regions)) or donors.dtype.kind not in 'iu'
+                or np.any(donors<0) or np.any(donors>=len(meta))
+                or np.any(donors==np.arange(len(meta))[:,None])):
+            raise ValueError('one no-self native trial donor per target ROI required')
+        strata=('dataset','subject','record','condition','split')
+        for target,row in enumerate(meta):
+            if any(any(meta[int(donor)][k]!=row[k] for k in strata) for donor in donors[target]):
+                raise ValueError('relationship donor crosses the frozen pairing stratum')
+    elif donors is not None: raise ValueError('donors require an explicit relationship perturbation')
+    means=h.mean(axis=2)
+    target=np.stack((.35*means[...,0]-.65*means[...,1],means.sum(axis=-1)),axis=-1)
+    region_results={}
+    for index,region in enumerate(regions):
+        take=layout[:,index];region_rows=[rows[i] for i in take]
+        current=z[take,1:9]
+        if context=='own_current': x=current
+        elif context=='own_history':
+            previous=layout[donors[:,index],index] if perturbation=='wrong_previous' else take
+            x=np.concatenate((z[previous,:8],current),axis=-1)
+        else:
+            sources=[layout[donors[:,index],r] if perturbation=='wrong_other_ROIs' and r!=index
+                else layout[:,r] for r in range(len(regions))]
+            x=np.concatenate([part for source in sources
+                for part in (z[source,:8],z[source,1:9])],axis=-1)
+        y=target[take,2:10]-target[take,1:9]
+        scores=relation_patch_readout(region_rows,x,y,cfg,['X','T'])
+        train=np.array([r['split']=='train' for r in region_rows])
+        test=np.array([r['split']=='test' for r in region_rows])
+        sd=np.maximum(y[train].reshape(-1,2).std(axis=0),1e-8)
+        zero_errors=np.square(y[test]/sd).mean(axis=1)
+        test_rows=[r for r,m in zip(region_rows,test) if m]
+        persistence={}
+        for coordinate,errors in (('X',zero_errors[:,0]),('T',zero_errors[:,1]),
+                ('coordinate_mean',zero_errors.mean(axis=1))):
+            persistence.update({(r['dataset'],r['subject'],coordinate):r
+                for r in relation_subject_mse(test_rows,errors)})
+        region_results[region]={}
+        for score in scores:
+            key=(score['dataset'],score['subject'],score['coordinate'])
+            region_results[region][key]=dict(score,persistence_MSE=persistence[key]['MSE'],
+                persistence_NRMSE=persistence[key]['NRMSE'])
+    expected=set(region_results[regions[0]])
+    if any(set(scores)!=expected for scores in region_results.values()):
+        raise ValueError('target ROI score populations disagree')
+    result=[]
+    for key in sorted(expected):
+        scores=[region_results[region][key] for region in regions]
+        mse=float(np.mean([score['MSE'] for score in scores]))
+        persistence_mse=float(np.mean([score['persistence_MSE'] for score in scores]))
+        result.append(dict(dataset=key[0],subject=key[1],coordinate=key[2],context=context,MSE=mse,
+            NRMSE=float(np.sqrt(mse)),persistence_MSE=persistence_mse,persistence_NRMSE=float(np.sqrt(persistence_mse)),
+            mean_baseline_NRMSE=float(np.sqrt(np.mean([score['mean_baseline_NRMSE']**2 for score in scores]))),
+            selected_alpha_by_region={region:region_results[region][key]['ridge_alpha'] for region in regions},
+            target_training_SD_by_region={region:region_results[region][key]['target_training_SD'] for region in regions},
+            region_scores={region:region_results[region][key] for region in regions},
+            records=scores[0]['records'],trials=scores[0]['trials'],patches_per_regional_window=8))
+    return result
+
+
+def shape_persistence_scores(scores):
+    """Keep every zero-change baseline level consistent with its top score."""
+    result=[]
+    for score in scores:
+        regions={region:dict(row,MSE=row['persistence_MSE'],NRMSE=row['persistence_NRMSE'],
+            ridge_alpha=None,validation_MSE=None) for region,row in score.get('region_scores',{}).items()}
+        result.append(dict(score,MSE=score['persistence_MSE'],NRMSE=score['persistence_NRMSE'],
+            selected_alpha_by_region=None,region_scores=regions))
+    return result
+
+
+def shape_relationship_probes(rows,feature_sets,hb,cfg):
+    """Frozen candidate relationship specificity on one paired trial support.
+
+    Wrong-previous keeps the real current target-ROI token. Wrong-other-ROIs
+    keeps the target ROI history and uses one common other-trial trajectory
+    for both other ROIs, preserving their internal relationship.
+    """
+    regions=cfg['data']['regions'];meta,layout=relation_trial_layout(rows,regions)
+    eligible,donors,_=relation_null_donors(meta,regions,cfg['seed'])
+    eligible_set=set(eligible.tolist())
+    excluded=Counter((r['dataset'],r['split']) for i,r in enumerate(meta) if i not in eligible_set)
+    kept=[meta[i] for i in eligible]
+    support=dict(planned_trials=len(meta),eligible_trials=len(eligible),excluded_trials=len(meta)-len(eligible),
+        excluded_by_dataset_split=[dict(dataset=k[0],split=k[1],trials=v) for k,v in sorted(excluded.items())],
+        eligible_trial_ids=[r['trial_id'] for r in kept],
+        donor_trial_ids=[[kept[int(donor)]['trial_id'] for donor in group] for group in donors],
+        regions=list(regions),donor_seed=cfg['seed'],
+        eligibility='common_complete_three_ROI_trials_with_at_least_two_native_trials_in_each_pairing_stratum',
+        stratum=['dataset','subject','record','condition','split'],
+        interpretation='descriptive_relationship_perturbation_not_randomization_or_causal_test')
+    if not len(eligible): return [],[dict(reason='no_relationship_eligible_trials')],support
+    take=layout[eligible].ravel();selected=[rows[i] for i in take]
+    target=np.asarray(hb)[take];scores=[];failures=[]
+    for representation,values in feature_sets.items():
+        features=np.asarray(values)[take]
+        for context,wrong in (('own_history','wrong_previous'),('spatial_history','wrong_other_ROIs')):
+            for variant in ('real',wrong):
+                arguments={} if variant=='real' else dict(donors=donors,perturbation=wrong)
+                try:
+                    result=shape_forecast_readout(selected,features,target,cfg,context,**arguments)
+                    scores.extend(dict(row,representation=representation,variant=variant) for row in result)
+                except ValueError as exc:
+                    failures.append(dict(representation=representation,context=context,variant=variant,reason=str(exc)))
+    return scores,failures,support

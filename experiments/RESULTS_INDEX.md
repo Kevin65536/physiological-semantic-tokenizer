@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-23; payload-pruning record retained from
+_Evidence surface updated 2026-10-25; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -26,6 +26,7 @@ explains the path hierarchy and reading order.
 
 | Research question | Suite root | Evidence entry |
 | --- | --- | --- |
+| Which information survives hard tokens, and do time/region relations or a shape-plus-scale architecture help? | `functional_tokenizer/` | [Frozen relationships and local shape tokens](#frozen-relationships-and-local-shape-tokens--2026-10-25) |
 | How do model-compatibility scores vary across the registered public inventory and frozen observation panels? | `model_compatibility/` | [Population distributions and typical curves](#model-compatibility-distributions-and-typical-curves--2026-10-23) |
 | Can the frozen observation family meet separate EEG/Hb tolerances, and which failures remain numerical? | `source_observability/` | [Shared-driver conditional feasibility](#shared-driver-conditional-feasibility--2026-10-22) |
 | Does the missing independent common-volume direction restrict sustained 30/90 s Hb reconstruction? | `shared_driver_reconstruction/` | [30/90 s volume-drive diagnostic](#continuous-hb-compatibility-and-independent-volume-direction--2026-10-22) |
@@ -52,6 +53,33 @@ Some run and checkpoint paths below point to local Git-ignored artifacts that re
 useful in this workspace but are not part of the tracked paper record. For manuscript
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
+
+## Frozen relationships and local shape tokens — 2026-10-25
+
+The completed [TK-FUNCTIONAL parent summary](runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1/summary.json)
+owns its eight-arm training, hidden-Hb comparisons and mechanism controls. Its
+24 failed native trials remain in the original 5,008-trial denominator. New
+probes use only the shared retained subset and frozen public subject split.
+
+| Probe | Contract | Numeric evidence |
+| --- | --- | --- |
+| Frozen QT/Q0/CT patch semantics and temporal/regional feature comparisons | [Relation contract](configs/physiology_semantic_tokenizer/functional_relation_probe_v1.yaml) | [Per-subject summary](runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_relation_v1/summary.json), [paired analysis](runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_relation_v1/analysis.json) |
+| New local shape IDs, continuous scales and current/past-token Hb prediction; SSM vs matched smoothing | [Shape contract](configs/physiology_semantic_tokenizer/functional_shape_probe_v1.yaml) | [Per-subject summary](runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_v1/summary.json), [paired analysis](runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_v1/analysis.json) |
+| Correct temporal and regional pairing vs condition-matched donors, using frozen shape exports | [Pairing contract](configs/physiology_semantic_tokenizer/functional_shape_relations_v1.yaml) | [Per-subject summary](runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_relations_v1/summary.json), [paired analysis](runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_relations_v1/analysis.json) |
+
+Retain each run's resolved configuration, source archive, launch/resource record,
+atomic tasks and summary. Git retains these records, paired analyses, reports,
+figures and the small numeric shape encoders with their dictionaries. The public
+parent's coordinate/identity manifest, resolved contract, terminal summaries and
+the cited QT mechanism records preserve the split, failure and interpretation
+provenance. Dense hard-ID/scale exports, continuous references, parent signal
+caches and old training checkpoints remain local; the new shape exports can be
+rebuilt from the retained numeric encoders and the declared parent cache. Pilot
+records retain throughput evidence without duplicating their model exports.
+The [combined interpretation](runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_v1/REPORT.md)
+is a communication view of these sources. Same-input waveform readability,
+offline relationship classification and actual next-patch observed-Hb prediction
+are distinct endpoints; none establishes physiological source recovery.
 
 ## Model-compatibility distributions and typical curves — 2026-10-23
 

@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-23T11:30:08.336797+00:00",
+  "updated_at": "2026-10-25T06:10:29.973312+00:00",
   "tracks": [
     {
       "id": "main",
@@ -2151,6 +2151,72 @@
       "label": "总体分布与典型曲线中文报告",
       "path": "experiments/runs/physiology_semantic_tokenizer/model_compatibility/20261023_v1/report_v4/TECHNICAL_REPORT.pdf",
       "role": "result_summary"
+    },
+    {
+      "id": "e.functional_tokenizer_completed_summary",
+      "label": "条件功能监督完整终态与失败分母",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.functional_tokenizer_completed_readouts",
+      "label": "条件读出与隐藏Hb配对对照",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1/readout_and_coupling_contrasts.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_probe_relation_contract",
+      "label": "冻结token波形与关系探针合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/functional_relation_probe_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_probe_shape_contract",
+      "label": "局部形状ID与连续尺度合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/functional_shape_probe_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_probe_pairing_contract",
+      "label": "冻结局部token时间区域配对合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/functional_shape_relations_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_probe_relation_summary",
+      "label": "冻结token逐被试读出与任务关系结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_relation_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_probe_shape_summary",
+      "label": "局部形状尺度候选与预测结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_probe_pairing_summary",
+      "label": "正确时间区域配对的最终对照",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_relations_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_probe_report",
+      "label": "三组探针的中文解释与结构建议",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_v1/REPORT.md",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_probe_verification",
+      "label": "语义与架构探针独立核验及保留schema限制",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_probe_pairing_verification",
+      "label": "最终配对分母与逐值复核",
+      "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_relations_v1/verification.json",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -5976,6 +6042,67 @@
       ],
       "headline": false,
       "next_step": "本轮固定矩阵已完成。后续应优先检验持续状态输入的可识别性及跨记录泛化，并保留HbR折中和失败；没有支持仅调慢衰减的实测证据，未启动新的受保护评价。"
+    },
+    {
+      "state_id": "main.functional_tokenizer@2026-10-25.review",
+      "entity": "main.functional_tokenizer",
+      "label": "条件功能监督与离散token开发矩阵",
+      "track": "main",
+      "order": 180,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "八臂×三种子24/24训练及后续评分已完成；原计划5008 trial保留4984，24失败导致全分母主分类裁决无效，成功子集单列。QT相对Q0条件teacher读出误差降低EEG21.40%、Hb69.59%，但CT未显示优于平滑监督；QT隐藏Hb相对仅Hb上下文NRMSE反而增加Single-Trial .01229、Simultaneous .01583。模型条件可读性不能替代生理资格或跨模态收益。保留旧终态、失败、合成机制与替代解，不重跑父训练。",
+      "evidence_ids": [
+        "e.functional_tokenizer_contract",
+        "e.functional_tokenizer_pilot",
+        "e.functional_tokenizer_resources",
+        "e.functional_tokenizer_launch",
+        "e.functional_tokenizer_run_resources",
+        "e.functional_tokenizer_supervisor",
+        "e.functional_tokenizer_completed_summary",
+        "e.functional_tokenizer_completed_readouts"
+      ],
+      "supersedes": [
+        "main.functional_tokenizer@2026-10-11.v1"
+      ],
+      "updated_at": "2026-10-25T06:10:29.973312+00:00",
+      "depends_on": [
+        "main.ssm_output_support"
+      ],
+      "headline": false,
+      "next_step": "完整父运行保留为开发证据；新的冻结语义、局部形状尺度和配对探针见对应独立条目，不自动开启原条件扩展或受保护评价。"
+    },
+    {
+      "state_id": "main.functional_semantic_probes@2026-10-25.v1",
+      "entity": "main.functional_semantic_probes",
+      "label": "token语义保留、局部形状尺度与时空配对探针",
+      "track": "main",
+      "order": 191,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "三组固定21/21任务完成、无新增失败，继承4984/5008父成功子集；每库6测试被试、3种子先被试内汇总。旧QT实测X读出NRMSE .278/.285，优于Q0的1.019/1.185；T仍.759/.776，弱于连续CT的.321/.335，旧时空任务关系无一致收益。新局部16项形状字典加连续尺度在三区历史预测联合X/T变化时NRMSE .75402/.74047，优于ID-only .84835/.81787，但弱于直接观测.73659/.71806；相对平滑的差异区间均跨零。正确前序配对较同条件错配改善.03909/.03167，正确其他区域配对改善.02186/.01931，描述区间均正；raw和平滑也存在同类效应。保留形状和尺度可支持观测时空关系的预测解释，未证明SSM独有优势、唯一生理源或因果耦合。Hb混合名义200bit/2s/ROI，其中192bit来自连续尺度，不是纯ID收益。",
+      "evidence_ids": [
+        "e.tk_probe_relation_contract",
+        "e.tk_probe_shape_contract",
+        "e.tk_probe_pairing_contract",
+        "e.tk_probe_relation_summary",
+        "e.tk_probe_shape_summary",
+        "e.tk_probe_pairing_summary",
+        "e.tk_probe_report",
+        "e.tk_probe_verification",
+        "e.tk_probe_pairing_verification"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-25T06:10:29.973312+00:00",
+      "depends_on": [
+        "main.functional_tokenizer"
+      ],
+      "headline": false,
+      "next_step": "本轮两项配对控制完成即收束。保留可解码形状、连续尺度和明确时空支持，SSM保持可替换条件目标；更强生理命名需独立生理锚点与跨记录复现，本轮未启动该扩展。"
     }
   ]
 }

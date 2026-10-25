@@ -1,0 +1,57 @@
+schema: functional_relation_probe_v1
+experiment_id: TK-RELATION-PROBE-v1
+scope: frozen_public_development_reanalysis_not_fresh_confirmation
+artifact_root: experiments/runs/physiology_semantic_tokenizer/functional_tokenizer
+parent_run: experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1
+protected_data: forbidden
+seed: 20261025
+arms: [QT, Q0, CT]
+seeds: [17, 29, 43]
+primary_tasks: [motor_imagery, nback]
+input_boundary: retained_parent_cache_and_frozen_exports_only_no_raw_or_new_teacher_fit
+hard_boundary: integer_ID_frozen_codebook_identity_only_QT_Q0
+continuous_reference: CT_pre_export_separate_from_hard_consumer
+split: inherit_parent_subject_train_validation_test
+tensor:
+  regions: [prefrontal, left_motor, right_motor]
+  patches: 10
+  patch_seconds: 2
+  context: offline_bidirectional_20s_with_parent_Hb_reference_prefix
+  changes_scored_patch_indices: [1, 2, 3, 4, 5, 6, 7, 8]
+semantic_readout:
+  measured_targets: [EEG_feature, X_0.35_HbO_minus_0.65_HbR, T_HbO_plus_HbR]
+  conditional_targets: same_coordinates_from_parent_physical_prediction
+  level: mean_of_8_samples_per_2s_patch
+  change: next_patch_mean_minus_current_patch_mean
+  inputs: [current_token, previous_current_next_tokens_for_change_only]
+  scaling: each_target_training_SD_only
+  interpretation: own_input_observation_or_model_conditional_readability_not_physiological_truth
+relations:
+  marginal: separate_region_mean_std_and_hard_ID_occupancy
+  temporal: lag1_lag2_coordinate_products_absolute_differences_and_end_minus_start
+  spatial: all_three_region_pairs_same_time_and_bidirectional_lag1_coordinate_products
+  comparisons: [marginal, temporal, spatial, null_temporal, null_spatial]
+  donor_strata: [dataset, subject, record, condition, split]
+  donor_unit: distinct_native_trial_excluding_self_and_region_replicas
+  minimum_trials_per_stratum: 2
+  temporal_surrogate: independent_region_phase_matched_donor_recombination
+  spatial_surrogate: independent_region_whole_trial_donors
+  surrogate_boundary: replace_relation_block_only_keep_real_baseline_refit_each_probe
+  interpretation: descriptive_relationship_perturbation_not_randomization_or_causal_test
+evaluation:
+  modalities: [eeg, hb, both]
+  ridge_alpha: [0.01, 0.1, 1.0, 10.0, 100.0]
+  probe_dimensions: 32
+  probe_C: [0.01, 0.1, 1.0, 10.0]
+  label_fractions: [1.0]
+  bootstrap_repeats: 2000
+  aggregation: patch_region_to_trial_then_record_then_subject_equal_seeds_within_subject
+  comparisons: matched_32_dimension_budget_separate_training_PCA_not_nested_information_test
+  interval: exploratory_paired_subject_percentile_95pct_no_multiplicity_claim
+  missing_parent_trials: retain_full_planned_denominator_report_success_subset_only
+  null: train_mean_semantic_baseline_and_marginal_relationship_baseline
+  stopping_rule: fixed_nine_arm_seed_tasks_no_test_tuning_or_new_training
+resources:
+  max_cpu_workers: 9
+  numerical_threads: 1
+  supervisor: user_systemd_linger

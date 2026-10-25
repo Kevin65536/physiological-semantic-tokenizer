@@ -1,0 +1,774 @@
+{
+  "config": {
+    "schema": "functional_tokenizer_v1",
+    "experiment_id": "TK-FUNCTIONAL-v1",
+    "scope": "public_development_not_fresh_confirmation",
+    "artifact_root": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer",
+    "seed": 20261010,
+    "data": {
+      "cache_root": "data/cache/physiology_semantic_clean_v5",
+      "datasets": [
+        "eeg_fnirs_single_trial",
+        "simultaneous_eeg_nirs"
+      ],
+      "tasks": [
+        "motor_imagery",
+        "mental_arithmetic",
+        "nback",
+        "wg"
+      ],
+      "protected_data": "forbidden",
+      "labels_as_training_inputs": false,
+      "split": "seeded_subject_permutation_60_20_20_before_arrays",
+      "train_fraction": 0.6,
+      "validation_fraction": 0.2,
+      "regions": [
+        "prefrontal",
+        "left_motor",
+        "right_motor"
+      ],
+      "region_vectors": [
+        [
+          -0.45,
+          0.89,
+          0.1
+        ],
+        [
+          -0.65,
+          0.0,
+          0.72
+        ],
+        [
+          0.65,
+          0.0,
+          0.72
+        ]
+      ],
+      "eeg_channels_per_region": 6,
+      "input_eeg": "registered_native_voltage_200Hz_no_project_artifact_removal",
+      "input_hb": "disjoint_native_250ms_means_first_5s_reference",
+      "incomplete_window": "retain_failure_no_padding_or_imputation",
+      "task_labels": {
+        "motor_imagery": [
+          "LMI",
+          "RMI"
+        ],
+        "mental_arithmetic": [
+          "MA",
+          "BL"
+        ],
+        "nback": [
+          "0-back session",
+          "2-back session",
+          "3-back session"
+        ],
+        "wg": [
+          "WG",
+          "BL"
+        ]
+      }
+    },
+    "tensor": {
+      "teacher_seconds": 90,
+      "teacher_offset_s": -30,
+      "teacher_steps": 360,
+      "dt_s": 0.25,
+      "student_steps": [
+        120,
+        200
+      ],
+      "student_seconds": 20,
+      "hb_reference_support_event_s": [
+        -30,
+        -25
+      ],
+      "patch_seconds": 2,
+      "patches": 10,
+      "eeg_rate_hz": 200,
+      "eeg_bands_hz": [
+        [
+          1,
+          4
+        ],
+        [
+          4,
+          8
+        ],
+        [
+          8,
+          13
+        ],
+        [
+          13,
+          30
+        ],
+        [
+          30,
+          45
+        ]
+      ]
+    },
+    "teacher": {
+      "contract": "experiments/configs/physiology_semantic_tokenizer/ssm_output_support_v1.yaml",
+      "physical_config": "experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml",
+      "state_arm": "chain_matched",
+      "target": "physical_prediction_not_total_fit_or_common_component",
+      "primary_hb": "X_0.35_HbO_minus_0.65_HbR",
+      "wide_hb": [
+        "X",
+        "T"
+      ],
+      "eeg": "own_training_PCA_logpower_SSM_prediction",
+      "status": "conditional_model_output_not_physiological_truth",
+      "nonconvergence": "retain_record_exclude_from_all_matched_training_arms",
+      "smooth_sigma_steps": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "smooth_selection": "training_only_match_normalized_first_difference_energy",
+      "shuffle": "different_subject_same_dataset_region_without_task_or_label_matching"
+    },
+    "model": {
+      "width": 64,
+      "semantic_dim": 16,
+      "observation_dim": 32,
+      "codebook_size": 128,
+      "independent_encoders": true,
+      "context": "offline_bidirectional_20s_student_90s_privileged_teacher",
+      "quantizer": "EMA_hard_forward_ST_backward",
+      "commitment": 0.25,
+      "ema_decay": 0.99
+    },
+    "training": {
+      "arms": [
+        "C0",
+        "CT",
+        "Q0",
+        "QT",
+        "C-wide",
+        "C-smooth",
+        "C-shuffle",
+        "C-stop"
+      ],
+      "seeds": [
+        17,
+        29,
+        43
+      ],
+      "steps": 3000,
+      "batch_size": 64,
+      "learning_rate": 0.0003,
+      "weight_decay": 0.0001,
+      "gradient_clip": 5.0,
+      "reconstruction_weight": 1.0,
+      "teacher_weight": 1.0,
+      "teacher_reduction": "per_modality_mean_squared_error_over_time_and_supervised_coordinates",
+      "wide_weighting": "fixed_total_Hb_teacher_weight_shared_equally_between_standardized_X_and_T",
+      "checkpoint_every": 1000,
+      "selection": "final_fixed_exposure_no_task_labels_no_early_stopping",
+      "sampling": "uniform_dataset_then_uniform_region_window"
+    },
+    "evaluation": {
+      "primary_tasks": [
+        "motor_imagery",
+        "nback"
+      ],
+      "secondary_tasks": [
+        "mental_arithmetic",
+        "wg"
+      ],
+      "label_fractions": [
+        0.1,
+        0.25,
+        1.0
+      ],
+      "probe_dimensions": 32,
+      "probe_C": [
+        0.01,
+        0.1,
+        1.0,
+        10.0
+      ],
+      "ridge_alpha": [
+        0.01,
+        0.1,
+        1.0,
+        10.0,
+        100.0
+      ],
+      "kmeans_sizes": [
+        16,
+        32,
+        64,
+        128
+      ],
+      "metric": "trial_then_record_then_subject_equal_balanced_accuracy",
+      "secondary_metric": "subject_equal_macro_F1",
+      "cross_session": "frozen_outer_model_inner_probe_first_middle_last_native_sessions_of_outer_test_subjects",
+      "primary_representation": "integer_ID_frozen_codebook_only",
+      "bootstrap_repeats": 2000,
+      "bootstrap_unit": "subject_with_all_seeds_records_regions_together",
+      "task_gain_margin": 0.02,
+      "hard_retention_margin": 0.02,
+      "readout_relative_error_margin": 0.05,
+      "decisions": [
+        "benefit",
+        "degradation",
+        "insufficient_evidence",
+        "invalid_experiment"
+      ],
+      "missing_primary_fit": "invalidate_full_denominator_claim_retain_success_subset"
+    },
+    "mechanism": {
+      "train_identities": 48,
+      "validation_identities": 16,
+      "test_identities": 32,
+      "scenarios": [
+        "base",
+        "driver_amplitude",
+        "driver_shape",
+        "tau",
+        "D_common",
+        "off_D",
+        "combined",
+        "exact_alias"
+      ],
+      "streams": {
+        "train": 6101,
+        "validation": 6102,
+        "test": 6103
+      },
+      "paired_retrain_arms": [
+        "CT",
+        "C-wide"
+      ],
+      "paired_retrain_steps": 500,
+      "panel_training_trials_per_dataset": 6,
+      "alternative_offsets": [
+        -0.25,
+        0.25
+      ],
+      "alternative_objective_fraction": 0.05,
+      "alternative_status": "whole_trajectory_feasible_witness_not_posterior"
+    },
+    "coupling": {
+      "target": "native_Hb_bins_hidden_before_any_temporal_operation",
+      "hidden_student_steps": [
+        32,
+        48
+      ],
+      "nulls": [
+        "different_record_same_subject",
+        "same_task_condition",
+        "nonwrapping_time_shift"
+      ],
+      "shifts_in_patches": [
+        -2,
+        -1,
+        1,
+        2
+      ],
+      "lag_selection": "fixed_zero_paired_lag_all_prespecified_null_shifts_reported",
+      "context": "offline_completion_not_causal_prediction",
+      "training_loss": "none"
+    },
+    "resources": {
+      "max_cpu_workers": 40,
+      "numerical_threads": 1,
+      "max_gpu_workers": 4,
+      "supervisor": "user_systemd_linger",
+      "timeout_hours": 48,
+      "resume": "per_task_atomic_and_training_optimizer_RNG_checkpoint"
+    },
+    "conditional_extensions": {
+      "not_launched": [
+        "Visual_four_class",
+        "DSR",
+        "outer_subject_folds_after_screen",
+        "set_supervision_if_triggered",
+        "O_quantization"
+      ]
+    }
+  },
+  "teacher_configs": [
+    {
+      "schema": "ssm_output_support_v1",
+      "experiment_id": "SSM-OUTPUT-SUPPORT-v1",
+      "seed": 20261010,
+      "artifact_root": "experiments/runs/physiology_semantic_tokenizer/ssm_output_support",
+      "source_config": "experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml",
+      "source_pair_plan": "experiments/runs/physiology_semantic_tokenizer/shared_driver_parameter_stability/20261010_v1/pair_plan.json",
+      "scope": "public_development_output_audit_not_fresh_confirmation",
+      "data": {
+        "cache_root": "data/cache/physiology_semantic_clean_v5",
+        "datasets": [
+          "eeg_fnirs_single_trial",
+          "simultaneous_eeg_nirs",
+          "visual_cognitive_motivation"
+        ],
+        "protected_data": "forbidden",
+        "calibration": "existing_development_subjects_only",
+        "evaluation_subjects_per_dataset": 6,
+        "selection": "lexical_subject_one_prefrontal_site_preferred_same_montage_calibration_available",
+        "records_per_subject": 2,
+        "labels_as_inputs": false,
+        "wrong_pair": "same_subject_task_condition_onset_counts_roi_montage_nonoverlapping_record_pair",
+        "wrong_pair_limitation": "onset_order_and_phase_not_exactly_matched"
+      },
+      "tensor": {
+        "dt_s": 0.25,
+        "steps": 360,
+        "score_steps": [
+          120,
+          240
+        ],
+        "state_order": [
+          "r",
+          "s",
+          "f",
+          "v",
+          "p",
+          "q"
+        ],
+        "components": [
+          "EEG_logpower_PCA",
+          "relative_HbO",
+          "relative_HbR"
+        ]
+      },
+      "observation": {
+        "eeg": "continuous_90s_native_bandpower_5bands_6channels_training_PCA",
+        "hb": "disjoint_native_sample_bin_means_no_temporal_filter",
+        "baseline": "first_5s_visible_reference_not_assumed_rest",
+        "scale": "training_PCA_to_0.025_Hb_common_positive_scale_to_0.025",
+        "model_operator": "identical_native_sample_interpolation_bin_average_and_reference",
+        "extra_component": "fixed_4_DCT_modes_per_original_30s_block_loading_0.65_0.35",
+        "coefficient_sd": [
+          0.04,
+          0.03,
+          0.02,
+          0.01
+        ],
+        "missing_remaining": "NaN_on_unobserved_entries"
+      },
+      "solver": {
+        "substeps": 4,
+        "validation_substeps": 8,
+        "penalty": 0.01,
+        "initial_penalty": 100.0,
+        "flow_prior_weight": 1.0,
+        "flow_prior_log_sd": 0.6931471805599453,
+        "max_iterations": 120,
+        "max_evaluations": 500,
+        "gradient_tolerance": 1e-05,
+        "constraint_tolerance": 1e-05,
+        "numerical_threads": 1
+      },
+      "comparison": {
+        "arms": [
+          "free",
+          "chain_matched",
+          "chain_first"
+        ],
+        "boundaries": [
+          120,
+          240
+        ],
+        "shifted_boundaries": [
+          [
+            100,
+            220
+          ],
+          [
+            140,
+            260
+          ]
+        ],
+        "fixed_driver_curvature_breaks": [
+          120,
+          240
+        ],
+        "free_prior": "physical_states_at_each_free_segment_start",
+        "chain_matched_prior": "same_physical_states_at_same_three_times",
+        "chain_first_prior": "physical_state_at_time_zero_only",
+        "parameter_policy": "fixed_reference_tau_2_gain_1_kappa_0.64_no_response_search",
+        "masks": [
+          "full",
+          "middle_Hb",
+          "middle_HbR"
+        ],
+        "eeg_conditions": [
+          "paired",
+          "wrong_pair",
+          "Hb_only"
+        ],
+        "context_hb_s": [
+          90,
+          75
+        ]
+      },
+      "profiles": {
+        "panel": "first_lexical_evaluation_subject_each_dataset_first_record",
+        "outputs": [
+          "SSM_Hb",
+          "T",
+          "X",
+          "volume",
+          "p_minus_v",
+          "flow",
+          "driver"
+        ],
+        "nonlinear_modes": [
+          "full"
+        ],
+        "local_modes": [
+          "full",
+          "middle_Hb"
+        ],
+        "objectives": [
+          "data",
+          "total"
+        ],
+        "offsets": [
+          -0.5,
+          -0.25,
+          0.25,
+          0.5
+        ],
+        "threshold_fraction": 0.05,
+        "direction": "own_output_worst_generalized_tangent_each_arm_and_objective",
+        "parameter_coordinate_scales": {
+          "driver": 0.025,
+          "initial": 0.02
+        },
+        "state_output_unit": 0.01,
+        "constraint": "signed_projection_of_whole_middle_output_all_actual_unknowns_reoptimized",
+        "local_information_floor": 1e-06,
+        "finite_search": "witnesses_only_not_exhaustive_confidence_bounds"
+      },
+      "synthetic": {
+        "training_seeds": 8,
+        "evaluation_seeds": 16,
+        "streams": {
+          "training": 5101,
+          "pilot": 5102,
+          "evaluation": 5103
+        },
+        "driver_sd": 0.025,
+        "driver_smoothing_steps": 5.0,
+        "nonrest_sd": 0.015,
+        "component_sd": 0.025,
+        "component_smoothing_steps": 8.0,
+        "canonical_noise_sd": [
+          0.00125,
+          0.00015,
+          7e-05
+        ],
+        "scenarios": [
+          "neural_only",
+          "nonrest_common"
+        ]
+      },
+      "power": {
+        "seeds_per_dataset": 16,
+        "injection_Hb_training_SD": [
+          0.25,
+          0.5,
+          1.0
+        ],
+        "background": "training_coordinate_joint_AR1_covariance_from_native_features_not_pure_noise",
+        "parameter_policy": "same_fixed_reference",
+        "detection": "paired_minus_wrong_pair_and_Hb_only_subject_seed_cluster_bootstrap"
+      },
+      "endpoints": {
+        "primary": [
+          "output_profile_witness_range",
+          "boundary_T_X_remaining_stability",
+          "hidden_Hb_prediction"
+        ],
+        "secondary": [
+          "paired_EEG_increment",
+          "synthetic_component_truth",
+          "initial_volume_separation"
+        ],
+        "diagnostic": [
+          "full_reconstruction",
+          "local_data_vs_prior_information",
+          "fixed_parameter_restriction"
+        ],
+        "bootstrap_repeats": 2000,
+        "failure_penalty": 100.0,
+        "bootstrap_unit": "subject_both_records_together_or_generator_seed",
+        "improvement_sign": "comparator_error_minus_candidate_error",
+        "stopping": "fixed_once_all_planned_failures_retained_no_evaluation_tuning"
+      },
+      "resources": {
+        "max_workers": 24,
+        "numerical_threads": 1,
+        "in_flight_per_worker": 2,
+        "supervisor": "user_systemd"
+      },
+      "report": {
+        "path": "docs/report/20261010_ssm_output_support_v1.md",
+        "format": "markdown",
+        "language": "zh_CN"
+      }
+    },
+    {
+      "schema": "shared_driver_physiology_semantics_v1",
+      "experiment_id": "SSM-PHYSIOLOGY-SEMANTICS-v1",
+      "seed": 20260928,
+      "data": {
+        "cache_root": "data/cache/physiology_semantic_clean_v5",
+        "native_prevalence_run": "experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20260928_hbo_hbr_prevalence_v1",
+        "datasets": [
+          "eeg_fnirs_single_trial",
+          "simultaneous_eeg_nirs",
+          "visual_cognitive_motivation",
+          "refed"
+        ],
+        "excluded": [
+          "visual_cognitive_motivation/S06/Part1"
+        ],
+        "protected_data": "forbidden",
+        "motion_method": "none",
+        "preparation": "split_local_native_features",
+        "refed_geometry": "Hb_only_no_cross_modal_coregistration"
+      },
+      "tensor": {
+        "steps": 120,
+        "dt_s": 0.25,
+        "components": [
+          "EEG_logpower_PCA",
+          "relative_HbO",
+          "relative_HbR"
+        ],
+        "state_order": [
+          "r",
+          "s",
+          "f",
+          "v",
+          "p",
+          "q"
+        ],
+        "eeg_bands_hz": [
+          [
+            1,
+            4
+          ],
+          [
+            4,
+            8
+          ],
+          [
+            8,
+            13
+          ],
+          [
+            13,
+            30
+          ],
+          [
+            30,
+            45
+          ]
+        ],
+        "eeg_neighbors": 6,
+        "center_steps": 16,
+        "context_s": [
+          30,
+          60,
+          120
+        ]
+      },
+      "fixed": {
+        "alpha": 0.32,
+        "E0": 0.32,
+        "gamma": 0.32,
+        "P0": 1.0,
+        "Q0": 0.35,
+        "driver_decay_per_s": 0.45,
+        "eeg_loading": 1.0,
+        "neurovascular_gain": 1.0,
+        "kappa": 0.64,
+        "tau": 2.0
+      },
+      "parameters": {
+        "tau": {
+          "bounds": [
+            0.5,
+            8.0
+          ],
+          "starts": [
+            1.0,
+            2.0,
+            4.0
+          ]
+        },
+        "neurovascular_gain": {
+          "bounds": [
+            0.1,
+            10.0
+          ],
+          "starts": [
+            0.5,
+            1.0,
+            2.0
+          ]
+        },
+        "kappa": {
+          "bounds": [
+            0.2,
+            1.5
+          ],
+          "starts": [
+            0.32,
+            0.64,
+            1.28
+          ]
+        }
+      },
+      "solver": {
+        "numerical_backend": "numba",
+        "substeps": 4,
+        "validation_substeps": 8,
+        "penalty": 0.01,
+        "initial_penalty": 100.0,
+        "flow_prior_weight": 1.0,
+        "flow_prior_log_sd": 0.6931471805599453,
+        "gradient_tolerance": 1e-05,
+        "max_iterations": 150,
+        "max_evaluations_per_trial": 600,
+        "step_control": "quadratic_interpolation"
+      },
+      "synthetic": {
+        "tau": [
+          1.0,
+          2.0,
+          4.0
+        ],
+        "gain": [
+          0.5,
+          1.0,
+          2.0
+        ],
+        "spectra": [
+          "slow",
+          "mixed"
+        ],
+        "repeats": 8,
+        "initial_conditions": [
+          "rest",
+          "nonrest"
+        ],
+        "train_trials": 18,
+        "validation_trials": 6,
+        "driver_sd": 0.025,
+        "noise_fraction": 0.05,
+        "hierarchy_repeats": 8,
+        "hierarchy_shape": [
+          4,
+          4,
+          3,
+          6
+        ],
+        "stress": [
+          "common_colored",
+          "independent_colored",
+          "drift",
+          "jump",
+          "swapped_Hb",
+          "lag"
+        ]
+      },
+      "splits": {
+        "subject_folds": 5,
+        "record_repeats": 2,
+        "training_windows": 18,
+        "trial_calibration_s": 10,
+        "labels_as_model_inputs": false,
+        "overlapping_windows_across_folds": "forbidden",
+        "refed_video_grouping": "required"
+      },
+      "coordinate": {
+        "eeg_training_sd_target": 0.025,
+        "common_Hb_training_sd_target": 0.025,
+        "per_trial_zscore": "forbidden",
+        "absolute_physiology_calibration": "unavailable"
+      },
+      "endpoints": {
+        "primary": [
+          "full_observation_reconstruction",
+          "heldout_parameter_sharing"
+        ],
+        "secondary": [
+          "waveform",
+          "feature_missing_completion",
+          "independent_record_repeatability"
+        ],
+        "diagnostic": [
+          "parameter_profiles",
+          "gauge",
+          "observation_rank",
+          "context",
+          "stress"
+        ],
+        "missing_modes": [
+          "center_EEG",
+          "center_Hb",
+          "HbO_hidden",
+          "HbR_hidden",
+          "EEG_hidden",
+          "Hb_hidden"
+        ],
+        "baselines": [
+          "fixed_parameters",
+          "training_template",
+          "own_context",
+          "ridge_own",
+          "ridge_cross"
+        ],
+        "nulls": [
+          "training_donor",
+          "nonwrapping_time_shift",
+          "spatial_anchor"
+        ],
+        "hierarchy": [
+          "H0",
+          "H1_dataset",
+          "H2_subject",
+          "H2s_partial_pooling",
+          "H3_record",
+          "H4_trial_diagnostic"
+        ],
+        "likelihood_intervals": "forbidden_engineering_objective"
+      },
+      "gates": {
+        "synthetic_median_relative_error_max": 0.1,
+        "synthetic_p90_relative_error_max": 0.25,
+        "optimizer_success_min": 0.95,
+        "all_component_nrmse_max": 0.5,
+        "full_denominator_pass_min": 0.8,
+        "repeat_symmetric_relative_error_median_max": 0.2,
+        "icc_lower_min": 0.6,
+        "failed_parameter_branch": "stop_semantic_expansion_retain_negative_evidence"
+      },
+      "resources": {
+        "max_workers": 52,
+        "numerical_threads": 1,
+        "in_flight_per_worker": 2,
+        "supervisor": "user_systemd"
+      },
+      "report": {
+        "format": "pptx",
+        "output_root": "docs/report",
+        "figures": "png",
+        "language": "zh_CN"
+      }
+    }
+  ],
+  "project_root": "/SSD_2/pid-mcm-implementation"
+}
