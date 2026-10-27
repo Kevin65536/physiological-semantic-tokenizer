@@ -1181,7 +1181,8 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
                                initial_embedding=None, initial_coordinates='independent_logs',
                                numerical_backend='python', observation_component=None,
                                observation_whitener=None, hemodynamics='inlet_balance',
-                               viscoelastic_s=0., initial_coordinate_weights=None):
+                               viscoelastic_s=0., initial_coordinate_weights=None,
+                               data_weight=1.):
     """Actual common residual contract for individual and shared-parameter fitting."""
     steps, count = len(y), len(y)+5
     if initial_embedding is not None:
@@ -1201,6 +1202,7 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
     residual_data = (prediction[mask]-y[mask])/scale[mask]
     if observation_whitener is not None:
         residual_data = observation_whitener@residual_data
+    residual_data = np.sqrt(data_weight)*residual_data
     initial_residual = physical_initial-np.array([0., 1., 1., 1., 1.])
     initial_factor = np.sqrt(initial_weight) * (np.ones(5) if initial_coordinate_weights is None
         else np.sqrt(initial_coordinate_weights))
@@ -1217,6 +1219,7 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
         jdata = ((operator@jf) if operator is not None else jf)[mask.ravel()]/scale[mask, None]
         if observation_whitener is not None:
             jdata = observation_whitener@jdata
+        jdata = np.sqrt(data_weight)*jdata
         ji = np.zeros((5, count))
         ji[:, steps:] = np.diag(initial_factor*np.r_[1., physical_initial[1:]])
         jacobian = np.vstack((jdata, regularizer, ji))
@@ -1227,6 +1230,7 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
             jt = (operator@jt if operator is not None else jt)[mask.ravel()]/scale[mask]
             if observation_whitener is not None:
                 jt = observation_whitener@jt
+            jt = np.sqrt(data_weight)*jt
             column = np.r_[jt, np.zeros(len(residual)-len(jt))]
             if flow_prior_weight:
                 column[-steps:] = flow_factor/flow*forward['flow_'+name+'_jacobian']
@@ -2070,7 +2074,7 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
         observation_whiteners=None, parameter_prior_log_mean=None,
         parameter_prior_precision=None, return_jacobian=False,
         hemodynamics='tak', viscoelastic_s=2., initial_state_mode='volume_tied',
-        initial_coordinate_weights=None):
+        initial_coordinate_weights=None, data_weight=1.):
     """Small joint-parameter diagnostic with exact block Gauss--Newton steps.
 
     Uses the same trial residual and physical domain as the scalar solver.
@@ -2092,8 +2096,13 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
     preserve [r,s,f,v,p,q] as an observation-compatible view with derived p.
     Historical callers explicitly select inlet_balance, viscoelastic_s=0 and
     their initial-state policy. Per-record operators may be [B,3T,3T].
+    data_weight multiplies only the standardized observation SSE and tangents.
+    A denser sampling grid can use dt/reference_dt to preserve the same
+    per-second observation weight without changing the reported training SD.
     """
     parameters.validate()
+    if not np.isfinite(data_weight) or data_weight <= 0:
+        raise ValueError('data_weight must be finite and positive')
     _validate_hemodynamics(hemodynamics, viscoelastic_s)
     if initial_state_mode not in ('free', 'volume_tied', 'rest'):
         raise ValueError('initial_state_mode must be free, volume_tied or rest')
@@ -2209,7 +2218,7 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
                     regularizer,initial_weights[i],substeps,derivative,names,flow_prior_weight,
                     flow_prior_log_sd,numerical_backend=numerical_backend,observation_whitener=whiteners[i],
                     initial_embedding=embedding, hemodynamics=hemodynamics, viscoelastic_s=tv,
-                    initial_coordinate_weights=initial_coordinate_weights))
+                    initial_coordinate_weights=initial_coordinate_weights,data_weight=data_weight))
             return result,float(sum(t['objective'] for t in result)+np.sum(prior_precision*(zz-prior_mean)**2))
         try:current,cost=evaluate(x,logp,True)
         except (FloatingPointError,ValueError,OverflowError) as exc:
@@ -2309,7 +2318,7 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
         converged=bool(record['converged'] and valid),parameter_names=names,parameter_values=values,
         parameter_bounds=bounds,starts=attempts,selected_start=record['start'],objective=record['objective'],
         projected_scaled_gradient_inf_norm=record['projected_scaled_gradient_inf_norm'],
-        weighted_data_sse=sum(np.sum(((t['prediction'][mask[i]]-y[i][mask[i]])/scale[i][mask[i]])**2) for i,t in enumerate(current)),
+        weighted_data_sse=data_weight*sum(np.sum(((t['prediction'][mask[i]]-y[i][mask[i]])/scale[i][mask[i]])**2) for i,t in enumerate(current)),
         flow_prior_cost=sum(t['flow_prior_cost'] for t in current),driver=x[:,:n],initial_state=initial,
         states=np.array([t['forward']['states'] for t in current]),prediction=np.array([t['prediction'] for t in current]),
         canonical_prediction=np.array([t['forward']['canonical_prediction'] for t in current]),
@@ -2323,6 +2332,7 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
         tau=fitted.free.tau,neurovascular_gain=fitted.fixed.neurovascular_gain,kappa=fitted.free.kappa,
         gamma=fitted.fixed.gamma, viscoelastic_s=tv, hemodynamics=hemodynamics,
         initial_state_mode=initial_state_mode, initial_coordinate_weights=initial_coordinate_weights,
+        data_weight=float(data_weight),
         initial_free_parameters={'free':5, 'volume_tied':4, 'rest':0}[initial_state_mode])
     if return_jacobian:
         result.update(residual_jacobians=[t['jacobian'] for t in current],

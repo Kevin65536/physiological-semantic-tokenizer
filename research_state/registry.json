@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-27T14:06:07.270664+00:00",
+  "updated_at": "2026-10-27T15:01:58.263336+00:00",
   "tracks": [
     {
       "id": "main",
@@ -2331,6 +2331,18 @@
       "label": "Tak研究基线的方程、设置与实现边界",
       "path": "docs/ARCHITECTURE.md",
       "role": "protocol"
+    },
+    {
+      "id": "e.eeg_proxy_10hz_contract",
+      "label": "后续Tak与10 Hz EEG代理可执行合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.eeg_proxy_10hz_checks",
+      "label": "10 Hz原生功率与Tak合成软件检查（无实测读取）",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_10hz_checks_v1/software_checks.json",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -6311,6 +6323,66 @@
       ],
       "headline": true,
       "next_step": "后续研究以Tak确定性核心、四初态和统一Hb缓存为基线，按新实验合同检验观测映射、条件参数及独立记录支持。空间、多重射击、闭合指标或tokenizer扩展必须适配Tak状态与目标定义；旧结果继续按原模型解释。"
+    },
+    {
+      "state_id": "main.eeg_proxy_rate@2026-10-27.10hz-convention",
+      "entity": "main.eeg_proxy_rate",
+      "label": "EEG代理10 Hz后续约定与保留采样率证据",
+      "track": "main",
+      "order": 174,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "代码与后续合同统一为10 Hz，未重跑实测比较。既有2026-10-10固定面板结果与结论保留：完整Hb误差绝对变化均小于0.002，隐藏Hb无一致改善，100/250 ms功率窗的EEG目标不等价。用户据此选择统一后续代理率；这一工程约定不新增生理恢复证据，也不把旧4 Hz结果改标为10 Hz。新Tak入口从原生EEG重算100 ms功率并重新拟合开发集变换，时钟和损失按物理时间处理。",
+      "evidence_ids": [
+        "e.eeg_proxy_rate_contract",
+        "e.eeg_proxy_rate_summary",
+        "e.eeg_proxy_rate_verification",
+        "e.eeg_proxy_10hz_contract",
+        "e.eeg_proxy_10hz_checks"
+      ],
+      "supersedes": [
+        "main.eeg_proxy_rate@2026-10-10.v1"
+      ],
+      "updated_at": "2026-10-27T15:01:58.263336+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "后续新实验使用10 Hz EEG代理合同及新准备数组/训练坐标；原4/10 Hz比较已收束，不再以保留4 Hz为默认后续动作。新的预测或生理主张仍按各自协议验证。"
+    },
+    {
+      "state_id": "main.program@2026-10-27.tak-10hz-baseline",
+      "entity": "main.program",
+      "label": "Tak与10 Hz EEG代理基线下的后续研究",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "后续研究采用Tak确定性四血管状态、p=v及非静息初态，并统一10 Hz EEG功率代理、共享驱动和观测网格。新目标从原生EEG计算100 ms功率，Hb读取既有带通缓存；PCA与尺度只由开发集重新拟合。数据SSE以dt/0.25秒保持每秒工程权重，参考、遮挡及连续正则保持物理时间定义。代码迁移和软件/合成检查完成，未启动新的实测campaign；既有模型与4 Hz证据保留原身份和负结果。",
+      "evidence_ids": [
+        "e.tak_baseline_architecture",
+        "e.method_rationale",
+        "e.eeg_proxy_10hz_contract",
+        "e.eeg_proxy_10hz_checks",
+        "e.shared_driver_tak_measured",
+        "e.shared_driver_tak_sensitivity",
+        "e.shared_driver_tak_array_audit"
+      ],
+      "supersedes": [
+        "main.program@2026-10-27.tak-baseline"
+      ],
+      "updated_at": "2026-10-27T15:01:58.263336+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak",
+        "main.eeg_proxy_rate"
+      ],
+      "headline": true,
+      "next_step": "新研究从Tak与10 Hz代理合同出发，按版本声明数据/端点/输出及开发集变换。空间、连续状态和teacher扩展需同时适配Tak状态与10 Hz目标；以独立记录检验观测映射、条件参数和生理资格。"
     }
   ]
 }

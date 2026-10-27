@@ -21,13 +21,13 @@ ROOT = Path(__file__).resolve().parents[1]
 def setup():
     cfg = yaml.safe_load((ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_output_support_v1.yaml').read_text())
     base = yaml.safe_load((ROOT/cfg['source_config']).read_text())
-    op = disjoint_native_bin_operator(np.arange(900)/10.)
+    op = disjoint_native_bin_operator(np.arange(900)/10., steps=360, dt=.25, reference_steps=20)
     return cfg, reference_parameters(base), dict(eeg=op['eeg'], hb=op['model'])
 
 
 def test_disjoint_native_support_prevents_hidden_information_return():
     t = np.arange(900)/10.
-    op = disjoint_native_bin_operator(t)
+    op = disjoint_native_bin_operator(t, steps=360, dt=.25, reference_steps=20)
     hidden = (t >= 30)&(t < 60)
     rng = np.random.default_rng(8)
     raw = rng.normal(size=(900, 2)); other = raw.copy()
@@ -39,14 +39,14 @@ def test_disjoint_native_support_prevents_hidden_information_return():
     np.testing.assert_allclose(op['raw']@native, op['model']@model, atol=1e-14)
     for bad in (t[3:], t[:-4], t[::-1]):
         with pytest.raises(ValueError):
-            disjoint_native_bin_operator(bad)
+            disjoint_native_bin_operator(bad, steps=360, dt=.25, reference_steps=20)
 
 
 def test_native_clock_roundoff_uses_one_canonical_bin_partition():
     # Subtracting two large source-clock values can put nominal 60s just below
     # 60. The declared operator owns bin membership, including roundoff.
     t = (731.2+np.arange(900)/10.)-731.2
-    op = disjoint_native_bin_operator(t)
+    op = disjoint_native_bin_operator(t, steps=360, dt=.25, reference_steps=20)
     hidden = (op['native_groups'] >= 120)&(op['native_groups'] < 240)
     values = np.random.default_rng(3).normal(size=(len(t), 2))
     altered = values.copy(); altered[hidden] += 1000

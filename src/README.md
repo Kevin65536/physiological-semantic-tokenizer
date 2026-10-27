@@ -27,6 +27,7 @@ archive; packages do not import that archive. The E2 surface is stopped and
 replay-only.
 
 For new shared-driver work, start with the [Tak baseline](../docs/ARCHITECTURE.md#tak-hemodynamic-baseline)
+and [10 Hz EEG proxy contract](../docs/DATA_CONTRACT.md#新-eeg-代理目标统一为-10-hz--2026-10-27)
 and `fit_nonlinear_shared_parameters` in `inference/shared_driver_reconstruction.py`, then use the
 [entrypoint/config/test map](../experiments/README.md#entrypoint-config-and-test-map)
 to find the diagnostic that exercises it. The observation-baseline module owns

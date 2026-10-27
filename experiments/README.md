@@ -99,7 +99,7 @@ Measurement caches, coordinate and scale audits, native Hb summaries and optical
 
 The default shared-driver model is the [Tak baseline](../docs/ARCHITECTURE.md#tak-hemodynamic-baseline).
 With no historical mode selected, the existing runner resolves
-[`shared_driver_tak_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml)
+[`shared_driver_tak_10hz_v2.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml)
 and starts with its array-free `check` stage. For example:
 
 ```bash
@@ -107,16 +107,24 @@ and starts with its array-free `check` stage. For example:
   --check-only --run-dir <fresh_run>
 ```
 
-The retained Tak comparison is also selected explicitly with `--tak-comparison
+The current path recomputes 100 ms EEG power from registered native voltage and
+uses the same 10 Hz model grid as cached Hb. Preparation refits development-only
+coordinates and rejects old 4 Hz arrays; physical-time rules are owned by the
+[data contract](../docs/DATA_CONTRACT.md#新-eeg-代理目标统一为-10-hz--2026-10-27).
+`check` is synthetic software validation; it does not start measured work.
+
+The retained 4 Hz Tak comparison is selected explicitly with `--tak-comparison
 --tak-stage <check|plan|synthetic|prepare|pilot|measured|sensitivity|summarize|verify|audit>
---run-dir <fresh_run>` and
+--run-dir <fresh_run> --config
+experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml` using
 [`shared_driver_tak_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml).
 It compares the retained inlet-balance core with deterministic reduced Tak/SPM
 hemodynamics, matched initial priors, parameter estimation and declared
 sensitivity controls on newly prepared cached Hb coordinates. The
 [protocol](../docs/EXPERIMENT_PLAN.md#tak-原始血流核心的缓存实测对照2026-10-27)
 owns scope and interpretation. Tests: `test_shared_driver_tak.py`,
-`test_shared_driver_tak_experiment.py`, `test_shared_driver_parameter_stability.py`.
+`test_shared_driver_tak_experiment.py`, `test_shared_driver_parameter_stability.py`;
+the current clock, native preparation and loss weights use `test_eeg_proxy_10hz.py`.
 After verification and the independent retained-array audit, render with
 `scripts/render_shared_driver_reconstruction.py --tak-comparison --run <run>
 --output <fresh_export>` for the searchable PDF and complete bitmap waveform atlas.

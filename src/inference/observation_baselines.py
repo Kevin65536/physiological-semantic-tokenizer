@@ -88,11 +88,15 @@ def ridge_predict(model, x):
 
 
 def eeg_band_power(values, bands=((8., 13.), (13., 30.), (30., 45.)),
-                   sample_rate=200., target_rate=4.):
-    """Trial-local power in uV^2; caller verifies units before this boundary.
+                   sample_rate=200., target_rate=10.):
+    """Trial-local power in squared native voltage units, preserved by the caller.
 
     The last axis preserves band identity. No baseline, fitted scaling or
     missing-feature interpolation is applied before returning these features.
+    The current proxy uses 100 ms non-overlapping mean-square bins (10 Hz),
+    computed from the original voltage samples after bandpass filtering.
+    This is a windowed power statistic, not downsampling the EEG carrier or
+    interpolating a previously computed 4 Hz proxy. Historical rates are explicit.
     """
     from scipy.signal import butter, sosfiltfilt
     x = np.asarray(values, dtype=float)
@@ -108,7 +112,7 @@ def eeg_band_power(values, bands=((8., 13.), (13., 30.), (30., 45.)),
     return np.stack(powers, axis=-1)
 
 
-def disjoint_native_bin_operator(native_time, *, steps=360, dt=.25, reference_steps=20):
+def disjoint_native_bin_operator(native_time, *, steps=900, dt=.1, reference_steps=50):
     """Native sample means with explicit disjoint raw support and a fixed reference.
 
     Returns raw-to-feature and model-to-feature matrices. Each unreferenced row
@@ -116,6 +120,8 @@ def disjoint_native_bin_operator(native_time, *, steps=360, dt=.25, reference_st
     or interpolation of measured values across a missing interval. The model
     is linearly interpolated to those exact native timestamps before binning.
     The caller keeps the first reference_steps bins visible for every Hb task.
+    Defaults describe a 90 s window at the current 10 Hz modeling grid with
+    a 5 s reference. Retained 4 Hz callers supply their old clock explicitly.
     """
     t = np.asarray(native_time, float)
     if (t.ndim != 1 or not np.isfinite(t).all() or np.any(np.diff(t) <= 0)

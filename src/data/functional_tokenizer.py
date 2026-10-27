@@ -150,7 +150,7 @@ def prepare_cached_record(project_root, cfg, rows):
             e = eeg.values[start:start+18000, [names[n.upper()] for n in row['anchor']['eeg_channels']]]
             take = (hb['time_s'] >= row['hb_start_s']) & (hb['time_s'] < row['hb_start_s']+90)
             t = hb['time_s'][take]-row['hb_start_s']
-            ops = disjoint_native_bin_operator(t)
+            ops = disjoint_native_bin_operator(t, steps=360, dt=.25, reference_steps=20)
             pair = row['anchor']['hb_pair']
             h = hb['values'][take, pair]
             if e.shape != (18000,6) or not np.isfinite(e).all() or not np.isfinite(h).all():

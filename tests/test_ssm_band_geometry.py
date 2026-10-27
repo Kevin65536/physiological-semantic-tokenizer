@@ -46,7 +46,7 @@ def test_correlated_sufficient_statistic_preserves_objective_differences_and_gra
 def test_power_features_preserve_band_axis_and_physical_merge():
     t=np.arange(6000)/200
     x=np.column_stack((np.sin(2*np.pi*10*t),2*np.sin(2*np.pi*20*t)))
-    p=eeg_band_power(x)
+    p=eeg_band_power(x, target_rate=4.)
     assert p.shape==(120,2,3) and p.dtype==np.float64
     assert np.median(p[8:-8,0,0])>.4
     assert np.median(p[8:-8,1,1])>1.6

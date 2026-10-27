@@ -40,7 +40,7 @@ from src.inference.observation_baselines import native_feature_operators, visibl
 from src.data.ssm_prepared import read_prepared_arrays as semantics_prepared_arrays
 from src.data.ssm_prepared import prepared_target as semantics_target
 
-DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml'
+DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml'
 LEGACY_DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_reconstruction_v1.yaml'
 MODALITIES = ('EEG', 'HbO', 'HbR')
 
@@ -7150,24 +7150,27 @@ def volume_drive_plan(cfg, root):
         source='parent native continuous record; no concatenation of independent trials')
 
 
-def volume_drive_crop(y, operators, length_s):
+def volume_drive_crop(y, operators, length_s, *, dt=.25, reference_seconds=5.):
     """Re-reference the same retained samples; drop the final interpolation bin.
 
     Cancellation of the old constant reference is checked in the FULL operator,
     before restricting its columns. Every used row has zero dependence outside
     the cropped model support. No new interpolation of measured data occurs.
     """
-    if length_s not in (30, 90) or np.shape(y) != (360, 3):
+    if dt not in (.1,.25):
+        raise ValueError('declared 4 or 10 Hz clock required')
+    whole,short,reference_steps = round(90/dt),round(30/dt),round(reference_seconds/dt)
+    if length_s not in (30, 90) or np.shape(y) != (whole, 3) or not 1<=reference_steps<=short:
         raise ValueError('expected a 90s parent and 30/90s sample length')
-    left, right = (120, 240) if length_s == 30 else (0, 360)
+    left, right = (short, 2*short) if length_s == 30 else (0, whole)
     n = right-left
-    reference = np.eye(n); reference[:, :20] -= 1/20
+    reference = np.eye(n); reference[:, :reference_steps] -= 1/reference_steps
     target = reference@np.asarray(y)[left:right]
     operator = np.zeros((3*n, 3*n))
-    outside = np.r_[np.arange(left), np.arange(right, 360)]
+    outside = np.r_[np.arange(left), np.arange(right, whole)]
     for column, name in enumerate(('eeg', 'hb', 'hb')):
         original = np.asarray(operators[name], float)
-        if original.shape != (360, 360) or not np.isfinite(original).all():
+        if original.shape != (whole, whole) or not np.isfinite(original).all():
             raise ValueError('invalid parent observation operator')
         complete = reference@original[left:right]
         if outside.size and np.max(np.abs(complete[:-1, outside])) > 1e-12:
@@ -7218,29 +7221,32 @@ def volume_drive_basis(cfg, operator, sd, arm):
     return basis/scale
 
 
-def volume_drive_mask(n, condition):
-    if n not in (120,360) or condition not in ('joint_full','Hb_only_full','joint_blocked'):
+def volume_drive_mask(n, condition, *, dt=.25):
+    if dt not in (.1,.25):raise ValueError('declared 4 or 10 Hz clock required')
+    short,long = round(30/dt),round(90/dt)
+    if n not in (short,long) or condition not in ('joint_full','Hb_only_full','joint_blocked'):
         raise ValueError('unregistered sample shape or condition')
     mask = np.ones((n,3), bool); mask[-1] = False
     if condition == 'Hb_only_full':
         mask[:,0] = False
     if condition == 'joint_blocked':
-        for start in range(0,n,120):
-            mask[start+40:start+60,1:] = False
-            mask[start+80:start+100,1:] = False
+        for start in range(0,n,short):
+            mask[start+round(10/dt):start+round(15/dt),1:] = False
+            mask[start+round(20/dt):start+round(25/dt),1:] = False
     return mask
 
 
-def volume_drive_metrics(target, prediction, sd, condition):
+def volume_drive_metrics(target, prediction, sd, condition, *, dt=.25):
     from scipy.fft import dct
     y, pred = np.asarray(target), np.asarray(prediction)
     n = len(y); error = (pred-y)/sd
     valid = np.ones(n,bool); valid[-1] = False
-    mask = volume_drive_mask(n,condition)
+    mask = volume_drive_mask(n,condition,dt=dt)
     score = ~mask[:,1] & valid if condition == 'joint_blocked' else valid
-    center = np.zeros(n,bool); center[120:239] = True if n == 360 else False
-    if n == 120: center = valid.copy()
-    tail = np.zeros(n,bool); tail[-120:-1] = True
+    short,long = round(30/dt),round(90/dt)
+    center = np.zeros(n,bool); center[short:2*short-1] = True if n == long else False
+    if n == short: center = valid.copy()
+    tail = np.zeros(n,bool); tail[-short:-1] = True
     result = dict(full_hb_nmse=float(np.mean(error[valid,1:]**2)),
         score_hb_nmse=float(np.mean(error[score,1:]**2)),
         center_hb_nmse=float(np.mean(error[center,1:]**2)),
@@ -7254,7 +7260,7 @@ def volume_drive_metrics(target, prediction, sd, condition):
     # DCT on the scored support, identical for target and reconstruction. The
     # narrow physical band is a descriptive waveform endpoint, not a fit filter.
     spectrum = dct(error[valid,1:], axis=0, norm='ortho')
-    freq = np.arange(valid.sum())/(2*valid.sum()*.25)
+    freq = np.arange(valid.sum())/(2*valid.sum()*dt)
     band = (freq >= 1/30-1e-12)&(freq <= .1+1e-12)
     result['oscillation_band_nmse'] = float(np.sum(spectrum[band]**2)/(2*valid.sum()))
     return result
@@ -7269,7 +7275,7 @@ def volume_drive_synthetic(cfg, seed, scenario, length_s):
     initial = np.array([0.,1.,1.,1.,1.])
     if scenario == 'nonrest': initial = np.array([.01,1.03,.98,1.03,1.01])
     forward = compiled_forward(driver,initial,p,.25,8,False,False,state=True)
-    ops = disjoint_native_bin_operator(np.arange(900)/10.)
+    ops = disjoint_native_bin_operator(np.arange(900)/10., steps=360, dt=.25, reference_steps=20)
     operators = dict(eeg=ops['eeg'],hb=ops['model'])
     canonical = forward['canonical_prediction'].copy()
     sd = np.array([.025,.025,.015])
@@ -7626,7 +7632,7 @@ def decay_synthetic(cfg, seed, scenario, length_s):
         forcing_coefficients=coefficients,substeps=cfg['synthetic']['generation_substeps'])
     clean = forward['canonical_prediction']; sd = np.asarray(cfg['synthetic']['training_sd'])
     noise = rng.normal(size=clean.shape)*sd*cfg['synthetic']['noise_training_sd']
-    native = disjoint_native_bin_operator(np.arange(900)/10.)
+    native = disjoint_native_bin_operator(np.arange(900)/10., steps=360, dt=.25, reference_steps=20)
     operators = dict(eeg=native['eeg'],hb=native['model'])
     def observe(values):
         return np.column_stack((operators['eeg']@values[:,0],operators['hb']@values[:,1:]))
@@ -8268,7 +8274,7 @@ def filter_retest_prepare(cfg, base, root, out, plan):
         native = cached['values'][take, pair]
         if not np.isfinite(native).all() or not np.isfinite(old['hb']).all():
             raise ValueError('unsupported Hb pair in one branch')
-        op = disjoint_native_bin_operator(t)
+        op = disjoint_native_bin_operator(t, steps=360, dt=.25, reference_steps=20)
         new = dict(eeg=old['eeg'], hb=op['raw'] @ native,
                    eeg_operator=old['eeg_operator'], hb_operator=op['model'])
         return dict(retained_unfiltered=old, unified_cache=new), cached['provenance']
@@ -8315,7 +8321,7 @@ def filter_retest_prepare(cfg, base, root, out, plan):
     return result
 
 
-def filter_retest_waveform_metrics(target, prediction, sd, *, mask=None, hb_factor=1., common_sd=None):
+def filter_retest_waveform_metrics(target, prediction, sd, *, mask=None, hb_factor=1., common_sd=None, dt=.25):
     y, p, sd = np.asarray(target), np.asarray(prediction), np.asarray(sd)
     use = np.ones(len(y), bool) if mask is None else np.asarray(mask, bool)
     use[-1] = False
@@ -8333,7 +8339,7 @@ def filter_retest_waveform_metrics(target, prediction, sd, *, mask=None, hb_fact
             bias_training_sd=float((b - a).mean() / sd[col]),
             absolute_rmse_in_cache_unit=rms / scale,
             target_centered_rms_in_cache_unit=float(a.std() / scale),
-            peak_time_difference_s=float((np.flatnonzero(use)[np.argmax(b)] - np.flatnonzero(use)[np.argmax(a)]) * .25))
+            peak_time_difference_s=float((np.flatnonzero(use)[np.argmax(b)] - np.flatnonzero(use)[np.argmax(a)]) * dt))
         if col and common_sd is not None:
             row['nrmse_common_cached_training_sd'] = rms / scale / common_sd[col - 1]
         rows.append(row)
@@ -8644,14 +8650,27 @@ def filter_retest_main(args):
 
 
 def tak_config(path):
-    cfg = yaml.safe_load(Path(path).read_text())
-    if (cfg.get('schema') != 'shared_driver_tak_v1' or cfg['data']['protected_data'] != 'forbidden'
-            or cfg['data']['raw_reads'] is not False or cfg['data']['fnirs_input'] != 'unified_cached_fnirs_v1'
+    path = Path(path)
+    cfg = json.loads(path.read_text()) if path.suffix.lower()=='.json' else yaml.safe_load(path.read_text())
+    current = cfg.get('schema') == 'shared_driver_tak_10hz_v2'
+    dt = .1 if current else .25
+    if (cfg.get('schema') not in ('shared_driver_tak_v1','shared_driver_tak_10hz_v2') or cfg['data']['protected_data'] != 'forbidden'
+            or (cfg['data']['raw_reads'] != 'registered_EEG_only' if current else cfg['data']['raw_reads'] is not False)
+            or cfg['data']['fnirs_input'] != 'unified_cached_fnirs_v1'
             or cfg['data']['expected_records'] != 48
             or cfg['data']['datasets'] != ['eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation','refed']
-            or cfg['tensor']['lengths_s'] != [30,90] or cfg['tensor']['dt_s'] != .25
+            or cfg['tensor']['lengths_s'] != [30,90] or cfg['tensor']['dt_s'] != dt
+            or cfg['tensor']['reference_steps'] != round(5/dt) or cfg['synthetic']['dt_s'] != dt
             or cfg['conditions'] != ['joint_full','Hb_only_full','joint_blocked']):
         raise ValueError('Tak public cached-input contract mismatch')
+    if current:
+        from src.data.ssm_prepared import EEG_PROXY_INPUT_SCHEMA
+        if (cfg['tensor'].get('eeg_proxy_input') != EEG_PROXY_INPUT_SCHEMA
+                or cfg['tensor'].get('eeg_proxy_rate_hz') != 10.
+                or cfg['tensor'].get('eeg_bands_hz') != [[1,4],[4,8],[8,13],[13,30],[30,45]]
+                or cfg['solver'].get('observation_reference_dt_s') != .25
+                or cfg['solver'].get('data_weight') != 'dt_over_reference_dt_standardized_SSE_preserve_per_second_weight'):
+            raise ValueError('Tak 10 Hz EEG proxy or time-weight contract mismatch')
     expected = ['legacy_free','legacy_tied','tak_fixed','tak_rest','legacy_free_fit','legacy_tied_fit','tak_fit','tak_spm_prior']
     if [a['name'] for a in cfg['arms']] != expected or cfg['model']['primary'] != 'tak_fit':
         raise ValueError('Tak paired arm contract mismatch')
@@ -8687,14 +8706,16 @@ def tak_plan(cfg, root):
     plan.update(schema='shared_driver_tak_plan_v1', selection='all_exact_parent_public_evaluation_records',
         independent_subjects={ds: len({r['subject'] for r in plan['records'] if r['dataset']==ds})
             for ds in cfg['data']['datasets']})
+    if cfg['schema']=='shared_driver_tak_10hz_v2':
+        plan.update(schema='shared_driver_tak_plan_v2',dt_s=cfg['tensor']['dt_s'],eeg_proxy_rate_hz=10.)
     return plan
 
 
 def tak_prepare(cfg, root, out, plan):
     from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
-    from src.data.unified_physiology import load_cached_fnirs_record
-    from src.data.ssm_prepared import fit_feature_coordinate
-    from src.inference.observation_baselines import disjoint_native_bin_operator
+    from src.data.unified_physiology import load_cached_fnirs_record, load_native_eeg_record
+    from src.data.ssm_prepared import fit_feature_coordinate, EEG_PROXY_INPUT_SCHEMA
+    from src.inference.observation_baselines import disjoint_native_bin_operator, eeg_band_power
     if serial(plan) != serial(tak_plan(cfg, root)):
         raise ValueError('Tak plan no longer matches the admitted public metadata')
     if json.loads((out/'software_checks.json').read_text())['status'] != 'passed':
@@ -8702,6 +8723,9 @@ def tak_prepare(cfg, root, out, plan):
     if json.loads((out/'synthetic_summary.json').read_text())['status'] != 'completed':
         raise ValueError('completed synthetic experiment required before measured preparation')
     lookup = {r.join_key: r for r in CleanPhysiologyCacheIndex(root/cfg['data']['cache_root']).records}
+    current = cfg['schema']=='shared_driver_tak_10hz_v2'
+    dt = cfg['tensor']['dt_s'];steps=round(90/dt);reference_steps=cfg['tensor']['reference_steps']
+    native_eeg_reads=0
     coordinates, failures, prepared = {}, [], []
     for relative in cfg['parents']:
         parent = root/relative
@@ -8716,13 +8740,36 @@ def tak_prepare(cfg, root, out, plan):
                 try:
                     if ref['dataset'] not in cfg['data']['datasets'] or Path(ref['id']).name != ref['id']:
                         raise ValueError('unregistered public identity')
-                    meta = json.loads((parent/'tasks'/'prepare'/(ref['id']+'.json')).read_text())
-                    if meta['status'] != 'completed': raise ValueError('parent EEG preparation failed')
-                    with np.load(parent/'prepared'/(ref['id']+'.npz'), allow_pickle=False) as a:
-                        eeg, eeg_op = a['eeg'].copy(), a['eeg_operator'].copy()
-                    if eeg.shape != (360,30) or eeg_op.shape != (360,360):
-                        raise ValueError('parent EEG shape mismatch')
-                    cached = load_cached_fnirs_record(root, lookup[ref['join_key']])
+                    record=lookup[ref['join_key']]
+                    eeg_provenance=None
+                    if current:
+                        native=load_native_eeg_record(root,record);native_eeg_reads+=1
+                        channels={str(name).upper():i for i,name in enumerate(native.channel_names)}
+                        selected=[channels[name.upper()] for name in ref['anchor']['eeg_channels']]
+                        start=round(ref['eeg_start_s']*native.sample_rate_hz);length=round(90*native.sample_rate_hz)
+                        values=native.values[start:start+length,selected]
+                        if start<0 or values.shape!=(length,6) or not np.isfinite(values).all():
+                            raise ValueError('complete registered EEG support required for 10 Hz proxy')
+                        power=eeg_band_power(values,bands=cfg['tensor']['eeg_bands_hz'],
+                            sample_rate=native.sample_rate_hz,target_rate=cfg['tensor']['eeg_proxy_rate_hz'])
+                        if power.shape!=(steps,6,5) or not np.isfinite(power).all() or np.any(power<=0):
+                            raise ValueError('invalid native 10 Hz bandpower tensor')
+                        eeg_op=np.eye(steps);eeg_op[:,:reference_steps]-=1/reference_steps
+                        eeg=eeg_op@np.log(power).reshape(steps,30)
+                        eeg_provenance=dict(schema=EEG_PROXY_INPUT_SCHEMA,source=str(native.source_path),
+                            source_rate_hz=native.sample_rate_hz,source_unit=native.native_unit,
+                            proxy_rate_hz=10.,bin_seconds=dt,channels=ref['anchor']['eeg_channels'],
+                            bands_hz=cfg['tensor']['eeg_bands_hz'],native_start_sample=start,native_samples=length,
+                            start_rounding_s=start/native.sample_rate_hz-ref['eeg_start_s'],
+                            estimator=cfg['tensor']['eeg_power'],timestamps=cfg['tensor']['timestamps'])
+                    else:
+                        meta = json.loads((parent/'tasks'/'prepare'/(ref['id']+'.json')).read_text())
+                        if meta['status'] != 'completed': raise ValueError('parent EEG preparation failed')
+                        with np.load(parent/'prepared'/(ref['id']+'.npz'), allow_pickle=False) as a:
+                            eeg, eeg_op = a['eeg'].copy(), a['eeg_operator'].copy()
+                        if eeg.shape != (steps,30) or eeg_op.shape != (steps,steps):
+                            raise ValueError('parent EEG shape mismatch')
+                    cached = load_cached_fnirs_record(root, record)
                     pair = int(ref['anchor']['hb_pair'])
                     if cached['channel_names'][2*pair] != ref['anchor']['hb_channel']+'_HbO':
                         raise ValueError('cached Hb channel identity mismatch')
@@ -8730,11 +8777,11 @@ def tak_prepare(cfg, root, out, plan):
                     times = cached['time_s'][take]-ref['hb_start_s']
                     hb = cached['values'][take,pair]
                     if not np.isfinite(hb).all(): raise ValueError('unsupported cached Hb samples')
-                    op = disjoint_native_bin_operator(times)
+                    op = disjoint_native_bin_operator(times,steps=steps,dt=dt,reference_steps=reference_steps)
                     hb = op['raw']@hb
-                    if hb.shape != (360,2): raise ValueError('cached Hb shape mismatch')
+                    if hb.shape != (steps,2): raise ValueError('cached Hb shape mismatch')
                     raw[ref['id']] = dict(eeg=eeg, hb=hb, eeg_op=eeg_op, hb_op=op['model'])
-                    provenance[ref['id']] = cached['provenance']
+                    provenance[ref['id']] = dict(hb=cached['provenance'],eeg=eeg_provenance) if current else cached['provenance']
                     if ref in dev: good.append(ref)
                 except (ValueError,KeyError,FileNotFoundError) as exc:
                     failures.append(dict(id=ref['id'], coordinate=coordinate, partition=ref['partition'], reason=str(exc)))
@@ -8742,40 +8789,45 @@ def tak_prepare(cfg, root, out, plan):
             co.update(training_ids=[r['id'] for r in good], training_subjects=sorted({r['subject'] for r in good}),
                 planned_training_records=len(dev), successful_training_records=len(good),
                 fnirs_input='unified_cached_fnirs_v1')
+            if current:co.update(eeg_proxy_input=EEG_PROXY_INPUT_SCHEMA,eeg_proxy_rate_hz=10.,dt_s=dt)
             coordinates[coordinate] = co
             for ref in evaluation:
                 if ref['id'] not in raw: continue
                 a = raw[ref['id']]
                 y = np.column_stack((a['eeg']@np.asarray(co['pc'])*co['eeg_factor'],a['hb']*co['hb_factor']))
                 for length in cfg['tensor']['lengths_s']:
-                    target, operator = volume_drive_crop(y,dict(eeg=a['eeg_op'],hb=a['hb_op']),length)
+                    target, operator = volume_drive_crop(y,dict(eeg=a['eeg_op'],hb=a['hb_op']),length,dt=dt)
                     path = out/'prepared'/f"{ref['id']}__{length}.npz"
                     path.parent.mkdir(parents=True,exist_ok=True)
+                    extra=dict(eeg_proxy_input=np.array(EEG_PROXY_INPUT_SCHEMA),eeg_proxy_rate_hz=np.array(10.),
+                        time_s=np.arange(len(target))*dt) if current else {}
                     np.savez_compressed(path,target=target,operator=operator,sd=np.asarray(co['sd']),
-                        hb_factor=np.array(co['hb_factor']),fnirs_input=np.array('unified_cached_fnirs_v1'))
+                        hb_factor=np.array(co['hb_factor']),fnirs_input=np.array('unified_cached_fnirs_v1'),**extra)
                 write_json(out/'prepared'/(ref['id']+'.json'),dict(status='completed',ref=ref,
                     cache_provenance=provenance[ref['id']],calibration_coordinate=coordinate,
-                    source='new_cached_Hb_and_retained_EEG_no_raw_Hb_reads'))
+                    source='native_10Hz_EEG_proxy_and_cached_Hb' if current else 'new_cached_Hb_and_retained_EEG_no_raw_Hb_reads'))
                 prepared.append(ref['id'])
     result = dict(status='completed', planned_records=len(plan['records']), prepared_records=len(prepared),
-        prepared_ids=prepared,coordinates=coordinates,failures=failures,raw_reads=0,protected_reads=0)
+        prepared_ids=prepared,coordinates=coordinates,failures=failures,raw_reads=native_eeg_reads,protected_reads=0)
+    if current:result.update(native_eeg_reads=native_eeg_reads,raw_fnirs_reads=0,eeg_proxy_rate_hz=10.,dt_s=dt)
     write_json(out/'preparation.json',result)
     return result
 
 
 def tak_synthetic(cfg, seed, scenario):
     from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
-    n = int(cfg['synthetic']['length_s']/.25)
-    t = np.arange(n)*.25
+    dt=cfg['tensor']['dt_s'];reference_steps=cfg['tensor']['reference_steps']
+    n = round(cfg['synthetic']['length_s']/dt)
+    t = np.arange(n)*dt
     driver = .04*np.sin(2*np.pi*t/17)+.018*np.cos(2*np.pi*t/7)
     driver *= 1+.12*seed
     initial = (np.array([.02,1.04,1.025,1.025,.99]) if scenario=='tak_nonrest' else
                np.array([.02,1.04,1.025,1.105,.99]) if scenario=='legacy_unbound' else np.r_[0.,np.ones(4)])
     p = volume_drive_parameters(cfg,kappa=.55+.08*seed,tau=1.5+.5*seed)
     hemo = 'inlet_balance' if scenario=='legacy_unbound' else 'tak'
-    truth = nonlinear_driver_forward(driver,initial,p,.25,substeps=cfg['synthetic']['generation_substeps'],
+    truth = nonlinear_driver_forward(driver,initial,p,dt,substeps=cfg['synthetic']['generation_substeps'],
         derivative=False,numerical_backend='numba',hemodynamics=hemo,viscoelastic_s=0. if hemo=='inlet_balance' else 2.)
-    ref = np.eye(n);ref[:,:20]-=1/20
+    ref = np.eye(n);ref[:,:reference_steps]-=1/reference_steps
     operator = np.kron(ref,np.eye(3))
     clean = (operator@truth['canonical_prediction'].ravel()).reshape(n,3)
     noise = np.random.default_rng(cfg['seed']+seed).normal(size=(n,3))*cfg['synthetic']['noise_sd']
@@ -8811,6 +8863,7 @@ def tak_specs(cfg, plan, phase):
 def tak_fit_group(cfg, arm, y, operator, sd, mask, warm=None):
     from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_parameters
     names = arm['fit'];s=cfg['solver'];f=cfg['fitting'];batch,n,_=y.shape
+    dt=cfg['tensor']['dt_s'];data_weight=dt/s.get('observation_reference_dt_s',dt)
     starts = []
     references = np.array([f['reference'][name] for name in names])
     values = [references] if not names else [np.array(kt if len(names)==2 else kt+gv)
@@ -8828,18 +8881,18 @@ def tak_fit_group(cfg, arm, y, operator, sd, mask, warm=None):
         substeps=s['substeps'],max_iterations=s['max_iterations'],
         max_evaluations_per_trial=s['max_evaluations_per_trial'],gradient_tolerance=s['gradient_tolerance'],
         numerical_backend='numba',hemodynamics=arm['hemodynamics'],viscoelastic_s=arm['tau_v'],
-        initial_state_mode=arm['initial'])
+        initial_state_mode=arm['initial'],data_weight=data_weight)
     if names:
         kwargs.update(parameter_prior_log_mean=np.log(references),
                       parameter_prior_precision=1/np.square(arm['log_sd']))
-    return fit_nonlinear_shared_parameters(np.where(mask,y,np.nan),volume_drive_parameters(cfg),.25,**kwargs)
+    return fit_nonlinear_shared_parameters(np.where(mask,y,np.nan),volume_drive_parameters(cfg),dt,**kwargs)
 
 
 def tak_worker(payload):
     from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
-    from src.data.ssm_prepared import require_cached_hb_array
+    from src.data.ssm_prepared import require_cached_hb_array, require_10hz_eeg_proxy_array
     cfg,out_string,spec = payload;out=Path(out_string)
-    start=time.monotonic();arm=spec['arm'];refs=spec['group']['refs']
+    start=time.monotonic();arm=spec['arm'];refs=spec['group']['refs'];dt=cfg['tensor']['dt_s']
     result=dict(spec=spec,status='failed',rows=[]);saved={}
     try:
         truth=None;factors=[]
@@ -8851,9 +8904,11 @@ def tak_worker(payload):
             for ref in refs:
                 with np.load(out/'prepared'/f"{ref['id']}__{spec['length_s']}.npz",allow_pickle=False) as a:
                     require_cached_hb_array(a)
+                    if cfg['schema']=='shared_driver_tak_10hz_v2':
+                        require_10hz_eeg_proxy_array(a,steps=round(spec['length_s']/dt))
                     ys.append(a['target']);ops.append(a['operator']);sds.append(a['sd']);factors.append(float(a['hb_factor']))
             y,op,sd=np.array(ys),np.array(ops),np.array(sds)
-        mask=np.array([volume_drive_mask(len(yi),spec['condition']) for yi in y])
+        mask=np.array([volume_drive_mask(len(yi),spec['condition'],dt=dt) for yi in y])
         warm=None
         if 'warm' in arm:
             phase='measured' if spec['phase']=='sensitivity' else spec['phase']
@@ -8871,6 +8926,8 @@ def tak_worker(payload):
         if 'prediction' in fit:
             saved.update({k:fit[k] for k in ('driver','initial_state','prediction','canonical_prediction','states')})
         saved.update(target=y,operator=op,sd=sd,visible=mask,hb_factor=np.array(factors))
+        if cfg['schema']=='shared_driver_tak_10hz_v2':
+            saved.update(time_s=np.arange(y.shape[1])*dt,dt_s=np.array(dt),eeg_proxy_rate_hz=np.array(10.))
         for i,ref in enumerate(refs):
             row=dict(id=ref['id'],dataset=ref['dataset'],subject=ref['subject'],record=ref['record'],
                 group=spec['group']['id'],group_size=len(refs),length_s=spec['length_s'],condition=spec['condition'],
@@ -8879,16 +8936,16 @@ def tak_worker(payload):
                 objective=fit.get('objective'),objective_components=fit.get('objective_components'),
                 scaled_gradient=fit.get('projected_scaled_gradient_inf_norm'),evaluations=fit.get('evaluations'))
             score=~mask[i,:,1] if spec['condition']=='joint_blocked' else np.ones(len(y[i]),bool)
-            row['zero_baseline']=volume_drive_metrics(y[i],np.zeros_like(y[i]),sd[i],spec['condition'])
+            row['zero_baseline']=volume_drive_metrics(y[i],np.zeros_like(y[i]),sd[i],spec['condition'],dt=dt)
             if spec['condition']=='joint_blocked':
                 baseline=y[i].copy()
                 for j in (1,2):
                     visible=mask[i,:,j];time_axis=np.arange(len(y[i]))
                     baseline[:,j]=np.interp(time_axis,time_axis[visible],y[i,visible,j])
-                row['interpolation_baseline']=volume_drive_metrics(y[i],baseline,sd[i],spec['condition'])
+                row['interpolation_baseline']=volume_drive_metrics(y[i],baseline,sd[i],spec['condition'],dt=dt)
             if 'prediction' in fit:
                 pp=volume_drive_parameters(cfg,kappa=fit['kappa'],tau=fit['tau'],gamma=fit['gamma'])
-                fine=nonlinear_driver_forward(fit['driver'][i],fit['initial_state'][i],pp,.25,
+                fine=nonlinear_driver_forward(fit['driver'][i],fit['initial_state'][i],pp,dt,
                     substeps=8,derivative=False,numerical_backend='numba',hemodynamics=arm['hemodynamics'],
                     viscoelastic_s=fit['viscoelastic_s'])
                 pred=(op[i]@fine['canonical_prediction'].ravel()).reshape(y[i].shape)
@@ -8897,8 +8954,8 @@ def tak_worker(payload):
                 pv=float(np.max(abs(states[:,4]-states[:,3])))
                 row.update(qualified=bool(fit['converged'] and err<=.005 and (arm['hemodynamics']!='tak' or pv==0)),
                     integration_max_training_sd=err,p_minus_v_max=pv,
-                    waveform=filter_retest_waveform_metrics(y[i],fit['prediction'][i],sd[i],mask=score,hb_factor=factors[i]),
-                    **volume_drive_metrics(y[i],fit['prediction'][i],sd[i],spec['condition']),
+                    waveform=filter_retest_waveform_metrics(y[i],fit['prediction'][i],sd[i],mask=score,hb_factor=factors[i],dt=dt),
+                    **volume_drive_metrics(y[i],fit['prediction'][i],sd[i],spec['condition'],dt=dt),
                     initial_state=fit['initial_state'][i],driver_rms=float(np.sqrt(np.mean(fit['driver'][i]**2))),
                     state_extrema={name:[float(states[:,j].min()),float(states[:,j].max())]
                         for j,name in enumerate(('r','s','f','v','p','q'))},
@@ -9014,6 +9071,8 @@ def tak_summarize(cfg,out,plan,phase='measured'):
         qualified_rows=sum(r['qualified'] for r in rows),groups=groups,paired_contrasts=contrasts,
         claim_limits=cfg['claim_limits'],source='tasks/*.json_and_matching_npz',
         aggregation=cfg['endpoints']['aggregation'],failure_policy=cfg['endpoints']['failures'])
+    if cfg['schema']=='shared_driver_tak_10hz_v2':
+        result.update(schema='shared_driver_tak_summary_v2',dt_s=cfg['tensor']['dt_s'],eeg_proxy_rate_hz=10.)
     write_json(out/(phase+'_summary.json'),result)
     write_json(out/(phase+'_rows.json'),rows)
     return result
@@ -9022,7 +9081,8 @@ def tak_summarize(cfg,out,plan,phase='measured'):
 def tak_verify_arrays(cfg,out,plan):
     """Independently recompute scores, objectives and observation closure."""
     maxima=dict(score=0.,observation=0.,objective_relative=0.,waveform=0.,physical_domain_violation=0.)
-    checked=0;failed_tasks=0;problems=[]
+    checked=0;failed_tasks=0;problems=[];dt=cfg['tensor']['dt_s']
+    data_weight=dt/cfg['solver'].get('observation_reference_dt_s',dt)
     for phase in ('synthetic','measured','sensitivity'):
         for spec in tak_specs(cfg,plan,phase):
             path=out/'tasks'/(spec['key']+'.json');meta=json.loads(path.read_text())
@@ -9036,7 +9096,7 @@ def tak_verify_arrays(cfg,out,plan):
             weights=np.array(s['initial_weights_free'] if arm['initial']=='free' else s['initial_weights_tied'])
             for i,row in enumerate(meta['rows']):
                 n=len(y[i]);valid=np.ones(n,bool);valid[-1]=False
-                expected_mask=volume_drive_mask(n,spec['condition'])
+                expected_mask=volume_drive_mask(n,spec['condition'],dt=dt)
                 if not np.array_equal(mask[i],expected_mask):problems.append(spec['key']+'_mask')
                 score=valid&~mask[i,:,1] if spec['condition']=='joint_blocked' else valid
                 e=(pred[i]-y[i])/sd[i]
@@ -9057,10 +9117,10 @@ def tak_verify_arrays(cfg,out,plan):
                         signed_gain=ac@bc/max(ac@ac,1e-24),bias_training_sd=(bb-aa).mean()/sd[i,c])
                     if min(aa.std(),bb.std())>1e-12:values['pearson_r']=np.corrcoef(aa,bb)[0,1]
                     maxima['waveform']=max(maxima['waveform'],*[float(abs(value-w[key])) for key,value in values.items()])
-                costs['data']+=float(np.sum(e[mask[i]]**2))
-                costs['driver']+=float(s['penalty']/.25**3*np.sum(np.diff(driver[i],n=2)**2))
+                costs['data']+=float(data_weight*np.sum(e[mask[i]]**2))
+                costs['driver']+=float(s['penalty']/dt**3*np.sum(np.diff(driver[i],n=2)**2))
                 costs['initial']+=float(arm.get('initial_penalty',s['initial_penalty'])*np.sum(weights*(initial[i]-np.r_[0.,np.ones(4)])**2))
-                costs['flow']+=float(s['flow_prior_weight']*.25*np.sum((np.log(states[i,:,2])/s['flow_prior_log_sd'])**2))
+                costs['flow']+=float(s['flow_prior_weight']*dt*np.sum((np.log(states[i,:,2])/s['flow_prior_log_sd'])**2))
                 checked+=1
             if arm['fit']:
                 refs=np.array([cfg['fitting']['reference'][name] for name in arm['fit']])
@@ -9088,15 +9148,26 @@ def tak_main(args):
     stage=args.tak_stage
     if stage=='check':
         from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+        dt=cfg['tensor']['dt_s']
         p0=volume_drive_parameters(cfg);r=.025*np.sin(np.arange(32)*.3);initial=np.r_[0.,np.ones(4)]
-        a=nonlinear_driver_forward(r,initial,p0,.25,numerical_backend='numba',hemodynamics='tak',viscoelastic_s=0.)
-        b=nonlinear_driver_forward(r,initial,p0,.25,numerical_backend='numba',
+        a=nonlinear_driver_forward(r,initial,p0,dt,numerical_backend='numba',hemodynamics='tak',viscoelastic_s=0.)
+        b=nonlinear_driver_forward(r,initial,p0,dt,numerical_backend='numba',
             hemodynamics='inlet_balance',viscoelastic_s=0.)
         error=float(np.max(abs(a['states']-b['states'])))
         if error>1e-12:raise ValueError('Tak zero-viscoelastic equivalence failed')
         y,op,sd,truth=tak_synthetic(cfg,0,'tak_nonrest')
         result=dict(status='passed',zero_viscoelastic_max_abs=error,synthetic_shape=list(y.shape),
             measured_arrays_read=0,sources=cfg['model']['sources'])
+        if cfg['schema']=='shared_driver_tak_10hz_v2':
+            from src.inference.observation_baselines import eeg_band_power
+            clock=np.arange(6000)/200.
+            volts=np.column_stack([np.sin(2*np.pi*f*clock) for f in (3.,6.,10.,15.,22.,36.)])
+            power=eeg_band_power(volts,bands=cfg['tensor']['eeg_bands_hz'],sample_rate=200.)
+            if power.shape!=(300,6,5) or not np.isfinite(power).all() or np.any(power<=0):
+                raise ValueError('10 Hz native-voltage proxy check failed')
+            result.update(dt_s=dt,eeg_proxy_rate_hz=10.,power_shape=list(power.shape),
+                reference_seconds=cfg['tensor']['reference_steps']*dt,
+                data_weight=dt/cfg['solver']['observation_reference_dt_s'])
         write_json(out/'software_checks.json',result)
     elif stage=='plan':
         result=tak_plan(cfg,root);write_json(out/'plan.json',result)
@@ -9186,7 +9257,7 @@ def main():
     elif not historical_mode and not args.tak_comparison:
         # A saved Tak contract may live inside its run. Resolve its schema before
         # dispatch; explicitly supplied historical configs keep their old mode.
-        args.tak_comparison = yaml.safe_load(args.config.read_text()).get('schema') == 'shared_driver_tak_v1'
+        args.tak_comparison = yaml.safe_load(args.config.read_text()).get('schema') in ('shared_driver_tak_v1','shared_driver_tak_10hz_v2')
     if args.tak_comparison:
         incompatible = (args.filter_retest,args.decay_diagnostic,args.volume_drive_diagnostic,
             args.component_attribution,args.teacher_robustness,args.physiology_semantics,

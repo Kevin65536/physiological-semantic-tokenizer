@@ -8,6 +8,21 @@ from pathlib import Path
 
 import numpy as np
 
+EEG_PROXY_INPUT_SCHEMA = 'eeg_log_bandpower_10hz_v1'
+
+
+def require_10hz_eeg_proxy_array(arrays, *, steps):
+    """Reject old/upcast prepared targets before a current Tak fit."""
+    schema = np.asarray(arrays.get('eeg_proxy_input', ''))
+    rate = np.asarray(arrays.get('eeg_proxy_rate_hz', np.nan))
+    clock = np.asarray(arrays.get('time_s', []), dtype=float)
+    if (schema.shape != () or str(schema) != EEG_PROXY_INPUT_SCHEMA
+            or rate.shape != () or float(rate) != 10.
+            or np.shape(arrays.get('target')) != (steps, 3)
+            or clock.shape != (steps,)
+            or not np.allclose(clock, np.arange(steps)/10., rtol=0, atol=1e-12)):
+        raise ValueError('Expected native-recomputed 10 Hz EEG proxy and matching clock; regenerate prepared arrays and training coordinates')
+
 
 def require_cached_hb_array(arrays):
     """Do not join retained native targets to a new cached-input run."""

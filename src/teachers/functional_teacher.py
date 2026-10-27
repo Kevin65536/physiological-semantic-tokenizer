@@ -19,7 +19,7 @@ from src.inference.shared_driver_rk4 import compiled_forward
 
 
 def teacher_problem(arrays,coordinate,ssm_config,physical_config,mode='joint'):
-    ops=disjoint_native_bin_operator(arrays['native_time'])
+    ops=disjoint_native_bin_operator(arrays['native_time'], steps=360, dt=.25, reference_steps=20)
     target=np.column_stack((arrays['features']@np.asarray(coordinate['pc'])*coordinate['eeg_factor'],
         arrays['hb']*coordinate['hb_factor']))
     mask=np.ones_like(target,bool)
@@ -98,7 +98,7 @@ def synthetic_interventions(cfg,physical_config,seed):
     carriers=np.sin(2*np.pi*raw_t[:,None,None]*frequencies[None,None,:]+phases)
     noise=rng.normal(0,.05,size=(18000,6))
     native_time=np.arange(900)/10.
-    operators=disjoint_native_bin_operator(native_time)
+    operators=disjoint_native_bin_operator(native_time, steps=360, dt=.25, reference_steps=20)
     hb_noise=rng.normal(0,.0001,size=(900,2))
     result={}
     for scenario in cfg['mechanism']['scenarios']:

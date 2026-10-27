@@ -28,6 +28,19 @@ tokenizer 和保护评价的结果保持原模型身份，不因基线变更而�
 迁移决定与研究方向只在[项目登记表](../research_state/registry.json)维护；
 完整实测证据从[结果索引](../experiments/RESULTS_INDEX.md#tak-hemodynamic-migration--2026-10-27)进入。
 
+## EEG proxy output convention — 2026-10-27
+
+后续统一采用 10 Hz EEG 功率代理，使 EEG 代理、已有 10 Hz Hb 缓存和共享驱动
+在同一输出网格上表达。功率定义、原生读取、训练尺度与物理时间换算由
+[数据合同](DATA_CONTRACT.md#新-eeg-代理目标统一为-10-hz--2026-10-27)持有。
+100 毫秒功率箱是明确的工程估计器设置，不称为文献唯一规定的生理采样率。
+短时均方功率会受载波相位和带通支持影响；输出率提高本身不证明信息增加。
+
+本次按用户决定统一代码与后续约定。既有 4/10 Hz 对照保留其原始结论，
+不在这里重跑比较，也不把“实测结果整体变化很小”升级为所有端点严格等价。
+论文应按实际版本报告功率窗口、时间支持、训练变换及损失时间权重；更密时间点
+不是更多独立观测。历史结果不能改标为 10 Hz，基线采用也不替代生理资格检验。
+
 ## Version boundary and status
 
 The following retained tokenizer boundary has two jobs. **v1** names the

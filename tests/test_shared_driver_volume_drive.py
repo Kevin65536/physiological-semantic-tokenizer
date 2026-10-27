@@ -47,7 +47,7 @@ def test_delta_is_an_unforced_decaying_mode_even_with_oscillating_neural_input(c
 
 @pytest.mark.parametrize('length',[30,90])
 def test_crop_preserves_native_bins_and_removes_only_reference(length):
-    ops=disjoint_native_bin_operator(np.arange(900)/10.)
+    ops=disjoint_native_bin_operator(np.arange(900)/10., steps=360, dt=.25, reference_steps=20)
     rng=np.random.default_rng(5);canonical=rng.normal(size=(360,3))
     original=np.column_stack((ops['eeg']@canonical[:,0],ops['model']@canonical[:,1:]))
     target,operator=run.volume_drive_crop(original,dict(eeg=ops['eeg'],hb=ops['model']),length)

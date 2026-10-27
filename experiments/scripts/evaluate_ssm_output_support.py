@@ -192,7 +192,7 @@ def prepare_record(cfg, out, spec):
         raise ValueError('continuous bandpower tensor mismatch')
     native_mask = (hb['time_s'] >= spec['hb_start_s'])&(hb['time_s'] < spec['hb_start_s']+90)
     t = hb['time_s'][native_mask]-spec['hb_start_s']
-    ops = disjoint_native_bin_operator(t)
+    ops = disjoint_native_bin_operator(t, steps=360, dt=.25, reference_steps=20)
     pair = spec['anchor']['hb_pair']
     native = hb['values'][native_mask, pair]
     if not np.isfinite(native).all():
@@ -268,7 +268,7 @@ def measured_arrays(out_string, record_id, coordinate):
 
 @lru_cache(maxsize=1)
 def synthetic_operators():
-    ops = disjoint_native_bin_operator(np.arange(900)/10.)
+    ops = disjoint_native_bin_operator(np.arange(900)/10., steps=360, dt=.25, reference_steps=20)
     return dict(eeg=ops['eeg'], hb=ops['model'])
 
 

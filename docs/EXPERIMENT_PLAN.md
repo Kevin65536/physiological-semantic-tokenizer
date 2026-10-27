@@ -6,7 +6,12 @@ execution and scientific verdicts live in `research_state/registry.json`._
 后续血流动力学研究从
 [Tak 基线](ARCHITECTURE.md#tak-hemodynamic-baseline)出发；选择依据由
 [方法说明](METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27)持有。
-未显式选择历史模式时，共享驱动入口使用 Tak 合同。旧 T3/Step5、空间、
+未显式选择历史模式时，共享驱动入口使用
+[`Tak 10 Hz v2`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml)
+合同；后续 EEG 代理、驱动及观测网格按
+[10 Hz 数据约定](DATA_CONTRACT.md#新-eeg-代理目标统一为-10-hz--2026-10-27)
+统一，准备数组和开发集变换重新生成。本次仅修订代码与后续约定，既有采样率
+比较不重跑，原结论不改写。旧 T3/Step5、空间、
 连续状态和 tokenizer 设计保留其原始模型身份，下面的历史顺序不构成默认
 继续执行旧方程的队列。后续新实验需声明自己的数据、端点及输出版本；本次
 基线修订不重新执行已完成实测矩阵，也不修改冻结配置或保护边界。

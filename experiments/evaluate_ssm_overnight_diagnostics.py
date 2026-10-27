@@ -4296,7 +4296,7 @@ def structure_dispatch(run_dir,cfg,dc,base,measured,metadata,task):
         geometry=ChannelGeometryIndex(ROOT/cfg['structure']['geometry_cache'])
         detail['geometry_rows']=[r for r in geometry.rows if r.get('dataset_id')=='eeg_fnirs_single_trial' and r.get('canonical_subject_id')==subject]
         broad=np.array([t['views']['target']['feature_boundary']['eeg_log_power'] for t in trials])
-        power=np.array([eeg_band_power(t['native_eeg']*t['views']['target']['eeg_feature_contract']['unit_conversion']['factor']) for t in trials])
+        power=np.array([eeg_band_power(t['native_eeg']*t['views']['target']['eeg_feature_contract']['unit_conversion']['factor'], target_rate=4.) for t in trials])
         source=ROOT/cfg['structure']['source_run']/'prepared'/f'{subject}.npz'
         with np.load(source) as d:
             error=float(np.max(abs(broad-d['feature_eeg_log_power'])))

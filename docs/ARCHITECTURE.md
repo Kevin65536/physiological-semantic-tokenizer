@@ -45,8 +45,13 @@ The model choice is explained in
 [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27).
 The reviewed executable settings are the `parameters`, `solver`, `fitting` and
 `arms[name == model.primary]` entries of
-[`shared_driver_tak_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml).
-That dated comparison contract is immutable; a later experiment gives its own
+[`shared_driver_tak_10hz_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml).
+Its EEG proxy, driver and observation grid follow the
+[10 Hz input contract](DATA_CONTRACT.md#新-eeg-代理目标统一为-10-hz--2026-10-27).
+The common power/bin helpers default to this grid; retained 4 Hz consumers
+pass their historical clocks explicitly. The completed
+[`shared_driver_tak_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml)
+and its evidence remain unchanged. A later experiment gives its own
 data/split/output contract and versions any deliberate change to these settings.
 
 The deterministic vascular states are $(s,f,v,q)$, with $p\equiv v$:

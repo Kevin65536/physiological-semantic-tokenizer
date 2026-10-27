@@ -84,7 +84,8 @@ def test_default_cli_selects_tak_without_a_mode_flag(monkeypatch,tmp_path):
     monkeypatch.setattr(runner,'tak_main',lambda args:seen.append((args.config,args.tak_stage)))
     monkeypatch.setattr(sys,'argv',['runner','--run-dir',str(tmp_path)])
     runner.main()
-    assert seen==[(CONFIG,'check')]
+    assert seen==[(runner.DEFAULT,'check')]
+    assert runner.tak_config(runner.DEFAULT)['schema']=='shared_driver_tak_10hz_v2'
 
 
 @pytest.mark.parametrize('module,arguments',[

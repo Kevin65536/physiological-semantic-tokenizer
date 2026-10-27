@@ -8877,6 +8877,8 @@ def render_tak(run, out):
     audit=json.loads((run/'array_verification.json').read_text())
     if audit['status']!='passed':raise ValueError('Independent retained-array audit required')
     cfg=json.loads((run/'resolved_config.json').read_text());plan=json.loads((run/'plan.json').read_text())
+    dt=cfg['tensor']['dt_s'];current_proxy=cfg['schema']=='shared_driver_tak_10hz_v2'
+    data_weight=dt/cfg['solver'].get('observation_reference_dt_s',dt)
     summaries={phase:json.loads((run/(phase+'_summary.json')).read_text()) for phase in ('synthetic','measured','sensitivity')}
     frames={phase:pd.DataFrame(json.loads((run/(phase+'_rows.json')).read_text())) for phase in summaries}
     if any(s['status']!='completed' for s in summaries.values()):raise ValueError('Complete denominator required')
@@ -8925,7 +8927,7 @@ def render_tak(run, out):
             number(pair.get('reference_nrmse'))+' → '+number(pair.get('candidate_nrmse')),number(matched.get('reference_nrmse')),
             number(pair.get('improvement'),4)+' ['+number(ci[0],4)+', '+number(ci[1],4)+']'])
     page('恢复 Tak 血流核心：实测收益取决于数据集与比较条件',
-        p('2026-10-27 · SSM-TAK-v1 · 四个公开数据集、24名被试、48个连续片段。采用统一带通Hb缓存，全部臂重新拟合；本报告汇总同口径的条件重建、隐藏块补全与参数敏感性。')
+        p(f"{escape(cfg['experiment_id'])} · 四个公开数据集、24名被试、48个连续片段。采用统一带通Hb缓存，全部臂重新拟合；本报告汇总同口径的条件重建、隐藏块补全与参数敏感性。")
         +tab(['90秒联合完整','合格数：旧→Tak','Hb NRMSE：旧→Tak','旧自由＋估参','配对改善与95%探索区间'],overview)
         +p('旧→Tak指旧自由初态、固定参数与Tak主模型（四初态、估计κ和τ）。误差与改善均基于各自与Tak共同成功的身份；数值合格数保留原12片段分母。正改善表示Tak误差更低，详细配对分母在后文。')
         +p(f'<b>主模型在{same_parameter_worse}/4库的90秒联合完整比较中，误差高于同样估参的旧自由初态模型。</b>旧模型多一个独立p初态，因此还要看双方都使用四初态的比较。窄先验产生的稳定参数和精确p=v属于模型约束，不是生理真值恢复证据。')
@@ -8933,7 +8935,8 @@ def render_tak(run, out):
     page('输入、共享范围与完整实验分母',
         tab(['阶段','计划结果','终态','数值合格'],[[phase,s['planned_rows'],s['terminal_rows'],s['qualified_rows']] for phase,s in summaries.items()])
         +p(f"实测参数分为{len(plan['groups'])}个原生记录／session支持／Hb通道组。每组一个参数向量；同组不重叠片段分别估初态。不同会话不绑定，间隔没有数据时不伪造状态传播。30秒是同一90秒片段的中段，不能充当独立被试。")
-        +p('保留父运行的EEG特征及身份。Hb只读v5/none统一缓存；全记录已执行0.01–0.2Hz带通，再取250毫秒分箱和窗口前5秒参考。模型端不重复带通。PCA、共同Hb正尺度及各观测SD均仅由原开发被试重新确定，评价被试不参与。')
+        +p(('保留父运行的样本身份，从原生EEG重新计算100毫秒非重叠均方功率，再取log、前5秒参考及训练PCA；不插值旧4 Hz特征。' if current_proxy else '保留父运行的EEG特征及身份。')
+            +f'Hb只读v5/none统一缓存；全记录已执行0.01–0.2Hz带通，再取{1000*dt:g}毫秒分箱和窗口前5秒参考。模型端不重复带通。PCA、共同Hb正尺度及各观测SD均仅由原开发被试重新确定，评价被试不参与。')
         +p('联合完整：EEG/HbO/HbR都可见；Hb-only完整：只用Hb拟合，EEG误差是外部评分；联合隐藏：EEG全程可见，Hb在每30秒的10–15秒、20–25秒隐藏。末端插值bin在所有拟合和评分中排除。')
         +p('缓存预处理早于遮挡，因此隐藏实验检验离线处理特征补全，不能称实时或原始传感器未来预测。窗口ODE是带通坐标中的条件模型，未重建窗口外状态，也未严格重放完整记录的滤波过程。')
         +p('Hb单位保留缓存约定：Simultaneous为µM，其他为各库相对／未核定单位。拟合保持两色团相对幅度；图中可除以固定训练SD，绝不逐窗或逐帧重新归一化。'))
@@ -8963,11 +8966,13 @@ def render_tak(run, out):
         r'e_{s,j,c}=\frac{1}{|\mathcal{T}_j|}\sum_{t\in\mathcal{T}_j}\left(\frac{\hat{y}_{s,j,t,c}-y_{s,j,t,c}}{\sigma_{\mathrm{train},c}}\right)^2',
         r'\mathrm{NRMSE}_{Hb}=\sqrt{\frac{1}{S}\sum_s\frac{1}{J_s}\sum_j\frac{e_{s,j,O}+e_{s,j,R}}{2}}',
         r'\Delta=\mathrm{NRMSE}_{\mathrm{reference}}-\mathrm{NRMSE}_{\mathrm{candidate}}',
-        r'L=L_{\mathrm{data}}+0.01\Delta t\sum_t(\Delta^2 r_t/\Delta t^2)^2+L_0+\Delta t\sum_t(\log f_t/\log2)^2+L_\theta'])
+        r'L=L_{\mathrm{data}}+0.01\Delta t\sum_t(\Delta^2 r_t/\Delta t^2)^2+L_0+\Delta t\sum_t(\log f_t/\log2)^2+L_\theta',
+        r'L_{\mathrm{data}}=w\sum_{t,c\ \mathrm{visible}}[(\hat y_{t,c}-y_{t,c})/\sigma_{\mathrm{train},c}]^2'])
     page('指标、先验和配对区间如何计算',metrics
         +p('σtrain是冻结开发集SD。先在评分时间内计算误差平方均值，再平均HbO/HbR、被试内记录、被试，最后开方。隐藏条件的主评分时间仅包含隐藏Hb块，完整误差另存。所有配对比较均先限制共同成功身份，另列原计划分母。')
         +p('Pearson r衡量中心化形状；幅比为预测SD/目标SD，1为幅度一致；有符号增益为中心化目标与预测内积除以目标能量；偏置为预测−目标均值除以训练SD。局部中心化NRMSE的分母是当前窗口目标SD，不能与训练SD误差混写。峰时间差只描述全局最大值位置。')
         +p('L₀是物理初态偏离静息的工程二次惩罚。Lθ对log参数加一次组先验，不按窗口重复。报告数据、驱动、初态、流量和参数先验代价，避免用不同完整目标的数值直接排名。')
+        +p(f'模型步长为{dt:g}秒，数据项权重w={data_weight:g}。'+('w=Δt/0.25秒保持每秒标准化误差相对工程先验的权重，不能把更密时间点解释为更多独立样本；曲率和流量惩罚继续按秒积分，初态与参数先验不随采样率重复。' if current_proxy else '本历史合同保留原逐点SSE权重。'))
         +p('区间使用2000次整被试配对bootstrap；训练坐标与拟合结果冻结，每库只有6名评价被试。区间为逐项探索性95%百分位区间，没有多重比较校正；跨零表示方向不确定。'))
     syn=frames['synthetic'];syn_rows=[]
     for scenario,part in syn.groupby('record'):
@@ -9053,7 +9058,7 @@ def render_tak(run, out):
             if 'target' not in arrays:
                 for ax in axes[:,col]:ax.text(.1,.5,'准备失败，完整分母保留',transform=ax.transAxes)
                 continue
-            target=arrays['target'][index];sd=arrays['sd'][index];time_axis=np.arange(len(target)-1)*.25
+            target=arrays['target'][index];sd=arrays['sd'][index];time_axis=np.arange(len(target)-1)*dt
             for c,ax in enumerate(axes[:,col]):
                 ax.plot(time_axis,target[:-1,c]/sd[c],color='black',lw=1.2,label='处理后实测')
                 if col==1 and c>0:
@@ -9243,7 +9248,7 @@ def main():
     if args.run is not None and not any(value is True for value in vars(args).values()):
         config_path=args.run/'resolved_config.json'
         if config_path.exists():
-            args.tak_comparison=json.loads(config_path.read_text()).get('schema')=='shared_driver_tak_v1'
+            args.tak_comparison=json.loads(config_path.read_text()).get('schema') in ('shared_driver_tak_v1','shared_driver_tak_10hz_v2')
     if args.tak_comparison:
         if args.run is None:parser.error('--tak-comparison requires --run')
         if any(value is True for key,value in vars(args).items() if key != 'tak_comparison'):

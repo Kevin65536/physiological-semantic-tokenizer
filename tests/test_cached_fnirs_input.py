@@ -108,7 +108,7 @@ def test_output_preparation_uses_cached_target_once(cached_record, tmp_path, mon
     assert 'hidden_native_invariance' not in result
     take = (np.arange(len(values)) / 10 >= .02) & (np.arange(len(values)) / 10 < 90.02)
     with np.load(tmp_path / 'prepared' / 'fixture.npz') as a:
-        ops = disjoint_native_bin_operator(a['native_time'])
+        ops = disjoint_native_bin_operator(a['native_time'], steps=360, dt=.25, reference_steps=20)
         np.testing.assert_array_equal(a['hb'], ops['raw'] @ values[take, :2])
     old = yaml.safe_load((runner.CODE_ROOT / 'experiments/configs/physiology_semantic_tokenizer/ssm_output_support_v1.yaml').read_text())
     with pytest.raises(ValueError, match='retired'):
