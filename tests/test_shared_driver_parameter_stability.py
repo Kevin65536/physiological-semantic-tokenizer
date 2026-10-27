@@ -31,19 +31,19 @@ def test_refed_repeats_use_complete_same_emotion_videos_without_pre_event_paddin
 def fixture():
     p=BalloonParameters()
     r=.025*np.sin(np.arange(28)*.3)
-    y=nonlinear_driver_forward(r,np.r_[0.,np.ones(4)],p,.25,numerical_backend='numba')['canonical_prediction']
+    y=nonlinear_driver_forward(r,np.r_[0.,np.ones(4)],p,.25,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)['canonical_prediction']
     return p,r,y[None]
 
 
 def test_fixed_parameter_profile_and_prior_accounting():
     p,r,y=fixture()
     opts=dict(sd=[.02,.03,.02],penalty=.01,initial_penalty=[100.],flow_prior_weight=1.)
-    fixed=fit_nonlinear_shared_parameters(y,p,.25,parameter_names=[],parameter_bounds=[],**opts)
+    fixed=fit_nonlinear_shared_parameters(y,p,.25,parameter_names=[],parameter_bounds=[],**opts, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     assert fixed['converged']
     assert fixed['parameter_values'].shape==(0,)
     np.testing.assert_allclose(fixed['objective'],sum(fixed['objective_components'].values()))
     shrunk=fit_nonlinear_shared_parameters(y,p,.25,parameter_names=['tau'],parameter_bounds=[[.5,8.]],
-        parameter_prior_log_mean=[np.log(3.)],parameter_prior_precision=[4.],**opts)
+        parameter_prior_log_mean=[np.log(3.)],parameter_prior_precision=[4.],**opts, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     np.testing.assert_allclose(shrunk['objective_components']['parameter_prior'],4*np.log(shrunk['tau']/3.)**2)
     np.testing.assert_allclose(shrunk['raw_parameter_gradient'],sum(shrunk['raw_parameter_gradient_components'].values()))
 
@@ -51,10 +51,10 @@ def test_fixed_parameter_profile_and_prior_accounting():
 def test_boundary_warm_start_allows_only_float_roundoff():
     p,r,y=fixture()
     opts=dict(parameter_names=['neurovascular_gain'],parameter_bounds=[[.1,10.]],sd=[.02,.03,.02],max_iterations=0)
-    a=fit_nonlinear_shared_parameters(y,p,.25,starts=[dict(parameter_values=[np.exp(np.log(10.))])],**opts)
+    a=fit_nonlinear_shared_parameters(y,p,.25,starts=[dict(parameter_values=[np.exp(np.log(10.))])],**opts, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     assert a['parameter_values'][0]==pytest.approx(10.)
     with pytest.raises(ValueError,match='outside'):
-        fit_nonlinear_shared_parameters(y,p,.25,starts=[dict(parameter_values=[10.00001])],**opts)
+        fit_nonlinear_shared_parameters(y,p,.25,starts=[dict(parameter_values=[10.00001])],**opts, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
 
 
 def test_visible_covariance_whitening_never_reads_hidden_targets():
@@ -62,18 +62,18 @@ def test_visible_covariance_whitening_never_reads_hidden_targets():
     count=mask.sum();w=np.eye(count);w[1:, :-1]+=.03*np.eye(count-1)
     opts=dict(parameter_names=['tau'],parameter_bounds=[[.5,8.]],sd=[.02,.03,.02],
               visible=mask,observation_whiteners=[w],max_iterations=200)
-    a=fit_nonlinear_shared_parameters(y,p,.25,**opts)
+    a=fit_nonlinear_shared_parameters(y,p,.25,**opts, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     y[~mask]=1e15
-    b=fit_nonlinear_shared_parameters(y,p,.25,**opts)
+    b=fit_nonlinear_shared_parameters(y,p,.25,**opts, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     np.testing.assert_array_equal(a['parameter_values'],b['parameter_values'])
     with pytest.raises(ValueError,match='whitener'):
-        fit_nonlinear_shared_parameters(y,p,.25,**dict(opts,observation_whiteners=[np.eye(y.size)]))
+        fit_nonlinear_shared_parameters(y,p,.25,**dict(opts,observation_whiteners=[np.eye(y.size)]), hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
 
 
 def test_data_information_cannot_exceed_conditional_and_prior_is_separate():
     p,r,y=fixture()
     result=fit_nonlinear_shared_parameters(y,p,.25,parameter_names=['tau','neurovascular_gain'],
-        parameter_bounds=[[.5,8.],[.1,10.]],sd=[.02,.03,.02],max_iterations=200)
+        parameter_bounds=[[.5,8.],[.1,10.]],sd=[.02,.03,.02],max_iterations=200, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     info=result['information']
     assert np.linalg.eigvalsh(info['conditional_data']['matrix']-info['data_only']['matrix']).min()>-1e-8
     assert np.linalg.eigvalsh(info['nuisance_regularized']['matrix']-info['data_only']['matrix']).min()>-1e-8
@@ -83,13 +83,13 @@ def test_continuity_regularization_omits_only_cross_boundary_curvature():
     p,r,y=fixture()
     # A piecewise-linear driver has curvature only at the artificial boundary.
     r=np.r_[np.arange(14)*.001, .1+np.arange(14)*.002]
-    yy=nonlinear_driver_forward(r,np.r_[0.,np.ones(4)],p,.25,numerical_backend='numba')['canonical_prediction'][None]
+    yy=nonlinear_driver_forward(r,np.r_[0.,np.ones(4)],p,.25,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)['canonical_prediction'][None]
     opts=dict(parameter_names=[],parameter_bounds=[],sd=[.02,.03,.02],starts=[dict(parameter_values=[],driver=r[None])],
         penalty=1.,flow_prior_weight=0.,initial_penalty=0.,gradient_tolerance=1e-9)
-    a=fit_nonlinear_shared_parameters(yy,p,.25,curvature_breaks=[14],**opts)
+    a=fit_nonlinear_shared_parameters(yy,p,.25,curvature_breaks=[14],**opts, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     assert a['objective']<1e-20
     with pytest.raises(ValueError,match='curvature_breaks'):
-        fit_nonlinear_shared_parameters(yy,p,.25,curvature_breaks=[2],**opts)
+        fit_nonlinear_shared_parameters(yy,p,.25,curvature_breaks=[2],**opts, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
 
 
 def test_coordinate_fits_training_only_and_preserves_hb_amplitude_ratio():

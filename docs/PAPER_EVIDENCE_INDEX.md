@@ -14,12 +14,17 @@ specified:
 
 - [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md): research question, claim levels,
   method rationale, and scientific boundaries.
+- [Tak hemodynamic baseline](ARCHITECTURE.md#tak-hemodynamic-baseline): current
+  equations, independent states, observation scope and executable settings.
+  Attribute the blood-flow model to Tak/SPM; the project retains its EEG
+  driver/Hb observation inference. Historical inlet-balance results keep their
+  original Methods identity.
 - [`DATA_CONTRACT.md`](DATA_CONTRACT.md) and
   [`DATASETS_DESCRIPTION.md`](DATASETS_DESCRIPTION.md): units, modality semantics,
   masks, joins, normalization, and split rules.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) and the retained runtime description in
   [`physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.json`](physiology_semantic_tokenizer/architecture/physiology_semantic_architecture.json):
-  stopped E2-compatible implementation and data-flow structure, for replay and
+  the retained-tokenizer sections describe the stopped E2-compatible implementation and data-flow structure, for replay and
   historical description only. It must be kept separate from the abandoned
   design note below.
 - [`physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json`](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json):
@@ -46,6 +51,11 @@ specified:
 Use the dated report or retained table that directly contains each result. Use
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md) only to locate its recorded lifecycle;
 historical “current” or “next” wording in a report is local to that snapshot.
+
+- [Tak versus inlet-balance comparison](../experiments/RESULTS_INDEX.md#tak-hemodynamic-migration--2026-10-27):
+  implementation checks, synthetic controls, cached measured comparisons,
+  numerical failures and parameter sensitivity. Adoption as the research
+  baseline does not relabel the recorded reconstruction or physiological claims.
 
 - [`physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md):
   compact E0–E2/R0–R2 decision snapshot.

@@ -1,4 +1,4 @@
-"""Optional compiled arithmetic for the existing ZOH Balloon RK4 map.
+"""Compiled RK4 for the Tak baseline and explicit historical Balloon controls.
 
 This module is a numerical backend, not a different model or optimizer. The
 public wrapper validates inputs and the original implementation independently
@@ -9,6 +9,115 @@ equation and optionally integrates a declared finite-dimensional input there.
 """
 import numpy as np
 from numba import njit
+
+
+@njit(cache=True)
+def _tak_slope(x, d, r, step, count, p, derivative):
+    """Tak/SPM hemodynamics in four physical coordinates [s,f,v,q]."""
+    alpha, e0, gamma, p0, q0, beta, kappa, tau, tv = p
+    s, f, v, q = x
+    if not np.isfinite(x).all() or min(x[1:]) <= 0 or q0*q > p0*v:
+        raise FloatingPointError('invalid Tak RK stage')
+    power, total = 1/alpha, tau+tv
+    steady = v**power
+    dv = (f-steady)/total
+    out = steady+tv*dv
+    loge = np.log1p(-e0)
+    extraction = -np.expm1(loge/f)
+    dq = (f*extraction/e0-out*q/v)/tau
+    value = np.array([beta*r-kappa*s-gamma*(f-1), s, dv, dq])
+    ds = np.zeros_like(d)
+    if derivative:
+        out_f, out_v = tv/total, tau/total*power*steady/v
+        a = np.zeros((4, 4))
+        a[0, 0], a[0, 1], a[1, 0] = -kappa, -gamma, 1.
+        a[2, 1], a[2, 2] = 1/total, -power*steady/v/total
+        a[3, 1] = ((extraction+np.exp(loge/f)*loge/f)/e0-out_f*q/v)/tau
+        a[3, 2], a[3, 3] = -(out_v-out/v)*q/v/tau, -out/v/tau
+        ds = a@d
+        ds[0, step] += beta
+        # Physical derivatives: tau, gain, kappa, gamma, viscoelastic_s.
+        ds[2, count] -= dv/total
+        ds[3, count] += tv*dv*q/(v*total*tau)-dq/tau
+        ds[0, count+1] += r
+        ds[0, count+2] -= s
+        ds[0, count+3] -= f-1
+        ds[2, count+4] -= dv/total
+        ds[3, count+4] -= dv*q/(v*total)
+    if not np.isfinite(value).all() or not np.isfinite(ds).all():
+        raise FloatingPointError('nonfinite Tak RK tangent')
+    return value, ds
+
+
+@njit(cache=True)
+def _integrate_tak(r, initial, p, dt, substeps, derivative):
+    n, count = len(r), len(r)+5
+    states = np.empty((n, 6))
+    tangents = np.zeros((n, 4, count+5 if derivative else 0))
+    x = initial[np.array([0, 1, 2, 4])].copy()
+    d = np.zeros((4, count+5 if derivative else 0))
+    if derivative:
+        d[0, n], d[1, n+1], d[2, n+2], d[3, n+4] = 1., x[1], x[2], x[3]
+    h = dt/substeps
+    for t in range(n):
+        # p is derived from v, never independently integrated or innovated.
+        states[t] = np.array([r[t], x[0], x[1], x[2], x[2], x[3]])
+        tangents[t] = d
+        if t == n-1:
+            break
+        for _ in range(substeps):
+            k1, d1 = _tak_slope(x, d, r[t], t, count, p, derivative)
+            k2, d2 = _tak_slope(x+h*k1/2, d+h*d1/2, r[t], t, count, p, derivative)
+            k3, d3 = _tak_slope(x+h*k2/2, d+h*d2/2, r[t], t, count, p, derivative)
+            k4, d4 = _tak_slope(x+h*k3, d+h*d3, r[t], t, count, p, derivative)
+            x += h*(k1+2*k2+2*k3+k4)/6
+            d += h*(d1+2*d2+2*d3+d4)/6
+            if not np.isfinite(x).all() or min(x[1:]) <= 0 or p[4]*x[3] > p[3]*x[2]:
+                raise FloatingPointError('invalid Tak RK endpoint')
+    return states, tangents
+
+
+def tak_forward(r, initial, parameters, dt, substeps, derivative, flow, viscoelastic_s):
+    """Reduced deterministic Tak core; caller validates the shared input contract.
+
+    The legacy-shaped initial Jacobian has a zero log(p0) column. Its log(v0)
+    column already differentiates both v and p. The fitting embedding removes
+    the unused p coordinate, so it adds no parameter or stochastic innovation.
+    """
+    if initial[3] != initial[2]:
+        raise ValueError('Tak reduced core requires p0 == v0 exactly')
+    if not np.isfinite(viscoelastic_s) or viscoelastic_s < 0:
+        raise ValueError('Tak viscoelastic_s must be finite and nonnegative')
+    fixed, free = parameters.fixed, parameters.free
+    p = np.array([fixed.alpha, fixed.E0, fixed.gamma, fixed.P0, fixed.Q0,
+                  fixed.neurovascular_gain, free.kappa, free.tau, viscoelastic_s])
+    states, tangent = _integrate_tak(r, initial, p, dt, substeps, derivative)
+    n, count = len(r), len(r)+5
+    prediction = np.column_stack((fixed.eeg_loading*r,
+        fixed.P0*(states[:, 3]-1)-fixed.Q0*(states[:, 5]-1),
+        fixed.Q0*(states[:, 5]-1)))
+    result = dict(states=states, canonical_prediction=prediction, jacobian=None,
+                  hemodynamics='tak', viscoelastic_s=float(viscoelastic_s))
+    names = ('tau', 'neurovascular_gain', 'kappa', 'gamma', 'viscoelastic_s')
+    for name in names:
+        result[name+'_jacobian'] = None
+        if flow:
+            result['flow_'+name+'_jacobian'] = None
+    if flow:
+        result['flow_jacobian'] = None
+    if derivative:
+        j = np.zeros((n, 3, count+5))
+        j[:, 0, :n] = fixed.eeg_loading*np.eye(n)
+        j[:, 1] = fixed.P0*tangent[:, 2]-fixed.Q0*tangent[:, 3]
+        j[:, 2] = fixed.Q0*tangent[:, 3]
+        result['jacobian'] = j[:, :, :count].reshape(3*n, count)
+        for k, name in enumerate(names):
+            result[name+'_jacobian'] = j[:, :, count+k]
+            if flow:
+                result['flow_'+name+'_jacobian'] = tangent[:, 1, count+k].copy()
+        if flow:
+            result['flow_jacobian'] = tangent[:, 1, :count].copy()
+    return result
 
 
 @njit(cache=True)

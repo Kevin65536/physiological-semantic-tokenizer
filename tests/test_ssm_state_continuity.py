@@ -46,7 +46,7 @@ def test_synthetic_truth_is_continuous_and_arms_use_identical_capacity(configs):
         np.testing.assert_array_equal(op[j*360:(j+1)*360,j*360:(j+1)*360],local)
         np.testing.assert_array_equal(big_basis[j*360:(j+1)*360,j*4:(j+1)*4],basis)
         replay = nonlinear_driver_forward(case['driver'][j*120:(j+1)*120],case['states'][j*120,1:],
-            run.parameters(base),.25,substeps=8,derivative=False,numerical_backend='numba')
+            run.parameters(base),.25,substeps=8,derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
         np.testing.assert_allclose(replay['states'],case['states'][j*120:(j+1)*120],atol=1e-14,rtol=0)
     # The middle starts from a propagated nonrest state even if the entire
     # continuous generator initially starts at rest; it is never reset there.

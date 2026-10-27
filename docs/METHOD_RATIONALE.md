@@ -1,12 +1,36 @@
 # Method rationale and claim boundary
 
-_Consolidated from the legacy postmortem, theoretical foundations, and
-architecture-return review; v1 historical boundary and frozen forward method
-principles, 2026-08-24_
+_Owns the research-baseline rationale and claim boundaries. The 2026-08-24
+tokenizer principles and negative evidence below retain their historical scope._
+
+## Tak baseline for subsequent research — 2026-10-27
+
+后续研究采用 Tak et al. (2015) 与官方 SPM 对应的血流动力学作为基线。
+本次迁移已有方程、导数、合成及公开实测对照的实现证据；用户据此选择有原始
+研究依据、假设清楚的模型作为后续起点。基线选择依据是文献支持与模型一致性。
+实测误差差异、参数先验敏感性和负结果继续按保留证据报告，不改变其数值或结论。
+
+采用包含静脉黏弹性和动态流出量的完整 Tak 血流核心，并用共同容量变量表达
+总 Hb，消去独立 p 状态。连续片段允许估计非静息初态；固定静息初态与原文
+参数先验保留为单独的文献设置。旧 inlet-balance 方程、独立 p 初态、无源
+p−v 衰减及附加输入只用于有明确版本的历史回放或对照，不再作为默认生理假设。
+
+具体方程、变量和当前实现入口由
+[`ARCHITECTURE.md#tak-hemodynamic-baseline`](ARCHITECTURE.md#tak-hemodynamic-baseline)
+说明；数值设置由该处链接的可执行合同持有。此次恢复范围是血流核心；EEG
+约束的自由驱动、处理后 Hb 观测与工程正则仍属于项目自己的推断框架。
+“采用 Tak 血流核心的 EEG–fNIRS 条件模型”是准确名称，不能写成完整 Tak DCM
+复现或把血流方程作为本项目原创。
+
+研究基线的采用与具体科学主张分开：后续以 Tak 开展参数、观测及表示研究，
+仍以独立证据评价生理参数恢复、跨模态增益和 teacher 资格。旧 T3/Step5、空间、
+tokenizer 和保护评价的结果保持原模型身份，不因基线变更而改称 Tak 结果。
+迁移决定与研究方向只在[项目登记表](../research_state/registry.json)维护；
+完整实测证据从[结果索引](../experiments/RESULTS_INDEX.md#tak-hemodynamic-migration--2026-10-27)进入。
 
 ## Version boundary and status
 
-This document has two deliberately different jobs. **v1** names the
+The following retained tokenizer boundary has two jobs. **v1** names the
 implemented E2/SSM_OBSERVATION/LC-SPVQ development surfaces and their audited
 negative results. The **forward contract** freezes only the theory and
 architecture principles listed below; the concrete implementation remains

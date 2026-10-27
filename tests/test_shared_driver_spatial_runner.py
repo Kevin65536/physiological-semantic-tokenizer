@@ -48,7 +48,7 @@ def test_default_check_reads_no_signal_or_metadata_payload(cfg, monkeypatch, cap
     def forbidden(*args, **kwargs):
         pytest.fail('check stage must not load data')
     monkeypatch.setattr(runner.np, 'load', forbidden)
-    assert runner.main([]) == 0
+    assert runner.main(['--config', str(runner.DEFAULT_CONFIG)]) == 0
     assert '"measured_arrays_read": 0' in capsys.readouterr().out
     assert runner.dryrun(cfg)['planned_cells'] == 2*(7*3*3*5+10+4)
 
@@ -493,13 +493,13 @@ def test_expensive_stage_requires_durable_supervisor_before_data_access(cfg, tmp
         monkeypatch.delenv(key, raising=False)
     out = tmp_path/cfg['artifact_root']/'fixture'
     with pytest.raises(SystemExit):
-        runner.main(['--stage', 'prepare', '--project-root', str(tmp_path), '--output', str(out)])
+        runner.main(['--config', str(runner.DEFAULT_CONFIG), '--stage', 'prepare', '--project-root', str(tmp_path), '--output', str(out)])
     assert not out.exists()
 
 
 def test_check_and_dryrun_are_neutral_before_synthetic_family(cfg, tmp_path, monkeypatch):
     out = tmp_path/cfg['artifact_root']/'fixture'
-    common = ['--project-root', str(tmp_path), '--output', str(out)]
+    common = ['--config', str(runner.DEFAULT_CONFIG), '--project-root', str(tmp_path), '--output', str(out)]
     assert runner.main(['--stage', 'dryrun', *common]) == 0
     assert runner.read_json(out/'run_identity.json')['family'] == 'neutral'
     monkeypatch.setattr(runner, 'synthetic_smoke', lambda cfg, out: dict(status='completed', measured_arrays_read=0))
@@ -518,7 +518,7 @@ def test_source_snapshot_retains_native_cache_and_alignment_read_dependencies(tm
 
 def test_execution_history_preserves_each_stage_command_resources_and_supervisor(cfg, tmp_path, monkeypatch):
     out = tmp_path/cfg['artifact_root']/'history_fixture'
-    common = ['--project-root', str(tmp_path), '--output', str(out)]
+    common = ['--config', str(runner.DEFAULT_CONFIG), '--project-root', str(tmp_path), '--output', str(out)]
     previous = {}
     monkeypatch.setattr(runner.sys, 'argv', ['-'])
     for index, stage in enumerate(('dryrun', 'check', 'dryrun'), start=1):
@@ -546,7 +546,7 @@ def test_failed_stage_also_retains_its_execution_record(cfg, tmp_path, monkeypat
         raise ValueError('fixture stage failure')
     monkeypatch.setattr(runner, 'dryrun', fail)
     with pytest.raises(ValueError, match='fixture stage failure'):
-        runner.main(['--stage', 'dryrun', '--project-root', str(tmp_path), '--output', str(out)])
+        runner.main(['--config', str(runner.DEFAULT_CONFIG), '--stage', 'dryrun', '--project-root', str(tmp_path), '--output', str(out)])
     latest = runner.read_json(out/'execution.json')
     assert latest['status'] == 'failed' and latest['error'] == 'fixture stage failure'
     assert runner.read_json(out/latest['history_path']) == latest

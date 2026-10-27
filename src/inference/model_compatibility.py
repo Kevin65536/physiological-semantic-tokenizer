@@ -1,8 +1,10 @@
-"""Descriptive model-compatibility distances, with no data or run I/O.
+"""Retained pre-Tak inlet-balance compatibility distances, with no run I/O.
 
 These are projection/closure energies, not calibrated noise statistics or
 physiological parameter confidence sets. The caller owns sampling support,
 processing operators, physical channel identities and evaluation partitions.
+The weak closures and independent p-v nuisance are tied to the old model;
+they must not be interpreted as tests of the current reduced Tak baseline.
 """
 from __future__ import annotations
 

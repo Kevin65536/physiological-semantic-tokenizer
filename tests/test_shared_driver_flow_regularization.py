@@ -15,7 +15,7 @@ def case():
     p = core.BalloonParameters()
     r = .04*np.sin(np.arange(12)*.3)
     initial = np.array([.01, 1.03, 1.02, 1.01, .99])
-    y = nonlinear_driver_forward(r, initial, p, .25)['canonical_prediction']
+    y = nonlinear_driver_forward(r, initial, p, .25, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     return p, r, initial, y
 
 
@@ -165,7 +165,7 @@ def test_baseline_processing_cannot_identify_stationary_nonrest_flow_family():
             if flow != 1.:
                 assert rhs[0] != 0.
             forward = nonlinear_driver_forward(np.full(120, driver), state[1:], p, .25,
-                                               substeps=4, derivative=False)
+                                               substeps=4, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
             np.testing.assert_allclose(forward['states'], np.tile(state, (120, 1)), atol=1e-13, rtol=0.)
             checks = core.run_physical_checks(forward['states'], p)
             for key in ['finite', 'positive_fvpq', 'oxygen_extraction_in_unit_interval',

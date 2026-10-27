@@ -247,7 +247,7 @@ def prepare_examples():
     nonlinear = []
     for scale in (.012, .22):
         result = nonlinear_driver_forward(scale*pulse, np.array([0., 1., 1., 1., 1.]),
-                                          PARAMETERS, t[1]-t[0], substeps=2, derivative=False)
+                                          PARAMETERS, t[1]-t[0], substeps=2, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
         nonlinear.append(result)
     nonlinear_y = [z["canonical_prediction"] for z in nonlinear]
     corrupt = nonlinear_y[1].copy()
@@ -267,7 +267,7 @@ def prepare_examples():
         nl_profiles.append(score)
     nl_linear = [hb_closure(z, t, bank)["D"] for z in nonlinear_y]
     refined = nonlinear_driver_forward(.22*pulse, np.array([0., 1., 1., 1., 1.]),
-                                       PARAMETERS, t[1]-t[0], substeps=4, derivative=False)
+                                       PARAMETERS, t[1]-t[0], substeps=4, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
     numerical_error = float(np.max(np.abs(refined["canonical_prediction"]-nonlinear_y[1])))
 
     rng = np.random.default_rng(20261023)

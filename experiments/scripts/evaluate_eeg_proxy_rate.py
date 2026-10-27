@@ -341,7 +341,7 @@ def synthetic(cfg, out):
         driver *= cfg['synthetic']['driver_sd']/driver.std()
         initial = np.r_[0.,np.ones(4)]
         f = nonlinear_driver_forward(driver, initial, parameters(cfg), .1, substeps=8,
-                                     derivative=False, numerical_backend='numba')
+                                     derivative=False, numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
         canonical = f['canonical_prediction']
         target = (operators('B4_grid10')[1]@canonical.ravel()).reshape(120,3)
         eeg10 = (operators('C10')[0]@canonical.ravel()).reshape(300,3)[:,0]

@@ -235,7 +235,7 @@ def fixed_driver_response(driver, parameters, dt, *, initial_state=None, tau_n=0
     initial_jacobian = None
     if tau_n == 0 and tau_v == 0:
         original = nonlinear_driver_forward(r, initial, parameters, dt, substeps=substeps,
-            derivative=derivative, numerical_backend=numerical_backend)
+            derivative=derivative, numerical_backend=numerical_backend, hemodynamics='inlet_balance', viscoelastic_s=0.)
         states, canonical = original["states"], original["canonical_prediction"][:, 1:]
         vascular_input = r.copy()
         if derivative:

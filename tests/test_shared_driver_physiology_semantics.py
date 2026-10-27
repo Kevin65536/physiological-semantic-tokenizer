@@ -230,8 +230,8 @@ def test_precision_audit_replays_frozen_driver_without_refitting(tmp_path):
     from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
     cfg=runner.semantics_config(CONFIG);parameters=runner.semantics_parameters(cfg)
     driver=.025*np.sin(np.arange(120)*.21);initial=np.r_[.01,1.02,1.01,1.01,1.]
-    old=nonlinear_driver_forward(driver,initial,parameters,.25,substeps=4,derivative=False,numerical_backend='numba')
-    fine=nonlinear_driver_forward(driver,initial,parameters,.25,substeps=8,derivative=False,numerical_backend='numba')
+    old=nonlinear_driver_forward(driver,initial,parameters,.25,substeps=4,derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
+    fine=nonlinear_driver_forward(driver,initial,parameters,.25,substeps=8,derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
     operator=runner.semantics_model_operator();target=(operator@fine['canonical_prediction'].ravel()).reshape(120,3)
     prediction=(operator@old['canonical_prediction'].ravel()).reshape(120,3)
     ref=dict(key='fixture',site='motor',window=0,id='fixture_w0',dataset='fixture',subject='S0')

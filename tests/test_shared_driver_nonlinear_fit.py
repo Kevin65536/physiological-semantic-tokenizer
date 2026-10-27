@@ -20,28 +20,28 @@ def test_exact_rk4_sensitivities_match_finite_differences_including_tau():
     r = .035*np.sin(np.arange(steps)*.4)
     initial = np.array([.005, 1.03, 1.02, 1.015, 1.01])
     vector = np.r_[r, initial[0], np.log(initial[1:])]
-    result = nonlinear_driver_forward(r, initial, p, dt)
+    result = nonlinear_driver_forward(r, initial, p, dt, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
     epsilon = 1e-6
     numeric = []
     for col in range(steps+5):
         plus, minus = vector.copy(), vector.copy()
         plus[col] += epsilon
         minus[col] -= epsilon
-        yp = nonlinear_driver_forward(*unpack(plus, steps), p, dt, derivative=False)['canonical_prediction']
-        ym = nonlinear_driver_forward(*unpack(minus, steps), p, dt, derivative=False)['canonical_prediction']
+        yp = nonlinear_driver_forward(*unpack(plus, steps), p, dt, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
+        ym = nonlinear_driver_forward(*unpack(minus, steps), p, dt, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
         numeric.append(((yp-ym)/(2*epsilon)).ravel())
     np.testing.assert_allclose(result['jacobian'], np.array(numeric).T, atol=3e-9, rtol=2e-6)
     yp = nonlinear_driver_forward(r, initial, replace(p, free=replace(p.free, tau=p.free.tau+epsilon)),
-                                  dt, derivative=False)['canonical_prediction']
+                                  dt, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     ym = nonlinear_driver_forward(r, initial, replace(p, free=replace(p.free, tau=p.free.tau-epsilon)),
-                                  dt, derivative=False)['canonical_prediction']
+                                  dt, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     np.testing.assert_allclose(result['tau_jacobian'], (yp-ym)/(2*epsilon), atol=3e-9, rtol=2e-6)
     yp = nonlinear_driver_forward(r, initial,
         replace(p,fixed=replace(p.fixed,neurovascular_gain=p.fixed.neurovascular_gain+epsilon)),
-        dt,derivative=False)['canonical_prediction']
+        dt,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     ym = nonlinear_driver_forward(r, initial,
         replace(p,fixed=replace(p.fixed,neurovascular_gain=p.fixed.neurovascular_gain-epsilon)),
-        dt,derivative=False)['canonical_prediction']
+        dt,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     np.testing.assert_allclose(result['neurovascular_gain_jacobian'],(yp-ym)/(2*epsilon),atol=3e-9,rtol=2e-6)
     # Last driver affects its EEG sample, never earlier vascular observations.
     np.testing.assert_array_equal(result['jacobian'][1::3, steps-1], 0.)
@@ -52,8 +52,8 @@ def test_fast_forward_matches_independent_checked_replay_outside_linear_range():
     p = core.BalloonParameters()
     r = .05+.03*np.sin(np.arange(20)*.2)
     initial = np.array([.03, 1.3, 1.2, 1.25, 1.1])
-    forward = nonlinear_driver_forward(r, initial, p, .25)
-    checked = replay_nonlinear_driver(r, initial, p, .25)
+    forward = nonlinear_driver_forward(r, initial, p, .25, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
+    checked = replay_nonlinear_driver(r, initial, p, .25, hemodynamics='inlet_balance', viscoelastic_s=0.)
     assert checked['status'] == 'completed'
     np.testing.assert_allclose(forward['states'], checked['states'], atol=1e-14, rtol=0.)
     np.testing.assert_allclose(forward['canonical_prediction'], checked['canonical_prediction'], atol=1e-14, rtol=0.)
@@ -63,7 +63,7 @@ def test_noisefree_fit_recovers_shared_driver_without_vascular_innovations():
     p, steps, dt = core.BalloonParameters(), 14, .4
     r = .03*np.sin(np.arange(steps)*.4)
     initial = np.array([.005, 1.02, 1.01, 1.015, 1.008])
-    target = nonlinear_driver_forward(r, initial, p, dt)['canonical_prediction']
+    target = nonlinear_driver_forward(r, initial, p, dt, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     fit = fit_nonlinear_shared_driver(target, p, dt, penalty=0., initial_penalty=0.,
         sd=np.array([.03, .01, .01]), max_evaluations=81, return_jacobian=True)
     assert fit['status'] == 'completed', fit['starts']
@@ -81,7 +81,7 @@ def test_zero_driver_penalty_preserves_independent_initial_state_regularization(
     rest = np.array([0.,1.,1.,1.,1.])
     initial = np.array([.02,1.1,1.1,1.1,1.1])
     driver = .02*np.sin(np.arange(steps)*.3)
-    target = nonlinear_driver_forward(driver,initial,p,dt)['canonical_prediction']
+    target = nonlinear_driver_forward(driver,initial,p,dt, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     common = dict(starts=[dict(driver=driver,initial_state=initial)],
                   penalty=0.,max_evaluations=81)
     unregularized = fit_nonlinear_shared_driver(target,p,dt,initial_penalty=0.,**common)
@@ -97,7 +97,7 @@ def test_zero_driver_penalty_preserves_independent_initial_state_regularization(
 
 def test_masked_hidden_values_and_processing_do_not_change_fit():
     p, steps, dt = core.BalloonParameters(), 10, .3
-    target = nonlinear_driver_forward(.02*np.sin(np.arange(steps)), [0.,1.,1.,1.,1.],p,dt)['canonical_prediction']
+    target = nonlinear_driver_forward(.02*np.sin(np.arange(steps)), [0.,1.,1.,1.,1.],p,dt, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     operator = np.kron(np.eye(steps)-np.ones((steps,steps))/steps, np.eye(3))
     target = (operator@target.ravel()).reshape(steps,3)
     visible = np.ones((steps,3), dtype=bool)
@@ -176,13 +176,13 @@ def test_infeasible_proposals_are_rejected_not_replaced_by_constant_residual():
 @pytest.mark.parametrize('initial', [[0.,0.,1.,1.,1.],[0.,1.,1.,1.,4.]])
 def test_forward_rejects_mathematical_domain(initial):
     with pytest.raises(FloatingPointError):
-        nonlinear_driver_forward(np.zeros(5),initial,core.BalloonParameters(),.25)
+        nonlinear_driver_forward(np.zeros(5),initial,core.BalloonParameters(),.25, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
 
 
 def test_forward_midway_domain_and_invalid_input_contracts():
     p = core.BalloonParameters()
     with pytest.raises(FloatingPointError):
-        nonlinear_driver_forward(np.full(20,-10.),[0.,1.,1.,1.,1.],p,.25)
+        nonlinear_driver_forward(np.full(20,-10.),[0.,1.,1.,1.,1.],p,.25, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
     for kwargs in [dict(max_evaluations=0),dict(penalty=-1),dict(substeps=0),
                    dict(sd=[1.,0.,1.]),dict(mean_operator=np.eye(3)),
                    dict(visible=np.zeros((5,3),dtype=bool)),dict(starts=[])]:
@@ -195,7 +195,7 @@ def test_three_trial_shared_tau_recovers_known_nonlinear_truth_from_rest():
     truth = replace(p,free=replace(p.free,tau=1.4))
     drivers = np.array([.07*np.sin(np.arange(steps)*(.25+.1*i)+i)+.025*np.cos(np.arange(steps)*.6)
                         for i in range(3)])
-    target = np.array([nonlinear_driver_forward(r,[0.,1.,1.,1.,1.],truth,dt)['canonical_prediction']
+    target = np.array([nonlinear_driver_forward(r,[0.,1.,1.,1.,1.],truth,dt, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
                        for r in drivers])
     fit = fit_nonlinear_shared_parameter(target,p,dt,parameter_name='tau',parameter_bounds=(.5,10.),
         sd=[.03,.005,.003],penalty=0.,initial_penalty=0.)
@@ -320,7 +320,7 @@ def test_three_trial_shared_gain_recovery_preserves_tau_and_other_fixed_gauge():
     truth=replace(p,fixed=replace(p.fixed,neurovascular_gain=.35))
     drivers=np.array([.07*np.sin(np.arange(steps)*(.25+.1*i)+i)+.025*np.cos(np.arange(steps)*.6)
                       for i in range(3)])
-    target=np.array([nonlinear_driver_forward(r,[0.,1.,1.,1.,1.],truth,dt)['canonical_prediction']
+    target=np.array([nonlinear_driver_forward(r,[0.,1.,1.,1.,1.],truth,dt, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
                      for r in drivers])
     result=fit_nonlinear_shared_parameter(target,p,dt,parameter_name='neurovascular_gain',
         parameter_bounds=(.05,5.),sd=[.03,.005,.003],penalty=0.,initial_penalty=0.)
@@ -395,7 +395,7 @@ def test_shared_parameter_trace_is_observational_and_failed_fit_can_warm_start()
     truth = replace(p, fixed=replace(p.fixed, neurovascular_gain=.35))
     drivers = np.array([.07*np.sin(np.arange(steps)*(.25+.1*i)+i)
                         for i in range(batch)])
-    y = np.array([nonlinear_driver_forward(r, [0.,1.,1.,1.,1.], truth, dt)
+    y = np.array([nonlinear_driver_forward(r, [0.,1.,1.,1.,1.], truth, dt, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
                   ['canonical_prediction'] for r in drivers])
     options = dict(parameter_name='neurovascular_gain', parameter_bounds=(.05,5.),
                    sd=[.03,.005,.003], penalty=0., initial_penalty=0.,
@@ -477,7 +477,7 @@ def test_shared_tau_unit_reexpression_preserves_physical_fit(coordinate_factor, 
                         for i in range(batch)])
     physical_initial = np.array([[.002,1.015,1.008,1.01,1.006],
                                  [-.001,1.008,1.012,1.009,1.005]])
-    canonical = np.array([nonlinear_driver_forward(r, initial, truth, dt)['canonical_prediction']
+    canonical = np.array([nonlinear_driver_forward(r, initial, truth, dt, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
                           for r, initial in zip(drivers, physical_initial)])
     # A nonidentity observation map prevents the test from only exercising
     # scalar weighting. It is deliberately fixed, not estimated from targets.

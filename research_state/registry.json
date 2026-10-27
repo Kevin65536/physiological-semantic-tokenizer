@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-27T10:26:21.062539+00:00",
+  "updated_at": "2026-10-27T14:06:07.270664+00:00",
   "tracks": [
     {
       "id": "main",
@@ -2253,6 +2253,84 @@
       "label": "持久监督单元与复现实验命令",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/launch.json",
       "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_tak_contract",
+      "label": "Tak血流核心与旧方程的缓存实测对照合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.shared_driver_tak_plan",
+      "label": "Tak对照公开身份与会话分组",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/plan.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_tak_launch",
+      "label": "Tak合成阶段持久监督记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/launch_synthetic.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_tak_resources",
+      "label": "Tak对照资源与源码记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/resources.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_tak_synthetic",
+      "label": "Tak已知真值合成比较",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/synthetic_summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_tak_measured",
+      "label": "Tak与旧方程的完整实测配对比较",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/measured_summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_tak_sensitivity",
+      "label": "Tak参数先验与黏弹性敏感性",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/sensitivity_summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.shared_driver_tak_verification",
+      "label": "Tak完整分母与数值验证",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_tak_array_audit",
+      "label": "Tak保存数组独立复算",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/array_verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_tak_measured_launch",
+      "label": "Tak实测矩阵的持久监督",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/launch_measured.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.shared_driver_tak_report",
+      "label": "Tak恢复的完整比较报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/report_v4/REPORT.pdf",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.shared_driver_tak_atlas",
+      "label": "Tak全记录波形图册",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/report_v4/WAVEFORM_ATLAS.pdf",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_baseline_architecture",
+      "label": "Tak研究基线的方程、设置与实现边界",
+      "path": "docs/ARCHITECTURE.md",
+      "role": "protocol"
     }
   ],
   "records": [
@@ -6168,6 +6246,71 @@
       ],
       "headline": false,
       "next_step": "本次固定样例快测已收束。建议优先保持统一缓存及重新标定，再决定是否扩大REFED与隐藏段失败的无额外项复核；未启动扩展样本、额外成分或保护评价。"
+    },
+    {
+      "state_id": "main.shared_driver_tak@2026-10-27.v1",
+      "entity": "main.shared_driver_tak",
+      "label": "Tak原始血流核心与旧方程实测对照",
+      "track": "main",
+      "order": 193,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "descriptive",
+      "summary": "Tak/SPM黏弹性核心与p=v降维实现完成。四库24被试48片段：合成72/72合格；实测主矩阵2253/2304合格，敏感性276/288合格，63项预算耗尽保留。90秒共同成功11/10/11/12片段上，旧固定到Tak主模型Hb NRMSE为0.430→0.414、0.535→0.553、0.566→0.448、0.237→0.237；同样估计κ/τ的旧自由初态模型为0.388/0.529/0.442/0.216，均略低。双方四初态时仅REFED有小幅一致收益。30/90秒八项隐藏Hb比较均差于自身线性插值。放宽log先验使REFED κ/τ变化中位约52%/64%，文献四参数有黏弹性多起点和触边解。2664行数组复算一致，未建立生理真值或稳健跨模态补全优势。",
+      "evidence_ids": [
+        "e.shared_driver_tak_contract",
+        "e.shared_driver_tak_plan",
+        "e.shared_driver_tak_launch",
+        "e.shared_driver_tak_resources",
+        "e.shared_driver_tak_synthetic",
+        "e.shared_driver_tak_measured",
+        "e.shared_driver_tak_sensitivity",
+        "e.shared_driver_tak_verification",
+        "e.shared_driver_tak_array_audit",
+        "e.shared_driver_tak_measured_launch",
+        "e.shared_driver_tak_report",
+        "e.shared_driver_tak_atlas"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-27T11:21:31.510421+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_decay"
+      ],
+      "headline": false,
+      "next_step": "本次有限比较已收束。后续可沿用Tak确定性核心与统一缓存，但需把κ/τ解释为先验依赖的条件参数；优先检验观测映射与独立记录支持，不凭本次拟合授予teacher资格或直接推广固定静息初态。"
+    },
+    {
+      "state_id": "main.program@2026-10-27.tak-baseline",
+      "entity": "main.program",
+      "label": "Tak基线下的后续研究",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "基线迁移已完成。按用户决定，后续研究采用有Tak原文和官方SPM依据的完整血流核心：包含黏弹性和动态流出量，p恒等于v，确定性四血管状态，连续片段允许非静息初态。通用前向、重放、联合拟合与默认共享驱动命令切换到Tak；旧inlet-balance及其独立p初态、衰减、空间和teacher接口保留显式历史身份。迁移依据为文献支持和方程一致性，保留既有实测负结果、参数敏感性及未完成的生理资格。",
+      "evidence_ids": [
+        "e.tak_baseline_architecture",
+        "e.method_rationale",
+        "e.shared_driver_tak_contract",
+        "e.shared_driver_tak_measured",
+        "e.shared_driver_tak_sensitivity",
+        "e.shared_driver_tak_array_audit",
+        "e.shared_driver_tak_report"
+      ],
+      "supersedes": [
+        "main.program@2026-09-09.mask-domain-repair"
+      ],
+      "updated_at": "2026-10-27T14:06:07.270664+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak"
+      ],
+      "headline": true,
+      "next_step": "后续研究以Tak确定性核心、四初态和统一Hb缓存为基线，按新实验合同检验观测映射、条件参数及独立记录支持。空间、多重射击、闭合指标或tokenizer扩展必须适配Tak状态与目标定义；旧结果继续按原模型解释。"
     }
   ]
 }

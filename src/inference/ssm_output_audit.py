@@ -1,9 +1,11 @@
-"""Output-function profiles and matched-prior state-continuity diagnostics.
+"""Retained pre-Tak output profiles and state-continuity diagnostics.
 
 The physiology and RK4 tangents remain owned by shared_driver_rk4. This module
 keeps every driver, free boundary state and structured remainder coefficient in
 one explicit objective so an output profile can reoptimize *all* actual unknowns.
 No feature SD is interpreted as calibrated sensor noise or posterior precision.
+The independent p boundary and p-v profiles belong to the inlet-balance
+contract, not the current reduced Tak model.
 """
 from __future__ import annotations
 

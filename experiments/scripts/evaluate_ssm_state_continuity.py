@@ -122,7 +122,7 @@ def synthetic_case(cfg, base, split, identity, initial, scenario):
     perturbation = rng.normal(size=5)*generator['nonrest_sd']
     x0 = np.r_[0.,np.ones(4)]+(perturbation if initial == 'nonrest' else 0.)
     forward = nonlinear_driver_forward(driver,x0,parameters(base),dt,
-        substeps=generator['substeps'],derivative=False,numerical_backend='numba')
+        substeps=generator['substeps'],derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
     op = operators(n)[2]
     physical = (op@forward['canonical_prediction'].ravel()).reshape(3*n,3)
     colored = gaussian_filter1d(rng.normal(size=3*n),generator['common_smoothing_steps'])

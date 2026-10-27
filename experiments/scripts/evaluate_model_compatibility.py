@@ -609,7 +609,8 @@ def synthetic_checks(config):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config',type=Path,default=DEFAULT_CONFIG)
+    parser.add_argument('--config',type=Path,required=True,
+        help='Explicit pre-Tak closure contract; these metrics are not the current Tak baseline equations')
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--stage',choices=['plan','synthetic','pilot','census','summarize','panels'],required=True)
     parser.add_argument('--workers',type=int,default=1)

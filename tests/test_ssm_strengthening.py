@@ -40,7 +40,7 @@ def test_conditioned_profile_hidden_values_and_known_units_are_invariant():
     n = 24
     p = BalloonParameters()
     driver = .01*np.sin(np.arange(n)*.2)
-    truth = nonlinear_driver_forward(driver,[0.,1.,1.,1.,1.],p,.25,substeps=4,derivative=False)
+    truth = nonlinear_driver_forward(driver,[0.,1.,1.,1.,1.],p,.25,substeps=4,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
     basis = equal_capacity_hb_basis(np.eye(3*n),modes=2)
     mean = (basis@np.array([.003,-.001])).reshape(n,3)
     y = truth['canonical_prediction']+mean

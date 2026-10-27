@@ -126,7 +126,7 @@ def test_roi_tau_selection_waits_for_three_starts_and_excludes_failed_lowest(tmp
 
 @pytest.fixture
 def cfg():
-    return run.read_config(run.DEFAULT)
+    return run.read_config(run.LEGACY_DEFAULT)
 
 
 @pytest.fixture
@@ -341,7 +341,8 @@ def test_replay_group_never_refits_or_mutates_parent_and_retains_failures(tmp_pa
         raise AssertionError('replay must not refit or access measured loaders')
     monkeypatch.setattr(run, 'fit', forbidden)
     monkeypatch.setattr(run, 'load_measured', forbidden)
-    def fake_replay(driver, initial, parameters, dt, *, substeps):
+    def fake_replay(driver, initial, parameters, dt, *, substeps, hemodynamics, viscoelastic_s):
+        assert hemodynamics == 'inlet_balance' and viscoelastic_s == 0.
         failed = driver[0] < 0
         prediction = np.zeros((120,3))
         if driver[0] == 0 and substeps == 8:

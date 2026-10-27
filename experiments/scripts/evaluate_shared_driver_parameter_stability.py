@@ -1065,7 +1065,7 @@ def verify_worker(payload):
             _,op,_=record_arrays(targets[side],d['arm']);differences=[];legal=True
             for r,i,stored in zip(driver,initial,pred):
                 try:
-                    forward=nonlinear_driver_forward(r,i,p,.25,substeps=cfg['solver']['validation_substeps'],numerical_backend='numba',derivative=False)
+                    forward=nonlinear_driver_forward(r,i,p,.25,substeps=cfg['solver']['validation_substeps'],numerical_backend='numba',derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0.)
                     predicted=(op@forward['canonical_prediction'].ravel()).reshape(-1,3)
                     differences.append(float(np.max(abs(predicted-stored)/sd)))
                 except (ValueError,FloatingPointError,OverflowError):legal=False;differences.append(float('inf'))

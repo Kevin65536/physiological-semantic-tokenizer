@@ -3,6 +3,16 @@
 _Design owner for independently versioned experiment protocols. Registered
 execution and scientific verdicts live in `research_state/registry.json`._
 
+后续血流动力学研究从
+[Tak 基线](ARCHITECTURE.md#tak-hemodynamic-baseline)出发；选择依据由
+[方法说明](METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27)持有。
+未显式选择历史模式时，共享驱动入口使用 Tak 合同。旧 T3/Step5、空间、
+连续状态和 tokenizer 设计保留其原始模型身份，下面的历史顺序不构成默认
+继续执行旧方程的队列。后续新实验需声明自己的数据、端点及输出版本；本次
+基线修订不重新执行已完成实测矩阵，也不修改冻结配置或保护边界。
+以下按日期保留的设计中，“当前模型”“本轮”等措辞指对应日期的版本，
+不覆盖上述后续研究基线。
+
 The 2026-10-27 [cache-input correction](DATA_CONTRACT.md#新-hb-建模输入统一使用带通缓存--2026-10-27)
 supersedes native unfiltered Hb preparation for new work. The dated designs below
 retain the observation coordinates used for their evidence; the
@@ -10,7 +20,7 @@ retain the observation coordinates used for their evidence; the
 new cached contracts. This code/input migration does not register a new measured
 campaign or reinterpret previously completed results.
 
-This document owns experiment design. The original `PST-DISCOVERY-v1` path
+This document owns experiment design. The retained `PST-DISCOVERY-v1` path
 concerns physical-teacher qualification, source/observation tokenization and
 coupling-prior retention. The separately versioned `TK-FUNCTIONAL-v1` screen
 below tests conditional supervision without claiming physical qualification.
@@ -68,6 +78,55 @@ measured result exists.
 | Qualification and tokenizer design | [P0](#p0-software-and-synthetic-qualification), [teacher selection](#t-physical-teacher-selection), [tokenizer](#bq-source-and-observation-tokenizer), [coupling prior](#c-coupling-prior-return) |
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
+
+## Tak 原始血流核心的缓存实测对照（2026-10-27）
+
+用户要求恢复忠于 Tak 原始设计的方程，并全面比较实测差异。
+`SSM-TAK-v1` 由
+[`shared_driver_tak_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml)
+定义，沿用 `evaluate_shared_driver_reconstruction.py --tak-comparison`。它恢复
+Tak/SPM 的血流核心：容量分母为 `tau+tau_v`，动态流出量为
+`v^(1/alpha)+tau_v*dv/dt`，脱氧 Hb 方程仍使用独立 `tau`。
+直接消去独立 p 状态，令 `p=v`，无独立血管过程创新。旧 inlet-balance
+核心保留用于历史调用及同口径对照，不改写旧运行或冻结源码。
+
+输入为既有公开 output-support 两父运行的全部评价身份，四库各六被试、每人
+两个不重叠 90 秒片段及其中间 30 秒。父运行只提供登记身份和保留 EEG 特征；
+Hb 通过统一 reader 读取 v5/none 带通缓存，重新按原开发被试确定 PCA 与共同
+Hb 正尺度。不得沿用旧 Hb 训练尺度，不读取原始 Hb 或其他协议的保护材料。
+完整记录预处理先于遮挡；窗口内 ODE 是处理后坐标的条件模型，隐藏块只解释为
+离线特征补全，不解释为原生传感器预测。所有样本按事先固定身份纳入，保留准备失败。
+
+八臂分别为旧自由初态、旧绑定初态、Tak 参考参数／自由四初态、Tak 固定静息
+血管初态，以及前述旧自由、旧绑定、Tak 四初态各自估计 kappa/tau，最后为
+Tak 固定静息血管初态与原始四参数先验。两种绑定模型均使用四初态工程惩罚
+`100*[s0²+(f0-1)²+(v0-1)²+(q0-1)²]`，避免重复惩罚容量。主臂固定
+gamma=0.32、tau_v=2 秒，以 log-SD=0.25 估计 kappa/tau；文献先验的
+kappa/tau/gamma log-SD 为 exp(-3)，tau_v 为 1。工程目标的观测权重和
+Gauss–Newton 推断保持现有定义，所以文献先验臂也不称为完整 Tak DCM 复现：
+未恢复任务驱动的神经连接、光密度观测或变分推断，EEG 约束的驱动仍可估计。
+P0/Q0 保持现有观测坐标约定，不用论文浓度值替代未经标定的尺度。
+
+生理参数仅在同一被试、原生记录／连续 session 支持和 Hb 通道内共享；不跨
+会话绑定。原文件拼接时 session 支持也进入分组键。不同片段各估初态，不假造
+缺失间隔的状态延续。参数先验每组加一次，固定参数启动解后使用三个声明起点，
+按收敛后的完整目标选解。30/90 秒和联合完整、Hb-only、联合 Hb 分块隐藏的
+矩阵均执行。90 秒联合完整另检查 log-SD=0.125/0.5、tau_v=1/4 秒和
+初态权重50/200；这些是工程敏感性，不能称生理正常范围。
+
+独立合成包含 Tak 静息、Tak 非静息和旧自由初差三种生成器，每种三个固定种子。
+真值只用于评分，不进入初始化。独立 SPM 对数 ODE、零黏弹性新旧等价、状态与
+参数 Jacobian、隐藏值隔离及物理域测试先于实测。4/8 RK4 子步差异用冻结训练
+SD 归一化，阈值0.005；预算耗尽或未通过梯度判据均保留失败。完成合成后再
+准备实测；所有较大拟合均由持久 user systemd 监督，pilot 后按实测吞吐选择并发。
+
+主终点为同身份 Hb NRMSE 的旧模型减 Tak 主臂。数据集、窗口长度与可见条件
+分别统计；先时间／色团 NMSE，再记录被试内均值、被试等权均值，最后开方。
+2000次整被试配对 bootstrap 给出探索性逐项区间，不作多重检验后的显著性声明。
+报告完整计划数、成功数及每项配对分母，同时给出 EEG/HbO/HbR、相关、中心化
+幅比、有符号增益、偏置、峰时间差、零预测和可见 Hb 插值基线。状态范围、
+初态、驱动、参数边界、多起点差异、先验代价和积分加密分别列出。低误差、
+硬绑定或窄先验产生的稳定性不能独立证明生理真值或个体可识别性。
 
 ## 无额外成分的滤波敏感性样例复测（2026-10-27）
 

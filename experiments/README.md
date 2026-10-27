@@ -49,9 +49,14 @@ New measured Hb preparation uses the already bandpassed v5/none cache through
 `src.data.unified_physiology.load_cached_fnirs_record`. The input, units, support,
 offline masking semantics and historical boundary are owned by
 [the data contract](../docs/DATA_CONTRACT.md#新-hb-建模输入统一使用带通缓存--2026-10-27).
-The following are the defaults of the existing commands, with no new launcher:
+The following cached-input contracts retain their **pre-Tak model/metric**
+identity. Their CLIs now require an explicit `--config`; they are historical
+replay/control entrypoints, not implicit choices for the research baseline.
+The [Tak entry](#shared-driver-reconstruction-and-reliability) uses the same
+unified cache reader. A new Tak spatial/continuity/teacher/closure extension
+must version its state and target contract rather than only replace a config path.
 
-| Existing entry | Current cache-input contract | Preparation checks |
+| Retained entry | Explicit pre-Tak cache-input contract | Preparation checks |
 | --- | --- | --- |
 | `scripts/evaluate_ssm_output_support.py` | [`ssm_output_support_cached_v2.yaml`](configs/physiology_semantic_tokenizer/ssm_output_support_cached_v2.yaml); REFED: [`ssm_output_support_refed_cached_v3.yaml`](configs/physiology_semantic_tokenizer/ssm_output_support_refed_cached_v3.yaml) | `test_cached_fnirs_input.py`, `test_ssm_output_support.py` |
 | `scripts/evaluate_shared_driver_spatial.py` | [`shared_driver_spatial_cached_v2.yaml`](configs/physiology_semantic_tokenizer/shared_driver_spatial_cached_v2.yaml) | `test_cached_fnirs_input.py`, `test_shared_driver_spatial_data.py`, `test_shared_driver_spatial_runner.py` |
@@ -91,6 +96,30 @@ Measurement caches, coordinate and scale audits, native Hb summaries and optical
 | Read-only optical motion pipeline audit; metadata `--check-only`, then separate synthetic/measured phases on the exact retained public windows; no model fits | [`scripts/analyze_fnirs_motion_correction.py`](scripts/analyze_fnirs_motion_correction.py) | [`optical motion audit`](configs/physiology_semantic_tokenizer/shared_driver_optical_motion_audit_v1.yaml) | `test_fnirs_motion_correction_audit.py`, `test_homer2_preprocessing.py`, `test_homer2_measurement_v4.py` |
 
 ### Shared-driver reconstruction and reliability
+
+The default shared-driver model is the [Tak baseline](../docs/ARCHITECTURE.md#tak-hemodynamic-baseline).
+With no historical mode selected, the existing runner resolves
+[`shared_driver_tak_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml)
+and starts with its array-free `check` stage. For example:
+
+```bash
+.venv/bin/python experiments/scripts/evaluate_shared_driver_reconstruction.py \
+  --check-only --run-dir <fresh_run>
+```
+
+The retained Tak comparison is also selected explicitly with `--tak-comparison
+--tak-stage <check|plan|synthetic|prepare|pilot|measured|sensitivity|summarize|verify|audit>
+--run-dir <fresh_run>` and
+[`shared_driver_tak_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml).
+It compares the retained inlet-balance core with deterministic reduced Tak/SPM
+hemodynamics, matched initial priors, parameter estimation and declared
+sensitivity controls on newly prepared cached Hb coordinates. The
+[protocol](../docs/EXPERIMENT_PLAN.md#tak-原始血流核心的缓存实测对照2026-10-27)
+owns scope and interpretation. Tests: `test_shared_driver_tak.py`,
+`test_shared_driver_tak_experiment.py`, `test_shared_driver_parameter_stability.py`.
+After verification and the independent retained-array audit, render with
+`scripts/render_shared_driver_reconstruction.py --tak-comparison --run <run>
+--output <fresh_export>` for the searchable PDF and complete bitmap waveform atlas.
 
 The bounded post-10.20 filter sensitivity uses
 `scripts/evaluate_shared_driver_reconstruction.py --filter-retest --filter-stage
@@ -268,7 +297,11 @@ This workspace does not maintain a second status summary. Query the generated
 Live-process checks must be performed immediately before touching generated run
 or cache directories.
 
-## Active SSM entries
+## Retained T3, Step5 and observation entries
+
+The following commands retain their dated inlet-balance inference and data
+contracts. New shared-driver model work uses the Tak entry above; old teacher,
+stochastic and closure interfaces are not automatically Tak models.
 
 The following sections explain recorded command interfaces. Their lifecycle is
 owned by the registry view linked above.

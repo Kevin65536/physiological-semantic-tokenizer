@@ -14,7 +14,7 @@ def fixture():
     n = 24
     driver = .025*np.sin(np.arange(n)*.3)
     initial = np.r_[0., np.ones(4)]
-    y = inference.nonlinear_driver_forward(driver, initial, p, .25, derivative=False)['canonical_prediction']
+    y = inference.nonlinear_driver_forward(driver, initial, p, .25, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     basis = inference.waveform_component_basis(p, n, .25, np.eye(3*n), 'volume', modes=2)
     return p, y, basis
 

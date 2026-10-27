@@ -26,6 +26,7 @@ explains the path hierarchy and reading order.
 
 | Research question | Suite root | Evidence entry |
 | --- | --- | --- |
+| What changes when the Tak/SPM hemodynamic equations, tied total Hb and original-prior reference are restored? | `shared_driver_reconstruction/` | [Tak hemodynamic migration](#tak-hemodynamic-migration--2026-10-27) |
 | Does the unified filter change post-10.20 conclusions without adding components? | `shared_driver_reconstruction/` | [Selected-example filter sensitivity](#selected-example-filter-sensitivity--2026-10-27) |
 | Which information survives hard tokens, and do time/region relations or a shape-plus-scale architecture help? | `functional_tokenizer/` | [Frozen relationships and local shape tokens](#frozen-relationships-and-local-shape-tokens--2026-10-25) |
 | How do model-compatibility scores vary across the registered public inventory and frozen observation panels? | `model_compatibility/` | [Population distributions and typical curves](#model-compatibility-distributions-and-typical-curves--2026-10-23) |
@@ -54,6 +55,35 @@ Some run and checkpoint paths below point to local Git-ignored artifacts that re
 useful in this workspace but are not part of the tracked paper record. For manuscript
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
+
+## Tak hemodynamic migration — 2026-10-27
+
+The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml)
+owns the paired inlet-balance/Tak design on newly prepared unified cached Hb.
+The retained package is
+[`20261027_tak_v1_run1`](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/plan.json):
+[measured comparisons](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/measured_summary.json),
+[parameter/initial-prior sensitivity](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/sensitivity_summary.json),
+[known-truth synthetic controls](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/synthetic_summary.json),
+and [independent array verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/array_verification.json).
+The [PDF report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/report_v4/REPORT.pdf)
+and [complete waveform atlas](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1/report_v4/WAVEFORM_ATLAS.pdf)
+are bitmap-figure communication exports; numerical task records remain the source.
+
+Retain the resolved contract, exact public identities, new development-only
+coordinates, prepared targets/operators, per-task fits and failures, summaries,
+supervisor/resource records and frozen fitting source. The later array-audit and
+report sources are retained separately. Git carries the compact prepared inputs,
+complete task JSON records, summaries/endpoint rows, fitting source and final
+PDF/HTML report with its referenced bitmaps; the atlas PDF retains every plotted
+record. Frozen fitting source is stored byte-for-byte in `source_snapshot.tar.gz`;
+extract it in the run directory to restore the recorded `source_snapshot/` paths.
+Dense task trajectory/operator NPZ files, numerical caches, superseded
+exports and page previews remain local and can be regenerated from the saved
+inputs and frozen implementation in a fresh run. Conditional states, parameter priors,
+numerical search boundaries and offline feature completion do not establish
+physiological truth or full Tak DCM replication. Earlier exports and the aborted
+preflight retain their original identities and are not replacement results.
 
 ## Frozen relationships and local shape tokens — 2026-10-25
 

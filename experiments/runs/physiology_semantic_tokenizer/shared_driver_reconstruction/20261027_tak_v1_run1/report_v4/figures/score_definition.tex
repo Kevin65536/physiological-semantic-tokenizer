@@ -1,0 +1,4 @@
+e_{s,j,c}=\frac{1}{|\mathcal{T}_j|}\sum_{t\in\mathcal{T}_j}\left(\frac{\hat{y}_{s,j,t,c}-y_{s,j,t,c}}{\sigma_{\mathrm{train},c}}\right)^2
+\mathrm{NRMSE}_{Hb}=\sqrt{\frac{1}{S}\sum_s\frac{1}{J_s}\sum_j\frac{e_{s,j,O}+e_{s,j,R}}{2}}
+\Delta=\mathrm{NRMSE}_{\mathrm{reference}}-\mathrm{NRMSE}_{\mathrm{candidate}}
+L=L_{\mathrm{data}}+0.01\Delta t\sum_t(\Delta^2 r_t/\Delta t^2)^2+L_0+\Delta t\sum_t(\log f_t/\log2)^2+L_\theta

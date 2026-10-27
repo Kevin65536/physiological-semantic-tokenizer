@@ -1,7 +1,9 @@
-"""Frozen conditional TK teacher, using the retained six-state SSM owner.
+"""Frozen pre-Tak conditional TK teacher with the inlet-balance SSM owner.
 
 The physiology, solver and observation matrices are reused unchanged. New
 targets are not a qualification or a relabeling of old teacher evidence.
+It is a historical consumer, not the default Tak teacher. New Tak-derived
+targets need their own versioned target/consumer contract.
 """
 from __future__ import annotations
 

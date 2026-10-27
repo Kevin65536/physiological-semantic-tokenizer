@@ -928,8 +928,8 @@ def verify_results(cfg, out, pp, measured):
             four = []; eight = []
             for i, (left, right) in enumerate(pieces):
                 initial = np.r_[x[360+5*i], np.exp(x[361+5*i:365+5*i])]
-                four.append(nonlinear_driver_forward(x[left:right], initial, par, .25, substeps=4, derivative=False, numerical_backend='python')['states'])
-                eight.append(nonlinear_driver_forward(x[left:right], initial, par, .25, substeps=8, derivative=False, numerical_backend='python')['states'])
+                four.append(nonlinear_driver_forward(x[left:right], initial, par, .25, substeps=4, derivative=False, numerical_backend='python', hemodynamics='inlet_balance', viscoelastic_s=0.)['states'])
+                eight.append(nonlinear_driver_forward(x[left:right], initial, par, .25, substeps=8, derivative=False, numerical_backend='python', hemodynamics='inlet_balance', viscoelastic_s=0.)['states'])
             four, eight = np.concatenate(four), np.concatenate(eight)
             delta_h = np.column_stack((par.fixed.P0*(eight[:, 4]-four[:, 4])-par.fixed.Q0*(eight[:, 5]-four[:, 5]), par.fixed.Q0*(eight[:, 5]-four[:, 5])))
             delta_h = ops['hb']@delta_h
@@ -1034,7 +1034,8 @@ def snapshot(cfg, out, stage):
 def main():
     global ROOT
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', type=Path, default=DEFAULT)
+    parser.add_argument('--config', type=Path, required=True,
+        help='Explicit pre-Tak output-support contract; current Tak baseline uses evaluate_shared_driver_reconstruction.py')
     parser.add_argument('--run-dir', type=Path, required=True)
     parser.add_argument('--stage', choices=['plan', 'pilot', 'prepare', 'calibrate', 'synthetic', 'measured', 'profiles', 'power', 'power_calibration_v2', 'summary'], required=True)
     parser.add_argument('--calibration-contract', type=Path, default=ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_output_power_calibration_v2.yaml')

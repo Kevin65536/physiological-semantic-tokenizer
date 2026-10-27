@@ -62,7 +62,7 @@ def test_zero_extensions_are_exact_existing_forward(backend):
     driver, parameters = _driver(24), BalloonParameters()
     initial = np.array([.004, 1.008, 1.01, 1.009, 1.005])
     original = nonlinear_driver_forward(driver, initial, parameters, .25,
-        derivative=True, numerical_backend=backend)
+        derivative=True, numerical_backend=backend, hemodynamics='inlet_balance', viscoelastic_s=0.)
     result = fixed_driver_response(driver, parameters, .25, initial_state=initial,
                                   derivative=True, numerical_backend=backend)
     np.testing.assert_array_equal(result["states"], original["states"])

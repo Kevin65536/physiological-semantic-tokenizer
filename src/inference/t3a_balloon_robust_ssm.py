@@ -1,4 +1,10 @@
-"""Minimal robust nonlinear Balloon state-space teacher.
+"""Historical inlet-balance Balloon state-space teacher (T3/Step5 replay).
+
+New shared-driver research uses the Tak baseline in
+``shared_driver_reconstruction``. This module retains the old six-state drift,
+independent p initial state and stochastic contract for its dated tests and
+evidence. Its parameter/observation containers are also reused by the Tak core;
+that reuse does not select this module's dynamics or process noise.
 
 This module is deliberately self contained.  It implements the T3a
 continuous-time core in transformed coordinates
@@ -9,7 +15,7 @@ extended-Kalman fixed-interval smoother with Student-t IRLS observation
 updates.  The IRLS/Laplace approximation is a robust engineering posterior,
 not an exact Student-t posterior.
 
-The current ``tau_v=0`` contract uses the inlet-balance variant
+The retained ``tau_v=0`` contract uses the inlet-balance variant
 ``tau * dp/dt = f - f_out * p / v``. Tak et al. (2015), Eq. (3), instead
 prints ``tau * dp/dt = (f - f_out) * p / v``:
 https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf

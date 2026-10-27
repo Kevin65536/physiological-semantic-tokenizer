@@ -61,8 +61,8 @@ def test_current_registry_is_lightweight_and_views_are_readable(registry_repo):
 
     readme = render_readme_block(registry)
     assert "### Next steps" in readme
-    assert "Step5A" in readme
-    assert "联合似然" in readme
+    assert "Tak" in readme
+    assert "联合拟合" in readme
 
     snapshot = current_snapshot(registry)
     assert snapshot["status_axes"] == ["execution", "scientific_verdict"]
@@ -92,6 +92,12 @@ def test_execution_and_scientific_verdict_remain_independent():
 
     assert current["main.program"]["execution"] == "planned"
     assert current["main.program"]["scientific_verdict"] == "unreviewed"
+    assert current["main.program"]["state_id"] == "main.program@2026-10-27.tak-baseline"
+    assert current["main.shared_driver_tak"]["execution"] == "completed"
+    assert current["main.shared_driver_tak"]["scientific_verdict"] == "inconclusive"
+    historical = next(r for r in _registry()["records"]
+        if r["state_id"] == "main.program@2026-09-09.mask-domain-repair")
+    assert historical["execution"] == "planned" and historical["scientific_verdict"] == "unreviewed"
     assert current["main.step5a"]["execution"] == "completed"
     assert current["main.step5a"]["scientific_verdict"] == "inconclusive"
     # Completed diagnostics can retain follow-up work; stopped and abandoned

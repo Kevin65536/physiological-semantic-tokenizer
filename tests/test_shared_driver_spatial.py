@@ -38,7 +38,7 @@ def test_k1_j1_is_exact_existing_core_including_nonrest_initials():
     actual = forward_spatial_shared_driver(coef, initial, p, .25, **kwargs)
     physical = np.r_[initial[0, 0], np.exp(initial[0, 1:])]
     core = nonlinear_driver_forward(kwargs["temporal_basis"]@coef[:, 0], physical,
-        p, .25, numerical_backend="python", return_flow_jacobian=True)
+        p, .25, numerical_backend="python", return_flow_jacobian=True, hemodynamics='inlet_balance', viscoelastic_s=0.)
     np.testing.assert_array_equal(actual["prediction"], core["canonical_prediction"])
     np.testing.assert_array_equal(actual["states"][:, 0], core["states"])
     chain = np.zeros((16+5, 3+5))

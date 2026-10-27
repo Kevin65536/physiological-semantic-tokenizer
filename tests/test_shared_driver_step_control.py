@@ -108,7 +108,7 @@ def real_problem():
     p = BalloonParameters()
     r = .025*np.sin(np.arange(10)*.35)
     initial = np.array([.01, 1.02, 1.01, 1.015, .99])
-    y = fit.nonlinear_driver_forward(r, initial, p, .2)['canonical_prediction']
+    y = fit.nonlinear_driver_forward(r, initial, p, .2, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     return p, np.stack([y, .9*y])
 
 

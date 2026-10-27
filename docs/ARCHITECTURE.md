@@ -1,7 +1,7 @@
 # Software architecture
 
-_Software surfaces and package ownership. SSM diagnostics are implemented; the
-next tokenizer generation has no training runtime. Registered execution and
+_Software surfaces and package ownership. Tak is the shared-driver hemodynamic
+baseline; retained tokenizer runtimes keep their recorded model identities. Registered execution and
 scientific verdicts are generated in [`PROJECT_STATUS.md`](PROJECT_STATUS.md)._
 
 ## Repository layers
@@ -22,14 +22,13 @@ over the old one.
 
 ## Runtime scope and version boundary
 
-The implemented SSM path is:
+The current shared-driver path is:
 
 ```text
 src/data/                              registry, native loaders, masks and preprocessing
 src/inference/observation_baselines.py   shared transforms, noise and linear controls
-src/inference/t3a_balloon_robust_ssm.py   forward model and robust pointwise inference
-src/inference/t3a_balloon_joint_ssm.py    joint likelihood and temporal observation operators
-src/inference/balloon_trajectory_map.py  nonlinear trajectory MAP and Gaussian target prediction
+src/inference/shared_driver_reconstruction.py  Tak forward/replay and joint parameter fitting
+src/inference/shared_driver_rk4.py       reduced Tak RK4 and exact discrete tangents
 experiments/                           existing diagnostic entrypoints and reviewed configs
 experiments/scripts/                   reporting tools and all new executable entrypoints
 ```
@@ -40,8 +39,76 @@ for commands. Shared computations belong in `src/`; data/replay roots are passed
 at their read boundaries rather than assigned to another runner's globals.
 Recorded command paths and frozen source snapshots retain their identities.
 
-The only retained tokenizer runtime surface is the E2-compatible
-`PhysiologySemanticTokenizer` (v1). R0-P, R1-D/R1-P, D1B, and R2-D added
+## Tak hemodynamic baseline
+
+The model choice is explained in
+[`METHOD_RATIONALE.md`](METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27).
+The reviewed executable settings are the `parameters`, `solver`, `fitting` and
+`arms[name == model.primary]` entries of
+[`shared_driver_tak_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml).
+That dated comparison contract is immutable; a later experiment gives its own
+data/split/output contract and versions any deliberate change to these settings.
+
+The deterministic vascular states are $(s,f,v,q)$, with $p\equiv v$:
+
+$$
+\begin{aligned}
+\dot s &= r-\kappa s-\gamma(f-1), & \dot f &= s,\\
+\dot v &= \frac{f-v^{1/\alpha}}{\tau+\tau_v}, &
+f_{\rm out} &= v^{1/\alpha}+\tau_v\dot v,\\
+\dot q &= \frac{fE(f)/E_0-f_{\rm out}q/v}{\tau}, &
+E(f) &= 1-(1-E_0)^{1/f}.
+\end{aligned}
+$$
+
+Here $r$ is the EEG-constrained driver; $s$ is the flow-inducing signal;
+$f,v,q$ are flow, venous volume and deoxy-Hb relative to rest. Transit time
+$\tau$ and viscoelastic time $\tau_v$ are in seconds. In the declared time
+coordinate, $s$ has units of inverse seconds, $\kappa$ inverse seconds and
+$\gamma$ inverse seconds squared; the driver has the effective units required
+by $\dot s$. The EEG readout fixes its engineering scale. $\alpha$ and $E_0$
+are dimensionless. The q equation retains its own $\tau$ denominator.
+
+The physical initial states $(s_0,f_0,v_0,q_0)$ are optimized through
+$(s_0,\log f_0,\log v_0,\log q_0)$; p has no independent initial coordinate,
+process innovation or noise. Positivity and $P_0v\ge Q_0q$ are checked at RK
+stages. The primary setting estimates $\kappa,\tau$ with the declared log
+prior, holding $\gamma,\tau_v,\alpha,E_0$ and observation gains fixed. Volume
+is penalized once. Shared parameter priors are counted once per native
+record/session/channel group; separate records keep separate initial states.
+
+Canonical Hb changes are $H_O=P_0(v-1)-Q_0(q-1)$ and $H_R=Q_0(q-1)$.
+The existing observation operator then bins/references the prediction. New
+measured targets use the [unified cached Hb contract](DATA_CONTRACT.md#新-hb-建模输入统一使用带通缓存--2026-10-27);
+unknown physical units and uncalibrated optical scales remain explicit.
+
+`nonlinear_driver_forward` and `replay_nonlinear_driver` default to Tak.
+`fit_nonlinear_shared_parameters` is the fitting entry for one or multiple
+records, including fixed-parameter fits with an empty parameter list. Its
+default is the four-initial-state Tak model. For compatibility, returned
+trajectories use `[r,s,f,v,p,q]`; this is a six-column view with **derived p**,
+not six independent states. A four-entry Tak initializer is accepted directly.
+
+The old scalar/component fitters, linear design, decay interventions,
+`t3a_balloon_robust_ssm`, `t3a_balloon_joint_ssm`, `balloon_trajectory_map`,
+multi-shooting/spatial interfaces and conditional tokenizer targets retain
+their original inlet-balance contracts. Historical calls to the common
+forward/replay/joint fitter explicitly select that model. The old T3 module
+also supplies parameter/observation containers; using those containers does
+not select its dynamics or independent process noise. New Tak extensions
+must preserve the reduced-state invariant rather than reuse an old p−v
+metric, linearization or teacher schema as if it already applied to Tak.
+
+Sources: [Tak et al. (2015), equations 3–6](https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf),
+[SPM dynamics](https://github.com/spm/spm12/blob/main/toolbox/dcm_fnirs/spm_fx_fnirs.m),
+[SPM initial states and priors](https://github.com/spm/spm12/blob/main/toolbox/dcm_fnirs/spm_dcm_fnirs_priors.m).
+
+## Retained tokenizer scope
+
+The E2-compatible `PhysiologySemanticTokenizer` (v1) is a retained runtime.
+The separately versioned `functional_tokenizer.py` implements the later
+conditional-supervision screen with its recorded pre-Tak teacher; it is not
+automatically a Tak-based tokenizer. R0-P, R1-D/R1-P, D1B, and R2-D added
 diagnostic and qualification components around it. The v1 implementation,
 checkpoints, and negative screen are **stopped historical evidence** and are
 replay-only; no new tokenizer runtime generation is active. Their execution outcomes

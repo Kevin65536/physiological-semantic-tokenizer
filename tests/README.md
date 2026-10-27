@@ -20,7 +20,8 @@ artifacts. Run those only with the exact evidence restored:
 | Area | Representative files | Contract |
 | --- | --- | --- |
 | Data/preprocessing | `test_unified_physiology.py`, `test_event_alignment.py` | dataset, timing, mask, and cache identity |
-| Balloon inference | `test_t3a_balloon_robust_ssm.py`, `test_t3a_balloon_joint_ssm.py` | forward dynamics, joint likelihood, masking, temporal operators and posterior moments |
+| Tak baseline | `test_shared_driver_tak.py`, `test_shared_driver_tak_experiment.py` | default Tak dispatch, four-state/p=v invariant, SPM-equation replay, discrete tangents, matched priors and explicit historical controls |
+| Historical Balloon inference | `test_t3a_balloon_robust_ssm.py`, `test_t3a_balloon_joint_ssm.py` | retained inlet-balance forward dynamics, joint likelihood, masking, temporal operators and posterior moments |
 | T3 diagnostics | `test_t3a_balloon_robust_p0.py`, `test_t3_measured_reconstruction_null.py`, `test_t3_identifiability.py`, `test_t3_multisession_loso.py` | synthetic recovery, observation nulls, parameter identifiability and fit-only LOSO |
 | T3c composite | `test_t3c_hierarchical_admission.py`, `test_t3c_composite_synthetic_t2.py` | array-free admission and known-truth composite screening |
 | Step5 | `test_step5a_inference_consistency.py`, `test_step5.py`, `test_step5_observation_diagnostic.py`, `test_step5_observation_repair.py` | likelihood calibration, shared observation baselines, fold isolation and observation/mask regression |

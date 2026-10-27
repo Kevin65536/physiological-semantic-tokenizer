@@ -1252,7 +1252,8 @@ def dryrun(cfg):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument('--config', type=Path, required=True,
+        help='Explicit pre-Tak spatial contract; current Tak baseline uses evaluate_shared_driver_reconstruction.py')
     parser.add_argument('--project-root', type=Path, default=CODE_ROOT)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--stage', choices=STAGES, default='check')

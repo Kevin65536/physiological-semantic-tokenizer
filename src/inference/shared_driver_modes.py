@@ -1,4 +1,4 @@
-"""Fixed spectral/spatial neural modes with the existing scalar Balloon core.
+"""Retained pre-Tak spectral/spatial modes with the inlet-balance core.
 
 Modes are signed changes in baseline-relative log power. The second mode is
 an effective spectral contrast, not a cellular synchrony or E/I estimate.
@@ -123,7 +123,7 @@ def forward_shared_driver_modes(coefficients, initial_coordinates, parameters, d
             hb_weights /= np.sqrt(1+gamma**2)
     u_h = drivers@hb_weights
     balloon = nonlinear_driver_forward(u_h, physical_initial, parameters, dt,
-        substeps=substeps, derivative=derivative, numerical_backend=numerical_backend)
+        substeps=substeps, derivative=derivative, numerical_backend=numerical_backend, hemodynamics='inlet_balance', viscoelastic_s=0.)
     canonical_eeg = drivers[:, :dimensions]@loading.T
     canonical_hb = balloon["canonical_prediction"][:, 1:]
     canonical = np.column_stack((canonical_eeg, canonical_hb))

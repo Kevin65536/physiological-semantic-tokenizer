@@ -40,7 +40,8 @@ from src.inference.observation_baselines import native_feature_operators, visibl
 from src.data.ssm_prepared import read_prepared_arrays as semantics_prepared_arrays
 from src.data.ssm_prepared import prepared_target as semantics_target
 
-DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_reconstruction_v1.yaml'
+DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml'
+LEGACY_DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_reconstruction_v1.yaml'
 MODALITIES = ('EEG', 'HbO', 'HbR')
 
 
@@ -493,7 +494,7 @@ def replay_group(payload):
             row={k:source[k] for k in ('kind','subject','outer','trial','session','method','tau','true_tau')}
             row.update(group=group,mode='full',status='failed_domain')
             z=data[f'states_{method}_full'][index]
-            runs=[replay_nonlinear_driver(z[:,0],z[0,1:],parameters(parent_cfg,source['tau']),.25,substeps=s)
+            runs=[replay_nonlinear_driver(z[:,0],z[0,1:],parameters(parent_cfg,source['tau']),.25,substeps=s, hemodynamics='inlet_balance', viscoelastic_s=0.)
                   for s in (cfg['substeps'],cfg['integration_check_substeps'])]
             row['checks']=[dict(status=r['status'],checks=r['checks'],failure=r.get('failure')) for r in runs]
             row['physical_valid']=all(r['status']=='completed' for r in runs)
@@ -537,7 +538,7 @@ def replay_main(args):
     if args.replay_of.resolve()!=parent:
         raise ValueError('replay-of differs from exact source contract')
     if args.check_only:
-        r=replay_nonlinear_driver(np.zeros(12),np.array([0.,1.,1.,1.,1.]),BalloonParameters(),.25)
+        r=replay_nonlinear_driver(np.zeros(12),np.array([0.,1.,1.,1.,1.]),BalloonParameters(),.25, hemodynamics='inlet_balance', viscoelastic_s=0.)
         assert r['status']=='completed'
         print(json.dumps(dict(status='passed',source_arrays_read=0)))
         return
@@ -678,7 +679,7 @@ def nonlinear_synthetic_panel(cfg,spec):
         initial=np.r_[0.,np.ones(4)]+rng.normal(size=5)*syn['initial_state_sd']
         if cfg['schema']=='shared_driver_fixed_roi_initial_v1':
             initial[3]=initial[2]*np.exp(spec['true_initial_log_p_over_v'])
-        generated=replay_nonlinear_driver(driver,initial,p,dt,substeps=cfg['nonlinear']['integration_check_substeps'])
+        generated=replay_nonlinear_driver(driver,initial,p,dt,substeps=cfg['nonlinear']['integration_check_substeps'], hemodynamics='inlet_balance', viscoelastic_s=0.)
         if generated['status']!='completed':
             raise ValueError(f'synthetic generator domain failure trial={trial}: {generated.get("failure")}')
         canonical=generated['canonical_prediction'].copy()
@@ -687,7 +688,7 @@ def nonlinear_synthetic_panel(cfg,spec):
         clean.append(view(eeg,hb,cfg,'full')[0]);truth.append(driver);truth_states.append(generated['states'])
         if conditional:
             for destination,probe_driver,probe_initial in [(initial_only,np.zeros(n),initial),(driver_only,driver,np.r_[0.,np.ones(4)])]:
-                probe=replay_nonlinear_driver(probe_driver,probe_initial,p,dt,substeps=cfg['nonlinear']['integration_check_substeps'])
+                probe=replay_nonlinear_driver(probe_driver,probe_initial,p,dt,substeps=cfg['nonlinear']['integration_check_substeps'], hemodynamics='inlet_balance', viscoelastic_s=0.)
                 if probe['status']!='completed':raise ValueError('conditional truth component domain failure')
                 native=probe['canonical_prediction'].copy();native[:,1:]=native[:,1:]@mapping['matrix'].T
                 destination.append(view(native[:,0],op['native_interpolation']@native[:,1:],cfg,'full')[0])
@@ -855,7 +856,7 @@ def nonlinear_cell(payload):
                     and all(physical.get('completed_states',{}).get(k,False) for k in required))
                 if 'states' in result:
                     state=result['states'];prediction=(full_operator@result['canonical_prediction'].ravel()).reshape(n,3)
-                    fine=replay_nonlinear_driver(result['driver'],result['initial_state'],p,dt,substeps=options['integration_check_substeps'])
+                    fine=replay_nonlinear_driver(result['driver'],result['initial_state'],p,dt,substeps=options['integration_check_substeps'], hemodynamics='inlet_balance', viscoelastic_s=0.)
                     row['fine_physical_valid']=fine['status']=='completed'
                     row['physical_valid']=row['physical_valid'] and row['fine_physical_valid']
                     gap=float('inf')
@@ -2109,7 +2110,7 @@ def train_gain_prior_start(payload):
                 checks=[]
                 for index,trial in enumerate(train):
                     fine=replay_nonlinear_driver(result['driver'][index],result['initial_state'][index],fitted,dt,
-                        substeps=cfg['nonlinear']['integration_check_substeps'])
+                        substeps=cfg['nonlinear']['integration_check_substeps'], hemodynamics='inlet_balance', viscoelastic_s=0.)
                     gap=float('inf')
                     if fine['status']=='completed':
                         pred=(operator@fine['canonical_prediction'].ravel()).reshape(n,3)
@@ -2692,7 +2693,7 @@ def waveform_nonlinear_case(payload):
         pred=result['prediction']
         result.update(optimization_status=result['status'],optimization_converged=result['converged'])
         try:
-            fine=nonlinear_driver_forward(result['driver'],result['initial_state'],p,.25,substeps=8,derivative=False)
+            fine=nonlinear_driver_forward(result['driver'],result['initial_state'],p,.25,substeps=8,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
             fine_pred=(operator@fine['canonical_prediction'].ravel()).reshape(120,3)
             gap=float(np.max(abs(fine_pred-pred)/sd))
             result['integration_max_difference_training_sd']=gap
@@ -2723,7 +2724,7 @@ def waveform_synthetic(cfg):
     initial=np.array([0.,1.,1.,1.,1.]);rows=[];checks={}
     for truth in ('matched','tau4','kappa_low','viscoelastic4','volume','exchange'):
         pp=waveform_parameters(p,'tau',4.) if truth=='tau4' else waveform_parameters(p,'kappa',.16) if truth=='kappa_low' else p
-        f=nonlinear_driver_forward(driver,initial,pp,dt,substeps=8,derivative=False)
+        f=nonlinear_driver_forward(driver,initial,pp,dt,substeps=8,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
         y=(operator@f['canonical_prediction'].ravel()).reshape(n,3)
         if truth=='viscoelastic4':
             generated=build_shared_driver_design(p,n,dt,processed_mean_operator=operator,venous_viscoelastic_s=4.)
@@ -2791,7 +2792,7 @@ def waveform_volume_main(args,cfg):
             ys=[]
             for _ in range(24):
                 driver=.04*np.sin(.45*t+rng.uniform(-3,3))+.01*np.sin(1.1*t)
-                f=nonlinear_driver_forward(driver,np.r_[0.,np.ones(4)],p,.25,substeps=8,derivative=False)
+                f=nonlinear_driver_forward(driver,np.r_[0.,np.ones(4)],p,.25,substeps=8,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
                 y=(operator@f['canonical_prediction'].ravel()+basis@(rng.normal(size=6)*.004)).reshape(120,3);ys.append(y)
             ys=np.array(ys);sd=np.std(ys[:18],axis=(0,1));r,_=waveform_volume_fit(cfg,ys,sd,p,operator,list(range(18)),list(range(18,24)))
             results.append(dict(true_fraction=fraction,**r))
@@ -2921,7 +2922,7 @@ def tau_curvature_cell(payload):
         row['initial_prior_cost']=float(arm['initial_penalty']*np.sum((fit['initial_state']-[0,1,1,1,1])**2))
         try:
             fine=nonlinear_driver_forward(fit['driver'],fit['initial_state'],p,.25,
-                substeps=settings['check_substeps'],derivative=False,numerical_backend='numba')
+                substeps=settings['check_substeps'],derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
             fine_pred=(op@fine['canonical_prediction'].ravel()).reshape(y.shape)
             gap=float(np.max(abs(fine_pred-pred)/sd));row['integration_max_difference_training_sd']=gap
             if gap>settings['maximum_integration_difference_training_sd']:
@@ -2943,15 +2944,15 @@ def tau_curvature_synthetic(cfg):
     phase=rng.uniform(-np.pi,np.pi,2)
     driver=.02*np.sin(2*np.pi*s['driver_slow_hz']*t+phase[0])+.02*np.sin(2*np.pi*s['driver_fast_hz']*t+phase[1])
     initial=np.r_[0.,np.ones(4)];op=native_model_operator(120);sd=np.array([.04,.01,.003]);checks={};rows=[]
-    fine=nonlinear_driver_forward(driver,initial,p,.25,substeps=32,derivative=True,numerical_backend='numba')
+    fine=nonlinear_driver_forward(driver,initial,p,.25,substeps=32,derivative=True,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
     y=(op@fine['canonical_prediction'].ravel()).reshape(120,3)
-    coarse=nonlinear_driver_forward(driver,initial,p,.25,substeps=16,derivative=True,numerical_backend='python')
-    compiled=nonlinear_driver_forward(driver,initial,p,.25,substeps=16,derivative=True,numerical_backend='numba')
+    coarse=nonlinear_driver_forward(driver,initial,p,.25,substeps=16,derivative=True,numerical_backend='python', hemodynamics='inlet_balance', viscoelastic_s=0.)
+    compiled=nonlinear_driver_forward(driver,initial,p,.25,substeps=16,derivative=True,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
     checks['compiled_python_prediction']=bool(np.max(abs(compiled['canonical_prediction']-coarse['canonical_prediction']))<1e-10)
     checks['compiled_python_jacobian']=bool(np.max(abs(compiled['jacobian']-coarse['jacobian']))<1e-9)
     checks['fine_grid']=bool(np.max(abs((op@(coarse['canonical_prediction']-fine['canonical_prediction']).ravel()).reshape(120,3)/sd))<.005)
     old=nonlinear_driver_forward(driver,initial,replace(p,free=replace(p.free,tau=.5)),.25,
-        substeps=16,derivative=False,numerical_backend='numba')
+        substeps=16,derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
     checks['tau_does_not_change_flow']=bool(np.max(abs(old['states'][:,1:3]-fine['states'][:,1:3]))<1e-8)
     checks['tau_changes_Hb']=bool(np.max(abs(old['canonical_prediction'][:,1:]-fine['canonical_prediction'][:,1:]))>1e-5)
     for weight in (0.,1.):
@@ -2981,7 +2982,7 @@ def tau_curvature_screens(cfg,root,out):
                     **tau_curvature_metrics(a['target'][i],fit['prediction'][i],a['normalizer'],cfg)))
         for i,trial in enumerate(cfg['trials']):
             state=a['states'][i]
-            f=nonlinear_driver_forward(state[:,0],state[0,1:],pp,.25,substeps=32,derivative=False,numerical_backend='numba')
+            f=nonlinear_driver_forward(state[:,0],state[0,1:],pp,.25,substeps=32,derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
             pred=(op@f['canonical_prediction'].ravel()).reshape(120,3)
             arrays[f'forward_tau{tau:g}_trial{trial}']=pred
             forward.append(dict(tau=tau,trial=trial,**tau_curvature_metrics(a['target'][i],pred,a['normalizer'],cfg)))
@@ -3940,7 +3941,7 @@ def semantics_generate(cfg, spec):
         perturbation = rng.normal(size=5)*.015
         initial = np.r_[0., np.ones(4)] + (perturbation if spec['initial'] == 'nonrest' else 0)
         forward = nonlinear_driver_forward(r, initial, p, dt, substeps=8,
-                                           derivative=False, numerical_backend='numba')
+                                           derivative=False, numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
         drivers.append(r); states.append(forward['states']); clean.append(forward['canonical_prediction'])
     clean = np.array(clean)
     if spec.get('coordinate') == 'processed':
@@ -4027,7 +4028,7 @@ def semantics_synthetic_worker(payload):
                 item['driver_nrmse'] = np.sqrt(np.mean((fit['driver']-arrays['driver'][ntrain+i])**2))/np.std(arrays['driver'][:ntrain])
                 item['state_rmse'] = np.sqrt(np.mean((fit['states']-arrays['states'][ntrain+i])**2, axis=0))
                 fine = nonlinear_driver_forward(fit['driver'], fit['initial_state'], pfit, .25,
-                    substeps=8, derivative=False, numerical_backend='numba')
+                    substeps=8, derivative=False, numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
                 item['substep_4_8_max_difference'] = float(np.max(abs(fine['canonical_prediction']-fit['canonical_prediction'])))
                 trajectories[name+f'_prediction_{i}'] = fit['prediction']
             validation.append(item)
@@ -4047,12 +4048,12 @@ def semantics_observation_math(cfg,out):
     from scipy.linalg import expm
     p=semantics_parameters(cfg);driver=.025*np.sin(np.arange(120)/12)+.01
     initial=np.array([.01,1.02,1.01,1.03,1.02])
-    baseline=nonlinear_driver_forward(driver,initial,p,.25,numerical_backend='numba',derivative=False)
+    baseline=nonlinear_driver_forward(driver,initial,p,.25,numerical_backend='numba',derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0.)
     gauges=[]
     for factor in (.25,1.,4.):
         alternate=replace(p,fixed=replace(p.fixed,eeg_loading=p.fixed.eeg_loading/factor,
                                          neurovascular_gain=p.fixed.neurovascular_gain/factor))
-        replay=nonlinear_driver_forward(factor*driver,initial,alternate,.25,numerical_backend='numba',derivative=False)
+        replay=nonlinear_driver_forward(factor*driver,initial,alternate,.25,numerical_backend='numba',derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0.)
         gauges.append(dict(driver_scale=factor,eeg_loading=alternate.fixed.eeg_loading,
             beta=alternate.fixed.neurovascular_gain,prediction_max_difference=float(np.max(abs(
                 replay['canonical_prediction']-baseline['canonical_prediction']))),
@@ -4100,7 +4101,7 @@ def semantics_hierarchy_generate(cfg,spec):
         driver=.025*driver/driver.std()
         initial=np.r_[0.,np.ones(4)]+rng.normal(0,.01,5)
         forward=nonlinear_driver_forward(driver,initial,semantics_parameters(cfg,tau=tau),.25,
-            substeps=8,numerical_backend='numba',derivative=False)
+            substeps=8,numerical_backend='numba',derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0.)
         value=forward['canonical_prediction'].copy()
         if kind=='eeg_gain_only':value[:,0]*=np.exp(2*subject_effect[ds,subject])
         elif kind=='hb_gain_only':value[:,1:]*=np.exp(2*subject_effect[ds,subject])
@@ -4242,7 +4243,7 @@ def semantics_joint_worker(payload):
         parameter_names=names,parameter_bounds=[cfg['parameters'][name]['bounds'] for name in names],
         sd=a['sd'],mean_operator=semantics_model_operator(),starts=starts,
         max_iterations=cfg['solver']['max_iterations'],
-        max_evaluations_per_trial=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
+        max_evaluations_per_trial=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg), hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     row=semantics_compact_fit(fit)
     row['relative_errors']=abs(np.asarray(fit['parameter_values'])/np.array([spec['tau'],spec['gain']])-1) if fit['parameter_values'] is not None else None
     validation=[]
@@ -4290,7 +4291,7 @@ def semantics_kappa_worker(payload):
         sd=a['sd'],mean_operator=semantics_model_operator(),
         starts=[dict(parameter_values=[v]) for v in cfg['parameters']['kappa']['starts']],
         max_iterations=cfg['solver']['max_iterations'],max_evaluations_per_trial=cfg['solver']['max_evaluations_per_trial'],
-        **semantics_solver_options(cfg))
+        **semantics_solver_options(cfg), hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     value=fit['parameter_values'][0] if fit['parameter_values'] is not None else None
     validation=[]
     if value is not None:
@@ -4316,7 +4317,7 @@ def semantics_joint_fit(cfg,y,sd,*,fixed=None,visible=None,flow_weight=None):
         parameter_names=['tau','neurovascular_gain'],parameter_bounds=[cfg['parameters'][n]['bounds'] for n in ('tau','neurovascular_gain')],
         sd=sd,visible=visible,mean_operator=semantics_model_operator(),
         starts=[dict(parameter_values=v) for v in ([1.,.5],[2.,1.],[4.,2.],[1.,2.],[4.,.5])],
-        max_iterations=cfg['solver']['max_iterations'],max_evaluations_per_trial=cfg['solver']['max_evaluations_per_trial'],**options)
+        max_iterations=cfg['solver']['max_iterations'],max_evaluations_per_trial=cfg['solver']['max_evaluations_per_trial'],**options, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
 
 
 def semantics_profile_worker(payload):
@@ -4521,7 +4522,7 @@ def semantics_precision_worker(payload):
                     method=row['method'];values={} if row['parameter'] is None else {row['parameter']:row['parameter_value']}
                     try:
                         fine=nonlinear_driver_forward(arrays[method+'__driver'],arrays[method+'__initial_state'],semantics_parameters(cfg,**values),.25,
-                            substeps=cfg['solver']['validation_substeps'],derivative=False,numerical_backend='numba')
+                            substeps=cfg['solver']['validation_substeps'],derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
                         prediction=(operator@fine['canonical_prediction'].ravel()).reshape(120,3)
                         item.update(fine_valid=True,max_prediction_difference_sd=float(np.max(abs(prediction-arrays[method+'__prediction'])/sd)),
                             max_state_difference=float(np.max(abs(fine['states']-arrays[method+'__states']))),
@@ -5468,7 +5469,7 @@ def robustness_synthetic_case(cfg, base, repeat, spectrum, initial, scenario, *,
     if scenario=='physiology_tau':parameters = semantics_parameters(base,tau=4.)
     if scenario=='weak_coupling':parameters = semantics_parameters(base,neurovascular_gain=1e-6)
     forward = nonlinear_driver_forward(r, initial_state, parameters,.25,substeps=8,
-        derivative=False,numerical_backend='numba')
+        derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
     raw = forward['canonical_prediction']
     # Fixed noise distribution across all interventions; never rescale on a test condition.
     noise = rng.normal(size=(132,3))*np.array(cfg['synthetic']['canonical_white_noise_SD'])
@@ -6157,7 +6158,7 @@ def attribution_synthetic_case(cfg, base, repeat, spectrum, initial, scenario, *
             delayed = np.r_[np.repeat(driver[0],8),driver[:-8]]
             driver = .65*driver+.35*delayed
         forward = nonlinear_driver_forward(driver, case['states'][0,1:], parameters, .25,
-            derivative=False, substeps=8, numerical_backend='numba')
+            derivative=False, substeps=8, numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
         physical = (op@forward['canonical_prediction'].ravel()).reshape(120,3)
         if scenario == 'unmodeled_dynamics':physical[:,0] = case['physical_truth'][:,0]
         case['target'] += physical-case['physical_truth'];case['physical_truth'] = physical
@@ -6538,7 +6539,7 @@ def attribution_profile_worker(payload):
             predictions=[]
             for sign in (-1,1):
                 p=semantics_parameters(base,**{parameter:value*np.exp(sign*1e-4)})
-                f=nonlinear_driver_forward(fit['driver'],fit['initial_state'],p,.25,substeps=4,derivative=False,numerical_backend='numba')
+                f=nonlinear_driver_forward(fit['driver'],fit['initial_state'],p,.25,substeps=4,derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
                 predictions.append(op@f['canonical_prediction'].ravel())
             derivatives.append((predictions[1]-predictions[0])/2e-4)
         expanded=subspace_overlap(np.column_stack([j]+derivatives),basis,sd)
@@ -8642,9 +8643,503 @@ def filter_retest_main(args):
     print(json.dumps(serial({k:v for k,v in result.items() if k not in ('jobs','coordinates','selected','terminal')})), flush=True)
 
 
+def tak_config(path):
+    cfg = yaml.safe_load(Path(path).read_text())
+    if (cfg.get('schema') != 'shared_driver_tak_v1' or cfg['data']['protected_data'] != 'forbidden'
+            or cfg['data']['raw_reads'] is not False or cfg['data']['fnirs_input'] != 'unified_cached_fnirs_v1'
+            or cfg['data']['expected_records'] != 48
+            or cfg['data']['datasets'] != ['eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation','refed']
+            or cfg['tensor']['lengths_s'] != [30,90] or cfg['tensor']['dt_s'] != .25
+            or cfg['conditions'] != ['joint_full','Hb_only_full','joint_blocked']):
+        raise ValueError('Tak public cached-input contract mismatch')
+    expected = ['legacy_free','legacy_tied','tak_fixed','tak_rest','legacy_free_fit','legacy_tied_fit','tak_fit','tak_spm_prior']
+    if [a['name'] for a in cfg['arms']] != expected or cfg['model']['primary'] != 'tak_fit':
+        raise ValueError('Tak paired arm contract mismatch')
+    for arm in cfg['arms']:
+        if arm['hemodynamics'] == 'tak' and arm['initial'] not in ('volume_tied','rest'):
+            raise ValueError('Tak requires elimination of independent p')
+        if len(arm.get('log_sd', [])) != len(arm['fit']):
+            raise ValueError('one prior SD required per fitted parameter')
+    if (cfg['solver']['substeps'] != 4 or cfg['solver']['validation_substeps'] != 8
+            or cfg['solver']['initial_weights_tied'] != [1,1,1,0,1]
+            or cfg['resources']['numerical_threads'] != 1):
+        raise ValueError('Tak integration or matched initial-prior contract mismatch')
+    return cfg
+
+
+def tak_plan(cfg, root):
+    plan = volume_drive_plan(cfg, root)
+    if len(plan['records']) != cfg['data']['expected_records']:
+        raise ValueError('Tak evaluation record denominator mismatch')
+    groups = {}
+    for ref in plan['records']:
+        # In concatenated native exports, the admitted continuous session
+        # support is part of the key. Never pool different session supports.
+        key = (ref['join_key'], ref['anchor']['hb_channel'], ref.get('native_session'),
+               json.dumps(ref.get('alignment_support'), sort_keys=True))
+        groups.setdefault(key, []).append(ref)
+    plan['groups'] = []
+    for i, (key, refs) in enumerate(sorted(groups.items(), key=lambda item: str(item[0]))):
+        refs = sorted(refs, key=lambda r: r['hb_start_s'])
+        if any(a['hb_start_s']+90 > b['hb_start_s']+1e-8 for a,b in zip(refs, refs[1:])):
+            raise ValueError('overlapping records cannot multiply shared-parameter evidence')
+        plan['groups'].append(dict(id=f'g{i:03d}', sharing_identity=key, refs=refs))
+    plan.update(schema='shared_driver_tak_plan_v1', selection='all_exact_parent_public_evaluation_records',
+        independent_subjects={ds: len({r['subject'] for r in plan['records'] if r['dataset']==ds})
+            for ds in cfg['data']['datasets']})
+    return plan
+
+
+def tak_prepare(cfg, root, out, plan):
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import load_cached_fnirs_record
+    from src.data.ssm_prepared import fit_feature_coordinate
+    from src.inference.observation_baselines import disjoint_native_bin_operator
+    if serial(plan) != serial(tak_plan(cfg, root)):
+        raise ValueError('Tak plan no longer matches the admitted public metadata')
+    if json.loads((out/'software_checks.json').read_text())['status'] != 'passed':
+        raise ValueError('Tak software checks required before cache access')
+    if json.loads((out/'synthetic_summary.json').read_text())['status'] != 'completed':
+        raise ValueError('completed synthetic experiment required before measured preparation')
+    lookup = {r.join_key: r for r in CleanPhysiologyCacheIndex(root/cfg['data']['cache_root']).records}
+    coordinates, failures, prepared = {}, [], []
+    for relative in cfg['parents']:
+        parent = root/relative
+        pp = json.loads((parent/'plan.json').read_text())
+        for coordinate in sorted({r['coordinate'] for r in pp['records']}):
+            dev = [r for r in pp['records'] if r['coordinate']==coordinate and r['partition']=='development']
+            evaluation = [r for r in plan['records'] if r['coordinate']==coordinate and r['parent']==relative]
+            if {r['subject'] for r in dev} & {r['subject'] for r in evaluation}:
+                raise ValueError('calibration/evaluation subject overlap')
+            raw, provenance, good = {}, {}, []
+            for ref in dev+evaluation:
+                try:
+                    if ref['dataset'] not in cfg['data']['datasets'] or Path(ref['id']).name != ref['id']:
+                        raise ValueError('unregistered public identity')
+                    meta = json.loads((parent/'tasks'/'prepare'/(ref['id']+'.json')).read_text())
+                    if meta['status'] != 'completed': raise ValueError('parent EEG preparation failed')
+                    with np.load(parent/'prepared'/(ref['id']+'.npz'), allow_pickle=False) as a:
+                        eeg, eeg_op = a['eeg'].copy(), a['eeg_operator'].copy()
+                    if eeg.shape != (360,30) or eeg_op.shape != (360,360):
+                        raise ValueError('parent EEG shape mismatch')
+                    cached = load_cached_fnirs_record(root, lookup[ref['join_key']])
+                    pair = int(ref['anchor']['hb_pair'])
+                    if cached['channel_names'][2*pair] != ref['anchor']['hb_channel']+'_HbO':
+                        raise ValueError('cached Hb channel identity mismatch')
+                    take = (cached['time_s']>=ref['hb_start_s']) & (cached['time_s']<ref['hb_start_s']+90)
+                    times = cached['time_s'][take]-ref['hb_start_s']
+                    hb = cached['values'][take,pair]
+                    if not np.isfinite(hb).all(): raise ValueError('unsupported cached Hb samples')
+                    op = disjoint_native_bin_operator(times)
+                    hb = op['raw']@hb
+                    if hb.shape != (360,2): raise ValueError('cached Hb shape mismatch')
+                    raw[ref['id']] = dict(eeg=eeg, hb=hb, eeg_op=eeg_op, hb_op=op['model'])
+                    provenance[ref['id']] = cached['provenance']
+                    if ref in dev: good.append(ref)
+                except (ValueError,KeyError,FileNotFoundError) as exc:
+                    failures.append(dict(id=ref['id'], coordinate=coordinate, partition=ref['partition'], reason=str(exc)))
+            co = fit_feature_coordinate([(raw[r['id']]['eeg'],raw[r['id']]['hb']) for r in good])
+            co.update(training_ids=[r['id'] for r in good], training_subjects=sorted({r['subject'] for r in good}),
+                planned_training_records=len(dev), successful_training_records=len(good),
+                fnirs_input='unified_cached_fnirs_v1')
+            coordinates[coordinate] = co
+            for ref in evaluation:
+                if ref['id'] not in raw: continue
+                a = raw[ref['id']]
+                y = np.column_stack((a['eeg']@np.asarray(co['pc'])*co['eeg_factor'],a['hb']*co['hb_factor']))
+                for length in cfg['tensor']['lengths_s']:
+                    target, operator = volume_drive_crop(y,dict(eeg=a['eeg_op'],hb=a['hb_op']),length)
+                    path = out/'prepared'/f"{ref['id']}__{length}.npz"
+                    path.parent.mkdir(parents=True,exist_ok=True)
+                    np.savez_compressed(path,target=target,operator=operator,sd=np.asarray(co['sd']),
+                        hb_factor=np.array(co['hb_factor']),fnirs_input=np.array('unified_cached_fnirs_v1'))
+                write_json(out/'prepared'/(ref['id']+'.json'),dict(status='completed',ref=ref,
+                    cache_provenance=provenance[ref['id']],calibration_coordinate=coordinate,
+                    source='new_cached_Hb_and_retained_EEG_no_raw_Hb_reads'))
+                prepared.append(ref['id'])
+    result = dict(status='completed', planned_records=len(plan['records']), prepared_records=len(prepared),
+        prepared_ids=prepared,coordinates=coordinates,failures=failures,raw_reads=0,protected_reads=0)
+    write_json(out/'preparation.json',result)
+    return result
+
+
+def tak_synthetic(cfg, seed, scenario):
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    n = int(cfg['synthetic']['length_s']/.25)
+    t = np.arange(n)*.25
+    driver = .04*np.sin(2*np.pi*t/17)+.018*np.cos(2*np.pi*t/7)
+    driver *= 1+.12*seed
+    initial = (np.array([.02,1.04,1.025,1.025,.99]) if scenario=='tak_nonrest' else
+               np.array([.02,1.04,1.025,1.105,.99]) if scenario=='legacy_unbound' else np.r_[0.,np.ones(4)])
+    p = volume_drive_parameters(cfg,kappa=.55+.08*seed,tau=1.5+.5*seed)
+    hemo = 'inlet_balance' if scenario=='legacy_unbound' else 'tak'
+    truth = nonlinear_driver_forward(driver,initial,p,.25,substeps=cfg['synthetic']['generation_substeps'],
+        derivative=False,numerical_backend='numba',hemodynamics=hemo,viscoelastic_s=0. if hemo=='inlet_balance' else 2.)
+    ref = np.eye(n);ref[:,:20]-=1/20
+    operator = np.kron(ref,np.eye(3))
+    clean = (operator@truth['canonical_prediction'].ravel()).reshape(n,3)
+    noise = np.random.default_rng(cfg['seed']+seed).normal(size=(n,3))*cfg['synthetic']['noise_sd']
+    target = clean+ref@noise
+    truth.update(driver=driver,initial_state=initial,kappa=p.free.kappa,tau=p.free.tau,clean=clean)
+    return target,operator,np.array(cfg['synthetic']['training_sd']),truth
+
+
+def tak_specs(cfg, plan, phase):
+    arms = cfg['arms']
+    if phase=='sensitivity':
+        base = next(a for a in arms if a['name']==cfg['sensitivity']['base_arm'])
+        arms = [dict(base,**v,warm='tak_fit') for v in cfg['sensitivity']['variants']]
+    jobs = []
+    if phase=='synthetic':
+        groups = [dict(id=f'seed{s}_{scenario}',seed=s,scenario=scenario,refs=[dict(
+            id=f'seed{s}_{scenario}',dataset='synthetic',subject=f'seed{s}',record=scenario)])
+            for s in cfg['synthetic']['seeds'] for scenario in cfg['synthetic']['scenarios']]
+        lengths,conditions = [30],['joint_full']
+    else:
+        groups = plan['groups']
+        lengths = [90] if phase=='sensitivity' else cfg['tensor']['lengths_s']
+        conditions = ['joint_full'] if phase=='sensitivity' else cfg['conditions']
+    for g in groups:
+        for length in lengths:
+            for condition in conditions:
+                for arm in arms:
+                    key = f"{phase}__{g['id']}__{length}__{condition}__{arm['name']}"
+                    jobs.append(dict(key=key,phase=phase,group=g,length_s=length,condition=condition,arm=arm))
+    return jobs
+
+
+def tak_fit_group(cfg, arm, y, operator, sd, mask, warm=None):
+    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_parameters
+    names = arm['fit'];s=cfg['solver'];f=cfg['fitting'];batch,n,_=y.shape
+    starts = []
+    references = np.array([f['reference'][name] for name in names])
+    values = [references] if not names else [np.array(kt if len(names)==2 else kt+gv)
+        for kt,gv in zip(f['starts_kappa_tau'],f['starts_gamma_tau_v'])]
+    for v in values:
+        start = dict(parameter_values=v)
+        if warm is not None:
+            start.update(driver=warm['driver'],initial_state=warm['initial_state'])
+        starts.append(start)
+    weights = s['initial_weights_free'] if arm['initial']=='free' else s['initial_weights_tied']
+    kwargs = dict(parameter_names=names,parameter_bounds=[f['bounds'][name] for name in names],
+        sd=sd,mean_operator=operator,visible=mask,starts=starts,penalty=s['penalty'],
+        initial_penalty=arm.get('initial_penalty',s['initial_penalty']),initial_coordinate_weights=weights,
+        flow_prior_weight=s['flow_prior_weight'],flow_prior_log_sd=s['flow_prior_log_sd'],
+        substeps=s['substeps'],max_iterations=s['max_iterations'],
+        max_evaluations_per_trial=s['max_evaluations_per_trial'],gradient_tolerance=s['gradient_tolerance'],
+        numerical_backend='numba',hemodynamics=arm['hemodynamics'],viscoelastic_s=arm['tau_v'],
+        initial_state_mode=arm['initial'])
+    if names:
+        kwargs.update(parameter_prior_log_mean=np.log(references),
+                      parameter_prior_precision=1/np.square(arm['log_sd']))
+    return fit_nonlinear_shared_parameters(np.where(mask,y,np.nan),volume_drive_parameters(cfg),.25,**kwargs)
+
+
+def tak_worker(payload):
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    from src.data.ssm_prepared import require_cached_hb_array
+    cfg,out_string,spec = payload;out=Path(out_string)
+    start=time.monotonic();arm=spec['arm'];refs=spec['group']['refs']
+    result=dict(spec=spec,status='failed',rows=[]);saved={}
+    try:
+        truth=None;factors=[]
+        if spec['phase']=='synthetic':
+            yy,oo,ss,truth=tak_synthetic(cfg,spec['group']['seed'],spec['group']['scenario'])
+            y,op,sd=yy[None],oo[None],ss[None];factors=[1.]
+        else:
+            ys,ops,sds=[],[],[]
+            for ref in refs:
+                with np.load(out/'prepared'/f"{ref['id']}__{spec['length_s']}.npz",allow_pickle=False) as a:
+                    require_cached_hb_array(a)
+                    ys.append(a['target']);ops.append(a['operator']);sds.append(a['sd']);factors.append(float(a['hb_factor']))
+            y,op,sd=np.array(ys),np.array(ops),np.array(sds)
+        mask=np.array([volume_drive_mask(len(yi),spec['condition']) for yi in y])
+        warm=None
+        if 'warm' in arm:
+            phase='measured' if spec['phase']=='sensitivity' else spec['phase']
+            key=f"{phase}__{spec['group']['id']}__{spec['length_s']}__{spec['condition']}__{arm['warm']}"
+            warm_path=out/'tasks'/(key+'.npz')
+            if warm_path.exists():
+                with np.load(warm_path,allow_pickle=False) as a:
+                    if 'driver' in a and 'initial_state' in a:
+                        warm=dict(driver=a['driver'],initial_state=a['initial_state'])
+        fit=tak_fit_group(cfg,arm,y,op,sd,mask,warm)
+        # A failed warm fit may still supply a feasible start. If it produced no
+        # trajectory the explicit rest start above is used; no rows disappear.
+        result.update(status='completed',fit={k:v for k,v in fit.items() if k not in
+            ('driver','initial_state','prediction','canonical_prediction','states')})
+        if 'prediction' in fit:
+            saved.update({k:fit[k] for k in ('driver','initial_state','prediction','canonical_prediction','states')})
+        saved.update(target=y,operator=op,sd=sd,visible=mask,hb_factor=np.array(factors))
+        for i,ref in enumerate(refs):
+            row=dict(id=ref['id'],dataset=ref['dataset'],subject=ref['subject'],record=ref['record'],
+                group=spec['group']['id'],group_size=len(refs),length_s=spec['length_s'],condition=spec['condition'],
+                phase=spec['phase'],arm=arm['name'],qualified=False,fit_status=fit['status'],
+                converged=fit['converged'],parameter_names=fit['parameter_names'],parameter_values=fit['parameter_values'],
+                objective=fit.get('objective'),objective_components=fit.get('objective_components'),
+                scaled_gradient=fit.get('projected_scaled_gradient_inf_norm'),evaluations=fit.get('evaluations'))
+            score=~mask[i,:,1] if spec['condition']=='joint_blocked' else np.ones(len(y[i]),bool)
+            row['zero_baseline']=volume_drive_metrics(y[i],np.zeros_like(y[i]),sd[i],spec['condition'])
+            if spec['condition']=='joint_blocked':
+                baseline=y[i].copy()
+                for j in (1,2):
+                    visible=mask[i,:,j];time_axis=np.arange(len(y[i]))
+                    baseline[:,j]=np.interp(time_axis,time_axis[visible],y[i,visible,j])
+                row['interpolation_baseline']=volume_drive_metrics(y[i],baseline,sd[i],spec['condition'])
+            if 'prediction' in fit:
+                pp=volume_drive_parameters(cfg,kappa=fit['kappa'],tau=fit['tau'],gamma=fit['gamma'])
+                fine=nonlinear_driver_forward(fit['driver'][i],fit['initial_state'][i],pp,.25,
+                    substeps=8,derivative=False,numerical_backend='numba',hemodynamics=arm['hemodynamics'],
+                    viscoelastic_s=fit['viscoelastic_s'])
+                pred=(op[i]@fine['canonical_prediction'].ravel()).reshape(y[i].shape)
+                err=float(np.max(abs((pred-fit['prediction'][i])[:-1]/sd[i])))
+                states=fit['states'][i]
+                pv=float(np.max(abs(states[:,4]-states[:,3])))
+                row.update(qualified=bool(fit['converged'] and err<=.005 and (arm['hemodynamics']!='tak' or pv==0)),
+                    integration_max_training_sd=err,p_minus_v_max=pv,
+                    waveform=filter_retest_waveform_metrics(y[i],fit['prediction'][i],sd[i],mask=score,hb_factor=factors[i]),
+                    **volume_drive_metrics(y[i],fit['prediction'][i],sd[i],spec['condition']),
+                    initial_state=fit['initial_state'][i],driver_rms=float(np.sqrt(np.mean(fit['driver'][i]**2))),
+                    state_extrema={name:[float(states[:,j].min()),float(states[:,j].max())]
+                        for j,name in enumerate(('r','s','f','v','p','q'))},
+                    kappa=fit['kappa'],tau=fit['tau'],gamma=fit['gamma'],tau_v=fit['viscoelastic_s'])
+                if truth is not None:
+                    row.update(truth_kappa=truth['kappa'],truth_tau=truth['tau'],
+                        kappa_relative_error=(fit['kappa']/truth['kappa']-1),tau_relative_error=(fit['tau']/truth['tau']-1),
+                        driver_relative_rmse=float(np.sqrt(np.mean((fit['driver'][i]-truth['driver'])**2)/np.mean(truth['driver']**2))),
+                        state_rmse=np.sqrt(np.mean((states-truth['states'])**2,axis=0)))
+                    saved.update(truth_states=truth['states'],truth_driver=truth['driver'],truth_clean=truth['clean'])
+            result['rows'].append(row)
+    except Exception:
+        result['error']=traceback.format_exc()
+        known={r['id'] for r in result['rows']}
+        for ref in refs:
+            if ref['id'] not in known:
+                result['rows'].append(dict(id=ref['id'],dataset=ref['dataset'],subject=ref['subject'],
+                    record=ref['record'],group=spec['group']['id'],length_s=spec['length_s'],
+                    condition=spec['condition'],phase=spec['phase'],arm=arm['name'],qualified=False,
+                    converged=False,fit_status='task_exception'))
+    result.update(seconds=time.monotonic()-start,peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    path=out/'tasks'/(spec['key']+'.json');path.parent.mkdir(parents=True,exist_ok=True)
+    if saved:np.savez_compressed(path.with_suffix('.npz'),**saved)
+    write_json(path,result)
+    return dict(key=spec['key'],status=result['status'],seconds=result['seconds'],peak_rss_mib=result['peak_rss_mib'],
+        qualified=sum(r['qualified'] for r in result['rows']),rows=len(result['rows']))
+
+
+def tak_run(cfg,out,plan,phase,workers,pilot=False):
+    if not os.environ.get('INVOCATION_ID') or not os.environ.get('SSM_SYSTEMD_UNIT'):
+        raise ValueError('Tak fitting requires the recorded durable user-systemd supervisor')
+    jobs=tak_specs(cfg,plan,phase)
+    if pilot:
+        selected={}
+        for g in plan['groups']:selected.setdefault(g['refs'][0]['dataset'],g['id'])
+        jobs=[j for j in jobs if j['group']['id'] in selected.values() and j['length_s']==90 and j['condition']=='joint_full']
+    t=time.monotonic();terminal=[]
+    # Warm-start dependencies are explicit phases, with all fixed fits complete
+    # before parameter fitting. Each task is resumable and retains failed rows.
+    for fitted in (False,True):
+        pending=[j for j in jobs if bool(j['arm']['fit'])==fitted and not (out/'tasks'/(j['key']+'.json')).exists()]
+        iterator=iter(pending)
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            active={}
+            def submit():
+                try:job=next(iterator)
+                except StopIteration:return False
+                active[pool.submit(tak_worker,(cfg,str(out),job))]=job
+                return True
+            for _ in range(workers*2):
+                if not submit():break
+            while active:
+                ready,_=wait(active,return_when=FIRST_COMPLETED)
+                for future in ready:
+                    spec=active.pop(future)
+                    try:terminal.append(future.result())
+                    except Exception as exc:
+                        failed=dict(spec=spec,status='failed_worker',error=repr(exc),rows=[dict(
+                            id=r['id'],dataset=r['dataset'],subject=r['subject'],record=r['record'],group=spec['group']['id'],
+                            length_s=spec['length_s'],condition=spec['condition'],phase=phase,arm=spec['arm']['name'],
+                            qualified=False,converged=False,fit_status='failed_worker') for r in spec['group']['refs']])
+                        write_json(out/'tasks'/(spec['key']+'.json'),failed)
+                        terminal.append(dict(key=spec['key'],status='failed_worker'))
+                    submit()
+                write_json(out/'progress.json',dict(phase=phase,pilot=pilot,planned=len(jobs),newly_terminal=len(terminal),
+                    terminal=sum((out/'tasks'/(j['key']+'.json')).exists() for j in jobs),
+                    in_flight=len(active),elapsed_s=time.monotonic()-t,supervisor=os.environ['SSM_SYSTEMD_UNIT']))
+    result=dict(status='completed',phase=phase,pilot=pilot,planned=len(jobs),newly_executed=len(terminal),
+        workers=workers,seconds=time.monotonic()-t,terminal=terminal,supervisor=os.environ['SSM_SYSTEMD_UNIT'])
+    write_json(out/(('pilot' if pilot else phase)+'_execution.json'),result)
+    return result
+
+
+def tak_summarize(cfg,out,plan,phase='measured'):
+    jobs=tak_specs(cfg,plan,phase);rows=[];missing=[]
+    for spec in jobs:
+        p=out/'tasks'/(spec['key']+'.json')
+        if not p.exists():missing.append(spec['key']);continue
+        rows.extend(json.loads(p.read_text())['rows'])
+    groups=[];contrasts=[]
+    frame=pd.DataFrame(rows)
+    if len(frame):
+        for key,g in frame.groupby(['dataset','length_s','condition','arm'],sort=True):
+            good=g[g.qualified];entry=dict(zip(['dataset','length_s','condition','arm'],key))
+            entry.update(planned=len(g),qualified=len(good),subjects=g.subject.nunique(),
+                qualified_subjects=good.subject.nunique(),failures=dict(g[~g.qualified].fit_status.value_counts()))
+            for metric in ('score_hb_nmse','full_hb_nmse','eeg_nmse','full_hbo_nmse','full_hbr_nmse'):
+                if metric in good and len(good):entry[metric.replace('nmse','nrmse')]=float(np.sqrt(good.groupby('subject')[metric].mean().mean()))
+            if len(good):
+                entry['integration_max_training_sd']=float(good.integration_max_training_sd.max())
+                for name in ('kappa','tau','gamma','tau_v','driver_rms'):
+                    entry[name+'_median']=float(good[name].median())
+            groups.append(entry)
+        pairs=cfg['endpoints']['contrasts']+[ ['legacy_free','tak_fit'] ] if phase!='sensitivity' else []
+        for key,g in frame.groupby(['dataset','length_s','condition']):
+            for reference,candidate in pairs:
+                a=g[(g.arm==reference)&g.qualified];b=g[(g.arm==candidate)&g.qualified]
+                if 'score_hb_nmse' not in g:continue
+                pair=a[['id','subject','score_hb_nmse']].merge(b[['id','score_hb_nmse']],on='id',suffixes=('_reference','_candidate'))
+                item=dict(zip(['dataset','length_s','condition'],key),reference=reference,candidate=candidate,
+                    planned_records=len(g[g.arm==reference]),paired_records=len(pair),paired_subjects=pair.subject.nunique())
+                if len(pair):
+                    means=pair.groupby('subject')[['score_hb_nmse_reference','score_hb_nmse_candidate']].mean().to_numpy()
+                    difference=np.sqrt(means[:,0].mean())-np.sqrt(means[:,1].mean())
+                    rng=np.random.default_rng(cfg['seed']);ix=rng.integers(0,len(means),(2000,len(means)))
+                    boot=np.sqrt(means[ix,0].mean(1))-np.sqrt(means[ix,1].mean(1))
+                    item.update(reference_nrmse=float(np.sqrt(means[:,0].mean())),candidate_nrmse=float(np.sqrt(means[:,1].mean())),
+                        improvement=float(difference),ci95=np.quantile(boot,[.025,.975]),interval='exploratory_whole_subject_percentile_no_multiplicity_adjustment')
+                contrasts.append(item)
+    result=dict(schema='shared_driver_tak_summary_v1',status='completed' if not missing else 'incomplete',phase=phase,
+        planned_tasks=len(jobs),terminal_tasks=len(jobs)-len(missing),missing=missing,
+        planned_rows=sum(len(j['group']['refs']) for j in jobs),terminal_rows=len(rows),
+        qualified_rows=sum(r['qualified'] for r in rows),groups=groups,paired_contrasts=contrasts,
+        claim_limits=cfg['claim_limits'],source='tasks/*.json_and_matching_npz',
+        aggregation=cfg['endpoints']['aggregation'],failure_policy=cfg['endpoints']['failures'])
+    write_json(out/(phase+'_summary.json'),result)
+    write_json(out/(phase+'_rows.json'),rows)
+    return result
+
+
+def tak_verify_arrays(cfg,out,plan):
+    """Independently recompute scores, objectives and observation closure."""
+    maxima=dict(score=0.,observation=0.,objective_relative=0.,waveform=0.,physical_domain_violation=0.)
+    checked=0;failed_tasks=0;problems=[]
+    for phase in ('synthetic','measured','sensitivity'):
+        for spec in tak_specs(cfg,plan,phase):
+            path=out/'tasks'/(spec['key']+'.json');meta=json.loads(path.read_text())
+            if meta['status']!='completed':
+                failed_tasks+=1;continue
+            with np.load(path.with_suffix('.npz'),allow_pickle=False) as a:
+                if 'prediction' not in a:
+                    failed_tasks+=1;continue
+                y,pred,states,driver,initial,sd,mask,ops=(a[k] for k in ('target','prediction','states','driver','initial_state','sd','visible','operator'))
+            arm=spec['arm'];fit=meta['fit'];s=cfg['solver'];costs=dict(data=0.,driver=0.,initial=0.,flow=0.,parameter_prior=0.)
+            weights=np.array(s['initial_weights_free'] if arm['initial']=='free' else s['initial_weights_tied'])
+            for i,row in enumerate(meta['rows']):
+                n=len(y[i]);valid=np.ones(n,bool);valid[-1]=False
+                expected_mask=volume_drive_mask(n,spec['condition'])
+                if not np.array_equal(mask[i],expected_mask):problems.append(spec['key']+'_mask')
+                score=valid&~mask[i,:,1] if spec['condition']=='joint_blocked' else valid
+                e=(pred[i]-y[i])/sd[i]
+                for key,val in [('score_hb_nmse',np.mean(e[score,1:]**2)),('full_hb_nmse',np.mean(e[valid,1:]**2)),
+                    ('eeg_nmse',np.mean(e[valid,0]**2)),('full_hbo_nmse',np.mean(e[valid,1]**2)),('full_hbr_nmse',np.mean(e[valid,2]**2))]:
+                    maxima['score']=max(maxima['score'],float(abs(val-row[key])))
+                canonical=np.column_stack((driver[i],cfg['parameters']['P0']*(states[i,:,4]-1)-cfg['parameters']['Q0']*(states[i,:,5]-1),
+                    cfg['parameters']['Q0']*(states[i,:,5]-1)))
+                closed=(ops[i]@canonical.ravel()).reshape(pred[i].shape)
+                maxima['observation']=max(maxima['observation'],float(np.max(abs(closed-pred[i]))))
+                if not np.isfinite(states[i]).all() or np.any(states[i,:,2:]<=0) or np.any(cfg['parameters']['Q0']*states[i,:,5]>cfg['parameters']['P0']*states[i,:,4]):
+                    problems.append(spec['key']+'_physical_domain')
+                if arm['hemodynamics']=='tak' and not np.array_equal(states[i,:,3],states[i,:,4]):problems.append(spec['key']+'_p_v')
+                if arm['initial']=='rest' and not np.array_equal(initial[i],np.r_[0.,np.ones(4)]):problems.append(spec['key']+'_rest')
+                for c,w in enumerate(row['waveform']):
+                    aa,bb=y[i,score,c],pred[i,score,c];ac,bc=aa-aa.mean(),bb-bb.mean()
+                    values=dict(nrmse=np.sqrt(np.mean((bb-aa)**2))/sd[i,c],centered_amplitude_ratio=bb.std()/max(aa.std(),1e-12),
+                        signed_gain=ac@bc/max(ac@ac,1e-24),bias_training_sd=(bb-aa).mean()/sd[i,c])
+                    if min(aa.std(),bb.std())>1e-12:values['pearson_r']=np.corrcoef(aa,bb)[0,1]
+                    maxima['waveform']=max(maxima['waveform'],*[float(abs(value-w[key])) for key,value in values.items()])
+                costs['data']+=float(np.sum(e[mask[i]]**2))
+                costs['driver']+=float(s['penalty']/.25**3*np.sum(np.diff(driver[i],n=2)**2))
+                costs['initial']+=float(arm.get('initial_penalty',s['initial_penalty'])*np.sum(weights*(initial[i]-np.r_[0.,np.ones(4)])**2))
+                costs['flow']+=float(s['flow_prior_weight']*.25*np.sum((np.log(states[i,:,2])/s['flow_prior_log_sd'])**2))
+                checked+=1
+            if arm['fit']:
+                refs=np.array([cfg['fitting']['reference'][name] for name in arm['fit']])
+                costs['parameter_prior']=float(np.sum((np.log(np.asarray(fit['parameter_values'])/refs)/arm['log_sd'])**2))
+            for key,value in costs.items():
+                maxima['objective_relative']=max(maxima['objective_relative'],abs(value-fit['objective_components'][key])/max(1.,abs(value)))
+            maxima['objective_relative']=max(maxima['objective_relative'],abs(sum(costs.values())-fit['objective'])/max(1.,abs(fit['objective'])))
+    if any(v>1e-9 for v in maxima.values()):problems.append('numerical_evidence_mismatch')
+    result=dict(status='passed' if not problems else 'failed',checked_rows=checked,unfitted_failed_tasks=failed_tasks,
+        maxima=maxima,problems=problems,source='retained_task_arrays_independent_recomputation_no_refit')
+    write_json(out/'array_verification.json',result)
+    if problems:raise ValueError('Tak array verification failed: '+str(problems[:10]))
+    return result
+
+
+def tak_main(args):
+    cfg=tak_config(args.config);root=args.project_root.resolve();out=args.run_dir.resolve()
+    if not out.is_relative_to(root/cfg['output_root']) or out==root/cfg['output_root']:
+        raise ValueError('Tak output must be a fresh directory below the owning run root')
+    out.mkdir(parents=True,exist_ok=True)
+    lock=(out/'controller.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    p=out/'resolved_config.json'
+    if p.exists() and json.loads(p.read_text())!=cfg:raise ValueError('Tak resolved contract is immutable')
+    write_json(p,cfg)
+    stage=args.tak_stage
+    if stage=='check':
+        from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+        p0=volume_drive_parameters(cfg);r=.025*np.sin(np.arange(32)*.3);initial=np.r_[0.,np.ones(4)]
+        a=nonlinear_driver_forward(r,initial,p0,.25,numerical_backend='numba',hemodynamics='tak',viscoelastic_s=0.)
+        b=nonlinear_driver_forward(r,initial,p0,.25,numerical_backend='numba',
+            hemodynamics='inlet_balance',viscoelastic_s=0.)
+        error=float(np.max(abs(a['states']-b['states'])))
+        if error>1e-12:raise ValueError('Tak zero-viscoelastic equivalence failed')
+        y,op,sd,truth=tak_synthetic(cfg,0,'tak_nonrest')
+        result=dict(status='passed',zero_viscoelastic_max_abs=error,synthetic_shape=list(y.shape),
+            measured_arrays_read=0,sources=cfg['model']['sources'])
+        write_json(out/'software_checks.json',result)
+    elif stage=='plan':
+        result=tak_plan(cfg,root);write_json(out/'plan.json',result)
+    else:
+        plan=json.loads((out/'plan.json').read_text()) if (out/'plan.json').exists() else None
+        if stage=='prepare':result=tak_prepare(cfg,root,out,plan)
+        elif stage in ('synthetic','pilot','measured','sensitivity'):
+            if not 1<=args.workers<=cfg['resources']['max_workers']:raise ValueError('workers outside Tak resource envelope')
+            phase='measured' if stage=='pilot' else stage
+            result=tak_run(cfg,out,plan,phase,args.workers,pilot=stage=='pilot')
+            if stage!='pilot':result=tak_summarize(cfg,out,plan,phase)
+        elif stage=='summarize':
+            result={phase:tak_summarize(cfg,out,plan,phase) for phase in ('synthetic','measured','sensitivity')}
+        elif stage=='audit':
+            result=tak_verify_arrays(cfg,out,plan)
+        elif stage=='verify':
+            summaries={phase:tak_summarize(cfg,out,plan,phase) for phase in ('synthetic','measured','sensitivity')}
+            problems=[]
+            for phase,summary in summaries.items():
+                if summary['status']!='completed' or summary['terminal_rows']!=summary['planned_rows']:problems.append(phase+'_incomplete')
+                for spec in tak_specs(cfg,plan,phase):
+                    meta=json.loads((out/'tasks'/(spec['key']+'.json')).read_text())
+                    if meta['status']!='completed':continue
+                    if meta['fit'].get('objective_components'):
+                        if not np.isclose(meta['fit']['objective'],sum(meta['fit']['objective_components'].values()),rtol=1e-10):
+                            problems.append(spec['key']+'_objective_mismatch')
+                    for row in meta['rows']:
+                        if row['qualified'] and (not row['converged'] or row['integration_max_training_sd']>.005):
+                            problems.append(spec['key']+'_invalid_qualification')
+                        if spec['arm']['hemodynamics']=='tak' and row.get('p_minus_v_max',0)!=0:
+                            problems.append(spec['key']+'_p_v_mismatch')
+            result=dict(status='passed' if not problems else 'failed',problems=problems,
+                full_denominators={p:s['terminal_rows'] for p,s in summaries.items()})
+            write_json(out/'verification.json',result)
+            if problems:raise ValueError('Tak verification failed: '+str(problems[:10]))
+    print(json.dumps(serial({k:v for k,v in result.items() if k not in
+        ('groups','records','coordinates','jobs','terminal','paired_contrasts','missing','prepared_ids')})),flush=True)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--config',type=Path,default=DEFAULT)
+    ap.add_argument('--config',type=Path,
+        help='Default: Tak baseline comparison contract; historical modes retain their explicit versioned contracts')
     ap.add_argument('--run-dir',type=Path)
     ap.add_argument('--project-root',type=Path,default=CODE_ROOT)
     ap.add_argument('--workers',type=int,default=1)
@@ -8665,6 +9160,8 @@ def main():
     ap.add_argument('--volume-drive-diagnostic',action='store_true')
     ap.add_argument('--volume-stage',choices=['pilot','synthetic','linear','measured','summarize'],default='synthetic')
     ap.add_argument('--decay-diagnostic',action='store_true')
+    ap.add_argument('--tak-comparison',action='store_true')
+    ap.add_argument('--tak-stage',choices=['check','plan','synthetic','prepare','pilot','measured','sensitivity','summarize','verify','audit'],default='check')
     ap.add_argument('--filter-retest',action='store_true')
     ap.add_argument('--filter-stage',choices=['check','plan','prepare','pilot','run','summarize','verify'],default='check')
     ap.add_argument('--decay-stage',choices=['check','pilot','synthetic','measured','summarize','replay-migrate'],default='synthetic')
@@ -8677,8 +9174,32 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    historical_mode = any((args.filter_retest,args.decay_diagnostic,args.volume_drive_diagnostic,
+        args.component_attribution,args.teacher_robustness,args.physiology_semantics,
+        args.waveform_diagnostic,args.conditional_step_control,args.conditional_optical_gain_fit,
+        args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,
+        args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None))
+    if args.config is None:
+        args.config = LEGACY_DEFAULT if historical_mode and not args.tak_comparison else DEFAULT
+    if args.config == DEFAULT and not historical_mode:
+        args.tak_comparison = True
+    elif not historical_mode and not args.tak_comparison:
+        # A saved Tak contract may live inside its run. Resolve its schema before
+        # dispatch; explicitly supplied historical configs keep their old mode.
+        args.tak_comparison = yaml.safe_load(args.config.read_text()).get('schema') == 'shared_driver_tak_v1'
+    if args.tak_comparison:
+        incompatible = (args.filter_retest,args.decay_diagnostic,args.volume_drive_diagnostic,
+            args.component_attribution,args.teacher_robustness,args.physiology_semantics,
+            args.waveform_diagnostic,args.conditional_step_control,args.conditional_optical_gain_fit,
+            args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,
+            args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None)
+        if args.run_dir is None or any(incompatible):
+            ap.error('Tak comparison requires its own run-dir and exclusive diagnostic mode')
+        if args.check_only: args.tak_stage='check'
+        elif args.pilot: args.tak_stage='pilot'
+        return tak_main(args)
     if args.filter_retest:
-        if args.config == DEFAULT:
+        if args.config == LEGACY_DEFAULT:
             args.config = CODE_ROOT / 'experiments/configs/physiology_semantic_tokenizer/shared_driver_filter_retest_v1.yaml'
         if args.run_dir is None or args.decay_diagnostic or args.volume_drive_diagnostic:
             ap.error('filter retest requires its own run-dir and no other diagnostic mode')

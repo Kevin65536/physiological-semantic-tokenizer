@@ -33,7 +33,7 @@ def test_composed_prediction_and_exact_jacobian_finite_difference(cfg):
     n=8;r=np.linspace(-.02,.03,n);initial=np.array([.001,1.002,.999,1.001,.998]);p=run.parameters(cfg,2.)
     mapping=conditional_optical_hb_mapping(40.);p=replace(p,fixed=replace(p.fixed,neurovascular_gain=mapping['beta_reference']))
     op=run.conditional_prediction_operator(np.eye(3*n),mapping,'conditional_fixed_gain')
-    f=nonlinear_driver_forward(r,initial,p,.25)
+    f=nonlinear_driver_forward(r,initial,p,.25, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
     np.testing.assert_allclose((op@f['canonical_prediction'].ravel()).reshape(n,3)[:,1:],f['canonical_prediction'][:,1:]@mapping['matrix'].T)
     jac=op@f['jacobian'];step=1e-6
     for col in [0,4,n,n+1,n+3,n+4]:
@@ -41,11 +41,11 @@ def test_composed_prediction_and_exact_jacobian_finite_difference(cfg):
         if col<n:rp[col]+=step;rm[col]-=step
         elif col==n:ip[0]+=step;im[0]-=step
         else:ip[col-n]*=np.exp(step);im[col-n]*=np.exp(-step)
-        fp=nonlinear_driver_forward(rp,ip,p,.25,derivative=False)['canonical_prediction']
-        fm=nonlinear_driver_forward(rm,im,p,.25,derivative=False)['canonical_prediction']
+        fp=nonlinear_driver_forward(rp,ip,p,.25,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
+        fm=nonlinear_driver_forward(rm,im,p,.25,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
         np.testing.assert_allclose(jac[:,col],op@((fp-fm)/(2*step)).ravel(),rtol=2e-5,atol=2e-8)
     plus=replace(p,fixed=replace(p.fixed,neurovascular_gain=p.fixed.neurovascular_gain+step));minus=replace(p,fixed=replace(p.fixed,neurovascular_gain=p.fixed.neurovascular_gain-step))
-    fd=(nonlinear_driver_forward(r,initial,plus,.25,derivative=False)['canonical_prediction']-nonlinear_driver_forward(r,initial,minus,.25,derivative=False)['canonical_prediction'])/(2*step)
+    fd=(nonlinear_driver_forward(r,initial,plus,.25,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']-nonlinear_driver_forward(r,initial,minus,.25,derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction'])/(2*step)
     np.testing.assert_allclose(op@f['neurovascular_gain_jacobian'].ravel(),op@fd.ravel(),rtol=2e-5,atol=2e-8)
 
 

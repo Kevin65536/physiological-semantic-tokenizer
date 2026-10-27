@@ -10,7 +10,7 @@ def case():
     p=core.BalloonParameters();p=replace(p,free=replace(p.free,tau=1.6))
     r=.05*np.sin(np.arange(20)*.4)
     initial=np.array([.01,1.02,1.01,.96,.93])
-    y=lib.nonlinear_driver_forward(r,initial,p,.25)['canonical_prediction']
+    y=lib.nonlinear_driver_forward(r,initial,p,.25, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     return p,r,initial,y
 
 
@@ -55,7 +55,7 @@ def test_single_and_shared_truth_recovery(shared):
 def test_near_zero_hbo_native_gradient_cannot_fake_convergence(shared):
     p=core.BalloonParameters();n=14;ratio=p.fixed.Q0/p.fixed.P0
     initial=np.array([0.,1.,1.,ratio+1e-10,1.]);driver=np.zeros(n)
-    forward=lib.nonlinear_driver_forward(driver,initial,p,.25)
+    forward=lib.nonlinear_driver_forward(driver,initial,p,.25, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
     j=forward['jacobian'];g=np.zeros(n+5);g[n+3]=1.;g[n+4]=-ratio/initial[3]
     if shared:
         j=np.column_stack((j,p.free.tau*forward['tau_jacobian'].ravel()));g=np.r_[g,0.]
@@ -94,7 +94,7 @@ def test_options_and_zero_initial_hbo_fail_closed(shared):
 
 def test_near_boundary_start_same_physical_objective_not_a_claim_of_rescue():
     p=core.BalloonParameters();n=20;r=.04*np.sin(np.arange(n)*.4)
-    truth=np.array([.01,1.,1.,.8,.8]);y=lib.nonlinear_driver_forward(r,truth,p,.25)['canonical_prediction']
+    truth=np.array([.01,1.,1.,.8,.8]);y=lib.nonlinear_driver_forward(r,truth,p,.25, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     initial=np.array([.03,1.02,1.1,p.fixed.Q0/p.fixed.P0*.6+1e-7,.6])
     kwargs=dict(sd=np.full(3,.02),penalty=.01,initial_penalty=100.,flow_prior_weight=1.,flow_prior_log_sd=np.log(2),
         starts=[dict(driver=np.zeros(n),initial_state=initial)],max_evaluations=160,gradient_tolerance=1e-4)

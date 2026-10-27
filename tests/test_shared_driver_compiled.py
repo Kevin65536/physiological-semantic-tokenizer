@@ -19,10 +19,10 @@ def test_compiled_matches_reference_discrete_map(substeps, derivative):
     driver = .04*np.sin(np.arange(24)/4)+.013
     initial = np.array([.015, 1.04, .97, 1.02, .99])
     a = nonlinear_driver_forward(driver, initial, p, .25, substeps=substeps,
-                                 derivative=derivative, return_flow_jacobian=True)
+                                 derivative=derivative, return_flow_jacobian=True, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
     b = nonlinear_driver_forward(driver, initial, p, .25, substeps=substeps,
                                  derivative=derivative, return_flow_jacobian=True,
-                                 numerical_backend='numba')
+                                 numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
     for key, value in a.items():
         if value is not None:
             np.testing.assert_allclose(b[key], value, rtol=2e-12, atol=5e-13)
@@ -32,7 +32,7 @@ def test_compiled_sensitivity_independent_finite_difference():
     p = BalloonParameters()
     driver = .02*np.sin(np.arange(20)/3)
     initial = np.array([.01, 1.02, 1.01, 1.02, 1.])
-    call = lambda r, i, pp: nonlinear_driver_forward(r, i, pp, .25, numerical_backend='numba')
+    call = lambda r, i, pp: nonlinear_driver_forward(r, i, pp, .25, numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
     base = call(driver, initial, p)
     eps = 1e-5
     for name in ('tau', 'kappa', 'neurovascular_gain'):
@@ -62,13 +62,13 @@ def test_compiled_sensitivity_independent_finite_difference():
 def test_compiled_does_not_clip_invalid_rk_stages(backend):
     with pytest.raises(FloatingPointError):
         nonlinear_driver_forward(np.full(20, -100.), np.array([0., 1., 1., 1., 1.]),
-                                 BalloonParameters(), .25, numerical_backend=backend)
+                                 BalloonParameters(), .25, numerical_backend=backend, hemodynamics='inlet_balance', viscoelastic_s=0.)
 
 
 def test_optimizer_and_hidden_value_isolation():
     p = BalloonParameters()
     y = nonlinear_driver_forward(.02*np.sin(np.arange(20)/3), np.array([0., 1., 1., 1., 1.]),
-                                 p, .25)['canonical_prediction']
+                                 p, .25, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     mask = np.ones_like(y, dtype=bool); mask[8:12, 1:] = False
     args = dict(sd=np.array([.02, .03, .01]), penalty=.01, initial_penalty=100.,
                 max_evaluations=150, visible=mask, flow_prior_weight=1., flow_prior_log_sd=np.log(2))
@@ -88,16 +88,16 @@ def test_joint_parameters_recover_known_truth_and_hidden_invariance():
     clock = np.arange(48)*.25
     drivers = np.array([.03*np.sin(clock*1.1), .035*np.sin(clock*.65)+.012*np.cos(clock*1.7)])
     y = np.array([nonlinear_driver_forward(r, np.r_[0.,np.ones(4)], truth,.25,
-                 numerical_backend='numba')['canonical_prediction'] for r in drivers])
+                 numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)['canonical_prediction'] for r in drivers])
     mask = np.ones_like(y,dtype=bool); mask[:,20:24,1:] = False
     options = dict(parameter_names=['tau','neurovascular_gain'],parameter_bounds=[[.5,8],[.1,10]],
         sd=np.std(y,axis=(0,1)),visible=mask,penalty=0,initial_penalty=100,
         flow_prior_weight=0,gradient_tolerance=1e-7,max_iterations=100)
-    a = fit_nonlinear_shared_parameters(y,base,.25,**options)
+    a = fit_nonlinear_shared_parameters(y,base,.25,**options, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     assert a['converged'],a['starts']
     np.testing.assert_allclose(a['parameter_values'],[1.4,.8],rtol=1e-4)
     y[~mask]=1e15
-    b = fit_nonlinear_shared_parameters(y,base,.25,**options)
+    b = fit_nonlinear_shared_parameters(y,base,.25,**options, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     np.testing.assert_array_equal(a['parameter_values'],b['parameter_values'])
     assert np.min(a['information']['data_only']['eigenvalues'])>0
 

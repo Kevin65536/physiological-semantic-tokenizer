@@ -51,7 +51,7 @@ def make_worlds(cfg, seed, noise_multiplier, *, scale=None):
     worlds = []
     for tau, gain, present in product(syn['tau_s'], syn['hb_gain'], syn['common_present']):
         forward = nonlinear_driver_forward(r, initial, parameters_at_tau(tau), dt,
-            derivative=False, substeps=cfg['fit']['substeps'], numerical_backend='numba')
+            derivative=False, substeps=cfg['fit']['substeps'], numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
         clean = forward['canonical_prediction']
         component = common if present else np.zeros_like(common)
         gained = clean*np.array([1., gain, gain])
@@ -91,7 +91,7 @@ def fit_profile(observation, cfg, scale, coefficient_sd, *, common=False,
             else:
                 forward = nonlinear_driver_forward(oracle_driver, oracle_initial, p,
                     cfg['tensor']['dt_s'], derivative=False, substeps=cfg['fit']['substeps'],
-                    numerical_backend='numba')
+                    numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
                 physical = forward['canonical_prediction']
                 coefficients = project_component(observation-physical, basis, scale,
                     coefficient_sd=coefficient_sd) if common else np.zeros(basis.shape[1])

@@ -85,7 +85,7 @@ def test_parameter_sweep_replays_actual_forward_without_changing_eeg(renderer):
     driver = .01*np.sin(np.arange(n)*.2)
     initial = np.array([0., 1., 1., 1., 1.])
     parameters = BalloonParameters()
-    baseline = nonlinear_driver_forward(driver, initial, parameters, .25, derivative=False)['canonical_prediction']
+    baseline = nonlinear_driver_forward(driver, initial, parameters, .25, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     result = renderer.parameter_response_frames(driver, initial, parameters, np.eye(3*n),
         baseline, np.ones(3), factors=[.75, 1., 1.25], backend='python')
     for response in result.values():

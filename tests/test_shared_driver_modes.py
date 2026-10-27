@@ -86,7 +86,7 @@ def test_scalar_Hb_route_is_exactly_the_existing_balloon_core():
     forward = forward_shared_driver_modes(coefficients, np.zeros(5), BalloonParameters(), .25,
         loadings=loading[:, :1], temporal_basis=basis, numerical_backend="python")
     original = nonlinear_driver_forward(basis@coefficients[:, 0], np.r_[0., np.ones(4)],
-        BalloonParameters(), .25, numerical_backend="python")
+        BalloonParameters(), .25, numerical_backend="python", hemodynamics='inlet_balance', viscoelastic_s=0.)
     np.testing.assert_array_equal(forward["hb_prediction"], original["canonical_prediction"][:, 1:])
     np.testing.assert_array_equal(forward["states"], original["states"])
     np.testing.assert_allclose(forward["jacobian"].reshape(32, 12, -1)[:, -2:, :6],

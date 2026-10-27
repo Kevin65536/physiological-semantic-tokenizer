@@ -20,6 +20,7 @@ in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 | What data, masks, joins, geometry, and splits are valid? | [`DATA_CONTRACT.md`](DATA_CONTRACT.md) |
 | What are the dataset-native facts and original sources? | [`DATASETS_DESCRIPTION.md`](DATASETS_DESCRIPTION.md) |
 | What code/runtime exists today? | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| Which hemodynamic model is the research baseline, and why? | [`METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27`](METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27); implementation and settings: [`ARCHITECTURE.md#tak-hemodynamic-baseline`](ARCHITECTURE.md#tak-hemodynamic-baseline) |
 | Which entrypoint, config and tests cover a diagnostic? | [Experiment map](../experiments/README.md#entrypoint-config-and-test-map) |
 | What theory and architecture principles are frozen? | [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md#frozen-theory-and-architecture-contract-unimplemented) |
 | Where is the abandoned pre-freeze candidate snapshot? | [tracked design note](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json) · [candidate snapshot figure](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg) |

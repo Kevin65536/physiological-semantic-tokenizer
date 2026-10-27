@@ -231,7 +231,7 @@ def synthetic_case(cfg, base, population, split, repeat, spectrum, initial, scen
     physical, states = [], []
     for r, x0 in zip(drivers,starts):
         forward = nonlinear_driver_forward(r, x0, parameters(base, truth=truth), .25,
-            substeps=8, derivative=False, numerical_backend='numba')
+            substeps=8, derivative=False, numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
         physical.append((operators()[0]@forward['canonical_prediction'].ravel()).reshape(120,3))
         states.append(forward['states'])
     physical = np.asarray(physical)
@@ -822,14 +822,14 @@ def confounding_profile(cfg, base, case, cal, candidate, *, mode, arm):
     op, basis, _ = operators()
     p = parameters(base,candidate)
     forward = nonlinear_driver_forward(result['driver'],result['initial_state'],p,.25,substeps=4,
-                                       derivative=True,return_flow_jacobian=True,numerical_backend='numba')
+                                       derivative=True,return_flow_jacobian=True,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
     j = op@forward['jacobian']
     columns, flow_columns = [], []
     for index in (0,1):
         plus,minus = list(RESPONSE_GRID[candidate]),list(RESPONSE_GRID[candidate])
         plus[index] *= np.exp(1e-4); minus[index] *= np.exp(-1e-4)
         alternatives = [nonlinear_driver_forward(result['driver'],result['initial_state'],parameters(base,truth=v),
-                            .25,substeps=4,derivative=False,numerical_backend='numba') for v in (plus,minus)]
+                            .25,substeps=4,derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.) for v in (plus,minus)]
         columns.append(op@(alternatives[0]['canonical_prediction']-alternatives[1]['canonical_prediction']).ravel()/2e-4)
         flow_columns.append((alternatives[0]['states'][:,2]-alternatives[1]['states'][:,2])/2e-4)
     j = np.column_stack([j]+columns)
@@ -1404,7 +1404,7 @@ def calibration_tables(cfg, base, out, keys):
     reference = None
     for index,(tau,kappa) in enumerate(RESPONSE_GRID):
         f = nonlinear_driver_forward(drive,[0.,1.,1.,1.,1.],parameters(base,index),.25,
-                                     substeps=8,derivative=False,numerical_backend='numba')
+                                     substeps=8,derivative=False,numerical_backend='numba', hemodynamics='inlet_balance', viscoelastic_s=0.)
         hb = f['canonical_prediction'][:,1:]
         if reference is None:
             reference=hb

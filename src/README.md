@@ -10,8 +10,8 @@ Execution and scientific verdicts come from the
 | Package | Responsibility and reading entry |
 | --- | --- |
 | `data/` | registry, unified loaders, preprocessing, alignment, masks, geometry, and retained target contracts |
-| `inference/` | Balloon forward/robust inference (`t3a_balloon_robust_ssm.py`), joint and temporal observation inference (`t3a_balloon_joint_ssm.py`), trajectory MAP (`balloon_trajectory_map.py`), and shared observation baselines (`observation_baselines.py`); older adaptive/SMC models remain retained references |
-| `teachers/` | `functional_teacher.py`: conditional six-state SSM target adapter; `physical_state_teacher.py`: retained training-teacher adapter |
+| `inference/` | Current Tak forward/replay and fitting: `shared_driver_reconstruction.py`, with reduced RK4/tangents in `shared_driver_rk4.py`; `observation_baselines.py` owns shared observation transforms. T3/Step5, scalar/component, spatial, continuity and compatibility paths retain explicit historical model contracts |
+| `teachers/` | `functional_teacher.py`: retained pre-Tak conditional SSM target adapter; `physical_state_teacher.py`: retained training-teacher adapter; neither is automatically relabeled by the baseline change |
 | `tokenizers/` | `functional_tokenizer.py`: independent S/O continuous/hard-VQ screen; corrected EMA VQ and stopped E2/R2 replay |
 | `analysis/` | `functional_tokenizer.py`: frozen grouped probes and integer-only reader; stopped Token Physiology Atlas |
 | `losses/` | losses required by the stopped E2 runtime |
@@ -26,7 +26,8 @@ lag-conditioned, and observation-SSM generations were moved to the local ignored
 archive; packages do not import that archive. The E2 surface is stopped and
 replay-only.
 
-For SSM work, start with the relevant solver in `inference/`, then use the
+For new shared-driver work, start with the [Tak baseline](../docs/ARCHITECTURE.md#tak-hemodynamic-baseline)
+and `fit_nonlinear_shared_parameters` in `inference/shared_driver_reconstruction.py`, then use the
 [entrypoint/config/test map](../experiments/README.md#entrypoint-config-and-test-map)
 to find the diagnostic that exercises it. The observation-baseline module owns
 array transforms, robust noise estimation, and linear controls shared by Step5

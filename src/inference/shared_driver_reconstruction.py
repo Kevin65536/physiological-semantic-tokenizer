@@ -1,12 +1,18 @@
-"""Single-driver Balloon reconstruction diagnostics.
+"""Tak-baseline shared-driver reconstruction and explicit historical controls.
 
-Only the driver trajectory and five initial vascular coordinates are fitted.
-Vascular states have no per-sample innovations. Linear screening, fixed-driver
+Fits expose the driver trajectory, declared physiological parameters and
+permitted initial coordinates. Vascular states have no per-sample innovations. Linear screening, fixed-driver
 nonlinear replay and nonlinear MAP-style fitting remain distinct diagnostics;
 none provides a calibrated SSM posterior or a physiological qualification.
 
 The explicit delta-decay intervention additionally supports fixed-bandwidth
 input forcing; it retains fixed physiology and has no added output component.
+The default Tak core eliminates p in favor of v and restores venous
+viscoelasticity. Its joint fitter supports four or fixed resting vascular
+initial coordinates, with no independent vascular innovations.
+New fits use fit_nonlinear_shared_parameters (batch size one is supported).
+The older single-parameter/component fitters and linear/decay interventions
+retain their recorded inlet-balance equations for historical comparisons.
 """
 from __future__ import annotations
 
@@ -48,14 +54,15 @@ class SharedDriverDesign:
 
 def build_shared_driver_design(parameters, steps, dt, *, processed_mean_operator=None,
                                venous_viscoelastic_s=0.):
-    """Build time-major [EEG,HbO,HbR] design, columns [r[0:T],initial[5]].
+    """Historical inlet-balance design, columns [r[0:T],initial[5]].
 
     The driver is held constant on [t,t+dt); its last value is observed in
     EEG but cannot influence an earlier vascular state. A supplied processing
     operator acts on the complete canonical mean, before selecting visible
     processed observations. It does not implement raw-sensor masking.
     The optional linear diagnostic uses f_out=v**(1/alpha)+tau_v*dv/dt.
-    It changes the rest Jacobian only; the nonlinear core remains unchanged.
+    It changes this legacy rest Jacobian only; it is not the reduced Tak
+    baseline linearization. New Tak work uses the nonlinear forward/tangents.
     """
     parameters.validate()
     if isinstance(steps, bool) or not isinstance(steps, (int, np.integer)) or steps < 3:
@@ -269,12 +276,14 @@ def fit_shared_driver(observations, design, *, visible=None, penalty=1.,
         residual_lower_bound_scope='tied_initial_state' if tie_total_hb_to_volume else 'free_initial_state')
 
 
-def replay_nonlinear_driver(driver, initial_state, parameters, dt, *, substeps=4):
+def replay_nonlinear_driver(driver, initial_state, parameters, dt, *, substeps=4,
+                            hemodynamics='tak', viscoelastic_s=2.):
     """Replay fixed ZOH driver through nonlinear core, without refitting.
 
-    ``initial_state`` is physical [s,f,v,p,q], unlike the linear design's
-    initial perturbations. Classical RK4 evolves these five coordinates;
-    derivatives come only from the existing transformed Balloon drift.
+    The default is deterministic Tak with tau_v=2 seconds. A Tak initial state
+    can be [s,f,v,q], or the retained [s,f,v,p,q] view with p==v exactly.
+    p is derived, not an independent degree of freedom. Explicit inlet_balance
+    with viscoelastic_s=0 retains the historical five-coordinate RK4 replay.
     Every RK stage and accepted endpoint undergoes the core physical checks.
     An invalid stage returns ``failed_domain`` and a NaN-filled uncomputed
     suffix; no clipping, projection or automatic step-size retry occurs.
@@ -284,10 +293,15 @@ def replay_nonlinear_driver(driver, initial_state, parameters, dt, *, substeps=4
     parameters.validate()
     r = np.asarray(driver, dtype=float)
     initial = np.asarray(initial_state, dtype=float)
+    if hemodynamics == 'tak' and initial.shape == (4,):
+        initial = initial[[0, 1, 2, 2, 3]]
     if r.ndim != 1 or not len(r) or not np.isfinite(r).all():
         raise ValueError('driver must be nonempty finite [T]')
     if initial.shape != (5,) or not np.isfinite(initial).all():
         raise ValueError('initial_state must be finite physical [s,f,v,p,q]')
+    _validate_hemodynamics(hemodynamics, viscoelastic_s)
+    if hemodynamics == 'tak' and initial[2] != initial[3]:
+        raise ValueError('Tak reduced core requires p0 == v0 exactly')
     if not np.isfinite(dt) or dt <= 0:
         raise ValueError('dt must be finite and positive')
     if isinstance(substeps, bool) or not isinstance(substeps, (int, np.integer)) or substeps < 1:
@@ -316,6 +330,16 @@ def replay_nonlinear_driver(driver, initial_state, parameters, dt, *, substeps=4
         return valid
 
     def derivative(vascular, value):
+        if hemodynamics == 'tak':
+            # Independent scalar transcription of the SPM equations. It does
+            # not call the compiled forward or its state/parameter tangents.
+            s, f, v, p, q = vascular
+            fixed, free = parameters.fixed, parameters.free
+            dv = (f-v**(1/fixed.alpha))/(free.tau+viscoelastic_s)
+            out = v**(1/fixed.alpha)+viscoelastic_s*dv
+            ef = -np.expm1(np.log1p(-fixed.E0)/f)/fixed.E0
+            return np.array([fixed.neurovascular_gain*value-free.kappa*s-fixed.gamma*(f-1),
+                s, dv, dv, (f*ef-out*q/v)/free.tau])
         transformed = core.physical_to_transformed(np.r_[value, vascular])
         dz = core.balloon_rhs(transformed, parameters)[1:]
         return dz*np.r_[1., vascular[1:]]
@@ -378,9 +402,19 @@ def _require_nonlinear_domain(vascular, parameters):
     # extraction implementation retains its stable log-complement convention.
 
 
+def _validate_hemodynamics(hemodynamics, viscoelastic_s):
+    if hemodynamics not in ('inlet_balance', 'tak'):
+        raise ValueError('hemodynamics must be inlet_balance or tak')
+    if not np.isfinite(viscoelastic_s) or viscoelastic_s < 0:
+        raise ValueError('viscoelastic_s must be finite and nonnegative')
+    if hemodynamics == 'inlet_balance' and viscoelastic_s != 0:
+        raise ValueError('inlet_balance has no viscoelastic term')
+
+
 def nonlinear_driver_forward(driver, initial_physical, parameters, dt, *,
                              substeps=4, derivative=True, return_flow_jacobian=False,
-                             numerical_backend='python'):
+                             numerical_backend='numba', hemodynamics='tak',
+                             viscoelastic_s=2.):
     """Nonlinear ZOH mean and exact derivatives of the discrete RK4 map.
 
     Jacobian columns are [r[0:T],s0,log(f0),log(v0),log(p0),log(q0)].
@@ -389,10 +423,19 @@ def nonlinear_driver_forward(driver, initial_physical, parameters, dt, *,
     return_flow_jacobian optionally exposes the compact physical flow tangents.
     Initial physical values stay fixed. No parameter is fitted here. Invalid RK stages
     raise FloatingPointError without clipping or residual substitution.
+    Tak is the research baseline: four physical initial states [s,f,v,q],
+    deterministic p=v, and tau_v=2 seconds by default. The retained five-entry
+    initial/state view is also accepted, but its p entry must equal v exactly.
+    Historical callers explicitly select inlet_balance and viscoelastic_s=0.
+    The returned Jacobian keeps its recorded column layout: under Tak the
+    log(p0) column is zero and log(v0) differentiates both v and derived p.
+    The current joint fitter removes that redundant column exactly.
     """
     parameters.validate()
     r = np.asarray(driver, dtype=float)
     initial = np.asarray(initial_physical, dtype=float)
+    if hemodynamics == 'tak' and initial.shape == (4,):
+        initial = initial[[0, 1, 2, 2, 3]]
     if r.ndim != 1 or not len(r) or not np.isfinite(r).all():
         raise ValueError('driver must be nonempty finite [T]')
     if initial.shape != (5,) or not np.isfinite(initial).all():
@@ -402,6 +445,13 @@ def nonlinear_driver_forward(driver, initial_physical, parameters, dt, *,
     if isinstance(substeps, bool) or not isinstance(substeps, (int, np.integer)) or substeps < 1:
         raise ValueError('substeps must be a positive integer')
     _require_nonlinear_domain(initial, parameters)
+    _validate_hemodynamics(hemodynamics, viscoelastic_s)
+    if hemodynamics == 'tak':
+        if numerical_backend != 'numba':
+            raise ValueError('Tak forward requires numba; independent replay is available separately')
+        from .shared_driver_rk4 import tak_forward
+        return tak_forward(r, initial, parameters, dt, substeps, derivative,
+                           return_flow_jacobian, viscoelastic_s)
     if numerical_backend == 'numba':
         from .shared_driver_rk4 import compiled_forward
         return compiled_forward(r, initial, parameters, dt, substeps, derivative,
@@ -1130,7 +1180,8 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
                                parameter_name='tau', flow_prior_weight=0., flow_prior_log_sd=1.,
                                initial_embedding=None, initial_coordinates='independent_logs',
                                numerical_backend='python', observation_component=None,
-                               observation_whitener=None):
+                               observation_whitener=None, hemodynamics='inlet_balance',
+                               viscoelastic_s=0., initial_coordinate_weights=None):
     """Actual common residual contract for individual and shared-parameter fitting."""
     steps, count = len(y), len(y)+5
     if initial_embedding is not None:
@@ -1143,14 +1194,17 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
     forward = nonlinear_driver_forward(x[:steps], physical_initial, parameters,
                                        dt, substeps=substeps, derivative=derivative,
                                        return_flow_jacobian=bool(flow_prior_weight),
-                                       numerical_backend=numerical_backend)
+                                       numerical_backend=numerical_backend,
+                                       hemodynamics=hemodynamics, viscoelastic_s=viscoelastic_s)
     clean = forward['canonical_prediction'].ravel()
     prediction = (operator@clean if operator is not None else clean).reshape(y.shape)
     residual_data = (prediction[mask]-y[mask])/scale[mask]
     if observation_whitener is not None:
         residual_data = observation_whitener@residual_data
     initial_residual = physical_initial-np.array([0., 1., 1., 1., 1.])
-    residual = np.r_[residual_data, regularizer@x, np.sqrt(initial_weight)*initial_residual]
+    initial_factor = np.sqrt(initial_weight) * (np.ones(5) if initial_coordinate_weights is None
+        else np.sqrt(initial_coordinate_weights))
+    residual = np.r_[residual_data, regularizer@x, initial_factor*initial_residual]
     flow_residual = np.empty(0)
     if flow_prior_weight:
         flow_factor = np.sqrt(flow_prior_weight*dt)/flow_prior_log_sd
@@ -1164,7 +1218,7 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
         if observation_whitener is not None:
             jdata = observation_whitener@jdata
         ji = np.zeros((5, count))
-        ji[:, steps:] = np.sqrt(initial_weight)*np.diag(np.r_[1., physical_initial[1:]])
+        ji[:, steps:] = np.diag(initial_factor*np.r_[1., physical_initial[1:]])
         jacobian = np.vstack((jdata, regularizer, ji))
         names = [parameter_name] if isinstance(parameter_name, str) else list(parameter_name)
         parameter_columns = []
@@ -1229,7 +1283,11 @@ def fit_nonlinear_shared_driver(observations, parameters, dt, *, mean_operator=N
         tie_total_hb_to_volume=False, initial_coordinates="independent_logs",
         numerical_backend='python', observation_basis=None, observation_coefficient_sd=1.,
         curvature_breaks=()):
-    """Fixed-parameter nonlinear driver/initial-state fit by damped Gauss--Newton.
+    """Historical inlet-balance fixed-parameter/component fit.
+
+    New Tak fits use fit_nonlinear_shared_parameters with parameter_names=[]
+    and batch size one when appropriate. This retained entry keeps the old
+    component and initial-state contract for explicit historical callers.
 
     ``starts`` contains dictionaries with driver[T] and physical initial_state[5].
     The default is zero driver and rest. Each start has max_evaluations forward
@@ -1471,7 +1529,7 @@ def fit_nonlinear_shared_driver(observations, parameters, dt, *, mean_operator=N
             derivative_rejections=sum(a['derivative_rejections'] for a in attempts), **constraint_metadata)
     converged_candidates = [candidate for candidate in candidates if candidate[0]['converged']]
     record, x, best = min(converged_candidates or candidates, key=lambda candidate: candidate[0]['objective'])
-    replay = replay_nonlinear_driver(x[:steps], best['initial'], parameters, dt, substeps=substeps)
+    replay = replay_nonlinear_driver(x[:steps], best['initial'], parameters, dt, substeps=substeps, hemodynamics='inlet_balance', viscoelastic_s=0.)
     replay_error = (float(np.max(abs(replay['canonical_prediction']-best['forward']['canonical_prediction'])))
                     if replay['status'] == 'completed' else float('inf'))
     validated = replay['status'] == 'completed' and replay_error <= 1e-10
@@ -1523,7 +1581,10 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
         driver_amplitude_weight=0., driver_prior_sd=1., flow_prior_weight=0., flow_prior_log_sd=1.,
         tie_total_hb_to_volume=False, initial_coordinates="independent_logs",
         step_control="armijo", numerical_backend='python'):
-    """Fit exactly one declared positive shared parameter using block GN.
+    """Historical inlet-balance scalar-parameter fit using block GN.
+
+    New Tak fits, including one-parameter profiles, use
+    fit_nonlinear_shared_parameters with an explicit parameter list.
 
     Arrays are [B,T,3], with one common mean operator. sd accepts [3], [B,3]
     or [B,T,3]. parameter_name is 'tau' or 'neurovascular_gain', with explicit
@@ -1928,7 +1989,7 @@ def fit_nonlinear_shared_parameter(observations, parameters, dt, *, parameter_na
     value = float(np.exp(log_parameter))
     fitted_p = parameter_object(value)
     initial = np.array([t['initial'] for t in best['trials']])
-    validations = [replay_nonlinear_driver(x[i,:steps],initial[i],fitted_p,dt,substeps=substeps) for i in range(batch)]
+    validations = [replay_nonlinear_driver(x[i,:steps],initial[i],fitted_p,dt,substeps=substeps, hemodynamics='inlet_balance', viscoelastic_s=0.) for i in range(batch)]
     validation_errors = [float(np.max(abs(v['canonical_prediction']-t['forward']['canonical_prediction'])))
         if v['status']=='completed' else float('inf') for v,t in zip(validations,best['trials'])]
     valid = all(v['status']=='completed' and e<=1e-10 for v,e in zip(validations,validation_errors))
@@ -2007,7 +2068,9 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
         substeps=4, max_iterations=150, max_evaluations_per_trial=600,
         gradient_tolerance=1e-5, numerical_backend='numba', curvature_breaks=(),
         observation_whiteners=None, parameter_prior_log_mean=None,
-        parameter_prior_precision=None, return_jacobian=False):
+        parameter_prior_precision=None, return_jacobian=False,
+        hemodynamics='tak', viscoelastic_s=2., initial_state_mode='volume_tied',
+        initial_coordinate_weights=None):
     """Small joint-parameter diagnostic with exact block Gauss--Newton steps.
 
     Uses the same trial residual and physical domain as the scalar solver.
@@ -2022,10 +2085,30 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
     Optional whiteners act on the *visible standardized residual vector* only,
     and must be constructed from the corresponding visible covariance. A log
     parameter prior contributes once per group, independently of trial count.
+    Tak is the default and eliminates p as an independent state. Its default
+    volume_tied initial mode fits four coordinates and penalizes volume once;
+    rest is the fixed-initial literature control. Tak starts can contain [B,4]
+    physical [s,f,v,q], or the retained [B,5] view with p==v. Returned states
+    preserve [r,s,f,v,p,q] as an observation-compatible view with derived p.
+    Historical callers explicitly select inlet_balance, viscoelastic_s=0 and
+    their initial-state policy. Per-record operators may be [B,3T,3T].
     """
     parameters.validate()
+    _validate_hemodynamics(hemodynamics, viscoelastic_s)
+    if initial_state_mode not in ('free', 'volume_tied', 'rest'):
+        raise ValueError('initial_state_mode must be free, volume_tied or rest')
+    if hemodynamics == 'tak' and initial_state_mode == 'free':
+        raise ValueError('Tak eliminates independent p; use volume_tied or rest')
+    if initial_coordinate_weights is None:
+        initial_coordinate_weights = [1., 1., 1., 0., 1.] if hemodynamics == 'tak' else np.ones(5)
+    initial_coordinate_weights = np.asarray(initial_coordinate_weights, float)
+    if (initial_coordinate_weights.shape != (5,) or not np.isfinite(initial_coordinate_weights).all()
+            or np.any(initial_coordinate_weights < 0)):
+        raise ValueError('five finite nonnegative initial coordinate weights required')
     names = tuple(parameter_names)
-    if len(set(names)) != len(names) or not set(names) <= {'tau','neurovascular_gain','kappa'}:
+    supported = {'tau','neurovascular_gain','kappa'}
+    if hemodynamics == 'tak': supported |= {'gamma', 'viscoelastic_s'}
+    if len(set(names)) != len(names) or not set(names) <= supported:
         raise ValueError('distinct supported physiological parameter names required')
     if 'kappa' in names and numerical_backend != 'numba':
         raise ValueError('joint kappa tangent requires the validated compiled backend')
@@ -2037,6 +2120,8 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
     if y.ndim != 3 or y.shape[0]<1 or y.shape[1]<3 or y.shape[2]!=3:
         raise ValueError('observations must be [B,T,3]')
     batch,n,_ = y.shape; count=n+5
+    embedding = (_volume_tied_initial_embedding(n) if initial_state_mode == 'volume_tied'
+        else np.eye(count)[:, :n] if initial_state_mode == 'rest' else None)
     mask = np.isfinite(y) if visible is None else np.asarray(visible)
     if mask.shape != y.shape or mask.dtype != bool or not mask.any(axis=(1,2)).all() or not np.isfinite(y[mask]).all():
         raise ValueError('finite visible observations and boolean mask required')
@@ -2064,8 +2149,8 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
             or not np.isfinite(prior_mean).all() or not np.isfinite(prior_precision).all() or np.any(prior_precision < 0)):
         raise ValueError('finite per-parameter log means and nonnegative diagonal precisions required')
     operator = None if mean_operator is None else np.asarray(mean_operator,dtype=float)
-    if operator is not None and (operator.shape!=(3*n,3*n) or not np.isfinite(operator).all()):
-        raise ValueError('finite common observation operator required')
+    if operator is not None and (operator.shape not in ((3*n,3*n), (batch,3*n,3*n)) or not np.isfinite(operator).all()):
+        raise ValueError('finite common or per-record observation operator required')
     for v,minimum in ((substeps,1),(max_iterations,0),(max_evaluations_per_trial,3)):
         if isinstance(v,bool) or not isinstance(v,(int,np.integer)) or v<minimum:
             raise ValueError('positive integer numerical budgets required')
@@ -2077,11 +2162,14 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
         raise ValueError('curvature_breaks requires ordered unique segment boundaries')
     for boundary in breaks: regularizer[boundary-2:boundary] = 0.
     lower,upper=np.log(bounds).T
-    reference=np.array([getattr(parameters.fixed if name=='neurovascular_gain' else parameters.free,name) for name in names])
+    fixed_names = {'neurovascular_gain', 'gamma'}
+    reference=np.array([viscoelastic_s if name == 'viscoelastic_s' else
+        getattr(parameters.fixed if name in fixed_names else parameters.free,name) for name in names])
     def at(values):
-        fixed={name:float(v) for name,v in zip(names,values) if name=='neurovascular_gain'}
-        free={name:float(v) for name,v in zip(names,values) if name!='neurovascular_gain'}
-        return replace(parameters,fixed=replace(parameters.fixed,**fixed),free=replace(parameters.free,**free))
+        fixed={name:float(v) for name,v in zip(names,values) if name in fixed_names}
+        free={name:float(v) for name,v in zip(names,values) if name in {'tau', 'kappa'}}
+        tv = float(values[names.index('viscoelastic_s')]) if 'viscoelastic_s' in names else viscoelastic_s
+        return replace(parameters,fixed=replace(parameters.fixed,**fixed),free=replace(parameters.free,**free)), tv
     if starts is None:starts=[dict(parameter_values=reference)]
     if not len(starts):raise ValueError('at least one start required')
     attempts,candidates=[],[]
@@ -2096,21 +2184,32 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
         values=np.clip(values,bounds[:,0],bounds[:,1])
         driver=np.asarray(start.get('driver',np.zeros((batch,n))),dtype=float)
         initial=np.asarray(start.get('initial_state',np.tile(np.r_[0.,np.ones(4)],(batch,1))),dtype=float)
+        if hemodynamics == 'tak' and initial.shape == (batch,4):
+            initial = initial[:, [0, 1, 2, 2, 3]]
         if driver.shape!=(batch,n) or initial.shape!=(batch,5) or not np.isfinite(driver).all():
             raise ValueError('invalid nuisance start shape')
         for row in initial:_require_nonlinear_domain(row,parameters)
+        if initial_state_mode == 'volume_tied' and np.any(initial[:,2] != initial[:,3]):
+            raise ValueError('volume_tied starts require p0 == v0 exactly')
+        if initial_state_mode == 'rest' and np.any(initial != np.r_[0.,np.ones(4)]):
+            raise ValueError('rest starts require the fixed resting initial state')
         x=np.column_stack((driver,initial[:,0],np.log(initial[:,1:])))
+        if initial_state_mode == 'volume_tied': x = np.delete(x, n+3, axis=1)
+        elif initial_state_mode == 'rest': x = x[:, :n]
         logp=np.log(values);evaluations=0;rejections=0;damping=1e-3;converged=False
         def evaluate(xx,zz,derivative):
             nonlocal evaluations
-            pp=at(np.exp(zz));result=[]
+            pp,tv=at(np.exp(zz));result=[]
             for i in range(batch):
                 evaluations+=1
                 if evaluations>max_evaluations_per_trial*batch:
                     raise RuntimeError('internal evaluation budget overflow')
-                result.append(_nonlinear_trial_objective(xx[i],pp,dt,operator,y[i],mask[i],scale[i],
+                op = operator[i] if operator is not None and operator.ndim == 3 else operator
+                result.append(_nonlinear_trial_objective(xx[i],pp,dt,op,y[i],mask[i],scale[i],
                     regularizer,initial_weights[i],substeps,derivative,names,flow_prior_weight,
-                    flow_prior_log_sd,numerical_backend=numerical_backend,observation_whitener=whiteners[i]))
+                    flow_prior_log_sd,numerical_backend=numerical_backend,observation_whitener=whiteners[i],
+                    initial_embedding=embedding, hemodynamics=hemodynamics, viscoelastic_s=tv,
+                    initial_coordinate_weights=initial_coordinate_weights))
             return result,float(sum(t['objective'] for t in result)+np.sum(prior_precision*(zz-prior_mean)**2))
         try:current,cost=evaluate(x,logp,True)
         except (FloatingPointError,ValueError,OverflowError) as exc:
@@ -2174,8 +2273,9 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
     if not candidates:return dict(status='failed_domain',converged=False,starts=attempts,parameter_names=names,parameter_values=None)
     good=[c for c in candidates if c[0]['converged']]
     record,x,logp,current=min(good or candidates,key=lambda c:c[0]['objective'])
-    values=np.exp(logp);fitted=at(values);initial=np.array([t['initial'] for t in current])
-    replay=[replay_nonlinear_driver(x[i,:n],initial[i],fitted,dt,substeps=substeps) for i in range(batch)]
+    values=np.exp(logp);fitted,tv=at(values);initial=np.array([t['initial'] for t in current])
+    replay=[replay_nonlinear_driver(x[i,:n],initial[i],fitted,dt,substeps=substeps,
+        hemodynamics=hemodynamics, viscoelastic_s=tv) for i in range(batch)]
     errors=[float(np.max(abs(v['canonical_prediction']-t['forward']['canonical_prediction'])))
             if v['status']=='completed' else float('inf') for v,t in zip(replay,current)]
     valid=max(errors)<=1e-10
@@ -2220,7 +2320,10 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
         projected_raw_parameter_gradient=projected_raw,
         log_parameter_boundary_distance=np.minimum((logp-lower)/(upper-lower),(upper-logp)/(upper-lower)),
         evaluations=sum(a['evaluations'] for a in attempts)+batch,
-        tau=fitted.free.tau,neurovascular_gain=fitted.fixed.neurovascular_gain,kappa=fitted.free.kappa)
+        tau=fitted.free.tau,neurovascular_gain=fitted.fixed.neurovascular_gain,kappa=fitted.free.kappa,
+        gamma=fitted.fixed.gamma, viscoelastic_s=tv, hemodynamics=hemodynamics,
+        initial_state_mode=initial_state_mode, initial_coordinate_weights=initial_coordinate_weights,
+        initial_free_parameters={'free':5, 'volume_tied':4, 'rest':0}[initial_state_mode])
     if return_jacobian:
         result.update(residual_jacobians=[t['jacobian'] for t in current],
             residual_parameter_jacobians=[t['parameter_jacobian'] for t in current],

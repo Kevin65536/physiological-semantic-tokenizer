@@ -6360,19 +6360,19 @@ def render_fitting_explainer(run, out):
                 linear['joint__fixed'][li], key + ': gradient-flow endpoint vs retained SVD')
         if np.max(np.diff(flow['sse'])) > 1e-7:
             raise ValueError("Educational gradient flow increased its objective")
-        nonlinear = nonlinear_driver_forward(states[:, 0], states[0, 1:], p, dt, derivative=False)
+        nonlinear = nonlinear_driver_forward(states[:, 0], states[0, 1:], p, dt, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
         forward_pred = (operator @ nonlinear['canonical_prediction'].ravel()).reshape(n, 3)
         compare(forward_pred, pred, key + ': retained nonlinear forward reconstruction')
         for c in (.5, 1.25, 2.):
             pp = replace(p, fixed=replace(p.fixed, eeg_loading=p.fixed.eeg_loading/c,
                                         neurovascular_gain=p.fixed.neurovascular_gain/c))
-            moved = nonlinear_driver_forward(c*states[:, 0], states[0, 1:], pp, dt, derivative=False)
+            moved = nonlinear_driver_forward(c*states[:, 0], states[0, 1:], pp, dt, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
             compare(moved['canonical_prediction'], nonlinear['canonical_prediction'],
                     key + f': gain gauge c={c}', atol=1e-10)
             # A separate, explicitly generated observation-gain mismatch:
             # loading stays one, EEG changes, Hb and physical states do not.
             pp = replace(pp, fixed=replace(pp.fixed, eeg_loading=p.fixed.eeg_loading))
-            omitted = nonlinear_driver_forward(c*states[:, 0], states[0, 1:], pp, dt, derivative=False)
+            omitted = nonlinear_driver_forward(c*states[:, 0], states[0, 1:], pp, dt, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')
             expected = nonlinear['canonical_prediction'].copy()
             expected[:, 0] *= c
             compare(omitted['canonical_prediction'], expected,
@@ -6524,9 +6524,9 @@ def parameter_response_frames(driver, initial, parameters, operator, target, sd,
                  else replace(parameters, free=replace(parameters.free, **{name: value})))
             try:
                 coarse = nonlinear_driver_forward(driver, initial, p, dt, derivative=False,
-                    substeps=4, numerical_backend=backend)
+                    substeps=4, numerical_backend=backend, hemodynamics='inlet_balance', viscoelastic_s=0.)
                 fine = nonlinear_driver_forward(driver, initial, p, dt, derivative=False,
-                    substeps=8, numerical_backend=backend)
+                    substeps=8, numerical_backend=backend, hemodynamics='inlet_balance', viscoelastic_s=0.)
                 prediction = (operator @ coarse['canonical_prediction'].ravel()).reshape(target.shape)
                 checked = (operator @ fine['canonical_prediction'].ravel()).reshape(target.shape)
                 difference = float(np.max(np.abs((prediction - checked) / sd)))
@@ -6719,7 +6719,7 @@ def render_parameter_explorer(run, out, *, boundary_run=None):
             # Validate the compiled arithmetic against the original backend at the reference.
             checks.append(dict(case=choice['key'], parameter=name, baseline_max_error_training_sd=error))
         reference_python = nonlinear_driver_forward(states[:, 0], states[0, 1:], parameters, dt,
-                                                    derivative=False, numerical_backend='python')
+                                                    derivative=False, numerical_backend='python', hemodynamics='inlet_balance', viscoelastic_s=0.)
         py_pred = (operator @ reference_python['canonical_prediction'].ravel()).reshape(n, 3)
         np.testing.assert_allclose(py_pred, baseline, atol=1e-7, rtol=1e-8)
         case = dict(**choice, identity=meta['trials'][trial], train_count=len(meta['train']),
@@ -8867,6 +8867,347 @@ def render_filter_retest(run, out):
     print(json.dumps(validation,ensure_ascii=False))
 
 
+def render_tak(run, out):
+    """Read-only comparison report; plots are PNG, body and tables stay text."""
+    from html import escape
+    import shutil
+    if out.exists() and any(out.iterdir()):raise ValueError('Choose a fresh versioned Tak report export')
+    verify=json.loads((run/'verification.json').read_text())
+    if verify['status']!='passed':raise ValueError('Completed verified Tak evidence required')
+    audit=json.loads((run/'array_verification.json').read_text())
+    if audit['status']!='passed':raise ValueError('Independent retained-array audit required')
+    cfg=json.loads((run/'resolved_config.json').read_text());plan=json.loads((run/'plan.json').read_text())
+    summaries={phase:json.loads((run/(phase+'_summary.json')).read_text()) for phase in ('synthetic','measured','sensitivity')}
+    frames={phase:pd.DataFrame(json.loads((run/(phase+'_rows.json')).read_text())) for phase in summaries}
+    if any(s['status']!='completed' for s in summaries.values()):raise ValueError('Complete denominator required')
+    out.mkdir(parents=True,exist_ok=True);(out/'figures').mkdir()
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':10,'axes.unicode_minus':False,'mathtext.fontset':'stix',
+        'axes.spines.top':False,'axes.spines.right':False})
+    ds_names=dict(eeg_fnirs_single_trial='Single-Trial',simultaneous_eeg_nirs='Simultaneous',visual_cognitive_motivation='Visual',refed='REFED')
+    labels=dict(legacy_free='旧自由初态',legacy_tied='旧绑定初态',tak_fixed='Tak固定参数',tak_rest='Tak静息初态',
+        legacy_free_fit='旧自由＋估参',legacy_tied_fit='旧绑定＋估参',tak_fit='Tak主模型',tak_spm_prior='Tak文献先验')
+    colors=dict(legacy_free='#777777',legacy_free_fit='#d48821',tak_fixed='#279163',tak_fit='#1768ac',tak_spm_prior='#8650a1')
+    styles=dict(legacy_free='--',legacy_free_fit='-.',tak_fixed=':',tak_fit='-',tak_spm_prior='--')
+    f=frames['measured'];good=f[f.qualified];pages=[];images=[];sources=[];atlas_figures=[]
+    def p(text):return '<p>'+text+'</p>'
+    def number(v,d=3):return '—' if v is None or not np.isfinite(v) else f'{v:.{d}f}'
+    def tab(columns,rows):
+        return '<table><tr>'+''.join('<th>'+escape(str(c))+'</th>' for c in columns)+'</tr>'+''.join(
+            '<tr>'+''.join('<td>'+escape(str(v))+'</td>' for v in r)+'</tr>' for r in rows)+'</table>'
+    def page(title,body):pages.append('<h1>'+title+'</h1>'+body)
+    def save(fig,name,source,caption='',dpi=240):
+        path=out/'figures'/(name+'.png');fig.savefig(path,dpi=dpi,bbox_inches='tight');plt.close(fig)
+        images.append(path);sources.append(dict(figure=str(path.relative_to(out)),source=source,caption=caption))
+        return '<div class="figure"><img src="figures/'+name+'.png" width="520"></div>'+p(caption)
+    def formula(name,lines):
+        (out/'figures'/(name+'.tex')).write_text('\n'.join(lines)+'\n')
+        fig=plt.figure(figsize=(8.8,.52*len(lines)+.25))
+        for i,line in enumerate(lines):fig.text(.025,1-(i+.8)/(len(lines)+.5),'$'+line+'$',fontsize=15)
+        return save(fig,name,'Tak/SPM equations and experiment residual contract',dpi=300)
+    def group(ds,arm,length=90,condition='joint_full'):
+        return next(x for x in summaries['measured']['groups'] if (x['dataset'],x['arm'],x['length_s'],x['condition'])==(ds,arm,length,condition))
+    def select(ds,arm,length=90,condition='joint_full',qualified=True):
+        part=f[(f.dataset==ds)&(f.arm==arm)&(f.length_s==length)&(f.condition==condition)]
+        return part[part.qualified] if qualified else part
+    def hb(part,key='score_hb_nmse'):
+        return float(np.sqrt(part.groupby('subject')[key].mean().mean())) if len(part) else np.nan
+    overview=[]; same_parameter_worse=0
+    for ds in ds_names:
+        a=group(ds,'legacy_free');b=group(ds,'tak_fit');c=group(ds,'legacy_free_fit')
+        pair=next(x for x in summaries['measured']['paired_contrasts'] if x['dataset']==ds and x['length_s']==90 and x['condition']=='joint_full' and x['reference']=='legacy_free' and x['candidate']=='tak_fit')
+        matched=next(x for x in summaries['measured']['paired_contrasts'] if x['dataset']==ds and x['length_s']==90 and x['condition']=='joint_full' and x['reference']=='legacy_free_fit' and x['candidate']=='tak_fit')
+        same_parameter_worse += int(matched.get('improvement',0)<0)
+        ci=pair.get('ci95',[None,None])
+        overview.append([ds_names[ds],f"{a['qualified']}/{a['planned']} → {b['qualified']}/{b['planned']}",
+            number(pair.get('reference_nrmse'))+' → '+number(pair.get('candidate_nrmse')),number(matched.get('reference_nrmse')),
+            number(pair.get('improvement'),4)+' ['+number(ci[0],4)+', '+number(ci[1],4)+']'])
+    page('恢复 Tak 血流核心：实测收益取决于数据集与比较条件',
+        p('2026-10-27 · SSM-TAK-v1 · 四个公开数据集、24名被试、48个连续片段。采用统一带通Hb缓存，全部臂重新拟合；本报告汇总同口径的条件重建、隐藏块补全与参数敏感性。')
+        +tab(['90秒联合完整','合格数：旧→Tak','Hb NRMSE：旧→Tak','旧自由＋估参','配对改善与95%探索区间'],overview)
+        +p('旧→Tak指旧自由初态、固定参数与Tak主模型（四初态、估计κ和τ）。误差与改善均基于各自与Tak共同成功的身份；数值合格数保留原12片段分母。正改善表示Tak误差更低，详细配对分母在后文。')
+        +p(f'<b>主模型在{same_parameter_worse}/4库的90秒联合完整比较中，误差高于同样估参的旧自由初态模型。</b>旧模型多一个独立p初态，因此还要看双方都使用四初态的比较。窄先验产生的稳定参数和精确p=v属于模型约束，不是生理真值恢复证据。')
+        +p('所有结果来自公开开发材料，未读取保护评价或新原始Hb。没有训练tokenizer、开展下游分类或恢复完整DCM的连接模型、光密度观测和变分推断。'))
+    page('输入、共享范围与完整实验分母',
+        tab(['阶段','计划结果','终态','数值合格'],[[phase,s['planned_rows'],s['terminal_rows'],s['qualified_rows']] for phase,s in summaries.items()])
+        +p(f"实测参数分为{len(plan['groups'])}个原生记录／session支持／Hb通道组。每组一个参数向量；同组不重叠片段分别估初态。不同会话不绑定，间隔没有数据时不伪造状态传播。30秒是同一90秒片段的中段，不能充当独立被试。")
+        +p('保留父运行的EEG特征及身份。Hb只读v5/none统一缓存；全记录已执行0.01–0.2Hz带通，再取250毫秒分箱和窗口前5秒参考。模型端不重复带通。PCA、共同Hb正尺度及各观测SD均仅由原开发被试重新确定，评价被试不参与。')
+        +p('联合完整：EEG/HbO/HbR都可见；Hb-only完整：只用Hb拟合，EEG误差是外部评分；联合隐藏：EEG全程可见，Hb在每30秒的10–15秒、20–25秒隐藏。末端插值bin在所有拟合和评分中排除。')
+        +p('缓存预处理早于遮挡，因此隐藏实验检验离线处理特征补全，不能称实时或原始传感器未来预测。窗口ODE是带通坐标中的条件模型，未重建窗口外状态，也未严格重放完整记录的滤波过程。')
+        +p('Hb单位保留缓存约定：Simultaneous为µM，其他为各库相对／未核定单位。拟合保持两色团相对幅度；图中可除以固定训练SD，绝不逐窗或逐帧重新归一化。'))
+    equations=formula('tak_equations',[
+        r'\dot{s}=r-\kappa s-\gamma(f-1),\qquad \dot{f}=s',
+        r'\dot{v}=\frac{f-v^{1/\alpha}}{\tau+\tau_v},\qquad f_{\mathrm{out}}=v^{1/\alpha}+\tau_v\dot{v}',
+        r'\dot{q}=\frac{f E(f)/E_0-f_{\mathrm{out}}q/v}{\tau},\qquad E(f)=1-(1-E_0)^{1/f}',
+        r'p\equiv v,\qquad H_O=P_0(v-1)-Q_0(q-1),\quad H_R=Q_0(q-1)'])
+    page('完整黏弹性影响容量与流出量，不能统一替换τ',equations
+        +p('r是当前EEG约束的自由神经驱动；s是流量诱导信号；f、v、q分别为相对静息血流、容量和脱氧Hb。p为相对总Hb，直接由v给出。τ和τᵥ单位为秒，κ为衰减率，γ为反馈系数；α=E₀=0.32固定。')
+        +p('Tak原式使p/v保持初始比例。本文选择p₀=v₀并消去独立p；未加入独立血管过程噪声。自由初态为s₀、log f₀、log v₀、log q₀，允许非静息，但全程检查正状态与P₀v≥Q₀q。参考后的ΔHb可以为负。')
+        +p('τᵥ=0且p=v时，两核心的轨迹与切线一致；因此旧绑定臂已是零黏弹性对照。脱氧Hb方程仍除以τ，不能把所有τ换成τ+τᵥ。前向、离散状态/参数导数与独立重放均同步更新。')
+        +p('P₀=1、Q₀=0.35保留当前观测坐标；未把论文浓度直接替换到未标定的项目坐标。以上血流核心忠于Tak/SPM，当前自由驱动与Hb目标仍是项目自身的推断设置。'))
+    arm_rows=[]
+    for a in cfg['arms']:
+        arm_rows.append([labels[a['name']],'Tak' if a['hemodynamics']=='tak' else '旧流入平衡',a['tau_v'],
+            {'free':'5自由初态','volume_tied':'4自由初态，p=v','rest':'固定血管静息'}[a['initial']],
+            '/'.join({'kappa':'κ','tau':'τ','gamma':'γ','viscoelastic_s':'τᵥ'}[n] for n in a['fit']) or '固定',
+            '/'.join(f'{v:.4g}' for v in a['log_sd']) if a['fit'] else '—'])
+    page('八臂分开识别初态绑定、黏弹性和参数自由度的影响',
+        tab(['模型','方程','τᵥ参考/s','初态','估计参数','log先验SD'],arm_rows)
+        +p('全部臂固定EEG读出、Hb基线尺度与神经血管增益。旧绑定与Tak四初态共用一次容量惩罚100；没有把v和p的同一方向重复计算为200。旧自由臂保留独立p初态及对应惩罚。')
+        +p('主模型固定γ=0.32、τᵥ=2，κ和τ的log先验SD=0.25是工程选择。文献臂的κ、τ、γ log-SD为exp(−3)≈0.0498，τᵥ为1；这是原始先验参数，不是完整DCM后验。静息臂固定血管状态，EEG约束的自由驱动仍可拟合。')
+        +p('每个参数组先固定参考参数拟合驱动与初态，再从(κ,τ)=(0.64,2)、(0.35,1)、(1.1,3.5)启动。文献臂同时使用τᵥ=2/0.7/5的起点。按收敛解的完整目标选取，不能只按观测误差选解。')
+        +p('每轨迹每起点最多600次前向评价；梯度阈值0.00001。参数边界为数值搜索范围，不能称正常生理范围；预算耗尽和小步停滞均不算收敛。'))
+    metrics=formula('score_definition',[
+        r'e_{s,j,c}=\frac{1}{|\mathcal{T}_j|}\sum_{t\in\mathcal{T}_j}\left(\frac{\hat{y}_{s,j,t,c}-y_{s,j,t,c}}{\sigma_{\mathrm{train},c}}\right)^2',
+        r'\mathrm{NRMSE}_{Hb}=\sqrt{\frac{1}{S}\sum_s\frac{1}{J_s}\sum_j\frac{e_{s,j,O}+e_{s,j,R}}{2}}',
+        r'\Delta=\mathrm{NRMSE}_{\mathrm{reference}}-\mathrm{NRMSE}_{\mathrm{candidate}}',
+        r'L=L_{\mathrm{data}}+0.01\Delta t\sum_t(\Delta^2 r_t/\Delta t^2)^2+L_0+\Delta t\sum_t(\log f_t/\log2)^2+L_\theta'])
+    page('指标、先验和配对区间如何计算',metrics
+        +p('σtrain是冻结开发集SD。先在评分时间内计算误差平方均值，再平均HbO/HbR、被试内记录、被试，最后开方。隐藏条件的主评分时间仅包含隐藏Hb块，完整误差另存。所有配对比较均先限制共同成功身份，另列原计划分母。')
+        +p('Pearson r衡量中心化形状；幅比为预测SD/目标SD，1为幅度一致；有符号增益为中心化目标与预测内积除以目标能量；偏置为预测−目标均值除以训练SD。局部中心化NRMSE的分母是当前窗口目标SD，不能与训练SD误差混写。峰时间差只描述全局最大值位置。')
+        +p('L₀是物理初态偏离静息的工程二次惩罚。Lθ对log参数加一次组先验，不按窗口重复。报告数据、驱动、初态、流量和参数先验代价，避免用不同完整目标的数值直接排名。')
+        +p('区间使用2000次整被试配对bootstrap；训练坐标与拟合结果冻结，每库只有6名评价被试。区间为逐项探索性95%百分位区间，没有多重比较校正；跨零表示方向不确定。'))
+    syn=frames['synthetic'];syn_rows=[]
+    for scenario,part in syn.groupby('record'):
+        for arm in ('legacy_free_fit','tak_fit','tak_spm_prior'):
+            a=part[(part.arm==arm)&part.qualified]
+            syn_rows.append([scenario,labels[arm],len(a),number(hb(a)),
+                number(100*a.kappa_relative_error.abs().mean(),1),number(100*a.tau_relative_error.abs().mean(),1)])
+    page('合成实验支持实现正确，也保留错误模型假设的负对照',
+        tab(['生成条件','拟合模型','成功/3','Hb NRMSE','κ平均绝对相对误差/%','τ平均绝对相对误差/%'],syn_rows)
+        +p('三个固定种子共享相同上游驱动与噪声规则，改变生成器和初态。Tak非静息生成器保持p₀=v₀；旧自由初差生成器使用p₀≠v₀。真值只用于评分，不进入拟合启动点；各方法拟合同一带噪目标。')
+        +p('在Tak生成器上更低的观测误差和较小的参数误差支持新实现可用；在旧自由初差条件下Tak的失配说明p=v是一项实质假设。有限合成样本不是实测参数可识别性的替代证据。')
+        +p('独立SPM对数ODE核对、τᵥ=0新旧等价、五类参数导数数值差分、状态/初态切线、隐藏值隔离和4/8子步核验均已通过。'))
+    for condition,title in [('joint_full','联合完整重建'),('Hb_only_full','仅Hb拟合及未拟合EEG评分'),('joint_blocked','隐藏Hb补全')]:
+        vals=[]
+        for ds in ds_names:
+            for length in (30,90):
+                row=[ds_names[ds],length]
+                for arm in ('legacy_free','legacy_free_fit','tak_fixed','tak_fit','tak_spm_prior'):
+                    g=group(ds,arm,length,condition)
+                    row.append(number(g.get('score_hb_nrmse'))+f" ({g['qualified']}/{g['planned']})")
+                vals.append(row)
+        page(title+'：30秒与90秒分别比较',
+            tab(['数据集','秒','旧自由','旧自由＋估参','Tak固定参数','Tak主模型','Tak文献先验'],vals)
+            +p('括号为数值合格数/计划12片段；误差为各臂成功子集的被试等权Hb NRMSE。成功子集不同的表值不能直接作配对收益判断。30秒独立重拟合初态，未冒充90秒连续传播。')
+            +p('联合完整拟合可利用完整Hb目标；仅Hb拟合没有EEG约束；隐藏条件的Hb分数只用遮挡区，EEG仍全程可见。三种任务的信息条件不同，误差不能跨条件直接当作同一预测能力。'))
+    component_rows=[]
+    for ds in ds_names:
+        for condition in ('joint_full','Hb_only_full'):
+            a=select(ds,'legacy_free_fit',condition=condition);b=select(ds,'tak_fit',condition=condition)
+            keys=['eeg_nmse','full_hbo_nmse','full_hbr_nmse']
+            pair=a[['id','subject',*keys]].merge(b[['id',*keys]],on='id',suffixes=('_old','_tak'))
+            component_rows.append([ds_names[ds],'联合完整' if condition=='joint_full' else '仅Hb完整',len(pair),
+                *[number(hb(pair,key+'_old'))+' → '+number(hb(pair,key+'_tak')) for key in keys]])
+    page('分别看EEG、HbO和HbR，避免总误差掩盖分量失配',
+        tab(['90秒数据集','可见输入','配对片段/12','EEG NRMSE：旧→Tak','HbO NRMSE：旧→Tak','HbR NRMSE：旧→Tak'],component_rows)
+        +p('旧为旧自由初态＋估计κ/τ，Tak为四初态＋估计κ/τ；每行只用双方共同成功身份，保持相同训练SD、参数先验和可见条件。各分量先算时间NMSE，再按记录及被试汇总后开方。')
+        +p('仅Hb条件完全没有EEG数据项，表中EEG是未拟合目标的评分。即使Hb误差下降，若EEG明显变差，说明自由驱动在两种观测之间作了不同折中，不能解释为神经驱动恢复。'))
+    contrasts=[x for x in summaries['measured']['paired_contrasts'] if x['length_s']==90 and x['condition']=='joint_full'
+        and (x['reference'],x['candidate']) in [('legacy_tied','tak_fixed'),('legacy_tied_fit','tak_fit'),('legacy_free_fit','tak_fit'),('legacy_free','tak_fit')]]
+    fig,ax=plt.subplots(figsize=(8.8,6.4),layout='constrained');ys=np.arange(len(contrasts))
+    for i,x in enumerate(contrasts):
+        if 'ci95' in x:
+            lo,hi=x['ci95'];v=x['improvement'];ax.plot([lo,hi],[i,i],color='#1768ac',lw=1.5);ax.scatter([v],[i],color='#1768ac',s=28)
+    ax.set_yticks(ys,[ds_names[x['dataset']]+' · '+labels[x['reference']]+' → '+labels[x['candidate']]+f" ({x['paired_records']}/12)" for x in contrasts])
+    ax.axvline(0,color='black',ls='--',lw=1);ax.invert_yaxis();ax.set_xlabel('配对Hb NRMSE改善（参考−候选，正值有利于候选）')
+    page('配对比较隔离方程收益与参数自由度',save(fig,'paired_contrasts','measured_summary.json:paired_contrasts',
+        '每点为一个数据集内的配对汇总，线段为整被试95%探索区间。括号为共同成功片段/12；样本独立单位是被试。')
+        +p('旧绑定→Tak固定隔离参考参数下的黏弹性；旧绑定＋估参→Tak主模型保持四初态和两参数自由度；旧自由＋估参仍多一个独立p初态；旧自由→Tak主模型是总体迁移效果。区间跨零时不声称方向已确定。'))
+    base_rows=[]; hidden_worse=0; hidden90=[]
+    for ds in ds_names:
+        for length in (30,90):
+            part=select(ds,'tak_fit',length,'joint_blocked');tmp=part.copy()
+            for col,key in [('zero','zero_baseline'),('interpolation','interpolation_baseline')]:
+                tmp[col]=[r['score_hb_nmse'] for r in tmp[key]]
+            base_rows.append([ds_names[ds],length,len(tmp),number(hb(tmp)),number(hb(tmp,'zero')),number(hb(tmp,'interpolation'))])
+            hidden_worse += int(hb(tmp)>hb(tmp,'interpolation'))
+            if length==90:hidden90.append(ds_names[ds]+' '+number(hb(tmp))+'/'+number(hb(tmp,'interpolation')))
+    page('隐藏段必须同时比较零预测和可见Hb插值',
+        tab(['数据集','秒','共同成功片段','Tak主模型','零预测','可见Hb线性插值'],base_rows)
+        +p('三个分数在Tak成功的完全相同身份与隐藏时间上计算。零预测保留参考后的零水平；插值仅使用可见Hb特征并在同一训练SD上评分。完整记录缓存预处理早于遮挡，所有模型均处于离线特征条件。')
+        +p(f'<b>四库30秒和90秒的八个比较中，{hidden_worse}个Tak误差高于可见Hb线性插值。</b>90秒Tak/插值NRMSE为'+ '、'.join(hidden90)+'。方程忠实性和隐藏特征补全优势需分别判断。')
+        +p('本轮没有独立EEG错配检验，不能把联合补全收益全部归因于EEG；也不把旧模型比较或离线特征插值称为生理状态恢复。'))
+    # Fixed explanatory selection uses only the legacy full 90s error. The atlas
+    # includes every planned record, including numerical failures.
+    selected={}
+    for ds in ds_names:
+        candidates=select(ds,'legacy_free').sort_values(['score_hb_nmse','id'])
+        middle=candidates.score_hb_nmse.median()
+        selected[ds]=candidates.assign(distance=abs(candidates.score_hb_nmse-middle)).sort_values(['distance','id']).iloc[0].id
+    group_by_id={r['id']:g['id'] for g in plan['groups'] for r in g['refs']}
+    def task(ref,condition,arm):
+        key=f"measured__{group_by_id[ref['id']]}__90__{condition}__{arm}"
+        meta=json.loads((run/'tasks'/(key+'.json')).read_text())
+        index=next(i for i,r in enumerate(meta['spec']['group']['refs']) if r['id']==ref['id'])
+        path=run/'tasks'/(key+'.npz')
+        a=dict(np.load(path,allow_pickle=False)) if path.exists() else {}
+        row=next(r for r in meta['rows'] if r['id']==ref['id'])
+        return a,index,row,str(path.relative_to(run))
+    for ref in plan['records']:
+        fig,axes=plt.subplots(3,2,figsize=(8.8,6.1),sharex=True,sharey='row',layout='constrained');source=[];metrics_rows=[];interpretation=[]
+        for col,condition in enumerate(('joint_full','joint_blocked')):
+            arrays,index,row,path=task(ref,condition,'legacy_free');source.append(path)
+            if 'target' not in arrays:
+                for ax in axes[:,col]:ax.text(.1,.5,'准备失败，完整分母保留',transform=ax.transAxes)
+                continue
+            target=arrays['target'][index];sd=arrays['sd'][index];time_axis=np.arange(len(target)-1)*.25
+            for c,ax in enumerate(axes[:,col]):
+                ax.plot(time_axis,target[:-1,c]/sd[c],color='black',lw=1.2,label='处理后实测')
+                if col==1 and c>0:
+                    for k in (0,30,60):
+                        for left,right in ((10,15),(20,25)):ax.axvspan(k+left,k+right,color='#c8d5df',alpha=.5)
+                ax.axhline(0,color='#aaa',ls=':',lw=.6);ax.set_ylabel(COMPONENTS[c]+' / 训练SD');ax.set_xlim(0,89.5)
+                if c==2:ax.set_xlabel('90秒片段内时间 / 秒')
+            failed_labels=[]
+            for arm in ('legacy_free','legacy_free_fit','tak_fit'):
+                a,i,row,path=task(ref,condition,arm);source.append(path)
+                if not row['qualified']:failed_labels.append(labels[arm])
+                if 'prediction' not in a:continue
+                for c,ax in enumerate(axes[:,col]):
+                    ax.plot(time_axis,a['prediction'][i,:-1,c]/sd[c],color=colors[arm],ls=styles[arm],lw=1.05,
+                        label=labels[arm])
+                metrics_rows.append([('完整' if col==0 else '隐藏'),labels[arm],row['qualified'],
+                    number(np.sqrt(row.get('score_hb_nmse',np.nan))),
+                    '/'.join(number(w['pearson_r']) for w in row.get('waveform',[])[1:]),
+                    '/'.join(number(w['centered_amplitude_ratio']) for w in row.get('waveform',[])[1:])])
+                if arm=='tak_fit':
+                    for c,w in enumerate(row['waveform'][1:],start=1):
+                        valid=np.ones(len(target),bool);valid[-1]=False
+                        if condition=='joint_blocked':valid &= ~a['visible'][i,:,c]
+                        maximum=int(np.flatnonzero(valid)[np.argmax(abs(a['prediction'][i,valid,c]-target[valid,c]))])
+                        interpretation.append(('完整' if col==0 else '隐藏')+' '+COMPONENTS[c]+': Tak的r='+number(w['pearson_r'])+
+                            '，幅比='+number(w['centered_amplitude_ratio'])+'，偏置='+number(w['bias_training_sd'])+
+                            '训练SD；最大绝对残差位于'+number(maximum*.25,2)+'秒，预测峰相对目标峰差'+number(w['peak_time_difference_s'],2)+'秒。')
+            title='联合完整重建' if col==0 else '隐藏Hb块补全'
+            if failed_labels:title+='\n未合格：'+'、'.join(failed_labels)
+            axes[0,col].set_title(title,fontsize=10)
+        handles,legend_labels=axes[0,0].get_legend_handles_labels()
+        fig.legend(handles,legend_labels,loc='outside upper center',ncol=4,fontsize=9)
+        name='waveform_'+ref['id'];caption=(ds_names[ref['dataset']]+' · '+ref['subject']+' · '+ref['record']+
+            f" · Hb起点{ref['hb_start_s']:.3f}秒。每行一个观测分量，灰区Hb只评分；两列同一纵轴。")
+        html=save(fig,name,source,caption);atlas_figures.append((images[-1],caption))
+        if selected[ref['dataset']]==ref['id']:
+            page(ds_names[ref['dataset']]+'：预先按旧模型中位误差选取的解释样例',html
+                +tab(['条件','模型','数值合格','Hb NRMSE','r：HbO/HbR','幅比：HbO/HbR'],metrics_rows)
+                +p(' '.join(interpretation))
+                +p('各条件单独重拟合；曲线为完整模型预测，非独立成分。r接近1只表示形状一致，幅比偏离1或偏置仍可造成误差。选择依据为本库旧自由臂90秒完整误差距中位数最近者，不使用Tak收益选例；全48片段在图册中保留。'))
+    sensitivities=[]
+    sens=frames['sensitivity'];ref=good[(good.arm=='tak_fit')&(good.length_s==90)&(good.condition=='joint_full')]
+    for (ds,arm),part in sens.groupby(['dataset','arm']):
+        pair=part[part.qualified].merge(ref[['id','kappa','tau','score_hb_nmse']],on='id',suffixes=('','_base'))
+        independent=pair.drop_duplicates('group')
+        sensitivities.append([ds_names[ds],arm,len(pair),number(hb(pair)),
+            number(100*np.median(abs(independent.kappa/independent.kappa_base-1)),1) if len(pair) else '—',
+            number(100*np.median(abs(independent.tau/independent.tau_base-1)),1) if len(pair) else '—'])
+    page('参数与初态先验敏感性：共享参数按组计数',
+        tab(['数据集','敏感性臂','配对片段/12','Hb NRMSE','κ变化中位/%','τ变化中位/%'],sensitivities)
+        +p('变化取相对Tak主模型的绝对相对差，参数先去重到原生记录／session组，再取组中位数；表内Hb误差仍按记录、被试顺序汇总。narrow/wide为log-SD 0.125/0.5；tv1/tv4为固定τᵥ=1/4秒；initial50/200为四初态权重。')
+        +p('同样低的观测误差若对应显著变化的参数，提示条件补偿。这里的百分比不是生理差异效应量或置信区间；固定τᵥ时估计的τ可能吸收真实黏弹性差异。'))
+    parameter_rows=[];repeat_rows=[];start_exceptions=[]
+    for ds in ds_names:
+        for arm in ('legacy_free_fit','legacy_tied_fit','tak_fit','tak_spm_prior'):
+            part=select(ds,arm);once=part.drop_duplicates('group');spreads=[];converged_starts=0;planned_starts=0;boundaries=0
+            for _,row in once.iterrows():
+                key=f"measured__{row['group']}__90__joint_full__{arm}"
+                fit=json.loads((run/'tasks'/(key+'.json')).read_text())['fit']
+                attempts=fit['starts'];valid=[a for a in attempts if a['converged']]
+                converged_starts+=len(valid);planned_starts+=len(attempts)
+                boundaries+=int(min(fit['log_parameter_boundary_distance'])<1e-6)
+                if len(valid)>1:
+                    values=np.array([a['parameter_values'] for a in valid])
+                    spreads.append(float(np.max((values.max(0)-values.min(0))/np.array(fit['parameter_values']))))
+                    if spreads[-1]>.01:
+                        j=int(np.argmax((values.max(0)-values.min(0))/np.array(fit['parameter_values'])))
+                        start_exceptions.append(ds_names[ds]+' '+str(row['subject'])+' '+labels[arm]+'的'+fit['parameter_names'][j]+
+                            '在已收敛起点间为'+number(values[:,j].min())+'–'+number(values[:,j].max())+
+                            '；起点完整目标范围'+number(min(a['objective'] for a in valid),2)+'–'+number(max(a['objective'] for a in valid),2)+'。')
+            parameter_rows.append([ds_names[ds],labels[arm],len(once),
+                number(once.kappa.min())+'–'+number(once.kappa.max()) if len(once) else '—',
+                number(once.tau.min())+'–'+number(once.tau.max()) if len(once) else '—',boundaries,
+                f'{converged_starts}/{planned_starts}',number(100*max(spreads),3) if spreads else '—'])
+            repeat=[]
+            for _,subject in part.groupby('subject'):
+                if len(subject)==2 and subject.group.nunique()==2:
+                    repeat.append([subject.kappa.max()/subject.kappa.min()-1,subject.tau.max()/subject.tau.min()-1])
+            repeat_rows.append([ds_names[ds],labels[arm],len(repeat),
+                number(100*np.median(np.array(repeat)[:,0]),1) if repeat else '—',
+                number(100*np.median(np.array(repeat)[:,1]),1) if repeat else '—'])
+    page('多起点一致、参数边界和跨记录一致性不是同一件事',
+        tab(['90秒完整','模型','成功参数组','κ范围','τ/s范围','触边组','成功起点','最大起点差/%'],parameter_rows)
+        +p('参数范围按原生组去重，触边表示任一参数距数值边界的log相对距离小于0.000001。最大起点差为同组已收敛起点的参数极差除以选中参数，再取所有参数及组最大值；不包含未收敛起点。')
+        +p(' '.join(start_exceptions) if start_exceptions else '成功组的起点差均未超过1%。')
+        +p('多起点一致仅说明当前先验和目标下的数值解稳定；上表例外按最小完整目标选择，仍保留其他局部解。边界值不是生理上下限；τ达到12秒或τᵥ达到40.2秒都只能报告搜索箱内的条件解。'))
+    page('重复记录分别拟合后，参数仍需独立核对',
+        tab(['数据集','模型','可用独立拟合记录对','κ差异中位/%','τ差异中位/%'],repeat_rows)
+        +p('仅纳入同一被试两条记录均成功、且没有被硬共享为同一参数组的记录对。百分比定义为两次估计较大值/较小值−1，再取被试中位数；不是有符号变化或置信区间。')
+        +p('同一原生记录／session支持中的两个不连续块若共享参数，不进入本表。不同视频或文件的重复不是额外被试，原生会话身份不足时也不称跨会话重测。误差较低、数值稳定与生理参数可重复性分别判断。'))
+    state_rows=[];objective_rows=[];multistart=[]
+    for ds in ds_names:
+        for arm in ('legacy_free','legacy_free_fit','tak_fit','tak_spm_prior'):
+            part=select(ds,arm)
+            state_rows.append([ds_names[ds],labels[arm],len(part),
+                number(min(r['f'][0] for r in part.state_extrema))+'–'+number(max(r['f'][1] for r in part.state_extrema)) if len(part) else '—',
+                number(min(r['v'][0] for r in part.state_extrema))+'–'+number(max(r['v'][1] for r in part.state_extrema)) if len(part) else '—',
+                number(part.p_minus_v_max.max()) if len(part) else '—',number(part.driver_rms.median()) if len(part) else '—'])
+            once=part.drop_duplicates('group')
+            objective_rows.append([ds_names[ds],labels[arm],len(once),*[number(np.median([v[k] for v in once.objective_components])) if len(once) else '—' for k in ('data','driver','initial','flow','parameter_prior')]])
+    page('合法状态、驱动补偿和p=v约束分别检查',
+        tab(['90秒完整','模型','成功片段','血流f范围','容量v范围','最大|p−v|','驱动RMS中位'],state_rows)
+        +p('f、v相对静息归一化，范围是全部成功轨迹的极值；r的幅度处于冻结EEG读出坐标。Tak的p−v精确为0由实现保证，不是数据估计结果。初态与完整六列条件状态保存在任务NPZ；不存在实测生理真值用于潜状态评分。')
+        +p('更低NRMSE必须和状态偏离、驱动补偿、边界及先验一起解释。绝对Hb非负检查属于数学域，不能当作人体生理正常范围。'))
+    page('完整目标分解：观测收益是否伴随其他代价',
+        tab(['90秒完整','模型','参数组','数据项','驱动曲率','初态','流量','参数先验'],objective_rows)
+        +p('表值为每个原生参数组完整代价的中位数；不同组包含的片段数可能不同，不将其当作归一化误差。参数先验每组只计算一次。Tak文献先验与主模型的先验宽度不同，不能直接用总目标跨模型排名。')
+        +p('每个起点的收敛状态、前向评价次数、最终参数与完整目标均保留在tasks/*.json。只有满足尺度化梯度阈值并通过独立重放和积分加密的结果计为合格；失败轨迹可在图册显示，但不进入成功子集收益。'))
+    numerical=[]
+    for phase,fr in frames.items():
+        valid=fr[fr.qualified]
+        numerical.append([phase,len(fr),int(fr.qualified.sum()),int((~fr.qualified).sum()),
+            number(fr.integration_max_training_sd.max(),8) if len(fr) else '—'])
+    page('数值核验、结论边界与证据入口',
+        tab(['阶段','完整分母','合格','失败','最大4/8子步差/训练SD'],numerical)
+        +p(f"独立保存数组复算{audit['checked_rows']}条：评分最大差{audit['maxima']['score']:.2e}，状态到观测闭合最大差{audit['maxima']['observation']:.2e}，完整目标相对差{audit['maxima']['objective_relative']:.2e}。")
+        +p('积分阈值0.005。初态和参数搜索不裁剪非法状态，域外RK阶段拒绝并保留原因。失败统计和配对分母来自全部计划任务，未通过减少分母、重命名预算耗尽或复用旧未滤波拟合提高成功率。')
+        +p('本次迁移解决了Tak方程、p=v与确定性动力学的一致性，并量化了在当前缓存坐标中的收益及代价。条件重建更好不等于真实神经驱动、血流、容量或参数已恢复；隐藏块也不是独立传感器预测。')
+        +p('后续是否扩大模型自由度，应由同样估参的旧模型对照、隐藏基线与参数敏感性共同决定。若收益小于先验或固定τᵥ带来的变化，应优先保留条件参数解释，并在独立记录上检验；不直接授予生理teacher资格。')
+        +p('数值事实源：measured_summary.json、sensitivity_summary.json、synthetic_summary.json与对应rows及tasks。身份／坐标：plan.json、preparation.json、prepared/。监督／源码：launch_*.json、resources.json、source_snapshot/。本报告只作汇总，旧证据保持原身份。')
+        +p('方程来源：<a href="https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf">Tak等，NeuroImage 2015</a>；<a href="https://github.com/spm/spm12/blob/main/toolbox/dcm_fnirs/spm_fx_fnirs.m">SPM动力学</a>；<a href="https://github.com/spm/spm12/blob/main/toolbox/dcm_fnirs/spm_dcm_fnirs_priors.m">SPM初态与先验</a>。'))
+    css=('body{font-family:sans-serif;font-size:10pt;line-height:1.4;color:#17212e}h1{font-size:17pt;color:#123e59;margin-bottom:10pt}'
+         'p{margin:6pt 0}table{width:100%;border-collapse:collapse;font-size:8pt;margin:8pt 0}'
+         'td,th{border:.4pt solid #c1cad3;padding:4pt}th{background:#eef3f7}img{max-width:100%}.figure{margin:5pt 0}')
+    html='<!doctype html><html lang="zh"><meta charset="utf-8"><style>'+css+'.section{max-width:760px;margin:24px auto}</style><body>'
+    (out/'REPORT.html').write_text(html+''.join('<section class="section">'+body+'</section>' for body in pages)+'</body></html>')
+    pdf=fitz.open();page_map=[]
+    def rectfn(number,filled):
+        if number>2:raise ValueError('Tak report section overflow; split visible content')
+        rect=fitz.paper_rect('a4');return rect,rect+(35,32,-35,-32),None
+    for i,body in enumerate(pages):
+        part=fitz.Story(body,user_css=css,archive=fitz.Archive(str(out))).write_with_links(rectfn)
+        page_map.append(dict(section=i+1,pages=list(range(len(pdf)+1,len(pdf)+len(part)+1))))
+        pdf.insert_pdf(part);part.close()
+    pdf.save(out/'REPORT.pdf',garbage=4,deflate=True)
+    validation=dict(pages=len(pdf),sections=len(pages),image_objects=sum(len(page.get_images()) for page in pdf),
+        searchable_characters=sum(len(page.get_text()) for page in pdf),chart_dpi=240,formula_dpi=300,
+        figures_embedded_as_bitmap=True,page_map=page_map,wps_checked=False)
+    for i,page_obj in enumerate(pdf):page_obj.get_pixmap(dpi=110).save(out/f'preview_{i+1:02d}.png')
+    if validation['image_objects']<7 or validation['searchable_characters']<4000:raise AssertionError('Tak bitmap/text export validation failed')
+    pdf.close();atlas=fitz.open()
+    for path,caption in atlas_figures:
+        page_obj=atlas.new_page();page_obj.insert_image(fitz.Rect(28,45,567,760),filename=str(path),keep_proportion=True)
+        page_obj.insert_text((28,24),path.stem.replace('waveform_','')[:95],fontsize=8)
+    atlas.save(out/'WAVEFORM_ATLAS.pdf',garbage=4,deflate=True)
+    validation['atlas_pages']=len(atlas);validation['atlas_image_objects']=sum(len(p.get_images()) for p in atlas)
+    if validation['atlas_image_objects']!=48:raise AssertionError('Tak atlas must retain all 48 record figures')
+    atlas.close()
+    (out/'figure_sources.json').write_text(json.dumps(sources,ensure_ascii=False,indent=2)+'\n')
+    (out/'export_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+    shutil.copy2(Path(__file__),out/'renderer_source.py')
+    print(json.dumps(validation,ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path)
@@ -8887,6 +9228,7 @@ def main():
     parser.add_argument("--waveform-diagnostic", action="store_true")
     parser.add_argument('--volume-drive-diagnostic', action='store_true')
     parser.add_argument('--decay-diagnostic', action='store_true', help='Render retained six-arm initial-difference decay and actual-input evidence')
+    parser.add_argument('--tak-comparison', action='store_true', help='Render verified Tak core comparison')
     parser.add_argument('--filter-retest', action='store_true', help='Render verified no-extra-component cached-input sensitivity')
     parser.add_argument('--decay-evidence', type=Path, help='Versioned replay-only evidence overlay; trajectories and fixed config remain under --run')
     parser.add_argument("--fitting-explainer", action="store_true", help="Export an offline interactive lesson from the retained public waveform cases")
@@ -8898,6 +9240,16 @@ def main():
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.run is not None and not any(value is True for value in vars(args).values()):
+        config_path=args.run/'resolved_config.json'
+        if config_path.exists():
+            args.tak_comparison=json.loads(config_path.read_text()).get('schema')=='shared_driver_tak_v1'
+    if args.tak_comparison:
+        if args.run is None:parser.error('--tak-comparison requires --run')
+        if any(value is True for key,value in vars(args).items() if key != 'tak_comparison'):
+            parser.error('Choose one report mode')
+        render_tak(args.run.resolve(),args.output.resolve())
+        return
     if args.filter_retest:
         if args.run is None: parser.error('--filter-retest requires --run')
         if any(value is True for key,value in vars(args).items() if key != 'filter_retest'):

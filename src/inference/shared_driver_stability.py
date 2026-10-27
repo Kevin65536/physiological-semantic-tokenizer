@@ -168,12 +168,12 @@ def fit_record(target,sd,cfg,base,model,*,arm='C0a',fixed=None,prior=None,
             fit[name]=value
             if audit:
                 inspected=fit_nonlinear_shared_parameters(y,p,.25,**dict(options,max_iterations=0,
-                    starts=[dict(parameter_values=[value],driver=fit['driver'],initial_state=fit['initial_state'])]))
+                    starts=[dict(parameter_values=[value],driver=fit['driver'],initial_state=fit['initial_state'])]), hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
                 for key in ('information','objective_components','raw_parameter_gradient','raw_parameter_gradient_components',
                     'raw_parameter_kkt_inf_norm','projected_raw_parameter_gradient','log_parameter_boundary_distance'):
                     fit[key]=inspected[key]
                 fit['audit_objective_difference']=float(inspected['objective']-fit['objective'])
-    else:fit=fit_nonlinear_shared_parameters(y,p,.25,**options)
+    else:fit=fit_nonlinear_shared_parameters(y,p,.25,**options, hemodynamics='inlet_balance', viscoelastic_s=0., initial_state_mode='free')
     if 'prediction' in fit:
         pred=np.asarray(fit['prediction']).reshape(-1,3)
         fit['nrmse']=np.sqrt(np.mean(((pred-np.asarray(target).reshape(-1,3))/sd)**2,axis=0))
@@ -325,7 +325,7 @@ def synthetic_pair(cfg,base,subject,level,model='P2'):
         driver=sum(a*np.sin(clock*f+ph) for a,f,ph in zip([1.,.7,.4,.2],[.08,.25,.6,1.4],phases))
         driver*=cfg['synthetic']['driver_sd']/np.std(driver)
         initial=np.r_[rg.normal(0,.005),np.exp(rg.normal(0,.015,4))]
-        forward=nonlinear_driver_forward(driver,initial,p,.25,substeps=8,numerical_backend='numba',derivative=False)
+        forward=nonlinear_driver_forward(driver,initial,p,.25,substeps=8,numerical_backend='numba',derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0.)
         y=(operator@forward['canonical_prediction'].ravel()).reshape(-1,3)
         # Training gauge/noise scale is fixed before any virtual subject truth.
         sd=np.full(3,.025);noise=rg.normal(size=y.shape)*sd*cfg['synthetic']['noise_fraction']
@@ -338,7 +338,7 @@ def oracle_fit(target,driver,initial,sd,cfg,base,names):
     operator=native_model_operator(len(driver),block_steps=120)
     def residual(logp):
         p=parameter_object(base,dict(zip(names,np.exp(logp))))
-        f=nonlinear_driver_forward(driver,initial,p,.25,substeps=4,numerical_backend='numba',derivative=False)
+        f=nonlinear_driver_forward(driver,initial,p,.25,substeps=4,numerical_backend='numba',derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0.)
         return (((operator@f['canonical_prediction'].ravel()).reshape(-1,3)-target)/sd).ravel()
     result=least_squares(residual,np.log(REFERENCE[indices]),bounds=np.log(bounds).T,
                          xtol=1e-10,gtol=1e-8,ftol=1e-10,max_nfev=100)

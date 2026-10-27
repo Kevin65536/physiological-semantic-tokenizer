@@ -1,4 +1,4 @@
-"""Fixed spatial readouts of one or two independent nonlinear Balloon cores.
+"""Retained pre-Tak spatial readouts of independent inlet-balance cores.
 
 Each spatial coordinate owns one driver and five initial vascular coordinates.
 Physiology, temporal coordinates, spatial loadings, gains and observation
@@ -121,7 +121,7 @@ def forward_spatial_shared_driver(coefficients, initial_coordinates, parameters,
     drivers = basis@coef
     cores = [nonlinear_driver_forward(drivers[:, index], physical_initial[index],
         parameters, dt, derivative=derivative, substeps=substeps,
-        return_flow_jacobian=derivative, numerical_backend=numerical_backend)
+        return_flow_jacobian=derivative, numerical_backend=numerical_backend, hemodynamics='inlet_balance', viscoelastic_s=0.)
         for index in range(k)]
     states = np.stack([core["states"] for core in cores], axis=1)
     latent_hb = np.stack([core["canonical_prediction"][:, 1:] for core in cores], axis=1)

@@ -109,7 +109,7 @@ def test_nonlinear_replay_matches_small_signal_design_and_retains_stage_checks()
     initial = initial_delta+np.array([0., 1., 1., 1., 1.])
     design = build_shared_driver_design(p, steps, dt)
     expected = (design.canonical_design@np.r_[r, initial_delta]).reshape(steps, 3)
-    replay = replay_nonlinear_driver(r, initial, p, dt)
+    replay = replay_nonlinear_driver(r, initial, p, dt, hemodynamics='inlet_balance', viscoelastic_s=0.)
     assert replay['status'] == 'completed'
     assert replay['failure'] is None
     assert replay['checks']['all_intermediate_valid']
@@ -126,7 +126,7 @@ def test_nonlinear_replay_preserves_linear_signal_flow_dynamics_at_large_amplitu
     initial_delta = np.array([.005, .08, .05, .04, .02])
     design = build_shared_driver_design(p, steps, dt)
     linear = np.einsum('tij,j->ti', design.state_design, np.r_[r, initial_delta])
-    replay = replay_nonlinear_driver(r, initial_delta+np.array([0., 1., 1., 1., 1.]), p, dt)
+    replay = replay_nonlinear_driver(r, initial_delta+np.array([0., 1., 1., 1., 1.]), p, dt, hemodynamics='inlet_balance', viscoelastic_s=0.)
     assert replay['status'] == 'completed'
     np.testing.assert_allclose(replay['states'][:, 1], linear[:, 0], atol=2e-9, rtol=0.)
     np.testing.assert_allclose(replay['states'][:, 2], 1+linear[:, 1], atol=2e-9, rtol=0.)
@@ -134,7 +134,7 @@ def test_nonlinear_replay_preserves_linear_signal_flow_dynamics_at_large_amplitu
 
 @pytest.mark.parametrize('initial', [[0., 0., 1., 1., 1.], [0., 1., 1., 1., 4.]])
 def test_nonlinear_replay_rejects_initial_domain_without_clipping(initial):
-    replay = replay_nonlinear_driver(np.zeros(5), initial, core.BalloonParameters(), .25)
+    replay = replay_nonlinear_driver(np.zeros(5), initial, core.BalloonParameters(), .25, hemodynamics='inlet_balance', viscoelastic_s=0.)
     assert replay['status'] == 'failed_domain'
     assert replay['failure']['stage'] == 'initial'
     assert replay['checks']['completed_samples'] == 0
@@ -144,7 +144,7 @@ def test_nonlinear_replay_rejects_initial_domain_without_clipping(initial):
 
 def test_nonlinear_replay_rejects_midway_invalid_flow_and_retains_prefix():
     replay = replay_nonlinear_driver(np.full(20, -10.), [0., 1., 1., 1., 1.],
-        core.BalloonParameters(), .25)
+        core.BalloonParameters(), .25, hemodynamics='inlet_balance', viscoelastic_s=0.)
     assert replay['status'] == 'failed_domain'
     assert replay['failure']['stage'] != 'initial'
     assert 0 < replay['checks']['completed_samples'] < 20
@@ -162,4 +162,4 @@ def test_nonlinear_replay_input_contract(kwargs):
                 parameters=core.BalloonParameters(), dt=.25)
     args.update(kwargs)
     with pytest.raises(ValueError):
-        replay_nonlinear_driver(**args)
+        replay_nonlinear_driver(**args, hemodynamics='inlet_balance', viscoelastic_s=0.)

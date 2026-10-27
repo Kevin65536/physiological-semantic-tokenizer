@@ -240,7 +240,7 @@ def create_demo_bundle(output, seed=20261016):
     r1 = .09 * np.exp(-.5 * ((time - 12.) / 2.8) ** 2) + .055 * np.exp(-.5 * ((time - 34.) / 3.5) ** 2)
     r2 = .025 * np.exp(-.5 * ((time - 14.) / 3.) ** 2) + .11 * np.exp(-.5 * ((time - 43.) / 2.5) ** 2)
     local = np.stack([
-        nonlinear_driver_forward(r, initial, parameters, dt, substeps=4, derivative=False)["canonical_prediction"][:, 1:]
+        nonlinear_driver_forward(r, initial, parameters, dt, substeps=4, derivative=False, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')["canonical_prediction"][:, 1:]
         for r in (r1, r2)
     ], axis=1)
     weights = np.array([[.85, .15], [.65, .35], [.35, .65], [.15, .85]])

@@ -61,6 +61,11 @@ that succeeds only because two arrays currently share an ordering is invalid.
 
 ### TK conditional functional targets — 2026-10-10
 
+This target generation retains its pre-Tak inlet-balance teacher identity.
+The [Tak baseline](ARCHITECTURE.md#tak-hemodynamic-baseline) does not relabel
+these cached targets or their consumer schema; future Tak-derived supervision
+requires a versioned target contract and newly generated targets.
+
 The versioned `functional_training_cache_v1` producer is owned by
 [`functional_tokenizer_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/functional_tokenizer_v1.yaml)
 and [`src/data/functional_tokenizer.py`](../src/data/functional_tokenizer.py).

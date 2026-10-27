@@ -16,7 +16,7 @@ def synthetic():
     p = replace(p, free=replace(p.free, tau=1.6))
     r = .06*np.sin(np.arange(20)*.4)+.02*np.cos(np.arange(20)*.9)
     initial = np.array([.01, 1.03, 1.02, 1.02, .98])
-    y = nonlinear_driver_forward(r, initial, p, .3)['canonical_prediction']
+    y = nonlinear_driver_forward(r, initial, p, .3, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
     return p, r, initial, y
 
 
@@ -72,7 +72,7 @@ def test_matched_nonrest_initial_constraint_recovers_states_driver_and_tau(group
         second_initial[[2, 3]] = 1.01
         truth_initial = np.stack([initial, second_initial])
         truth_driver = np.stack([r, .7*r])
-        second_y = nonlinear_driver_forward(.7*r, second_initial, p, .3)['canonical_prediction']
+        second_y = nonlinear_driver_forward(.7*r, second_initial, p, .3, hemodynamics='inlet_balance', viscoelastic_s=0., numerical_backend='python')['canonical_prediction']
         fit = fit_nonlinear_shared_parameter(np.stack([y, second_y]), p, .3, parameter_name='tau',
             parameter_bounds=(.5, 8.), max_evaluations=400, max_iterations=60,
             starts=[dict(parameter_value=2., driver=np.zeros((2, n)),

@@ -1526,7 +1526,8 @@ def run_shape_relations(cfg,parent,shape_parent,out,workers,pilot=False):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config',type=Path,default=DEFAULT)
+    parser.add_argument('--config',type=Path,required=True,
+        help='Explicit retained teacher/tokenizer contract; a new Tak teacher requires a versioned target contract')
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--project-root',type=Path,default=SOURCE)
     parser.add_argument('--stage',choices=['plan','synthetic','pilot','all','prepare','train','train-one','evaluate','auxiliary','hard-probe','gpu-pilot','cpu-pilot','relation-probe','shape-probe','shape-relations'],default='all')
