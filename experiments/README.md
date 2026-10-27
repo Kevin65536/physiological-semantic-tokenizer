@@ -129,6 +129,66 @@ After verification and the independent retained-array audit, render with
 `scripts/render_shared_driver_reconstruction.py --tak-comparison --run <run>
 --output <fresh_export>` for the searchable PDF and complete bitmap waveform atlas.
 
+Automatic fNIRS morphology scoring reads the retained targets and predictions
+without refitting or changing the parent evidence:
+
+```bash
+.venv/bin/python experiments/scripts/evaluate_shared_driver_reconstruction.py \
+  --config <completed_tak_run>/resolved_config.json \
+  --tak-stage morphology --run-dir <completed_tak_run> \
+  --morphology-output <completed_tak_run>/morphology_v1
+```
+
+The export currently accepts the retained `shared_driver_tak_v1` contract;
+pass its saved configuration explicitly rather than a newer fitting default.
+It uses the complete waveform-atlas scope: every planned 90 s identity,
+`joint_full` and `joint_blocked`, and `legacy_free`, `legacy_free_fit`, `tak_fit`.
+It requires a fresh export directory below the completed run. The parent
+configuration, task identities and public cached-input contract are checked
+before reading the saved arrays; no raw-data, cache-production or fitting path
+is invoked. Original qualification and failure fields remain attached to each
+result. The hidden condition scores its actual disconnected hidden Hb blocks;
+metrics never bridge those blocks or substitute full-window scores.
+
+The numerical definitions and engineering defaults are owned by
+[`src/metrics/fnirs_morphology.py`](../src/metrics/fnirs_morphology.py).
+They report separate dimensions, without a weighted total or an automatic
+physiological qualification:
+
+- trajectory and local detrended shape correlation, with slope-direction loss;
+- matched local peak/trough timing and half-prominence width;
+- missed and additional extrema, precision, recall and matching denominators;
+- measured versus reconstructed HbO/HbR covariation on common support.
+
+Amplitude ratio and training-scale bias/error are separate. Independent
+normalization is restricted to temporary single-component shape scoring; it
+does not alter observations, predictions, the paired-Hb coordinates or fitting.
+`within_segment_r` pools values after centering each continuous support block;
+the ordinary full-curve correlation is unavailable for disconnected support.
+Local shape correlations remove a linear trend within each complete window.
+Slope-direction loss is the fraction of reference slope-squared energy whose
+predicted direction is zero or opposite; paired-Hb direction loss instead
+weights by the absolute product of the two reference slopes. Lower is better.
+Event precision/recall count same-type, order-preserving one-to-one matches;
+timing and width errors describe only matched events, alongside their counts.
+Positive timing error means the reconstructed event is later. Widths whose
+controlling prominence base is at a support boundary are censored; segment-local
+widths remain diagnostic detail and do not enter complete-width error summaries.
+Low dynamics, missing support, flat predictions, nonfinite values and censored
+widths remain explicit. Unavailable quantities are JSON `null`/empty CSV cells,
+with their status and coverage counts; they are not filled with good scores.
+Short hidden blocks may have no complete local-correlation window or peak width.
+The saved settings are numerical definitions, not calibrated biological or
+acceptance thresholds; optional `--morphology-settings <json>` overrides are
+validated and recorded in each fresh export.
+
+The CSV provides scalar metrics with canonical sample, model, condition and
+component keys for joins; JSON retains segment, local-window and event detail.
+Use subject-level paired summaries when combining these with other endpoints;
+overlapping windows and extrema are not independent subjects. Tests:
+[`test_fnirs_morphology.py`](../tests/test_fnirs_morphology.py),
+[`test_fnirs_morphology_export.py`](../tests/test_fnirs_morphology_export.py).
+
 The bounded post-10.20 filter sensitivity uses
 `scripts/evaluate_shared_driver_reconstruction.py --filter-retest --filter-stage
 <check|plan|prepare|pilot|run|summarize|verify> --run-dir <fresh_run>` with

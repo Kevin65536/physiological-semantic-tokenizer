@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ProcessPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import asdict, fields, replace
 from datetime import datetime, timezone
 import fcntl
 from functools import lru_cache
@@ -9136,10 +9136,189 @@ def tak_verify_arrays(cfg,out,plan):
     return result
 
 
+def tak_morphology_export(cfg, parent, output, settings_path=None):
+    """Read the retained 48-record waveform-atlas scope without mutating its run."""
+    from src.metrics.fnirs_morphology import MorphologySettings, fnirs_morphology_metrics
+    parent = Path(parent).resolve()
+    output = Path(output).resolve()
+    if output.parent != parent or output.exists():
+        raise ValueError('morphology output must be a fresh direct child of the retained run')
+
+    def retained_path(relative):
+        relative = Path(relative)
+        path = (parent/relative).resolve()
+        if relative.is_absolute() or '..' in relative.parts or not path.is_relative_to(parent):
+            raise ValueError('morphology retained path escapes the parent run')
+        return path
+
+    def read(relative):
+        return json.loads(retained_path(relative).read_text())
+
+    def basename(value):
+        return isinstance(value,str) and value not in ('','.','..') and Path(value).name==value and '\\' not in value
+
+    if (read('resolved_config.json') != cfg or cfg.get('schema') != 'shared_driver_tak_v1'
+            or cfg.get('scope') != 'exploratory_public_cached_Hb_conditional_reconstruction'
+            or cfg['data'].get('protected_data') != 'forbidden' or cfg['data'].get('raw_reads') is not False
+            or cfg['data'].get('identities') != 'exact_parent_evaluation_records_no_result_based_selection'
+            or cfg['tensor'].get('last_bin') != 'excluded_from_fit_and_score'):
+        raise ValueError('morphology requires the unchanged retained public Tak contract')
+    plan = read('plan.json')
+    records = plan.get('records',[])
+    if (plan.get('schema') != 'shared_driver_tak_plan_v1'
+            or plan.get('selection') != 'all_exact_parent_public_evaluation_records'
+            or len(records) != cfg['data']['expected_records']):
+        raise ValueError('morphology retained plan denominator or schema mismatch')
+    by_id = {}
+    for ref in records:
+        if (not basename(ref.get('id')) or ref['id'] in by_id
+                or ref.get('dataset') not in cfg['data']['datasets']
+                or ref.get('partition') != 'evaluation' or ref.get('duration_s') != 90
+                or ref.get('parent') not in cfg['parents']
+                or not all(isinstance(ref.get(k),str) and ref[k] for k in ('subject','record'))):
+            raise ValueError('morphology public plan identity mismatch')
+        by_id[ref['id']] = ref
+    grouped, group_ids = [], set()
+    for group in plan.get('groups',[]):
+        if not basename(group.get('id')) or group['id'] in group_ids or not group.get('refs'):
+            raise ValueError('morphology plan group identity mismatch')
+        group_ids.add(group['id'])
+        for ref in group['refs']:
+            if ref.get('id') not in by_id or ref != by_id[ref['id']]:
+                raise ValueError('morphology plan group record mismatch')
+            grouped.append(ref['id'])
+    if sorted(grouped) != sorted(by_id):
+        raise ValueError('morphology plan groups must contain every record exactly once')
+    jobs = tak_specs(cfg,plan,'measured')
+    summary = read('measured_summary.json')
+    planned_rows = sum(len(j['group']['refs']) for j in jobs)
+    if (summary.get('schema') != 'shared_driver_tak_summary_v1' or summary.get('status') != 'completed'
+            or summary.get('phase') != 'measured' or summary.get('missing') != []
+            or summary.get('planned_tasks') != len(jobs) or summary.get('terminal_tasks') != len(jobs)
+            or summary.get('planned_rows') != planned_rows or summary.get('terminal_rows') != planned_rows):
+        raise ValueError('morphology requires a completed measured parent with its full denominator')
+    selected = [j for j in jobs if j['length_s']==90 and j['condition'] in ('joint_full','joint_blocked')
+                and j['arm']['name'] in ('legacy_free','legacy_free_fit','tak_fit')]
+    admitted = []
+    for spec in selected:
+        relative = Path('tasks')/(spec['key']+'.json')
+        meta = read(relative)
+        refs = spec['group']['refs']
+        if (meta.get('spec') != spec or meta.get('status') not in ('completed','failed','failed_worker')
+                or len(meta.get('rows',[])) != len(refs)):
+            raise ValueError('morphology retained task spec or row denominator mismatch: '+spec['key'])
+        index_by_id = {r['id']:i for i,r in enumerate(refs)}
+        seen = set()
+        for row in meta['rows']:
+            identity = {k:row.get(k) for k in ('id','dataset','subject','record')}
+            ref = by_id.get(identity['id'])
+            if (ref is None or identity['id'] not in index_by_id or identity['id'] in seen
+                    or identity != {k:ref[k] for k in identity}
+                    or any(row.get(k)!=v for k,v in dict(group=spec['group']['id'],length_s=90,
+                        condition=spec['condition'],phase='measured',arm=spec['arm']['name']).items())
+                    or not isinstance(row.get('qualified'),bool) or not isinstance(row.get('converged'),bool)
+                    or not isinstance(row.get('fit_status'),str)):
+                raise ValueError('morphology retained row identity mismatch: '+spec['key'])
+            seen.add(identity['id'])
+        admitted.append((spec,meta,relative,index_by_id))
+    overrides = {} if settings_path is None else json.loads(Path(settings_path).read_text())
+    if not isinstance(overrides,dict) or set(overrides)-{f.name for f in fields(MorphologySettings)}:
+        raise ValueError('unknown morphology settings field')
+    settings = MorphologySettings(**overrides)
+    n = int(90/cfg['tensor']['dt_s'])
+    time_s = np.arange(n)*cfg['tensor']['dt_s']
+    result_rows, csv_rows = [], []
+
+    def scalars(value, prefix=''):
+        result = {}
+        for key,item in value.items():
+            name = prefix+str(key)
+            if isinstance(item,dict):
+                result.update(scalars(item,name+'_'))
+            elif key in ('slope_direction','slope_relationship') and isinstance(item,list):
+                for scale in item:
+                    result.update(scalars(scale,f"{name}_{scale['window_s']:g}s_"))
+            elif not isinstance(item,(list,tuple)):
+                result[name] = item
+        return result
+
+    # All contracts and retained identities are checked before the first array read.
+    for spec,meta,relative,index_by_id in admitted:
+        array_relative = relative.with_suffix('.npz')
+        path = retained_path(array_relative)
+        arrays, failure = {}, None
+        if not path.exists():
+            failure = 'missing_npz'
+        else:
+            with np.load(path,allow_pickle=False) as archive:
+                arrays = {k:archive[k].copy() for k in ('target','prediction','sd','visible') if k in archive}
+            missing = [k for k in ('target','prediction','sd','visible') if k not in arrays]
+            if missing:
+                failure = 'missing_arrays:'+','.join(missing)
+            batch = len(spec['group']['refs'])
+            for key,shape in (('target',(batch,n,3)),('prediction',(batch,n,3)),('sd',(batch,3)),('visible',(batch,n,3))):
+                if key in arrays and arrays[key].shape != shape:
+                    raise ValueError('morphology retained array shape mismatch: '+spec['key']+'/'+key)
+            if 'sd' in arrays and (not np.isfinite(arrays['sd']).all() or np.any(arrays['sd']<=0)):
+                raise ValueError('morphology retained training SD mismatch: '+spec['key'])
+            if 'visible' in arrays:
+                expected = np.broadcast_to(volume_drive_mask(n,spec['condition']),(batch,n,3))
+                if arrays['visible'].dtype != np.bool_ or not np.array_equal(arrays['visible'],expected):
+                    raise ValueError('morphology retained scoring mask mismatch: '+spec['key'])
+        for source_row_index,row in enumerate(meta['rows']):
+            index = index_by_id[row['id']]
+            score = np.ones((n,2),bool); score[-1] = False
+            if spec['condition']=='joint_blocked':
+                visible = arrays['visible'][index] if 'visible' in arrays else volume_drive_mask(n,spec['condition'])
+                score &= ~visible[:,1:]
+            support = 'hidden_Hb_blocks_last_bin_excluded' if spec['condition']=='joint_blocked' else 'full_curve_last_bin_excluded'
+            identity = {k:row[k] for k in ('id','dataset','subject','record','group','length_s','condition','phase','arm',
+                                         'qualified','converged','fit_status')}
+            identity.update(source_task=str(relative),source_arrays=str(array_relative),source_row_index=source_row_index,
+                array_row_index=index,task_status=meta['status'],support=support)
+            if failure:
+                metrics = dict(components=[dict(component=c,status=failure,requested_points=int(score[:,i].sum()),
+                    scored_points=0,na_reason=failure) for i,c in enumerate(('HbO','HbR'))],
+                    pair=dict(status=failure,na_reason=failure))
+            else:
+                metrics = fnirs_morphology_metrics(arrays['target'][index,:,1:],arrays['prediction'][index,:,1:],
+                    time_s=time_s,score_mask=score,training_sd=arrays['sd'][index,1:],settings=settings)
+            result_rows.append(dict(**identity,ref=by_id[row['id']],metrics=metrics))
+            for component in metrics['components']:
+                scalar = scalars(component)
+                scalar['morphology_status'] = scalar.pop('status')
+                csv_rows.append(dict(**identity,**scalar,**scalars(metrics['pair'],'pair_')))
+    frame = pd.DataFrame(csv_rows)
+    counts = dict(planned_records=len(records),planned_curves=len(records)*6,terminal_curves=len(result_rows),
+        component_rows=len(csv_rows),qualified_curves=sum(r['qualified'] for r in result_rows),
+        component_status_counts=dict(frame.morphology_status.value_counts()),
+        component_na_reason_counts={k:dict(frame[k].dropna().value_counts()) for k in frame
+            if k.endswith('na_reason') and frame[k].notna().any()},
+        component_na_field_counts={k:int(frame[k].isna().sum()) for k in frame if frame[k].isna().any()})
+    if counts['terminal_curves'] != counts['planned_curves']:
+        raise ValueError('morphology export denominator mismatch')
+    result = dict(schema='shared_driver_tak_morphology_export_v1',status='completed',
+        scope='retained_tak_waveform_atlas_90s',parent=str(parent),settings=asdict(settings),
+        source_summary='measured_summary.json',parent_measured_planned_rows=planned_rows,
+        raw_reads=0,protected_reads=0,refits=0,summary=counts,rows=result_rows)
+    output.mkdir()
+    write_json(output/'morphology.json',result)
+    frame.to_csv(output/'morphology.csv',index=False)
+    shutil.copy2(Path(__file__),output/'export_source.py')
+    shutil.copy2(CODE_ROOT/'src/metrics/fnirs_morphology.py',output/'metrics_source.py')
+    return {k:v for k,v in result.items() if k!='rows'}
+
+
 def tak_main(args):
     cfg=tak_config(args.config);root=args.project_root.resolve();out=args.run_dir.resolve()
     if not out.is_relative_to(root/cfg['output_root']) or out==root/cfg['output_root']:
         raise ValueError('Tak output must be a fresh directory below the owning run root')
+    if args.tak_stage=='morphology':
+        if args.morphology_output is None:
+            raise ValueError('morphology requires --morphology-output pointing to a fresh export')
+        result=tak_morphology_export(cfg,out,args.morphology_output,args.morphology_settings)
+        print(json.dumps(serial(result)),flush=True)
+        return result
     out.mkdir(parents=True,exist_ok=True)
     lock=(out/'controller.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     p=out/'resolved_config.json'
@@ -9232,7 +9411,9 @@ def main():
     ap.add_argument('--volume-stage',choices=['pilot','synthetic','linear','measured','summarize'],default='synthetic')
     ap.add_argument('--decay-diagnostic',action='store_true')
     ap.add_argument('--tak-comparison',action='store_true')
-    ap.add_argument('--tak-stage',choices=['check','plan','synthetic','prepare','pilot','measured','sensitivity','summarize','verify','audit'],default='check')
+    ap.add_argument('--tak-stage',choices=['check','plan','synthetic','prepare','pilot','measured','sensitivity','summarize','verify','audit','morphology'],default='check')
+    ap.add_argument('--morphology-output',type=Path,help='Fresh child export directory of a completed retained Tak run')
+    ap.add_argument('--morphology-settings',type=Path,help='Optional JSON overrides for the morphology metric settings')
     ap.add_argument('--filter-retest',action='store_true')
     ap.add_argument('--filter-stage',choices=['check','plan','prepare','pilot','run','summarize','verify'],default='check')
     ap.add_argument('--decay-stage',choices=['check','pilot','synthetic','measured','summarize','replay-migrate'],default='synthetic')
@@ -9250,6 +9431,9 @@ def main():
         args.waveform_diagnostic,args.conditional_step_control,args.conditional_optical_gain_fit,
         args.fixed_roi_optical_fit,args.fixed_roi_initial_fit,args.fixed_roi_flow_fit,args.fixed_roi_tau_fit,
         args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None))
+    if historical_mode and (args.tak_stage=='morphology' or args.morphology_output is not None
+                            or args.morphology_settings is not None):
+        ap.error('morphology requires its exclusive read-only Tak mode')
     if args.config is None:
         args.config = LEGACY_DEFAULT if historical_mode and not args.tak_comparison else DEFAULT
     if args.config == DEFAULT and not historical_mode:
@@ -9266,6 +9450,11 @@ def main():
             args.gain_prior_fit,args.nonlinear_fit,args.replay_of is not None)
         if args.run_dir is None or any(incompatible):
             ap.error('Tak comparison requires its own run-dir and exclusive diagnostic mode')
+        if args.tak_stage=='morphology':
+            if args.check_only or args.pilot:
+                ap.error('read-only morphology cannot be combined with check-only or pilot')
+        elif args.morphology_output is not None or args.morphology_settings is not None:
+            ap.error('morphology output/settings require --tak-stage morphology')
         if args.check_only: args.tak_stage='check'
         elif args.pilot: args.tak_stage='pilot'
         return tak_main(args)
