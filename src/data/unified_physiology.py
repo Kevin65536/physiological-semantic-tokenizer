@@ -1,14 +1,14 @@
-"""Unified, provenance-preserving access to the four raw physiology datasets.
+"""Unified, provenance-preserving access to the four physiology datasets.
 
 The Croce source/observation caches are deliberately absent from this module:
 they are derived supervision targets, not an additional dataset.  This loader
-joins the clean fNIRS cache to the original EEG recordings, applies one
-canonical preprocessing contract, and returns event-aligned multimodal
-windows with a common schema.
+reads canonical measurement caches and returns event-aligned multimodal
+windows with a common schema. Native readers remain for cache production,
+source audits and explicit historical processing contracts.
 
-Canonical numerical coordinates are dimensionless robust standard deviations.
-Native units and measurement families remain in metadata; the transform does
-not claim that volts and chromophore concentration are physically identical.
+Current measurement coordinates preserve verified units and relative groups;
+legacy robust-standard-deviation coordinates are explicitly separate. Native
+provenance never implies that volts and Hb concentration are the same quantity.
 """
 
 from __future__ import annotations
@@ -51,6 +51,7 @@ RAW_DATASET_IDS: tuple[str, ...] = (
 
 UNIFIED_PHYSIOLOGY_SCHEMA = "unified_physiology_window_v2"
 MEASUREMENT_WINDOW_SCHEMA = "unified_physiology_measurement_window_v3"
+CACHED_FNIRS_INPUT_SCHEMA = "unified_cached_fnirs_v1"
 EEG_ARTIFACT_MASK_POLICY = "disabled_all_false_no_invalid_authority_v1"
 REFED_CONTINUOUS_SEQUENCE_SCHEMA = "refed_continuous_va_sequence_v2"
 REFED_CONTINUOUS_TARGET_NAMES = ("valence", "arousal")
@@ -651,8 +652,65 @@ def _native_fnirs_mat(path: str):
     return loadmat(path, struct_as_record=False, squeeze_me=True)
 
 
+def load_cached_fnirs_record(project_root: Path, record: CleanCacheRecord) -> dict[str, Any]:
+    """Read the canonical, already bandpassed measurement without a raw fallback.
+
+    This is the record-level counterpart of UnifiedPhysiologyWindowDataset for
+    Hb-only consumers. It does not repeat MBLL, filtering, unit conversion or
+    normalization. Full-record offline preprocessing precedes any caller mask;
+    a masked task therefore concerns cached features, not unseen raw samples.
+    """
+    from .clean_physiology_cache import require_measurement_producer
+    from .homer2_preprocessing import MEASUREMENT_ALIGNMENT_V5_SCHEMA
+
+    require_measurement_producer(record.manifest)
+    manifest = record.manifest
+    if (manifest.get('storage') != MEASUREMENT_CACHE_STORAGE
+            or manifest.get('processing_schema') != MEASUREMENT_ALIGNMENT_V5_SCHEMA
+            or manifest.get('motion_method') != 'none'):
+        raise ValueError('Cached Hb input requires the v5/none measurement cache; no native fallback')
+    quality = manifest['homer2_aligned_contract']['quality']['bandpass']
+    if (quality.get('status') != 'applied'
+            or (quality.get('low_hz'), quality.get('high_hz')) != CANONICAL_FNIRS_BAND_HZ):
+        raise ValueError('Cached Hb requires applied 0.01–0.2 Hz bandpass provenance')
+    meta = manifest['measurement']
+    names = list(meta['fnirs_channel_names'])
+    rate = float(meta['fnirs_preprocessing_state']['canonical_sample_rate_hz'])
+    if (rate != CANONICAL_FNIRS_SAMPLE_RATE_HZ or not names or len(names) % 2
+            or len(set(names)) != len(names)
+            or any(names[i].rsplit('_', 1)[-1] != 'HbO'
+                   or names[i + 1] != names[i][:-3] + 'HbR'
+                   for i in range(0, len(names), 2))):
+        raise ValueError('Cached Hb requires registered paired HbO/HbR channels at 10 Hz')
+    path = record.npz_path if record.npz_path.is_absolute() else Path(project_root) / record.npz_path
+    arrays = CleanPhysiologyCacheIndex.load_record_arrays(
+        replace(record, npz_path=path), ('fnirs', 'fnirs_supported_channels'))
+    values, supported = arrays['fnirs'], arrays['fnirs_supported_channels']
+    if (values.dtype != np.float64 or values.ndim != 2 or values.shape[1] != len(names)
+            or list(values.shape) != manifest['array_shapes']['fnirs']
+            or supported.dtype != np.bool_ or supported.shape != (len(names),)):
+        raise ValueError('Cached Hb dtype, shape or support differs from the measurement manifest')
+    # Invalid cache channels remain missing even if their stored placeholders
+    # happen to be finite. Neither artifact annotations nor fits alter support.
+    if not np.all(supported):
+        values = np.where(supported[None, :], values, np.nan)
+    values = values.reshape(len(values), -1, 2)
+    provenance = dict(schema=CACHED_FNIRS_INPUT_SCHEMA, cache_path=str(path),
+        processing_schema=manifest['processing_schema'], motion_method=manifest['motion_method'],
+        source_files=manifest['source_files'], native_unit=manifest['native_contract']['native_unit'],
+        output_unit=meta['fnirs_preprocessing_state']['canonical_unit'],
+        transform='unified_cache_full_record_bandpass_0.01_0.2_Hz_resampled_10Hz',
+        bandpass=dict(quality), preprocessing_support='complete_registered_record_offline',
+        masking='after_cache_preprocessing_processed_feature_task_not_raw_sample_isolation')
+    return dict(values=values, time_s=np.arange(len(values), dtype=float) / rate,
+        sample_rate_hz=rate, channel_names=names, provenance=provenance,
+        valid_mask=np.broadcast_to(supported.reshape(1, -1, 2), values.shape))
+
+
 def load_native_fnirs_record(project_root: Path, record: CleanCacheRecord) -> dict[str, Any]:
-    """Read registered source Hb pairs before filtering or motion correction.
+    """Read source Hb for native-versus-processed audits and frozen replay only.
+
+    New measured model inputs use load_cached_fnirs_record instead.
 
     Single-Trial is intensity, so its output is explicitly a relative MBLL
     estimate. Missing/nonpositive optical support stays missing. Other datasets

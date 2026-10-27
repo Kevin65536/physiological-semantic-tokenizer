@@ -744,7 +744,10 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m pytest -q \
 
 def render(run, destination):
     run, destination = run.resolve(), destination.resolve()
-    cfg = load_config(run/'resolved_config.yaml'); summary = read(run/'summary.json'); power_summary = read(run/'power_calibration_v2/summary.json')
+    cfg = load_config(run/'resolved_config.yaml')
+    if cfg['schema'] != 'ssm_output_support_v1':
+        raise ValueError('This dated narrative describes native v1 evidence only; cached-input results need a new report interpretation')
+    summary = read(run/'summary.json'); power_summary = read(run/'power_calibration_v2/summary.json')
     if summary['status'] != 'completed' or summary['verification'] != 'pass' or power_summary['status'] != 'completed':
         raise ValueError('completed verified evidence required')
     analysis = run/'report_analysis_v1'; analysis.mkdir(parents=True, exist_ok=True)

@@ -17,7 +17,7 @@ from src.analysis.functional_tokenizer import (
 from src.teachers.functional_teacher import match_smoothing,apply_smoothing,synthetic_interventions
 
 ROOT=Path(__file__).resolve().parents[1]
-CONFIG=ROOT/'experiments/configs/physiology_semantic_tokenizer/functional_tokenizer_v1.yaml'
+CONFIG=ROOT/'experiments/configs/physiology_semantic_tokenizer/functional_tokenizer_cached_v2.yaml'
 
 
 @pytest.fixture
@@ -44,13 +44,13 @@ def test_contract_and_forbidden_scope_fail_closed(cfg,runner,tmp_path):
 def test_source_scope_checked_before_even_hash_reads(cfg,tmp_path,monkeypatch):
     from types import SimpleNamespace
     import src.data.clean_physiology_cache as registry
-    from src.data.functional_tokenizer import prepare_native_record
+    from src.data.functional_tokenizer import prepare_cached_record
     source=[dict(path=str(tmp_path/'protected_DO_NOT_OPEN'),sha256='unused')]
     record=SimpleNamespace(join_key='public',dataset_id='eeg_fnirs_single_trial',manifest=dict(source_files=source))
     monkeypatch.setattr(registry,'CleanPhysiologyCacheIndex',lambda _:SimpleNamespace(records=[record]))
     row=dict(join_key='public',dataset='eeg_fnirs_single_trial',split='train',source_identity=source)
     with pytest.raises(ValueError,match='outside the registered public dataset root'):
-        next(prepare_native_record(tmp_path,cfg,[row]))
+        next(prepare_cached_record(tmp_path,cfg,[row]))
 
 
 def test_subject_split_all_variants_stay_together():

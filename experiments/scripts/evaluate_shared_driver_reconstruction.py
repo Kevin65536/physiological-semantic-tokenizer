@@ -4393,65 +4393,20 @@ def semantics_profile_worker(payload):
 
 
 def semantics_context_worker(payload):
-    """One continuous raw support; identical central target across context lengths."""
-    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
-    from src.data.unified_physiology import load_native_eeg_record,load_native_fnirs_record
-    from src.data.event_alignment import window_within_alignment_support
-    from src.inference.observation_baselines import eeg_band_power
-    from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_driver
-    cfg,root,project_root,ref=payload;out=Path(root);path=out/'context'/ref['id']/'result.json'
-    if path.exists():return json.loads(path.read_text())
-    started=time.monotonic();index=CleanPhysiologyCacheIndex(Path(project_root)/cfg['data']['cache_root'])
-    record=next(r for r in index.records if r.join_key.replace('|','__').replace('/','_')==ref['key'])
-    event=next(e for e in index.events_by_join_key[record.join_key] if e['event_index']==ref['event_id'])
-    es,hs=ref['eeg_start_s']-45,ref['hb_start_s']-45
-    relative_start=es-float(event['eeg_time_ms'])/1000.
-    if not window_within_alignment_support(event,relative_start,120.):
-        result=dict(ref=ref,status='unavailable_alignment_support',rows=[])
-        write_json(path,result);return result
-    eeg=load_native_eeg_record(Path(project_root),record);native=load_native_fnirs_record(Path(project_root),record)
-    start=round(es*eeg.sample_rate_hz);length=round(120*eeg.sample_rate_hz)
-    if min(es,hs)<0 or start+length>len(eeg.values) or hs<native['time_s'][0] or hs+119.75>native['time_s'][-1]:
-        result=dict(ref=ref,status='unavailable_native_support',rows=[])
-        write_json(path,result);return result
-    prepared=json.loads((out/'prepared'/ref['key']/'record.json').read_text())
-    anchor=next(a for a in prepared['prepared'] if a['region']==ref['region'])
-    lookup={str(n).upper():i for i,n in enumerate(eeg.channel_names)}
-    indices=[lookup[n.upper()] for n in ref['eeg_channels']]
-    power=eeg_band_power(eeg.values[start:start+length,indices],bands=cfg['tensor']['eeg_bands_hz'],sample_rate=eeg.sample_rate_hz,target_rate=4.)
-    pair=native['values'][:,anchor['hb_pair']];times=hs+np.arange(480)/4.
-    hb=np.column_stack([np.interp(times,native['time_s'],pair[:,j]) for j in range(2)])
-    key=f'{ref["dataset"]}__{ref["site"]}__outer{ref["subject_fold"]}'
-    coordinate=json.loads((out/'coordinates'/(key+'.json')).read_text());sd=np.array(coordinate['sd'])
-    features=np.log(power).reshape(480,-1)
-    y=np.column_stack([features@np.array(coordinate['pc'])*coordinate['eeg_factor'],hb*coordinate['hb_factor']])
-    y-=y[:20].mean(axis=0);center=y[180:300].copy();rows=[];saved=dict(target=y,central_target=center,sd=sd)
-    qualified=json.loads((out/'training_plan.json').read_text())['qualified_parameters']
-    candidates=[c for c in semantics_parameter_candidates(cfg,out,ref,qualified) if c['method']=='H0_fixed' or c['method'].startswith('H2_subject')]
-    for seconds in cfg['tensor']['context_s']:
-        n=int(seconds*4);left=(480-n)//2;target=y[left:left+n];central=slice(180-left,300-left)
-        if not np.array_equal(target[central],center):raise ValueError('context endpoint changed')
-        for candidate in candidates:
-            row=dict(seconds=seconds,method=candidate['method'],parameter_value=candidate['value'],converged=False,status='failed_training')
-            if candidate['converged']:
-                values={} if candidate['parameter'] is None else {candidate['parameter']:candidate['value']}
-                fit=fit_nonlinear_shared_driver(target,semantics_parameters(cfg,**values),.25,sd=sd,
-                    max_evaluations=cfg['solver']['max_evaluations_per_trial'],**semantics_solver_options(cfg))
-                row.update(semantics_compact_fit(fit))
-                if 'prediction' in fit:
-                    central_fit=dict(prediction=fit['prediction'][central],converged=fit['converged'])
-                    row.update(semantics_fit_metrics(center,central_fit,sd))
-                    row['central_driver_mean']=float(fit['driver'][central].mean())
-                    row['central_state_mean']=fit['states'][central].mean(axis=0)
-                    for field in ('prediction','driver','states','initial_state'):saved[f'{seconds}__{candidate["method"]}__{field}']=fit[field]
-            rows.append(row)
-    path.parent.mkdir(parents=True,exist_ok=True);np.savez_compressed(path.with_suffix('.npz'),**saved)
-    dt=np.diff(native['time_s'])
-    result=dict(ref=ref,status='completed',rows=rows,seconds=time.monotonic()-started,
-        eeg_support_s=[es,es+120],hb_support_s=[hs,hs+120],native_clock_step_quantiles_s=np.quantile(dt,[0,.01,.5,.99,1]),
-        processing='continuous_120s_logpower_PCA_and_unfiltered_timestamp_interpolated_Hb; common_first5s_reference; nested_slices_identity_mean',
-        interpretation='complete_observation_context_diagnostic; distinct_from_primary_window_filtered_target; no_forecasting_claim')
-    write_json(path,result);return result
+    """Read retained context evidence; the unfiltered producer is retired.
+
+    Its frozen parameters and training scales cannot be reused with cached Hb.
+    Fresh continuous measurements use the cached output-support entry instead;
+    exact historical regeneration uses the source snapshot retained by the run.
+    """
+    _, root, _, ref = payload
+    path = Path(root) / 'context' / ref['id'] / 'result.json'
+    if path.exists():
+        return json.loads(path.read_text())
+    raise ValueError(
+        'Unfiltered context preparation is retired. Use the cached output-support '
+        'contract with fresh coordinates/fits, or the retained source snapshot '
+        'for historical regeneration; cached targets cannot reuse native-run scales.')
 
 
 def semantics_geometry_worker(payload):

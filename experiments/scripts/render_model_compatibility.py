@@ -227,7 +227,7 @@ def read_census(run):
     return pd.concat(rows, ignore_index=True), records, metas
 
 
-def coverage_blocks(frame, inventory, metas, source):
+def coverage_blocks(frame, inventory, metas, source, *, cached=False):
     counts, support_counts, record_failures, units = [], [], [], []
     for dataset in DATASETS:
         for length in sorted(frame.length_s.unique()):
@@ -246,11 +246,15 @@ def coverage_blocks(frame, inventory, metas, source):
         failed = [m for m in metas.values() if m["dataset_id"] == dataset and m.get("execution") == "failed"]
         record_failures.append([label(dataset), len(failed), "; ".join(f"{m['subject_id']}/{m['record_id']}: {m.get('error_type', 'failure')}" for m in failed) or "无"])
         completed = [m for m in metas.values() if m["dataset_id"] == dataset and m.get("execution") == "completed"]
-        native_units = sorted({str(m.get("native_provenance", {}).get("native_unit", "unknown")) for m in completed})
-        transforms = sorted({str(m.get("native_provenance", {}).get("transform", "unknown")) for m in completed})
-        rates = sorted({float(m["native_sample_rate_hz"]) for m in completed if "native_sample_rate_hz" in m})
+        field = 'measurement_provenance' if cached else 'native_provenance'
+        native_units = sorted({str(m.get(field, {}).get('output_unit' if cached else 'native_unit', 'unknown')) for m in completed})
+        transforms = sorted({str(m.get(field, {}).get('transform', 'unknown')) for m in completed})
+        rate_field = 'sample_rate_hz' if cached else 'native_sample_rate_hz'
+        rates = sorted({float(m[rate_field]) for m in completed if rate_field in m})
         units.append([label(dataset), "; ".join(native_units) or "N/A", "; ".join(transforms) or "N/A", "; ".join(number(v) for v in rates) or "N/A"])
-    return [paragraph("本报告先给出全登记公开库存的 Hb 配对闭合分布，再在保留冻结坐标、训练尺度和观测算子的子面板检验 EEG–Hb、共同参数及条件非线性重建。两类分母分别计算。空间映射仅适用于其 Single-Trial 冻结评价面板。全库存主分析使用原生 Hb 读取器，不沿用 v5 的额外滤波轨迹；原始发布处理和单位保留在逐记录 provenance。"),
+    intro = ("本报告只汇总统一 v5/none 缓存中的 Hb 测量。输入已在完整记录上作 0.01–0.2 Hz 带通并重采样到10 Hz，不重复 MBLL、单位换算或带通。统计与曲线使用相同缓存数组；旧原生输入的拟合面板不混入本轮结果。" if cached else
+             "本报告先给出全登记公开库存的 Hb 配对闭合分布，再在保留冻结坐标、训练尺度和观测算子的子面板检验 EEG–Hb、共同参数及条件非线性重建。两类分母分别计算。空间映射仅适用于其 Single-Trial 冻结评价面板。全库存主分析使用原生 Hb 读取器，不沿用 v5 的额外滤波轨迹；原始发布处理和单位保留在逐记录 provenance。")
+    return [paragraph(intro),
             table(["数据集", "窗长 / 秒", "计划被试", "计划记录", "原生配对窗", "有效评分", "其余状态（完整计数）"], counts,
                   caption="一个配对窗是一个记录中的一个时间窗与一个物理 HbO/HbR 对。窗口、通道和重复记录不构成独立被试。库内被试身份只在各数据集内部计数。", source=source,
                   widths=[1.1, .7, .75, .65, 1.1, 1, 2.2]),
@@ -260,8 +264,8 @@ def coverage_blocks(frame, inventory, metas, source):
             paragraph("30秒与90秒的非重叠窗口并非相同观测单元，且可用记录集合可能不同。因此两种窗长的分布差异仅作描述，不能归因为窗长的因果效应。合法初态贡献、弱核边缘支持或激励频率可能参与这些差异，但本组实验没有隔离这些机制，相关解释只能作为推断。"),
             table(["数据集", "整记录读取/计算失败", "保留失败身份和类型"], record_failures,
                   caption="原生配对窗数在实际读取原生时钟后确定。若整条记录读取失败，其真实窗口分母未知，不能用缓存时长估计冒充有效实测分母；计划记录仍保留。末尾不足整窗部分不补齐，拼接边界跨窗排除。", source=source),
-            table(["数据集", "metadata原生单位标注", "实际原生读出变换", "实际采样率/Hz"], units,
-                  caption="单位和变换逐字来自保留 provenance。Single-Trial 从正双波长强度经自然对数光密度和相对 MBLL 得到 Hb；原生测量单位标注不构成变换后 Hb 的绝对标定。Visual/REFED 的物理单位未知时保留未知，跨库不汇集原幅值。普查无新增项目时间滤波；冻结面板另用原父算子。", source=source + "/records/*.meta.json",
+            table(["数据集", "缓存输出单位" if cached else "metadata原生单位标注", "实际测量处理", "实际采样率/Hz"], units,
+                  caption=("单位与处理来自缓存 provenance。Simultaneous 的 mmol/L→µM 已由缓存完成；Single-Trial 仍为相对 MBLL，未知单位保持未知。完整记录带通先于窗口划分，不能解释为未滤波瞬态或原始传感器隔离。" if cached else "单位和变换逐字来自保留 provenance。Single-Trial 从正双波长强度经自然对数光密度和相对 MBLL 得到 Hb；原生测量单位标注不构成变换后 Hb 的绝对标定。Visual/REFED 的物理单位未知时保留未知，跨库不汇集原幅值。普查无新增项目时间滤波；冻结面板另用原父算子。"), source=source + "/records/*.meta.json",
                   widths=[1, 1.6, 3, 1])]
 
 
@@ -393,7 +397,6 @@ def prepare_hb_examples(run, frame, inventory):
     selection_path = example_dir / "hb_selection.json"
     choices = select_exemplars(frame)
     by_token = {str(r["record_token"]): r for r in inventory}
-    config = evaluator.load_config(run / "resolved_config.yaml")
     if selection_path.exists():
         retained = read_json(selection_path)
         expected = [(r["record_token"], int(r["window_id"]), int(r["pair_index"]), r["selection_quantile"]) for r in choices]
@@ -404,6 +407,7 @@ def prepare_hb_examples(run, frame, inventory):
             if not (example_dir / item["arrays"]).is_file():
                 raise FileNotFoundError(example_dir / item["arrays"])
         return retained["examples"]
+    config = evaluator.load_config(run / "resolved_config.yaml")
     cache_root = Path(config["census"]["metadata_cache"])
     index = CleanPhysiologyCacheIndex(cache_root if cache_root.is_absolute() else ROOT / cache_root)
     example_dir.mkdir(parents=True, exist_ok=True)
@@ -416,7 +420,7 @@ def prepare_hb_examples(run, frame, inventory):
         found = index.records_by_join_key[admitted["join_key"]]
         if len(found) != 1:
             raise ValueError("selected example must resolve to one native record")
-        native = evaluator.replay_window(found[0], row, project_root=ROOT)
+        native = evaluator.replay_window(found[0], row, config=config, project_root=ROOT)
         pair_index = int(row["pair_index"])
         observed = np.asarray(native["values"], float)[:, pair_index, :]
         times = np.asarray(native["time_s"], float)
@@ -446,7 +450,7 @@ def prepare_hb_examples(run, frame, inventory):
             np.savez_compressed(temporary, **arrays)
             temporary.replace(destination)
         item = {k: (v.item() if isinstance(v, np.generic) else v) for k, v in row.items()}
-        item.update(arrays=filename, native_provenance=native["provenance"],
+        item.update(arrays=filename, measurement_provenance=native["provenance"],
                     channel_names=list(native["channel_names"])[2*pair_index:2*pair_index+2],
                     replay_nominal_D=nominal, replay_best_D=best, score_reproduced=True)
         selected.append(item)
@@ -456,9 +460,10 @@ def prepare_hb_examples(run, frame, inventory):
     return selected
 
 
-def hb_example_blocks(run, examples, directory):
+def hb_example_blocks(run, examples, directory, *, cached=False):
     plt = configure_plotting()
-    blocks = [paragraph("以下每库三例按全库 90 秒有效配对窗的固定参数 D，分别选择最接近第 10、50、90 百分位的窗口，尽量来自不同被试。选择仅用于解释，未使用最优参数误差挑例，也未把样例用于调参。每例的原生窗身份和精确数值数组保留在 examples/。原始 Hb 纵轴保留该记录的发布相对单位；闭合纵轴是中心化后的弱积分量，两者不可直接比较幅值。")]
+    units_text = '缓存输出单位' if cached else '发布相对单位'
+    blocks = [paragraph(f"以下每库三例按全库 90 秒有效配对窗的固定参数 D，分别选择最接近第 10、50、90 百分位的窗口，尽量来自不同被试。选择仅用于解释，未使用最优参数误差挑例，也未把样例用于调参。每例的记录身份和精确数值数组保留在 examples/。Hb 纵轴保留该记录的{units_text}；闭合纵轴是中心化后的弱积分量，两者不可直接比较幅值。")]
     selection_rows = []
     for index, item in enumerate(examples):
         source = Path(run) / "examples" / item["arrays"]
@@ -469,9 +474,9 @@ def hb_example_blocks(run, examples, directory):
         fig = plt.figure(figsize=(7.4, 7.0), layout="constrained")
         grid = fig.add_gridspec(3, 2, height_ratios=(1.05, 1, 1))
         top = fig.add_subplot(grid[0, :])
-        top.plot(t, a["observed"][:, 0], color=COLORS["HbO"], label="原生 HbO")
-        top.plot(t, a["observed"][:, 1], color=COLORS["HbR"], label="原生 HbR")
-        top.set(xlabel="窗内时间 / 秒", ylabel="发布相对 Hb 坐标", title=f"{label(item['dataset_id'])}｜{item['subject_id']}｜{item['record_id']}｜{item['pair']}")
+        top.plot(t, a["observed"][:, 0], color=COLORS["HbO"], label="带通缓存 HbO" if cached else "原生 HbO")
+        top.plot(t, a["observed"][:, 1], color=COLORS["HbR"], label="带通缓存 HbR" if cached else "原生 HbR")
+        top.set(xlabel="窗内时间 / 秒", ylabel=units_text, title=f"{label(item['dataset_id'])}｜{item['subject_id']}｜{item['record_id']}｜{item['pair']}")
         top.legend(ncol=2)
         for col, width in enumerate(sorted(np.unique(positions[:, 1]))):
             ax = fig.add_subplot(grid[1, col])
@@ -507,7 +512,7 @@ def hb_example_blocks(run, examples, directory):
         improved, worsened = int((local_change > 0).sum()), int((local_change < 0).sum())
         best_tau = float(a["best_tau"][0])
         where = "下界" if best_tau == float(a["taus"].min()) else "上界" if best_tau == float(a["taus"].max()) else "内部节点"
-        caption += (f" 本例HbO/HbR峰峰幅分别为 {number(np.ptp(a['observed'][:, 0]))}/{number(np.ptp(a['observed'][:, 1]))} 个发布相对单位。"
+        caption += (f" 本例HbO/HbR峰峰幅分别为 {number(np.ptp(a['observed'][:, 0]))}/{number(np.ptp(a['observed'][:, 1]))} 个{units_text}。"
                     f"固定参数最大绝对弱残差位于窗内 {number(local_time)} 秒、半宽 {number(positions[worst, 1])} 秒的核，左-右={number(a['nominal_residual'][worst])}。"
                     f"选择τ后 {improved}/{len(local_change)} 个弱核的残差平方下降、{worsened} 个上升；核互相重叠，计数只描述局部变化。最佳τ位于网格{where}，右下profile采用线性D轴。")
         blocks.append(figure(path, caption, str(source)))
@@ -887,6 +892,37 @@ def build_report(run, output):
         raise ValueError("full measured report requires the completed owning census summary")
     retained_summary = _read_csv(run / "summary.csv")
     census, inventory, metas = read_census(run)
+    if terminal.get('schema') == 'model_compatibility_census_cached_v2':
+        examples = prepare_hb_examples(run, census, inventory)
+        with tempfile.TemporaryDirectory(prefix='cached_Hb_report_') as staging:
+            staging = Path(staging)
+            distribution, _ = census_distribution_blocks(census, staging, str(run / 'summary.csv'), retained_summary)
+            # Reuse the metric equations, but describe their filtered-coordinate
+            # meaning explicitly instead of claiming unfiltered ODE closure.
+            methods = methods_section()
+            methods['blocks'] = methods['blocks'][:4]
+            methods['blocks'][0] = paragraph('输入为完整记录已带通的缓存 Hb。D 是在这个测量坐标上计算的描述性闭合残差；指数项仅作为工程拟合项，不把缓存滤波后的瞬态解释为原始血管初态。窗口参数剖面不提供生理参数识别。')
+            for block in methods['blocks']:
+                for key in ('text', 'caption'):
+                    if isinstance(block.get(key), str):
+                        block[key] = block[key].replace('原生读出', '缓存输出').replace('合法指数初态项', '工程指数项')
+            good = census.loc[census.status == 'ok']
+            content = dict(schema='source_diagnostics_report_v1',
+                title='统一带通 Hb 缓存的描述性相容性', subtitle='缓存输入、完整分母与同源示例曲线',
+                date=str(plan.get('created_at', ''))[:10],
+                summary=[f'计划配对窗 {len(census):,} 个，有效评分 {len(good):,} 个；其余状态全部保留。',
+                    '输入为 v5/none、0.01–0.2 Hz 带通、10 Hz 缓存。未重新拟合历史模型面板，旧原生目标与本轮数值不直接比较。'],
+                provenance=[str(run), '数值与图线使用同一带通缓存；完整记录预处理先于遮挡。'],
+                sections=[dict(title='覆盖范围、状态和分母', blocks=coverage_blocks(census, inventory, metas, str(run), cached=True)),
+                    methods, dict(title='固定参数与同窗剖面分布', blocks=distribution),
+                    dict(title='较好、中部与困难的带通缓存波形', blocks=hb_example_blocks(run, examples, staging, cached=True))],
+                sources=[str(run / 'summary.json'), str(run / 'resolved_config.yaml')])
+            content_path = staging / 'report_content.json'
+            content_path.write_text(json.dumps(content, ensure_ascii=False, indent=2, allow_nan=False) + '\n')
+            checks = render_report(content_path, output)
+        (output / 'report_generation.json').write_text(json.dumps(dict(schema=SCHEMA, owning_run=str(run),
+            fnirs_input='unified_cached_fnirs_v1', figure_dpi=DPI, historical_panels_included=False), indent=2) + '\n')
+        return checks
     panels = read_panels(run)
     examples = prepare_hb_examples(run, census, inventory)
     source = str(run)

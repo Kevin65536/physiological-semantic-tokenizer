@@ -1,4 +1,4 @@
-"""Metadata-frozen public spatial patches and their native observations.
+"""Metadata-frozen public spatial patches and cached Hb measurements.
 
 The v1 surface admits Single-Trial only. Subject assignment and all spatial
 identities are resolved without loading signal arrays. Hb pair zero is hidden
@@ -16,9 +16,8 @@ import numpy as np
 
 from .unified_physiology import (
     UnifiedPhysiologyWindowDataset, canonical_channel_name, canonical_label,
-    load_native_eeg_record, load_native_fnirs_record,
+    load_native_eeg_record, load_cached_fnirs_record, CACHED_FNIRS_INPUT_SCHEMA,
 )
-from .homer2_preprocessing import modified_beer_lambert
 from .registry import REGISTERED_DATASETS
 from .clean_physiology_cache import canonical_subject_id, join_key
 from src.inference.observation_baselines import (
@@ -366,7 +365,9 @@ def inventory_spatial(cfg, project_root) -> dict:
 
 
 def prepare_spatial_record(cfg, project_root, row) -> dict:
-    """Revalidate frozen metadata before reading registered native signals."""
+    """Revalidate metadata and consume the already filtered Hb cache once."""
+    if cfg['data'].get('fnirs_input') != CACHED_FNIRS_INPUT_SCHEMA:
+        raise ValueError('Native-Hb spatial preparation is retired; use the cached v2 contract and a fresh run')
     settings, root = _settings(cfg), Path(project_root)
     if row.get('dataset') not in DATASETS or row.get('split') not in SPLITS:
         raise ValueError('admitted public dataset and subject split required before array access')
@@ -389,7 +390,7 @@ def prepare_spatial_record(cfg, project_root, row) -> dict:
         raise ValueError('registered source identity changed before array access')
     _sources(record, root)
     eeg = load_native_eeg_record(root, record)
-    hb = load_native_fnirs_record(root, record)
+    hb = load_cached_fnirs_record(root, record)
     names = list(eeg.channel_names)
     if (eeg.sample_rate_hz != 200 or eeg.native_unit not in ('uV', 'µV', 'μV') or not eeg.unit_evidence
             or names != list(record.manifest['measurement']['eeg_channel_names'])):
@@ -405,17 +406,12 @@ def prepare_spatial_record(cfg, project_root, row) -> dict:
     take = (hb['time_s'] >= row['hb_start_s']) & (hb['time_s'] < row['hb_start_s'] + settings['duration'])
     times = np.asarray(hb['time_s'][take], float) - row['hb_start_s']
     operators = disjoint_native_bin_operator(times, steps=settings['steps'], dt=settings['dt'], reference_steps=settings['reference_steps'])
-    if hb.get('optical_intensity') is None:
-        raise ValueError('Single-Trial requires native intensity for a visible-only optical reference')
-    optical = np.asarray(hb['optical_intensity'][take][:, patch['hb_pair_indices']], float)
-    if optical.shape != (len(times), settings['pairs'], 2) or not np.isfinite(optical).all() or np.any(optical <= 0):
-        raise ValueError('complete positive finite native wavelength pairs required')
-    reference_mask = times < settings['reference']
-    reference = optical[reference_mask].mean(axis=0)
-    native_hb, mbll = modified_beer_lambert(-np.log(optical / reference), wavelengths_nm=(760., 850.))
+    cached_hb = np.asarray(hb['values'][take][:, patch['hb_pair_indices']], float)
+    if cached_hb.shape != (len(times), settings['pairs'], 2) or not np.isfinite(cached_hb).all():
+        raise ValueError('complete finite unified-cache Hb support required')
     powers = eeg_band_power(e, bands=settings['bands'], sample_rate=200., target_rate=4.)
     features = np.einsum('ij,jcb->icb', operators['eeg'], np.log(np.maximum(powers, np.finfo(float).tiny)))
-    values = (operators['raw'] @ native_hb.reshape(len(times), -1)).reshape(settings['steps'], settings['pairs'], 2)
+    values = (operators['raw'] @ cached_hb.reshape(len(times), -1)).reshape(settings['steps'], settings['pairs'], 2)
     target = np.zeros_like(values, dtype=bool)
     target[:, 0, :] = True
     observed = ~target
@@ -428,13 +424,14 @@ def prepare_spatial_record(cfg, project_root, row) -> dict:
         metadata=dict(row=deepcopy(row), eeg_native_unit=eeg.native_unit,
             eeg_unit_evidence=eeg.unit_evidence, eeg_reference=eeg.reference,
             eeg_native_sample_rate_hz=float(eeg.sample_rate_hz),
-            hb_native_sample_rate_hz=float(hb['sample_rate_hz']),
+            hb_sample_rate_hz=float(hb['sample_rate_hz']),
             eeg_signal_branch='raw_with_ocular_artifact',
             eeg_processing='trial_local_five_band_4Hz_logpower_first_reference_subtraction',
-            hb_native_provenance=deepcopy(hb['provenance']), hb_mbll=mbll,
-            hb_processing='window_native_intensity_visible_reference_MBLL_disjoint_bins_no_temporal_filter',
-            hb_reference_seconds=settings['reference'], scoring_hb_optical_reference=reference.tolist(),
-            discarded_native_reader_reference=True,
+            hb_provenance=deepcopy(hb['provenance']), fnirs_input=CACHED_FNIRS_INPUT_SCHEMA,
+            hb_processing='unified_cache_bandpass_0.01_0.2Hz_then_bin_means_and_reference_no_second_filter',
+            hb_reference_seconds=settings['reference'],
+            preprocessing_support='full_record_offline_before_masking',
             masking='heldout_pair_all_times_scoring_reference_hidden',
             target_reference='scoring_coordinate_only_never_visible_input',
-            target_unit='relative_MBLL_not_absolute_physiological_concentration'))
+            target_unit=hb['provenance']['output_unit'],
+            model_coordinate='cached_measurement_coordinate_not_raw_ODE_filter_equivalence'))

@@ -26,8 +26,9 @@ import numpy as np
 import yaml
 
 from src.data.functional_tokenizer import (
-    inventory,prepare_native_record,training_coordinates,label_blind_donors,identity_digest,
+    inventory,prepare_cached_record,training_coordinates,label_blind_donors,identity_digest,
 )
+from src.data.ssm_prepared import require_cached_hb_array
 from src.teachers.functional_teacher import (
     produce_teacher,alternative_teacher,match_smoothing,apply_smoothing,synthetic_interventions,
 )
@@ -42,7 +43,7 @@ from src.analysis.functional_tokenizer import (
     shape_persistence_scores,shape_relationship_probes,
 )
 
-DEFAULT=SOURCE/'experiments/configs/physiology_semantic_tokenizer/functional_tokenizer_v1.yaml'
+DEFAULT=SOURCE/'experiments/configs/physiology_semantic_tokenizer/functional_tokenizer_cached_v2.yaml'
 
 
 def clean(value):
@@ -77,7 +78,7 @@ def save_arrays(path,**values):
 def config(path):
     cfg=yaml.safe_load(Path(path).read_text())
     expected=['C0','CT','Q0','QT','C-wide','C-smooth','C-shuffle','C-stop']
-    if (cfg['schema']!='functional_tokenizer_v1' or cfg['experiment_id']!='TK-FUNCTIONAL-v1'
+    if (cfg['schema']!='functional_tokenizer_cached_v2' or cfg['experiment_id']!='TK-FUNCTIONAL-CACHED-v2'
         or cfg['data']['protected_data']!='forbidden' or cfg['data']['labels_as_training_inputs']
         or cfg['data']['datasets']!=['eeg_fnirs_single_trial','simultaneous_eeg_nirs']
         or cfg['training']['arms']!=expected or cfg['tensor']['teacher_steps']!=360
@@ -103,12 +104,14 @@ def config(path):
         raise ValueError('invalid exposure, label budget or common shift support')
     if len(set(cfg['mechanism']['streams'].values()))!=3: raise ValueError('independent synthetic partitions required')
     if cfg['training']['seeds']!=[17,29,43]: raise ValueError('three registered optimization seeds required')
+    if cfg['data'].get('fnirs_input') != 'unified_cached_fnirs_v1':
+        raise ValueError('cached tokenizer requires the unified bandpassed Hb input')
     return cfg
 
 
 def teacher_configs(cfg):
     ssm,physical=tuple(yaml.safe_load((SOURCE/cfg['teacher'][key]).read_text()) for key in ('contract','physical_config'))
-    if (ssm['schema']!='ssm_output_support_v1' or physical['schema']!='shared_driver_physiology_semantics_v1'
+    if (ssm['schema']!='ssm_output_support_cached_v2' or physical['schema']!='shared_driver_physiology_semantics_v1'
         or any(physical['fixed'][k]!=v for k,v in dict(tau=2.,kappa=.64,neurovascular_gain=1.).items())):
         raise ValueError('frozen six-state reference teacher version changed')
     return ssm,physical
@@ -131,15 +134,18 @@ def freeze_run(cfg,out,project_root):
 def prepare_worker(payload):
     project_root,cfg,out_string,rows=payload;out=Path(out_string)
     counts=Counter();t=time.monotonic()
-    for row,a,error in prepare_native_record(project_root,cfg,rows):
+    for row,a,error in prepare_cached_record(project_root,cfg,rows):
         record=out/'tasks'/'prepare'/(row['id']+'.json')
         if error:
             write(record,dict(status='failed',reason=error,id=row['id']))
             counts['failed']+=1
         else:
             save_arrays(out/'prepared'/(row['id']+'.npz'),**a)
-            write(record,dict(status='completed',id=row['id'],hidden_native_invariance=True,
-                units=dict(eeg='uV',hb='relative_MBLL' if row['dataset']=='eeg_fnirs_single_trial' else 'released_mmol/L'),
+            provenance = json.loads(str(a['hb_provenance']))
+            write(record,dict(status='completed',id=row['id'],hidden_cached_feature_invariance=True,
+                fnirs_input=str(a['fnirs_input']), hb_provenance=provenance,
+                units=dict(eeg='uV',hb=provenance['output_unit']),
+                information_scope='offline_bandpassed_cache_features_not_raw_sample_isolation',
                 source_identity=row['source_identity']))
             counts['completed']+=1
     return dict(status='completed',counts=dict(counts),seconds=time.monotonic()-t,
@@ -149,6 +155,7 @@ def prepare_worker(payload):
 def teacher_worker(payload):
     cfg,out_string,row,co,mode=payload;out=Path(out_string);t=time.monotonic()
     a=arrays(out/'prepared'/(row['id']+'.npz'))
+    require_cached_hb_array(a)
     data,status=produce_teacher(a,co,*teacher_configs(cfg),mode=mode)
     save_arrays(out/'teacher'/mode/(row['id']+'.npz'),**data)
     return dict(status='completed' if status['converged'] else 'failed',fit=status,

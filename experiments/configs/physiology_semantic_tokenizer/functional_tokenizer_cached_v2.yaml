@@ -1,0 +1,246 @@
+# Versioned cache-input migration; previous configurations and evidence remain unchanged.
+schema: functional_tokenizer_cached_v2
+experiment_id: TK-FUNCTIONAL-CACHED-v2
+scope: public_development_not_fresh_confirmation
+artifact_root: experiments/runs/physiology_semantic_tokenizer/functional_tokenizer
+seed: 20261010
+data:
+  cache_root: data/cache/physiology_semantic_clean_v5
+  datasets:
+  - eeg_fnirs_single_trial
+  - simultaneous_eeg_nirs
+  tasks:
+  - motor_imagery
+  - mental_arithmetic
+  - nback
+  - wg
+  protected_data: forbidden
+  labels_as_training_inputs: false
+  split: seeded_subject_permutation_60_20_20_before_arrays
+  train_fraction: 0.6
+  validation_fraction: 0.2
+  regions:
+  - prefrontal
+  - left_motor
+  - right_motor
+  region_vectors:
+  - - -0.45
+    - 0.89
+    - 0.1
+  - - -0.65
+    - 0.0
+    - 0.72
+  - - 0.65
+    - 0.0
+    - 0.72
+  eeg_channels_per_region: 6
+  input_eeg: registered_native_voltage_200Hz_no_project_artifact_removal
+  input_hb: unified_cached_fnirs_v1_then_250ms_bin_means_first_5s_reference
+  incomplete_window: retain_failure_no_padding_or_imputation
+  task_labels:
+    motor_imagery:
+    - LMI
+    - RMI
+    mental_arithmetic:
+    - MA
+    - BL
+    nback:
+    - 0-back session
+    - 2-back session
+    - 3-back session
+    wg:
+    - WG
+    - BL
+  fnirs_input: unified_cached_fnirs_v1
+tensor:
+  teacher_seconds: 90
+  teacher_offset_s: -30
+  teacher_steps: 360
+  dt_s: 0.25
+  student_steps:
+  - 120
+  - 200
+  student_seconds: 20
+  hb_reference_support_event_s:
+  - -30
+  - -25
+  patch_seconds: 2
+  patches: 10
+  eeg_rate_hz: 200
+  eeg_bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+teacher:
+  contract: experiments/configs/physiology_semantic_tokenizer/ssm_output_support_cached_v2.yaml
+  physical_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_physiology_semantics_v1.yaml
+  state_arm: chain_matched
+  target: physical_prediction_not_total_fit_or_common_component
+  primary_hb: X_0.35_HbO_minus_0.65_HbR
+  wide_hb:
+  - X
+  - T
+  eeg: own_training_PCA_logpower_SSM_prediction
+  status: conditional_model_output_not_physiological_truth
+  nonconvergence: retain_record_exclude_from_all_matched_training_arms
+  smooth_sigma_steps:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  smooth_selection: training_only_match_normalized_first_difference_energy
+  shuffle: different_subject_same_dataset_region_without_task_or_label_matching
+model:
+  width: 64
+  semantic_dim: 16
+  observation_dim: 32
+  codebook_size: 128
+  independent_encoders: true
+  context: offline_bidirectional_20s_student_90s_privileged_teacher
+  quantizer: EMA_hard_forward_ST_backward
+  commitment: 0.25
+  ema_decay: 0.99
+training:
+  arms:
+  - C0
+  - CT
+  - Q0
+  - QT
+  - C-wide
+  - C-smooth
+  - C-shuffle
+  - C-stop
+  seeds:
+  - 17
+  - 29
+  - 43
+  steps: 3000
+  batch_size: 64
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  gradient_clip: 5.0
+  reconstruction_weight: 1.0
+  teacher_weight: 1.0
+  teacher_reduction: per_modality_mean_squared_error_over_time_and_supervised_coordinates
+  wide_weighting: fixed_total_Hb_teacher_weight_shared_equally_between_standardized_X_and_T
+  checkpoint_every: 1000
+  selection: final_fixed_exposure_no_task_labels_no_early_stopping
+  sampling: uniform_dataset_then_uniform_region_window
+evaluation:
+  primary_tasks:
+  - motor_imagery
+  - nback
+  secondary_tasks:
+  - mental_arithmetic
+  - wg
+  label_fractions:
+  - 0.1
+  - 0.25
+  - 1.0
+  probe_dimensions: 32
+  probe_C:
+  - 0.01
+  - 0.1
+  - 1.0
+  - 10.0
+  ridge_alpha:
+  - 0.01
+  - 0.1
+  - 1.0
+  - 10.0
+  - 100.0
+  kmeans_sizes:
+  - 16
+  - 32
+  - 64
+  - 128
+  metric: trial_then_record_then_subject_equal_balanced_accuracy
+  secondary_metric: subject_equal_macro_F1
+  cross_session: frozen_outer_model_inner_probe_first_middle_last_native_sessions_of_outer_test_subjects
+  primary_representation: integer_ID_frozen_codebook_only
+  bootstrap_repeats: 2000
+  bootstrap_unit: subject_with_all_seeds_records_regions_together
+  task_gain_margin: 0.02
+  hard_retention_margin: 0.02
+  readout_relative_error_margin: 0.05
+  decisions:
+  - benefit
+  - degradation
+  - insufficient_evidence
+  - invalid_experiment
+  missing_primary_fit: invalidate_full_denominator_claim_retain_success_subset
+mechanism:
+  train_identities: 48
+  validation_identities: 16
+  test_identities: 32
+  scenarios:
+  - base
+  - driver_amplitude
+  - driver_shape
+  - tau
+  - D_common
+  - off_D
+  - combined
+  - exact_alias
+  streams:
+    train: 6101
+    validation: 6102
+    test: 6103
+  paired_retrain_arms:
+  - CT
+  - C-wide
+  paired_retrain_steps: 500
+  panel_training_trials_per_dataset: 6
+  alternative_offsets:
+  - -0.25
+  - 0.25
+  alternative_objective_fraction: 0.05
+  alternative_status: whole_trajectory_feasible_witness_not_posterior
+coupling:
+  target: cached_Hb_bins_hidden_after_full_record_preprocessing
+  hidden_student_steps:
+  - 32
+  - 48
+  nulls:
+  - different_record_same_subject
+  - same_task_condition
+  - nonwrapping_time_shift
+  shifts_in_patches:
+  - -2
+  - -1
+  - 1
+  - 2
+  lag_selection: fixed_zero_paired_lag_all_prespecified_null_shifts_reported
+  context: offline_completion_not_causal_prediction
+  training_loss: none
+resources:
+  max_cpu_workers: 40
+  numerical_threads: 1
+  max_gpu_workers: 4
+  supervisor: user_systemd_linger
+  timeout_hours: 48
+  resume: per_task_atomic_and_training_optimizer_RNG_checkpoint
+conditional_extensions:
+  not_launched:
+  - Visual_four_class
+  - DSR
+  - outer_subject_folds_after_screen
+  - set_supervision_if_triggered
+  - O_quantization
+input_revision:
+  schema: unified_cached_fnirs_v1
+  supersedes_input_contract: functional_tokenizer_v1
+  source: v5_none_full_record_0.01_0.2Hz_bandpassed_10Hz_measurement
+  preprocessing: consume_cache_once_no_MBLL_or_second_Hb_bandpass
+  masking: processed_feature_completion_after_offline_record_preprocessing_not_raw_isolation
+  reuse: fresh_prepared_arrays_coordinates_and_fits; retained native runs require
+    their frozen snapshots
+  model_coordinate: bandpassed_measurement_coordinate_not_exact_raw_ODE_full_record_filter_replay

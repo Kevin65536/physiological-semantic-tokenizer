@@ -91,6 +91,8 @@ def inside(parent, relative):
 
 
 def panel_config(cfg):
+    if cfg.get('schema') == 'model_compatibility_cached_v2':
+        raise ValueError('Cached census requires newly fitted cached parents; retained native panels are historical replay only')
     p = cfg['panels']
     if (tuple(p['output_support_runs']) != OUTPUT_SUPPORT_RUNS
             or p['spatial_run'] != SPATIAL_RUN or p['lengths_s'] != [30, 90]

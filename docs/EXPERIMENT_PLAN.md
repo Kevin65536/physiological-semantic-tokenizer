@@ -3,6 +3,13 @@
 _Design owner for independently versioned experiment protocols. Registered
 execution and scientific verdicts live in `research_state/registry.json`._
 
+The 2026-10-27 [cache-input correction](DATA_CONTRACT.md#新-hb-建模输入统一使用带通缓存--2026-10-27)
+supersedes native unfiltered Hb preparation for new work. The dated designs below
+retain the observation coordinates used for their evidence; the
+[entrypoint map](../experiments/README.md#cached-hb-input-migration) identifies the
+new cached contracts. This code/input migration does not register a new measured
+campaign or reinterpret previously completed results.
+
 This document owns experiment design. The original `PST-DISCOVERY-v1` path
 concerns physical-teacher qualification, source/observation tokenization and
 coupling-prior retention. The separately versioned `TK-FUNCTIONAL-v1` screen

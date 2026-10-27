@@ -9,6 +9,14 @@ from pathlib import Path
 import numpy as np
 
 
+def require_cached_hb_array(arrays):
+    """Do not join retained native targets to a new cached-input run."""
+    from .unified_physiology import CACHED_FNIRS_INPUT_SCHEMA
+    value = np.asarray(arrays.get('fnirs_input', ''))
+    if value.shape != () or str(value) != CACHED_FNIRS_INPUT_SCHEMA:
+        raise ValueError('Prepared Hb input is not unified_cached_fnirs_v1; regenerate targets and training coordinates in a fresh run')
+
+
 @lru_cache(maxsize=16)
 def public_prepared_datasets(parent):
     """REFED needs its resolved planar parent contract before any prepared read."""

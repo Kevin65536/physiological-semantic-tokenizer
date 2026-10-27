@@ -136,39 +136,21 @@ def test_subject_record_block_bootstrap_does_not_treat_duplicate_windows_as_new_
     np.testing.assert_allclose(runner.semantics_block_bootstrap_gain(constant,37,300),[.25,.25])
 
 
-def test_continuous_context_keeps_identical_endpoint_and_native_clock(tmp_path,monkeypatch):
-    from types import SimpleNamespace
-    from src.data import clean_physiology_cache as cache,unified_physiology as unified
-    from src.inference import shared_driver_reconstruction as inference
-    cfg=runner.semantics_config(CONFIG);key='fixture__subject__record'
-    ref=dict(id='fixture_window',key=key,dataset='fixture',subject='subject',record='record',site='prefrontal',region='prefrontal',
-        event_id=0,eeg_start_s=60.,hb_start_s=60.,subject_fold=0,eeg_channels=[f'c{i}' for i in range(6)])
-    record=SimpleNamespace(join_key='fixture|subject|record')
-    event=dict(event_index=0,eeg_time_ms=65000.,fnirs_time_ms=65000.,metadata={})
-    monkeypatch.setattr(cache,'CleanPhysiologyCacheIndex',lambda _:SimpleNamespace(records=[record],events_by_join_key={record.join_key:[event]}))
-    rng=np.random.default_rng(22)
-    eeg=SimpleNamespace(sample_rate_hz=200.,channel_names=ref['eeg_channels'],values=rng.normal(size=(36000,6)))
-    t=np.arange(1800)/10.;t+=.002*np.sin(t)
-    native=dict(time_s=t,values=np.stack([np.sin(t/4),np.cos(t/5)],axis=-1)[:,None,:])
-    monkeypatch.setattr(unified,'load_native_eeg_record',lambda *_:eeg)
-    monkeypatch.setattr(unified,'load_native_fnirs_record',lambda *_:native)
-    folder=tmp_path/'prepared'/key;folder.mkdir(parents=True)
-    (folder/'record.json').write_text(json.dumps(dict(prepared=[dict(region='prefrontal',hb_pair=0)])))
-    folder=tmp_path/'coordinates';folder.mkdir()
-    (folder/'fixture__prefrontal__outer0.json').write_text(json.dumps(dict(pc=[1.]+[0.]*29,eeg_factor=1.,hb_factor=1.,sd=[1.,1.,1.])))
-    (tmp_path/'training_plan.json').write_text(json.dumps(dict(qualified_parameters=[])))
-    targets=[]
-    def fake_fit(target,*_,**kwargs):
-        assert 'mean_operator' not in kwargs
-        targets.append(target.copy());n=len(target)
-        return dict(prediction=np.zeros_like(target),driver=np.zeros(n),states=np.ones((n,6)),initial_state=np.ones(5),converged=True,status='test_only')
-    monkeypatch.setattr(inference,'fit_nonlinear_shared_driver',fake_fit)
-    result=runner.semantics_context_worker((cfg,str(tmp_path),str(tmp_path),ref))
-    assert [len(x) for x in targets]==[120,240,480]
-    np.testing.assert_array_equal(targets[0],targets[1][60:180])
-    np.testing.assert_array_equal(targets[0],targets[2][180:300])
-    assert result['status']=='completed'
-    assert result['native_clock_step_quantiles_s'][0]<.1<result['native_clock_step_quantiles_s'][-1]
+def test_retired_unfiltered_context_reads_only_retained_results(tmp_path, monkeypatch):
+    from src.data import clean_physiology_cache as cache
+    def forbidden(*args, **kwargs):
+        raise AssertionError('retired context producer must not read measured data')
+    monkeypatch.setattr(cache, 'CleanPhysiologyCacheIndex', forbidden)
+    ref = dict(id='fixture_window')
+    payload = ({}, str(tmp_path), str(tmp_path), ref)
+    with pytest.raises(ValueError, match='Unfiltered context preparation is retired'):
+        runner.semantics_context_worker(payload)
+    path = tmp_path / 'context' / ref['id'] / 'result.json'
+    path.parent.mkdir(parents=True)
+    retained = dict(status='completed', processing='historical_unfiltered_target', rows=[])
+    path.write_text(json.dumps(retained))
+    assert runner.semantics_context_worker(payload) == retained
+    assert json.loads(path.read_text()) == retained
 
 
 def test_versioned_contract_and_truth_grid(tmp_path):

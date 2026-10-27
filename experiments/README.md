@@ -43,6 +43,35 @@ in the closest `src/` owner, with data and replay roots passed explicitly.
 
 ## Entrypoint, config and test map
 
+### Cached Hb input migration
+
+New measured Hb preparation uses the already bandpassed v5/none cache through
+`src.data.unified_physiology.load_cached_fnirs_record`. The input, units, support,
+offline masking semantics and historical boundary are owned by
+[the data contract](../docs/DATA_CONTRACT.md#新-hb-建模输入统一使用带通缓存--2026-10-27).
+The following are the defaults of the existing commands, with no new launcher:
+
+| Existing entry | Current cache-input contract | Preparation checks |
+| --- | --- | --- |
+| `scripts/evaluate_ssm_output_support.py` | [`ssm_output_support_cached_v2.yaml`](configs/physiology_semantic_tokenizer/ssm_output_support_cached_v2.yaml); REFED: [`ssm_output_support_refed_cached_v3.yaml`](configs/physiology_semantic_tokenizer/ssm_output_support_refed_cached_v3.yaml) | `test_cached_fnirs_input.py`, `test_ssm_output_support.py` |
+| `scripts/evaluate_shared_driver_spatial.py` | [`shared_driver_spatial_cached_v2.yaml`](configs/physiology_semantic_tokenizer/shared_driver_spatial_cached_v2.yaml) | `test_cached_fnirs_input.py`, `test_shared_driver_spatial_data.py`, `test_shared_driver_spatial_runner.py` |
+| `scripts/run_functional_tokenizer.py` | [`functional_tokenizer_cached_v2.yaml`](configs/physiology_semantic_tokenizer/functional_tokenizer_cached_v2.yaml) | `test_cached_fnirs_input.py`, `test_functional_tokenizer.py` |
+| `scripts/evaluate_model_compatibility.py` | [`model_compatibility_cached_v2.yaml`](configs/physiology_semantic_tokenizer/model_compatibility_cached_v2.yaml) | `test_cached_fnirs_input.py`, `test_model_compatibility_runner.py`, `test_model_compatibility_report.py` |
+
+These contracts require fresh preparation and training coordinates; their presence
+does not record a measured campaign. The cached census and its report do not mix in
+old native-parent fit panels. Downstream volume/decay, feasibility, information and
+token probes still reference explicit retained parents; replay preserves those
+parents and does not turn their arrays into filtered evidence. Migrating those
+results requires newly fitted cached parents, not a path substitution.
+
+The native reader remains for the Hb prevalence/native-vs-cache audit, historical
+raw-to-prepared curve verification, and historical window-local **bandpassed**
+semantics/parameter-stability experiments. The old unfiltered 120-second context
+producer is retired from current execution; retained result reading is supported.
+Use its frozen source for exact historical regeneration. The versioned entries
+below retain the contracts used to generate their dated results.
+
 Configs below are relative to `configs/physiology_semantic_tokenizer/`; tests
 are relative to `../tests/`. The grouped tables map software surfaces, not
 execution state or permission to launch. Detailed usage follows in the linked

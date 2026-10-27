@@ -224,6 +224,32 @@ increments and the declared null comparisons are the evidence surface.
 
 ## Signal branches
 
+### 新 Hb 建模输入统一使用带通缓存 — 2026-10-27
+
+本次按用户要求撤销以原生样本隔离为理由绕过通用 Hb 带通的生产路径。
+新的 Hb 拟合、监督、评价及同源绘图使用已有 v5/none 测量缓存；记录级入口为
+`src.data.unified_physiology.load_cached_fnirs_record`，输入身份为
+`unified_cached_fnirs_v1`。具体入口及版本配置由
+[experiment map](../experiments/README.md#cached-hb-input-migration) 持有。
+
+- 从登记缓存读取 float64 HbO/HbR、10 Hz 时间轴、成对通道身份与支持掩码，
+  核验 v5/none 和已执行的 0.01–0.2 Hz 带通。缓存缺失或合同不符时失败，
+  不回退到原始 MAT/CSV，不在消费者中重作 MBLL、单位换算或 Hb 带通。
+- 支持掩码优先于缓存中的有限占位值；不支持的通道输出缺失，失败不得因接入而消失。
+  Simultaneous 的 µM 换算已经由缓存完成；其他数据保留已登记的相对/未知单位。
+- 完整记录的离线预处理先于分窗和遮挡。消费者可以分箱、减参考与拟合训练尺度，
+  但只能声明处理后特征补全，不能把缓存读取描述为原生隐藏样本隔离或实时预测。
+- 模型在带通测量坐标中作条件拟合，不对缓存重复滤波。本次读取迁移没有重建
+  全记录的潜在状态及窗口外条件，不能把窗口内前向算子冒称原生 ODE 经整记录
+  滤波的严格重放。原生动力学、指数初态或生理参数主张仍须匹配实际观测合同。
+- 使用独立版本配置和新的 run；准备数组、训练尺度、参数与拟合结果不能沿用
+  原生输入运行。旧配置、冻结源码和结果保留原身份，不改写为缓存证据。
+
+`load_native_fnirs_record` 保留给原生/处理对照审计、源文件核查，以及明确的历史
+回放。旧逐窗带通实验与其证据仍是历史坐标，不能作为新缓存输入的同口径结果。
+旧未滤波 120 秒 context producer 在当前代码中只读取已有结果；重新生成须使用
+该运行的冻结源码，新连续数据准备使用缓存版 output-support 入口。
+
 The loader distinguishes measurement provenance from model coordinates:
 
 - `raw_*`: dataset-native/released measured arrays and their source metadata;

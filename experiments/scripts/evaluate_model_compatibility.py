@@ -28,11 +28,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
-from src.data.unified_physiology import load_native_fnirs_record
+from src.data.unified_physiology import load_cached_fnirs_record, CACHED_FNIRS_INPUT_SCHEMA
 from src.inference.model_compatibility import weak_hb_profiles
 
-DEFAULT_CONFIG = ROOT / 'experiments/configs/physiology_semantic_tokenizer/model_compatibility_v1.yaml'
-SCHEMA = 'model_compatibility_census_v1'
+DEFAULT_CONFIG = ROOT / 'experiments/configs/physiology_semantic_tokenizer/model_compatibility_cached_v2.yaml'
+SCHEMA = 'model_compatibility_census_cached_v2'
 IDENTITY = ['dataset_id', 'subject_id', 'record_id', 'join_key', 'record_token']
 ROW_FIELDS = IDENTITY + ['length_s', 'window_id', 'start_s', 'stop_s', 'start_index',
     'stop_index', 'samples', 'pair_index', 'pair', 'status', 'nominal_D', 'best_D',
@@ -69,13 +69,13 @@ def write_json(path, value):
 
 def load_config(path=DEFAULT_CONFIG):
     config = yaml.safe_load(Path(path).read_text())
-    if config.get('schema') != 'model_compatibility_v1':
-        raise ValueError('expected model_compatibility_v1 contract')
+    if config.get('schema') != 'model_compatibility_cached_v2':
+        raise ValueError('expected cached v2 contract; native v1 replay requires its retained source snapshot')
     census, metric, summary = config['census'], config['metric'], config['summary']
-    if census['reader'] != 'src.data.unified_physiology.load_native_fnirs_record':
-        raise ValueError('native unified Hb reader is required')
-    if census['temporal_processing'] != 'none_added' or census['eeg_access'] != 'none':
-        raise ValueError('this census adds no filtering and reads no EEG')
+    if census['reader'] != 'src.data.unified_physiology.load_cached_fnirs_record':
+        raise ValueError('unified cached Hb reader is required')
+    if census['temporal_processing'] != CACHED_FNIRS_INPUT_SCHEMA or census['eeg_access'] != 'none':
+        raise ValueError('this census consumes bandpassed cache measurements and reads no EEG')
     if any(float(x) <= 0 for x in census['lengths_s']) or len(set(census['lengths_s'])) != len(census['lengths_s']):
         raise ValueError('lengths_s must be unique positive durations')
     tau = tau_grid(config)
@@ -161,7 +161,7 @@ def plan_inventory(index, config):
     plan = dict(schema=SCHEMA, created_at=_now(), records=len(records), subjects=len(subjects),
         datasets=dict(Counter(r.dataset_id for r in records)),
         excluded_join_keys=sorted(excluded), lengths_s=census['lengths_s'],
-        count_note='Record/subject identities exact; cache-duration window counts are estimates until native read.',
+        count_note='Record/subject identities exact; cache-duration window counts are estimates until cached arrays and support are read.',
         estimated_pair_windows=sum(r['estimated_pair_windows'] for r in inventory),
         stopping_rule=config['stopping_rule'])
     return plan, inventory, records
@@ -197,13 +197,15 @@ def _paths(output, record):
     return base.with_suffix('.csv.gz'), base.with_suffix('.meta.json'), base.with_suffix('.profiles.npz')
 
 
-def replay_window(record, window, *, project_root=ROOT):
-    """Replay an exact retained native window, without fitting or preprocessing."""
-    native = load_native_fnirs_record(Path(project_root), record)
+def replay_window(record, window, *, config, project_root=ROOT):
+    """Replay a cached-v2 window; never relabel a retained native-v1 curve."""
+    if config.get('schema') != 'model_compatibility_cached_v2':
+        raise ValueError('Historical native curve replay requires the retained v1 source snapshot')
+    native = load_cached_fnirs_record(Path(project_root), record)
     times = np.asarray(native['time_s'], float)
     left, right = np.searchsorted(times, [float(window['start_s']), float(window['stop_s'])])
     if 'start_index' in window and (left != int(window['start_index']) or right != int(window['stop_index'])):
-        raise ValueError('native clock differs from retained window identity')
+        raise ValueError('cache clock differs from retained window identity')
     return dict(values=np.asarray(native['values'])[left:right], time_s=times[left:right],
         channel_names=native['channel_names'], provenance=native['provenance'])
 
@@ -216,7 +218,9 @@ def evaluate_record(record, events, config, output, *, project_root=ROOT, reader
     identity = record_identity(record)
     meta = dict(schema=SCHEMA, **identity, execution='failed', started_at=_now())
     try:
-        native = (load_native_fnirs_record if reader is None else reader)(Path(project_root), record)
+        if config['census']['temporal_processing'] != CACHED_FNIRS_INPUT_SCHEMA:
+            raise ValueError('Retired native census cannot produce new measurement evidence')
+        native = (load_cached_fnirs_record if reader is None else reader)(Path(project_root), record)
         hb, times = np.asarray(native['values']), np.asarray(native['time_s'], float)
         if hb.ndim != 3 or hb.shape[2] != 2 or times.shape != (len(hb),) or len(hb) < 3:
             raise ValueError('native Hb must be [T,pair,2] with matching T>=3 clock')
@@ -280,8 +284,8 @@ def evaluate_record(record, events, config, output, *, project_root=ROOT, reader
             np.savez_compressed(handle, **profiles)
         temporary.replace(profile_path)
         meta.update(execution='completed', rows=len(rows), windows=len(windows), pairs=hb.shape[1],
-            duration_s=duration, native_sample_rate_hz=float(native['sample_rate_hz']),
-            native_provenance=native['provenance'], source_temporal_processing='none_added',
+            duration_s=duration, sample_rate_hz=float(native['sample_rate_hz']),
+            measurement_provenance=native['provenance'], source_temporal_processing=CACHED_FNIRS_INPUT_SCHEMA,
             boundary_s=alignment_boundaries(events), status_counts=dict(Counter(frame.status)),
             windows_by_length={str(int(length)): sum(w['length_s'] == length for w in windows) for length in config['census']['lengths_s']},
             tail_s_by_length={str(int(length)): duration % float(length) for length in config['census']['lengths_s']},
@@ -614,15 +618,14 @@ def main(argv=None):
         'pilot-linear','pilot-nonlinear','pilot-space'],default='all')
     args=parser.parse_args(argv)
     config=load_config(args.config)
+    if args.stage == 'panels':
+        raise ValueError('The cached census cannot reuse native-parent fitted panels. Replay retained panels with their frozen v1 source; new panels require newly fitted cached parents.')
     output=prepare_output(args.output,config)
     if args.stage=='synthetic':
         result=synthetic_checks(config)
         write_json(output/'synthetic_checks.json',result)
     elif args.stage=='summarize':
         result=summarize(output,config)
-    elif args.stage=='panels':
-        from experiments.scripts.evaluate_model_compatibility_panels import run_panels
-        result=run_panels(config,output,args.panel_stage,args.workers)
     else:
         index=CleanPhysiologyCacheIndex(ROOT/config['census']['metadata_cache'])
         plan,_,records=make_plan(output,config,index)

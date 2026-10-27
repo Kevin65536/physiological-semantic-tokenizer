@@ -8,6 +8,43 @@ import pytest
 from experiments.scripts import render_model_compatibility as report
 
 
+def test_cached_coverage_reports_actual_units_and_filtering():
+    identity = dict(record_token='one', dataset_id='refed', subject_id='s1', record_id='r1')
+    frame = pd.DataFrame([dict(identity, length_s=90, status='ok')])
+    meta = dict(identity, execution='completed', sample_rate_hz=10.,
+        measurement_provenance=dict(output_unit='relative:refed', transform='cache_bandpass_0.01_0.2'))
+    blocks = report.coverage_blocks(frame, [identity], {'one': meta}, 'fixture', cached=True)
+    text = str(blocks)
+    assert 'relative:refed' in text and 'cache_bandpass_0.01_0.2' in text
+    assert '0.01–0.2 Hz' in text and '普查无新增项目时间滤波' not in text
+
+
+def test_cached_report_never_reads_native_parent_panels(tmp_path, monkeypatch):
+    import json
+    from experiments.scripts import render_source_diagnostics_report as renderer
+    run, output = tmp_path / 'run', tmp_path / 'report'
+    run.mkdir()
+    (run / 'plan.json').write_text(json.dumps(dict(created_at='2026-10-27')))
+    (run / 'summary.json').write_text(json.dumps(dict(execution='completed', schema='model_compatibility_census_cached_v2')))
+    frame = pd.DataFrame([dict(status='ok')])
+    monkeypatch.setattr(report, '_read_csv', lambda *_: pd.DataFrame())
+    monkeypatch.setattr(report, 'read_census', lambda *_: (frame, [], {}))
+    monkeypatch.setattr(report, 'prepare_hb_examples', lambda *_: [])
+    monkeypatch.setattr(report, 'census_distribution_blocks', lambda *_: ([], {}))
+    monkeypatch.setattr(report, 'coverage_blocks', lambda *a, **k: [])
+    monkeypatch.setattr(report, 'hb_example_blocks', lambda *a, **k: [])
+    monkeypatch.setattr(report, 'read_panels', lambda *_: (_ for _ in ()).throw(AssertionError('historical native panels must not be mixed in')))
+    def render(path, destination):
+        content = json.loads(path.read_text())
+        assert '统一带通' in content['title']
+        assert '缓存' in str(content['sections'])
+        destination.mkdir()
+        return dict(output=str(destination))
+    monkeypatch.setattr(renderer, 'render_report', render)
+    report.build_report(run, output)
+    assert json.loads((output / 'report_generation.json').read_text())['historical_panels_included'] is False
+
+
 def test_full_distribution_weights_do_not_turn_repeated_pairs_into_subjects():
     rows = [("A", "r1", 0, 0.), ("A", "r1", 0, 2.), ("A", "r1", 1, 4.),
             ("A", "r2", 0, 8.), ("B", "r3", 0, 10.)]

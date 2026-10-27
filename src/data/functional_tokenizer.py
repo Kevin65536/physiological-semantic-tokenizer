@@ -1,7 +1,8 @@
-"""TK v1 identity, native measurement and frozen training-coordinate adapter.
+"""TK identities, canonical cached Hb and frozen training-coordinate adapter.
 
 Only registry-listed ordinary public inputs are read. Splits precede all array
-access. Native readers and observation operators retain their existing owners.
+access. EEG features retain their existing definition; Hb uses the bandpassed
+measurement cache with no repeated raw conversion or filtering.
 """
 from __future__ import annotations
 
@@ -13,11 +14,10 @@ import json
 import numpy as np
 
 from .unified_physiology import (
-    UnifiedPhysiologyWindowDataset, canonical_label, load_native_fnirs_record,
-    load_native_eeg_record,
+    UnifiedPhysiologyWindowDataset, canonical_label, load_cached_fnirs_record,
+    load_native_eeg_record, CACHED_FNIRS_INPUT_SCHEMA,
 )
 from .ssm_prepared import fit_feature_coordinate
-from .homer2_preprocessing import modified_beer_lambert
 from src.inference.observation_baselines import eeg_band_power, disjoint_native_bin_operator
 
 
@@ -115,9 +115,11 @@ def inventory(project_root, cfg):
         measured_arrays_read=0, confirmation='public_development_previously_examined_population')
 
 
-def prepare_native_record(project_root, cfg, rows):
-    """One record read serves all planned windows/regions; no ad-hoc parser."""
+def prepare_cached_record(project_root, cfg, rows):
+    """One canonical Hb cache read serves all planned windows and regions."""
     from .clean_physiology_cache import CleanPhysiologyCacheIndex
+    if cfg['data'].get('fnirs_input') != CACHED_FNIRS_INPUT_SCHEMA:
+        raise ValueError('Native-Hb tokenizer preparation is retired; use cached v2 in a fresh run')
     if not rows or any(r['join_key'] != rows[0]['join_key'] for r in rows):
         raise ValueError('one canonical record per producer')
     if any(r['dataset'] not in DATASETS or r['split'] not in ('train','validation','test') for r in rows):
@@ -130,20 +132,15 @@ def prepare_native_record(project_root, cfg, rows):
     record = matches[0]
     if record.manifest['source_files'] != rows[0]['source_identity']:
         raise ValueError('source identity changed after inventory freeze')
-    # Verify the registry's existing source identity before the first native
-    # array read. This is a provenance check, not an additional permission gate.
+    # Source identities belong to the cache manifest. Do not reopen original
+    # Hb files to hash or parse them when consuming a completed cache.
     from .registry import REGISTERED_DATASETS
     admitted_root=(root/REGISTERED_DATASETS[record.dataset_id].default_root).resolve()
     for source in rows[0]['source_identity']:
         path=Path(source['path']);path=path if path.is_absolute() else root/path
         if not path.resolve().is_relative_to(admitted_root):
             raise ValueError('native source is outside the registered public dataset root')
-        digest=hashlib.sha256()
-        with path.open('rb') as handle:
-            for block in iter(lambda:handle.read(8*1024*1024),b''):digest.update(block)
-        if digest.hexdigest()!=source['sha256']:
-            raise ValueError('registered native source changed: '+str(path))
-    eeg, hb = load_native_eeg_record(root, record), load_native_fnirs_record(root, record)
+    eeg, hb = load_native_eeg_record(root, record), load_cached_fnirs_record(root, record)
     if eeg.sample_rate_hz != 200 or eeg.native_unit not in ('uV', 'µV', 'μV'):
         raise ValueError('v1 requires verified native 200Hz microvolt EEG')
     names = {n.upper(): i for i,n in enumerate(eeg.channel_names)}
@@ -156,26 +153,21 @@ def prepare_native_record(project_root, cfg, rows):
             ops = disjoint_native_bin_operator(t)
             pair = row['anchor']['hb_pair']
             h = hb['values'][take, pair]
-            if hb['optical_intensity'] is not None:
-                intensity = hb['optical_intensity'][take, pair]
-                if not np.isfinite(intensity).all() or np.any(intensity <= 0):
-                    raise ValueError('invalid native intensity')
-                reference = intensity[t < 5].mean(0)
-                h, _ = modified_beer_lambert((-np.log(intensity/reference))[:,None,:], wavelengths_nm=(760.,850.))
-                h = h[:,0]
             if e.shape != (18000,6) or not np.isfinite(e).all() or not np.isfinite(h).all():
                 raise ValueError('incomplete finite native support')
             power = eeg_band_power(e, bands=cfg['tensor']['eeg_bands_hz'], sample_rate=200, target_rate=4)
             ef = ops['eeg']@np.log(np.maximum(power, np.finfo(float).tiny)).reshape(360,30)
             hf = ops['raw']@h
-            # Hidden Hb target cannot change any visible bin or optical reference.
+            # Masking concerns already preprocessed cache features. Full-record
+            # filtering is not repeated or claimed to isolate raw samples.
             poisoned = h.copy(); hidden = (ops['native_groups']>=152)&(ops['native_groups']<168)
             poisoned[hidden] += np.array([1e6,-2e6])
             visible = ~((np.arange(360)>=152)&(np.arange(360)<168))
             if not np.array_equal((ops['raw']@poisoned)[visible], hf[visible]):
-                raise AssertionError('hidden Hb contaminates visible support')
+                raise AssertionError('hidden cached Hb contaminates visible feature bins')
             payload = dict(eeg=e[6000:10000].astype('float32'), hb=hf,
-                features=ef, native_time=t,
+                features=ef, native_time=t, fnirs_input=np.array(CACHED_FNIRS_INPUT_SCHEMA),
+                hb_provenance=np.array(json.dumps(hb['provenance'], sort_keys=True)),
                 trial_id=np.array(row['trial_id']), identity=np.array(row['id']))
             yield row, payload, None
         except (ValueError, FloatingPointError, IndexError) as exc:

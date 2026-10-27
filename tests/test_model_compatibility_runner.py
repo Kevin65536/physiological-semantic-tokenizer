@@ -48,7 +48,7 @@ def test_fixed_contract_and_metadata_only_plan():
 def test_synthetic_stage_covers_known_truth_without_data_access(monkeypatch):
     def forbidden(*args,**kwargs):
         raise AssertionError('synthetic stage cannot read data')
-    monkeypatch.setattr(runner,'load_native_fnirs_record',forbidden)
+    monkeypatch.setattr(runner,'load_cached_fnirs_record',forbidden)
     monkeypatch.setattr(runner,'CleanPhysiologyCacheIndex',forbidden)
     result=runner.synthetic_checks(runner.load_config())
     assert result['execution']=='passed' and len(result['cases'])==34
@@ -70,7 +70,7 @@ def test_all_pair_rows_and_profiles_retain_exclusions_and_missing(tmp_path):
     assert (frame.status=='excluded_alignment_boundary').sum()==6
     assert (frame.status=='missing_support').sum()==1
     assert frame.loc[frame.status!='ok',['nominal_D','best_D','best_tau']].isna().all().all()
-    assert meta['native_provenance']['native_unit']=='unreported_fixture'
+    assert meta['measurement_provenance']['native_unit']=='unreported_fixture'
     with np.load(meta['profiles_path']) as values:
         assert values['profiles_30s'].shape==(6,3,31)
         assert values['profiles_90s'].shape==(2,3,31)
@@ -101,7 +101,7 @@ def test_record_failure_and_resume_preserve_terminal_evidence(tmp_path,monkeypat
     record=fixture_record()
     meta=runner.evaluate_record(record,[],runner.load_config(),tmp_path,reader=broken)
     assert meta['execution']=='failed' and meta['error_type']=='ValueError'
-    monkeypatch.setattr(runner,'load_native_fnirs_record',broken)
+    monkeypatch.setattr(runner,'load_cached_fnirs_record',broken)
     result=runner.execute_records([record],{},runner.load_config(),tmp_path,resume=True)
     assert result[0]['error']=='fixture source failure'
     with pytest.raises(ValueError,match='already exists'):

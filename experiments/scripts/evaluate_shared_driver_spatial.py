@@ -49,7 +49,7 @@ from src.inference.t3a_balloon_robust_ssm import (
     BalloonFixedParameters, BalloonFreeParameters, BalloonParameters,
 )
 
-DEFAULT_CONFIG = CODE_ROOT / 'experiments/configs/physiology_semantic_tokenizer/shared_driver_spatial_v1.yaml'
+DEFAULT_CONFIG = CODE_ROOT / 'experiments/configs/physiology_semantic_tokenizer/shared_driver_spatial_cached_v2.yaml'
 ARTIFACT_ROOT = 'experiments/runs/physiology_semantic_tokenizer/shared_driver_spatial'
 STAGES = ('check', 'dryrun', 'synthetic-smoke', 'synthetic', 'plan', 'prepare', 'calibrate', 'measured', 'summarize')
 MODES = ('full', 'heldout_pair', 'center_pair')
@@ -98,12 +98,19 @@ def token(identity):
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
-    if (cfg.get('schema') != 'shared_driver_spatial_v1'
-            or cfg.get('experiment_id') != 'SSM-LOCAL-SPATIAL-v1'
+    identities = {'shared_driver_spatial_v1': 'SSM-LOCAL-SPATIAL-v1',
+                  'shared_driver_spatial_cached_v2': 'SSM-LOCAL-SPATIAL-CACHED-v2'}
+    if (cfg.get('schema') not in identities
+            or cfg.get('experiment_id') != identities[cfg['schema']]
             or cfg.get('artifact_root') != ARTIFACT_ROOT
             or cfg.get('scope') != 'public_development_local_spatial_observation_not_source_localization'):
         raise ValueError('wrong versioned spatial experiment or artifact boundary')
     d, t, m, c, e, s = (cfg[k] for k in ('data', 'tensor', 'model', 'calibration', 'evaluation', 'solver'))
+    cached = cfg['schema'] == 'shared_driver_spatial_cached_v2'
+    if cached and d.get('fnirs_input') != 'unified_cached_fnirs_v1':
+        raise ValueError('cached spatial contract requires the unified bandpassed Hb input')
+    hidden_policy = ('mask_cached_features_before_input_assembly_no_target_reference_PCA_or_window_statistics'
+                     if cached else 'mask_before_input_assembly_no_target_reference_PCA_or_window_statistics')
     if (d['datasets'] != ['eeg_fnirs_single_trial'] or d['protected_data'] != 'forbidden'
             or d['cache_root'] != 'data/cache/physiology_semantic_clean_v5'
             or d['region'] != 'prefrontal' or d['hb_pairs'] != 4 or d['eeg_channels'] != 12
@@ -134,7 +141,7 @@ def read_config(path=DEFAULT_CONFIG):
     if (e['modes'] != list(MODES) or e['pairings'] != list(PAIRINGS)
             or e['baselines'] != list(BASELINES) or e['target_pair'] != 0
             or e['center_steps'] != [48, 72] or e['score_steps'] != [20, 120]
-            or e['hidden_policy'] != 'mask_before_input_assembly_no_target_reference_PCA_or_window_statistics'
+            or e['hidden_policy'] != hidden_policy
             or e['wrong_EEG'] != 'other_nonoverlapping_record_window_same_subject_task_condition_and_montage'
             or e['bootstrap_unit'] != 'subject_all_windows_targets_and_conditions_together'
             or e['fixed_weight_diagnostic'] != 'main_panels_paired_heldout_and_center_SSM_fixed1'
@@ -348,6 +355,11 @@ def load_prepared(out, row):
     if meta.get('status') != 'completed' or meta.get('row') != row:
         raise ValueError('missing, failed or changed frozen prepared identity')
     with np.load(path, allow_pickle=False) as values:
+        contract = Path(out) / 'resolved_config.json'
+        if (row.get('dataset') == 'eeg_fnirs_single_trial' and contract.exists()
+                and read_json(contract).get('schema') == 'shared_driver_spatial_cached_v2'):
+            from src.data.ssm_prepared import require_cached_hb_array
+            require_cached_hb_array(values)
         return {k: values[k].copy() for k in values.files}
 
 
@@ -360,7 +372,8 @@ def _prepare_job(payload):
         from src.data.shared_driver_spatial import prepare_spatial_record
         record = prepare_spatial_record(cfg, root, row)
         write_npz(path, eeg=record['eeg'], hb=record['hb'], input_hb=record['input_hb'],
-                  eeg_operator=record['operators']['eeg'], hb_operator=record['operators']['model'])
+                  eeg_operator=record['operators']['eeg'], hb_operator=record['operators']['model'],
+                  fnirs_input=np.array(record['metadata']['fnirs_input']))
         result = dict(status='completed', row=row, provenance=record['metadata'])
     except Exception as exc:
         result = dict(status='failed_exception', row=row, error=str(exc), traceback=traceback.format_exc())
@@ -1247,6 +1260,8 @@ def main(argv=None):
     cli_argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(cli_argv)
     cfg = read_config(args.config)
+    if cfg['data'].get('fnirs_input') != 'unified_cached_fnirs_v1':
+        raise ValueError('Current execution requires the cached spatial contract; retained native runs use their frozen source snapshot')
     if not 1 <= args.workers <= cfg['resources']['max_workers']:
         parser.error('workers must be within the registered 1..24 bound')
     if args.stage == 'check' and args.output is None:

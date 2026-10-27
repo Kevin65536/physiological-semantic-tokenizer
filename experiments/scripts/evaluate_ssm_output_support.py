@@ -36,9 +36,10 @@ from src.inference.ssm_output_audit import (
     fit_problem, worst_output_direction, output_profile,
 )
 from src.inference.shared_driver_rk4 import compiled_forward
-from src.data.ssm_prepared import fit_feature_coordinate
+from src.data.ssm_prepared import fit_feature_coordinate, require_cached_hb_array
+from src.data.unified_physiology import CACHED_FNIRS_INPUT_SCHEMA, load_cached_fnirs_record
 
-DEFAULT = ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_output_support_v1.yaml'
+DEFAULT = ROOT/'experiments/configs/physiology_semantic_tokenizer/ssm_output_support_cached_v2.yaml'
 
 
 def clean(x):
@@ -66,8 +67,12 @@ def read(path):
 
 def load_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
-    refed=cfg.get('schema')=='ssm_output_support_refed_v2'
-    if (cfg['schema'] not in ('ssm_output_support_v1','ssm_output_support_refed_v2') or cfg['experiment_id'] != ('SSM-OUTPUT-SUPPORT-REFED-v2' if refed else 'SSM-OUTPUT-SUPPORT-v1')
+    identities = {'ssm_output_support_v1': 'SSM-OUTPUT-SUPPORT-v1',
+        'ssm_output_support_refed_v2': 'SSM-OUTPUT-SUPPORT-REFED-v2',
+        'ssm_output_support_cached_v2': 'SSM-OUTPUT-SUPPORT-CACHED-v2',
+        'ssm_output_support_refed_cached_v3': 'SSM-OUTPUT-SUPPORT-REFED-CACHED-v3'}
+    refed='refed' in cfg.get('schema', '')
+    if (cfg['schema'] not in identities or cfg['experiment_id'] != identities[cfg['schema']]
             or cfg['data']['protected_data'] != 'forbidden' or cfg['data']['labels_as_inputs']
             or cfg['tensor']['steps'] != 360 or cfg['tensor']['dt_s'] != .25
             or cfg['tensor']['score_steps'] != [120, 240]
@@ -78,6 +83,9 @@ def load_config(path):
         raise ValueError('invalid output-support scope, tensor, masks or data boundary')
     if len(set(cfg['synthetic']['streams'].values())) != 3:
         raise ValueError('training/pilot/evaluation generator streams must be distinct')
+    if 'cached' in cfg['schema'] and (cfg['data'].get('fnirs_input') != CACHED_FNIRS_INPUT_SCHEMA
+            or cfg['observation']['hb'] != 'unified_cached_fnirs_v1_then_250ms_bin_means_and_reference'):
+        raise ValueError('cached output-support requires the unified bandpassed Hb input')
     return cfg
 
 
@@ -155,8 +163,9 @@ def cache_index(root):
 
 def prepare_record(cfg, out, spec):
     """Only measured read boundary; registry identity and completed pilot precede it."""
-    from src.data.unified_physiology import load_native_eeg_record, load_native_fnirs_record
-    from src.data.homer2_preprocessing import modified_beer_lambert
+    from src.data.unified_physiology import load_native_eeg_record
+    if cfg['data'].get('fnirs_input') != CACHED_FNIRS_INPUT_SCHEMA:
+        raise ValueError('Native-Hb preparation is retired; use the cached v2/v3 contract in a fresh run, or the retained source snapshot for replay')
     if spec['dataset'] not in cfg['data']['datasets'] or spec['partition'] not in ('development', 'evaluation'):
         raise ValueError('unregistered public identity')
     pilot = read(out/'pilot_summary.json')
@@ -168,7 +177,7 @@ def prepare_record(cfg, out, spec):
         raise ValueError('unique registered raw record required')
     record = matches[0]
     eeg = load_native_eeg_record(ROOT, record)
-    hb = load_native_fnirs_record(ROOT, record)
+    hb = load_cached_fnirs_record(ROOT, record)
     channels = {str(name).upper(): i for i, name in enumerate(eeg.channel_names)}
     selected = [channels[name.upper()] for name in spec['anchor']['eeg_channels']]
     start = round(spec['eeg_start_s']*eeg.sample_rate_hz)
@@ -186,19 +195,8 @@ def prepare_record(cfg, out, spec):
     ops = disjoint_native_bin_operator(t)
     pair = spec['anchor']['hb_pair']
     native = hb['values'][native_mask, pair]
-    optical_reference = None
-    if hb['optical_intensity'] is not None:
-        # Recompute the selected optical pair with ONLY the visible first 5s.
-        # The generic native reader's full-record OD reference is never used.
-        intensity = hb['optical_intensity'][native_mask, pair]
-        if not np.isfinite(intensity).all() or np.any(intensity <= 0):
-            raise ValueError('missing/nonpositive native intensity in registered interval')
-        optical_reference = np.mean(intensity[t < 5.], axis=0)
-        od = -np.log(intensity/optical_reference)
-        converted, _ = modified_beer_lambert(od[:, None, :], wavelengths_nm=(760., 850.))
-        native = converted[:, 0, :]
     if not np.isfinite(native).all():
-        raise ValueError('nonfinite native Hb support')
+        raise ValueError('missing or nonfinite unified-cache Hb support')
     ef = ops['eeg']@np.log(power).reshape(360, 30)
     hf = ops['raw']@native
     # Use the operator's sample-support partition, including its explicit clock
@@ -208,16 +206,18 @@ def prepare_record(cfg, out, spec):
     visible = np.r_[np.arange(120), np.arange(240, 360)]
     invariant = np.array_equal((ops['raw']@changed)[visible], hf[visible])
     if not invariant:
-        raise AssertionError('hidden native Hb changed visible input features')
+        raise AssertionError('hidden cached Hb changed visible binned features')
     path = out/'prepared'/(spec['id']+'.npz'); path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(path, eeg=ef, hb=hf, eeg_operator=ops['eeg'], hb_operator=ops['model'],
-        native_time=t, native_groups=ops['native_groups'])
+        native_time=t, native_groups=ops['native_groups'], fnirs_input=np.array(CACHED_FNIRS_INPUT_SCHEMA))
     return dict(status='completed', native_eeg_source=str(eeg.source_path),
         eeg_rate=eeg.sample_rate_hz, eeg_unit=eeg.native_unit, hb_provenance=hb['provenance'],
-        native_hb_rate=hb['sample_rate_hz'], eeg_clock_rounding_s=start/eeg.sample_rate_hz-spec['eeg_start_s'],
-        feature_shapes=dict(eeg=ef.shape, hb=hf.shape), optical_reference=optical_reference,
-        reference='first_5s_only_visible_not_latent_rest', native_samples=len(t),
-        hidden_native_invariance=invariant, source_record=spec['join_key'])
+        hb_sample_rate_hz=hb['sample_rate_hz'], eeg_clock_rounding_s=start/eeg.sample_rate_hz-spec['eeg_start_s'],
+        feature_shapes=dict(eeg=ef.shape, hb=hf.shape), fnirs_input=CACHED_FNIRS_INPUT_SCHEMA,
+        reference='first_5s_cached_measurement_reference_not_latent_rest', cached_samples=len(t),
+        hidden_cached_feature_invariance=invariant, source_record=spec['join_key'],
+        information_scope='offline_full_record_bandpassed_Hb; masks_apply_after_cache_preprocessing',
+        model_coordinate='cached_measurement_coordinate; no_second_bandpass_or_raw_ODE_filter_equivalence_claim')
 
 
 def calibrate(cfg, out, pp):
@@ -230,6 +230,8 @@ def calibrate(cfg, out, pp):
         chunks = []
         for r in good:
             with np.load(out/'prepared'/(r['id']+'.npz')) as a:
+                if cfg['data'].get('fnirs_input') == CACHED_FNIRS_INPUT_SCHEMA:
+                    require_cached_hb_array(a)
                 chunks.append((a['eeg'].copy(), a['hb'].copy()))
         co = fit_feature_coordinate(chunks)
         ys = [np.column_stack((e@co['pc']*co['eeg_factor'], h*co['hb_factor'])) for e, h in chunks]
@@ -256,6 +258,9 @@ def calibrate(cfg, out, pp):
 def measured_arrays(out_string, record_id, coordinate):
     out = Path(out_string); co = read(out/'coordinates.json')[coordinate]
     with np.load(out/'prepared'/(record_id+'.npz')) as a:
+        contract = out / 'resolved_config.yaml'
+        if contract.exists() and yaml.safe_load(contract.read_text())['data'].get('fnirs_input') == CACHED_FNIRS_INPUT_SCHEMA:
+            require_cached_hb_array(a)
         y = np.column_stack((a['eeg']@np.asarray(co['pc'])*co['eeg_factor'], a['hb']*co['hb_factor']))
         ops = dict(eeg=a['eeg_operator'].copy(), hb=a['hb_operator'].copy())
     return y, ops, np.asarray(co['sd']), co['output_scales']
@@ -934,13 +939,15 @@ def verify_results(cfg, out, pp, measured):
                 errors.append(key+':integration_check')
             replays.append(replay)
     prepared = [read(out/'tasks'/'prepare'/(r['id']+'.json')) for r in pp['records']]
-    hidden_invariance_count = sum(bool(r.get('hidden_native_invariance')) for r in prepared)
+    cached_input = cfg['data'].get('fnirs_input') == CACHED_FNIRS_INPUT_SCHEMA
+    field = 'hidden_cached_feature_invariance' if cached_input else 'hidden_native_invariance'
+    hidden_invariance_count = sum(bool(r.get(field)) for r in prepared)
     result = dict(status='pass' if not errors and max_score < 1e-12 and max_closure < 1e-12 else 'fail',
         errors=errors, measured_arrays_verified=checked, score_recalculation_max_error=max_score,
         visible_decomposition_closure_max=max_closure, independent_replays=replays,
-        native_hidden_invariance_pass=hidden_invariance_count, native_preparation_planned=len(prepared),
+        hidden_feature_invariance_pass=hidden_invariance_count, preparation_planned=len(prepared),
         data_boundary='declared_public_subjects_only; no_protected_campaign',
-        information_scope='native_Hb_derived_components; EEG_90s_offline_power_features')
+        information_scope=('offline_bandpassed_cached_Hb_features' if cached_input else 'historical_native_Hb_derived_components'))
     write(out/'verification.json', result)
     return result
 
@@ -1035,6 +1042,8 @@ def main():
     parser.add_argument('--project-root',type=Path,default=ROOT)
     parser.add_argument('--limit', type=int, default=0, help='pilot/prepare throughput benchmark prefix; not a final experiment')
     args = parser.parse_args(); cfg = load_config(args.config)
+    if cfg['data'].get('fnirs_input') != CACHED_FNIRS_INPUT_SCHEMA:
+        raise ValueError('Current execution requires the cached input contract; retained native runs use their frozen source snapshot')
     ROOT=args.project_root.resolve()
     out = args.run_dir.resolve(); root = (ROOT/cfg['artifact_root']).resolve()
     if not out.is_relative_to(root) or out == root:

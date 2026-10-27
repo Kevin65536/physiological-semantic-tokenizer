@@ -29,7 +29,7 @@ def geometry():
 def fixture_data(tmp_path, monkeypatch):
     eeg_rows, hb_rows = geometry()
     cfg = dict(seed=23, data=dict(datasets=['eeg_fnirs_single_trial'], protected_data='forbidden',
-        cache_root='data/cache/physiology_semantic_clean_v5', region='prefrontal',
+        cache_root='data/cache/physiology_semantic_clean_v5', fnirs_input='unified_cached_fnirs_v1', region='prefrontal',
         hb_pairs=4, eeg_channels=12, window_seconds=30, reference_seconds=5,
         window_offset_s=-5, split_seed=11, train_fraction=.6, selection_fraction=.2,
         max_records_per_subject=2, max_windows_per_record=3, max_subjects=10),
@@ -74,16 +74,16 @@ def fixture_data(tmp_path, monkeypatch):
         unit_evidence='fixture explicit unit', reference='fixture native reference')
     intensity = np.exp(.02 * np.sin(native_time[:, None, None] / 2 + np.arange(5)[None, :, None])
                        + np.array([0., .01])[None, None, :])
-    native = dict(values=np.full_like(intensity, -9e20), time_s=native_time,
+    native = dict(values=np.log(intensity).copy(), time_s=native_time,
                   sample_rate_hz=10., channel_names=[r['channel_name'] for r in hb_rows],
-                  optical_intensity=intensity, provenance=dict(native_unit='optical_detector_V', transform='reader_full_record_reference_discarded'))
+                  optical_intensity=intensity, provenance=dict(native_unit='optical_detector_V', output_unit='relative_Hb', transform='fixture_bandpassed_cache'))
     reads = []
     def read_eeg(*_):
         reads.append('eeg'); return eeg
     def read_hb(*_):
         reads.append('hb'); return native
     monkeypatch.setattr(spatial, 'load_native_eeg_record', read_eeg)
-    monkeypatch.setattr(spatial, 'load_native_fnirs_record', read_hb)
+    monkeypatch.setattr(spatial, 'load_cached_fnirs_record', read_hb)
     return SimpleNamespace(cfg=cfg, root=tmp_path, records=records, refs=refs, data=data,
                            eeg_rows=eeg_rows, hb_rows=hb_rows, eeg=eeg, native=native, reads=reads)
 
@@ -267,7 +267,7 @@ def test_prepare_shapes_heldout_pair_mask_and_scoring_reference(fixture_data):
     assert prepared['scoring_mask'][20:, 0].all()
     assert not prepared['scoring_mask'][:, 1:].any()
     assert prepared['metadata']['target_reference'] == 'scoring_coordinate_only_never_visible_input'
-    assert prepared['metadata']['discarded_native_reader_reference']
+    assert prepared['metadata']['fnirs_input'] == 'unified_cached_fnirs_v1'
     np.testing.assert_allclose(prepared['hb'][:20].mean(axis=0), 0., atol=1e-10)
     assert f.reads == ['eeg', 'hb']
 
@@ -278,21 +278,21 @@ def test_poisoning_hidden_pair_including_reference_cannot_change_any_visible_inp
     original = spatial.prepare_spatial_record(f.cfg, f.root, row)
     target = row['patch']['hb_pair_indices'][0]
     times = f.native['time_s']
-    f.native['optical_intensity'][:, target, :] *= np.exp(.4 * np.cos(times[:, None] / 3.) + np.array([.1, -.2]))
+    f.native['values'][:, target, :] += .4 * np.cos(times[:, None] / 3.) + np.array([.1, -.2])
     poisoned = spatial.prepare_spatial_record(f.cfg, f.root, row)
     assert not np.array_equal(original['hb'][:, 0], poisoned['hb'][:, 0])
     np.testing.assert_array_equal(original['eeg'], poisoned['eeg'])
     np.testing.assert_array_equal(original['input_hb'], poisoned['input_hb'])
     np.testing.assert_array_equal(original['hb'][:, 1:], poisoned['hb'][:, 1:])
-    # The generic reader's whole-record reference and Hb values are discarded.
-    f.native['values'][:] = np.nan
+    # Raw optical data are not a model input and cannot override cached Hb.
+    f.native['optical_intensity'][:] = np.nan
     again = spatial.prepare_spatial_record(f.cfg, f.root, row)
     np.testing.assert_array_equal(poisoned['hb'], again['hb'])
 
 
-def test_missing_optical_support_is_retained_as_failure_without_interpolation(fixture_data):
+def test_missing_cached_support_is_retained_as_failure_without_interpolation(fixture_data):
     f = fixture_data
     row = spatial.inventory_spatial(f.cfg, f.root)['rows'][0]
-    f.native['optical_intensity'][80, 1, 0] = np.nan
-    with pytest.raises(ValueError, match='complete positive finite'):
+    f.native['values'][80, 1, 0] = np.nan
+    with pytest.raises(ValueError, match='complete finite unified-cache'):
         spatial.prepare_spatial_record(f.cfg, f.root, row)
