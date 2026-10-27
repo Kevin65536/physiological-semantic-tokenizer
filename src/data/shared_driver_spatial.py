@@ -211,6 +211,262 @@ def select_spatial_patch(eeg_rows: Sequence[Mapping[str, Any]],
     return patch
 
 
+def select_proxy_channel_sets(eeg_rows, hb_rows, target_index, *,
+                              random_seeds=(20261027, 20261028, 20261029)):
+    """Freeze single-target sensor sets using geometry and declared seeds only.
+
+    Distances are template-coordinate descriptors, not cortical distances.
+    Random donors exclude the original inner six and are sampled from the
+    remaining measured electrodes. Every expanded control contains 12 unique
+    electrodes and uses the same six inner electrodes.
+    """
+    pairs = _hb_pairs(hb_rows)
+    if (isinstance(target_index, bool) or not isinstance(target_index, (int, np.integer))
+            or not 0 <= target_index < len(pairs)):
+        raise ValueError('target must identify an existing Hb pair')
+    names = [canonical_channel_name(r.get('channel_name', '')) for r in eeg_rows]
+    if (len(names) < 12 or any(not n for n in names)
+            or len({n.casefold() for n in names}) != len(names)):
+        raise ValueError('at least twelve uniquely named measured EEG channels required')
+    rows = list(eeg_rows) + list(hb_rows)
+    units, systems = ({r.get(k) for r in rows} for k in ('coordinate_units', 'coordinate_system'))
+    if (units != {'normalized_head_unit'} or len(systems) != 1
+            or next(iter(systems), None) in (None, '', 'unknown', 'unavailable')):
+        raise ValueError('one known normalized-head geometry frame required')
+    positions = _positions(eeg_rows)
+    anchor = _positions([pairs[target_index]['row']])[0]
+    distances = np.linalg.norm(positions - anchor, axis=1)
+    order = sorted(range(len(names)), key=lambda i: (float(distances[i]), names[i]))
+    inner, outer = order[:6], order[6:12]
+    far = sorted(order[6:], key=lambda i: (-float(distances[i]), names[i]))[:6]
+    seeds = tuple(random_seeds)
+    if (len(seeds) != 3 or len(set(seeds)) != 3
+            or any(isinstance(s, bool) or not isinstance(s, (int, np.integer)) or s < 0 for s in seeds)):
+        raise ValueError('three distinct nonnegative integer random-set seeds required')
+    sets = dict(nearest3=order[:3], nearest6=inner, nearest12=order[:12],
+                sixth_to_seventh=order[:5] + [order[6]], outer6=outer, far6=far,
+                nearest6_far6=inner + far)
+    for i, seed in enumerate(seeds):
+        chosen = np.random.default_rng(int(seed)).choice(order[6:], size=6, replace=False)
+        donors = sorted(map(int, chosen), key=lambda j: (float(distances[j]), names[j]))
+        sets[f'random6_{i}'] = donors
+        sets[f'nearest6_random6_{i}'] = inner + donors
+    return dict(schema='shared_driver_sensor_proxy_support_v1',
+        native_target_index=int(target_index), hb_pair_name=pairs[target_index]['name'],
+        hb_component_indices=pairs[target_index]['components'],
+        eeg_channel_names=names, ranked_eeg_indices=order,
+        distances=distances.tolist(), sets=sets,
+        set_channel_names={name: [names[i] for i in ids] for name, ids in sets.items()},
+        random_seeds=list(map(int, seeds)), coordinate_units='normalized_head_unit',
+        coordinate_system=next(iter(systems)),
+        selection='distance_then_channel_identity; random_donors_exclude_inner6',
+        distance_interpretation='registered_template_not_individual_cortical_distance')
+
+
+def _sensor_proxy_record_identity(project_root, record, row, channel_sets):
+    """Common identity checks for target and EEG-only donor preparation."""
+    root = Path(project_root)
+    if (record.dataset_id != 'eeg_fnirs_single_trial' or row.get('dataset') != record.dataset_id
+            or row.get('join_key') != record.join_key
+            or row.get('subject') != record.canonical_subject_id
+            or row.get('record') != record.base_record_id
+            or row.get('split') not in SPLITS
+            or row.get('source_identity') != record.manifest.get('source_files')):
+        raise ValueError('registered public record, frozen source identity and subject split required')
+    if (channel_sets.get('schema') != 'shared_driver_sensor_proxy_support_v1'
+            or row.get('window_seconds') != 30 or row.get('reference_seconds') != 5
+            or row.get('eeg_filter_seconds') != 90):
+        raise ValueError('explicit 90 s EEG filtering context, 30 s target and 5 s reference required')
+    geometry = row['geometry_identity']
+    expected_sets = select_proxy_channel_sets(geometry['eeg'], geometry['fnirs'],
+        row['patch']['native_target_index'], random_seeds=channel_sets['random_seeds'])
+    if expected_sets != channel_sets:
+        raise ValueError('proxy channel support differs from the frozen target geometry')
+    es, hs = (float(row[k]) for k in ('eeg_start_s', 'hb_start_s'))
+    filter_start = float(row['eeg_filter_start_s'])
+    crop_start = round((es-filter_start)*10)
+    if (not np.isfinite([es, hs, filter_start]).all() or min(es, hs, filter_start) < 0
+            or not np.isclose(crop_start/10, es-filter_start, rtol=0, atol=1e-9)
+            or not 0 <= crop_start <= 600):
+        raise ValueError('30 s target must lie on the 10 Hz grid within its declared 90 s EEG context')
+    pair = channel_sets['native_target_index']
+    meta = record.manifest['measurement']
+    if (list(meta['eeg_channel_names']) != channel_sets['eeg_channel_names']
+            or meta['fnirs_channel_names'][2*pair:2*pair+2] !=
+               [channel_sets['hb_pair_name'] + '_HbO', channel_sets['hb_pair_name'] + '_HbR']):
+        raise ValueError('frozen EEG or target Hb channel identity differs from registered record')
+    _sources(record, root)
+    return root, es, hs, filter_start, crop_start, pair, meta
+
+
+def prepare_sensor_proxy_eeg_record(project_root, record, row, channel_sets, *,
+                                   bands=DEFAULT_BANDS, eeg_record=None):
+    """Prepare only EEG, optionally reusing a central-reader record in one group.
+
+    Callers keep the preloaded object scoped to its canonical record. Identity
+    checks still precede feature extraction. No Hb reader is used in this path.
+    """
+    from .ssm_prepared import EEG_PROXY_INPUT_SCHEMA
+
+    root, es, hs, filter_start, crop_start, pair, meta = _sensor_proxy_record_identity(
+        project_root, record, row, channel_sets)
+    eeg = load_native_eeg_record(root, record) if eeg_record is None else eeg_record
+    if (float(eeg.sample_rate_hz) != 200 or eeg.native_unit not in ('uV', 'µV', 'μV')
+            or not eeg.unit_evidence
+            or list(eeg.channel_names) != list(meta['eeg_channel_names'])):
+        raise ValueError('verified native EEG units/rate and exact registered channel identities required')
+    start, count = round(filter_start * eeg.sample_rate_hz), round(90 * eeg.sample_rate_hz)
+    values = np.asarray(eeg.values[start:start+count], float)
+    if values.shape != (count, len(eeg.channel_names)) or not np.isfinite(values).all():
+        raise ValueError('complete finite 90 s native EEG support required')
+    power = eeg_band_power(values, bands=bands, sample_rate=eeg.sample_rate_hz, target_rate=10.)
+    if power.shape != (900, len(eeg.channel_names), 5) or not np.isfinite(power).all() or np.any(power <= 0):
+        raise ValueError('finite positive native 10 Hz five-band power required')
+    reference = np.eye(300)
+    reference[:, :50] -= 1/50
+    features = np.log(power[crop_start:crop_start+300])
+    features -= features[:50].mean(axis=0)
+    provenance = dict(row=deepcopy(row), channel_sets=deepcopy(channel_sets),
+        eeg_proxy_input=EEG_PROXY_INPUT_SCHEMA,
+        eeg_native_unit=eeg.native_unit, eeg_unit_evidence=eeg.unit_evidence,
+        eeg_native_sample_rate_hz=float(eeg.sample_rate_hz),
+        eeg_reference=eeg.reference, native_start_sample=start, native_samples=count,
+        start_rounding_s=start/eeg.sample_rate_hz-filter_start,
+        eeg_filtering_support_seconds=90.,
+        final_crop_seconds=[crop_start/10., crop_start/10.+30.],
+        target_eeg_start_s=es, target_hb_start_s=hs,
+        reference_seconds=5., proxy_rate_hz=10., bands_hz=np.asarray(bands).tolist(),
+        preprocessing_support='90s_native_EEG_filtering',
+        masking='after_feature_preprocessing; final_bin_excluded_from_fitting_and_scoring')
+    return dict(eeg_logpower=features, eeg_operator=reference, time_s=np.arange(300)/10.,
+                eeg_proxy_input=EEG_PROXY_INPUT_SCHEMA,
+                eeg_proxy_rate_hz=10., metadata=provenance)
+
+
+def prepare_sensor_proxy_record(project_root, record, row, channel_sets, *,
+                                bands=DEFAULT_BANDS, eeg_record=None, hb_record=None):
+    """Prepare a 30 s target, reusing central-reader objects within one record.
+
+    The runner owns exact metadata-plan verification and software/synthetic
+    prerequisites. Preloaded objects avoid decoding a whole native MAT again
+    for each window; the caller owns their canonical-record association.
+    """
+    data = prepare_sensor_proxy_eeg_record(project_root, record, row, channel_sets,
+        bands=bands, eeg_record=eeg_record)
+    hb = load_cached_fnirs_record(Path(project_root), record) if hb_record is None else hb_record
+    if list(hb['channel_names']) != list(record.manifest['measurement']['fnirs_channel_names']):
+        raise ValueError('exact registered Hb channel identities required')
+    hs, pair = float(row['hb_start_s']), channel_sets['native_target_index']
+    take = (hb['time_s'] >= hs) & (hb['time_s'] < hs + 30)
+    times = np.asarray(hb['time_s'][take], float) - hs
+    observed_hb = np.asarray(hb['values'][take, pair], float)
+    if observed_hb.shape != (len(times), 2) or not np.isfinite(observed_hb).all():
+        raise ValueError('complete finite cached target Hb support required')
+    operators = disjoint_native_bin_operator(times, steps=300, dt=.1, reference_steps=50)
+    data.update(hb=operators['raw'] @ observed_hb, hb_operator=operators['model'],
+                fnirs_input=CACHED_FNIRS_INPUT_SCHEMA)
+    data['metadata'].update(fnirs_input=CACHED_FNIRS_INPUT_SCHEMA,
+        hb_provenance=deepcopy(hb['provenance']),
+        preprocessing_support='90s_native_EEG_filtering; full_record_offline_cached_Hb')
+    return data
+
+
+def metadata_sensor_proxy_donors(target_rows, parent_rows, records, events_by_join_key):
+    """Select wrong EEG donors from canonical events of parent records only.
+
+    No new target or fitted row is introduced. Actual 90 s filtering supports
+    must be disjoint within a native record; different records remain distinct
+    time supports. The first eligible donor in record/time/identity order is
+    selected, without consulting arrays or fitting results.
+    """
+    from .event_alignment import window_within_alignment_support
+
+    templates = {}
+    for row in parent_rows:
+        if row['dataset'] != 'eeg_fnirs_single_trial' or row['split'] not in SPLITS:
+            raise ValueError('donor scope requires the public parent subject partitions')
+        previous = templates.setdefault(row['join_key'], row)
+        if any(previous[k] != row[k] for k in ('subject', 'split', 'source_identity', 'geometry_identity', 'patch')):
+            raise ValueError('parent canonical record has inconsistent metadata')
+    if any(r['join_key'] not in templates for r in target_rows):
+        raise ValueError('target record lies outside the parent donor scope')
+    candidates, excluded = [], []
+    for key, template in sorted(templates.items()):
+        record = records[key]
+        if (record.join_key != key or record.dataset_id != template['dataset']
+                or record.canonical_subject_id != template['subject']
+                or record.manifest['source_files'] != template['source_identity']):
+            raise ValueError('canonical donor source identity differs from parent metadata')
+        duration_e = record.manifest['array_shapes']['eeg'][0]/200.
+        duration_h = record.manifest['array_shapes']['fnirs'][0]/float(record.sample_rate_hz)
+        geometry = template['geometry_identity']
+        target = template['patch']['native_target_index']
+        seeds = next((r['channel_sets']['random_seeds'] for r in target_rows if r['join_key'] == key),
+                     (20261027, 20261028, 20261029))
+        sets = select_proxy_channel_sets(geometry['eeg'], geometry['fnirs'], target, random_seeds=seeds)
+        for event in events_by_join_key.get(key, ()):
+            identity = dict(join_key=key, event_id=event.get('event_index'))
+            try:
+                if event.get('join_key') != key:
+                    raise ValueError('canonical event/record identity mismatch')
+                es, hs = (float(event[k])/1000.-5. for k in ('eeg_time_ms', 'fnirs_time_ms'))
+                label = canonical_label(event, record.dataset_id)
+                if label['task'] in ('', 'unknown') or label['condition'] in ('', 'unknown'):
+                    raise ValueError('unknown canonical task or condition')
+                if (not np.isfinite([es, hs, duration_e, duration_h]).all() or duration_e < 90
+                        or min(es, hs) < 0 or es+30 > duration_e or hs+30 > duration_h
+                        or not window_within_alignment_support(event, -5., 30.)):
+                    raise ValueError('incomplete canonical window or alignment support')
+                filter_start = max(0., min(es-30., duration_e-90.))
+                crop = (es-filter_start)*10
+                if not np.isclose(crop, round(crop), rtol=0, atol=1e-8):
+                    raise ValueError('donor crop does not align to the declared 10 Hz grid')
+                # The filtering context is also part of the native session
+                # support; it may not cross a verified timing discontinuity.
+                support = event.get('metadata', {}).get('alignment_support_ms', {}).get('eeg', (None, None))
+                if ((support[0] is not None and filter_start*1000 < support[0]-1e-8)
+                        or (support[1] is not None and (filter_start+90)*1000 > support[1]+1e-8)):
+                    raise ValueError('EEG filtering context crosses alignment support')
+                row = deepcopy(template)
+                event_id = int(event['event_index'])
+                row.update(id=f"{key}|event={event_id}|{template['patch']['patch_id']}",
+                    trial_id=f'{key}|event={event_id}', event_id=event_id,
+                    task=label['task'], condition=label['condition'], eeg_start_s=es, hb_start_s=hs,
+                    window_seconds=30., reference_seconds=5., channel_sets=sets,
+                    eeg_filter_start_s=filter_start, eeg_filter_seconds=90., eeg_crop_offset_s=es-filter_start,
+                    target_hb_pair=target, target_hb_name=sets['hb_pair_name'], donor_only=True,
+                    alignment_support=deepcopy(event.get('metadata', {}).get('alignment_support_ms', {})))
+                candidates.append(row)
+            except (ValueError, TypeError, KeyError, OverflowError) as exc:
+                excluded.append(dict(identity, reason=str(exc)))
+    if len({r['id'] for r in candidates}) != len(candidates):
+        raise ValueError('duplicate canonical donor event identity')
+    candidates.sort(key=lambda r: (r['record'], r['eeg_start_s'], r['id']))
+    partners, selected = {}, {}
+    target_ids = {r['id'] for r in target_rows}
+    for target in target_rows:
+        choices = []
+        for row in candidates:
+            if row['id'] == target['id'] or any(row[k] != target[k] for k in ('subject', 'task', 'condition', 'split')):
+                continue
+            if row['channel_sets']['eeg_channel_names'] != target['channel_sets']['eeg_channel_names']:
+                continue
+            if row['join_key'] == target['join_key']:
+                a, b = target['eeg_filter_start_s'], row['eeg_filter_start_s']
+                if a < b+90.-1e-9 and b < a+90.-1e-9:
+                    continue
+            choices.append(row)
+        donor = choices[0] if choices else None
+        partners[target['id']] = None if donor is None else donor['id']
+        if donor is not None and donor['id'] not in target_ids:
+            selected[donor['id']] = donor
+    return dict(donor_rows=[selected[k] for k in sorted(selected)], wrong_eeg_partners=partners,
+        candidate_count=len(candidates), excluded=excluded,
+        availability={split: sum(partners[r['id']] is not None for r in target_rows if r['split'] == split)
+                      for split in SPLITS},
+        source_scope='canonical_events_of_exact_parent_records_only', measured_arrays_read=0)
+
+
 def _partitions(subjects, settings):
     subjects = sorted(set(subjects))
     if len(subjects) < 5:

@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v1/source_snapshot/experiments/scripts/evaluate_shared_driver_sensor_proxy.py", line 963, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v1/source_snapshot/experiments/scripts/evaluate_shared_driver_sensor_proxy.py", line 953, in main
+    elif stage == 'screen': result = screen_stage(cfg, out, read_json(out/'plan.json'))
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v1/source_snapshot/experiments/scripts/evaluate_shared_driver_sensor_proxy.py", line 450, in screen_stage
+    train = [_load_prepared(out, r) for r in plan['rows'] if r['split'] == 'train']
+             ^^^^^^^^^^^^^^^^^^^^^^
+  File "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v1/source_snapshot/experiments/scripts/evaluate_shared_driver_sensor_proxy.py", line 117, in _load_prepared
+    if metadata['status'] != 'completed': raise ValueError('preparation unavailable: '+metadata['status'])
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: preparation unavailable: failed_preparation

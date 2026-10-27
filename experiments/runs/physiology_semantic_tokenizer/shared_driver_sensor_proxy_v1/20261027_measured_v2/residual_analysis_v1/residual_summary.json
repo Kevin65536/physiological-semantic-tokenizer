@@ -1,0 +1,3432 @@
+{
+  "schema": "shared_driver_sensor_proxy_residual_analysis_v1",
+  "status": "completed",
+  "source_run": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2",
+  "sources": [
+    "resolved_config.json",
+    "plan.json",
+    "screen.json",
+    "nonlinear_tasks.json",
+    "evaluation_selection.json",
+    "tasks/*.json",
+    "tasks/*.npz",
+    "training_template_scores.json"
+  ],
+  "split": "evaluation",
+  "component_names": [
+    "HbO",
+    "HbR"
+  ],
+  "planned_windows": 36,
+  "common_success_windows": 34,
+  "common_success_subjects": 6,
+  "common_success_window_ids": [
+    "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd"
+  ],
+  "excluded_window_ids": [
+    "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+    "eeg_fnirs_single_trial|subject_06|session_00|event=4|prefrontal__eee78d70376440fd"
+  ],
+  "exclusions_by_method": {
+    "Hb_only": [
+      {
+        "window_id": "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+        "task_id": "7652a1538aa80ee243a7d89f",
+        "reason": "failed_numerical"
+      }
+    ],
+    "pc1": [
+      {
+        "window_id": "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+        "task_id": "e5cb571886415206a60d6b07",
+        "reason": "failed_numerical"
+      }
+    ],
+    "mean6": [
+      {
+        "window_id": "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+        "task_id": "005277a2ddec91f7edb589aa",
+        "reason": "failed_numerical"
+      },
+      {
+        "window_id": "eeg_fnirs_single_trial|subject_06|session_00|event=4|prefrontal__eee78d70376440fd",
+        "task_id": "658e8e21d1a236e1ba890219",
+        "reason": "failed_numerical"
+      }
+    ]
+  },
+  "missing_task_ids": [],
+  "native_record_counts": {
+    "subject_05": {
+      "session_00": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd"
+        ]
+      },
+      "session_01": {
+        "planned_windows": 3,
+        "common_success_windows": 2,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd"
+        ]
+      }
+    },
+    "subject_06": {
+      "session_00": {
+        "planned_windows": 3,
+        "common_success_windows": 2,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd"
+        ]
+      },
+      "session_01": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd"
+        ]
+      }
+    },
+    "subject_07": {
+      "session_00": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd"
+        ]
+      },
+      "session_01": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd"
+        ]
+      }
+    },
+    "subject_08": {
+      "session_00": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd"
+        ]
+      },
+      "session_01": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd"
+        ]
+      }
+    },
+    "subject_21": {
+      "session_00": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd"
+        ]
+      },
+      "session_01": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd"
+        ]
+      }
+    },
+    "subject_25": {
+      "session_00": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd"
+        ]
+      },
+      "session_01": {
+        "planned_windows": 3,
+        "common_success_windows": 3,
+        "common_success_window_ids": [
+          "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+          "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd"
+        ]
+      }
+    }
+  },
+  "aggregation": "scored_time_mean_then_window_mean_within_native_record_then_record_mean_within_subject_then_subject_mean",
+  "score_steps": [
+    50,
+    299
+  ],
+  "training_sd": [
+    0.03305661011237064,
+    0.012540355970972894
+  ],
+  "methods": {
+    "Hb_only": {
+      "component_nmse": [
+        0.21353783984279337,
+        0.3188812405509372
+      ],
+      "joint_nmse": 0.2662095401968653,
+      "standardized_residual_change_RMS": [
+        0.297326884406028,
+        0.2227045968800979
+      ],
+      "standardized_residual_change_joint_RMS": 0.2628179839686498,
+      "cosine_with_physical_residual": [
+        1.0,
+        1.0
+      ],
+      "correlation_with_physical_residual": [
+        1.0,
+        1.0
+      ]
+    },
+    "pc1": {
+      "component_nmse": [
+        0.41470150920098553,
+        0.288465673643857
+      ],
+      "joint_nmse": 0.3515835914224212,
+      "standardized_residual_change_RMS": [
+        0.0,
+        0.0
+      ],
+      "standardized_residual_change_joint_RMS": 0.0,
+      "cosine_with_physical_residual": [
+        0.8470937538807203,
+        0.8613460847546645
+      ],
+      "correlation_with_physical_residual": [
+        0.8456378109196253,
+        0.8571495323968374
+      ]
+    },
+    "mean6": {
+      "component_nmse": [
+        0.40708053607257116,
+        0.25849793233878265
+      ],
+      "joint_nmse": 0.3327892342056769,
+      "standardized_residual_change_RMS": [
+        0.18924340506019685,
+        0.14524742178005978
+      ],
+      "standardized_residual_change_joint_RMS": 0.1687390213792989,
+      "cosine_with_physical_residual": [
+        0.9053559330739978,
+        0.9112516175266979
+      ],
+      "correlation_with_physical_residual": [
+        0.9064236236439572,
+        0.9093633299855028
+      ]
+    }
+  },
+  "physical_residual_diagnostics": {
+    "lag_s": [
+      1.0,
+      5.0
+    ],
+    "autocorrelation_1s_5s": [
+      [
+        0.879782031955807,
+        0.8873640747910571
+      ],
+      [
+        -0.08218061847402874,
+        -0.14249223258405905
+      ]
+    ],
+    "spectral_bands_hz": [
+      [
+        0.0,
+        0.05
+      ],
+      [
+        0.05,
+        0.15
+      ],
+      [
+        0.15,
+        0.5
+      ]
+    ],
+    "spectral_band_power": [
+      [
+        9.001334133991049e-05,
+        0.00011315557128899038,
+        1.8539067535222362e-05
+      ],
+      [
+        1.6792357822194e-05,
+        2.7286862786144594e-05,
+        3.9184730878071785e-06
+      ]
+    ],
+    "standardized_spectral_band_power": [
+      [
+        0.08237401836063606,
+        0.10355219535478721,
+        0.01696567938488881
+      ],
+      [
+        0.10678050015923142,
+        0.17351374279494428,
+        0.024917079579112395
+      ]
+    ],
+    "spectrum_rule": "length_weighted_contiguous_segment_periodograms_demeaned",
+    "source": "retained_Hb_only_task_diagnostics_on_identical_common_support"
+  },
+  "prediction_comparisons": {
+    "pc1_true_vs_wrong": {
+      "planned_windows": 36,
+      "common_success_windows": 36,
+      "common_success_subjects": 6,
+      "common_success_window_ids": [
+        "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd"
+      ],
+      "excluded_window_ids": [],
+      "left_nmse": 2.2982527099055474,
+      "right_nmse": 2.5110485114621843,
+      "delta_nmse_left_minus_right": -0.21279580155663683,
+      "delta_nmse_descriptive_95pct_interval": [
+        -0.3773412129414271,
+        -0.0995331560304101
+      ],
+      "relative_improvement_left_over_right": 0.08474380346906396,
+      "subject_ids": [
+        "subject_05",
+        "subject_06",
+        "subject_07",
+        "subject_08",
+        "subject_21",
+        "subject_25"
+      ],
+      "left_subject_nmse": {
+        "subject_05": 6.205093757074115,
+        "subject_06": 2.6998629593276893,
+        "subject_07": 1.6133788309609671,
+        "subject_08": 1.0619794409191288,
+        "subject_21": 1.3991572431057744,
+        "subject_25": 0.8100440280456108
+      },
+      "right_subject_nmse": {
+        "subject_05": 6.82328648707356,
+        "subject_06": 2.872470214449508,
+        "subject_07": 1.7027214280709677,
+        "subject_08": 1.1476785338301585,
+        "subject_21": 1.6299411365360092,
+        "subject_25": 0.8901932688129037
+      }
+    },
+    "pc1_true_vs_zero": {
+      "planned_windows": 36,
+      "common_success_windows": 36,
+      "common_success_subjects": 6,
+      "common_success_window_ids": [
+        "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd"
+      ],
+      "excluded_window_ids": [],
+      "left_nmse": 2.2982527099055474,
+      "right_nmse": 2.185314765567628,
+      "delta_nmse_left_minus_right": 0.11293794433791937,
+      "delta_nmse_descriptive_95pct_interval": [
+        -0.02001927470505562,
+        0.2643366353538712
+      ],
+      "relative_improvement_left_over_right": -0.05168040143113406,
+      "subject_ids": [
+        "subject_05",
+        "subject_06",
+        "subject_07",
+        "subject_08",
+        "subject_21",
+        "subject_25"
+      ],
+      "left_subject_nmse": {
+        "subject_05": 6.205093757074115,
+        "subject_06": 2.6998629593276893,
+        "subject_07": 1.6133788309609671,
+        "subject_08": 1.0619794409191288,
+        "subject_21": 1.3991572431057744,
+        "subject_25": 0.8100440280456108
+      },
+      "right_subject_nmse": {
+        "subject_05": 6.334179611550551,
+        "subject_06": 2.6949849229273317,
+        "subject_07": 1.3491143921069044,
+        "subject_08": 1.0725213802744615,
+        "subject_21": 1.0147750669738034,
+        "subject_25": 0.6463132195727169
+      }
+    },
+    "pc1_true_vs_template": {
+      "planned_windows": 36,
+      "common_success_windows": 36,
+      "common_success_subjects": 6,
+      "common_success_window_ids": [
+        "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd"
+      ],
+      "excluded_window_ids": [],
+      "left_nmse": 2.2982527099055474,
+      "right_nmse": 2.2217186207071857,
+      "delta_nmse_left_minus_right": 0.0765340891983622,
+      "delta_nmse_descriptive_95pct_interval": [
+        -0.05631562185769759,
+        0.20427209973282504
+      ],
+      "relative_improvement_left_over_right": -0.03444814680177655,
+      "subject_ids": [
+        "subject_05",
+        "subject_06",
+        "subject_07",
+        "subject_08",
+        "subject_21",
+        "subject_25"
+      ],
+      "left_subject_nmse": {
+        "subject_05": 6.205093757074115,
+        "subject_06": 2.6998629593276893,
+        "subject_07": 1.6133788309609671,
+        "subject_08": 1.0619794409191288,
+        "subject_21": 1.3991572431057744,
+        "subject_25": 0.8100440280456108
+      },
+      "right_subject_nmse": {
+        "subject_05": 6.385211197842663,
+        "subject_06": 2.802893051375163,
+        "subject_07": 1.4453463834484421,
+        "subject_08": 0.9632410861491512,
+        "subject_21": 1.1149246517406026,
+        "subject_25": 0.6186953536870904
+      }
+    },
+    "mean6_true_vs_wrong": {
+      "planned_windows": 36,
+      "common_success_windows": 36,
+      "common_success_subjects": 6,
+      "common_success_window_ids": [
+        "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd"
+      ],
+      "excluded_window_ids": [],
+      "left_nmse": 2.193633105420314,
+      "right_nmse": 2.1968626144750067,
+      "delta_nmse_left_minus_right": -0.003229509054692751,
+      "delta_nmse_descriptive_95pct_interval": [
+        -0.02459564986120369,
+        0.015892533827254602
+      ],
+      "relative_improvement_left_over_right": 0.0014700550837424275,
+      "subject_ids": [
+        "subject_05",
+        "subject_06",
+        "subject_07",
+        "subject_08",
+        "subject_21",
+        "subject_25"
+      ],
+      "left_subject_nmse": {
+        "subject_05": 6.307925153173163,
+        "subject_06": 2.7300320831636666,
+        "subject_07": 1.3635146706596695,
+        "subject_08": 1.0628209377994295,
+        "subject_21": 1.0469486542043371,
+        "subject_25": 0.6505571335216196
+      },
+      "right_subject_nmse": {
+        "subject_05": 6.28430136440333,
+        "subject_06": 2.705541691999465,
+        "subject_07": 1.4162889672833348,
+        "subject_08": 1.0838071549821398,
+        "subject_21": 1.0406652648751364,
+        "subject_25": 0.6505712433066361
+      }
+    },
+    "mean6_true_vs_zero": {
+      "planned_windows": 36,
+      "common_success_windows": 36,
+      "common_success_subjects": 6,
+      "common_success_window_ids": [
+        "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd"
+      ],
+      "excluded_window_ids": [],
+      "left_nmse": 2.193633105420314,
+      "right_nmse": 2.185314765567628,
+      "delta_nmse_left_minus_right": 0.008318339852686022,
+      "delta_nmse_descriptive_95pct_interval": [
+        -0.0088776015338623,
+        0.025035352404933826
+      ],
+      "relative_improvement_left_over_right": -0.00380647217680119,
+      "subject_ids": [
+        "subject_05",
+        "subject_06",
+        "subject_07",
+        "subject_08",
+        "subject_21",
+        "subject_25"
+      ],
+      "left_subject_nmse": {
+        "subject_05": 6.307925153173163,
+        "subject_06": 2.7300320831636666,
+        "subject_07": 1.3635146706596695,
+        "subject_08": 1.0628209377994295,
+        "subject_21": 1.0469486542043371,
+        "subject_25": 0.6505571335216196
+      },
+      "right_subject_nmse": {
+        "subject_05": 6.334179611550551,
+        "subject_06": 2.6949849229273317,
+        "subject_07": 1.3491143921069044,
+        "subject_08": 1.0725213802744615,
+        "subject_21": 1.0147750669738034,
+        "subject_25": 0.6463132195727169
+      }
+    },
+    "mean6_true_vs_template": {
+      "planned_windows": 36,
+      "common_success_windows": 36,
+      "common_success_subjects": 6,
+      "common_success_window_ids": [
+        "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_05|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+        "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd"
+      ],
+      "excluded_window_ids": [],
+      "left_nmse": 2.193633105420314,
+      "right_nmse": 2.2217186207071857,
+      "delta_nmse_left_minus_right": -0.028085515286871143,
+      "delta_nmse_descriptive_95pct_interval": [
+        -0.07653309001632375,
+        0.02933820757439376
+      ],
+      "relative_improvement_left_over_right": 0.012641346669692965,
+      "subject_ids": [
+        "subject_05",
+        "subject_06",
+        "subject_07",
+        "subject_08",
+        "subject_21",
+        "subject_25"
+      ],
+      "left_subject_nmse": {
+        "subject_05": 6.307925153173163,
+        "subject_06": 2.7300320831636666,
+        "subject_07": 1.3635146706596695,
+        "subject_08": 1.0628209377994295,
+        "subject_21": 1.0469486542043371,
+        "subject_25": 0.6505571335216196
+      },
+      "right_subject_nmse": {
+        "subject_05": 6.385211197842663,
+        "subject_06": 2.802893051375163,
+        "subject_07": 1.4453463834484421,
+        "subject_08": 0.9632410861491512,
+        "subject_21": 1.1149246517406026,
+        "subject_25": 0.6186953536870904
+      }
+    }
+  },
+  "per_window": [
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_05",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_05",
+          "component_nmse": [
+            0.8822984152751406,
+            1.2890929493034562
+          ],
+          "joint_nmse": 1.085695682289298,
+          "standardized_residual_change_RMS": [
+            0.5274689789547723,
+            0.38997901783231503
+          ],
+          "standardized_residual_change_joint_RMS": 0.46384650376447106,
+          "cosine_with_physical_residual": [
+            1.0,
+            0.9999999999999998
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999999,
+            0.9999999999999998
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_05",
+          "component_nmse": [
+            1.7239232087359573,
+            0.9082685598413338
+          ],
+          "joint_nmse": 1.3160958842886452,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9438129197870386,
+            0.9450897816072963
+          ],
+          "correlation_with_physical_residual": [
+            0.9430967949406605,
+            0.9435184493462381
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_05",
+          "component_nmse": [
+            1.4934473925364853,
+            0.8696484276740332
+          ],
+          "joint_nmse": 1.1815479101052586,
+          "standardized_residual_change_RMS": [
+            0.4075586137511285,
+            0.3111973947510994
+          ],
+          "standardized_residual_change_joint_RMS": 0.362593327394902,
+          "cosine_with_physical_residual": [
+            0.990552972923694,
+            0.9947815365398756
+          ],
+          "correlation_with_physical_residual": [
+            0.991518889175545,
+            0.99488581348513
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_05",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_05",
+          "component_nmse": [
+            0.6567022750318438,
+            1.0769915233861334
+          ],
+          "joint_nmse": 0.8668468992089886,
+          "standardized_residual_change_RMS": [
+            0.27180882210906976,
+            0.1845263895183878
+          ],
+          "standardized_residual_change_joint_RMS": 0.23230370660518063,
+          "cosine_with_physical_residual": [
+            0.9999999999999997,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            1.0000000000000002,
+            0.9999999999999998
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_05",
+          "component_nmse": [
+            0.8855850317788586,
+            0.9576817006222463
+          ],
+          "joint_nmse": 0.9216333662005526,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.962758000977399,
+            0.9849599589967024
+          ],
+          "correlation_with_physical_residual": [
+            0.9618636330740117,
+            0.9846149346205862
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_05",
+          "component_nmse": [
+            1.369259224720795,
+            0.6074498661587087
+          ],
+          "joint_nmse": 0.9883545454397515,
+          "standardized_residual_change_RMS": [
+            0.3420899113027263,
+            0.2582254355273308
+          ],
+          "standardized_residual_change_joint_RMS": 0.30307250202582453,
+          "cosine_with_physical_residual": [
+            0.9855513743007204,
+            0.9898184849559618
+          ],
+          "correlation_with_physical_residual": [
+            0.9874004021964987,
+            0.9902984419853051
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_05",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_05",
+          "component_nmse": [
+            0.4314159522374812,
+            0.34681059141393544
+          ],
+          "joint_nmse": 0.38911327182570826,
+          "standardized_residual_change_RMS": [
+            0.8280195392368305,
+            0.5485735621063401
+          ],
+          "standardized_residual_change_joint_RMS": 0.7023351445001209,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0000000000000002
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_05",
+          "component_nmse": [
+            0.8475105525001126,
+            0.9152383344331324
+          ],
+          "joint_nmse": 0.8813744434666225,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.49060404363866095,
+            0.8529675750313184
+          ],
+          "correlation_with_physical_residual": [
+            0.488711930368439,
+            0.8531583872052056
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_05",
+          "component_nmse": [
+            1.039991729706371,
+            0.9447185252177333
+          ],
+          "joint_nmse": 0.9923551274620519,
+          "standardized_residual_change_RMS": [
+            0.39031903716761357,
+            0.26448351233106304
+          ],
+          "standardized_residual_change_joint_RMS": 0.3333920208031594,
+          "cosine_with_physical_residual": [
+            0.5728095059546493,
+            0.800463205250743
+          ],
+          "correlation_with_physical_residual": [
+            0.5714306866353316,
+            0.8012455864096305
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_05",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_05",
+          "component_nmse": [
+            0.21755586108719127,
+            0.363231777622976
+          ],
+          "joint_nmse": 0.29039381935508346,
+          "standardized_residual_change_RMS": [
+            0.3971702207950233,
+            0.2759032741320129
+          ],
+          "standardized_residual_change_joint_RMS": 0.34195526093564643,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0000000000000004
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999999,
+            0.9999999999999999
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_05",
+          "component_nmse": [
+            0.6041706993263265,
+            0.22315234125242564
+          ],
+          "joint_nmse": 0.4136615202893759,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9157171182502505,
+            0.8961282443024227
+          ],
+          "correlation_with_physical_residual": [
+            0.9144954486895156,
+            0.8920965456861769
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_05",
+          "component_nmse": [
+            0.44974417125644406,
+            0.27545268223051966
+          ],
+          "joint_nmse": 0.36259842674348153,
+          "standardized_residual_change_RMS": [
+            0.1730347254152301,
+            0.14092386407315927
+          ],
+          "standardized_residual_change_joint_RMS": 0.15779821238663377,
+          "cosine_with_physical_residual": [
+            0.9195112715949956,
+            0.9462574756327201
+          ],
+          "correlation_with_physical_residual": [
+            0.9176217343075608,
+            0.9442583624009696
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_05",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_05",
+          "component_nmse": [
+            0.6820750186020149,
+            1.2956036996742246
+          ],
+          "joint_nmse": 0.98883935913812,
+          "standardized_residual_change_RMS": [
+            0.48178074407189325,
+            0.3292563176794906
+          ],
+          "standardized_residual_change_joint_RMS": 0.4126271974133096,
+          "cosine_with_physical_residual": [
+            1.0,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0000000000000002
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_05",
+          "component_nmse": [
+            1.4840326483893007,
+            0.8366776772769998
+          ],
+          "joint_nmse": 1.1603551628331505,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9611419827687536,
+            0.9719362750953138
+          ],
+          "correlation_with_physical_residual": [
+            0.9610998442116827,
+            0.971897531896636
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_05|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_05",
+          "component_nmse": [
+            1.5858617073982904,
+            0.8081801004861813
+          ],
+          "joint_nmse": 1.197020903942236,
+          "standardized_residual_change_RMS": [
+            0.17366676508251339,
+            0.13481491051030858
+          ],
+          "standardized_residual_change_joint_RMS": 0.15545932810566146,
+          "cosine_with_physical_residual": [
+            0.9539555927051778,
+            0.9635250300670875
+          ],
+          "correlation_with_physical_residual": [
+            0.953988129623089,
+            0.963474127298965
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_06",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.08949148180370278,
+            0.12801085494950926
+          ],
+          "joint_nmse": 0.108751168376606,
+          "standardized_residual_change_RMS": [
+            0.16154992007394356,
+            0.12244388815910477
+          ],
+          "standardized_residual_change_joint_RMS": 0.14333681038626628,
+          "cosine_with_physical_residual": [
+            1.0,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999999,
+            1.0000000000000002
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.1628827003182678,
+            0.09492765222658711
+          ],
+          "joint_nmse": 0.12890517627242748,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9370867429419378,
+            0.9431935215503972
+          ],
+          "correlation_with_physical_residual": [
+            0.9371133075573955,
+            0.9430178319055158
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.15739286578816025,
+            0.0810868946876934
+          ],
+          "joint_nmse": 0.11923988023792678,
+          "standardized_residual_change_RMS": [
+            0.15880204130237544,
+            0.11725427981292395
+          ],
+          "standardized_residual_change_joint_RMS": 0.13958268957189646,
+          "cosine_with_physical_residual": [
+            0.9850757548486447,
+            0.9898404894781206
+          ],
+          "correlation_with_physical_residual": [
+            0.9851760284439216,
+            0.9899301710818076
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_06",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.16529265161049495,
+            0.2304126150952372
+          ],
+          "joint_nmse": 0.19785263335286607,
+          "standardized_residual_change_RMS": [
+            0.12284462203650426,
+            0.09863988099269666
+          ],
+          "standardized_residual_change_joint_RMS": 0.11140158725427782,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0000000000000002,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.2510892344374192,
+            0.1699841859424506
+          ],
+          "joint_nmse": 0.2105367101899349,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9848921960574952,
+            0.9870049201007439
+          ],
+          "correlation_with_physical_residual": [
+            0.9849446228545709,
+            0.9870186738826862
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.2607707956928315,
+            0.1747437794201472
+          ],
+          "joint_nmse": 0.21775728755648935,
+          "standardized_residual_change_RMS": [
+            0.16153274278625768,
+            0.12938996932335847
+          ],
+          "standardized_residual_change_joint_RMS": 0.14634649150825402,
+          "cosine_with_physical_residual": [
+            0.9667243959803729,
+            0.9735559424098561
+          ],
+          "correlation_with_physical_residual": [
+            0.9667424728785771,
+            0.9734066004288386
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_06",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.25484520454048687,
+            0.374315562003431
+          ],
+          "joint_nmse": 0.314580383271959,
+          "standardized_residual_change_RMS": [
+            0.2261247499934583,
+            0.17136557676256242
+          ],
+          "standardized_residual_change_joint_RMS": 0.20062223637818624,
+          "cosine_with_physical_residual": [
+            1.0,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0000000000000002,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.2931797692648717,
+            0.41885763304018314
+          ],
+          "joint_nmse": 0.3560187011525273,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.908923382443405,
+            0.9644983728391142
+          ],
+          "correlation_with_physical_residual": [
+            0.8933364091243609,
+            0.9611339761504979
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.460012644919857,
+            0.2693600872033653
+          ],
+          "joint_nmse": 0.3646863660616113,
+          "standardized_residual_change_RMS": [
+            0.21867279947490623,
+            0.17808792369846796
+          ],
+          "standardized_residual_change_joint_RMS": 0.19941552321399633,
+          "cosine_with_physical_residual": [
+            0.9523154050087824,
+            0.9588259161102786
+          ],
+          "correlation_with_physical_residual": [
+            0.9499352158442155,
+            0.9540816045574412
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_06",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.03722085667180904,
+            0.06485122271681701
+          ],
+          "joint_nmse": 0.05103603969431303,
+          "standardized_residual_change_RMS": [
+            0.2238957211377506,
+            0.1667982397787799
+          ],
+          "standardized_residual_change_joint_RMS": 0.1974220691020798,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999998,
+            0.9999999999999998
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.08453464093037838,
+            0.09581271695041038
+          ],
+          "joint_nmse": 0.09017367894039435,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.6384566269271752,
+            0.8426276103065022
+          ],
+          "correlation_with_physical_residual": [
+            0.6381804738855719,
+            0.8423333176133208
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.06231148995328869,
+            0.05473019665190352
+          ],
+          "joint_nmse": 0.05852084330259611,
+          "standardized_residual_change_RMS": [
+            0.19383654684945353,
+            0.14714746161100428
+          ],
+          "standardized_residual_change_joint_RMS": 0.1720828032562847,
+          "cosine_with_physical_residual": [
+            0.934748346334558,
+            0.9596698223163063
+          ],
+          "correlation_with_physical_residual": [
+            0.934667932249201,
+            0.9595746348643761
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_06",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.24386138808551416,
+            0.3483342456925312
+          ],
+          "joint_nmse": 0.2960978168890226,
+          "standardized_residual_change_RMS": [
+            0.3290736951608642,
+            0.26780585979092797
+          ],
+          "standardized_residual_change_joint_RMS": 0.30000789605040695,
+          "cosine_with_physical_residual": [
+            1.0,
+            0.9999999999999996
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999999,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.40512281139535977,
+            0.36993818944637646
+          ],
+          "joint_nmse": 0.3875305004208682,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.8601164411950247,
+            0.900556780617323
+          ],
+          "correlation_with_physical_residual": [
+            0.857376934618793,
+            0.8992246336449864
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_06|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_06",
+          "component_nmse": [
+            0.3342791560413845,
+            0.3076144142286948
+          ],
+          "joint_nmse": 0.3209467851350398,
+          "standardized_residual_change_RMS": [
+            0.2171303468976528,
+            0.17994651662812425
+          ],
+          "standardized_residual_change_joint_RMS": 0.19940704148862295,
+          "cosine_with_physical_residual": [
+            0.957027971096468,
+            0.9757787762355075
+          ],
+          "correlation_with_physical_residual": [
+            0.9560837699450359,
+            0.9754458686617279
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_07",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.053000166762900265,
+            0.07817584941278867
+          ],
+          "joint_nmse": 0.06558800808784447,
+          "standardized_residual_change_RMS": [
+            0.1666976801436096,
+            0.12855435921190714
+          ],
+          "standardized_residual_change_joint_RMS": 0.1488528465257639,
+          "cosine_with_physical_residual": [
+            1.0,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0000000000000002
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.11935625934528468,
+            0.056633015183829696
+          ],
+          "joint_nmse": 0.08799463726455718,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9088283989431383,
+            0.888832388813881
+          ],
+          "correlation_with_physical_residual": [
+            0.9087897240004519,
+            0.8888142029204901
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.08628822096166433,
+            0.06158754735286641
+          ],
+          "joint_nmse": 0.07393788415726539,
+          "standardized_residual_change_RMS": [
+            0.1174143029816002,
+            0.09083659819623027
+          ],
+          "standardized_residual_change_joint_RMS": 0.10497001028036149,
+          "cosine_with_physical_residual": [
+            0.9552236134791512,
+            0.9614552604078188
+          ],
+          "correlation_with_physical_residual": [
+            0.9552044863310959,
+            0.9614612397037164
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_07",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.34590515142858796,
+            0.5190561622712648
+          ],
+          "joint_nmse": 0.4324806568499262,
+          "standardized_residual_change_RMS": [
+            0.3217263577409848,
+            0.23326441531289663
+          ],
+          "standardized_residual_change_joint_RMS": 0.28099834226961873,
+          "cosine_with_physical_residual": [
+            0.9999999999999999,
+            0.9999999999999998
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999998,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.6057635509264043,
+            0.4181408795164273
+          ],
+          "joint_nmse": 0.511952215221416,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.926441805072601,
+            0.9474500842683008
+          ],
+          "correlation_with_physical_residual": [
+            0.926505538571435,
+            0.9472784447603074
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.6068771874674334,
+            0.3603935217900782
+          ],
+          "joint_nmse": 0.48363535462875573,
+          "standardized_residual_change_RMS": [
+            0.14867001504681757,
+            0.11263413150947446
+          ],
+          "standardized_residual_change_joint_RMS": 0.13188862906807877,
+          "cosine_with_physical_residual": [
+            0.9672560952882302,
+            0.9765125953077072
+          ],
+          "correlation_with_physical_residual": [
+            0.9674630377905579,
+            0.9765966048129051
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_07",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.28889017661339583,
+            0.542611123332241
+          ],
+          "joint_nmse": 0.4157506499728186,
+          "standardized_residual_change_RMS": [
+            0.31385063412220415,
+            0.24779675231937495
+          ],
+          "standardized_residual_change_joint_RMS": 0.2827591298251388,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0000000000000002,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.49603760773157374,
+            0.5001922756400485
+          ],
+          "joint_nmse": 0.49811494168581094,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9066502049744625,
+            0.941896744825069
+          ],
+          "correlation_with_physical_residual": [
+            0.9057018668457724,
+            0.9416577837240735
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.42995520422136313,
+            0.5001217354760056
+          ],
+          "joint_nmse": 0.4650384698486844,
+          "standardized_residual_change_RMS": [
+            0.14541085078801816,
+            0.11151283031339324
+          ],
+          "standardized_residual_change_joint_RMS": 0.12957512657026213,
+          "cosine_with_physical_residual": [
+            0.9327274105781798,
+            0.968648153509045
+          ],
+          "correlation_with_physical_residual": [
+            0.9320585351828895,
+            0.968519537153042
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_07",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.3167204439443899,
+            0.3547932141717906
+          ],
+          "joint_nmse": 0.33575682905809007,
+          "standardized_residual_change_RMS": [
+            0.477380903417086,
+            0.4125569060328092
+          ],
+          "standardized_residual_change_joint_RMS": 0.4461478049159703,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            0.9999999999999999
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.6695655521940382,
+            0.5013848892443312
+          ],
+          "joint_nmse": 0.5854752207191849,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.8234362634950828,
+            0.8132142087080956
+          ],
+          "correlation_with_physical_residual": [
+            0.8417556810139349,
+            0.8442990662631799
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.6434613585240467,
+            0.5380642085135021
+          ],
+          "joint_nmse": 0.5907627835187748,
+          "standardized_residual_change_RMS": [
+            0.09156158454254872,
+            0.0692055794881954
+          ],
+          "standardized_residual_change_joint_RMS": 0.08115705759895199,
+          "cosine_with_physical_residual": [
+            0.8292340082872822,
+            0.7949341096572363
+          ],
+          "correlation_with_physical_residual": [
+            0.8524501926744287,
+            0.8243045143226089
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_07",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.07991461281261707,
+            0.11486369586246838
+          ],
+          "joint_nmse": 0.09738915433754272,
+          "standardized_residual_change_RMS": [
+            0.2393410620221059,
+            0.18895795456794923
+          ],
+          "standardized_residual_change_joint_RMS": 0.2156261261586507,
+          "cosine_with_physical_residual": [
+            1.0,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999998,
+            1.0000000000000002
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.20574815768353977,
+            0.08175401354165236
+          ],
+          "joint_nmse": 0.143751085612596,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.890521447835895,
+            0.8302600175946001
+          ],
+          "correlation_with_physical_residual": [
+            0.8898153075213601,
+            0.82959593634158
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.11295556380139198,
+            0.12103639998078876
+          ],
+          "joint_nmse": 0.11699598189109035,
+          "standardized_residual_change_RMS": [
+            0.13054016674075417,
+            0.10618095429954588
+          ],
+          "standardized_residual_change_joint_RMS": 0.1189855667479593,
+          "cosine_with_physical_residual": [
+            0.8878595360546327,
+            0.93602726309189
+          ],
+          "correlation_with_physical_residual": [
+            0.8866723005443149,
+            0.9359199716818979
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_07",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.40059513922791523,
+            0.5441796507920021
+          ],
+          "joint_nmse": 0.47238739500995874,
+          "standardized_residual_change_RMS": [
+            0.21672857743774995,
+            0.15467627451398533
+          ],
+          "standardized_residual_change_joint_RMS": 0.18827642732922847,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0000000000000002,
+            0.9999999999999998
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.5721107232734286,
+            0.44658433053347535
+          ],
+          "joint_nmse": 0.509347526903452,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9668600421644734,
+            0.9806214294213088
+          ],
+          "correlation_with_physical_residual": [
+            0.966908069961526,
+            0.9804880281282329
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_07|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_07",
+          "component_nmse": [
+            0.5480890561513622,
+            0.43859269970511516
+          ],
+          "joint_nmse": 0.4933408779282386,
+          "standardized_residual_change_RMS": [
+            0.16368694904383138,
+            0.11924722648662593
+          ],
+          "standardized_residual_change_joint_RMS": 0.14320146352609406,
+          "cosine_with_physical_residual": [
+            0.9867749606390033,
+            0.9915066399762043
+          ],
+          "correlation_with_physical_residual": [
+            0.9867602687793107,
+            0.9914563046490562
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_08",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.32120873564718083,
+            0.46309034409268357
+          ],
+          "joint_nmse": 0.3921495398699321,
+          "standardized_residual_change_RMS": [
+            0.3168073717666736,
+            0.24050877860426226
+          ],
+          "standardized_residual_change_joint_RMS": 0.2812573406965775,
+          "cosine_with_physical_residual": [
+            1.0,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0000000000000002
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.5759628966819853,
+            0.36570693348232725
+          ],
+          "joint_nmse": 0.47083491508215625,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.926255875033745,
+            0.9366952917858452
+          ],
+          "correlation_with_physical_residual": [
+            0.9206085445057761,
+            0.9284267163725898
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.6272758333288774,
+            0.2727800474358282
+          ],
+          "joint_nmse": 0.45002794038235283,
+          "standardized_residual_change_RMS": [
+            0.19582268520289237,
+            0.14696713966453437
+          ],
+          "standardized_residual_change_joint_RMS": 0.17312692479976335,
+          "cosine_with_physical_residual": [
+            0.9774373564375975,
+            0.9763029095442978
+          ],
+          "correlation_with_physical_residual": [
+            0.9806173593760522,
+            0.9767205560785115
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_08",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.06490566506261222,
+            0.10649804900397437
+          ],
+          "joint_nmse": 0.08570185703329326,
+          "standardized_residual_change_RMS": [
+            0.222290215982452,
+            0.15901790749621256
+          ],
+          "standardized_residual_change_joint_RMS": 0.19326100877569585,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.16423028558850122,
+            0.0806744802031507
+          ],
+          "joint_nmse": 0.12245238289582601,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.8703737068772319,
+            0.8732527024588995
+          ],
+          "correlation_with_physical_residual": [
+            0.8693705177069095,
+            0.8723402274073171
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.11084377319169235,
+            0.09111098582088487
+          ],
+          "joint_nmse": 0.10097737950628863,
+          "standardized_residual_change_RMS": [
+            0.17362810353046312,
+            0.1266520418261085
+          ],
+          "standardized_residual_change_joint_RMS": 0.15196621011643927,
+          "cosine_with_physical_residual": [
+            0.9148489136397097,
+            0.9493487206098902
+          ],
+          "correlation_with_physical_residual": [
+            0.9141170921659291,
+            0.9490324190329287
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_08",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.09434046998108714,
+            0.14914384255966376
+          ],
+          "joint_nmse": 0.12174215627037549,
+          "standardized_residual_change_RMS": [
+            0.32014861476022227,
+            0.239098979779272
+          ],
+          "standardized_residual_change_joint_RMS": 0.28254509167952113,
+          "cosine_with_physical_residual": [
+            0.9999999999999997,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.24605579021094007,
+            0.15472754709120917
+          ],
+          "joint_nmse": 0.20039166865107452,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.7807296752672366,
+            0.8120038146817041
+          ],
+          "correlation_with_physical_residual": [
+            0.7724249258744326,
+            0.7839474366633898
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.24450126955288334,
+            0.08726620873381821
+          ],
+          "joint_nmse": 0.16588373914335075,
+          "standardized_residual_change_RMS": [
+            0.20277249564714747,
+            0.1541200783870679
+          ],
+          "standardized_residual_change_joint_RMS": 0.18009675670734387,
+          "cosine_with_physical_residual": [
+            0.9246027622910893,
+            0.8962434129119153
+          ],
+          "correlation_with_physical_residual": [
+            0.9366409128074243,
+            0.8877052833379788
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_08",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.10682887573417695,
+            0.16977439123165675
+          ],
+          "joint_nmse": 0.1383016334829168,
+          "standardized_residual_change_RMS": [
+            0.23386851934975625,
+            0.18257554144254384
+          ],
+          "standardized_residual_change_joint_RMS": 0.2097955107668958,
+          "cosine_with_physical_residual": [
+            1.0,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.26648413667803034,
+            0.09727052442365493
+          ],
+          "joint_nmse": 0.18187733055084265,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9441935333274714,
+            0.9093322642453291
+          ],
+          "correlation_with_physical_residual": [
+            0.9602910589840677,
+            0.8976533451499624
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.25097392315980294,
+            0.09743582362547741
+          ],
+          "joint_nmse": 0.17420487339264026,
+          "standardized_residual_change_RMS": [
+            0.08877569195555787,
+            0.06793432564580713
+          ],
+          "standardized_residual_change_joint_RMS": 0.07904491154760905,
+          "cosine_with_physical_residual": [
+            0.9534771300242517,
+            0.9290576700835838
+          ],
+          "correlation_with_physical_residual": [
+            0.9676045734898299,
+            0.9227004631128
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_08",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.060618964856543035,
+            0.11170475992469546
+          ],
+          "joint_nmse": 0.08616186239061926,
+          "standardized_residual_change_RMS": [
+            0.2826960072147417,
+            0.21613880944695663
+          ],
+          "standardized_residual_change_joint_RMS": 0.2516277185092146,
+          "cosine_with_physical_residual": [
+            1.0,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999999,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.2257532151938836,
+            0.07521013689081346
+          ],
+          "joint_nmse": 0.15048167604234863,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.8824182668941032,
+            0.7647872127772191
+          ],
+          "correlation_with_physical_residual": [
+            0.8856916225623243,
+            0.7535325597759386
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.25988942517193697,
+            0.055752365566128226
+          ],
+          "joint_nmse": 0.15782089536903263,
+          "standardized_residual_change_RMS": [
+            0.09242158287018716,
+            0.06823149901846032
+          ],
+          "standardized_residual_change_joint_RMS": 0.08123203320900266,
+          "cosine_with_physical_residual": [
+            0.9179864396871092,
+            0.7321784712026722
+          ],
+          "correlation_with_physical_residual": [
+            0.9246543637709616,
+            0.7182374093207373
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_08",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.15555243432903054,
+            0.23541392096736433
+          ],
+          "joint_nmse": 0.19548317764819745,
+          "standardized_residual_change_RMS": [
+            0.29722266313326867,
+            0.215818152648164
+          ],
+          "standardized_residual_change_joint_RMS": 0.2597294616447071,
+          "cosine_with_physical_residual": [
+            0.9999999999999998,
+            0.9999999999999999
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999998,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.43253141734581185,
+            0.10484681521432392
+          ],
+          "joint_nmse": 0.26868911628006775,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9633166997564134,
+            0.9346639805993324
+          ],
+          "correlation_with_physical_residual": [
+            0.964203735406831,
+            0.9343935797192864
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_08|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_08",
+          "component_nmse": [
+            0.5195427008493763,
+            0.08891488519614192
+          ],
+          "joint_nmse": 0.30422879302275907,
+          "standardized_residual_change_RMS": [
+            0.08877919932494516,
+            0.06971755866599343
+          ],
+          "standardized_residual_change_joint_RMS": 0.07981943441018789,
+          "cosine_with_physical_residual": [
+            0.9525872974416378,
+            0.8680081146519286
+          ],
+          "correlation_with_physical_residual": [
+            0.9536347249981139,
+            0.8673259190844547
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_21",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.20721457269099092,
+            0.26993541833448625
+          ],
+          "joint_nmse": 0.23857499551273856,
+          "standardized_residual_change_RMS": [
+            0.36702434440497717,
+            0.29011053811622944
+          ],
+          "standardized_residual_change_joint_RMS": 0.3308103638884303,
+          "cosine_with_physical_residual": [
+            1.0,
+            1.0
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.28445985107597593,
+            0.40506317784024115
+          ],
+          "joint_nmse": 0.34476151445810876,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.7351536396927848,
+            0.8933970445348535
+          ],
+          "correlation_with_physical_residual": [
+            0.7056240547012272,
+            0.8893295300561853
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.20358241230654936,
+            0.3199606329569405
+          ],
+          "joint_nmse": 0.26177152263174497,
+          "standardized_residual_change_RMS": [
+            0.24633430007722928,
+            0.1912965163279963
+          ],
+          "standardized_residual_change_joint_RMS": 0.22053904932433824,
+          "cosine_with_physical_residual": [
+            0.9216294173442581,
+            0.9716223885585394
+          ],
+          "correlation_with_physical_residual": [
+            0.912097669761994,
+            0.970232427367832
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_21",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.14158168658893017,
+            0.20635156477728933
+          ],
+          "joint_nmse": 0.1739666256831098,
+          "standardized_residual_change_RMS": [
+            0.2601766039037905,
+            0.19887790065371305
+          ],
+          "standardized_residual_change_joint_RMS": 0.23156455318910318,
+          "cosine_with_physical_residual": [
+            1.0,
+            0.9999999999999999
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999998,
+            0.9999999999999999
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.24760787131701598,
+            0.20743254712083153
+          ],
+          "joint_nmse": 0.22752020921892369,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.8585430970909632,
+            0.9044159956909321
+          ],
+          "correlation_with_physical_residual": [
+            0.8583530156737864,
+            0.903149494238921
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.21434011963179936,
+            0.1573050862290915
+          ],
+          "joint_nmse": 0.1858226029304455,
+          "standardized_residual_change_RMS": [
+            0.2638436116082184,
+            0.1994385741309326
+          ],
+          "standardized_residual_change_joint_RMS": 0.23386876259758155,
+          "cosine_with_physical_residual": [
+            0.9795969204206818,
+            0.9855748626606143
+          ],
+          "correlation_with_physical_residual": [
+            0.9794734309417447,
+            0.985420295710913
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_21",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.11178905546663723,
+            0.15000634355135373
+          ],
+          "joint_nmse": 0.13089769950899552,
+          "standardized_residual_change_RMS": [
+            0.3997919421331339,
+            0.3139494607209629
+          ],
+          "standardized_residual_change_joint_RMS": 0.35944252731248044,
+          "cosine_with_physical_residual": [
+            1.0,
+            0.9999999999999994
+          ],
+          "correlation_with_physical_residual": [
+            1.0000000000000002,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.3865777683885352,
+            0.1332308636176529
+          ],
+          "joint_nmse": 0.2599043160030941,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.8142414830314334,
+            0.6531546772612674
+          ],
+          "correlation_with_physical_residual": [
+            0.8195067689763067,
+            0.6367501508522011
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.23938828304553622,
+            0.08400714585375818
+          ],
+          "joint_nmse": 0.16169771444964723,
+          "standardized_residual_change_RMS": [
+            0.28128268789286776,
+            0.2169988155633829
+          ],
+          "standardized_residual_change_joint_RMS": 0.25120552985966244,
+          "cosine_with_physical_residual": [
+            0.9585632604240718,
+            0.9383525364744354
+          ],
+          "correlation_with_physical_residual": [
+            0.9634318788991156,
+            0.9364828290837508
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_21",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.0337797521654216,
+            0.05783975722935853
+          ],
+          "joint_nmse": 0.04580975469739006,
+          "standardized_residual_change_RMS": [
+            0.3490321185300701,
+            0.27126686075789924
+          ],
+          "standardized_residual_change_joint_RMS": 0.31257729404983525,
+          "cosine_with_physical_residual": [
+            1.0000000000000007,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0000000000000002,
+            0.9999999999999999
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.25415755299188825,
+            0.03381269175871004
+          ],
+          "joint_nmse": 0.14398512237529915,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.8963883449403269,
+            0.20426627883768378
+          ],
+          "correlation_with_physical_residual": [
+            0.9070625998553986,
+            0.16003030607148538
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.19320916258605053,
+            0.02208064409441053
+          ],
+          "joint_nmse": 0.10764490334023054,
+          "standardized_residual_change_RMS": [
+            0.19791232453428584,
+            0.14085905789640457
+          ],
+          "standardized_residual_change_joint_RMS": 0.1717710138440522,
+          "cosine_with_physical_residual": [
+            0.9262405090725997,
+            0.4805832381392732
+          ],
+          "correlation_with_physical_residual": [
+            0.9383094322389437,
+            0.4480452442145077
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_21",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.11729923341683604,
+            0.14823380366452188
+          ],
+          "joint_nmse": 0.13276651854067895,
+          "standardized_residual_change_RMS": [
+            0.10451560102286976,
+            0.07957860543348184
+          ],
+          "standardized_residual_change_joint_RMS": 0.0928877421943,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            0.9999999999999998
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.1589593976489331,
+            0.12335487359847935
+          ],
+          "joint_nmse": 0.14115713562370624,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9715698985934963,
+            0.9808064463763806
+          ],
+          "correlation_with_physical_residual": [
+            0.9701881086011724,
+            0.9801443660150707
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.14110338412031664,
+            0.1324503083380588
+          ],
+          "joint_nmse": 0.13677684622918773,
+          "standardized_residual_change_RMS": [
+            0.05527551960844829,
+            0.0403628989797168
+          ],
+          "standardized_residual_change_joint_RMS": 0.04839703855625246,
+          "cosine_with_physical_residual": [
+            0.984306036700502,
+            0.9912643122804072
+          ],
+          "correlation_with_physical_residual": [
+            0.9833345270030585,
+            0.9909308536525215
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_21",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.24640836718277892,
+            0.31635509970600734
+          ],
+          "joint_nmse": 0.28138173344439305,
+          "standardized_residual_change_RMS": [
+            0.3247278325269691,
+            0.25574519565000325
+          ],
+          "standardized_residual_change_joint_RMS": 0.29227877986241296,
+          "cosine_with_physical_residual": [
+            0.9999999999999999,
+            0.9999999999999997
+          ],
+          "correlation_with_physical_residual": [
+            1.0000000000000002,
+            0.9999999999999998
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.2759995308084583,
+            0.46475998288599396
+          ],
+          "joint_nmse": 0.37037975684722624,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.7994332780465093,
+            0.9332650220408772
+          ],
+          "correlation_with_physical_residual": [
+            0.779341432339367,
+            0.9298334012083425
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_21|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_21",
+          "component_nmse": [
+            0.3237799605801681,
+            0.2972568875062472
+          ],
+          "joint_nmse": 0.31051842404320756,
+          "standardized_residual_change_RMS": [
+            0.25481852862739157,
+            0.2081662286051564
+          ],
+          "standardized_residual_change_joint_RMS": 0.23266463124368844,
+          "cosine_with_physical_residual": [
+            0.9527469432554301,
+            0.9711809087460609
+          ],
+          "correlation_with_physical_residual": [
+            0.9490241690616219,
+            0.969269781823251
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_25",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.009606324971448333,
+            0.014271843579796962
+          ],
+          "joint_nmse": 0.011939084275622644,
+          "standardized_residual_change_RMS": [
+            0.22583370296939145,
+            0.171716617509333
+          ],
+          "standardized_residual_change_joint_RMS": 0.20060839728898927,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.06102625946268884,
+            0.04354037927130371
+          ],
+          "joint_nmse": 0.052283319366996296,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.405407155748848,
+            0.5681504831671557
+          ],
+          "correlation_with_physical_residual": [
+            0.3880925782448565,
+            0.5640575007212114
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.030605047274485216,
+            0.017355253456286395
+          ],
+          "joint_nmse": 0.023980150365385814,
+          "standardized_residual_change_RMS": [
+            0.25509991799317,
+            0.20254327448690168
+          ],
+          "standardized_residual_change_joint_RMS": 0.23032558064617836,
+          "cosine_with_physical_residual": [
+            0.7266681754564692,
+            0.7419644669628361
+          ],
+          "correlation_with_physical_residual": [
+            0.7199534954058865,
+            0.7330602851421859
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_25",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.0662643728336672,
+            0.09333286747008167
+          ],
+          "joint_nmse": 0.07979862015187447,
+          "standardized_residual_change_RMS": [
+            0.1736142980490567,
+            0.12538391892561807
+          ],
+          "standardized_residual_change_joint_RMS": 0.15143158787421576,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0000000000000002
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.11329203292885226,
+            0.09309742124840434
+          ],
+          "joint_nmse": 0.10319472708862833,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.8622296732822406,
+            0.9156736220509902
+          ],
+          "correlation_with_physical_residual": [
+            0.8616587539228932,
+            0.9154063283092548
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.07151158082755867,
+            0.11539911903489945
+          ],
+          "joint_nmse": 0.09345534993122902,
+          "standardized_residual_change_RMS": [
+            0.1018750758568625,
+            0.07860330203956692
+          ],
+          "standardized_residual_change_joint_RMS": 0.09098629064964918,
+          "cosine_with_physical_residual": [
+            0.8733786442987788,
+            0.9623168076166336
+          ],
+          "correlation_with_physical_residual": [
+            0.8728530541099689,
+            0.9623578166660585
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_00",
+      "subject": "subject_25",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.12916310446381285,
+            0.171375698474769
+          ],
+          "joint_nmse": 0.15026940146929088,
+          "standardized_residual_change_RMS": [
+            0.31490996715222713,
+            0.2633909315783162
+          ],
+          "standardized_residual_change_joint_RMS": 0.29029559956147294,
+          "cosine_with_physical_residual": [
+            0.9999999999999998,
+            0.9999999999999996
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999999,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.35918078050732527,
+            0.10851201035769832
+          ],
+          "joint_nmse": 0.23384639543251184,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.9034202540637041,
+            0.7718541585018811
+          ],
+          "correlation_with_physical_residual": [
+            0.90312295958879,
+            0.7451395556014094
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_00|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_00",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.17010074340161285,
+            0.1668585653760676
+          ],
+          "joint_nmse": 0.16847965438884024,
+          "standardized_residual_change_RMS": [
+            0.2724659106634112,
+            0.2315815018507982
+          ],
+          "standardized_residual_change_joint_RMS": 0.25285140346962004,
+          "cosine_with_physical_residual": [
+            0.9230402198087212,
+            0.959510184515658
+          ],
+          "correlation_with_physical_residual": [
+            0.9122254813266523,
+            0.9554182343416268
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_25",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.018753485616568862,
+            0.03203015687733911
+          ],
+          "joint_nmse": 0.025391821246953987,
+          "standardized_residual_change_RMS": [
+            0.1545345268527179,
+            0.11082236049373691
+          ],
+          "standardized_residual_change_joint_RMS": 0.13446656754561184,
+          "cosine_with_physical_residual": [
+            1.0000000000000007,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.06480520872003616,
+            0.022032558062549876
+          ],
+          "joint_nmse": 0.04341888339129301,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.855926880365524,
+            0.7863901784169033
+          ],
+          "correlation_with_physical_residual": [
+            0.8590211687326865,
+            0.7805111985971142
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=0|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.08771490257029825,
+            0.03064628315994132
+          ],
+          "joint_nmse": 0.05918059286511978,
+          "standardized_residual_change_RMS": [
+            0.10763844716615202,
+            0.0809301847771541
+          ],
+          "standardized_residual_change_joint_RMS": 0.09522533832023071,
+          "cosine_with_physical_residual": [
+            0.7767794835025543,
+            0.6212022362360308
+          ],
+          "correlation_with_physical_residual": [
+            0.7765422985823136,
+            0.6119399276710182
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_25",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.06565043690437901,
+            0.08450181162701852
+          ],
+          "joint_nmse": 0.0750761242656988,
+          "standardized_residual_change_RMS": [
+            0.2850407723489497,
+            0.212780802712557
+          ],
+          "standardized_residual_change_joint_RMS": 0.2515192953873379,
+          "cosine_with_physical_residual": [
+            1.0000000000000002,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            0.9999999999999998,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.09949192859936236,
+            0.17874054867002098
+          ],
+          "joint_nmse": 0.13911623863469164,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.5190256378088135,
+            0.8867793692136016
+          ],
+          "correlation_with_physical_residual": [
+            0.5192358235090986,
+            0.8865157975237735
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=2|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.057506493153816084,
+            0.14648789447706506
+          ],
+          "joint_nmse": 0.10199719381544053,
+          "standardized_residual_change_RMS": [
+            0.1839179495496515,
+            0.14366989454284154
+          ],
+          "standardized_residual_change_joint_RMS": 0.1650255294863485,
+          "cosine_with_physical_residual": [
+            0.7235158814390508,
+            0.9501953171729577
+          ],
+          "correlation_with_physical_residual": [
+            0.7228190427108382,
+            0.9500895627562723
+          ]
+        }
+      }
+    },
+    {
+      "window_id": "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd",
+      "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd",
+      "native_record": "session_01",
+      "subject": "subject_25",
+      "methods": {
+        "Hb_only": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.013404394141270846,
+            0.019900775389898213
+          ],
+          "joint_nmse": 0.016652584765584524,
+          "standardized_residual_change_RMS": [
+            0.18439775457320817,
+            0.13636377652106715
+          ],
+          "standardized_residual_change_joint_RMS": 0.16216906523552616,
+          "cosine_with_physical_residual": [
+            1.0000000000000007,
+            1.0000000000000002
+          ],
+          "correlation_with_physical_residual": [
+            1.0,
+            1.0
+          ]
+        },
+        "pc1": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.050977617620472405,
+            0.03515143640034545
+          ],
+          "joint_nmse": 0.043064527010408915,
+          "standardized_residual_change_RMS": [
+            0.0,
+            0.0
+          ],
+          "standardized_residual_change_joint_RMS": 0.0,
+          "cosine_with_physical_residual": [
+            0.5810814024030749,
+            0.6892011139242321
+          ],
+          "correlation_with_physical_residual": [
+            0.5806413250245264,
+            0.6890586362274688
+          ]
+        },
+        "mean6": {
+          "record_id": "eeg_fnirs_single_trial|subject_25|session_01|event=4|prefrontal__eee78d70376440fd",
+          "native_record": "session_01",
+          "subject": "subject_25",
+          "component_nmse": [
+            0.041447744650773874,
+            0.04034461214552331
+          ],
+          "joint_nmse": 0.04089617839814859,
+          "standardized_residual_change_RMS": [
+            0.1826530135915895,
+            0.12855419125314743
+          ],
+          "standardized_residual_change_joint_RMS": 0.15793717653364608,
+          "cosine_with_physical_residual": [
+            0.5154264767802716,
+            0.7619615028531393
+          ],
+          "correlation_with_physical_residual": [
+            0.5169786793038639,
+            0.7617165569780479
+          ]
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "residual": "target_minus_prediction",
+    "nmse": "mean_of_squared_residual_divided_by_frozen_training_SD",
+    "residual_change": "e_candidate_minus_e_PC1; RMS_per_window_then_record_then_subject",
+    "cosine": "uncentered_signed_cosine_per_Hb_component; not_explained_variance",
+    "correlation": "demeaned_Pearson_per_Hb_component; not_explained_variance",
+    "bootstrap": "whole_subject_resampling_of_paired_record_aggregates_descriptive_95pct_not_confirmatory"
+  },
+  "claim_limits": [
+    "common_success_subset_does_not_replace_full_failure_denominators",
+    "Hb_only_is_best_available_regularized_local_fit_not_global_physical_unreachability",
+    "residual_alignment_does_not_identify_physiological_sources"
+  ],
+  "native_reads": 0,
+  "new_fits": 0
+}

@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-27T15:01:58.263336+00:00",
+  "updated_at": "2026-10-27T15:55:05.187971+00:00",
   "tracks": [
     {
       "id": "main",
@@ -2343,6 +2343,66 @@
       "label": "10 Hz原生功率与Tak合成软件检查（无实测读取）",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_10hz_checks_v1/software_checks.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.sensor_proxy_contract",
+      "label": "低容量传感器代理固定Tak版本合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.sensor_proxy_synthetic",
+      "label": "正式300点网格合成数值先导",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_synthetic_v1/synthetic_summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.sensor_proxy_plan",
+      "label": "公开固定目标与错配供体元数据计划",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/plan.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.sensor_proxy_launch",
+      "label": "固定Tak传感器代理持久运行",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.sensor_proxy_resources",
+      "label": "传感器代理资源及实测并发依据",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/resources.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.sensor_proxy_verification",
+      "label": "传感器代理测试与数值核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.sensor_proxy_revision",
+      "label": "首个准备失败及路径类型修复",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/revision.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.sensor_proxy_summary",
+      "label": "完整固定Tak代理比较与全部失败分母",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.sensor_proxy_array_audit",
+      "label": "420任务独立数组、训练坐标及错配输入审计",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/array_audit.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.sensor_proxy_residuals",
+      "label": "共同成功窗口残差与配对预测只读分析",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/residual_analysis_v1/residual_summary.json",
+      "role": "result_summary"
     }
   ],
   "records": [
@@ -6383,6 +6443,144 @@
       ],
       "headline": true,
       "next_step": "新研究从Tak与10 Hz代理合同出发，按版本声明数据/端点/输出及开发集变换。空间、连续状态和teacher扩展需同时适配Tak状态与10 Hz目标；以独立记录检验观测映射、条件参数和生理资格。"
+    },
+    {
+      "state_id": "main.sensor_proxy@2026-10-27.v1",
+      "entity": "main.sensor_proxy",
+      "label": "固定Tak下的低容量EEG传感器代理干预",
+      "track": "main",
+      "order": 194,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "按用户设计实现层0–3：固定Tak四血管状态、10Hz与正EEG权重，11个低容量代理经被试分组训练筛选，再执行隐藏双Hb预测、联合重建及固定Hb-only参照。114项相关测试及路径修复46项测试通过，正式网格合成10/10成功。公开Single-Trial训练102窗、开发12窗、评价36窗，48评分窗均有严格错配供体；v2持久服务36worker运行，184目标及供体窗准备成功，420逻辑任务有界。v1在信号读取前因路径类型失败，证据保留；尚不作实测收益或生理解释。",
+      "evidence_ids": [
+        "e.sensor_proxy_contract",
+        "e.sensor_proxy_synthetic",
+        "e.sensor_proxy_plan",
+        "e.sensor_proxy_launch",
+        "e.sensor_proxy_resources",
+        "e.sensor_proxy_verification",
+        "e.sensor_proxy_revision"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-27T15:45:25.557959+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak",
+        "main.eeg_proxy_rate"
+      ],
+      "headline": false,
+      "next_step": "通过同一冻结快照和持久服务完成筛选及有界非线性矩阵，保留失败和共同成功分母；核验整被试配对统计及残差。未启用电压重参考、物理结构扩展或受保护评价。"
+    },
+    {
+      "state_id": "main.program@2026-10-27.sensor-proxy",
+      "entity": "main.program",
+      "label": "固定Tak与10Hz下的传感器代理检验",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "后续研究按用户提供的低复杂度设计进入固定Tak传感器代理实验：同六通道读出修正、等容量空间范围、固定环带及匹配对照。物理参数、训练尺度和目标身份保持统一，整段双Hb隐藏预测与联合重建、Hb-only参考分别评价。实现及软件先导已核验，公开开发重分析由独立持久服务执行；旧实测负结果和历史证据保持原身份。",
+      "evidence_ids": [
+        "e.tak_baseline_architecture",
+        "e.eeg_proxy_10hz_contract",
+        "e.sensor_proxy_contract",
+        "e.sensor_proxy_synthetic",
+        "e.sensor_proxy_plan",
+        "e.sensor_proxy_launch",
+        "e.sensor_proxy_resources",
+        "e.sensor_proxy_verification",
+        "e.sensor_proxy_revision"
+      ],
+      "supersedes": [
+        "main.program@2026-10-27.tak-10hz-baseline"
+      ],
+      "updated_at": "2026-10-27T15:45:25.557959+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak",
+        "main.eeg_proxy_rate",
+        "main.sensor_proxy"
+      ],
+      "headline": true,
+      "next_step": "完成本轮冻结传感器代理矩阵并依据预测、错配和残差证据判断后续方向；不自动增加驱动、观测成分或启动阶段4。"
+    },
+    {
+      "state_id": "main.sensor_proxy@2026-10-27.v2",
+      "entity": "main.sensor_proxy",
+      "label": "固定Tak下的低容量EEG传感器代理干预",
+      "track": "main",
+      "order": 194,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "首轮11代理筛选与420逻辑任务全部终态，416成功、4个联合拟合达到600评价预算仍未收敛；184目标/供体窗完整，独立数组与训练尺度、错配输入审计通过。无候选晋级：开发mean6仅3/6被试改善且不及模板。冻结评价6人36窗mean6/PC1隐藏Hb NMSE 2.19363/2.29825，降4.55%但差值95%描述区间[-0.24419,0.01789]跨零，zero=2.18531；近12与近6训练CV几乎相同，FIR未显示新代理收益。PC1真实/错配2.29825/2.51105仍有配对差异，mean6真实/错配2.19363/2.19686增量区间跨零。共同成功34窗Hb-only/PC1联合/mean6联合NMSE .26621/.35158/.33279；残差共同方向保留。支持保留简单基线与残差研究，不支持空间扩展晋级或生理来源主张；准备v1失败和全部负结果保留。",
+      "evidence_ids": [
+        "e.sensor_proxy_contract",
+        "e.sensor_proxy_synthetic",
+        "e.sensor_proxy_plan",
+        "e.sensor_proxy_launch",
+        "e.sensor_proxy_resources",
+        "e.sensor_proxy_verification",
+        "e.sensor_proxy_revision",
+        "e.sensor_proxy_summary",
+        "e.sensor_proxy_array_audit",
+        "e.sensor_proxy_residuals"
+      ],
+      "supersedes": [
+        "main.sensor_proxy@2026-10-27.v1"
+      ],
+      "updated_at": "2026-10-27T15:55:05.187971+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak",
+        "main.eeg_proxy_rate"
+      ],
+      "headline": false,
+      "next_step": "本次有限矩阵已完成。暂停扩大空间自由度，区分PC1配对关联与净预测收益，并围绕共同成功分母的物理残差提出后续具体假设；不自动启动电压重参考、结构扩展或受保护评价。"
+    },
+    {
+      "state_id": "main.program@2026-10-27.sensor-proxy-complete",
+      "entity": "main.program",
+      "label": "固定Tak与10Hz下的传感器代理检验",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "用户设计的固定Tak/10Hz低容量传感器代理首轮已实现、持久执行并核验。所有计划单元终态且失败保留，无候选满足晋级；六通道均值虽降低PC1误差，仍不优于无EEG预测，近邻外圈未显示独特收益。原PC1保留真实/错配关联但尚无净预测优势。共同成功窗口的联合残差仍高于Hb-only条件参考，保留固定物理模型与残差证据供下一具体假设；不授予参数、生理来源或未见确认资格。",
+      "evidence_ids": [
+        "e.tak_baseline_architecture",
+        "e.eeg_proxy_10hz_contract",
+        "e.sensor_proxy_contract",
+        "e.sensor_proxy_synthetic",
+        "e.sensor_proxy_plan",
+        "e.sensor_proxy_launch",
+        "e.sensor_proxy_resources",
+        "e.sensor_proxy_verification",
+        "e.sensor_proxy_revision",
+        "e.sensor_proxy_summary",
+        "e.sensor_proxy_array_audit",
+        "e.sensor_proxy_residuals"
+      ],
+      "supersedes": [
+        "main.program@2026-10-27.sensor-proxy"
+      ],
+      "updated_at": "2026-10-27T15:55:05.187971+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak",
+        "main.eeg_proxy_rate",
+        "main.sensor_proxy"
+      ],
+      "headline": true,
+      "next_step": "当前实验套件已收束。后续由净预测收益、错配关联及物理参照残差共同限定研究问题，不继续自动扩大空间模型或启动阶段4。"
     }
   ]
 }

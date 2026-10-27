@@ -67,6 +67,54 @@ def prepared_target(ref, coordinate):
                             hb[index]*coordinate['hb_factor']))
 
 
+def pc1_band_contributions(features, coordinate):
+    """Five signed contributions in the original six-channel PCA gauge.
+
+    Features use channel-major/band-minor order and already carry the window
+    reference subtraction. Summing these columns recovers the original PC1;
+    neither a new center nor a new output SD is fitted here.
+    """
+    x = np.asarray(features, float)
+    if x.ndim >= 2 and x.shape[-2:] == (6, 5):
+        pass
+    elif x.ndim >= 1 and x.shape[-1] == 30:
+        x = x.reshape(*x.shape[:-1], 6, 5)
+    else:
+        raise ValueError('PC1 contributions require six channels by five bands')
+    pc = np.asarray(coordinate['pc'], float)
+    factor = float(coordinate['eeg_factor'])
+    if (pc.shape != (30,) or not np.isfinite(pc).all()
+            or not np.isfinite(x).all() or not np.isfinite(factor) or factor <= 0):
+        raise ValueError('finite features and the frozen positive PCA scale required')
+    return np.sum(x * pc.reshape(6, 5), axis=-2) * factor
+
+
+def spatial_band_features(features, indices, *, eeg_factor=1.):
+    """Mean channel log-power per band, preserving one frozen scale anchor."""
+    x = np.asarray(features, float)
+    take = np.asarray(indices)
+    factor = float(eeg_factor)
+    if (x.ndim < 2 or x.shape[-1] != 5 or not np.isfinite(x).all()
+            or take.ndim != 1 or not len(take) or take.dtype.kind not in 'iu'
+            or len(np.unique(take)) != len(take)
+            or np.any(take < 0) or np.any(take >= x.shape[-2])
+            or not np.isfinite(factor) or factor <= 0):
+        raise ValueError('finite five-band features and unique channel indices required')
+    return np.mean(x[..., take, :], axis=-2) * factor
+
+
+def ring_band_features(features, inner_indices, outer_indices, *, alpha, eeg_factor=1.):
+    """One common ring weight; endpoints retain the six/twelve-channel means."""
+    inner, outer = np.asarray(inner_indices), np.asarray(outer_indices)
+    if (inner.shape != (6,) or outer.shape != (6,)
+            or np.intersect1d(inner, outer).size
+            or not np.isfinite(alpha) or not 0 <= alpha <= .5):
+        raise ValueError('disjoint six-channel rings and alpha in [0,.5] required')
+    a = spatial_band_features(features, inner, eeg_factor=eeg_factor)
+    b = spatial_band_features(features, outer, eeg_factor=eeg_factor)
+    return (1 - alpha) * a + alpha * b
+
+
 def fit_feature_coordinate(chunks, *, eeg_training_sd_target=.025, common_hb_training_sd_target=.025):
     """Fit PCA and the common Hb scale from caller-declared training chunks.
 

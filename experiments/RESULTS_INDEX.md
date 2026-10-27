@@ -56,6 +56,36 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Sensor proxy interventions under fixed Tak — 2026-10-27
+
+The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1.yaml)
+and [protocol](../docs/EXPERIMENT_PLAN.md#传感器空间代理的固定-tak-首轮检验2026-10-27)
+define the bounded public Single-Trial layer 0–3 comparison. Evidence is retained in
+[`20261027_measured_v2`](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/launch.json),
+including its frozen source, metadata plan, preparation records, training-frozen
+selection, per-task predictions/residuals, failures and supervisor/resource records.
+The [complete summary](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/summary.json),
+[independent array audit](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/array_audit.json)
+and [common-support residual analysis](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/residual_analysis_v1/residual_summary.json)
+retain separate full-plan and common-success denominators.
+The [synthetic pilot](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_synthetic_v1/synthetic_summary.json)
+is software evidence. The [versioned preparation repair](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/revision.json)
+points to the preserved first attempt, which failed at its path-type boundary
+before signal reading. Run records own live progress; the research registry owns
+registered execution and scientific interpretation. These are development data,
+and the Hb-only reference is a regularized conditional fit rather than a proof of
+global physical unreachability.
+
+Git retains the synthetic pilot, the failed preparation attempt and the completed
+run, including prepared feature/operator arrays, task predictions and residuals,
+FIR predictions, metadata, summaries and audits. These inputs preserve training
+coordinate and wrong-pair checks without rereading native datasets. Each frozen
+source tree is retained byte-for-byte in its adjacent `source_snapshot.tar.gz`;
+extract the archive in that run or analysis directory to restore the recorded
+`source_snapshot/` paths. Runtime caches, Python bytecode and controller locks
+remain local. No original measurement files or unrelated running campaigns are
+part of this retained package.
+
 ## Tak hemodynamic migration — 2026-10-27
 
 The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_tak_v1.yaml)

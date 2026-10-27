@@ -113,6 +113,28 @@ coordinates and rejects old 4 Hz arrays; physical-time rules are owned by the
 [data contract](../docs/DATA_CONTRACT.md#新-eeg-代理目标统一为-10-hz--2026-10-27).
 `check` is synthetic software validation; it does not start measured work.
 
+The bounded sensor-proxy suite uses
+[`evaluate_shared_driver_sensor_proxy.py`](scripts/evaluate_shared_driver_sensor_proxy.py)
+with [`shared_driver_sensor_proxy_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1.yaml).
+It compares the original six-channel PC1, five band gains, equal-capacity spatial
+means and fixed ring/remote/random controls under one fixed Tak model. Its
+[protocol](../docs/EXPERIMENT_PLAN.md#传感器空间代理的固定-tak-首轮检验2026-10-27)
+separates EEG-only whole-Hb prediction, joint reconstruction and the fixed
+Hb-only reference. Use `--stage check` for the configuration contract,
+`--stage synthetic --output <fresh_synthetic_run>` for the numerical pilot,
+then metadata-only `--stage plan`;
+`--stage run --output <fresh_run> --workers <measured_capacity>` executes
+preparation, subject-grouped screening and the bounded nonlinear panel under
+a durable supervisor. Preparation reads registered native EEG and cached Hb;
+it does not reuse historical 4 Hz fitted coordinates or open protected evidence.
+Per-task terminal records retain numerical failures and unavailable controls.
+After completion, `--stage analyze --output <completed_run> --analysis-output
+<completed_run>/<fresh_analysis_version>` exports the joint/Hb-only residual
+comparison on identical successful windows and the prediction pairing contrasts.
+This reads retained arrays only and preserves the original run summaries.
+Tests: `test_shared_driver_sensor_proxy_data.py`, `test_low_capacity_eeg_proxy.py`,
+`test_shared_driver_sensor_proxy_runner.py`, `test_sensor_proxy_contract_audit.py`.
+
 The retained 4 Hz Tak comparison is selected explicitly with `--tak-comparison
 --tak-stage <check|plan|synthetic|prepare|pilot|measured|sensitivity|summarize|verify|audit>
 --run-dir <fresh_run> --config
