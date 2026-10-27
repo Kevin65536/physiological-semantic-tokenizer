@@ -8591,6 +8591,282 @@ def render_decay_diagnostic(run, out, *, evidence=None):
     print(json.dumps(validation, ensure_ascii=False))
 
 
+def render_filter_retest(run, out):
+    """Render the bounded, verified no-extra-component sensitivity evidence."""
+    from html import escape
+    import shutil
+    if out.exists() and any(out.iterdir()):
+        raise ValueError('Choose a fresh versioned report export')
+    summary = json.loads((run/'summary.json').read_text())
+    verify = json.loads((run/'verification.json').read_text())
+    plan = json.loads((run/'plan.json').read_text())
+    if summary['schema'] != 'shared_driver_filter_retest_v1' or verify['status'] != 'passed':
+        raise ValueError('Verified filter-retest evidence required')
+    out.mkdir(parents=True, exist_ok=True); (out/'figures').mkdir()
+    font = Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font))
+        plt.rcParams['font.family'] = font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size': 10, 'axes.unicode_minus': False, 'mathtext.fontset': 'dejavusans'})
+    names = dict(eeg_fnirs_single_trial='Single-Trial', simultaneous_eeg_nirs='Simultaneous',
+                 visual_cognitive_motivation='Visual', refed='REFED')
+    branches = ['retained_unfiltered','unified_cache']; labels = ['旧未滤波输入','统一滤波缓存']
+    arms = ['original','slow','no_decay']; arm_labels = ['原速','慢速（0.1倍）','零衰减']
+    colors = ['#1768ac','#d37608','#91469c']; styles = ['-','--',':']
+    rows = {(r['dataset'],r['branch'],r['length_s'],r['condition'],r['arm']): r for r in summary['rows']}
+    cases = {(r['dataset'],r['branch'],r['length_s']): r['compatibility'] for r in summary['cases'] if r['compatibility']}
+    refs = {r['dataset']: r for r in plan['selected']}
+    pages, images, sources = [], [], []
+    def row(ds, branch='unified_cache', length=90, condition='joint_full', arm='original'):
+        return rows[ds,branch,length,condition,arm]
+    def hb(r): return np.sqrt(r['score_hb_nmse'])
+    def common(r): return np.sqrt(np.mean([w['nrmse_common_cached_training_sd']**2 for w in r['waveform'][1:]]))
+    def pair(r, key): return '/'.join(f'{w[key]:.3f}' for w in r['waveform'][1:])
+    def n(value): return '未达到' if value is None else f'{value:.3f}'
+    def p(text): return '<p>'+text+'</p>'
+    def tab(columns, values):
+        return '<table><tr>'+''.join('<th>'+escape(str(c))+'</th>' for c in columns)+'</tr>'+''.join(
+            '<tr>'+''.join('<td>'+escape(str(v))+'</td>' for v in record)+'</tr>' for record in values)+'</table>'
+    def page(title, body): pages.append('<h1>'+title+'</h1>'+body)
+    def save(fig, name, source, dpi=240):
+        path = out/'figures'/(name+'.png'); fig.savefig(path, dpi=dpi, bbox_inches='tight'); plt.close(fig)
+        images.append(path); sources.append(dict(figure=str(path.relative_to(out)), source=source))
+        return '<div class="figure"><img src="figures/'+name+'.png" width="520"></div>'
+    def formula(name, lines):
+        (out/'figures'/(name+'.tex')).write_text('\n'.join(lines)+'\n')
+        fig = plt.figure(figsize=(8.8, .55*len(lines)+.25))
+        for i, line in enumerate(lines): fig.text(.02, 1-(i+.8)/(len(lines)+.5), '$'+line+'$', fontsize=13)
+        return save(fig, name, 'verified metric definitions and fixed no-input equation', dpi=300)
+
+    overview = [[names[ds], f'{hb(row(ds,branches[0])):.3f} → {hb(row(ds)):.3f}',
+        pair(row(ds,branches[0]),'pearson_r')+' → '+pair(row(ds),'pearson_r'),
+        pair(row(ds),'centered_amplitude_ratio')] for ds in names]
+    page('统一滤波后，哪些无额外成分结论需要改变？',
+        p('2026-10-27 · 四个固定样例的快速敏感性复测。仅复核10.23无额外成分的共享驱动重建、无源衰减与相容性诊断；每库一个评价被试。')
+        +p('<b>REFED样例的“很难重建”需要改写；“仅放慢衰减能解决主要误差”仍缺少一致支持；低误差不等于波形、参数或生理状态恢复。</b>')
+        +tab(['90秒联合完整','双Hb NRMSE：旧→新','相关系数：HbO/HbR，旧→新','新中心化幅比：HbO/HbR'],overview)
+        +p('本表NRMSE各用本分支开发集训练SD；相关系数与幅比均在评价窗口中计算。幅比1表示振幅匹配，不能从相关性高推断振幅正确。四个样例分别解释，不混池，不计算总体显著性。')
+        +p('无额外项线性放松的共同参数节点：Single-Trial 80→80、Simultaneous 22→9、Visual 0→0、REFED 0→80，分母均为80。REFED由未找到共同节点变为全部节点通过，支持观测相容性改善，同时削弱参数辨识能力。')
+        +p('共48任务、144模型结果：72个旧拟合逐数组复用、72个新拟合，全部数值合格。所有模型仅含原有状态和共享驱动；未加入独立输出成分、交换项或持续状态输入。')
+        +p('事实源：本运行summary.json、tasks/*.json与NPZ。筛选资格修正和独立数值复核由verification.json持有；旧运行和本次原始plan.json均保留。'))
+
+    identities = []
+    for ds,ref in refs.items():
+        identities.append([names[ds],ref['subject'],ref['record'],ref['anchor']['hb_channel'],
+            f"{ref['hb_start_s']:.3f}–{ref['hb_start_s']+90:.3f}", f"{ref['eeg_start_s']:.3f}–{ref['eeg_start_s']+90:.3f}"])
+    page('固定样例、可见条件与重新标定的边界',
+        p('每库从旧原速90秒联合完整重建的12条候选记录、6名被试中，选误差最接近中位数的一条；等距时按身份字符串排序。选择先于新缓存拟合，是解释性抽样。')
+        +tab(['数据集','被试','记录','Hb通道','Hb原始时钟/秒','EEG原始时钟/秒'],identities)
+        +p('核对正式evidence_v2时发现，初始计划误用了修正前的Simultaneous资格标记，将一次反事实重放失败当作原拟合失败。正确分母为12/12，原中位数0.23605修正为0.27912；按同一规则仍选VP001/r0，四个样例均未改变，无需重拟合。修正写入verification.json，不改写已执行计划或历史证据。')
+        +p('同一90秒窗口及其中间[30,60)秒分别拟合；两种长度都以自身首5秒作参考，末一个0.25秒采样箱不进入拟合或评分。90秒评分359点，30秒评分119点。两个长度不是两个独立被试。')
+        +tab(['条件','拟合可见量','主要评分范围'],[
+            ['联合完整','EEG、HbO、HbR完整窗口','除末箱外全窗Hb'],
+            ['仅Hb完整','仅HbO/HbR；EEG目标不进入拟合','除末箱外全窗Hb；另查看未拟合EEG'],
+            ['联合隐藏段','全窗EEG，Hb每30秒隐藏10–15和20–25秒','仅隐藏Hb；30/90秒分别40/120点']])
+        +p('共享驱动经血流、体积、总Hb和去氧Hb状态生成两个Hb分量，EEG由同一驱动线性读出。每臂估计整个窗口的驱动与五个初态；固定τ=2秒、κ=0.64、γ=0.32、α=E0=0.32、P0=1、Q0=0.35和神经血管增益1。')
+        +p('沿用旧求解预算600次评价；驱动曲率惩罚0.01，初态惩罚100，log-flow先验SD为ln2、权重1。原速从静息起点开始，其他臂比较本分支原速解与静息两个起点；未针对滤波结果调参。')
+        +p('统一缓存先在完整登记记录离线处理，再遮挡特征。因此隐藏段结果是已处理特征的离线插值，不能解释为原始传感器隔离或因果未来预测。当前可见窗口参与条件拟合，评价样例没有参与开发集坐标训练。'))
+
+    calibration = []
+    for ds,ref in refs.items():
+        meta = json.loads((run/'prepared'/(ref['id']+'.json')).read_text())
+        for branch,label in zip(branches,labels):
+            co = meta['calibration'][branch]
+            calibration.append([names[ds],label,len(co['training_ids']),meta['cache_provenance']['output_unit'],
+                '/'.join(f'{v:.5g}' for v in np.asarray(co['sd'])[1:]/co['hb_factor'])])
+    page('滤波与训练尺度同时改变，必须分开解释',
+        p('旧分支仅使用保留的未滤波准备数组；新分支通过统一加载入口读取v5/none缓存，使用整记录0.01–0.2 Hz带通和10 Hz输出，再作0.25秒分箱及首5秒参考，不重复带通。EEG特征定义与旧实验相同。')
+        +p('两分支使用相同开发记录，各自重新拟合EEG主成分、共同正Hb缩放和分量训练SD。每库12条开发记录全部可用，评价被试未进入标定。Simultaneous旧mmol/L统一乘1000转为μM；其余库保留相对单位，不冒称绝对浓度。')
+        +tab(['数据集','分支','训练记录','缓存输出单位','物理/缓存坐标训练SD：HbO/HbR'],calibration)
+        +p('除分支自身训练SD外，另将两分支预测误差都还原到相同缓存单位，再统一除以新分支训练SD。两者仍是对各自目标的误差；这不是把旧预测直接拿来预测新目标。')
+        +tab(['90秒原速联合完整','旧误差/新训练SD','新误差/新训练SD','共同分母下相对降低'],[
+            [names[ds],n(common(row(ds,branches[0]))),n(common(row(ds))),f'{100*(1-common(row(ds))/common(row(ds,branches[0]))):.1f}%'] for ds in names])
+        +p('REFED自身尺度NRMSE降低约79.6%，共同分母下约53.7%；HbO/HbR绝对RMSE分别约0.01059→0.00507和0.00969→0.00441。改善并非仅由分母产生，但不能把79.6%全部解释为波形恢复。')
+        +p('本轮检验的是统一缓存及相应重新标定后的条件重建。模型输出经分箱和参考算子比较，但没有对整记录潜在ODE输出重新执行完整带通；因此不能把差异孤立归因于某个频带，或宣称原始生理ODE已得到验证。'))
+
+    metrics_image = formula('metric_definitions',[
+        r'\mathrm{NRMSE}_{Hb}=\sqrt{\frac{1}{2|S|}\sum_{c\in\{O,R\}}\sum_{t\in S}\left(\frac{\hat y_{tc}-y_{tc}}{\sigma_c^{train}}\right)^2}',
+        r'r=\frac{\langle y-\bar y,\hat y-\bar{\hat y}\rangle}{\|y-\bar y\|\,\|\hat y-\bar{\hat y}\|},\quad A=\frac{\|\hat y-\bar{\hat y}\|}{\|y-\bar y\|},\quad G=rA'])
+    page('指标同时检查误差、形状、幅度和低信号陷阱',metrics_image
+        +p('y为已处理实测目标，ŷ为完整模型预测，S为该条件评分时间点。σ为独立开发记录上的训练SD；先对时间和两个Hb分量的标准化平方误差平均，再开平方。双Hb NRMSE不是两个分量NRMSE的算术平均。')
+        +tab(['指标','计算与含义'],[
+            ['Pearson r','评分时间内各自去均值后的相关性；1同形，0无相关，负数相反。'],
+            ['中心化幅比 A','预测SD/目标SD；1理想，低于1振幅不足，高于1放大。'],
+            ['有符号增益 G','目标到预测的中心化最小二乘投影系数r×A；不是能量占比。'],
+            ['偏移','平均(预测−目标)/训练SD；与中心化振幅分开。'],
+            ['局部尺度误差','RMSE/本评分段目标SD；不能替代训练SD，也未用于拟合。'],
+            ['零预测基线','在同一参考坐标预测0，RMSE/同一训练SD；不拟合。'],
+            ['峰时间差','预测全局最大值时间−目标全局最大值时间；多峰时会跳到另一峰，不等同于传导时延。'],
+            ['共同尺度','绝对RMSE统一除以新分支训练SD，仅消除分母变化。']])
+        +p('下列所有曲线显示完整预测，不把状态分量当作目标。颜色与线型固定：黑色实测目标、蓝实线原速、橙虚线慢速、紫点线零衰减。同一数据集、同一Hb分量的旧/新两图共用纵轴；不同库的单位及纵轴独立，不能直接比较振幅。'))
+
+    explanations = {
+        'eeg_fnirs_single_trial': '原速90秒的形状相关性从0.563/0.671升至0.795/0.884，峰值位置差从35.25/16.00秒缩至−0.25/−0.25秒。但幅比仍为0.761/0.652，HbR明显衰减。中间30秒完整拟合幅比1.024/0.935，恢复比90秒更好。隐藏段自身尺度误差从0.335升至0.395，统一分母则从0.562降至0.395；不能只凭其中一列宣布变好或变坏。',
+        'simultaneous_eeg_nirs': '改善主要来自HbR：相关性0.443→0.775、幅比0.609→0.914，绝对RMSE0.361→0.158 μM。HbO相关性0.738→0.681且绝对RMSE1.091→1.176 μM，存在真实分量折中。全局HbO峰差−62.75秒反映最大峰选择改变，不应解释为生理延迟。零衰减90秒HbR幅比1.550、相关性0.437，取消衰减进一步损害该分量。',
+        'visual_cognitive_motivation': '90秒原速双Hb自身尺度误差略升，但共同尺度误差0.788→0.434。HbO相关性0.905仍伴随幅比0.572：趋势看似贴合，振幅只恢复约57%。HbR相关性从0.915降至0.826，局部尺度误差从0.406升至0.571，说明部分波形恢复反而变差。共同参数节点仍为0/80；滤波没有消除该样例的EEG与Hb联合折中。',
+        'refed': '90秒原速相关性0.416/0.257→0.789/0.815，幅比0.386/0.147→0.969/0.615，确实恢复了更多低频形状。HbR仍低估约38.5%，HbO全局峰差−39.5秒，不能称逐峰精确恢复。中间30秒相关性仅0.421/0.568，HbR幅比0.321；90秒完整拟合的改善不能迁移成所有短窗均恢复良好的结论。'
+    }
+    for ds,ref in refs.items():
+        fig, axes = plt.subplots(2,2,figsize=(8.8,5.3),sharex=True,sharey='row',layout='constrained')
+        source_paths = []
+        unit = 'μM' if ds == 'simultaneous_eeg_nirs' else '本库相对单位'
+        for k,branch in enumerate(branches):
+            source = run/'tasks'/f"{ref['id']}__{branch}__90__joint_full.npz"; source_paths.append(str(source))
+            with np.load(source,allow_pickle=False) as a:
+                t = np.arange(len(a['target'])-1)*.25
+                for j in range(2):
+                    ax = axes[j,k]; ax.plot(t,a['target'][:-1,j+1]/a['hb_factor'],'k',lw=1.3,label='实测目标')
+                    for arm,label,color,style in zip(arms,arm_labels,colors,styles):
+                        ax.plot(t,a[arm+'_prediction'][:-1,j+1]/a['hb_factor'],color=color,ls=style,lw=1.3,label=label)
+                    w = row(ds,branch)['waveform'][j+1]
+                    ax.set_title(f"{labels[k]} · {COMPONENTS[j+1]}\nr={w['pearson_r']:.3f}  幅比={w['centered_amplitude_ratio']:.3f}  NRMSE={w['nrmse']:.3f}",fontsize=9)
+                    ax.axhline(0,color='#aaa',lw=.5); ax.grid(alpha=.18); ax.set_xlim(0,89.5)
+                    if k==0: ax.set_ylabel(COMPONENTS[j+1]+' / '+unit)
+                    if j==1: ax.set_xlabel('相对窗口时间 / 秒')
+        axes[0,0].legend(fontsize=8,ncol=2)
+        graphic = save(fig,ds+'_90s',source_paths)
+        r0,r1 = row(ds,branches[0]),row(ds)
+        page(names[ds]+'：90秒完整重建的改善与剩余失配',graphic
+            +p(explanations[ds])
+            +tab(['原速指标','旧未滤波','统一缓存'],[
+                ['双Hb自身尺度NRMSE',n(hb(r0)),n(hb(r1))],
+                ['有符号增益 HbO/HbR',pair(r0,'signed_gain'),pair(r1,'signed_gain')],
+                ['平均偏移/训练SD HbO/HbR',pair(r0,'bias_training_sd'),pair(r1,'bias_training_sd')],
+                ['最后30秒双Hb NRMSE',n(r0['late_hb_nrmse']),n(r1['late_hb_nrmse'])]])
+            +p(f"样例：{ref['subject']} / {ref['record']} / {ref['anchor']['hb_channel']}；所有臂在同一完整窗口分别拟合驱动和初态。图中r、幅比及NRMSE标注仅对应蓝色原速。"))
+
+    decay_image = formula('decay_equation',[
+        r'd=p-v,\quad \dot d=-\lambda\,v^{1/\alpha-1}d/\tau,\quad d(t)=d(0)\exp\left[-\lambda\int_0^t v(u)^{1/\alpha-1}/\tau\,du\right]'])
+    decay_rows = []
+    for ds in names:
+        for length in (30,90):
+            old = [hb(row(ds,branches[0],length,arm=arm)) for arm in arms]
+            new = [hb(row(ds,length=length,arm=arm)) for arm in arms]
+            decay_rows.append([names[ds],length,' / '.join(map(n,old)),' / '.join(map(n,new)),f'{100*(1-new[1]/new[0]):+.1f}%'])
+    page('放慢衰减仍没有一致收益，取消衰减通常更差',decay_image
+        +p('p为总Hb相对状态，v为体积相对状态，均无量纲；τ=2秒、α=0.32固定。原速/慢速/零衰减的λ分别为1/0.1/0，没有持续输入。正体积时d只能保留同号衰减或常量记忆；整个Hb仍可由共享驱动经v、q产生振荡。滤波不改变这一方程性质。')
+        +tab(['数据集','秒','旧：原速 / 慢速 / 零衰减','新：原速 / 慢速 / 零衰减','新慢速相对原速收益'],decay_rows)
+        +p('表为联合完整双Hb NRMSE；正收益表示更低误差。新90秒仅Visual慢速略好约1.3%，另外三例更差；新30秒Simultaneous约5.4%改善、REFED约0.4%，其余更差。零衰减在全部8个联合完整样例条件中都更差。窗口相关，8不是独立样本量，不作显著性检验。')
+        +p('各臂独立重拟合共享驱动与五个初态，HbR变化可能来自上游补偿；这不是固定驱动的反事实重放。本次结果与旧“衰减过快不是主要误差的一致解释”相容，不能由少数样例重算旧被试层面的区间。')
+        +tab(['90秒原速','旧95%记忆损失/秒','新95%记忆损失/秒','新流量f范围','新体积v范围'],[
+            [names[ds],n(row(ds,branches[0])['retention_95_loss_s']),n(row(ds)['retention_95_loss_s']),
+             '–'.join(f'{v:.3f}' for v in row(ds)['state_extrema']['f']),
+             '–'.join(f'{v:.3f}' for v in row(ds)['state_extrema']['v'])] for ds in names])
+        +p('新原速记忆约6.25–6.75秒损失95%，慢速约58.25–70.00秒；零衰减恒定。f、v是固定参数与坐标下的条件状态，不是实测真值；合法和收敛也不证明其生理准确性。'))
+
+    hidden_rows = []
+    for ds in names:
+        for length in (30,90):
+            old = row(ds,branches[0],length,'joint_blocked'); new = row(ds,length=length,condition='joint_blocked')
+            zero = np.sqrt(np.mean([w['zero_predictor_nrmse']**2 for w in new['waveform'][1:]]))
+            hidden_rows.append([names[ds],length,f'{hb(old):.3f} → {hb(new):.3f}',n(zero),pair(new,'pearson_r'),pair(new,'centered_amplitude_ratio')])
+    page('隐藏段：低误差仍可能输给零预测，或恢复错误振幅',
+        tab(['原速隐藏Hb','秒','旧→新 NRMSE','新零预测基线','新r：HbO/HbR','新幅比：HbO/HbR'],hidden_rows)
+        +p('<b>REFED 30秒隐藏段</b>：新误差0.229低于旧1.191，但零预测仅0.167，模型反而更差；两个相关系数约−0.15，幅比0.591/0.301。不能说隐藏波形已恢复。')
+        +p('<b>Simultaneous 30秒隐藏段</b>：新误差0.416也高于零预测0.345，HbR相关性只有0.055。<b>Visual 30秒隐藏段</b>：新误差0.186看似很低，HbO幅比却为1.915、局部尺度误差2.423；HbR相关性0.951但幅比1.319。')
+        +p('Single-Trial 90秒隐藏段误差0.395，仅略优于零预测0.446，相关性0.626/0.564。REFED 90秒隐藏段形状改善，但HbR幅比0.343仍明显偏低。长窗完整拟合的成功不自动成立于短窗或隐藏段。')
+        +tab(['新隐藏段NRMSE','秒','原速','慢速','零衰减'],[
+            [names[ds],length,*[n(hb(row(ds,length=length,condition='joint_blocked',arm=arm))) for arm in arms]] for ds in names for length in (30,90)])
+        +p('新90秒仅Visual慢速略改善，REFED零衰减仅约1.7%改善；新30秒仅Simultaneous慢速改善。局部例外不能支持统一延长初态记忆方案。这里未比较错配EEG或无EEG隐藏插值，不能从隐藏段分数推断EEG提供了独立信息。'))
+
+    fig, axes = plt.subplots(4,2,figsize=(8.8,7.0),sharex=True,layout='constrained')
+    source_paths = []
+    for k,(ds,ref) in enumerate(refs.items()):
+        path = run/'tasks'/f"{ref['id']}__unified_cache__30__joint_blocked.npz"; source_paths.append(str(path))
+        with np.load(path,allow_pickle=False) as a:
+            t = np.arange(len(a['target'])-1)*.25
+            for j in range(2):
+                ax = axes[k,j]; ax.plot(t,a['target'][:-1,j+1]/a['hb_factor'],'k',lw=1.2,label='处理后实测')
+                ax.plot(t,a['original_prediction'][:-1,j+1]/a['hb_factor'],color=colors[0],lw=1.2,label='原速条件重建')
+                for left,right in [(10,15),(20,25)]: ax.axvspan(left,right,color='#b6c4d3',alpha=.4)
+                ax.axhline(0,color='#aaa',ls=':',lw=.7); ax.set_xlim(0,29.5)
+                ax.set_title(names[ds]+' · '+COMPONENTS[j+1],fontsize=10)
+                ax.set_ylabel('μM' if ds=='simultaneous_eeg_nirs' else '本库相对单位')
+                if k==3: ax.set_xlabel('30秒窗口内时间 / 秒')
+    axes[0,0].legend(fontsize=8)
+    page('短窗隐藏段波形：灰色区域只参与评分',save(fig,'hidden_30s',source_paths)
+        +p('每行一个样例，左HbO、右HbR；灰色为模型看不到的Hb特征，EEG仍可见。各图纵轴独立，均还原到缓存单位。蓝线为单独拟合30秒窗口的原速完整预测，黑线为处理后实测目标。')
+        +p('REFED隐藏段的负相关、Visual HbO过大的起伏以及Simultaneous HbR的弱对应关系，使得“低NRMSE＝波形恢复”在这些样例上不成立。灰区之外的贴合是条件拟合，不能代替隐藏区检验。'))
+
+    compat_rows = []
+    for ds in names:
+        c0,c1 = cases[ds,branches[0],90],cases[ds,branches[1],90]
+        compat_rows.append([names[ds],f"{c0['common_nodes']}/80 → {c1['common_nodes']}/80",
+            f"{c0['weak']['nominal_D'][0]:.3f} → {c1['weak']['nominal_D'][0]:.3f}",
+            f"{c0['weak']['best_D'][0]:.3f} → {c1['weak']['best_D'][0]:.3f}"])
+    page('相容性判断改变，但参数与生理真值仍未识别',
+        tab(['90秒样例','共同节点：旧→新','弱式固定τ的D：旧→新','弱式最优D：旧→新'],compat_rows)
+        +p('线性放松在同一个参数节点、同一组共享驱动与初态系数下，同时要求EEG、HbO、HbR各自NRMSE≤0.5个本分支训练SD。τ为0.5–8秒、步长0.5的16节点；κ为0.2/0.4/0.64/1/1.5，共80节点。这是工程容限，未按噪声校准；自由系数不保证非线性物理可行。')
+        +p('<b>REFED：出现样例级反例。</b>旧输入未找到共同节点，新输入全部通过。不能继续据此样例把较大旧误差直接归因于模型结构不足。<b>Single-Trial：</b>两分支均全部通过，参数不唯一的判断保持。<b>Visual：</b>均0/80，只能说当前网格未找到见证，不能排除连续参数域或其他读出。')
+        +p('<b>Simultaneous：</b>22降至9个节点；新节点只在κ=0.2、τ=3–7秒。HbR波形改善并没有带来更宽的联合可行区域。仍有多个节点，不能将最优节点解释为真实τ或κ。30秒只计算名义节点，本报告不把其1点结果与80点扫描混比。')
+        +p('弱式D是相对动态能量归一的Hb闭合残差，越低越相容。本轮在两分支同样的0.25秒准备目标上重算；它不是旧原生采样率全库存普查的重跑。因此不能拿这四个D更新旧总体分布。Visual和Simultaneous的D反而升高，也反驳“滤波让所有模型约束都更成立”的说法。')
+        +p('弱式与离散联合指标约束不同：弱式仅看Hb，允许常量和指数瞬态nuisance；联合网格还要求EEG相容。滤波改变时间结构、局部动态分母和训练尺度，D下降不等于消除了特定生理混杂。'))
+
+    weak_image = formula('weak_metric',[
+        r'h=\int\phi R-\tau\int\phi^{\prime}R-\rho\left(\zeta\int\phi T-\xi\tau\int\phi^{\prime}T\right)',
+        r'D=\frac{\|h-\Pi_{[1,\,\int\phi e^{-t/\tau}]}h\|^2}{\sum_k\left[(\int\phi_k R)^2+\rho^2(\int\phi_k T)^2\right]}'])
+    page('仅Hb拟合揭示的折中与弱式指标计算',
+        tab(['新缓存','秒','仅Hb完整 NRMSE','联合完整 NRMSE','仅Hb模型的未拟合EEG NRMSE'],[
+            [names[ds],length,n(hb(row(ds,length=length,condition='Hb_only_full'))),n(hb(row(ds,length=length))),
+             n(row(ds,length=length,condition='Hb_only_full')['eeg_nmse']**.5)] for ds in names for length in (30,90)])
+        +p('每个条件均重新拟合。移除EEG约束后Hb误差均降低，但未进入目标函数的EEG NRMSE约1.06–2.38。它说明两种观测对同一驱动存在折中，不能解释成Hb单独恢复了真实神经驱动，也不是EEG独立信息量检验。')
+        +weak_image
+        +p('R为去均值HbR，T为去均值HbO+HbR；ρ=0.35，ξ约0.18047，ζ约−1.56104。φ为归一紧支撑核，半宽4/8秒、中心每2秒，导数通过分部积分作用于核。每个τ剔除常量与指数瞬态投影，分母在τ扫描内固定；D是能量比，没有开平方。')
+        +p('τ按0.5–8秒、步长0.25扫描，名义值2秒。重叠核不增加独立样本量。弱式仅为处理坐标中的描述性闭合，不是统计显著性检验；若最优τ落在边界，也不能认定其生理最优。'))
+
+    page('结论更新范围与可复核交付',
+        tab(['此前解释','本次判断','根据'],[
+            ['REFED误差高，原模型很难表示该目标','样例级需要改写','相关性、绝对误差和共同节点均明显改善；总体结论待扩大同协议复核。'],
+            ['原速初差很快衰减，只携带短时记忆','保持','原速95%损失约6–7秒；方程性质不随预处理改变。'],
+            ['仅减慢或取消衰减不足以解决主要误差','保持为样例级证据','慢速收益因数据集与长度而异；8个完整条件取消衰减均更差。'],
+            ['低误差意味着波形、状态或参数恢复','仍不支持','隐藏段负相关、幅度失真、零预测更好及满格参数节点均存在。'],
+            ['Visual的联合读出存在折中','保持于本样例','0/80共同节点；HbO幅比约0.57，EEG约束牺牲Hb拟合。'],
+            ['额外成分必要/有效，或已识别其生理来源','本轮不判断','未运行任何额外成分臂。'],
+            ['原全库存分布、空间结论、tokenizer表现','本轮不更新','四个单通道样例不覆盖这些分母和任务。']])
+        +p('旧相容性套件中“96个非线性拟合均未收敛”的结果属于另一条件放松和求解配置。本轮使用衰减诊断的既有求解器，不能把现在的144个合格结果称为对那96个结果的修正。')
+        +tab(['独立检查','结果'],[
+            ['保存数组重算全窗/评分NMSE最大差',f"{verify['maxima']['score']:.2e}"],
+            ['相关、幅比、增益、尺度与偏移最大差',f"{verify['maxima']['waveform']:.2e}"],
+            ['状态→Hb→观测算子闭合最大差',f"{verify['maxima']['observation']:.2e}"],
+            ['复用旧预测/状态/驱动/初态最大差',f"{verify['maxima']['reused_arrays']:.2e}"],
+            ['4/8积分子步最大差/训练SD',f"{verify['maxima']['integration_training_sd']:.2e}，上限0.005"],
+            ['有效结果与失败','144/144数值合格；无拟合失败；无原始或保护数据读取']])
+        +p('建议先把统一缓存与重新标定作为后续同类实验的固定输入，再决定是否扩大REFED及隐藏段失败样例的无额外项配对复核。现有证据不支持立即用慢衰减替换原模型。更强生理解释仍需要独立观测与跨记录证据，本次未启动这些扩展。')
+        +p('逐结果和完整指标：summary.json、metrics.csv、tasks/；数据来源与训练身份：preparation.json、prepared/；选择复核：verification.json；监督与资源：launch.json、resources.json。报告仅汇总以上证据。所有图均嵌入PNG，正文和表格可搜索。'))
+
+    css = ('body{font-family:sans-serif;font-size:10pt;line-height:1.42;color:#17212e}'
+           'h1{font-size:17pt;color:#123e59;margin-bottom:10pt}p{margin:6pt 0}'
+           'table{width:100%;border-collapse:collapse;font-size:8pt;margin:8pt 0}'
+           'td,th{border:.4pt solid #c1cad3;padding:4pt}th{background:#eef3f7}'
+           'img{max-width:100%}.figure{margin:5pt 0}')
+    html = '<!doctype html><html lang="zh"><meta charset="utf-8"><style>'+css+'.section{max-width:760px;margin:24px auto}</style><body>'
+    (out/'REPORT.html').write_text(html+''.join('<section class="section">'+body+'</section>' for body in pages)+'</body></html>')
+    pdf = fitz.open(); page_map = []
+    def rectfn(number, filled):
+        if number > 2: raise ValueError('Report section overflows; split visible content')
+        rect = fitz.paper_rect('a4'); return rect,rect+(35,32,-35,-32),None
+    for i,body in enumerate(pages):
+        part = fitz.Story(body,user_css=css,archive=fitz.Archive(str(out))).write_with_links(rectfn)
+        page_map.append(dict(section=i+1,pages=list(range(len(pdf)+1,len(pdf)+len(part)+1))))
+        pdf.insert_pdf(part); part.close()
+    pdf.save(out/'REPORT.pdf',garbage=4,deflate=True)
+    validation = dict(pages=len(pdf),sections=len(pages),image_objects=sum(len(p.get_images()) for p in pdf),
+        expected_images=len(images),searchable_characters=sum(len(p.get_text()) for p in pdf),
+        chart_dpi=240,formula_dpi=300,figures_embedded_as_bitmap=True,wps_checked=False,page_map=page_map)
+    if validation['image_objects'] != len(images) or validation['searchable_characters'] < 2000:
+        raise AssertionError('Report image or searchable-text validation failed')
+    for i,page_obj in enumerate(pdf): page_obj.get_pixmap(dpi=110).save(out/f'preview_{i+1:02d}.png')
+    pdf.close(); atlas = fitz.open()
+    for path in images:
+        page_obj = atlas.new_page(); page_obj.insert_image(page_obj.rect+(28,28,-28,-28),filename=str(path),keep_proportion=True)
+    atlas.save(out/'FIGURES.pdf',garbage=4,deflate=True)
+    validation['atlas_image_objects'] = sum(len(p.get_images()) for p in atlas); atlas.close()
+    (out/'figure_sources.json').write_text(json.dumps(sources,ensure_ascii=False,indent=2)+'\n')
+    (out/'export_validation.json').write_text(json.dumps(validation,ensure_ascii=False,indent=2)+'\n')
+    shutil.copy2(Path(__file__),out/'renderer_source.py')
+    print(json.dumps(validation,ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path)
@@ -8611,6 +8887,7 @@ def main():
     parser.add_argument("--waveform-diagnostic", action="store_true")
     parser.add_argument('--volume-drive-diagnostic', action='store_true')
     parser.add_argument('--decay-diagnostic', action='store_true', help='Render retained six-arm initial-difference decay and actual-input evidence')
+    parser.add_argument('--filter-retest', action='store_true', help='Render verified no-extra-component cached-input sensitivity')
     parser.add_argument('--decay-evidence', type=Path, help='Versioned replay-only evidence overlay; trajectories and fixed config remain under --run')
     parser.add_argument("--fitting-explainer", action="store_true", help="Export an offline interactive lesson from the retained public waveform cases")
     parser.add_argument("--parameter-explorer", action="store_true", help="Export three public examples with forward-only physiology parameter sweeps")
@@ -8621,6 +8898,12 @@ def main():
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.filter_retest:
+        if args.run is None: parser.error('--filter-retest requires --run')
+        if any(value is True for key,value in vars(args).items() if key != 'filter_retest'):
+            parser.error('Choose one report mode')
+        render_filter_retest(args.run.resolve(),args.output.resolve())
+        return
     if args.decay_diagnostic:
         if args.run is None:
             parser.error('--decay-diagnostic requires --run')

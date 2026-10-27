@@ -69,6 +69,32 @@ measured result exists.
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
 
+## 无额外成分的滤波敏感性样例复测（2026-10-27）
+
+本次用户要求仅检查 10.20 之后、没有额外成分的实验，用少量样例判断原解释是否
+改变。执行合同为
+[`shared_driver_filter_retest_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_filter_retest_v1.yaml)。
+复用 10.23 无源衰减诊断的 original、slow、no_decay 三臂和无额外项相容性指标；
+不纳入 volume/exchange、任何持续外加输入或含额外项 teacher 的 tokenizer。
+
+各库在旧 original 的 90 秒联合完整误差有效记录中选择最接近中位数者，先冻结
+样例，再读取新缓存或拟合。保留全部候选及旧失败分母。这是解释性样例选择，
+不是总体确认或调参。早于 10.20 的父运行只提供登记身份、准备数组及训练身份，
+不作为本次复测的旧模型结论。
+
+未滤波对照只读保留数组；新 Hb 只读统一 v5/none 缓存。两个分支使用相同、同时
+有支持的原开发记录重新确定各自 PCA 和共同 Hb 正尺度，评价样例不参与。保留
+30/90 秒相同中心、原固定响应参数、求解预算与起点规则。只有目标、算子、尺度
+均匹配时复用旧拟合，其余按同预算重拟合；所有失败保留。完整记录预处理先于
+遮挡，隐藏段是离线处理特征插值，不能称原始传感器的未来预测。
+
+除各分支训练 SD NRMSE 外，比较共同缓存训练尺度下的误差、缓存单位 RMSE、
+相关系数、中心化幅比、有符号投影增益、偏移和峰时间差，以及残差、合法性、
+收敛、积分精度、条件状态范围与衰减保留。低振幅零预测基线单列，防止把低误差
+误判为波形恢复。相容性保留同参数联合节点与完整分母；窗口内状态没有生理真值，
+更低误差不授予恢复资格。逐样例判断“保持、削弱、出现反例、仍不能判断”，不把
+四个不同数据集的样例混池作显著性或总体翻转声明。
+
 ## 五项模型相容性指标的总体分布与典型曲线（2026-10-23）
 
 用户明确要求实现完整指标套件、获取实测结果并分析总体分布和典型样例。

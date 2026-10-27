@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-25T06:10:29.973312+00:00",
+  "updated_at": "2026-10-27T10:26:21.062539+00:00",
   "tracks": [
     {
       "id": "main",
@@ -2217,6 +2217,42 @@
       "label": "最终配对分母与逐值复核",
       "path": "experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_relations_v1/verification.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.fnirs_filter_noextra_retest_contract",
+      "label": "10.20后无额外成分滤波敏感性快测合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_filter_retest_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.fnirs_filter_noextra_retest_summary",
+      "label": "无额外成分滤波复测逐样例结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.fnirs_filter_noextra_retest_verification",
+      "label": "保存数组独立复核与正式筛选分母修正",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.fnirs_filter_noextra_retest_report",
+      "label": "波形、幅度、隐藏段与结论变化的中文报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/report_v2/REPORT.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.fnirs_filter_noextra_retest_resources",
+      "label": "有监督快测的资源与并行测量",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/resources.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.fnirs_filter_noextra_retest_launch",
+      "label": "持久监督单元与复现实验命令",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/launch.json",
+      "role": "run_manifest"
     }
   ],
   "records": [
@@ -6103,6 +6139,35 @@
       ],
       "headline": false,
       "next_step": "本轮两项配对控制完成即收束。保留可解码形状、连续尺度和明确时空支持，SSM保持可替换条件目标；更强生理命名需独立生理锚点与跨记录复现，本轮未启动该扩展。"
+    },
+    {
+      "state_id": "main.fnirs_filter_noextra_retest@2026-10-27.v1",
+      "entity": "main.fnirs_filter_noextra_retest",
+      "label": "带通缓存对无额外成分结论的样例复测",
+      "track": "main",
+      "order": 192,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "descriptive",
+      "summary": "四库各1个评价记录的30/90秒无额外项复测完成，144/144结果数值合格，其中72旧拟合精确复用、72缓存新拟合。REFED的90秒原速NRMSE由1.059降至0.216，统一新训练分母后0.466降至0.216，Hb相关性明显改善；共同线性节点0/80变80/80。慢衰减仍无一致收益，零衰减在8个联合完整样例条件均更差；短窗隐藏段仍有负相关、幅度失真及差于零预测。正式资格修正不改变入选身份。仅更新样例级解释，不替代总体结论或授予生理恢复资格。",
+      "evidence_ids": [
+        "e.fnirs_filter_noextra_retest_contract",
+        "e.fnirs_filter_noextra_retest_summary",
+        "e.fnirs_filter_noextra_retest_verification",
+        "e.fnirs_filter_noextra_retest_report",
+        "e.fnirs_filter_noextra_retest_resources",
+        "e.fnirs_filter_noextra_retest_launch"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-27T10:26:21.062539+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_decay",
+        "main.model_compatibility"
+      ],
+      "headline": false,
+      "next_step": "本次固定样例快测已收束。建议优先保持统一缓存及重新标定，再决定是否扩大REFED与隐藏段失败的无额外项复核；未启动扩展样本、额外成分或保护评价。"
     }
   ]
 }

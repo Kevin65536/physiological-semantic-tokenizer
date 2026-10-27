@@ -92,6 +92,21 @@ Measurement caches, coordinate and scale audits, native Hb summaries and optical
 
 ### Shared-driver reconstruction and reliability
 
+The bounded post-10.20 filter sensitivity uses
+`scripts/evaluate_shared_driver_reconstruction.py --filter-retest --filter-stage
+<check|plan|prepare|pilot|run|summarize|verify> --run-dir <fresh_run>` with
+[`shared_driver_filter_retest_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_filter_retest_v1.yaml).
+It selects examples by retained original-fit median error before new fits, uses
+only original/slow/no-decay dynamics without additional components or inputs,
+and compares retained arrays with the unified cache using development-only
+branch coordinates. Fitting runs under user systemd; reports retain waveform,
+amplitude, offset, numerical, conditional-state and compatibility diagnostics.
+Selection uses the owning `evidence_v2` fit corrections. Render verified results
+with `scripts/render_shared_driver_reconstruction.py --filter-retest --run
+<completed_run> --output <fresh_export>`; the PDF embeds bitmap figures.
+Tests: `test_fnirs_filter_retest.py`, `test_shared_driver_decay_experiment.py`.
+See the [bounded design](../docs/EXPERIMENT_PLAN.md#无额外成分的滤波敏感性样例复测2026-10-27).
+
 Representation lower bounds and conditional joint feasibility use
 [`evaluate_source_observability.py --feasibility`](scripts/evaluate_source_observability.py),
 the [`feasibility contract`](configs/physiology_semantic_tokenizer/shared_driver_feasibility_v1.yaml),

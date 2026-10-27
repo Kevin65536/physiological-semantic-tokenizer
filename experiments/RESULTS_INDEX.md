@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-25; payload-pruning record retained from
+_Evidence surface updated 2026-10-27; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -26,6 +26,7 @@ explains the path hierarchy and reading order.
 
 | Research question | Suite root | Evidence entry |
 | --- | --- | --- |
+| Does the unified filter change post-10.20 conclusions without adding components? | `shared_driver_reconstruction/` | [Selected-example filter sensitivity](#selected-example-filter-sensitivity--2026-10-27) |
 | Which information survives hard tokens, and do time/region relations or a shape-plus-scale architecture help? | `functional_tokenizer/` | [Frozen relationships and local shape tokens](#frozen-relationships-and-local-shape-tokens--2026-10-25) |
 | How do model-compatibility scores vary across the registered public inventory and frozen observation panels? | `model_compatibility/` | [Population distributions and typical curves](#model-compatibility-distributions-and-typical-curves--2026-10-23) |
 | Can the frozen observation family meet separate EEG/Hb tolerances, and which failures remain numerical? | `source_observability/` | [Shared-driver conditional feasibility](#shared-driver-conditional-feasibility--2026-10-22) |
@@ -137,6 +138,33 @@ interpretations. A legal low-error trajectory need not be an optimizer optimum
 or a physiologically identified solution. The report retains numerical failures,
 the separate strict joint criterion, conditional non-entry of parameter profiles,
 and the mismatch controls that pass observation tolerances despite driver error.
+
+## Selected-example filter sensitivity — 2026-10-27
+
+The [bounded contract](configs/physiology_semantic_tokenizer/shared_driver_filter_retest_v1.yaml)
+compares retained unfiltered arrays with freshly calibrated unified-cache inputs,
+using only original, slow and no-decay arms. The numerical owner is
+[summary.json](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/summary.json),
+with [full metrics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/metrics.csv)
+and each task's saved prediction, state, driver and visibility mask.
+The [verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/verification.json)
+also owns a selection-denominator correction against the earlier run's
+`evidence_v2`; selected identities and fitted arrays are unchanged, and the
+executed plan is preserved.
+
+The Chinese [report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/report_v2/REPORT.pdf)
+and [bitmap figure atlas](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/report_v2/FIGURES.pdf)
+explain waveform shape, amplitude, common-scale error, hidden-segment baselines,
+compatibility and the limits of changes to prior conclusions. Keep resolved
+configuration, plan, preparation/calibration identities, task JSON/NPZ,
+source snapshots, verification source, reports, and supervised
+[launch](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/launch.json)
+and [resource](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/resources.json)
+records together. Earlier report exports and historical fits remain retained;
+this selected-example diagnostic does not replace earlier population results.
+Git retains the runtime source snapshot and patch, verification source and both
+export renderers in `source_snapshot.tar.gz`; extract it in this run directory to restore
+their recorded paths. Compiled caches and regenerable page previews stay local.
 
 ## Direct unforced p−v decay diagnostic — 2026-10-23
 

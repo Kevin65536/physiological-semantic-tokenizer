@@ -1,0 +1,55 @@
+schema: shared_driver_filter_retest_v1
+experiment_id: FNIRS-FILTER-NOEXTRA-RETEST-v1
+source_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_decay_v1.yaml
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1
+compatibility_config: experiments/configs/physiology_semantic_tokenizer/model_compatibility_v1.yaml
+artifact_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+cache_root: data/cache/physiology_semantic_clean_v5
+scope: post_20261020_no_extra_component_selected_example_sensitivity_only
+protected_data: forbidden
+raw_source_reads: forbidden
+selection:
+  records_per_dataset: 1
+  rule: nearest_median_retained_original_90s_joint_full_Hb_NMSE_then_lexical_id
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation, refed]
+  use: explanation_only_no_population_inference_or_tuning
+branches: [retained_unfiltered, unified_cache]
+arms: [original, slow, no_decay]
+forcing_modes: 0
+lengths_s: [30, 90]
+conditions: [joint_full, Hb_only_full, joint_blocked]
+calibration:
+  identities: parent_development_only_common_supported_records_between_branches
+  fit: branch_specific_training_PCA_and_shared_positive_Hb_scale
+  unit: convert_retained_Simultaneous_mmol_per_L_to_cache_uM_once
+  failures: retain_all_reasons_and_pair_denominators
+  old_fit_reuse: exact_target_operator_SD_and_reference_parameters_match_only
+  evaluation: no_per_window_rescaling_of_fit_or_training_SD
+observation:
+  cache_input: unified_cached_fnirs_v1
+  downstream: 250ms_bin_means_and_first5s_reference_no_second_bandpass
+  interpretation: processed_measurement_coordinate_conditional_fit_not_raw_ODE_full_record_filter_replay
+  hidden: offline_processed_feature_interpolation_not_raw_sample_forecasting
+solver:
+  max_evaluations: 600
+  substeps: 4
+  validation_substeps: 8
+  maximum_integration_difference_training_sd: 0.005
+  starts: rest_then_original_fit_and_rest_for_alternatives
+compatibility:
+  weak_tau_grid: [0.5, 8.0, 0.25]
+  linear_grid_lengths_s: [90]
+  shorter_windows: nominal_node_only
+  common_tolerance: 0.5
+metrics:
+  normalization: own_branch_training_SD_plus_common_cached_training_SD_in_cache_units
+  waveform: [pearson_r, centered_amplitude_ratio, signed_gain, bias_training_SD, peak_time_difference_s, absolute_RMSE]
+  conditional_states: [flow_range, volume_range, p_minus_v_initial_final, decay_95_loss_seconds, driver_RMS]
+  numerical: [all_failures, convergence, scaled_gradient, objective_parts, integration_refinement]
+  conclusion: compare_each_selected_example_no_significance_or_population_reversal_claim
+resources:
+  numerical_threads: 1
+  max_workers: 24
+  in_flight_per_worker: 2
+  supervisor: user_systemd_with_linger
+stopping: fixed_four_records_all_terminal_no_result_dependent_expansion

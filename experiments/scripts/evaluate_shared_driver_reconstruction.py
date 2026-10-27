@@ -8158,6 +8158,490 @@ def decay_main(args):
     print(json.dumps(counts))
 
 
+def filter_retest_config(path):
+    cfg = yaml.safe_load(Path(path).read_text())
+    if (cfg.get('schema') != 'shared_driver_filter_retest_v1'
+            or cfg['protected_data'] != 'forbidden' or cfg['raw_source_reads'] != 'forbidden'
+            or cfg['arms'] != ['original', 'slow', 'no_decay'] or cfg['forcing_modes'] != 0
+            or cfg['branches'] != ['retained_unfiltered', 'unified_cache']
+            or cfg['lengths_s'] != [30, 90]
+            or cfg['conditions'] != ['joint_full', 'Hb_only_full', 'joint_blocked']
+            or cfg['selection']['records_per_dataset'] != 1
+            or cfg['selection']['datasets'] != ['eeg_fnirs_single_trial', 'simultaneous_eeg_nirs', 'visual_cognitive_motivation', 'refed']
+            or cfg['cache_root'] != 'data/cache/physiology_semantic_clean_v5'
+            or cfg['source_run'] != 'experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1'
+            or cfg['resources']['numerical_threads'] != 1
+            or cfg['solver']['max_evaluations'] != 600):
+        raise ValueError('bounded post-10.20 no-extra-component filter retest contract changed')
+    base = decay_config(CODE_ROOT / cfg['source_config'])
+    if any(cfg['solver'][k] != base['solver'][k] for k in cfg['solver'] if k in base['solver']):
+        raise ValueError('retest cannot change the retained numerical budget')
+    return cfg, base
+
+
+def filter_retest_select(records, scores, datasets):
+    """Select before new data/fits; the old median is an illustration rule."""
+    chosen, denominators = [], {}
+    for dataset in datasets:
+        candidates = [r for r in records if r['dataset'] == dataset]
+        usable = [r for r in candidates if r['id'] in scores and np.isfinite(scores[r['id']])]
+        if not usable:
+            raise ValueError('no finite retained baseline for ' + dataset)
+        median = float(np.median([scores[r['id']] for r in usable]))
+        selected = min(usable, key=lambda r: (abs(scores[r['id']] - median), r['id']))
+        chosen.append(dict(selected, selection_score=scores[selected['id']], selection_median=median))
+        denominators[dataset] = dict(planned_records=len(candidates), usable_records=len(usable),
+            independent_subjects=len({r['subject'] for r in candidates}),
+            missing_or_failed=[r['id'] for r in candidates if r not in usable])
+    return chosen, denominators
+
+
+def filter_retest_source_task(parent, record_id, length_s, condition):
+    """Use the owning replay correction; original fitted arrays stay retained."""
+    name = f'{record_id}_{length_s}_{condition}.json'
+    corrected = parent / 'evidence_v2' / 'measured' / name
+    path = corrected if corrected.exists() else parent / 'measured' / name
+    return json.loads(path.read_text())
+
+
+def filter_retest_plan(cfg, base, root, out):
+    parent = root / cfg['source_run']
+    if json.loads((parent / 'evidence_v2/summary.json').read_text())['status'] != 'completed':
+        raise ValueError('completed retained post-10.20 source required')
+    pp = json.loads((parent / 'plan.json').read_text())
+    if len(pp['records']) != 48 or any(r['parent'] not in base['parents'] or r['partition'] != 'evaluation' for r in pp['records']):
+        raise ValueError('retained public source inventory changed')
+    scores = {}
+    for ref in pp['records']:
+        result = filter_retest_source_task(parent, ref['id'], 90, 'joint_full')
+        row = next(r for r in result['rows'] if r['arm'] == 'original')
+        if row.get('qualified'):
+            scores[ref['id']] = row['full_hb_nmse']
+    selected, denominators = filter_retest_select(pp['records'], scores, cfg['selection']['datasets'])
+    jobs = [dict(key=f"{ref['id']}__{branch}__{length}__{condition}", ref=ref,
+                 branch=branch, length_s=length, condition=condition)
+            for ref in selected for branch in cfg['branches']
+            for length in cfg['lengths_s'] for condition in cfg['conditions']]
+    plan = dict(schema=cfg['schema'], selected=selected, selection_denominators=denominators,
+        jobs=jobs, planned_jobs=len(jobs), planned_no_extra_fits=3 * len(jobs),
+        independent_evaluation_subjects=len({(r['dataset'], r['subject']) for r in selected}),
+        inference='selected_example_sensitivity_no_population_interval_or_confirmation',
+        excluded_models=['volume', 'exchange', 'driven_original', 'driven_slow', 'driven_no_decay', 'tokenizer_teacher_extra_component'])
+    path = out / 'plan.json'
+    if path.exists() and json.loads(path.read_text()) != serial(plan):
+        raise ValueError('frozen selection cannot change')
+    write_json(path, plan)
+    return plan
+
+
+def filter_retest_prepare(cfg, base, root, out, plan):
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import load_cached_fnirs_record
+    from src.data.ssm_prepared import fit_feature_coordinate
+    from src.inference.observation_baselines import disjoint_native_bin_operator
+    check = json.loads((out / 'software_checks.json').read_text())
+    if check['status'] != 'passed':
+        raise ValueError('software/synthetic checks required before cache access')
+    index = CleanPhysiologyCacheIndex(root / cfg['cache_root'])
+    lookup = {r.join_key: r for r in index.records}
+    coordinates, failures = {}, []
+
+    def read_pair(parent, ref):
+        if ref['dataset'] not in cfg['selection']['datasets']:
+            raise ValueError('dataset outside the bounded public contract')
+        with np.load(parent / 'prepared' / (ref['id'] + '.npz'), allow_pickle=False) as a:
+            old = {k: a[k].copy() for k in ('eeg', 'hb', 'eeg_operator', 'hb_operator')}
+        if old['eeg'].shape != (360, 30) or old['hb'].shape != (360, 2):
+            raise ValueError('retained prepared shape changed')
+        record = lookup[ref['join_key']]
+        cached = load_cached_fnirs_record(root, record)
+        pair = int(ref['anchor']['hb_pair'])
+        if cached['channel_names'][2 * pair] != ref['anchor']['hb_channel'] + '_HbO':
+            raise ValueError('cached channel identity mismatch')
+        factor = 1000. if ref['dataset'] == 'simultaneous_eeg_nirs' else 1.
+        if factor != 1 and (cached['provenance']['native_unit'] != 'mmol/L' or cached['provenance']['output_unit'] != 'uM'):
+            raise ValueError('retained-to-cached unit conversion not established')
+        old['hb'] *= factor
+        take = (cached['time_s'] >= ref['hb_start_s']) & (cached['time_s'] < ref['hb_start_s'] + 90)
+        t = cached['time_s'][take] - ref['hb_start_s']
+        native = cached['values'][take, pair]
+        if not np.isfinite(native).all() or not np.isfinite(old['hb']).all():
+            raise ValueError('unsupported Hb pair in one branch')
+        op = disjoint_native_bin_operator(t)
+        new = dict(eeg=old['eeg'], hb=op['raw'] @ native,
+                   eeg_operator=old['eeg_operator'], hb_operator=op['model'])
+        return dict(retained_unfiltered=old, unified_cache=new), cached['provenance']
+
+    for selected in plan['selected']:
+        parent = root / selected['parent']
+        pp = json.loads((parent / 'plan.json').read_text())
+        candidates = [r for r in pp['records'] if r['coordinate'] == selected['coordinate'] and r['partition'] == 'development']
+        chunks = {branch: [] for branch in cfg['branches']}
+        good = []
+        for ref in candidates:
+            if ref['subject'] == selected['subject']:
+                raise ValueError('evaluation subject entered calibration')
+            try:
+                pair, _ = read_pair(parent, ref)
+                for branch in cfg['branches']:
+                    chunks[branch].append((pair[branch]['eeg'], pair[branch]['hb']))
+                good.append(ref)
+            except (ValueError, KeyError, FileNotFoundError) as exc:
+                failures.append(dict(id=ref['id'], coordinate=ref['coordinate'], reason=str(exc)))
+        co = {branch: fit_feature_coordinate(chunks[branch]) for branch in cfg['branches']}
+        for branch in cfg['branches']:
+            co[branch].update(training_ids=[r['id'] for r in good],
+                training_subjects=sorted({r['subject'] for r in good}), planned_training_records=len(candidates))
+        coordinates[selected['coordinate']] = co
+        pair, provenance = read_pair(parent, selected)
+        for branch in cfg['branches']:
+            a, c = pair[branch], co[branch]
+            y = np.column_stack((a['eeg'] @ np.asarray(c['pc']) * c['eeg_factor'], a['hb'] * c['hb_factor']))
+            for length in cfg['lengths_s']:
+                target, operator = volume_drive_crop(y, dict(eeg=a['eeg_operator'], hb=a['hb_operator']), length)
+                path = out / 'prepared' / f"{selected['id']}__{branch}__{length}.npz"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                np.savez_compressed(path, target=target, operator=operator, sd=np.asarray(c['sd']),
+                    hb_factor=np.array(c['hb_factor']),
+                    common_cached_sd_physical=np.asarray(co['unified_cache']['sd'])[1:] / co['unified_cache']['hb_factor'])
+        write_json(out / 'prepared' / (selected['id'] + '.json'),
+            dict(status='completed', ref=selected, cache_provenance=provenance,
+                 calibration=co, original_source='retained_prepared_arrays_only_no_raw_file_parser'))
+    result = dict(status='completed', selected_records=len(plan['selected']),
+        prepared_pairs=len(plan['selected']) * len(cfg['lengths_s']), coordinates=coordinates,
+        calibration_failures=failures, raw_source_reads=0, protected_data_reads=0)
+    write_json(out / 'preparation.json', result)
+    return result
+
+
+def filter_retest_waveform_metrics(target, prediction, sd, *, mask=None, hb_factor=1., common_sd=None):
+    y, p, sd = np.asarray(target), np.asarray(prediction), np.asarray(sd)
+    use = np.ones(len(y), bool) if mask is None else np.asarray(mask, bool)
+    use[-1] = False
+    rows = []
+    for col, name in enumerate(('EEG', 'HbO', 'HbR')):
+        a, b = y[use, col], p[use, col]
+        ac, bc = a - a.mean(), b - b.mean()
+        rms = float(np.sqrt(np.mean((b - a) ** 2)))
+        scale = 1. if col == 0 else hb_factor
+        row = dict(component=name, nrmse=rms / sd[col], zero_predictor_nrmse=float(np.sqrt(np.mean(a*a)) / sd[col]),
+            local_centered_nrmse=rms / max(float(a.std()), 1e-12),
+            pearson_r=float(np.corrcoef(a, b)[0, 1]) if min(a.std(), b.std()) > 1e-12 else None,
+            centered_amplitude_ratio=float(b.std() / max(a.std(), 1e-12)),
+            signed_gain=float(ac @ bc / max(ac @ ac, 1e-24)),
+            bias_training_sd=float((b - a).mean() / sd[col]),
+            absolute_rmse_in_cache_unit=rms / scale,
+            target_centered_rms_in_cache_unit=float(a.std() / scale),
+            peak_time_difference_s=float((np.flatnonzero(use)[np.argmax(b)] - np.flatnonzero(use)[np.argmax(a)]) * .25))
+        if col and common_sd is not None:
+            row['nrmse_common_cached_training_sd'] = rms / scale / common_sd[col - 1]
+        rows.append(row)
+    return rows
+
+
+def filter_retest_worker(payload):
+    from src.inference.shared_driver_reconstruction import fit_decay_shared_driver
+    from src.inference.shared_driver_rk4 import decay_forward
+    from src.inference.model_compatibility import weak_hb_profiles, linear_panel_profiles
+    cfg, base, root_string, out_string, spec = payload
+    root, out = Path(root_string), Path(out_string)
+    path = out / 'tasks' / (spec['key'] + '.json')
+    started = time.monotonic()
+    result = dict(spec=spec, status='failed', rows=[], compatibility=None)
+    saved, original = {}, None
+    try:
+        prepared = out / 'prepared' / f"{spec['ref']['id']}__{spec['branch']}__{spec['length_s']}.npz"
+        with np.load(prepared, allow_pickle=False) as a:
+            y, op, sd, factor, common_sd = (a[k].copy() for k in
+                ('target', 'operator', 'sd', 'hb_factor', 'common_cached_sd_physical'))
+        mask = volume_drive_mask(len(y), spec['condition'])
+        observed = np.where(mask, y, np.nan)
+        saved.update(target=y, operator=op, sd=sd, visible=mask, hb_factor=factor,
+                     common_cached_sd_physical=common_sd)
+        p = volume_drive_parameters(base)
+        source_path = root / cfg['source_run'] / 'measured' / f"{spec['ref']['id']}_{spec['length_s']}_{spec['condition']}.npz"
+        retained = None
+        if spec['branch'] == 'retained_unfiltered' and source_path.exists():
+            with np.load(source_path, allow_pickle=False) as a:
+                same = (a['target'].shape == y.shape and np.allclose(a['target'], y, rtol=1e-10, atol=1e-12)
+                    and np.allclose(a['operator'], op, rtol=0, atol=1e-12)
+                    and np.allclose(a['sd'], sd, rtol=1e-10, atol=1e-12))
+                if same:
+                    retained = {k: a[k].copy() for k in a.files if
+                        any(k.startswith(arm + '_') for arm in cfg['arms'])}
+        for name, multiplier in [('original', 1.), ('slow', .1), ('no_decay', 0.)]:
+            row = dict(arm=name, decay_multiplier=multiplier, forcing_modes=0, input_present=False)
+            if retained is not None and name + '_prediction' in retained:
+                meta = filter_retest_source_task(root / cfg['source_run'], spec['ref']['id'],
+                                                spec['length_s'], spec['condition'])
+                old = next(r for r in meta['rows'] if r['arm'] == name)
+                fit = {k: retained[name + '_' + k] for k in ('prediction', 'states', 'driver', 'initial_state')}
+                fit.update(converged=old['converged'], status=old['fit_status'],
+                    objective=old['objective'], scaled_gradient_inf_norm=old['scaled_gradient'],
+                    costs=old.get('costs', {}), evaluations=old.get('evaluations'))
+                row['fit_source'] = 'retained_exact_target_operator_SD_match'
+            else:
+                starts = [dict(driver=np.zeros(len(y)), initial_state=np.r_[0., np.ones(4)])]
+                if original is not None:
+                    starts.insert(0, dict(driver=original['driver'], initial_state=original['initial_state']))
+                s = base['solver']
+                fit = fit_decay_shared_driver(observed, p, .25, mean_operator=op, sd=sd, visible=mask,
+                    decay_multiplier=multiplier, forcing_modes=0,
+                    penalty=s['penalty'], initial_penalty=s['initial_penalty'],
+                    flow_prior_weight=s['flow_prior_weight'], flow_prior_log_sd=s['flow_prior_log_sd'],
+                    max_evaluations=cfg['solver']['max_evaluations'], gradient_tolerance=s['gradient_tolerance'],
+                    substeps=4, starts=starts)
+                row['fit_source'] = 'new_same_budget_fit'
+            row.update(converged=bool(fit['converged']), fit_status=fit['status'],
+                evaluations=fit.get('evaluations'), objective=fit.get('objective'),
+                scaled_gradient=fit.get('scaled_gradient_inf_norm'), costs=fit.get('costs'))
+            if 'prediction' in fit:
+                forward = decay_forward(fit['driver'], fit['initial_state'], p, .25,
+                    decay_multiplier=multiplier, forcing_coefficients=np.empty(0), substeps=4)
+                fine = decay_forward(fit['driver'], fit['initial_state'], p, .25,
+                    decay_multiplier=multiplier, forcing_coefficients=np.empty(0), substeps=8)
+                fine_prediction = (op @ fine['canonical_prediction'].ravel()).reshape(y.shape)
+                error = float(np.max(abs((fine_prediction - fit['prediction'])[:-1] / sd)))
+                score = ~mask[:, 1] if spec['condition'] == 'joint_blocked' else np.ones(len(y), bool)
+                row.update(qualified=bool(fit['converged'] and error <= .005),
+                    integration_max_training_sd=error,
+                    waveform=filter_retest_waveform_metrics(y, fit['prediction'], sd, mask=score,
+                        hb_factor=float(factor), common_sd=common_sd),
+                    **decay_metrics(y, fit['prediction'], sd, spec['condition'],
+                        fit['states'], np.zeros(len(y)), forward, base),
+                    state_extrema={state: [float(fit['states'][:, j].min()), float(fit['states'][:, j].max())]
+                        for j, state in enumerate(('r', 's', 'f', 'v', 'p', 'q'))},
+                    initial_state=fit['initial_state'], driver_rms=float(np.sqrt(np.mean(fit['driver']**2))))
+                for key in ('prediction', 'states', 'driver', 'initial_state'):
+                    saved[name + '_' + key] = fit[key]
+                if name == 'original':
+                    original = fit
+            else:
+                row['qualified'] = False
+            result['rows'].append(row)
+        if spec['condition'] == 'joint_full':
+            weak = weak_hb_profiles(y[:, 1:], dt=.25, return_details=False)
+            grid = yaml.safe_load((CODE_ROOT / cfg['compatibility_config']).read_text())['panels']['linear']
+            taus = grid['tau_grid'] if spec['length_s'] in cfg['compatibility']['linear_grid_lengths_s'] else [2.]
+            kappas = grid['kappa_grid'] if len(taus) > 1 else [.64]
+            scoring = np.ones_like(y, bool); scoring[-1] = False
+            linear = linear_panel_profiles(y, op, sd, taus, kappas, scoring, dt=.25, parameters=p)
+            nodes = [r for r in linear['profiles'] if max(r['joint_eeg_nmse'], r['joint_hbo_nmse'], r['joint_hbr_nmse']) <= .25]
+            result['compatibility'] = dict(weak=weak, linear=linear,
+                common_tolerance=.5, common_nodes=len(nodes), grid_nodes=len(taus)*len(kappas),
+                compatible_parameters=[dict(tau=r['tau'], kappa=r['kappa']) for r in nodes],
+                interpretation='no_extra_component_linear_relaxation; weak_Hb_metric_descriptive_after_processing')
+        result['status'] = 'completed'
+    except Exception:
+        result['error'] = traceback.format_exc()
+    result.update(seconds=time.monotonic() - started,
+        peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if saved:
+        np.savez_compressed(path.with_suffix('.npz'), **saved)
+    write_json(path, result)
+    return dict(key=spec['key'], status=result['status'], seconds=result['seconds'], peak_rss_mib=result['peak_rss_mib'])
+
+
+def filter_retest_run(cfg, base, root, out, plan, workers, pilot=False):
+    jobs = [j for j in plan['jobs'] if (not pilot or
+        (j['branch'] == 'unified_cache' and j['length_s'] == 90 and j['condition'] == 'joint_full'))]
+    pending_jobs = [j for j in jobs if not (out / 'tasks' / (j['key'] + '.json')).exists()]
+    if not os.environ.get('INVOCATION_ID') or not os.environ.get('SSM_SYSTEMD_UNIT'):
+        raise ValueError('Fitting requires the recorded durable user-systemd supervisor')
+    start = time.monotonic(); terminal = []
+    iterator = iter(pending_jobs)
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        active = {}
+        def submit():
+            try:
+                spec = next(iterator)
+            except StopIteration:
+                return False
+            active[pool.submit(filter_retest_worker, (cfg, base, str(root), str(out), spec))] = spec
+            return True
+        for _ in range(2 * workers):
+            if not submit(): break
+        while active:
+            ready, _ = wait(active, return_when=FIRST_COMPLETED)
+            for future in ready:
+                spec = active.pop(future)
+                try:
+                    terminal.append(future.result())
+                except Exception as exc:
+                    failure = dict(spec=spec, status='failed_worker', rows=[], error=repr(exc))
+                    write_json(out / 'tasks' / (spec['key'] + '.json'), failure)
+                    terminal.append(dict(key=spec['key'], status='failed_worker'))
+                submit()
+            write_json(out / 'progress.json', dict(stage='pilot' if pilot else 'run',
+                planned=len(jobs), previously_terminal=len(jobs)-len(pending_jobs),
+                newly_terminal=len(terminal), running=len(active), elapsed_s=time.monotonic()-start))
+    result = dict(status='completed', stage='pilot' if pilot else 'run', workers=workers,
+        planned=len(jobs), newly_executed=len(terminal), elapsed_s=time.monotonic()-start,
+        terminal=terminal, supervisor=os.environ['SSM_SYSTEMD_UNIT'])
+    write_json(out / ('pilot.json' if pilot else 'execution.json'), result)
+    return result
+
+
+def filter_retest_summarize(cfg, out, plan):
+    all_rows, cases, failures = [], [], []
+    for spec in plan['jobs']:
+        path = out / 'tasks' / (spec['key'] + '.json')
+        if not path.exists():
+            raise ValueError('all planned cases must be terminal before summary: ' + spec['key'])
+        result = json.loads(path.read_text())
+        if result['status'] != 'completed':
+            failures.append(dict(key=spec['key'], status=result['status'], error=result.get('error')))
+        common = dict(dataset=spec['ref']['dataset'], subject=spec['ref']['subject'],
+            id=spec['ref']['id'], branch=spec['branch'], length_s=spec['length_s'], condition=spec['condition'], key=spec['key'])
+        cases.append(dict(**common, status=result['status'], compatibility=result.get('compatibility')))
+        for row in result['rows']:
+            all_rows.append(dict(**common, **row))
+    table = [{**{k:v for k,v in r.items() if not isinstance(v,(dict,list))},
+              **{f"{w['component']}_{k}":v for w in r.get('waveform',[]) for k,v in w.items() if k != 'component'}}
+             for r in all_rows]
+    pd.DataFrame(table).to_csv(out / 'metrics.csv', index=False)
+    result = dict(schema=cfg['schema'], experiment_id=cfg['experiment_id'],
+        status='completed_with_failures' if failures else 'completed',
+        selected_records=plan['selected'], planned_jobs=len(plan['jobs']), terminal_jobs=len(cases),
+        planned_no_extra_fits=plan['planned_no_extra_fits'], returned_fits=len(all_rows),
+        qualified_fits=sum(r.get('qualified',False) for r in all_rows),
+        reused_fits=sum(r.get('fit_source')=='retained_exact_target_operator_SD_match' for r in all_rows),
+        failures=failures, rows=all_rows, cases=cases,
+        interpretation='four_selected_public_records; branch-specific_training_scales; no_population_significance_or_latent_truth',
+        qualification='lower_NRMSE_does_not_override_correlation_amplitude_or_convergence')
+    write_json(out / 'summary.json', result)
+    return {k:v for k,v in result.items() if k not in ('rows','cases','selected_records')}
+
+
+def filter_retest_verify(cfg, base, root, out, plan):
+    """Independently recompute saved-array scores and observation/state closure."""
+    path = out / 'verification.json'
+    if path.exists():
+        raise ValueError('verification evidence already exists; preserve the retained result')
+    summary = json.loads((out / 'summary.json').read_text())
+    maxima = dict(score=0., waveform=0., observation=0., reused_arrays=0.,
+                  no_decay_drift=0., absolute_delta_increase=0., integration_training_sd=0.)
+    failures, checked = [], 0
+    for spec in plan['jobs']:
+        task = json.loads((out / 'tasks' / (spec['key'] + '.json')).read_text())
+        with np.load(out / 'tasks' / (spec['key'] + '.npz'), allow_pickle=False) as a:
+            y, op, sd = (a[k] for k in ('target', 'operator', 'sd'))
+            valid = np.arange(len(y)) < len(y)-1
+            score = valid & ~a['visible'][:, 1] if spec['condition'] == 'joint_blocked' else valid
+            expected_mask = np.ones(y.shape, bool); expected_mask[-1] = False
+            if spec['condition'] == 'Hb_only_full': expected_mask[:, 0] = False
+            if spec['condition'] == 'joint_blocked':
+                for start in range(0, len(y), 120):
+                    expected_mask[start+40:start+60, 1:] = False
+                    expected_mask[start+80:start+100, 1:] = False
+            if not np.array_equal(expected_mask, a['visible']): failures.append(spec['key'] + ': mask')
+            for row in task['rows']:
+                checked += 1
+                arm = row['arm']; pred, states = a[arm+'_prediction'], a[arm+'_states']
+                error = (pred-y)/sd
+                for key, value in [('full_hb_nmse', np.mean(error[valid, 1:]**2)),
+                                   ('score_hb_nmse', np.mean(error[score, 1:]**2))]:
+                    maxima['score'] = max(maxima['score'], abs(value-row[key]))
+                for j, w in enumerate(row['waveform']):
+                    target, fitted = y[score, j], pred[score, j]
+                    ac, bc = target-target.mean(), fitted-fitted.mean()
+                    rmse = np.sqrt(np.mean((fitted-target)**2))
+                    physical_factor = 1. if j == 0 else float(a['hb_factor'])
+                    values = dict(nrmse=rmse/sd[j], zero_predictor_nrmse=np.sqrt(np.mean(target**2))/sd[j],
+                        local_centered_nrmse=rmse/np.std(target),
+                        pearson_r=(ac@bc)/np.sqrt((ac@ac)*(bc@bc)),
+                        centered_amplitude_ratio=np.linalg.norm(bc)/np.linalg.norm(ac),
+                        signed_gain=(ac@bc)/(ac@ac), bias_training_sd=np.mean(fitted-target)/sd[j],
+                        absolute_rmse_in_cache_unit=rmse/physical_factor,
+                        target_centered_rms_in_cache_unit=np.std(target)/physical_factor,
+                        peak_time_difference_s=.25*(np.flatnonzero(score)[np.argmax(fitted)]-np.flatnonzero(score)[np.argmax(target)]))
+                    if j: values['nrmse_common_cached_training_sd'] = rmse/physical_factor/a['common_cached_sd_physical'][j-1]
+                    maxima['waveform'] = max(maxima['waveform'], *(abs(w[k]-v) for k,v in values.items()))
+                fixed = volume_drive_parameters(base).fixed
+                canonical = np.column_stack((fixed.eeg_loading*a[arm+'_driver']+fixed.eeg_offset,
+                    fixed.P0*(states[:,4]-1)-fixed.Q0*(states[:,5]-1), fixed.Q0*(states[:,5]-1)))
+                maxima['observation'] = max(maxima['observation'], float(np.max(abs((op@canonical.ravel()).reshape(y.shape)-pred))))
+                delta = states[:,4]-states[:,3]
+                maxima['absolute_delta_increase'] = max(maxima['absolute_delta_increase'], float(np.max(np.diff(abs(delta)))))
+                if arm == 'no_decay': maxima['no_decay_drift'] = max(maxima['no_decay_drift'], float(np.ptp(delta)))
+                maxima['integration_training_sd'] = max(maxima['integration_training_sd'], row['integration_max_training_sd'])
+                if (np.any(states[:,2:] <= 0) or np.any(fixed.P0*states[:,4] < fixed.Q0*states[:,5])
+                        or row['forcing_modes'] != 0 or row['input_present'] or not row['qualified']):
+                    failures.append(spec['key'] + ':' + arm + ': domain/qualification')
+                if row['fit_source'].startswith('retained_'):
+                    source = root/cfg['source_run']/'measured'/f"{spec['ref']['id']}_{spec['length_s']}_{spec['condition']}.npz"
+                    with np.load(source, allow_pickle=False) as old:
+                        for key in ('prediction','states','driver','initial_state'):
+                            maxima['reused_arrays'] = max(maxima['reused_arrays'], float(np.max(abs(a[arm+'_'+key]-old[arm+'_'+key]))))
+        compatibility = task.get('compatibility')
+        if compatibility:
+            profiles = compatibility['linear']['profiles']
+            count = sum(max(p['joint_eeg_nmse'], p['joint_hbo_nmse'], p['joint_hbr_nmse']) <= .25 for p in profiles)
+            if count != compatibility['common_nodes']: failures.append(spec['key'] + ': common nodes')
+    if any(value > (0.005 if key == 'integration_training_sd' else 1e-9) for key,value in maxima.items()):
+        failures.append('independent numerical tolerance exceeded')
+    if checked != summary['returned_fits'] or checked != plan['planned_no_extra_fits']:
+        failures.append('fit denominator')
+    parent = root/cfg['source_run']; original_plan = json.loads((parent/'plan.json').read_text())
+    scores = {}
+    for ref in original_plan['records']:
+        row = next(r for r in filter_retest_source_task(parent, ref['id'], 90, 'joint_full')['rows'] if r['arm']=='original')
+        if row['qualified']: scores[ref['id']] = row['full_hb_nmse']
+    selected, counts = filter_retest_select(original_plan['records'], scores, cfg['selection']['datasets'])
+    unchanged = [r['id'] for r in selected] == [r['id'] for r in plan['selected']]
+    if not unchanged: failures.append('corrected owning selection changes selected identities')
+    audit = dict(source=str(parent/'evidence_v2'), selected_identities_unchanged=unchanged,
+        corrected_selection_denominators=counts,
+        corrected_medians={r['dataset']: r['selection_median'] for r in selected},
+        correction='initial plan used pre-migration task qualification; corrected evidence restores one Simultaneous original fit; selected records and all fit arrays unchanged',
+        retained_plan='plan.json is preserved as executed; use this audit for corrected selection denominators')
+    result = dict(status='passed' if not failures else 'failed', fits_checked=checked, maxima=maxima,
+        failures=failures, selection_audit=audit, raw_source_reads=0, refits=0,
+        integration_check='retained 4/8-substep comparison; other maxima independently recomputed from saved arrays',
+        verification_source='verification_source.py')
+    write_json(path, result)
+    shutil.copy2(Path(__file__), out/'verification_source.py')
+    if failures: raise ValueError(f'verification failed: {failures}')
+    return result
+
+
+def filter_retest_main(args):
+    cfg, base = filter_retest_config(args.config)
+    root, out = args.project_root.resolve(), args.run_dir.resolve()
+    if not out.is_relative_to(root / cfg['artifact_root']) or out == root / cfg['artifact_root']:
+        raise ValueError('fresh versioned owning run directory required')
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / 'resolved_config.json'
+    if path.exists() and json.loads(path.read_text()) != cfg:
+        raise ValueError('resolved retest contract is immutable')
+    write_json(path, cfg)
+    stage = args.filter_stage
+    if stage == 'check':
+        y, op, sd, truth = decay_synthetic(base, 0, 'matched', 30)
+        assert y.shape == (120,3) and op.shape == (360,360) and np.isfinite(y).all()
+        metrics = filter_retest_waveform_metrics(y, y, sd)
+        assert max(r['nrmse'] for r in metrics) == 0.
+        result = dict(status='passed', synthetic_shape=list(y.shape), forcing_modes=0,
+            no_extra_arms=cfg['arms'], measured_arrays_read=0)
+        write_json(out / 'software_checks.json', result)
+    elif stage == 'plan':
+        result = filter_retest_plan(cfg, base, root, out)
+    else:
+        plan = json.loads((out / 'plan.json').read_text())
+        if stage == 'prepare':
+            result = filter_retest_prepare(cfg, base, root, out, plan)
+        elif stage in ('pilot', 'run'):
+            if not 1 <= args.workers <= cfg['resources']['max_workers']:
+                raise ValueError('workers outside resource envelope')
+            result = filter_retest_run(cfg, base, root, out, plan, args.workers, pilot=stage=='pilot')
+        elif stage == 'verify':
+            result = filter_retest_verify(cfg, base, root, out, plan)
+        else:
+            result = filter_retest_summarize(cfg, out, plan)
+    print(json.dumps(serial({k:v for k,v in result.items() if k not in ('jobs','coordinates','selected','terminal')})), flush=True)
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config',type=Path,default=DEFAULT)
@@ -8181,6 +8665,8 @@ def main():
     ap.add_argument('--volume-drive-diagnostic',action='store_true')
     ap.add_argument('--volume-stage',choices=['pilot','synthetic','linear','measured','summarize'],default='synthetic')
     ap.add_argument('--decay-diagnostic',action='store_true')
+    ap.add_argument('--filter-retest',action='store_true')
+    ap.add_argument('--filter-stage',choices=['check','plan','prepare','pilot','run','summarize','verify'],default='check')
     ap.add_argument('--decay-stage',choices=['check','pilot','synthetic','measured','summarize','replay-migrate'],default='synthetic')
     ap.add_argument('--physiology-semantics',action='store_true')
     ap.add_argument('--teacher-robustness',action='store_true')
@@ -8191,6 +8677,12 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.filter_retest:
+        if args.config == DEFAULT:
+            args.config = CODE_ROOT / 'experiments/configs/physiology_semantic_tokenizer/shared_driver_filter_retest_v1.yaml'
+        if args.run_dir is None or args.decay_diagnostic or args.volume_drive_diagnostic:
+            ap.error('filter retest requires its own run-dir and no other diagnostic mode')
+        return filter_retest_main(args)
     if args.decay_diagnostic:
         if any((args.volume_drive_diagnostic,args.component_attribution,args.teacher_robustness,args.physiology_semantics,
                 args.waveform_diagnostic,args.conditional_step_control,args.conditional_optical_gain_fit,
