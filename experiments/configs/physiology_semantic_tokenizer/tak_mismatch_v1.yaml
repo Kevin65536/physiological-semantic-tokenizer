@@ -1,0 +1,153 @@
+schema: tak_mismatch_v1
+experiment_id: SSM-TAK-MISMATCH-v1
+created: '2026-10-28'
+seed: 20261028
+artifact_root: experiments/runs/physiology_semantic_tokenizer/tak_mismatch
+run_name: 20261028_v1
+scope: all_eligible_public_v5_none_records_all_paired_Hb_channels
+data:
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation, refed]
+  protected_data: forbidden
+  cache_root: data/cache/physiology_semantic_clean_v5
+  geometry_root: data/cache/physiology_semantic_clean_v5/channel_geometry
+  refed_geometry_root: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20261013_refed_graphical_registration_v1/channel_geometry
+  fnirs_input: unified_cached_fnirs_v1
+  cache_normalization: none
+  raw_reads: registered_native_EEG_only
+  labels_as_model_inputs: false
+  selection: complete_registered_public_inventory_not_parent_panels
+  window_seconds: 30.0
+  window_stride_seconds: 30.0
+  reference_seconds: 5.0
+  eeg_filter_seconds: 90.0
+  shorter_record_context: complete_native_support_at_least_30s_no_cross_session_padding
+  incomplete_tail: retained_as_uncovered_duration_not_padded
+  failed_EEG: retain_Hb_only_axis_when_Hb_is_available
+  folds: 5
+tensor:
+  dt_s: 0.1
+  steps: 300
+  reference_steps: 50
+  score_steps: [50, 299]
+  final_bin: excluded_from_fit_and_score
+  eeg_features: [window, time, native_eeg_channel, band]
+  hb: [window, time, native_hb_pair, species]
+  eeg_bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  eeg_feature_order: channel_major_band_minor
+  species: [HbO, HbR]
+  state_order: [r, s, f, v, p, q]
+fixed:
+  tau: 2.0
+  kappa: 0.64
+  gamma: 0.32
+  alpha: 0.32
+  E0: 0.32
+  P0: 1.0
+  Q0: 0.35
+  neurovascular_gain: 1.0
+  eeg_loading: 1.0
+  viscoelastic_s: 2.0
+model:
+  hemodynamics: tak
+  initial_state_mode: volume_tied
+  fitted_physiological_parameters: []
+  parameter_scope: fixed_reference_primary
+  current_dof_companion: complete_record_native_support_pair_shared_kappa_tau
+  hb_only_start: zero_driver_and_rest_no_EEG_warm_start
+  independent_prediction: all_Hb_hidden_before_fit_and_initialization
+  total_Hb: p_equals_v_no_independent_state
+current_dof:
+  parameter_names: [kappa, tau]
+  parameter_bounds: [[0.05, 3.0], [0.25, 12.0]]
+  reference: [0.64, 2.0]
+  log_prior_sd: [0.25, 0.25]
+  starts: [[0.64, 2.0], [0.35, 1.0], [1.1, 3.5]]
+  views: [hb_only, joint]
+  grouping: dataset_subject_native_record_continuous_Hb_support_pair
+  warm_start: same_visibility_fixed_solution_or_zero_driver_rest
+  prior_multiplicity: once_per_native_support_pair_group
+  boundary_fraction: 0.01
+  independent_spatial_prediction: fixed_reference_only
+coordinate:
+  partition: five_outer_subject_folds_with_training_only_inner_subject_selection
+  inner_selection_fraction: 0.2
+  grouping: dataset_and_canonical_subject_all_sessions_together
+  pca: candidate_specific_30dim_PC1_training_only_sign_max_absolute_loading_positive
+  eeg_training_sd_target: 0.025
+  hb_training_sd_target: 0.025
+  scaling: common_positive_Hb_factor_preserve_species_ratio
+  candidate_scale: nearest6_EEG_factor_shared_across_candidates_no_output_renormalization
+  scoring_scale: nearest6_training_SD_frozen_for_all_candidates
+spatial:
+  candidates: [nearest6, sixth_to_seventh, next6, random6]
+  random_seed: 20261028
+  equal_channels: 6
+  selection: subject_equal_inner_holdout_Hb_NMSE_fixed_Tak_rest_tangent_screen
+  evaluation: nonlinear_EEG_only_nearest6_and_frozen_selected_candidate
+  ties: declared_candidate_order
+  missing_candidate: terminal_unavailable_no_substitution
+  wrong_EEG: same_subject_condition_montage_nonoverlap_actual_filter_support
+  missing_wrong: terminal_unavailable_no_fallback
+observability:
+  driver_scale: frozen_training_EEG_SD_divided_by_fixed_EEG_loading
+  draws: 256
+  quantile: 0.95
+  scenarios:
+  - {id: primary_ar1_sd0p1, noise_sd: 0.1, ar1: 0.9, cross_correlation: 0.3}
+  - {id: ar1_sd0p05, noise_sd: 0.05, ar1: 0.9, cross_correlation: 0.3}
+  - {id: ar1_sd0p2, noise_sd: 0.2, ar1: 0.9, cross_correlation: 0.3}
+  - {id: iid_sd0p1, noise_sd: 0.1, ar1: 0.0, cross_correlation: 0.0}
+  nuisance: [four_initial_states, driver_DC]
+  interpretation: prespecified_synthetic_processed_Hb_noise_sensitivity_not_measured_sensor_noise
+weak_balance:
+  support_widths_s: [10.0, 20.0, 40.0]
+  center_step_s: 1.0
+  support: complete_continuous_native_record_no_window_stitching
+  excitation_floor: 0.0
+  excitation_rule: zero_dynamic_energy_only_no_noise_calibrated_low_signal_threshold
+  interpretation: filtered_coordinate_small_signal_compatibility_not_exact_physiological_conservation
+solver:
+  penalty: 0.01
+  initial_penalty: 100.0
+  flow_prior_weight: 1.0
+  flow_prior_log_sd: 0.6931471805599453
+  max_evaluations_per_trial: 600
+  max_iterations: 300
+  gradient_tolerance: 1.0e-5
+  substeps: 4
+  validation_substeps: 8
+  maximum_integration_difference_training_sd: 0.005
+  numerical_backend: numba
+  data_weight: 0.4
+endpoints:
+  primary: [D1, D_EH, Delta_spatial, D4]
+  secondary: [D_bal, D_drive_H, D_J_E, D_J_O, D_J_R, HbO_RMSE_native, HbR_RMSE_native]
+  diagnostic: [D_obs_uncalibrated, independent_prediction_error, zero_baseline, wrong_EEG_advantage, train_template_baseline, convergence, integration_refinement, objective_parts, state_ranges]
+  score: mean_standardized_squared_error_then_sqrt_on_common_valid_support
+  aggregation: window_then_native_record_then_subject_equal_with_dataset_separation
+  intervals: descriptive_subject_cluster_bootstrap_frozen_selection
+  bootstrap_repeats: 1000
+  null_hypothesis: no_consistent_holdout_gain_for_selected_geometry_or_correct_EEG_pairing
+  failures: all_planned_terminal_statuses_and_success_denominators_retained_no_success_only_verdict
+  zero_dynamic_support: unavailable_not_epsilon_regularized_good_score
+  stopping: fixed_complete_public_inventory_all_tasks_terminal_no_result_driven_expansion
+report:
+  fields: [dataset, subject, record, session, window, pair, fold, fixed_parameters, input_units, training_subjects, selected_candidate, actual_EEG_context, status, denominator, metrics, evidence_path]
+  distributions: dataset_separated_all_available_pair_windows_record_and_subject_equal
+  typical_curves: nearest6_D1_good_median_difficult_different_subjects_when_possible
+  curve_selection: descriptive_only_not_tuning
+  searchable_text_and_bitmap_figures: true
+resources:
+  max_workers: 52
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  fit_chunk_size: 24
+  supervisor: user_systemd_with_linger_or_existing_durable_scheduler
+claim_limits:
+- public_development_reanalysis_not_protected_confirmation
+- no_exact_conservation_claim_from_bandpassed_Hb
+- no_unique_physiological_drive_or_parameter_identification
+- small_residual_does_not_imply_recovered_physiological_truth
+- spatial_delta_is_prediction_cost_not_millimeter_localization_error
+- overlapping_weak_support_and_windows_are_not_independent_subjects
+- four_axes_have_different_denominators_and_cannot_be_added

@@ -57,6 +57,23 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Complete public-inventory Tak mismatch — 2026-10-28
+
+The [four-axis contract](configs/physiology_semantic_tokenizer/tak_mismatch_v1.yaml)
+uses the current reduced Tak model and a complete public v5/none inventory.
+The owning evidence root is
+[`20261028_v1`](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/plan.json),
+with [frozen source](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/source_manifest.json),
+[numerical validation](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/software_validation.json),
+[synthetic replay](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/synthetic_summary.json),
+[preparation evidence](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/prepare_summary.json),
+and [supervised commands and logs](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/launch.json).
+Per-record `prepared/*.json` and `weak/*.npz` own continuous-support weak
+residuals; `tasks/` and `current_dof/tasks/` own fixed and shared-parameter
+fits. These are filtered-coordinate descriptive diagnostics, separate from the
+historical inlet-balance compatibility evidence below. Registered lifecycle
+and scientific interpretation remain in the research-state registry.
+
 ## Sensor proxy interventions under fixed Tak — 2026-10-27
 
 The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1.yaml)

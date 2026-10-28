@@ -84,6 +84,43 @@ measured result exists.
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
 
+## Tak 四轴全公开数据失配分析（2026-10-28）
+
+`SSM-TAK-MISMATCH-v1` 的执行合同为
+[`tak_mismatch_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/tak_mismatch_v1.yaml)，
+入口为 `evaluate_tak_mismatch.py`。这次用户要求四个登记数据集的指标分布和典型时间曲线；
+清单来自中央 v5/none 缓存登记，不沿用历史有限面板，也不访问独立比较协议的保护材料。
+每个原生 Hb 记录按不重叠 30 秒网格保留全部通道对，跨已知拼接支持的窗口记录为不可用；
+能在中央声明时钟支持内对齐的窗口附加 EEG，其余仍保留 Hb-only 分析资格。
+EEG 功率由原生电位在 90 秒上下文计算；不足 90 秒的 REFED 视频使用其完整、至少
+30 秒的真实支持并记录实际长度。尾部、缺失、时钟、几何和数值失败均进入分母。
+
+四轴分别为 Hb-only 条件拟合误差 `D1` 与 10/20/40 秒弱平衡 `D_bal`、
+Hb 驱动解释 EEG 的 `D_EH` 与局部可检测驱动差 `D_obs`、独立 EEG-only 的
+近邻减替代邻域 Hb NMSE `Delta_spatial`，以及联合三观察等权残差 `D4`。
+误差使用外训练被试冻结的观察 SD；输入 HbO/HbR 保持共同正尺度。
+弱核只在完整连续支持内计算。`D_obs` 明示预设有色/跨色团相关噪声情景，
+剔除允许初态、参数和参考所删除的驱动常数方向；同时报告秩、非线性回放差和情景敏感性，
+不把该噪声假设称为实测噪声校准或生理可识别性。
+
+五个被试外折使每名被试评价一次；PC1、尺度和空间选择只使用外训练被试。
+空间候选均为六通道五频带 PC1，共用原近邻的正缩放因子；内层被试留出使用固定 Tak
+切线模型筛选，外层再用完整非线性 EEG-only 比较，因此收益针对预选替代方案。
+保留零预测、训练模板和有合法非重叠支持的错配 EEG 对照。
+固定参考参数为主；配套 Hb-only 与 joint 在原生连续 Hb 支持和通道对内共享
+`kappa,tau`，各窗独立驱动与四初态，参数先验每组一次。三起点仅允许同可见数据的
+固定解热启动。空间独立预测始终使用固定参考参数。
+自由参数解处的 `D_obs_free` 逐窗投影 `kappa,tau` 切向量，允许每窗独立的局部参数
+补偿，因此是共享参数解处的逐窗放松诊断，不是整个共享组堆叠 Jacobian 的可检测差。
+它与固定参数 `D_obs` 的投影空间不同，数值下降不单独解释为组共享模型改善；
+直接观测误差的两口径比较以共同成功支持上的 `D1/D4` 为主。
+
+分布按数据集分别报告中位数、IQR、P90/P95、覆盖与失败；主汇总被试等权，
+时间分布对同一记录时刻的多通道重复使用反权重，区间以整被试重采样。
+典型曲线按各库固定 `D1` 的中位、P90 和最高有效值选择，尽量来自不同被试，
+不参与调参。完整终态、数值数组和训练坐标由版本化 run 持有；报告只作只读导出。
+这组指标检验带通缓存坐标下的模型相容性，四轴不能相加，也不能证明唯一生理恢复。
+
 ## Tak 原始血流核心的缓存实测对照（2026-10-27）
 
 用户要求恢复忠于 Tak 原始设计的方程，并全面比较实测差异。

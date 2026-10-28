@@ -113,6 +113,26 @@ coordinates and rejects old 4 Hz arrays; physical-time rules are owned by the
 [data contract](../docs/DATA_CONTRACT.md#新-eeg-代理目标统一为-10-hz--2026-10-27).
 `check` is synthetic software validation; it does not start measured work.
 
+The complete public-inventory four-axis Tak diagnostic uses
+[`evaluate_tak_mismatch.py`](scripts/evaluate_tak_mismatch.py) and
+[`tak_mismatch_v1.yaml`](configs/physiology_semantic_tokenizer/tak_mismatch_v1.yaml).
+Its [design](../docs/EXPERIMENT_PLAN.md#tak-四轴全公开数据失配分析2026-10-28)
+owns subject-heldout coordinates, equal-capacity spatial selection and the
+fixed/shared-parameter comparison. `check` and `synthetic` precede metadata-only
+`plan`, supervised `prepare` and `run`, then `summarize`. Record preparation,
+window fits and shared-parameter groups retain resumable terminal evidence.
+After both parameter modes are terminal, `audit-status` writes a fresh
+`terminal_status_audit.json`, separating numerical failure from unavailable
+support and execution errors without changing any fit or summary.
+The read-only [`render_tak_mismatch.py`](scripts/render_tak_mismatch.py) exports
+dataset distributions and preselected time curves after both parameter modes
+are terminal, including signed residuals and instantaneous spatial error
+differences on their retained scoring supports. Revisions use fresh export
+directories. Tests: `test_tak_mismatch.py`, `test_tak_mismatch_data.py`,
+`test_tak_mismatch_runner.py`, `test_tak_mismatch_current_dof.py`,
+`test_tak_mismatch_report.py`; independent replay equivalence is covered by
+`test_shared_driver_replay_equivalence.py`.
+
 The bounded sensor-proxy suite uses
 [`evaluate_shared_driver_sensor_proxy.py`](scripts/evaluate_shared_driver_sensor_proxy.py)
 with [`shared_driver_sensor_proxy_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1.yaml).
