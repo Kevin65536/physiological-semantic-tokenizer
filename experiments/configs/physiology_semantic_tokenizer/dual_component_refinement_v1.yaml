@@ -1,0 +1,98 @@
+schema: dual_component_refinement_v1
+experiment_id: TK-DUAL-REFINE-v1
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml
+refinement:
+  parent_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3
+  allowed_splits: [train, validation]
+  selection_split: validation
+  teacher: unchanged_fixed_Tak_full_output_and_fixed_full_residual
+  input_scope: own_modality_processed_observation_with_recorded_preprocessing_and_reference
+  test_use: none_during_iteration_or_selection
+  seed: 17
+  confirmation_seeds: [29, 43]
+  batch_size: 128
+  checkpoint_every: 250
+  evaluation_batch_size: 256
+  codebook_size: 128
+  waveform_vq_levels: [1, 2]
+  codebook_fit_patches: 32768
+  codebook_fit_iterations: 100
+  nominal_bits_per_modality_patch: {one_level: 14, two_levels: 28}
+  continuous_sidecars: false
+  stopping: finite_candidates_then_two_seed_confirmation_of_validation_choice
+  health:
+    train_active_fraction: 0.95
+    validation_active_fraction: 0.90
+    effective_fraction: 0.50
+    maximum_code_probability: 0.08
+    minimum_waveform_improvement: 0.30
+  selection: all_health_and_all_dataset_component_NMSE_first_then_lowest_rate_then_mean_relative_validation_error
+  candidates:
+  - name: native_warm_revival
+    input_mode: native
+    context_radius: 0
+    training_mode: hard_student
+    initial: parent_continuous
+    steps: 1000
+    learning_rate: 0.0001
+    balance_components: false
+    derivative_weight: 0.0
+    revive_dead_codes: true
+  - name: observation_local
+    input_mode: observation
+    context_radius: 0
+    training_mode: continuous_student
+    initial: fresh
+    steps: 2000
+    learning_rate: 0.001
+    balance_components: true
+    derivative_weight: 0.0
+  - name: observation_context6
+    input_mode: observation
+    context_radius: 1
+    training_mode: continuous_student
+    initial: fresh
+    steps: 2000
+    learning_rate: 0.001
+    balance_components: true
+    derivative_weight: 0.0
+  - name: observation_context6_shape
+    input_mode: observation
+    context_radius: 1
+    training_mode: continuous_student
+    initial: fresh
+    steps: 2000
+    learning_rate: 0.001
+    balance_components: true
+    derivative_weight: 0.1
+  - name: observation_context10_shape
+    input_mode: observation
+    context_radius: 2
+    training_mode: continuous_student
+    initial: fresh
+    steps: 2000
+    learning_rate: 0.001
+    balance_components: true
+    derivative_weight: 0.1
+  - name: component_oracle
+    input_mode: teacher_components_diagnostic_only
+    context_radius: 0
+    training_mode: oracle
+    initial: none
+    steps: 0
+    learning_rate: 0.0
+    balance_components: false
+    derivative_weight: 0.1
+resources:
+  devices: [cuda:0]
+  gpu_workers_per_device: 2
+  max_new_gpu_memory_mib: 4096
+  torch_threads: 2
+  numerical_threads: 1
+claim_limits:
+- healthy_occupancy_does_not_replace_waveform_fidelity
+- compare_bits_and_context_support_explicitly
+- context6_and_context10_require_support_expanded_joint_masking_before_downstream_use
+- component_oracle_is_not_a_deployable_student
+- no_continuous_amplitude_or_mean_sidecars
+- validation_selection_not_fresh_confirmation

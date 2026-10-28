@@ -37,7 +37,7 @@ import yaml
 
 DEFAULT_CONFIG = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml'
 STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark',
-          'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all')
+          'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all', 'refine', 'refine-one')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
 
@@ -78,6 +78,14 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_refinement_v1':
+        base = yaml.safe_load((SOURCE / cfg['base_contract']).read_text())
+        base.update(schema=cfg['schema'], experiment_id=cfg['experiment_id'],
+            refinement=cfg['refinement'], claim_limits=cfg['claim_limits'])
+        base['resources'].update(cfg['resources'])
+        cfg = base
+        if cfg['refinement']['allowed_splits'] != ['train', 'validation']:
+            raise ValueError('refinement cannot select on the held-out test subjects')
     if not isinstance(cfg, dict) or not cfg.get('schema') or not cfg.get('experiment_id'):
         raise ValueError('versioned schema and experiment identity required')
     if sorted(cfg.get('variants', VARIANTS)) != sorted(VARIANTS):
@@ -165,11 +173,11 @@ def array_paths(out, stage, row):
     return Path(out) / stage / (identity(row['id']) + '.npz')
 
 
-def read_arrays(out, stage, row):
+def read_arrays(out, stage, row, keys=None):
     if task_status(out, stage, row['id'])['status'] != 'completed':
         raise FileNotFoundError(f'{stage} unavailable for {row["id"]}')
     with np.load(array_paths(out, stage, row), allow_pickle=False) as archive:
-        return {key: archive[key] for key in archive.files}
+        return {key: archive[key] for key in (archive.files if keys is None else keys)}
 
 
 def _bounded_jobs(worker, payloads, workers, inflight=2, progress=None):
@@ -400,6 +408,10 @@ def load_cache(out):
     names = ('eeg_input', 'hb_input', 'eeg_u', 'eeg_s', 'eeg_e', 'hb_u', 'hb_s', 'hb_e')
     arrays = {name: np.load(cache / manifest.get('arrays', {}).get(name, name + '.npy'), mmap_mode='r')
               for name in names}
+    if manifest.get('schema') == 'dual_component_refinement_cache_v1':
+        for name in ('eeg_spectral_input', 'patch_metadata'):
+            if name in manifest.get('arrays', {}):
+                arrays[name] = np.load(cache / manifest['arrays'][name], mmap_mode='r', allow_pickle=False)
     if any(len(a) != len(manifest['rows']) for a in arrays.values()):
         raise ValueError('packed arrays and metadata population differ')
     for modality in ('eeg', 'hb'):
@@ -888,6 +900,7 @@ def parse_args(argv=None):
     parser.add_argument('--devices', nargs='+')
     parser.add_argument('--gpu-workers', type=int)
     parser.add_argument('--variant', choices=VARIANTS, default='hard_student')
+    parser.add_argument('--candidate', help='named candidate from the refinement contract')
     parser.add_argument('--seed', type=int, default=17)
     parser.add_argument('--device', default='cpu')
     parser.add_argument('--retry-failed', action='store_true')
@@ -901,6 +914,8 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema'] == 'dual_component_refinement_v1' and args.stage not in ('check', 'refine', 'refine-one'):
+        raise ValueError('refinement uses its finite train/validation-only stages')
     if args.stage == 'check':
         print(json.dumps(dict(status='software_contract_valid', stages=STAGES, variants=VARIANTS,
             seeds=seeds(cfg), protected_data='forbidden', measured_arrays_read=0))); return
@@ -921,10 +936,12 @@ def main(argv=None):
     gpu_workers = args.gpu_workers or int(cfg.get('resources', {}).get('gpu_workers_per_device', 1))
     if gpu_workers not in (1, 2): raise ValueError('one or two measured GPU workers per device required')
     if args.parent_pid is not None:
-        if args.stage not in ('train-one', 'masked-one') or os.getppid() != args.parent_pid:
+        if args.stage not in ('train-one', 'masked-one', 'refine-one') or os.getppid() != args.parent_pid:
             raise ValueError('worker must be a direct child of its live controller')
         freeze_contract(out, cfg, root)
-        if args.stage == 'masked-one':
+        if args.stage == 'refine-one':
+            result = refine_one(cfg, out, args.candidate, args.seed, args.device, args.gpu_memory_bytes)
+        elif args.stage == 'masked-one':
             result = masked_one(cfg, out, args.variant, args.seed, args.device, args.gpu_memory_bytes)
         else:
             result = train_one(cfg, out, args.variant, args.seed, args.device,
@@ -943,6 +960,8 @@ def main(argv=None):
                 path = out / 'synthetic.json'
                 result = read_json(path) if path.exists() else synthetic(cfg)
                 write_json(path, result)
+            elif stage == 'refine': result = run_refinement(cfg, args.config.resolve(), out, root, devices, gpu_workers)
+            elif stage == 'refine-one': result = refine_one(cfg, out, args.candidate, args.seed, args.device, args.gpu_memory_bytes)
             elif stage == 'plan': result = plan(root, cfg, out)
             elif stage == 'prepare': result = stage_prepare(root, cfg, out, workers, args.retry_failed)
             elif stage == 'teacher': result = stage_teacher(root, cfg, out, workers, args.retry_failed)
@@ -970,6 +989,395 @@ def main(argv=None):
                 raise RuntimeError(f'{stage} failed; retained task outcomes must be reviewed')
         write_json(out / 'controller.json', dict(status='completed', stage=args.stage, pid=os.getpid(), updated=now()))
         print(json.dumps(serial(result)))
+
+
+def prepare_refinement(cfg, out, root):
+    """Reuse only parent train/validation rows after exact public-lineage checks."""
+    settings = cfg['refinement']; parent = (Path(root) / settings['parent_run']).resolve()
+    admitted = (Path(root) / 'experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3').resolve()
+    if parent != admitted or settings['allowed_splits'] != ['train', 'validation']:
+        raise ValueError('exact completed public parent and train/validation-only refinement required')
+    contract = read_json(parent / 'resolved_config.json')['config']
+    if contract['data']['protected_data'] != 'forbidden' or read_json(parent / 'controller.json')['status'] != 'completed':
+        raise ValueError('completed public parent required before array reads')
+    destination = Path(out) / 'cache'; destination.mkdir(exist_ok=True)
+    if (destination / 'manifest.json').exists(): return read_json(destination / 'manifest.json')
+    source = parent / 'cache'; manifest = read_json(source / 'manifest.json')
+    if manifest['schema'] != 'dual_component_training_cache_v1' or manifest['target_units'] != 'training_observation_SD':
+        raise ValueError('unaltered full Tak component/residual training coordinates required')
+    selected = np.array([i for i, row in enumerate(manifest['rows']) if row['split'] in settings['allowed_splits']])
+    rows = [manifest['rows'][i] for i in selected]
+    planned_rows = [r for r in read_json(parent / 'inventory.json')['rows'] if r['split'] in settings['allowed_splits']]
+    relevant_trials = {r['trial_id'] for r in planned_rows}
+    for name, shape in manifest['shapes'].items():
+        if name not in ('eeg_input', 'hb_input', 'eeg_u', 'eeg_s', 'eeg_e', 'hb_u', 'hb_s', 'hb_e'):
+            raise ValueError('unregistered refinement cache field')
+        values = np.load(source / manifest['arrays'][name], mmap_mode='r', allow_pickle=False)
+        target = np.lib.format.open_memmap(destination / (name + '.tmp.npy'), mode='w+',
+            shape=(len(rows), *shape[1:]), dtype='float32')
+        for start in range(0, len(rows), 256): target[start:start + 256] = values[selected[start:start + 256]]
+        target.flush(); del target
+        (destination / (name + '.tmp.npy')).replace(destination / (name + '.npy'))
+    from src.data.functional_tokenizer import identity_digest
+    result = dict(manifest, rows=rows, shapes={k:[len(rows), *v[1:]] for k, v in manifest['shapes'].items()},
+        schema='dual_component_refinement_cache_v1', input_parent=str(parent), parent_indices=selected.tolist(),
+        selection_splits=settings['allowed_splits'], test_arrays_selected=False,
+        parent_retained_windows=manifest['retained_windows'], retained_windows=len(rows),
+        retained_trials=len(rows) // 3, planned_windows=len(planned_rows), planned_trials=len(relevant_trials),
+        failed_trials=[x for x in manifest['failed_trials'] if x in relevant_trials],
+        identity=identity_digest(rows), source_identity=manifest['identity'])
+    result['independent_subjects'] = {ds:{split:len({r['subject'] for r in rows if r['dataset']==ds and r['split']==split})
+        for split in ('train','validation')} for ds in sorted({r['dataset'] for r in rows})}
+    if any(c['input_mode'] == 'spectral' for c in settings['candidates']):
+        from src.data.ssm_prepared import EEG_PROXY_INPUT_SCHEMA
+        values = np.lib.format.open_memmap(destination / 'eeg_spectral_input.npy', mode='w+', dtype='float32', shape=(len(rows),10,620))
+        u = np.load(destination / 'eeg_u.npy', mmap_mode='r')
+        coordinates = sorted({r['coordinate'] for r in rows})
+        metadata = np.lib.format.open_memmap(destination / 'patch_metadata.npy', mode='w+', dtype='float32',
+            shape=(len(rows),10,20*(len(coordinates)+1)))
+        for i, row in enumerate(rows):
+            item = read_arrays(parent, 'prepared', row, keys=('features','identity','eeg_proxy_input','eeg_proxy_rate_hz'))
+            if str(item['identity']) != row['id'] or str(item['eeg_proxy_input']) != EEG_PROXY_INPUT_SCHEMA or float(item['eeg_proxy_rate_hz']) != 10.:
+                raise ValueError('exact native-channel 10Hz EEG feature lineage required')
+            features = np.asarray(item['features'][300:500], dtype='float32')
+            if features.shape != (200,30): raise ValueError('six channels by five bands required')
+            values[i] = np.column_stack((u[i].reshape(200),features)).reshape(10,620)
+            meta = np.zeros((200,len(coordinates)+1), dtype='float32')
+            meta[:,coordinates.index(row['coordinate'])] = 1.
+            meta[:,-1] = np.arange(200)/199. - .5
+            metadata[i] = meta.reshape(10,-1)
+        fitted = {}
+        for coordinate in coordinates:
+            training = np.array([r['coordinate']==coordinate and r['split']=='train' for r in rows])
+            all_rows = np.flatnonzero([r['coordinate']==coordinate for r in rows])
+            band = np.asarray(values[training]).reshape(-1,31)[:,1:]
+            mean = band.mean(0); scale = np.maximum(band.std(0),1e-5)
+            fitted[coordinate] = dict(mean=mean,scale=scale,training_rows=int(training.sum()))
+            for start in range(0,len(all_rows),128):
+                ix=all_rows[start:start+128];x=np.asarray(values[ix]).reshape(-1,20,31)
+                x[...,1:] = (x[...,1:]-mean)/scale
+                values[ix] = x.reshape(len(ix),10,620)
+        values.flush();metadata.flush();del values,metadata
+        result['arrays'].update(eeg_spectral_input='eeg_spectral_input.npy',patch_metadata='patch_metadata.npy')
+        result['shapes'].update(eeg_spectral_input=[len(rows),10,620],patch_metadata=[len(rows),10,20*(len(coordinates)+1)])
+        result['spectral_frontend'] = dict(schema='dual_component_spectral_frontend_v1',
+            channels='own EEG proxy plus original six EEG channels x five log-power bands',
+            fitting=fitted, metadata_coordinates=coordinates,
+            metadata='dataset/region and position within existing 20s window; no task, condition or subject ID',
+            source='registered 10Hz prepared EEG features only; no Hb values or teacher outputs read for EEG input')
+    write_json(destination / 'manifest.json', result)
+    return result
+
+
+def refinement_inputs(arrays, indices, candidate, device):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import local_patch_context
+    inputs, masks = {}, {}
+    for modality in ('eeg', 'hb'):
+        key = ('eeg_spectral_input' if modality == 'eeg' and candidate['input_mode'] == 'spectral'
+            else modality + ('_input' if candidate['input_mode'] == 'native' else '_u'))
+        value = torch.as_tensor(np.asarray(arrays[key][indices]).copy(), device=device)
+        if candidate.get('include_metadata'):
+            meta = torch.as_tensor(np.asarray(arrays['patch_metadata'][indices]).copy(), device=device)
+            value = torch.cat((value.reshape(*value.shape[:2],20,-1),meta.reshape(*meta.shape[:2],20,-1)), -1).flatten(-2)
+        inputs[modality], masks[modality] = local_patch_context(value, candidate['context_radius'])
+    return inputs, masks
+
+
+def refinement_predictions(model, arrays, candidate, device, batch_size=256):
+    import torch
+    total = len(arrays['eeg_u']); predictions = {}; hard_ids = {}
+    for modality in ('eeg', 'hb'):
+        for component in ('S', 'O', 'sum'):
+            predictions[modality + '_' + component] = np.empty_like(arrays[modality + '_u'])
+        if model.hard:
+            for component in ('S', 'O'):
+                hard_ids[modality + '_' + component] = np.empty((total, 10, 1), dtype='int16')
+    model.eval()
+    with torch.inference_mode():
+        for start in range(0, total, batch_size):
+            ix = np.arange(start, min(start + batch_size, total))
+            inputs, masks = refinement_inputs(arrays, ix, candidate, device)
+            result = model(inputs, masks)
+            for modality in ('eeg', 'hb'):
+                for component in ('S', 'O', 'sum'):
+                    predictions[modality + '_' + component][ix] = result[modality][component].cpu().numpy()
+                if model.hard:
+                    for component in ('S', 'O'):
+                        hard_ids[modality + '_' + component][ix, :, 0] = result[modality]['ids_' + component].cpu().numpy()
+        words = {m + '_' + c:v.cpu().numpy()[None] for m, branches in model.decoded_codewords().items()
+            for c, v in branches.items()} if model.hard else {}
+    return predictions, hard_ids, words
+
+
+def save_refinement_evaluation(cfg, out, destination, name, predictions, arrays, manifest,
+                               hard_ids=None, words=None, bits=None, eligible=True):
+    from src.analysis.dual_component_tokenizer import (
+        refinement_fidelity, refinement_code_health, refinement_decision, _csv,
+    )
+    destination = Path(destination); destination.mkdir(parents=True, exist_ok=True)
+    rows = manifest['rows']; subjects, metrics = refinement_fidelity(predictions, arrays, rows, name)
+    _csv(destination / 'subject_metrics.csv', subjects)
+    health = []
+    if hard_ids:
+        for modality in ('eeg', 'hb'):
+            for component in ('S', 'O'):
+                key = modality + '_' + component
+                health.extend(refinement_code_health(hard_ids[key], words[key], rows, modality, component,
+                    cfg['refinement']['codebook_size']))
+        write_npz(destination / 'hard_ids.npz', **hard_ids)
+        write_npz(destination / 'codewords.npz', **words)
+    selected = np.array([i for i, row in enumerate(rows) if row['split'] == 'validation'])
+    write_npz(destination / 'validation_predictions.npz', row_index=selected,
+        **{key:value[selected] for key, value in predictions.items()})
+    result = dict(status='completed', name=name, metrics=metrics, codebook_health=health,
+        nominal_bits_per_modality_patch=bits, continuous_sidecars=False,
+        deployable_student=eligible, test_used=False)
+    baseline = Path(out) / 'baseline_hard' / 'summary.json'
+    if baseline.exists():
+        result['decision'] = refinement_decision(metrics, read_json(baseline)['metrics'], health,
+            cfg['refinement']['health'])
+    write_json(destination / 'summary.json', result)
+    return result
+
+
+def refinement_baseline(cfg, out, root, device):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import DualComponentTokenizer
+    destination = Path(out) / 'baseline_hard'
+    if (destination / 'summary.json').exists(): return read_json(destination / 'summary.json')
+    manifest, arrays = load_cache(out); parent = Path(root) / cfg['refinement']['parent_run']
+    state = torch.load(parent / 'jobs/hard_student/seed_17/checkpoint.pt', map_location=device, weights_only=False)
+    model = DualComponentTokenizer(state['config']['model'], 'hard_student').to(device)
+    model.load_state_dict(state['model_state'])
+    candidate = dict(input_mode='native', context_radius=0)
+    prediction, ids, words = refinement_predictions(model, arrays, candidate, device)
+    return save_refinement_evaluation(cfg, out, destination, 'parent_hard_seed17', prediction, arrays,
+        manifest, ids, words, bits=14)
+
+
+def refine_one(cfg, out, name, seed, device='cpu', memory_bytes=None):
+    """Fixed-exposure candidate, then train-only waveform VQ and validation."""
+    import torch
+    from src.tokenizers.dual_component_tokenizer import DualComponentTokenizer, WaveformDictionary
+    settings = cfg['refinement']
+    candidate = next((x for x in settings['candidates'] if x['name'] == name), None)
+    if candidate is None: raise ValueError('unregistered finite refinement candidate')
+    job = Path(out) / 'refinement' / name / f'seed_{seed}'; job.mkdir(parents=True, exist_ok=True)
+    if (job / 'summary.json').exists(): return read_json(job / 'summary.json')
+    with owner_lock(job, 'candidate'):
+        torch.set_num_threads(cfg['resources']['torch_threads'])
+        if device.startswith('cuda'):
+            torch.cuda.set_device(device)
+            cap = memory_bytes or cfg['resources']['max_new_gpu_memory_mib'] * 1024 ** 2
+            torch.cuda.set_per_process_memory_fraction(max(cap - 512 * 1024 ** 2, 64 * 1024 ** 2) /
+                torch.cuda.get_device_properties(device).total_memory, device)
+            torch.cuda.reset_peak_memory_stats(device)
+        random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+        manifest, arrays = load_cache(out); rows = manifest['rows']
+        if any(r['split'] not in ('train', 'validation') for r in rows):
+            raise ValueError('test rows cannot enter refinement')
+        train = np.array([r['split'] == 'train' for r in rows])
+        groups = [np.flatnonzero(train & np.array([r['dataset'] == ds for r in rows]))
+                  for ds in sorted({r['dataset'] for r in rows})]
+        oracle = candidate['training_mode'] == 'oracle'; started = time.monotonic()
+        scales, derivative_scales = {}, {}
+        for modality, channels in (('eeg', 1), ('hb', 2)):
+            for component, suffix in (('S', 's'), ('O', 'e')):
+                truth = np.asarray(arrays[modality + '_' + suffix][train])
+                scales[modality + '_' + component] = max(float(np.var(truth)), .01)
+                delta = np.diff(truth.reshape(-1, 20, channels), axis=1)
+                derivative_scales[modality + '_' + component] = max(float(np.mean(delta ** 2)), 1e-6)
+        if oracle:
+            predictions = {m + '_' + c:np.asarray(arrays[m + '_' + key]) for m in ('eeg', 'hb')
+                for c, key in (('S', 's'), ('O', 'e'), ('sum', 'u'))}
+            model = None; learned_ids = {}; learned_words = {}
+        else:
+            model_cfg = deepcopy(cfg['model'])
+            factor = 1 + 2 * candidate['context_radius']
+            model_cfg['input_dims'] = {}
+            for m in ('eeg','hb'):
+                key = ('eeg_spectral_input' if m=='eeg' and candidate['input_mode']=='spectral'
+                    else m + ('_input' if candidate['input_mode']=='native' else '_u'))
+                dimension=arrays[key].shape[-1]
+                if candidate.get('include_metadata'):dimension += arrays['patch_metadata'].shape[-1]
+                model_cfg['input_dims'][m] = dimension * factor
+            model_cfg.update(width=candidate.get('width',model_cfg['width']),encoder_kind=candidate.get('encoder_kind','mlp'),
+                input_channels={m:d//factor//20 for m,d in model_cfg['input_dims'].items()})
+            model_cfg.update(revive_dead_codes=candidate.get('revive_dead_codes', False), ema_decay=.95,
+                dead_code_threshold=1., revival_warmup_steps=100, revival_interval=25,
+                revival_stop_after_steps=max(100, candidate['steps'] - 250),
+                max_revivals_per_event=8, revival_strategy='diverse_farthest', revival_count_prior='uniform_batch')
+            model = DualComponentTokenizer(model_cfg, candidate['training_mode']).to(device)
+            checkpoint = job / 'checkpoint.pt'; start = 0; history = []
+            optimizer = torch.optim.AdamW(model.parameters(), lr=candidate['learning_rate'],
+                weight_decay=candidate.get('weight_decay', .0001))
+            if checkpoint.exists():
+                saved = torch.load(checkpoint, map_location=device, weights_only=False)
+                if saved['candidate'] != candidate or saved['seed'] != seed: raise ValueError('refinement checkpoint drift')
+                model.load_state_dict(saved['model_state']); optimizer.load_state_dict(saved['optimizer_state'])
+                start = saved['step']; history = saved['history']; np.random.set_state(saved['numpy_rng'])
+                torch.set_rng_state(saved['torch_rng'].cpu())
+                if saved.get('cuda_rng') is not None and device.startswith('cuda'):
+                    torch.cuda.set_rng_state(saved['cuda_rng'].cpu(), device)
+            elif candidate['initial'] == 'parent_continuous':
+                parent = Path(manifest['input_parent'])
+                saved = torch.load(parent / 'jobs/continuous_student' / f'seed_{seed}' / 'checkpoint.pt', map_location=device, weights_only=False)
+                model.load_state_dict(saved['model_state'])
+            elif candidate['initial'] == 'refinement_continuous':
+                parent = Path(manifest['input_parent']).parent / settings['initial_refinement_run']
+                initial_seed = candidate.get('initial_seed', seed)
+                saved = torch.load(parent / 'refinement' / candidate['initial_candidate'] / f'seed_{initial_seed}' / 'checkpoint.pt',
+                    map_location=device, weights_only=False)
+                model.load_state_dict(saved['model_state'])
+            step_budget = int(candidate['steps'])
+            if start > step_budget: raise ValueError('refinement checkpoint exceeds fixed budget')
+            model.train()
+            for step in range(start, step_budget):
+                group_ids = np.random.randint(len(groups), size=settings['batch_size'])
+                ix = np.array([np.random.choice(groups[g]) for g in group_ids])
+                inputs, masks = refinement_inputs(arrays, ix, candidate, device)
+                output = model(inputs, masks); loss = torch.zeros((), device=device)
+                terms = {}
+                for modality, channels in (('eeg', 1), ('hb', 2)):
+                    for component, suffix in (('S', 's'), ('O', 'e')):
+                        key = modality + '_' + component
+                        truth = torch.as_tensor(np.asarray(arrays[modality + '_' + suffix][ix]).copy(), device=device)
+                        estimate = output[modality][component]
+                        level = (estimate - truth).square().mean()
+                        normalizer = scales[key] if candidate['balance_components'] else 1.
+                        loss = loss + level / normalizer
+                        if candidate['derivative_weight']:
+                            error = (estimate - truth).reshape(-1, 20, channels)
+                            loss = loss + candidate['derivative_weight'] * error.diff(dim=1).square().mean() / derivative_scales[key]
+                        terms[key] = float(level.detach())
+                    loss = loss + output[modality]['commitment']
+                loss = loss / 2
+                if not torch.isfinite(loss): raise FloatingPointError('nonfinite refinement loss')
+                optimizer.zero_grad(set_to_none=True); loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 5.); optimizer.step()
+                if (step + 1) % settings['checkpoint_every'] == 0 or step + 1 == step_budget:
+                    history.append(dict(step=step + 1, loss=float(loss.detach()), **terms))
+                    _torch_save(checkpoint, dict(model_state=model.state_dict(), optimizer_state=optimizer.state_dict(),
+                        candidate=candidate, model_config=model_cfg, seed=seed, step=step + 1, history=history,
+                        numpy_rng=np.random.get_state(), torch_rng=torch.get_rng_state(),
+                        cuda_rng=torch.cuda.get_rng_state(device) if device.startswith('cuda') else None))
+                    write_json(job / 'progress.json', dict(status='training', step=step + 1, budget=step_budget,
+                        elapsed_seconds=time.monotonic() - started, last_loss=history[-1]))
+            predictions, learned_ids, learned_words = refinement_predictions(model, arrays, candidate, device,
+                settings['evaluation_batch_size'])
+        results = []
+        if model is not None and model.hard:
+            results.append(save_refinement_evaluation(cfg, out, job / 'hard', name, predictions, arrays,
+                manifest, learned_ids, learned_words, bits=2 * np.log2(settings['codebook_size'])))
+        else:
+            if not oracle:
+                save_refinement_evaluation(cfg, out, job / 'continuous', name + '_continuous', predictions, arrays, manifest)
+            books, ids = {}, {}
+            for modality, channels in (('eeg', 1), ('hb', 2)):
+                for component in ('S', 'O'):
+                    key = modality + '_' + component; value = predictions[key]
+                    book = WaveformDictionary(settings['codebook_size'], max(settings['waveform_vq_levels']), channels,
+                        candidate['derivative_weight'], seed, settings['codebook_fit_patches'], settings['codebook_fit_iterations'])
+                    book.fit(value[train].reshape(-1, value.shape[-1]))
+                    books[key] = book; ids[key] = book.encode(value)
+            write_npz(job / 'waveform_dictionaries.npz', **{key + '_' + k:v for key, book in books.items() for k, v in book.state().items()})
+            for levels in settings['waveform_vq_levels']:
+                hard_ids = {k:v[..., :levels] for k, v in ids.items()}
+                words = {k:b.codewords[:levels] for k, b in books.items()}
+                hard = {k:books[k].decode(v) for k, v in hard_ids.items()}
+                for modality in ('eeg', 'hb'): hard[modality + '_sum'] = hard[modality + '_S'] + hard[modality + '_O']
+                results.append(save_refinement_evaluation(cfg, out, job / f'vq{levels}', name + f'_vq{levels}',
+                    hard, arrays, manifest, hard_ids, words, bits=2 * np.log2(settings['codebook_size']) * levels, eligible=not oracle))
+        result = dict(status='completed', candidate=candidate, seed=seed, elapsed_seconds=time.monotonic() - started,
+            nominal_observation_support_seconds=2 * (1 + 2 * candidate['context_radius']),
+            input_scope='same-modality processed coordinates; extended-context tokens require overlap-closed downstream masks',
+            variants=[dict(name=r['name'], bits=r['nominal_bits_per_modality_patch'], decision=r.get('decision'),
+                deployable_student=r['deployable_student']) for r in results], test_used=False)
+        if model is not None:
+            progress = read_json(job / 'progress.json')
+            result['training'] = dict(completed_steps=step_budget, resumed_from_step=start,
+                elapsed_seconds=progress['elapsed_seconds'],
+                peak_cuda_allocated_bytes=torch.cuda.max_memory_allocated(device) if device.startswith('cuda') else 0,
+                peak_cuda_reserved_bytes=torch.cuda.max_memory_reserved(device) if device.startswith('cuda') else 0)
+        if candidate['initial'] in ('parent_continuous','refinement_continuous'):
+            result['initialization'] = dict(source=candidate['initial'], weights_only=True,
+                optimizer='fresh for declared additional steps', prior_step_count=saved['step'])
+        write_json(job / 'summary.json', result)
+        return result
+
+
+def refinement_jobs(cfg, cfg_path, out, root, devices, gpu_workers, pending, phase):
+    settings = cfg['refinement']
+    pending = list(pending); planned = len(pending)
+    results = []; running = []
+    slots = [d for d in devices for _ in range(gpu_workers)]
+    while pending or running:
+        while pending and len(running) < len(slots):
+            name, seed = pending.pop(0); job = Path(out) / 'refinement' / name / f'seed_{seed}'
+            if (job / 'summary.json').exists(): results.append(read_json(job / 'summary.json')); continue
+            used = Counter(x[3] for x in running); device = next(d for d in slots if used[d] < slots.count(d))
+            job.mkdir(parents=True, exist_ok=True)
+            memory = cfg['resources']['max_new_gpu_memory_mib'] * 1024 ** 2 // slots.count(device)
+            command = [sys.executable, str(Path(__file__).resolve()), '--config', str(cfg_path), '--project-root', str(root),
+                '--output', str(out), '--stage', 'refine-one', '--candidate', name, '--seed', str(seed), '--device', device,
+                '--gpu-memory-bytes', str(memory), '--parent-pid', str(os.getpid())]
+            log = (job / 'process.log').open('a'); process = subprocess.Popen(command, cwd=SOURCE, stdout=log, stderr=subprocess.STDOUT)
+            running.append((process, log, (name, seed), device, job))
+        if not running: continue
+        time.sleep(.2)
+        for item in list(running):
+            process, log, key, device, job = item
+            code = process.poll()
+            if code is None: continue
+            log.close(); running.remove(item)
+            record = read_json(job / 'summary.json') if (job / 'summary.json').exists() else dict(status='failed', candidate=key[0], seed=key[1], log=str(job / 'process.log'))
+            record['returncode'] = code; results.append(record)
+            if code != 0: record['status'] = 'failed'
+            write_json(Path(out) / 'refinement_progress.json', dict(phase=phase, completed=len(results), planned=planned,
+                active=[dict(candidate=x[2], device=x[3], pid=x[0].pid) for x in running], last=record))
+    return results
+
+
+def run_refinement(cfg, cfg_path, out, root, devices, gpu_workers):
+    prepare_refinement(cfg, out, root)
+    import torch
+    torch.set_num_threads(cfg['resources']['torch_threads'])
+    refinement_baseline(cfg, out, root, 'cpu')
+    settings = cfg['refinement']
+    results = refinement_jobs(cfg, cfg_path, out, root, devices, gpu_workers,
+        [(c['name'], settings['seed']) for c in settings['candidates']], 'screen')
+    variants = []
+    for result in results:
+        if result.get('status') != 'completed': continue
+        for row in result['variants']:
+            if row['deployable_student']: variants.append(dict(row, candidate=result['candidate']['name'], seed=result['seed']))
+    def rank(row):
+        decision = row['decision']; values = decision['fidelity']
+        mean_ratio = np.mean([v['NMSE'] / v['baseline_NMSE'] for v in values])
+        if decision['health_pass'] and decision['fidelity_pass']: return (0, row['bits'], mean_ratio)
+        return (1, not decision['health_pass'], mean_ratio, row['bits'])
+    ranked = sorted(variants, key=rank)
+    confirmation = []
+    replicate_diagnostic = settings.get('seed_replication', 'only_if_all_thresholds_pass') == 'selected_even_if_diagnostic'
+    if ranked and (replicate_diagnostic or
+            (ranked[0]['decision']['health_pass'] and ranked[0]['decision']['fidelity_pass'])):
+        confirmation = refinement_jobs(cfg, cfg_path, out, root, devices, gpu_workers,
+            [(ranked[0]['candidate'], seed) for seed in settings['confirmation_seeds']], 'seed_confirmation')
+    summary = dict(status='completed' if all(r.get('status') == 'completed' for r in results + confirmation) else 'failed',
+        candidates=results, ranking=ranked, selected=ranked[0] if ranked else None,
+        selection_split='validation', test_used=False, confirmation=confirmation,
+        seed_replication_scope='optimization stability on the same validation subjects, not independent data confirmation',
+        interpretation='Health and waveform fidelity must both pass; oracle compression cannot be selected')
+    summary['requirements_met'] = bool(confirmation and len(confirmation) == len(settings['confirmation_seeds']) and
+        all(r.get('status') == 'completed' and any(v['name'] == ranked[0]['name'] and v['decision']['health_pass']
+            and v['decision']['fidelity_pass'] for v in r['variants']) for r in confirmation))
+    write_json(Path(out) / 'refinement_summary.json', summary)
+    from src.analysis.dual_component_tokenizer import render_refinement
+    figures = render_refinement(cfg, out, summary['selected'])
+    write_json(Path(out) / 'figure_index.json', dict(files=figures,
+        selection='first identity and baseline-median/P90 error, different validation subjects; no candidate-based selection'))
+    return dict(status=summary['status'], completed_candidates=len(results), selected=summary['selected'])
 
 
 if __name__ == '__main__':

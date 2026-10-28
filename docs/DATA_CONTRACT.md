@@ -112,6 +112,25 @@ raw-sample isolation or prospective prediction. Failed preparation, teacher
 convergence and integration checks retain their planned identities; all arms
 share the complete three-region trial subset and report the full denominator.
 
+The versioned
+[`dual_component_refinement_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_refinement_v1.yaml)
+reuses only this cache's training and validation subjects for rapid refinement.
+Its observation frontend reads `u`, the processed measured coordinate supplied
+to the Tak fitter; it never reads `physical` or `remaining` as deployable input.
+Two-second outputs may read two, six or ten seconds of same-modality processed
+observations. Out-of-window context is explicitly unobserved; downstream masks
+must close over this wider support before such tokens can be used for completion.
+The teacher and training scales remain frozen. Waveform-domain quantizers fit
+training predictions only, decode each component independently from integer IDs,
+and count every residual-VQ level in the bitrate. The separately labelled
+component-compression oracle may read targets but cannot be selected as a student.
+The versioned v2/v3 refinement contracts also test the original six-channel,
+five-band EEG features. Their centering/scaling is fitted per coordinate on
+training subjects only. Optional metadata identifies the dataset, region and
+position within the existing window; it contains no subject, task label, Hb
+measurement or per-sample teacher output. Seed repetitions use the same validation
+subjects and measure optimization stability, not independent confirmation.
+
 ### v1 patch target (historical)
 
 The implemented v1 observation screen is retained as historical evidence. Its

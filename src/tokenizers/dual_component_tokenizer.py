@@ -40,6 +40,30 @@ def _mask_for(values: torch.Tensor, mask: torch.Tensor | None) -> torch.Tensor:
     return mask.to(device=values.device)
 
 
+class TemporalPatchEncoder(nn.Module):
+    """Same-modality temporal features on the declared context, without normalization bypasses."""
+    def __init__(self, inputs, channels, width, latent, output_steps=20):
+        super().__init__()
+        if channels < 1 or inputs % channels or inputs // channels < output_steps:
+            raise ValueError('explicit channels and temporal context required')
+        self.inputs, self.channels, self.steps = inputs, channels, inputs // channels
+        self.output_steps = output_steps
+        self.stem = nn.Conv1d(channels * 2, width, 5, padding=2)
+        self.context = nn.Conv1d(width, width, 5, padding=4, dilation=2)
+        self.head = nn.Linear(width * (output_steps + 1), latent)
+
+    def forward(self, values_and_masks):
+        shape = values_and_masks.shape[:-1]
+        values, masks = values_and_masks.split(self.inputs, dim=-1)
+        joined = torch.cat((values.reshape(-1, self.steps, self.channels),
+            masks.reshape(-1, self.steps, self.channels)), dim=-1).transpose(1,2)
+        hidden = torch.nn.functional.gelu(self.stem(joined))
+        hidden = hidden + torch.nn.functional.gelu(self.context(hidden))
+        start = (self.steps - self.output_steps) // 2
+        features = torch.cat((hidden[:, :, start:start + self.output_steps].flatten(1), hidden.mean(-1)), -1)
+        return self.head(features).reshape(*shape, -1)
+
+
 class LocalComponentBranch(nn.Module):
     """One component's patch encoder, EMA vocabulary, and private decoder."""
 
@@ -51,9 +75,12 @@ class LocalComponentBranch(nn.Module):
             raise ValueError("width and latent_dim must be positive")
         self.input_dim, self.target_dim = input_dim, target_dim
         self.hard = hard
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim * 2, width), nn.GELU(), nn.Linear(width, latent)
-        )
+        if cfg.get('encoder_kind', 'mlp') == 'temporal':
+            self.encoder = TemporalPatchEncoder(input_dim, int(cfg['input_channels']), width, latent)
+        elif cfg.get('encoder_kind', 'mlp') == 'mlp':
+            self.encoder = nn.Sequential(nn.Linear(input_dim * 2, width), nn.GELU(), nn.Linear(width, latent))
+        else:
+            raise ValueError('unknown local encoder kind')
         self.decoder = nn.Sequential(
             nn.Linear(latent, width), nn.GELU(), nn.Linear(width, target_dim)
         )
@@ -64,7 +91,14 @@ class LocalComponentBranch(nn.Module):
             commitment_cost=float(cfg.get("commitment_cost", 0.25)),
             kmeans_init=bool(cfg.get("kmeans_init", True)),
             kmeans_iters=int(cfg.get("kmeans_iters", 10)),
-            revive_dead_codes=False,
+            revive_dead_codes=bool(cfg.get("revive_dead_codes", False)),
+            dead_code_threshold=float(cfg.get("dead_code_threshold", 0.1)),
+            revival_warmup_steps=int(cfg.get("revival_warmup_steps", 100)),
+            revival_interval=int(cfg.get("revival_interval", 100)),
+            revival_stop_after_steps=cfg.get("revival_stop_after_steps"),
+            max_revivals_per_event=int(cfg.get("max_revivals_per_event", 8)),
+            revival_strategy=cfg.get("revival_strategy", "top_error"),
+            revival_count_prior=cfg.get("revival_count_prior", "threshold"),
         )
 
     def forward(self, values: torch.Tensor, mask: torch.Tensor | None = None) -> dict:
@@ -136,8 +170,11 @@ class DualComponentTokenizer(nn.Module):
         for modality in self.modalities:
             inputs = (self.target_dims[modality] if variant == "component_compression"
                       else self.input_dims[modality])
+            branch_cfg = dict(cfg)
+            if cfg.get('input_channels'):
+                branch_cfg['input_channels'] = cfg['input_channels'][modality]
             self.branches[modality] = nn.ModuleDict({
-                component: LocalComponentBranch(inputs, self.target_dims[modality], cfg, self.hard)
+                component: LocalComponentBranch(inputs, self.target_dims[modality], branch_cfg, self.hard)
                 for component in COMPONENTS
             })
 
@@ -364,4 +401,114 @@ class DualComponentTokenizer(nn.Module):
                        for c in COMPONENTS) for m in self.modalities}
 
 
-__all__ = ["DualComponentTokenizer", "LocalComponentBranch", "VARIANTS"]
+def local_patch_context(values: torch.Tensor, radius: int = 0):
+    """Concatenate observed neighboring patches, preserving their exact support.
+
+    Out-of-window positions are masked placeholders, never observed padding.
+    A radius of one reads six seconds for a two-second output patch. Downstream
+    masking must hide every output whose support intersects a hidden input.
+    """
+    if values.ndim != 3 or radius < 0:
+        raise ValueError("[batch,patch,feature] values and nonnegative radius required")
+    pieces, masks = [], []
+    for offset in range(-radius, radius + 1):
+        value = torch.zeros_like(values)
+        mask = torch.zeros_like(values, dtype=torch.bool)
+        start, stop = max(0, -offset), min(values.shape[1], values.shape[1] - offset)
+        if start < stop:
+            source = values[:, start + offset:stop + offset]
+            valid = torch.isfinite(source)
+            value[:, start:stop] = torch.where(valid, source, 0)
+            mask[:, start:stop] = valid
+        pieces.append(value); masks.append(mask)
+    return torch.cat(pieces, -1), torch.cat(masks, -1)
+
+
+class WaveformDictionary:
+    """Train-only waveform-space residual VQ; decoding is integer lookup/addition.
+
+    Every level is an explicit K-way ID. There are no per-patch continuous
+    amplitude/mean sidecars. A second level doubles the nominal rate. This
+    quantizes an independently predicted component, not its teacher label at
+    deployment. Direct teacher compression must be labelled an oracle reference.
+    """
+    def __init__(self, size=128, levels=1, channels=1, derivative_weight=0.0,
+                 seed=17, max_fit_patches=32768, max_iter=100):
+        if size < 2 or levels < 1 or channels < 1 or derivative_weight < 0:
+            raise ValueError("invalid waveform vocabulary settings")
+        self.size, self.levels, self.channels = int(size), int(levels), int(channels)
+        self.derivative_weight, self.seed = float(derivative_weight), int(seed)
+        self.max_fit_patches, self.max_iter = int(max_fit_patches), int(max_iter)
+
+    def _features(self, values):
+        import numpy as np
+        values = np.asarray(values, dtype=np.float32)
+        scaled = values / self.value_scale
+        if not self.derivative_weight:
+            return scaled
+        wave = values.reshape(len(values), -1, self.channels)
+        delta = np.diff(wave, axis=1).reshape(len(values), -1)
+        return np.concatenate((scaled, np.sqrt(self.derivative_weight) * delta / self.delta_scale), axis=-1)
+
+    def fit(self, training_waveforms):
+        import numpy as np
+        from sklearn.cluster import MiniBatchKMeans
+        from sklearn.metrics import pairwise_distances_argmin
+        x = np.asarray(training_waveforms, dtype=np.float32)
+        if x.ndim != 2 or len(x) < self.size or x.shape[-1] % self.channels or not np.isfinite(x).all():
+            raise ValueError("finite training-only flattened waveforms required")
+        self.dimension = x.shape[-1]
+        # Fixed training scalars preserve amplitude; no sample-specific rescaling.
+        self.value_scale = max(float(x.std()), 1e-6)
+        delta = np.diff(x.reshape(len(x), -1, self.channels), axis=1)
+        self.delta_scale = max(float(np.sqrt(np.mean(delta ** 2))), 1e-6)
+        if len(x) > self.max_fit_patches:
+            selected = np.random.default_rng(self.seed).choice(len(x), self.max_fit_patches, replace=False)
+            fit_values = x[selected].copy()
+        else:
+            fit_values = x.copy()
+        self.codewords = []
+        residual = fit_values
+        for level in range(self.levels):
+            features = self._features(residual)
+            fitted = MiniBatchKMeans(n_clusters=self.size, n_init=3, random_state=self.seed + level,
+                batch_size=2048, max_iter=self.max_iter, reassignment_ratio=.01).fit(features)
+            # The feature map is linear: its first D coordinates retain the
+            # complete waveform, and weighted differences are derived features.
+            words = (fitted.cluster_centers_[:, :self.dimension] * self.value_scale).astype('float32')
+            self.codewords.append(words)
+            ids = pairwise_distances_argmin(features, self._features(words))
+            residual = residual - words[ids]
+        self.codewords = np.stack(self.codewords)
+        return self
+
+    def encode(self, waveforms, levels=None):
+        import numpy as np
+        from sklearn.metrics import pairwise_distances_argmin
+        x = np.asarray(waveforms, dtype=np.float32)
+        count = self.levels if levels is None else int(levels)
+        if x.shape[-1] != self.dimension or not 1 <= count <= self.levels or not np.isfinite(x).all():
+            raise ValueError("finite same-coordinate waveforms and available levels required")
+        residual = x.reshape(-1, self.dimension).copy(); indices = []
+        for words in self.codewords[:count]:
+            ids = pairwise_distances_argmin(self._features(residual), self._features(words))
+            indices.append(ids); residual -= words[ids]
+        return np.stack(indices, -1).reshape(x.shape[:-1] + (count,)).astype('int16')
+
+    def decode(self, ids):
+        import numpy as np
+        ids = np.asarray(ids)
+        if ids.dtype.kind not in 'iu' or ids.ndim < 1 or not 1 <= ids.shape[-1] <= self.levels:
+            raise ValueError("one integer ID per declared residual-VQ level required")
+        if np.any(ids < 0) or np.any(ids >= self.size):
+            raise ValueError("ID outside vocabulary")
+        return sum(self.codewords[level][ids[..., level]] for level in range(ids.shape[-1]))
+
+    def state(self):
+        return dict(codewords=self.codewords, value_scale=self.value_scale, delta_scale=self.delta_scale,
+            channels=self.channels, derivative_weight=self.derivative_weight, dimension=self.dimension,
+            nominal_bits_per_component_patch=self.levels * math.log2(self.size))
+
+
+__all__ = ["DualComponentTokenizer", "LocalComponentBranch", "TemporalPatchEncoder", "WaveformDictionary",
+           "local_patch_context", "VARIANTS"]

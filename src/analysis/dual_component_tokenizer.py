@@ -226,7 +226,7 @@ def codebook_health(ids, prototypes, rows, *, modality, branch, variant, seed, o
             result.append(dict(variant=variant, seed=seed, modality=modality, component=branch,
                 split=split, code=k, assignments=int(counts[k]), probability=float(p[k]),
                 assigned_windows=len(assigned), subjects=len({(rows[i].get('dataset', ''), rows[i]['subject']) for i in assigned}),
-                records=len({(rows[i].get('dataset', ''), rows[i].get('record', rows[i].get('join_key', ''))) for i in assigned}),
+                records=len({(rows[i].get('dataset', ''), rows[i]['subject'], rows[i].get('record', rows[i].get('join_key', ''))) for i in assigned}),
                 assigned_observation_RMS_P10=float(np.quantile(amplitudes, .1)) if len(amplitudes) else None,
                 assigned_observation_RMS_P50=float(np.quantile(amplitudes, .5)) if len(amplitudes) else None,
                 assigned_observation_RMS_P90=float(np.quantile(amplitudes, .9)) if len(amplitudes) else None,
@@ -860,3 +860,219 @@ def summarize_masked_pilots(cfg, run):
         inference='exploratory percentile subject bootstrap; no multiple-comparison significance claims')
     _json(run / 'analysis' / 'masked_summary.json', result)
     return result
+
+
+def refinement_fidelity(predictions, targets, rows, variant):
+    """Training/validation waveform metrics; no test rows or per-window scaling."""
+    if any(r['split'] not in ('train', 'validation') for r in rows):
+        raise ValueError('refinement selection is training/validation only')
+    training = np.array([r['split'] == 'train' for r in rows])
+    window_rows = []
+    for modality, channels in (('eeg', 1), ('hb', 2)):
+        truth = dict(S=targets[modality + '_s'], O=targets[modality + '_e'], sum=targets[modality + '_u'])
+        for component, target in truth.items():
+            estimate = np.asarray(predictions[modality + '_' + component], float)
+            target = np.asarray(target, float)
+            if estimate.shape != target.shape or len(target) != len(rows):
+                raise ValueError('aligned complete waveform support required')
+            a = estimate.reshape(len(rows), -1, channels)
+            b = target.reshape(a.shape)
+            centered_a = a - a.mean(1, keepdims=True); centered_b = b - b.mean(1, keepdims=True)
+            norm_a = np.sqrt(np.sum(centered_a ** 2, axis=(1, 2)))
+            norm_b = np.sqrt(np.sum(centered_b ** 2, axis=(1, 2)))
+            denominator = norm_a * norm_b
+            correlation = np.divide(np.sum(centered_a * centered_b, axis=(1, 2)), denominator,
+                out=np.full(len(rows), np.nan), where=denominator > 1e-12)
+            delta_a, delta_b = np.diff(a, axis=1), np.diff(b, axis=1)
+            # Frozen training RMS of differences, not SD or a window denominator.
+            delta_scale = max(float(np.mean(delta_b[training] ** 2)), 1e-8)
+            metrics = dict(NMSE=np.mean((a - b) ** 2, axis=(1, 2)),
+                derivative_NMSE=np.mean((delta_a - delta_b) ** 2, axis=(1, 2)) / delta_scale,
+                centered_correlation=correlation,
+                centered_amplitude_ratio=np.divide(norm_a, norm_b, out=np.full(len(rows), np.nan), where=norm_b > 1e-12))
+            for metric, values in metrics.items():
+                for i, row in enumerate(rows):
+                    window_rows.append(dict(dataset=row['dataset'], subject=row['subject'], record=row['record'],
+                        split=row['split'], variant=variant, modality=modality, component=component,
+                        metric=metric, value=float(values[i]) if np.isfinite(values[i]) else None,
+                        failures=int(not np.isfinite(values[i]))))
+    subjects = subject_aggregate(window_rows, value='value')
+    grouped = defaultdict(list)
+    for row in subjects:
+        grouped[(row['dataset'], row['split'], row['modality'], row['component'], row['metric'])].append(row)
+    summaries = []
+    for (dataset, split, modality, component, metric), values in grouped.items():
+        valid = [r['value'] for r in values if r['value'] is not None]
+        summaries.append(dict(dataset=dataset, split=split, modality=modality, component=component,
+            metric=metric, value=float(np.mean(valid)) if valid else None, subjects=len(valid),
+            undefined_subjects=len(values) - len(valid), undefined_windows=sum(r['failures'] for r in values)))
+    return subjects, summaries
+
+
+def refinement_code_health(ids, words, rows, modality, component, size):
+    """Per-level occupancy and correctly identified subject/record coverage."""
+    result = []
+    for level in range(ids.shape[-1]):
+        for split in ('train', 'validation'):
+            take = np.array([r['split'] == split for r in rows])
+            selected = ids[take, :, level]
+            counts = np.bincount(selected.ravel(), minlength=size)
+            probabilities = counts / counts.sum()
+            nz = probabilities > 0
+            per_code_subjects, per_code_records = [], []
+            for code in range(size):
+                assigned = np.flatnonzero(take & (ids[:, :, level] == code).any(-1))
+                per_code_subjects.append(len({(rows[i]['dataset'], rows[i]['subject']) for i in assigned}))
+                per_code_records.append(len({(rows[i]['dataset'], rows[i]['subject'], rows[i]['record']) for i in assigned}))
+            prototypes = np.asarray(words[level], float)
+            distance = np.mean((prototypes[:, None] - prototypes[None]) ** 2, axis=-1)
+            np.fill_diagonal(distance, np.inf)
+            result.append(dict(modality=modality, component=component, level=level, split=split,
+                size=size, active_codes=int(nz.sum()), active_fraction=float(nz.mean()),
+                perplexity=float(np.exp(-(probabilities[nz] * np.log(probabilities[nz])).sum())),
+                max_probability=float(probabilities.max()), minimum_assignments=int(counts.min()),
+                codes_with_three_subjects_fraction=float(np.mean(np.asarray(per_code_subjects) >= 3)),
+                per_code_subjects=per_code_subjects, per_code_records=per_code_records,
+                nearest_prototype_RMS_median=float(np.sqrt(np.median(distance.min(-1))))))
+    return result
+
+
+def refinement_decision(summary, baseline, health, settings):
+    """Predeclared engineering screen: usage cannot substitute for fidelity."""
+    reference = {(r['dataset'], r['modality'], r['component']):r['value'] for r in baseline
+        if r['split'] == 'validation' and r['metric'] == 'NMSE'}
+    fidelity = []
+    for row in summary:
+        if row['split'] != 'validation' or row['metric'] != 'NMSE': continue
+        key = row['dataset'], row['modality'], row['component']; base = reference[key]
+        gain = 1 - row['value'] / base if row['value'] is not None and base > 0 else None
+        fidelity.append(dict(dataset=key[0], modality=key[1], component=key[2], baseline_NMSE=base,
+            NMSE=row['value'], relative_improvement=gain,
+            passed=bool(gain is not None and gain >= settings['minimum_waveform_improvement'])))
+    health_checks = []
+    for row in health:
+        required_active = settings['train_active_fraction'] if row['split'] == 'train' else settings['validation_active_fraction']
+        health_checks.append(dict(modality=row['modality'], component=row['component'], level=row['level'], split=row['split'],
+            passed=bool(row['active_fraction'] >= required_active and row['perplexity'] / row['size'] >= settings['effective_fraction']
+                and row['max_probability'] <= settings['maximum_code_probability']),
+            active_fraction=row['active_fraction'], effective_fraction=row['perplexity'] / row['size'],
+            maximum_code_probability=row['max_probability']))
+    return dict(fidelity_pass=all(r['passed'] for r in fidelity),
+        health_pass=bool(health_checks and all(r['passed'] for r in health_checks)),
+        fidelity=fidelity, health=health_checks,
+        selection='validation only; no posthoc change of success thresholds')
+
+
+def render_refinement(cfg, run, selected, *, export=None):
+    """Fixed-rule validation cases: teacher, previous hard decode, new hard decode."""
+    if selected is None: return []
+    import matplotlib; matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    run = Path(run); cache = run / 'cache'; manifest = json.loads((cache / 'manifest.json').read_text())
+    folder = run / 'refinement' / selected['candidate'] / ('seed_' + str(selected['seed']))
+    variant = 'hard' if selected['name'] == selected['candidate'] else 'vq' + selected['name'].rsplit('_vq', 1)[1]
+    continuous_file = folder / 'continuous/validation_predictions.npz'
+    folder = folder / variant
+    with np.load(run / 'baseline_hard/validation_predictions.npz') as data:
+        baseline = {k:data[k] for k in data.files}
+    with np.load(folder / 'validation_predictions.npz') as data:
+        updated = {k:data[k] for k in data.files}
+    if not np.array_equal(baseline['row_index'], updated['row_index']):
+        raise ValueError('comparison plots require identical validation identities')
+    continuous = None
+    if continuous_file.exists():
+        with np.load(continuous_file) as data: continuous = {k:data[k] for k in data.files}
+        if not np.array_equal(baseline['row_index'], continuous['row_index']):
+            raise ValueError('continuous/hard comparison requires identical identities')
+    indices = baseline['row_index']; rows = [manifest['rows'][i] for i in indices]
+    targets = {m + '_' + c:np.load(cache / (m + '_' + suffix + '.npy'), mmap_mode='r')[indices]
+        for m in MODALITIES for c, suffix in (('S','s'),('O','e'),('sum','u'))}
+    baseline_error = np.mean((baseline['hb_sum'] - targets['hb_sum']) ** 2, axis=(1,2))
+    destination = run if export is None else Path(export)
+    if export is not None: destination.mkdir(parents=True, exist_ok=False)
+    examples = []; files = []; output = destination / 'figures'; output.mkdir(exist_ok=True)
+    for dataset in sorted({r['dataset'] for r in rows}):
+        group = [i for i, row in enumerate(rows) if row['dataset'] == dataset]
+        used = set()
+        for label, quantile in [('first_identity', None), ('median_parent_error', .5), ('p90_parent_error', .9)]:
+            candidates = [i for i in group if rows[i]['subject'] not in used]
+            if not candidates: continue
+            if quantile is None: i = candidates[0]
+            else:
+                target = float(np.quantile(baseline_error[group], quantile))
+                i = min(candidates, key=lambda j: (abs(baseline_error[j] - target), rows[j]['id']))
+            used.add(rows[i]['subject']); examples.append(dict(row=rows[i], selection=label,
+                parent_sum_NMSE=float(baseline_error[i]), candidate_used_for_selection=False))
+            for modality, channels in [('eeg',1),('hb',2)]:
+                fig, axes = plt.subplots(3, channels, figsize=(12 if channels == 2 else 9, 8),
+                    squeeze=False, constrained_layout=True)
+                time_axis = np.arange(200) * .1
+                for row_index, component in enumerate(('S','O','sum')):
+                    key = modality + '_' + component
+                    truth = targets[key][i].reshape(200, channels)
+                    old = baseline[key][i].reshape(200, channels)
+                    new = updated[key][i].reshape(200, channels)
+                    for channel in range(channels):
+                        ax = axes[row_index, channel]
+                        ax.plot(time_axis, truth[:,channel], color='black', lw=1.7,
+                            label='Observed target' if component == 'sum' else 'Fixed Tak component target')
+                        ax.plot(time_axis, old[:,channel], color='#888888', ls='--', lw=1.5, label='Previous hard tokenizer')
+                        if continuous is not None:
+                            before_vq = continuous[key][i].reshape(200, channels)[:,channel]
+                            ax.plot(time_axis, before_vq, color='#D55E00', ls=':', lw=1.4, label='Refined before quantization')
+                        ax.plot(time_axis, new[:,channel], color='#0072B2', lw=1.6, label='Refined hard tokenizer')
+                        before = np.mean((old[:,channel] - truth[:,channel]) ** 2)
+                        after = np.mean((new[:,channel] - truth[:,channel]) ** 2)
+                        signal = ('HbO','HbR')[channel] if channels == 2 else 'EEG power proxy'
+                        meaning = dict(S='S: Tak output', O='O: fixed residual', sum='total: observed')[component]
+                        ax.set_title(f'{signal} | {meaning} | NMSE {before:.4g} -> {after:.4g}', fontsize=10)
+                        ax.set_xlabel('Event time (s)'); ax.set_ylabel('Frozen training SD'); ax.grid(alpha=.2)
+                        if row_index == 0: ax.legend(fontsize=7, loc='best')
+                candidate = next(c for c in cfg['refinement']['candidates'] if c['name'] == selected['candidate'])
+                support = 2 * (1 + 2 * candidate['context_radius'])
+                fig.suptitle(f'{selected["name"]} | seed {selected["seed"]} | {support}s processed-observation support | '
+                    f'14 -> {selected["bits"]:g} bits / modality / 2s\n'
+                    f'Validation: {rows[i]["id"]}\n'
+                    f'{label}; complete observations visible; no masked-model predictions', fontsize=10)
+                path = output / f'{dataset}_{label}_{modality}.png'
+                fig.savefig(path, dpi=250); plt.close(fig); files.append(str(path))
+    _json(destination / 'examples.json', examples)
+    report = json.loads((folder / 'summary.json').read_text())
+    health = [x for x in report['codebook_health'] if x['split'] == 'validation']
+    fig, axes = plt.subplots(1,2,figsize=(12,4),constrained_layout=True)
+    labels = [f'{x["modality"]}-{x["component"]}-L{x["level"]+1}' for x in health]
+    for ax, values, threshold, title in [
+        (axes[0],[x['active_fraction'] for x in health],cfg['refinement']['health']['validation_active_fraction'],'Active codes / 128'),
+        (axes[1],[x['perplexity']/x['size'] for x in health],cfg['refinement']['health']['effective_fraction'],'Effective codes / 128')]:
+        ax.bar(labels, values, color='#0072B2'); ax.axhline(threshold,color='#D55E00',ls='--',label='Predeclared threshold')
+        ax.set_ylim(0,1.05); ax.set_title(title); ax.tick_params(axis='x',rotation=35); ax.legend(fontsize=8)
+        for i,value in enumerate(values): ax.text(i,value+.01,f'{value:.2f}',ha='center',fontsize=8)
+    fig.suptitle(f'Validation codebook health | {selected["name"]} | seed {selected["seed"]} | {selected["bits"]:g} bits / modality / 2s')
+    path = output / 'selected_codebook_health.png'; fig.savefig(path,dpi=250);plt.close(fig);files.append(str(path))
+    suite_path = run / 'refinement_summary.json'
+    if suite_path.exists():
+        suite = json.loads(suite_path.read_text())
+        matching = [v for r in suite['candidates'] + suite.get('confirmation', [])
+            if r.get('status') == 'completed' and r['candidate']['name'] == selected['candidate']
+            for v in r['variants'] if v['name'] == selected['name']]
+        if matching:
+            datasets = sorted({r['dataset'] for r in report['decision']['fidelity']})
+            labels = ['EEG S','EEG O','EEG total','Hb S','Hb O','Hb total']
+            keys = [(m,c) for m in ('eeg','hb') for c in ('S','O','sum')]
+            fig, axes = plt.subplots(1,len(datasets),figsize=(13,5),squeeze=False,constrained_layout=True)
+            for ax,dataset in zip(axes[0],datasets):
+                values = np.array([[next(r['relative_improvement']*100 for r in v['decision']['fidelity']
+                    if (r['dataset'],r['modality'],r['component']) == (dataset,*key)) for key in keys] for v in matching])
+                mean = values.mean(0); spread = np.stack((mean-values.min(0),values.max(0)-mean))
+                ax.bar(np.arange(6),mean,color=['#0072B2']*3+['#009E73']*3,yerr=spread,capsize=4)
+                for i,value in enumerate(mean): ax.text(i,value+3,f'{value:.1f}%',ha='center',fontsize=10)
+                ax.axhline(30,color='#D55E00',ls='--',label='Predeclared 30% improvement')
+                ax.axhline(0,color='black',lw=.8)
+                ax.set_xticks(np.arange(6),labels,rotation=25)
+                ax.set_ylim(min(-5,float(values.min())-10),105)
+                ax.set_ylabel('NMSE reduction versus previous hard tokenizer (%)')
+                ax.set_title(dataset); ax.legend(fontsize=8);ax.grid(axis='y',alpha=.2)
+            fig.suptitle(f'{selected["name"]}: mean and range of {len(matching)} seeds on the same validation subjects\n'
+                f'{selected["bits"]:g} versus 14 bits / modality / 2s; fixed training-SD denominator; subjects weighted equally',fontsize=11)
+            path=output/'seed_fidelity_comparison.png';fig.savefig(path,dpi=250);plt.close(fig);files.append(str(path))
+    return files

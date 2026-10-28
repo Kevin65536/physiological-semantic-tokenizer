@@ -1,0 +1,107 @@
+schema: dual_component_refinement_v1
+experiment_id: TK-DUAL-REFINE-v2
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml
+refinement:
+  parent_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3
+  allowed_splits:
+  - train
+  - validation
+  selection_split: validation
+  teacher: unchanged_fixed_Tak_full_output_and_fixed_full_residual
+  input_scope: strictly_same_modality_existing_six_EEG_channels_five_bands_or_same_Hb_pair;
+    no cross-modal values
+  test_use: none_during_iteration_or_selection
+  seed: 17
+  confirmation_seeds:
+  - 29
+  - 43
+  batch_size: 128
+  checkpoint_every: 250
+  evaluation_batch_size: 256
+  codebook_size: 128
+  waveform_vq_levels:
+  - 1
+  - 2
+  codebook_fit_patches: 32768
+  codebook_fit_iterations: 100
+  nominal_bits_per_modality_patch:
+    one_level: 14
+    two_levels: 28
+  continuous_sidecars: false
+  stopping: finite_candidates_then_two_seed_confirmation_of_validation_choice
+  health:
+    train_active_fraction: 0.95
+    validation_active_fraction: 0.9
+    effective_fraction: 0.5
+    maximum_code_probability: 0.08
+    minimum_waveform_improvement: 0.3
+  selection: all_health_and_all_dataset_component_NMSE_first_then_lowest_rate_then_mean_relative_validation_error
+  candidates:
+  - name: spectral_local
+    input_mode: spectral
+    context_radius: 0
+    training_mode: continuous_student
+    initial: fresh
+    steps: 2500
+    learning_rate: 0.0005
+    balance_components: true
+    derivative_weight: 0.0
+  - name: spectral_context6
+    input_mode: spectral
+    context_radius: 1
+    training_mode: continuous_student
+    initial: fresh
+    steps: 3000
+    learning_rate: 0.0005
+    balance_components: true
+    derivative_weight: 0.0
+  - name: spectral_temporal6
+    input_mode: spectral
+    context_radius: 1
+    training_mode: continuous_student
+    initial: fresh
+    steps: 3000
+    learning_rate: 0.0005
+    balance_components: true
+    derivative_weight: 0.0
+    encoder_kind: temporal
+    width: 64
+  - name: spectral_temporal6_metadata
+    input_mode: spectral
+    context_radius: 1
+    training_mode: continuous_student
+    initial: fresh
+    steps: 3000
+    learning_rate: 0.0005
+    balance_components: true
+    derivative_weight: 0.0
+    encoder_kind: temporal
+    width: 64
+    include_metadata: true
+  - name: observation_context6_long
+    input_mode: observation
+    context_radius: 1
+    training_mode: continuous_student
+    initial: refinement_continuous
+    initial_candidate: observation_context6
+    initial_seed: 17
+    steps: 3000
+    learning_rate: 0.0003
+    balance_components: true
+    derivative_weight: 0.0
+  initial_refinement_run: 20261028_refine_v1
+resources:
+  devices:
+  - cuda:0
+  gpu_workers_per_device: 2
+  max_new_gpu_memory_mib: 4096
+  torch_threads: 2
+  numerical_threads: 1
+claim_limits:
+- healthy_occupancy_does_not_replace_waveform_fidelity
+- compare_bits_and_context_support_explicitly
+- context6_and_context10_require_support_expanded_joint_masking_before_downstream_use
+- component_oracle_is_not_a_deployable_student
+- no_continuous_amplitude_or_mean_sidecars
+- validation_selection_not_fresh_confirmation
+- EEG_frontend_reads_only_registered_EEG_features_and_known_metadata_never_Hb_or_teacher_components

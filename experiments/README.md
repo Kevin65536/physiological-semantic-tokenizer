@@ -382,6 +382,22 @@ define the public input and interpretation boundaries. Tests are
 `test_dual_component_tokenizer_analysis.py`. The retained functional generation
 below keeps its original model, target and evidence identity.
 
+Rapid waveform/codebook refinement uses the same runner with
+`--config configs/physiology_semantic_tokenizer/dual_component_refinement_v1.yaml
+--stage refine --output <fresh_run>` under a durable supervisor. It freezes
+the retained target producer and uses training/validation subjects only. The
+finite controls compare continuous-checkpoint VQ recovery, an observation-space
+frontend, declared wider context, and waveform-space one/two-level quantization.
+All bitrate and context differences are explicit. `test_dual_component_refinement.py`
+covers support closure, teacher-input exclusion, fixed budgets, hard decoding
+and separate health/fidelity decisions.
+The same entry accepts the versioned
+[`v2`](configs/physiology_semantic_tokenizer/dual_component_refinement_v2.yaml) and
+[`v3`](configs/physiology_semantic_tokenizer/dual_component_refinement_v3.yaml)
+contracts for same-modality spectral/temporal frontends and finite seed repeats.
+All preprocessing fits use training subjects; repeated seeds retain the same
+validation set and the original quality thresholds.
+
 Response semantics, component attribution and conditional continuous or discrete representations.
 
 | Diagnostic / usage | Entry | Config | Targeted tests |

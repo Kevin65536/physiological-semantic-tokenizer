@@ -200,6 +200,28 @@ benchmark is not a fixed-budget tokenizer result. The
 [runtime profile](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3/runtime_profile.json)
 measures synthetic compute throughput only, not scientific performance.
 
+Read the [analysis summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3/analysis/summary.json)
+with its [subject reconstruction table](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3/analysis/reconstruction_subjects.csv)
+and [paired masked comparisons](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3/analysis/masked_paired_comparisons.csv).
+The [teacher sensitivity record](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3/sensitivity/summary.json)
+preserves the unavailable distinct-alternative comparison. Example curves are
+under each explicit `masked/<route>/seed_<seed>/trace_eeg.png` and
+`trace_hb.png`; they use the first retained validation identity for illustration.
+
+Waveform/codebook refinement retains the parent teacher and training scales.
+Read each finite round's own summary:
+[`refine v1`](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_refine_v1/refinement_summary.json),
+[`refine v2`](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_refine_v2/refinement_summary.json),
+and [`refine v3 with seed repetitions`](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_refine_v3/refinement_summary.json).
+Their versioned contracts use the same names under `configs/physiology_semantic_tokenizer/`.
+`refinement/<candidate>/seed_<seed>/{continuous,vq1,vq2}/` holds validation
+predictions, per-subject metrics and codebook usage; `waveform_dictionaries.npz`
+and each level's integer IDs preserve independent hard decoding. The final
+[`versioned figure export`](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_refine_v3/analysis_export_v2/figure_index.json)
+shows fixed validation examples, the continuous-to-hard gap and seed variation.
+Test subjects are excluded from refinement; same-validation seed repetitions do
+not supply independent data confirmation or a new masked-prediction result.
+
 ## Frozen relationships and local shape tokens — 2026-10-25
 
 The completed [TK-FUNCTIONAL parent summary](runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1/summary.json)
