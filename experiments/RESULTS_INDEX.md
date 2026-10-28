@@ -69,6 +69,13 @@ The [complete summary](runs/physiology_semantic_tokenizer/shared_driver_sensor_p
 [independent array audit](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/array_audit.json)
 and [common-support residual analysis](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/residual_analysis_v1/residual_summary.json)
 retain separate full-plan and common-success denominators.
+The [2026-10-28 detailed report](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/report_20261028_v6/REPORT.pdf)
+explains the configurations, selection and negative results; the
+[complete waveform atlas](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/report_20261028_v6/WAVEFORM_ATLAS.pdf)
+shows every development/evaluation target, including failed joint fits.
+Both use bitmap figures and selectable body text. Their
+[delivery checks](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/report_20261028_v6/delivery_checks.json)
+record rendering and evidence verification; the report does not replace the run.
 The [synthetic pilot](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_synthetic_v1/synthetic_summary.json)
 is software evidence. The [versioned preparation repair](runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/revision.json)
 points to the preserved first attempt, which failed at its path-type boundary

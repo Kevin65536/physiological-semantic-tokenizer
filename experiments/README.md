@@ -134,6 +134,13 @@ comparison on identical successful windows and the prediction pairing contrasts.
 This reads retained arrays only and preserves the original run summaries.
 Tests: `test_shared_driver_sensor_proxy_data.py`, `test_low_capacity_eeg_proxy.py`,
 `test_shared_driver_sensor_proxy_runner.py`, `test_sensor_proxy_contract_audit.py`.
+The read-only Chinese report entry is
+[`render_shared_driver_sensor_proxy.py`](scripts/render_shared_driver_sensor_proxy.py):
+`--run <completed_run> --output <fresh_child_export>`. It verifies retained
+arrays and produces a searchable PDF/HTML report plus a complete waveform atlas,
+with PNG figures and retained LaTeX sources. Configuration explanations, model
+selection, failures and common-support residuals stay distinct. Report-specific
+checks are in `test_sensor_proxy_report.py`.
 
 The retained 4 Hz Tak comparison is selected explicitly with `--tak-comparison
 --tak-stage <check|plan|synthetic|prepare|pilot|measured|sensitivity|summarize|verify|audit>
