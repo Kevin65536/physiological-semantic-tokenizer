@@ -140,6 +140,33 @@ numerical search boundaries and offline feature completion do not establish
 physiological truth or full Tak DCM replication. Earlier exports and the aborted
 preflight retain their original identities and are not replacement results.
 
+## Tak disjoint-subset parameter repeatability — 2026-10-28
+
+The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_tak_repeatability_v1.yaml)
+owns the new 10 Hz reestimation experiment on the retained Tak cohort, using
+the same prefrontal montage and original development identities. Its
+[frozen window/condition plan](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_repeatability_10hz_v1_run2/plan.json),
+[completed fitting summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_repeatability_10hz_v1_run2/measured_summary.json)
+and [read-only array-checked analysis](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_repeatability_10hz_v1_run2/repeatability_analysis_v1/summary.json)
+are the evidence entrypoints. Each dot is an actual estimate from a distinct
+nonoverlapping data subset; native record/support membership remains explicit.
+REFED same-emotion primary and other-emotion supplementary videos stay separate.
+
+The [PNG/HTML export](../docs/reports/interpretability_analysis/staging/02_parameter_individuality_expanded_20261028_v3/index.html)
+and [bitmap PDF atlas](../docs/reports/interpretability_analysis/staging/02_parameter_individuality_expanded_20261028_v3/FIGURE_ATLAS.pdf)
+show all parameter estimates, within-support and across-support dispersion,
+subject-cluster intervals, paired reconstruction and complete failure counts.
+They preserve the distinction between numerical optimization stability and
+stable individual characteristics; the old 4 Hz two-window export remains historical.
+
+Retain the resolved contracts, frozen fitting source, development-coordinate
+provenance, prepared arrays, per-task JSON/NPZ, all failures, supervisor/resource
+records and the versioned analysis source/tables. The
+[first metadata preflight](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_repeatability_10hz_v1/preflight_failure.json)
+stopped before signal reads because the Visual calibration-coordinate suffix
+was omitted; the replacement preserves that montage identity. No original data
+or protected comparison materials were changed.
+
 ## Independent component/residual vocabularies — 2026-10-28
 
 The [versioned contract](configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml)

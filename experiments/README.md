@@ -178,6 +178,31 @@ After verification and the independent retained-array audit, render with
 `scripts/render_shared_driver_reconstruction.py --tak-comparison --run <run>
 --output <fresh_export>` for the searchable PDF and complete bitmap waveform atlas.
 
+The same renderer's `--tak-parameter-individuality --run <completed_tak_v1_run>
+--output <fresh_export>` reads only retained task JSON to compare the final
+κ/τ estimates at log-prior SD 0.125, 0.25 and 0.5. It exports subject plots,
+independent-record repeats, multistart spans, matched reconstruction comparisons,
+source-linked CSVs and a bitmap-figure PDF. Shared parameter groups and fixed
+reference values never count as independent stable repeats; failed fits remain
+in the planned denominator. This is descriptive reporting, with no signal reads
+or refits. Tests: `test_tak_parameter_report.py`.
+
+The new disjoint-data repeatability experiment uses the same evaluation entry
+with `--tak-repeatability --repeat-stage
+<check|plan|synthetic|prepare|pilot|run|summarize|analyze>` and
+[`shared_driver_tak_repeatability_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_repeatability_v1.yaml).
+It preserves the original 24 evaluation subjects and prefrontal montage, prepares
+new 10 Hz coordinates from the original development subjects, and independently
+reestimates constant κ/τ from metadata-selected nonoverlapping 90 s subsets.
+Native record/support membership, same-condition and supplementary REFED videos,
+all planned windows and failures remain explicit. Preparation and fitting require
+the recorded durable supervisor; `analyze` reads completed retained results only
+and writes a fresh child export (`--repeat-analysis-output` optional).
+Render with `render_shared_driver_reconstruction.py --tak-repeatability
+--run <completed_run> --output <fresh_export>`; `--repeat-analysis` can select
+an explicit analysis version. Tests: `test_tak_repeatability.py` and the existing
+Tak/10 Hz suites. [Protocol](../docs/EXPERIMENT_PLAN.md#tak-参数的更多不重叠数据重复估计2026-10-28).
+
 Automatic fNIRS morphology scoring reads the retained targets and predictions
 without refitting or changing the parent evidence:
 

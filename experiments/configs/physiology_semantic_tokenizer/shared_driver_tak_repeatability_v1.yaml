@@ -1,0 +1,63 @@
+schema: shared_driver_tak_repeatability_v1
+experiment_id: SSM-TAK-REPEATABILITY-v1
+seed: 20261028
+base_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml
+identity_parent: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_tak_v1_run1
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+run_name: 20261028_tak_repeatability_10hz_v1
+scope: public_24_subject_parameter_reestimation_on_disjoint_data
+data:
+  cache_root: data/cache/physiology_semantic_clean_v5
+  protected_data: forbidden
+  raw_reads: registered_native_EEG_only
+  fnirs_input: unified_cached_fnirs_v1
+  subjects: exact_24_subjects_from_identity_parent_plan
+  calibration: parent_development_identities_recomputed_at_10Hz_no_evaluation_scale_fitting
+  channels: same_prefrontal_Hb_pair_and_six_EEG_channels_as_identity_parent
+  labels_as_model_inputs: false
+selection:
+  duration_s: 90
+  overlap: forbidden_within_native_record_in_both_clocks
+  rule: chronological_greedy_nonoverlap_then_evenly_spaced_metadata_only
+  single_trial: motor_imagery_sessions_00_02_04_two_windows_each
+  simultaneous: cnt_wg_three_centrally_declared_continuous_supports_two_windows_each
+  visual: same_Probe1_six_windows_total_balanced_over_available_Part_records
+  refed_primary: first_90s_of_all_three_LVLA_Sad_videos
+  refed_supplement: first_90s_of_other_videos_with_at_least_90s_separately_labelled
+  exclude: missing_clock_support_unknown_labels_unsupported_channels_and_short_records_retained
+model:
+  fitted_parameters: [kappa, tau]
+  log_prior_sd: [0.125, 0.125]
+  parameter_target: one_time_constant_parameter_pair_per_native_record_support_and_Hb_channel
+  replication: estimate_that_pair_separately_from_disjoint_90s_subsets_no_cross_subset_parameter_tying
+  distinction: repeated_estimates_of_one_constant_not_additional_independent_subjects_or_time_varying_physiology
+  baseline: fixed_kappa_0p64_tau_2_with_identical_driver_and_four_initial_state_freedom
+  condition: joint_full
+  reference_and_solver: unchanged_10Hz_base_contract_including_dt_over_0p25_data_weight
+synthetic:
+  seeds: [0, 1, 2]
+  scenarios: [tak_nonrest]
+  duration_s: 90
+  role: numerical_and_tensor_check_not_measured_parameter_qualification
+  required: all_narrow_tasks_converged_and_integration_passed_before_measured_reads
+endpoints:
+  primary: per_subject_parameter_distribution_separating_within_support_and_cross_record_reestimation
+  secondary: subject_equal_Hb_NRMSE_paired_to_fixed_parameter_baseline
+  diagnostic: all_failed_planned_windows_multistart_spread_boundaries_and_training_coordinate_provenance
+  null: within_subject_reestimation_dispersion_is_not_smaller_than_between_subject_dispersion
+  summary: log_parameters_geometric_centers_and_multiplicative_spread_no_window_as_subject_pseudoreplication
+  acceptance: descriptive_no_new_physiological_qualification_threshold
+  stopping: finite_metadata_frozen_inventory_no_outcome_based_window_replacement_or_expansion
+resources:
+  max_workers: 40
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  supervisor: user_systemd_with_linger
+  concurrency: measured_pilot_throughput_memory_and_live_competition
+claim_limits:
+  - 10Hz_new_version_separate_from_historical_4Hz_figures
+  - full_record_filtered_Hb_and_window_EEG_are_offline_conditional_coordinates
+  - common_narrow_prior_can_reduce_both_within_and_between_subject_variation
+  - same_record_subsets_are_dependent_reestimates_not_independent_sessions
+  - different_REFED_emotions_are_supplementary_not_same_condition_repeats
+  - preserve_failed_and_unstable_results_no_visual_selection_for_a_positive_conclusion
