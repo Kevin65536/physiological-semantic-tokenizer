@@ -16,7 +16,7 @@ come from the [project registry view](../docs/PROJECT_STATUS.md).
 | Export figures, reports or parameter explanations | [Visualization and report exports](#visualization-and-report-exports) |
 | Replay T3, Step5 or overnight diagnostics | [Recorded diagnostic entries](#t3-step5-and-overnight-diagnostic-replay) |
 | Find retained evidence | [Result index](RESULTS_INDEX.md) and [run-directory contract](runs/README.md) |
-| Compare downstream task-label performance | [Comparison methods](../comparative_methods/README.md), [new rebenchmark design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1) and [retained comparison protocol](../docs/comparisons/PROTOCOL.md) |
+| Compare downstream task-label performance | [Comparison methods](../comparative_methods/README.md), [new rebenchmark design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1), [retained comparison protocol](../docs/comparisons/PROTOCOL.md), and [dated comparison report renderer](scripts/render_downstream_comparison_report.py) (`--summary`, `--paper-values`, fresh `--output`; report only, no fitting) |
 
 The SSM suites evaluate observation reconstruction, reliability and conditional
 representations. Downstream task-label benchmarks have a separate comparison

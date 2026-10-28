@@ -1070,6 +1070,12 @@ its own question and evidence contract.
 
 ## Comparison methods
 
+The [2026-10-28 two-round comparison report](../docs/reports/interpretability_analysis/20261028_downstream_comparison_v3/REPORT.md)
+and [PDF](../docs/reports/interpretability_analysis/20261028_downstream_comparison_v3/REPORT.pdf)
+explain input-window accounting, channel/configuration changes, aggregation
+sensitivity, same-round LP/FT contrasts and author-paper comparability. They are
+dated communication exports; their source manifest links the owning run evidence.
+
 The independent [downstream rebenchmark v1](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1)
 retains its [frozen inventory, splits and job manifest](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/),
 [resource measurements](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/resource_summary.json),
