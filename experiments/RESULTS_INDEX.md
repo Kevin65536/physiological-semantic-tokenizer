@@ -138,6 +138,17 @@ recomputes preparation and coordinates without reusing its numerical targets.
 Neither vocabulary reconstruction nor patch-boundary smoothness establishes
 physiological truth or whole-trajectory Tak compatibility.
 
+The [v2 GPU-budget interruption](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/interruption.json)
+retains the over-budget benchmark and original code. The
+[v3 consumer launch](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3/launch.json)
+uses committed code with separate training-step and GPU-memory budgets.
+Its [input-reuse record](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3/input_reuse.json)
+identifies the unchanged v2 target producer, complete failure denominator and
+frozen scales. Benchmark and model checkpoints start fresh; the interrupted
+benchmark is not a fixed-budget tokenizer result. The
+[runtime profile](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3/runtime_profile.json)
+measures synthetic compute throughput only, not scientific performance.
+
 ## Frozen relationships and local shape tokens — 2026-10-25
 
 The completed [TK-FUNCTIONAL parent summary](runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1/summary.json)
