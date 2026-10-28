@@ -1063,7 +1063,15 @@ def _validate_observation_inputs(
 def _physical_checks(
     states: np.ndarray,
     parameters: BalloonParameters,
+    *,
+    _rest_equilibrium: bool | None = None,
 ) -> dict[str, Any]:
+    """Check states; internal replays may reuse their fixed-parameter rest check.
+
+    The one-state branch keeps every field and the same extraction arithmetic,
+    while avoiding array reductions for each individual RK stage. Parameters
+    are validated by callers before entering this private implementation.
+    """
     values = np.asarray(states, dtype=np.float64)
     checks: dict[str, Any] = {
         "finite": bool(np.all(np.isfinite(values))),
@@ -1085,31 +1093,49 @@ def _physical_checks(
     if values.ndim != 2 or values.shape[1] != _STATE_DIM or not checks["finite"]:
         return checks
     f, v, p, q = (values[:, index] for index in (2, 3, 4, 5))
-    checks["minimum_f"] = float(np.min(f))
-    # Descriptive extreme-state diagnostic, not a physiological admission gate.
-    checks["flow_below_0_01_count"] = int(np.sum(f < .01))
-    checks["minimum_v"] = float(np.min(v))
-    checks["minimum_p"] = float(np.min(p))
-    checks["minimum_q"] = float(np.min(q))
-    positive = (f > 0.0) & (v > 0.0) & (p > 0.0) & (q > 0.0)
-    checks["positive_fvpq"] = bool(np.all(positive))
-    if checks["positive_fvpq"]:
-        extraction = np.asarray([_extraction(float(value), parameters.fixed.E0)[0] for value in f])
-        checks["minimum_extraction"] = float(np.min(extraction))
-        checks["maximum_extraction"] = float(np.max(extraction))
-        log_complement = np.array([extraction_log_complement(float(value), parameters.fixed.E0) for value in f])
-        checks["oxygen_extraction_in_unit_interval"] = bool(np.all(np.isfinite(log_complement) & (log_complement < 0)))
-        checks["extraction_float_saturation_count"] = int(np.sum(extraction == 1.0))
-        checks["minimum_log_one_minus_extraction"] = float(np.min(log_complement))
-        hbt = parameters.fixed.P0 * p
-        hbr = parameters.fixed.Q0 * q
-        hbo = hbt - hbr
-        checks["absolute_hb_nonnegative"] = bool(np.all((hbt >= 0.0) & (hbr >= 0.0) & (hbo >= 0.0)))
-        checks["hbr_not_above_hbt"] = bool(np.all(hbr <= hbt + 1e-12))
-    rest = physical_to_transformed((0.0, 0.0, 1.0, 1.0, 1.0, 1.0))
-    checks["rest_equilibrium"] = bool(
-        np.allclose(balloon_rhs(rest, parameters), 0.0, atol=1e-10)
-    )
+    if len(values) == 1:
+        f, v, p, q = f[0], v[0], p[0], q[0]
+        checks.update(minimum_f=float(f), minimum_v=float(v), minimum_p=float(p),
+                      minimum_q=float(q), flow_below_0_01_count=int(f < .01),
+                      positive_fvpq=bool(f > 0.0 and v > 0.0 and p > 0.0 and q > 0.0))
+        if checks["positive_fvpq"]:
+            extraction = _extraction(float(f), parameters.fixed.E0)[0]
+            log_complement = extraction_log_complement(float(f), parameters.fixed.E0)
+            hbt = parameters.fixed.P0 * p
+            hbr = parameters.fixed.Q0 * q
+            hbo = hbt - hbr
+            checks.update(minimum_extraction=extraction, maximum_extraction=extraction,
+                oxygen_extraction_in_unit_interval=bool(np.isfinite(log_complement) and log_complement < 0),
+                extraction_float_saturation_count=int(extraction == 1.0),
+                minimum_log_one_minus_extraction=log_complement,
+                absolute_hb_nonnegative=bool(hbt >= 0.0 and hbr >= 0.0 and hbo >= 0.0),
+                hbr_not_above_hbt=bool(hbr <= hbt + 1e-12))
+    else:
+        checks["minimum_f"] = float(np.min(f))
+        # Descriptive extreme-state diagnostic, not a physiological admission gate.
+        checks["flow_below_0_01_count"] = int(np.sum(f < .01))
+        checks["minimum_v"] = float(np.min(v))
+        checks["minimum_p"] = float(np.min(p))
+        checks["minimum_q"] = float(np.min(q))
+        positive = (f > 0.0) & (v > 0.0) & (p > 0.0) & (q > 0.0)
+        checks["positive_fvpq"] = bool(np.all(positive))
+        if checks["positive_fvpq"]:
+            extraction = np.asarray([_extraction(float(value), parameters.fixed.E0)[0] for value in f])
+            checks["minimum_extraction"] = float(np.min(extraction))
+            checks["maximum_extraction"] = float(np.max(extraction))
+            log_complement = np.array([extraction_log_complement(float(value), parameters.fixed.E0) for value in f])
+            checks["oxygen_extraction_in_unit_interval"] = bool(np.all(np.isfinite(log_complement) & (log_complement < 0)))
+            checks["extraction_float_saturation_count"] = int(np.sum(extraction == 1.0))
+            checks["minimum_log_one_minus_extraction"] = float(np.min(log_complement))
+            hbt = parameters.fixed.P0 * p
+            hbr = parameters.fixed.Q0 * q
+            hbo = hbt - hbr
+            checks["absolute_hb_nonnegative"] = bool(np.all((hbt >= 0.0) & (hbr >= 0.0) & (hbo >= 0.0)))
+            checks["hbr_not_above_hbt"] = bool(np.all(hbr <= hbt + 1e-12))
+    if _rest_equilibrium is None:
+        rest = physical_to_transformed((0.0, 0.0, 1.0, 1.0, 1.0, 1.0))
+        _rest_equilibrium = bool(np.allclose(balloon_rhs(rest, parameters), 0.0, atol=1e-10))
+    checks["rest_equilibrium"] = _rest_equilibrium
     return checks
 
 

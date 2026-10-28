@@ -312,12 +312,18 @@ def replay_nonlinear_driver(driver, initial_state, parameters, dt, *, substeps=4
     required = ('finite', 'positive_fvpq', 'oxygen_extraction_in_unit_interval',
                 'absolute_hb_nonnegative', 'hbr_not_above_hbt', 'rest_equilibrium')
     failure = None
+    rest_equilibrium = None
 
     def check(vascular, value, step, substep, stage):
-        nonlocal failure
-        physical = np.r_[value, vascular]
+        nonlocal failure, rest_equilibrium
+        physical = np.empty(6)
+        physical[0], physical[1:] = value, vascular
         try:
-            checks = dict(core.run_physical_checks(physical[None, :], parameters))
+            # The frozen parameter object was validated at entry. Reuse only
+            # its rest-equilibrium result; every stage retains all state checks.
+            checks = core._physical_checks(physical[None, :], parameters,
+                                            _rest_equilibrium=rest_equilibrium)
+            rest_equilibrium = checks['rest_equilibrium']
             valid = all(checks[key] for key in required)
         except (ValueError, FloatingPointError, OverflowError) as exc:
             checks, valid = dict(error=repr(exc)), False
