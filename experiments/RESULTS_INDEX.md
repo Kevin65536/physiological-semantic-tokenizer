@@ -968,7 +968,11 @@ retains its [frozen inventory, splits and job manifest](../comparative_methods/r
 [resource measurements](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/resource_summary.json),
 source snapshot and service record in the shared owning run. Method-specific final
 fits remain under `<method>/runs/downstream_rebench_v1/20261016_v2/`; the final
-`aggregate/` consumes that exact planned matrix. Keep the original smoke failures,
+`aggregate/` consumes the current versioned manifest recorded by the controller.
+The [2026-10-27 scope revision](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/jobs_20261027_without_normwear.json)
+removes the unstarted NormWear jobs at the user's request; its
+[service handover record](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/launch_20261027_scope_revision.json)
+preserves the original manifest and existing worker identities. Keep the original smoke failures,
 corrected REFED smoke and `input_audit_v2/` multimodal coverage audit together.
 The superseded `20261016_v1/` dispatch retains its initial baselines and interrupted
 work. The revised run preserves its first failed BrainFusion smoke and uses

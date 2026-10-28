@@ -2345,6 +2345,18 @@
       "role": "diagnostic"
     },
     {
+      "id": "e.downstream_rebench_scope_20261027_jobs",
+      "label": "2026-10-27移除未启动NormWear后的版本化任务矩阵",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/jobs_20261027_without_normwear.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_rebench_scope_20261027_launch",
+      "label": "2026-10-27队列缩减及训练进程无重复接管记录",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/launch_20261027_scope_revision.json",
+      "role": "run_manifest"
+    },
+    {
       "id": "e.sensor_proxy_contract",
       "label": "低容量传感器代理固定Tak版本合同",
       "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1.yaml",
@@ -6443,6 +6455,35 @@
       ],
       "headline": true,
       "next_step": "新研究从Tak与10 Hz代理合同出发，按版本声明数据/端点/输出及开发集变换。空间、连续状态和teacher扩展需同时适配Tak状态与10 Hz目标；以独立记录检验观测映射、条件参数和生理资格。"
+    },
+    {
+      "state_id": "comparison.downstream_rebench@2026-10-27.v1",
+      "entity": "comparison.downstream_rebench",
+      "label": "统一测量v5下游任务性能重新获取",
+      "track": "comparisons",
+      "order": 100,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "按用户2026-10-27明确要求，从当前队列移除NormWear全部120个从未启动的任务（30个LP、90个FT），其历史结果和原始988节点清单保留。当前版本化矩阵包含868节点：855个下游评价、12个EFRM预训练及最终汇总；其他方法的工作进程、任务合同、候选、数据和输出路径保持不变。控制器通过现有恢复入口接管全部6个在途训练进程，PID身份与尝试次数均未改变；最终汇总使用缩减后的清单，不将移出任务记为训练失败或缺失结果。27项调度测试及独立systemd进程接管测试通过，持久服务继续运行。",
+      "evidence_ids": [
+        "e.downstream_rebench_contract",
+        "e.downstream_rebench_scope_20261027_jobs",
+        "e.downstream_rebench_scope_20261027_launch",
+        "e.downstream_rebench_v2_resources",
+        "e.downstream_rebench_v2_source",
+        "e.downstream_rebench_v2_progress"
+      ],
+      "supersedes": [
+        "comparison.downstream_rebench@2026-10-17.v2"
+      ],
+      "updated_at": "2026-10-27T15:36:16.112145+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": true,
+      "next_step": "按照控制器记录的当前版本化任务清单继续执行其余方法，保留全部计划分母和失败；完整轨道终态后核验被试/种子等权统计、目标覆盖、REVE重叠及方法准入。NormWear不再属于本次执行范围，不因历史配置仍列有该方法而重新派发。"
     },
     {
       "state_id": "main.sensor_proxy@2026-10-27.v1",

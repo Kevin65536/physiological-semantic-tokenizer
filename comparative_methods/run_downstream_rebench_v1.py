@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import ast
 import collections
+import copy
 import datetime as dt
 import fcntl
 import hashlib
@@ -870,6 +871,95 @@ class Scheduler:
                 self.lock_stream = None
 
 
+def remove_pending_method(manifest_path: Path, method: str, revised_path: Path) -> dict[str, Any]:
+    """Version a queue reduction while preserving all retained worker identities.
+
+    The controller must be detached first. Its live workers may continue and
+    are adopted by the normal resume path after this metadata-only transition.
+    """
+    controller = Scheduler(manifest_path)
+    revised_path = revised_path.resolve()
+    snapshot_path = revised_path.with_name(revised_path.stem + "_previous_status.json")
+    controller.acquire()
+    try:
+        previous = read_json(controller.root / "scheduler_status.json")
+        if not previous or previous.get("manifest_sha256") != controller.manifest_hash:
+            raise ValueError("queue reduction requires matching retained controller state")
+        if same_process(previous.get("controller_identity")):
+            raise ValueError("detach the live controller before reducing its queue")
+        if revised_path.parent != controller.root or revised_path.exists() or snapshot_path.exists():
+            raise ValueError("revised manifest must be a fresh file in the existing run_root")
+        records = previous.get("jobs", {})
+        if set(records) != set(controller.jobs):
+            raise ValueError("retained job identities differ from the original manifest")
+        removed = {key for key, job in controller.jobs.items() if job.get("method") == method}
+        if not removed or removed == set(controller.jobs):
+            raise ValueError("method must identify a nonempty proper subset of scheduled jobs")
+        for key in removed:
+            record = records[key]
+            if record["status"] != "pending" or record.get("attempt", 0) != 0:
+                raise ValueError(f"{key}: only never-started pending jobs can be removed")
+            output = Path(controller.jobs[key]["output_dir"])
+            if same_process(record.get("process_identity")) or any((output / name).exists() for name in ("status.json", "result.json")):
+                raise ValueError(f"{key}: worker evidence prevents pending-job removal")
+        revised = copy.deepcopy(controller.manifest)
+        retained = []
+        for job in revised["jobs"]:
+            if job["id"] in removed:
+                continue
+            if job.get("profile_from") in removed:
+                raise ValueError(f"{job['id']}: retained resource profile depends on removed jobs")
+            affected = removed.intersection(job.get("dependencies", []))
+            if affected:
+                if job.get("kind") != "aggregate":
+                    raise ValueError(f"{job['id']}: retained training depends on removed jobs")
+                if records[job["id"]]["status"] != "pending" or records[job["id"]].get("attempt", 0):
+                    raise ValueError("cannot revise an aggregate that has already started")
+                job["dependencies"] = [key for key in job["dependencies"] if key not in removed]
+            if job.get("kind") == "aggregate":
+                if records[job["id"]]["status"] != "pending" or records[job["id"]].get("attempt", 0):
+                    raise ValueError("cannot revise an aggregate that has already started")
+                command = job["command"]
+                if command.count("--schedule") != 1:
+                    raise ValueError("aggregate must declare exactly one --schedule argument")
+                index = command.index("--schedule") + 1
+                if index >= len(command) or Path(command[index]).resolve() != controller.manifest_path:
+                    raise ValueError("aggregate schedule does not match the original manifest")
+                command[index] = str(revised_path)
+            retained.append(job)
+        revised["jobs"] = retained
+        if "unsupported_cells" in revised:
+            revised["unsupported_cells"] = [cell for cell in revised["unsupported_cells"] if cell.get("method") != method]
+        revised["scope_revision"] = {
+            "operation": "remove_never_started_method", "method": method, "created_at": utc_now(),
+            "previous_manifest": str(controller.manifest_path), "previous_manifest_sha256": controller.manifest_hash,
+            "previous_status": str(snapshot_path), "removed_job_ids": sorted(removed),
+        }
+        # Keep the old contract and state snapshot; only the current runtime
+        # pointer changes. All retained commands and attempts remain intact.
+        atomic_json(snapshot_path, previous)
+        atomic_json(revised_path, revised)
+        _, manifest_hash = load_manifest(revised_path)
+        current = copy.deepcopy(previous)
+        current["jobs"] = {key: value for key, value in records.items() if key not in removed}
+        counts = dict(collections.Counter(record["status"] for record in current["jobs"].values()))
+        current.update(manifest_path=str(revised_path), manifest_sha256=manifest_hash,
+                       controller_identity=None, updated_at=utc_now(), eta_seconds=None)
+        current["progress"] = {
+            "total": len(retained), "counts": counts,
+            "terminal": sum(counts.get(state, 0) for state in TERMINAL),
+            "completed_fraction": counts.get("completed", 0) / len(retained),
+        }
+        controller.event("pending_method_removed", method=method, removed_job_ids=sorted(removed),
+                         previous_manifest=str(controller.manifest_path), revised_manifest=str(revised_path))
+        atomic_json(controller.root / "scheduler_status.json", current)
+        atomic_json(controller.root / "progress.json", {key: current[key] for key in (
+            "run_id", "status", "updated_at", "elapsed_seconds", "eta_seconds", "progress", "max_active_jobs", "gpu_observation")})
+        return {"manifest": str(revised_path), "removed_job_count": len(removed), "progress": current["progress"]}
+    finally:
+        controller.lock_stream.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -879,10 +969,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--smoke-summary", type=Path)
     parser.add_argument("--status", action="store_true", help="read controller status without importing workers or acquiring its lock")
+    parser.add_argument("--remove-pending-method", help="version a method removal; controller must be detached and all method jobs never started")
+    parser.add_argument("--revised-manifest", type=Path, help="fresh manifest path in the existing run_root for a queue reduction")
     parser.add_argument("--poll-seconds", type=float, default=2)
     parser.add_argument("--stop-grace-seconds", type=float, default=30)
     args = parser.parse_args(argv)
     try:
+        if args.remove_pending_method or args.revised_manifest:
+            if not args.manifest or not args.remove_pending_method or not args.revised_manifest or args.status:
+                raise ValueError("queue reduction requires --manifest, --remove-pending-method and --revised-manifest")
+            print(json.dumps(remove_pending_method(args.manifest, args.remove_pending_method, args.revised_manifest)))
+            return 0
         if args.build_config:
             if not args.run_root or not args.source_root or args.status:
                 raise ValueError("build mode requires --run-root and --source-root and cannot use --status")

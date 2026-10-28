@@ -236,6 +236,93 @@ def test_single_controller_lock_and_readonly_status(tmp_path, fixture_worker):
         process.wait(timeout=10)
 
 
+def test_remove_pending_method_preserves_live_worker_and_retargets_aggregate(tmp_path, fixture_worker):
+    path, run, manifest = write_manifest(tmp_path, fixture_worker, cpu=1, specs=[
+        ("keep", 1.5, 0, []), ("drop", .01, 0, []), ("aggregate", .01, 0, ["keep", "drop"])])
+    manifest["jobs"][1]["method"] = "normwear"
+    manifest["jobs"][2].update(kind="aggregate", dependency_policy="terminal")
+    manifest["jobs"][2]["command"] += ["--schedule", str(path)]
+    path.write_text(json.dumps(manifest))
+    original = path.read_bytes()
+    revised = run / "jobs_without_normwear.json"
+    process = launch(path)
+    try:
+        before = wait_for(lambda: (s if (s := status(run)).get("jobs", {}).get("keep", {}).get("status") == "running" else None))
+        with pytest.raises(RuntimeError, match="controller lock"):
+            scheduler.remove_pending_method(path, "normwear", revised)
+        process.kill()
+        process.wait(timeout=10)
+        result = scheduler.remove_pending_method(path, "normwear", revised)
+        assert result["removed_job_count"] == 1
+        assert path.read_bytes() == original
+        retained = status(run)
+        assert retained["jobs"]["keep"]["process_identity"] == before["jobs"]["keep"]["process_identity"]
+        assert retained["jobs"]["keep"]["attempt"] == 1
+        assert "drop" not in retained["jobs"]
+        changed, digest = scheduler.load_manifest(revised)
+        assert retained["manifest_sha256"] == digest
+        assert changed["jobs"][0] == manifest["jobs"][0]
+        assert changed["jobs"][1]["dependencies"] == ["keep"]
+        assert changed["jobs"][1]["command"][-1] == str(revised)
+        assert scheduler.read_json(run / "jobs_without_normwear_previous_status.json")["jobs"]["drop"]["status"] == "pending"
+        resumed = launch(revised)
+        assert resumed.wait(timeout=10) == 0, resumed.communicate()
+        assert status(run)["progress"]["total"] == 2
+        assert status(run)["jobs"]["keep"]["attempt"] == 1
+        assert not (run / "drop").exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=10)
+
+
+@pytest.fixture
+def pending_removal_fixture(tmp_path, fixture_worker):
+    path, run, manifest = write_manifest(tmp_path, fixture_worker)
+    manifest["jobs"][0]["method"] = "normwear"
+    path.write_text(json.dumps(manifest))
+    controller = scheduler.Scheduler(path)
+    controller.restore()
+    controller.persist("running")
+    retained = status(run)
+    retained["controller_identity"] = None
+    scheduler.atomic_json(run / "scheduler_status.json", retained)
+    return path, run, manifest, retained
+
+
+@pytest.mark.parametrize("state,attempt", [("running", 1), ("completed", 1), ("failed", 1),
+                                          ("blocked", 0), ("interrupted", 1), ("pending", 1)])
+def test_remove_method_rejects_started_or_nonpending_jobs_without_mutation(pending_removal_fixture, state, attempt):
+    path, run, _, retained = pending_removal_fixture
+    retained["jobs"]["a"].update(status=state, attempt=attempt)
+    scheduler.atomic_json(run / "scheduler_status.json", retained)
+    before = (run / "scheduler_status.json").read_bytes()
+    revised = run / "revised.json"
+    with pytest.raises(ValueError, match="never-started pending"):
+        scheduler.remove_pending_method(path, "normwear", revised)
+    assert (run / "scheduler_status.json").read_bytes() == before
+    assert not revised.exists()
+
+
+def test_remove_method_rejects_retained_training_dependency(pending_removal_fixture):
+    path, run, manifest, retained = pending_removal_fixture
+    manifest["jobs"][1]["dependencies"] = ["a"]
+    path.write_text(json.dumps(manifest))
+    retained["manifest_sha256"] = scheduler.load_manifest(path)[1]
+    scheduler.atomic_json(run / "scheduler_status.json", retained)
+    with pytest.raises(ValueError, match="retained training depends"):
+        scheduler.remove_pending_method(path, "normwear", run / "revised.json")
+    assert not (run / "revised.json").exists()
+
+
+def test_remove_method_rejects_stale_pending_record_with_worker_evidence(pending_removal_fixture):
+    path, run, _, _ = pending_removal_fixture
+    scheduler.atomic_json(run / "a/status.json", {"status": "running"})
+    with pytest.raises(ValueError, match="worker evidence"):
+        scheduler.remove_pending_method(path, "normwear", run / "revised.json")
+    assert not (run / "revised.json").exists()
+
+
 def test_manifest_unique_ids_cycle_and_immutable_resume(tmp_path, fixture_worker):
     path, run, manifest = write_manifest(tmp_path, fixture_worker, specs=[("a", .01, 0, [])])
     assert launch(path).wait(timeout=10) == 0

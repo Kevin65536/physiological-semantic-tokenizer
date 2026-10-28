@@ -62,12 +62,22 @@ It has its own `rebench_v1.py` adapters and does not resume retained v2 campaign
 Build a new run only after its inventory, splits, multimodal input audit and resource
 smoke are retained. Use the same controller's `--build-config`, `--run-root`,
 `--source-root` and `--smoke-summary` options. The generated `jobs.json` owns the
-resolved DAG; model outputs remain under each method's existing `runs/` root.
+initial resolved DAG; model outputs remain under each method's existing `runs/` root.
 Run `--manifest <jobs.json>` through the recorded persistent service and use
 `--manifest <jobs.json> --status` to reconnect. Preserve the frozen source and job
 identity when resuming. Per-job failures block dependent training; the final aggregate
 still records all planned units and failures. Runtime status is in `scheduler_status.json`;
 registered lifecycle is in the project registry, not this README.
+
+For a requested reduction containing only never-started jobs, detach the
+controller while preserving its workers, then use this same entrypoint with
+`--manifest <current.json> --remove-pending-method <method> --revised-manifest
+<fresh.json>`. The operation holds the controller lock, preserves the original
+manifest and a dated state snapshot, and updates the final aggregate's input and
+dependencies. Restart the service with the revised manifest; the normal recovery
+path adopts existing workers without launching duplicates. The current manifest
+path is recorded in `scheduler_status.json`; a retained initial config does not
+override an explicit scope reduction.
 
 ## Directory map
 
