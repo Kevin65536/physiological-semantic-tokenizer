@@ -20,6 +20,7 @@ artifacts. Run those only with the exact evidence restored:
 | Area | Representative files | Contract |
 | --- | --- | --- |
 | Data/preprocessing | `test_unified_physiology.py`, `test_event_alignment.py` | dataset, timing, mask, and cache identity |
+| Independent S/residual tokenizer | `test_dual_component_tokenizer.py`, `test_dual_component_tokenizer_data.py`, `test_dual_component_tokenizer_runner.py`, `test_dual_component_tokenizer_analysis.py` | full Tak targets, training-only coordinates, local hard IDs, independent decoders, fixed residuals, atomic resume, joint masking and decoded context prediction |
 | Tak baseline | `test_shared_driver_tak.py`, `test_shared_driver_tak_experiment.py`, `test_eeg_proxy_10hz.py` | default Tak/10 Hz dispatch, native power preparation, physical-time masks and loss weights, four-state/p=v invariant, SPM-equation replay, discrete tangents, matched priors and explicit historical controls |
 | Sensor proxy interventions | `test_shared_driver_sensor_proxy_data.py`, `test_low_capacity_eeg_proxy.py`, `test_shared_driver_sensor_proxy_runner.py`, `test_sensor_proxy_contract_audit.py` | fixed Tak conditional prediction, fold-local coordinates, PC1 nesting, matched channel sets, whole-Hb masking, donor support and retained failures |
 | Historical Balloon inference | `test_t3a_balloon_robust_ssm.py`, `test_t3a_balloon_joint_ssm.py` | retained inlet-balance forward dynamics, joint likelihood, masking, temporal operators and posterior moments |

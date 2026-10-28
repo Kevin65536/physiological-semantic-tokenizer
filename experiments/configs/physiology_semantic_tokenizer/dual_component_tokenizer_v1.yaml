@@ -1,0 +1,253 @@
+# New target/consumer contract; retained functional generations remain immutable.
+schema: dual_component_tokenizer_v1
+experiment_id: TK-DUAL-COMPONENT-v1
+scope: public_development_not_fresh_confirmation
+artifact_root: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer
+parent_run: experiments/runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1
+seed: 20261010
+data:
+  cache_root: data/cache/physiology_semantic_clean_v5
+  datasets:
+  - eeg_fnirs_single_trial
+  - simultaneous_eeg_nirs
+  tasks:
+  - motor_imagery
+  - mental_arithmetic
+  - nback
+  - wg
+  protected_data: forbidden
+  labels_as_training_inputs: false
+  split: seeded_subject_permutation_60_20_20_before_arrays
+  train_fraction: 0.6
+  validation_fraction: 0.2
+  regions:
+  - prefrontal
+  - left_motor
+  - right_motor
+  region_vectors:
+  - - -0.45
+    - 0.89
+    - 0.1
+  - - -0.65
+    - 0.0
+    - 0.72
+  - - 0.65
+    - 0.0
+    - 0.72
+  eeg_channels_per_region: 6
+  input_eeg: registered_native_voltage_local_2s_200Hz
+  input_hb: cached_100ms_HbO_HbR_5s_visible_prefix_reference
+  incomplete_window: retain_failure_no_padding_or_imputation
+  task_labels:
+    motor_imagery:
+    - LMI
+    - RMI
+    mental_arithmetic:
+    - MA
+    - BL
+    nback:
+    - 0-back session
+    - 2-back session
+    - 3-back session
+    wg:
+    - WG
+    - BL
+  fnirs_input: unified_cached_fnirs_v1
+  identities: complete_parent_inventory_revalidated_against_current_metadata
+  failed_trials: retain_all_planned_failures_and_common_three_region_trial_denominator
+tensor:
+  teacher_seconds: 90
+  teacher_offset_s: -30
+  teacher_steps: 900
+  dt_s: 0.1
+  student_steps:
+  - 300
+  - 500
+  student_seconds: 20
+  hb_reference_support_event_s:
+  - -30
+  - -25
+  patch_seconds: 2
+  patches: 10
+  eeg_rate_hz: 200
+  eeg_bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+  patch_steps: 20
+teacher:
+  contract: experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml
+  arm: tak_fixed
+  status: frozen_reference_conditional_model_output_not_physiological_truth
+  target: full_physical_EEG_proxy_HbO_HbR
+  residual: observation_minus_fixed_teacher_physical
+  parameters: fixed_reference_only_driver_and_four_initial_states_refitted
+  integration_acceptance_training_sd: 0.005
+  failures: retain_numerical_and_integration_failures_do_not_impute
+  privileged_support_s:
+  - -30
+  - 60
+model:
+  input_dims:
+    eeg: 2400
+    hb: 40
+  target_dims:
+    eeg: 20
+    hb: 40
+  width: 128
+  latent_dim: 32
+  codebook_size: 128
+  ema_decay: 0.99
+  commitment_cost: 0.25
+  kmeans_init: true
+  kmeans_iters: 10
+  independent_encoders: true
+  independent_decoders: true
+  context: one_2s_patch_no_cross_patch_layers
+  scales: training_only_no_continuous_per_patch_sidecars
+variants:
+- component_compression
+- continuous_student
+- hard_student
+- smooth_hard
+- ordinary_hard
+seeds:
+- 17
+- 29
+- 43
+training:
+  steps: 3000
+  batch_size: 128
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  gradient_clip: 5.0
+  checkpoint_every: 500
+  eval_batch_size: 128
+  lambda_O: 1.0
+  beta: 1.0
+  selection: final_fixed_exposure_no_task_labels_no_early_stopping
+  sampling: uniform_dataset_then_uniform_training_region_window
+  reduction: per_modality_valid_element_MSE_using_training_observation_SD
+  main_joint_loss: false
+  ordinary_loss: sum_reconstruction_only_two_equal_rate_codebooks
+smoothing:
+  sigma_steps:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  - 64
+  selection: training_only_match_normalized_first_difference_energy_per_component
+  residual: full_observation_minus_matched_smooth
+evaluation:
+  primary:
+  - S_NMSE
+  - O_NMSE
+  - sum_NMSE
+  components:
+  - EEG_proxy
+  - HbO
+  - HbR
+  baselines:
+  - training_component_mean
+  - continuous_student
+  - component_compression
+  aggregation: time_component_then_trial_record_subject_equal_separately_by_dataset
+  bootstrap_repeats: 1000
+  bootstrap_unit: whole_subject_all_regions_records_seeds_together
+  interval: descriptive_paired_percentile_95_no_multiplicity_claim
+  planned_denominator: all_inventory_trials_with_common_complete_three_region_success_subset
+  quality_screen:
+    split: validation
+    minimum_relative_gain_over_train_mean: 0.1
+    maximum_hard_minus_continuous_over_mean: 0.1
+    on_failure: continue_small_masked_pilot_diagnostic_only_no_scale_expansion
+  'null': no_reproducible_branch_gain_or_context_gain
+  stopping: fixed_matrix_all_terminal_no_result_driven_expansion
+sensitivity:
+  enabled: true
+  training_trials_per_dataset: 2
+  selection: lexicographic_identity_before_arrays_all_three_regions
+  seed: 17
+  paired_steps: 500
+  offsets:
+  - -0.25
+  - 0.25
+  maximum_objective_fraction: 0.05
+  variant: hard_student
+  matching: same_model_whole_trajectory_feasible_restart_no_pointwise_mixing
+  no_witness: retain_unavailable_no_replacement_or_expansion
+masked:
+  enabled: true
+  routes:
+  - hard_student
+  - smooth_hard
+  - ordinary_hard
+  seeds:
+  - 17
+  - 29
+  - 43
+  steps: 1000
+  batch_size: 64
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  checkpoint_every: 250
+  block_patches: 2
+  width: 128
+  layers: 2
+  heads: 4
+  dropout: 0.1
+  tasks:
+  - time_block
+  - modality_block
+  diagnostics:
+  - single_branch
+  - source_modality
+  - source_branch
+  - past_context
+  - matched_donor
+  - nonwrapping_shift
+  input: frozen_integer_IDs_one_ROI_per_sequence
+  mask: joint_S_O_per_information_block
+  scope: offline_processed_observation_completion
+  reference: fixed_visible_prefix_minus30_to_minus25_seconds
+  tokenizer: frozen_encoders_quantizers_decoders_scales_and_observation_operator
+  baselines:
+  - training_marginal
+  - training_metadata
+  - own_modality_same_capacity_budget
+  primary: same_observation_space_expected_decoded_waveform_NMSE
+  secondary: within_vocabulary_context_CE_gain
+  expectation: probability_weighted_decoded_codewords_not_decoded_mean_embedding
+  no_total_prediction_interval: true
+  teacher_inputs: false
+resources:
+  cpu_workers: 32
+  numerical_threads: 1
+  max_in_flight_per_worker: 2
+  devices:
+  - cuda:0
+  gpu_workers_per_device: 2
+  torch_threads: 2
+  max_new_gpu_memory_mib: 4096
+  benchmark_steps: 100
+  supervisor: user_systemd_linger
+  resume: atomic_per_task_optimizer_RNG_checkpoint
+  timeout_hours: 72
+claim_limits:
+- conditional_decomposition_not_physiological_truth
+- EEG_voltage_is_encoder_input_but_targets_live_in_power_proxy_space
+- bandpass_preprocessed_completion_not_raw_sample_isolation_or_causal_forecasting
+- all_public_subjects_previously_examined_not_protected_confirmation
+- masked_CE_not_ranked_across_vocabularies
+- ordinary_split_has_no_SSM_component_interpretation
+- small_masked_pilot_not_large_scale_foundation_model_pretraining

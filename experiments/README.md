@@ -315,6 +315,21 @@ Tests: `test_model_compatibility.py`, `test_model_compatibility_runner.py`,
 
 ### Semantic and tokenizer development
 
+The independent Tak-component/residual generation uses
+[`scripts/run_dual_component_tokenizer.py`](scripts/run_dual_component_tokenizer.py)
+and [`dual_component_tokenizer_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml).
+Run `--stage check`, then `--stage synthetic --output <fresh_run>`; `--stage all`
+under a durable supervisor prepares new 10 Hz targets, trains local independent
+S/O vocabularies and their controls, and executes the frozen-vocabulary masked
+pilot and analyses. `--stage benchmark` measures GPU throughput before choosing
+concurrency. The [design](../docs/EXPERIMENT_PLAN.md#完整-tak-输出与残差的双离散词表2026-10-27)
+and [data contract](../docs/DATA_CONTRACT.md#independent-tak-componentresidual-targets--2026-10-27)
+define the public input and interpretation boundaries. Tests are
+`test_dual_component_tokenizer.py`, `test_dual_component_tokenizer_data.py`,
+`test_dual_component_tokenizer_runner.py` and
+`test_dual_component_tokenizer_analysis.py`. The retained functional generation
+below keeps its original model, target and evidence identity.
+
 Response semantics, component attribution and conditional continuous or discrete representations.
 
 | Diagnostic / usage | Entry | Config | Targeted tests |

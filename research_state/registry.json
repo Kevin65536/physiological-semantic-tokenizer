@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-27T15:55:05.187971+00:00",
+  "updated_at": "2026-10-28T05:29:01.635836+00:00",
   "tracks": [
     {
       "id": "main",
@@ -2415,6 +2415,102 @@
       "label": "共同成功窗口残差与配对预测只读分析",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_sensor_proxy_v1/20261027_measured_v2/residual_analysis_v1/residual_summary.json",
       "role": "result_summary"
+    },
+    {
+      "id": "e.dual_component_contract",
+      "label": "完整Tak输出与残差双词表合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.dual_component_launch",
+      "label": "双词表预训练与分析持久启动",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_source",
+      "label": "双词表冻结源码",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v1/source/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_verification",
+      "label": "双词表软件验证",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.dual_component_synthetic",
+      "label": "双词表实际Tak合成验证",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v1/synthetic.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.dual_component_resources",
+      "label": "双词表资源核查",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v1/resources.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.dual_component_inventory",
+      "label": "双词表公开完整身份计划",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v1/inventory.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_controller",
+      "label": "双词表持久控制器",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v1/controller.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_v1_interruption",
+      "label": "首轮浮点时间边界错误及保留证据",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v1/interruption.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_v2_launch",
+      "label": "修正后双词表持久启动",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_v2_source",
+      "label": "修正后冻结源码",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/source/manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_v2_verification",
+      "label": "修正后软件验证",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.dual_component_v2_inventory",
+      "label": "修正后完整公开身份",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/inventory.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_v2_prepare",
+      "label": "修正后全部时间支持准备",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/prepare_summary.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_v2_controller",
+      "label": "修正后持久控制器",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/controller.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.dual_component_v2_budget_interruption",
+      "label": "GPU显存字节覆盖训练步数的复现及停止记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/interruption.json",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -6622,6 +6718,226 @@
       ],
       "headline": true,
       "next_step": "当前实验套件已收束。后续由净预测收益、错配关联及物理参照残差共同限定研究问题，不继续自动扩大空间模型或启动阶段4。"
+    },
+    {
+      "state_id": "main.dual_component_tokenizer@2026-10-28.v1",
+      "entity": "main.dual_component_tokenizer",
+      "label": "完整Tak输出与固定残差的独立双硬词表",
+      "track": "main",
+      "order": 195,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "按用户给定方案完成并启动新的公开开发实验套件：完整Tak输出与固定完整残差分别监督局部双硬词表，独立解码；分量压缩、连续student、硬student、匹配平滑与同码率普通观测对照使用相同被试划分。55项针对测试、全仓测试收集及实际90秒Tak合成拟合通过，分解闭合误差0、积分加密最大差7.96e-10训练SD。源码已冻结，systemd服务进入数据准备；随后依次生成新10Hz目标、实测并发、训练、近等价选解敏感性和冻结词表掩码先导。现无实测训练收益结论，物理轨迹相容性未评价。",
+      "evidence_ids": [
+        "e.dual_component_contract",
+        "e.dual_component_launch",
+        "e.dual_component_source",
+        "e.dual_component_verification",
+        "e.dual_component_synthetic",
+        "e.dual_component_resources",
+        "e.dual_component_inventory",
+        "e.dual_component_controller"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-27T16:16:04.130227+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak",
+        "main.eeg_proxy_rate"
+      ],
+      "headline": false,
+      "next_step": "由现有持久控制器执行有限矩阵，保留完整计划分母与失败，按CPU/GPU实测吞吐安排并发；在词典与掩码结果产生后报告分支误差、同观测空间收益及被试配对不确定性。"
+    },
+    {
+      "state_id": "main.program@2026-10-28.dual-component",
+      "entity": "main.program",
+      "label": "Tak双离散词表预训练与解释性分析",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "主线新增完整Tak输出／固定完整残差的独立双硬词表实验，采用局部观测蒸馏、独立解码和冻结词表后的联合遮蔽先导。公开身份与被试划分继承并核验，10Hz目标重新生成；现有Hb带通按用户要求保留。有限套件已通过软件与合成检查并交由持久监督器运行；实测效果待该运行证据，不继承旧functional的X/T目标或物理资格结论。",
+      "evidence_ids": [
+        "e.dual_component_contract",
+        "e.dual_component_launch",
+        "e.dual_component_controller",
+        "e.dual_component_verification"
+      ],
+      "supersedes": [
+        "main.program@2026-10-27.sensor-proxy-complete"
+      ],
+      "updated_at": "2026-10-27T16:16:04.130227+00:00",
+      "depends_on": [
+        "main.dual_component_tokenizer"
+      ],
+      "headline": true,
+      "next_step": "监控现有双词表运行，完成目标生成、训练和同观测空间的配对分析；依据实际结果判断词表保真和上下文增益，不自动扩展模型或数据范围。"
+    },
+    {
+      "state_id": "main.dual_component_tokenizer@2026-10-28.v1-interrupted",
+      "entity": "main.dual_component_tokenizer",
+      "label": "完整Tak输出与固定残差的独立双硬词表",
+      "track": "main",
+      "order": 195,
+      "entity_kind": "experiment",
+      "execution": "aborted",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "首轮准备得到14940成功、84时间箱支持失败；核验发现浮点时间起点与实际缓存时钟仅相差1.42e-14秒却误排首点。服务已停止并保留原源码、输入、任务及数值候选；该分母不能作为科学缺失解释。修正后使用全新v2运行重新准备、重拟合训练坐标和teacher，不继承首轮数值目标。",
+      "evidence_ids": [
+        "e.dual_component_contract",
+        "e.dual_component_launch",
+        "e.dual_component_source",
+        "e.dual_component_verification",
+        "e.dual_component_synthetic",
+        "e.dual_component_resources",
+        "e.dual_component_inventory",
+        "e.dual_component_controller",
+        "e.dual_component_v1_interruption"
+      ],
+      "supersedes": [
+        "main.dual_component_tokenizer@2026-10-28.v1"
+      ],
+      "updated_at": "2026-10-27T16:18:38Z",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak",
+        "main.eeg_proxy_rate"
+      ],
+      "headline": false,
+      "next_step": "首轮作为软件失败证据保留，修正后的执行由v2记录持有。"
+    },
+    {
+      "state_id": "main.dual_component_tokenizer@2026-10-28.v2",
+      "entity": "main.dual_component_tokenizer",
+      "label": "完整Tak输出与固定残差的独立双硬词表",
+      "track": "main",
+      "order": 195,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "浮点时钟边界修正后，58项针对测试及全仓测试收集通过；新的冻结源码和systemd服务从头执行同一公开完整计划。226记录、15024区域窗全部准备成功，原84误拒窗口均恢复真实样本支持，无补点或插值；训练坐标与Tak目标重新生成。控制器随后按CPU/GPU实测吞吐执行五条tokenizer路线、配对选解敏感性、三词表掩码先导及自身模态对照。实测训练效果尚未判定，拼接轨迹的Tak相容性未评价。",
+      "evidence_ids": [
+        "e.dual_component_contract",
+        "e.dual_component_synthetic",
+        "e.dual_component_resources",
+        "e.dual_component_v1_interruption",
+        "e.dual_component_v2_launch",
+        "e.dual_component_v2_source",
+        "e.dual_component_v2_verification",
+        "e.dual_component_v2_inventory",
+        "e.dual_component_v2_prepare",
+        "e.dual_component_v2_controller"
+      ],
+      "supersedes": [
+        "main.dual_component_tokenizer@2026-10-28.v1-interrupted"
+      ],
+      "updated_at": "2026-10-27T16:23:19.377710+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak",
+        "main.eeg_proxy_rate"
+      ],
+      "headline": false,
+      "next_step": "监控v2持久控制器生成新目标并自动启动GPU训练和分析；按完整计划失败分母及被试配对证据汇报，不扩大既定矩阵。"
+    },
+    {
+      "state_id": "main.program@2026-10-28.dual-component-v2",
+      "entity": "main.program",
+      "label": "Tak双离散词表预训练与解释性分析",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "完整Tak输出与固定残差的双硬词表套件在修正浮点时钟边界后进入v2持久运行：全部公开计划输入已准备，后续目标生成、预训练与解释性分析由同一控制器串接。58项针对测试通过，首轮软件失败证据保留；尚无新实测收益或物理资格结论。",
+      "evidence_ids": [
+        "e.dual_component_contract",
+        "e.dual_component_v2_launch",
+        "e.dual_component_v2_controller",
+        "e.dual_component_v2_verification",
+        "e.dual_component_v2_prepare"
+      ],
+      "supersedes": [
+        "main.program@2026-10-28.dual-component"
+      ],
+      "updated_at": "2026-10-27T16:23:19.377710+00:00",
+      "depends_on": [
+        "main.dual_component_tokenizer"
+      ],
+      "headline": true,
+      "next_step": "监控现有双词表运行，完成目标生成、训练和同观测空间的配对分析；依据实际结果判断词表保真和上下文增益，不自动扩展模型或数据范围。"
+    },
+    {
+      "state_id": "main.dual_component_tokenizer@2026-10-28.v2-budget-interrupted",
+      "entity": "main.dual_component_tokenizer",
+      "label": "完整Tak输出与固定残差的独立双硬词表",
+      "track": "main",
+      "order": 195,
+      "entity_kind": "experiment",
+      "execution": "aborted",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "核验确认CUDA分支把显存字节数覆盖训练步数预算：100步benchmark实际预算变为4294967296步，停止前最后保留进度为553500步、约11.20小时。模拟CUDA分支并使用真实CPU优化复现请求2步却执行7步。已停止本实验服务，原源码、目标、缓存和超预算checkpoint保留；后续正式tokenizer训练与掩码分析未启动。本次只核验问题与停止超预算运行，未修改训练实现。",
+      "evidence_ids": [
+        "e.dual_component_contract",
+        "e.dual_component_synthetic",
+        "e.dual_component_resources",
+        "e.dual_component_v1_interruption",
+        "e.dual_component_v2_launch",
+        "e.dual_component_v2_source",
+        "e.dual_component_v2_verification",
+        "e.dual_component_v2_inventory",
+        "e.dual_component_v2_prepare",
+        "e.dual_component_v2_controller",
+        "e.dual_component_v2_budget_interruption"
+      ],
+      "supersedes": [
+        "main.dual_component_tokenizer@2026-10-28.v2"
+      ],
+      "updated_at": "2026-10-28T05:29:01.635836+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak",
+        "main.eeg_proxy_rate"
+      ],
+      "headline": false,
+      "next_step": "分离训练步数与显存字节变量，增加CUDA分支步数回归后，以新源码版本重跑benchmark；不得把超预算benchmark checkpoint作为固定预算正式训练结果。"
+    },
+    {
+      "state_id": "main.program@2026-10-28.dual-budget-interrupted",
+      "entity": "main.program",
+      "label": "Tak双离散词表预训练与解释性分析",
+      "track": "main",
+      "order": 0,
+      "entity_kind": "aggregate",
+      "execution": "aborted",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "核验确认CUDA分支把显存字节数覆盖训练步数预算：100步benchmark实际预算变为4294967296步，停止前最后保留进度为553500步、约11.20小时。模拟CUDA分支并使用真实CPU优化复现请求2步却执行7步。已停止本实验服务，原源码、目标、缓存和超预算checkpoint保留；后续正式tokenizer训练与掩码分析未启动。本次只核验问题与停止超预算运行，未修改训练实现。",
+      "evidence_ids": [
+        "e.dual_component_contract",
+        "e.dual_component_v2_launch",
+        "e.dual_component_v2_controller",
+        "e.dual_component_v2_verification",
+        "e.dual_component_v2_prepare",
+        "e.dual_component_v2_budget_interruption"
+      ],
+      "supersedes": [
+        "main.program@2026-10-28.dual-component-v2"
+      ],
+      "updated_at": "2026-10-28T05:29:01.635836+00:00",
+      "depends_on": [
+        "main.dual_component_tokenizer"
+      ],
+      "headline": true,
+      "next_step": "分离训练步数与显存字节变量，增加CUDA分支步数回归后，以新源码版本重跑benchmark；不得把超预算benchmark checkpoint作为固定预算正式训练结果。"
     }
   ]
 }

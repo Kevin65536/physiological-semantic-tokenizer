@@ -26,6 +26,7 @@ explains the path hierarchy and reading order.
 
 | Research question | Suite root | Evidence entry |
 | --- | --- | --- |
+| Can complete Tak output and full residual be independently quantized and predicted from context? | `dual_component_tokenizer/` | [Independent component/residual vocabularies](#independent-componentresidual-vocabularies--2026-10-28) |
 | What changes when the Tak/SPM hemodynamic equations, tied total Hb and original-prior reference are restored? | `shared_driver_reconstruction/` | [Tak hemodynamic migration](#tak-hemodynamic-migration--2026-10-27) |
 | Does the unified filter change post-10.20 conclusions without adding components? | `shared_driver_reconstruction/` | [Selected-example filter sensitivity](#selected-example-filter-sensitivity--2026-10-27) |
 | Which information survives hard tokens, and do time/region relations or a shape-plus-scale architecture help? | `functional_tokenizer/` | [Frozen relationships and local shape tokens](#frozen-relationships-and-local-shape-tokens--2026-10-25) |
@@ -114,6 +115,28 @@ inputs and frozen implementation in a fresh run. Conditional states, parameter p
 numerical search boundaries and offline feature completion do not establish
 physiological truth or full Tak DCM replication. Earlier exports and the aborted
 preflight retain their original identities and are not replacement results.
+
+## Independent component/residual vocabularies — 2026-10-28
+
+The [versioned contract](configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml)
+defines the new full-output target and consumer generation. The
+[v2 launch](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/launch.json),
+[frozen source](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/source/manifest.json),
+[verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/verification.json)
+and [complete identity plan](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/inventory.json)
+are the execution evidence route. Per-task records and the run's analysis
+summary own numerical outcomes; project execution remains registry-owned.
+
+Retain the complete planned/failure denominator, resolved configurations,
+training coordinates, tokenizer checkpoints needed by the masked consumer,
+integer IDs, decoded dictionaries, subject tables, sensitivity witnesses,
+source snapshots and supervisor/resource records. Prepared caches and training
+logs remain local. The
+[v1 interruption](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v1/interruption.json)
+preserves the clock-roundoff failure and its original implementation; v2
+recomputes preparation and coordinates without reusing its numerical targets.
+Neither vocabulary reconstruction nor patch-boundary smoothness establishes
+physiological truth or whole-trajectory Tak compatibility.
 
 ## Frozen relationships and local shape tokens — 2026-10-25
 

@@ -83,6 +83,35 @@ smoothing and codebooks fit training subjects only. Hidden Hb cannot return
 through filtering, optical references, teacher outputs or input cache fields.
 Other protocols' protected boundaries and historical evidence remain intact.
 
+### Independent Tak component/residual targets — 2026-10-27
+
+[`dual_component_tokenizer_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml)
+and [`src/data/dual_component_tokenizer.py`](../src/data/dual_component_tokenizer.py)
+own `dual_component_training_cache_v1`. The old functional inventory supplies
+only public identities, geometry and subject partitions, revalidated against
+current central metadata before signals are read. The complete planned trial
+population is used; old teacher successes do not select the new population.
+Native EEG is recomputed at 100 ms power support and Hb is read from the
+v5/none cache. PCA, common positive Hb scaling and input/target scales use only
+training subjects. Retained cache targets share a training-observation SD
+denominator without centering, preserving `u = physical + remaining` exactly.
+
+The deliberately fixed-reference Tak teacher estimates a driver and four
+vascular initial coordinates on the 90 s support. Its full observation-space
+EEG proxy, HbO and HbR outputs define S; O is the complete fixed teacher
+residual. This is conditional model supervision, not physiological truth.
+Student EEG inputs are native 2 s voltage patches; their targets remain power
+proxies. Student Hb inputs are local 2 s cached patches with the declared
+visible reference prefix. Teacher trajectories, fitted parameters and residuals
+are labels only, except in the explicitly separate component-compression arm.
+
+The masked pilot accepts the existing full-record bandpass preprocessing and
+tests offline processed-observation completion. Local encoders and joint S/O
+masking prevent additional patch-context shortcuts; this is not a claim of
+raw-sample isolation or prospective prediction. Failed preparation, teacher
+convergence and integration checks retain their planned identities; all arms
+share the complete three-region trial subset and report the full denominator.
+
 ### v1 patch target (historical)
 
 The implemented v1 observation screen is retained as historical evidence. Its
