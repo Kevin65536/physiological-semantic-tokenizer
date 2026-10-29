@@ -1,0 +1,60 @@
+schema: downstream_ma_adaptation_audit_v1
+experiment_id: DOWNSTREAM-MA-ADAPTATION-AUDIT-v1
+scope: public_development_diagnostic_not_paper_ranking
+inventory: comparative_methods/runs/downstream_rebench_v1/20261016_v2/inventory.json
+splits: comparative_methods/runs/downstream_rebench_v1/20261016_v2/splits.json
+task: mental_arithmetic
+outer_fold: 0
+inner_fold: 0
+seed: 17
+input:
+  duration_s: 30
+  window_start_s: -5
+  input_window_schema: ma_30s_diagnostic_v1
+  eeg_panel: frozen_eeg_only_16_channels_for_every_method
+  fnirs_panel: frozen_multimodal_72_channels_for_both_fusion_methods
+  sample_filtering: none
+  masks: retain_recorded_support
+  outer_evaluation: not_read
+  context: existing_v5_offline_record_preprocessing_no_added_time_support
+metrics:
+  primary: subject_equal_macro_f1
+  secondary: balanced_accuracy_accuracy_per_class_recall
+  diagnostic: train_validation_gap_prediction_counts_feature_variance_lag_attention
+  inference: descriptive_single_development_split_no_significance_or_final_ranking
+linear:
+  C: 1.0
+  selection: none_fixed_regularization_for_mechanism_screen
+training:
+  max_epochs: 50
+  min_epochs: 20
+  patience: 15
+  effective_batch_size: 32
+  microbatch_size: 32
+  selection: best_development_macro_f1_all_epochs_retained
+  cbramod: {optimizer: adamw, learning_rate: 0.0001, weight_decay: 0.05, lr_schedule: cosine, gradient_clip_norm: 1}
+  sta_net: {optimizer: adamw, learning_rate: 0.0001, weight_decay: 0.0001, lr_schedule: constant, gradient_clip_norm: 1}
+arms:
+  - baselines
+  - cbramod_lp
+  - cbramod_ft_mean
+  - cbramod_ft_source_head
+  - sta_default
+  - sta_source_bn
+  - sta_dropout03
+  - brainfusion
+controls:
+  baselines: [eeg_bandpower, fnirs_moments, concatenation, coverage_only, train_prior]
+  cbramod_lp: [train_sd_mean, train_sd_flatten, physical_100uv_mean, physical_100uv_flatten]
+  cbramod_ft: common_train_sd_input_and_optimizer_only_head_changes
+  sta_net: same_28_within_window_lags_and_loss_change_only_bn_or_dropout
+  brainfusion: full_grouped_oof_stacking_and_each_fitted_component
+  null: fixed_seed_training_label_permutation_for_eeg_linear_only
+  source_checks: official_weight_loading_token_equivalence_nvc_cpu_gpu_equivalence_sta_numerical_deviations
+stopping: all_declared_arms_terminal_no_score_driven_extra_search
+resources:
+  cpu_threads_per_job: 4
+  max_parallel_gpu_jobs_per_device: 1
+  gpu_ids: [0, 1]
+  cpu_thread_budget: 12
+  ram_budget_gib: 40

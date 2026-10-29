@@ -27,6 +27,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 import torch
 import torch.nn.functional as F
+from comparative_methods.rebench_eeg_common_v1 import encoding_duration
 
 METHOD_ROOT = Path(__file__).resolve().parent
 ADAPTER_ROOT = METHOD_ROOT / "adapters"
@@ -311,8 +312,7 @@ class RebenchBrainFusionEstimator:
         fnirs_rate = int(profile.get("fnirs_sampling_rate_hz", profile.get("fnirs_sample_rate_hz", 10)))
         if eeg_rate <= 0 or fnirs_rate <= 0 or eeg_rate % fnirs_rate:
             raise ValueError("BrainFusion needs an integer EEG/fNIRS sampling-rate ratio")
-        if float(profile.get("duration_s", 8)) != 8:
-            raise ValueError("BrainFusion supported tasks require the common 8s window")
+        self.duration_s = encoding_duration(self.task, profile)
         self.nvc_config = NVCConfig(
             eeg_sampling_rate_hz=eeg_rate, fnirs_sampling_rate_hz=fnirs_rate,
             eeg_window_samples=eeg_rate // fnirs_rate,
@@ -336,7 +336,7 @@ class RebenchBrainFusionEstimator:
         self.spec = {
             "schema": "brainfusion_downstream_rebench_v1",
             "method_identity": "brainfusion_nvc_csp_stacking_reimplementation",
-            "task": self.task, "duration_s": 8,
+            "task": self.task, "duration_s": self.duration_s,
             "fit_scope": "all_supplied_outer_training_samples",
             "oof_unit": "subject",
             "oof_feature_fit": "oof_training_subjects_only",
@@ -362,8 +362,8 @@ class RebenchBrainFusionEstimator:
         fnirs = torch.as_tensor(fnirs, device="cpu")
         if eeg.ndim != 3 or fnirs.ndim != 3 or eeg.shape[0] != fnirs.shape[0] or fnirs.shape[1] % 2:
             raise ValueError("BrainFusion expects EEG [N,C,T] and paired Hb [N,2F,T]")
-        if eeg.shape[-1] != 8 * self.nvc_config.eeg_sampling_rate_hz or fnirs.shape[-1] != 8 * self.nvc_config.fnirs_sampling_rate_hz:
-            raise ValueError("BrainFusion input does not match the common 8s encoding window")
+        if eeg.shape[-1] != round(self.duration_s * self.nvc_config.eeg_sampling_rate_hz) or fnirs.shape[-1] != round(self.duration_s * self.nvc_config.fnirs_sampling_rate_hz):
+            raise ValueError("BrainFusion input does not match the common encoding window")
         if eeg.shape[1] < 2 or fnirs.shape[1] < 4:
             raise ValueError("BrainFusion needs at least two real EEG and Hb locations")
         if "channel_names" in self.profile and len(self.profile["channel_names"]) != eeg.shape[1]:

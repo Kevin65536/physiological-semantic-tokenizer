@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-28T10:17:51.278050+00:00",
+  "updated_at": "2026-10-28T16:22:10.954009+00:00",
   "tracks": [
     {
       "id": "main",
@@ -2798,6 +2798,54 @@
       "id": "e.tak_repeatability_preflight_failure",
       "label": "未读取信号的首次元数据预检失败",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_repeatability_10hz_v1/preflight_failure.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ma30_adaptation_audit_contract",
+      "label": "MA30适配查验合同",
+      "path": "comparative_methods/ma_adaptation_audit_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.ma30_adaptation_audit_plan",
+      "label": "共同样本和开发划分",
+      "path": "comparative_methods/runs/performance_analysis/20261028_ma30_v1/plan.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ma30_adaptation_audit_input",
+      "label": "相同输入核验",
+      "path": "comparative_methods/runs/performance_analysis/20261028_ma30_v1/input_audit.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ma30_adaptation_audit_software",
+      "label": "来源与软件核验",
+      "path": "comparative_methods/runs/performance_analysis/20261028_ma30_v1/software_audit.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ma30_adaptation_audit_launch",
+      "label": "持久监督与资源",
+      "path": "comparative_methods/runs/performance_analysis/20261028_ma30_v1/launch.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ma30_adaptation_audit_progress",
+      "label": "控制器状态",
+      "path": "comparative_methods/runs/performance_analysis/20261028_ma30_v1/scheduler_status.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ma30_adaptation_audit_summary",
+      "label": "完整诊断结果",
+      "path": "comparative_methods/runs/performance_analysis/20261028_ma30_v1/summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.ma30_adaptation_audit_stacking",
+      "label": "BrainFusion元分类器只读核验",
+      "path": "comparative_methods/runs/performance_analysis/20261028_ma30_v1/brainfusion_stacking_inspection.json",
       "role": "diagnostic"
     }
   ],
@@ -7527,6 +7575,64 @@
       ],
       "headline": false,
       "next_step": "本轮冻结清单及报告已完成；保留全部重估与失败。后续独立重复或先验检验仅按新的用户要求开展，不由本次结果授予生理个体特质资格。"
+    },
+    {
+      "state_id": "comparison.ma30_adaptation_audit@2026-10-29.v1-running",
+      "entity": "comparison.ma30_adaptation_audit",
+      "label": "MA共同30秒样本适配查验",
+      "track": "comparisons",
+      "order": 110,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "按用户确认的事件前5秒至后25秒，在MA原外折0内折0进行单划分单种子适配检查。共同16 EEG/72 Hb通道，15训练/8开发被试；所有方法共用冻结数组，历史外折预测和评价被试不读取。检查CBraMod读出/尺度、STA-Net数值设置和BrainFusion组件，不构成论文最终排名。",
+      "evidence_ids": [
+        "e.ma30_adaptation_audit_contract",
+        "e.ma30_adaptation_audit_plan",
+        "e.ma30_adaptation_audit_input",
+        "e.ma30_adaptation_audit_software",
+        "e.ma30_adaptation_audit_launch",
+        "e.ma30_adaptation_audit_progress"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-28T16:09:42.856638+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "完成冻结诊断臂并核对完整分母、负结果和训练/开发差距；不按分数追加搜索。"
+    },
+    {
+      "state_id": "comparison.ma30_adaptation_audit@2026-10-29.v1-completed",
+      "entity": "comparison.ma30_adaptation_audit",
+      "label": "MA共同30秒样本适配查验",
+      "track": "comparisons",
+      "order": 110,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "共同[-5,25) MA开发输入上的计划查验全部完成。CBraMod保留有序token的读出相对平均读出改善；源尺度没有一致收益。STA-Net默认设置超过同输入简单融合，BatchNorm/dropout改动未改善。BrainFusion组件训练/开发差距大，OOF元分类器负权重主导并反转完整训练预测；类别顺序与NVC数值核验通过，保留为适配不稳定负结果。单划分/单种子、开发集选epoch，不构成最终论文排名或窗口长度因果结论。",
+      "evidence_ids": [
+        "e.ma30_adaptation_audit_contract",
+        "e.ma30_adaptation_audit_plan",
+        "e.ma30_adaptation_audit_input",
+        "e.ma30_adaptation_audit_software",
+        "e.ma30_adaptation_audit_launch",
+        "e.ma30_adaptation_audit_progress",
+        "e.ma30_adaptation_audit_summary",
+        "e.ma30_adaptation_audit_stacking"
+      ],
+      "supersedes": [
+        "comparison.ma30_adaptation_audit@2026-10-29.v1-running"
+      ],
+      "updated_at": "2026-10-28T16:22:10.954009+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "以共同30秒输入和明确读出冻结后续比较方案；论文能力结论仍需多被试折/种子及配对统计。BrainFusion先解决跨被试组件与stacking稳定性，不以翻转分数或增加搜索掩盖负结果；本轮不启动扩大实验。"
     }
   ]
 }

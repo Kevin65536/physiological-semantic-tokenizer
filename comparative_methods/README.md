@@ -59,6 +59,16 @@ It has its own `rebench_v1.py` adapters and does not resume retained v2 campaign
 | [`aggregate_downstream_rebench_v1.py`](aggregate_downstream_rebench_v1.py): planned denominators, subject/seed aggregation and admission | [`test_aggregate_downstream_rebench_v1.py`](../tests/test_aggregate_downstream_rebench_v1.py); metrics in [`src/metrics/downstream_benchmark.py`](../src/metrics/downstream_benchmark.py) |
 | [`rebench_baselines_v1.py`](rebench_baselines_v1.py), [`rebench_eeg_common_v1.py`](rebench_eeg_common_v1.py): signal baselines and shared EEG adaptation | [`test_downstream_rebench_baselines.py`](../tests/test_downstream_rebench_baselines.py), [`test_downstream_rebench_eeg_models.py`](../tests/test_downstream_rebench_eeg_models.py) |
 
+The separate [MA adaptation audit](ma_adaptation_audit_v1.yaml) uses event-relative
+`[-5,25)` seconds, the same 16 EEG channels and 72 Hb channels across the applicable
+methods, and one frozen development subject split. Its
+[analysis entry](performance_analysis/audit_ma_adaptation_v1.py) reuses this worker
+and scheduler; [targeted tests](../tests/test_ma_adaptation_audit.py) cover the
+versioned window, sample migration, masks and adapter shapes. The explicit
+`ma_30s_diagnostic_v1` profile does not change the retained v1 defaults or imply
+30-second support for every task. This diagnostic does not establish a final
+paper ranking or extend historical protected-data access.
+
 Build a new run only after its inventory, splits, multimodal input audit and resource
 smoke are retained. Use the same controller's `--build-config`, `--run-root`,
 `--source-root` and `--smoke-summary` options. The generated `jobs.json` owns the

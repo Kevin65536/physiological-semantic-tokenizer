@@ -22,6 +22,22 @@ CLASSIFICATION_TASKS = frozenset(
 )
 
 
+def encoding_duration(task: str, profile: Mapping[str, Any]) -> float:
+    """Preserve v1 defaults; explicitly identify the separate MA 30 s audit."""
+    schema = profile.get("input_window_schema", "downstream_rebench_v1")
+    if schema == "ma_30s_diagnostic_v1":
+        if task != "mental_arithmetic" or profile.get("window_start_s") != -5:
+            raise ValueError("MA 30s diagnostic requires mental_arithmetic and [-5,25) support")
+        duration = 30.0
+    elif schema == "downstream_rebench_v1":
+        duration = 20.0 if task == "refed_regression" else (2.0 if task == "dsr" else 8.0)
+    else:
+        raise ValueError(f"unknown input window schema: {schema}")
+    if float(profile.get("duration_s", duration)) != duration:
+        raise ValueError("duration_s disagrees with the named input window schema")
+    return duration
+
+
 def validate_profile(task: str, profile: Mapping[str, Any]) -> tuple[tuple[str, ...], int]:
     if task == "refed_regression":
         raise NotImplementedError("REFED requires a validated temporal output and target-mask interface")
@@ -35,7 +51,7 @@ def validate_profile(task: str, profile: Mapping[str, Any]) -> tuple[tuple[str, 
     names = tuple(str(name) for name in raw_names)
     if len(names) != 16 or len(set(names)) != 16 or any(not name for name in names):
         raise ValueError("channel_names must identify 16 distinct measured EEG channels")
-    expected_samples = 400 if task == "dsr" else 1600
+    expected_samples = round(200 * encoding_duration(task, profile))
     if profile.get("input_samples", expected_samples) != expected_samples:
         raise ValueError(f"{task} requires {expected_samples} EEG samples")
     return names, expected_samples

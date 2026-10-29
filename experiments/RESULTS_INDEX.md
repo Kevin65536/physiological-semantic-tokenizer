@@ -1070,6 +1070,17 @@ its own question and evidence contract.
 
 ## Comparison methods
 
+The separate [MA 30-second adaptation audit](../comparative_methods/ma_adaptation_audit_v1.yaml)
+retains its [sample plan](../comparative_methods/runs/performance_analysis/20261028_ma30_v1/plan.json),
+[identical-input audit](../comparative_methods/runs/performance_analysis/20261028_ma30_v1/input_audit.json),
+[complete results](../comparative_methods/runs/performance_analysis/20261028_ma30_v1/summary.json),
+[source checks](../comparative_methods/runs/performance_analysis/20261028_ma30_v1/software_audit.json),
+and [BrainFusion stacking inspection](../comparative_methods/runs/performance_analysis/20261028_ma30_v1/brainfusion_stacking_inspection.json).
+This is a single development split/seed diagnostic on common event-relative
+`[-5,25)` observations. Preserve the negative results, retained throughput trials,
+source snapshots and service records; do not substitute these validation-selected
+scores for the historical five-fold results or final paper rankings.
+
 The [2026-10-28 two-round comparison report](../docs/reports/interpretability_analysis/20261028_downstream_comparison_v3/REPORT.md)
 and [PDF](../docs/reports/interpretability_analysis/20261028_downstream_comparison_v3/REPORT.pdf)
 explain input-window accounting, channel/configuration changes, aggregation

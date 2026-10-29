@@ -21,6 +21,7 @@ from typing import Any
 import numpy as np
 import torch
 from torch import Tensor, nn
+from comparative_methods.rebench_eeg_common_v1 import encoding_duration
 
 METHOD_ROOT = Path(__file__).resolve().parent
 if str(METHOD_ROOT) not in sys.path:
@@ -142,7 +143,8 @@ class SameWindowSTANet(nn.Module):
             raise ValueError(f"unsupported STA-Net task: {task}")
         self.task = task
         self.profile = dict(profile)
-        task_type, output_dim, duration = TASKS[task]
+        task_type, output_dim, _ = TASKS[task]
+        duration = encoding_duration(task, profile)
         if task_type == "classification" and int(profile.get("num_classes", output_dim)) != output_dim:
             raise ValueError("STA-Net class count differs from the fixed task vocabulary")
         if float(profile.get("duration_s", duration)) != duration:

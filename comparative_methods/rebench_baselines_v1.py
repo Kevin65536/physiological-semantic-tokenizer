@@ -12,6 +12,7 @@ from typing import Any
 
 import torch
 from torch import nn
+from comparative_methods.rebench_eeg_common_v1 import encoding_duration
 
 
 BANDS = ((1.0, 4.0), (4.0, 8.0), (8.0, 13.0), (13.0, 30.0), (30.0, 45.0))
@@ -105,7 +106,7 @@ class SignalFeatures(nn.Module):
         self.supports_fnirs = self.use_fnirs
         self.sequence_features = task == "refed_regression"
         self.segments = 20 if self.sequence_features else 1
-        duration = 20 if self.sequence_features else (2 if task == "dsr" else 8)
+        duration = int(encoding_duration(task, profile))
         self.input_samples = duration * 200
         self.fnirs_samples = duration * 10
         self.eeg_channels = len(profile.get("channel_names", ()))

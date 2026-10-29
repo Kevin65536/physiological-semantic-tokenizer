@@ -1,8 +1,13 @@
 # Comparator performance-degradation analyses
 
-> **STATUS: STOPPED.** The P0 synthesis is complete and retained as exploratory
+> **Historical P0: STOPPED.** The P0 synthesis is complete and retained as exploratory
 > evidence. Unexecuted mechanism follow-ups are **ABANDONED**; this directory is
 > an evidence index, not a current analysis queue or launch entrypoint.
+
+The separately requested [MA 30-second adaptation audit](../ma_adaptation_audit_v1.yaml)
+uses [`audit_ma_adaptation_v1.py`](audit_ma_adaptation_v1.py) and its own versioned
+run under `comparative_methods/runs/performance_analysis/`. It does not resume P0;
+its input scope and interpretation are in the owning experiment design.
 
 This package contains post-campaign mechanism analyses defined by
 `docs/comparisons/PERFORMANCE_DEGRADATION_ANALYSIS_PLAN_20260816.md`.
