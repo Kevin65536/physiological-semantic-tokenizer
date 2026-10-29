@@ -37,7 +37,8 @@ import yaml
 
 DEFAULT_CONFIG = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml'
 STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark',
-          'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all', 'refine', 'refine-one')
+          'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all', 'refine', 'refine-one',
+          'voltage', 'voltage-one')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
 
@@ -78,6 +79,16 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_voltage_v1':
+        extra=cfg;cfg=yaml.safe_load((SOURCE/extra['base_contract']).read_text())
+        cfg.update(schema=extra['schema'],experiment_id=extra['experiment_id'],voltage=extra['voltage'],claim_limits=extra['claim_limits'])
+        cfg['resources'].update(extra['resources'])
+        v=cfg['voltage']
+        if (v['selection_splits']!=['train','validation'] or v['final_split']!='test'
+                or v['eeg']['sample_rate_hz']!=200 or v['hb']['sample_rate_hz']!=10
+                or v['eeg']['hop_samples']!=20 or v['hb']['hop_samples']!=20
+                or v['steps']<1 or v['codebook_size']!=128):
+            raise ValueError('frozen voltage tensor/split/finite-budget contract required')
     if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_refinement_v1':
         base = yaml.safe_load((SOURCE / cfg['base_contract']).read_text())
         base.update(schema=cfg['schema'], experiment_id=cfg['experiment_id'],
@@ -909,23 +920,31 @@ def parse_args(argv=None):
     parser.add_argument('--no-export', action='store_true')
     parser.add_argument('--parent-pid', type=int, help=argparse.SUPPRESS)
     parser.add_argument('--gpu-memory-bytes', type=int, help=argparse.SUPPRESS)
+    parser.add_argument('--evaluation-split', choices=('development','test'),default='development',help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema']=='dual_component_voltage_v1' and args.stage not in ('check','synthetic','voltage','voltage-one'):
+        raise ValueError('voltage targets require their own versioned execution stages')
     if cfg['schema'] == 'dual_component_refinement_v1' and args.stage not in ('check', 'refine', 'refine-one'):
         raise ValueError('refinement uses its finite train/validation-only stages')
     if args.stage == 'check':
+        if cfg['schema']=='dual_component_voltage_v1':
+            print(json.dumps(dict(status='voltage_contract_valid',experiment_id=cfg['experiment_id'],
+                stages=['check','synthetic','voltage','voltage-one'],candidates=cfg['voltage']['candidates'],
+                selection_splits=cfg['voltage']['selection_splits'],final_split=cfg['voltage']['final_split'],
+                ssms_refitted=0,protected_data='forbidden',measured_arrays_read=0)));return
         print(json.dumps(dict(status='software_contract_valid', stages=STAGES, variants=VARIANTS,
             seeds=seeds(cfg), protected_data='forbidden', measured_arrays_read=0))); return
     if args.stage == 'synthetic':
-        result = synthetic(cfg)
+        result = voltage_synthetic(cfg) if cfg['schema']=='dual_component_voltage_v1' else synthetic(cfg)
         if args.output: write_json(args.output / 'synthetic.json', result)
         print(json.dumps(serial(result))); return
     if args.output is None: raise ValueError('--output required for a retained run')
     out, root = args.output.resolve(), args.project_root.resolve()
-    if args.steps is not None and (args.stage != 'train-one' or args.pilot_output is None):
+    if args.steps is not None and (args.stage not in ('train-one','voltage-one') or args.pilot_output is None):
         raise ValueError('step overrides require train-one and a separate --pilot-output')
     if args.pilot_output and args.pilot_output.resolve() == out:
         raise ValueError('pilot output must differ from the formal run root')
@@ -936,10 +955,14 @@ def main(argv=None):
     gpu_workers = args.gpu_workers or int(cfg.get('resources', {}).get('gpu_workers_per_device', 1))
     if gpu_workers not in (1, 2): raise ValueError('one or two measured GPU workers per device required')
     if args.parent_pid is not None:
-        if args.stage not in ('train-one', 'masked-one', 'refine-one') or os.getppid() != args.parent_pid:
+        if args.stage not in ('train-one', 'masked-one', 'refine-one','voltage-one') or os.getppid() != args.parent_pid:
             raise ValueError('worker must be a direct child of its live controller')
         freeze_contract(out, cfg, root)
-        if args.stage == 'refine-one':
+        if args.stage=='voltage-one':
+            result=(voltage_final(cfg,out,args.candidate,args.seed,args.device,args.gpu_memory_bytes)
+                if args.evaluation_split=='test' else voltage_train(cfg,out,args.candidate,args.seed,args.device,args.gpu_memory_bytes,
+                    steps=args.steps,job_override=args.pilot_output,export=not args.no_export))
+        elif args.stage == 'refine-one':
             result = refine_one(cfg, out, args.candidate, args.seed, args.device, args.gpu_memory_bytes)
         elif args.stage == 'masked-one':
             result = masked_one(cfg, out, args.variant, args.seed, args.device, args.gpu_memory_bytes)
@@ -956,7 +979,9 @@ def main(argv=None):
         for stage in selected:
             write_json(out / 'controller.json', dict(status='running', stage=stage, pid=os.getpid(), updated=now(),
                 command=sys.argv, workers=workers, devices=devices, gpu_workers=gpu_workers))
-            if stage == 'synthetic':
+            if stage=='voltage': result=run_voltage(cfg,args.config.resolve(),out,root,devices,gpu_workers,workers)
+            elif stage=='voltage-one':result=voltage_train(cfg,out,args.candidate,args.seed,args.device,args.gpu_memory_bytes)
+            elif stage == 'synthetic':
                 path = out / 'synthetic.json'
                 result = read_json(path) if path.exists() else synthetic(cfg)
                 write_json(path, result)
@@ -1378,6 +1403,674 @@ def run_refinement(cfg, cfg_path, out, root, devices, gpu_workers):
     write_json(Path(out) / 'figure_index.json', dict(files=figures,
         selection='first identity and baseline-median/P90 error, different validation subjects; no candidate-based selection'))
     return dict(status=summary['status'], completed_candidates=len(results), selected=summary['selected'])
+
+
+def voltage_synthetic(cfg):
+    from src.data.dual_component_tokenizer import voltage_proxy_correction, BANDS
+    from src.inference.observation_baselines import eeg_band_power
+    from src.tokenizers.dual_component_tokenizer import waveform_windows,overlap_decode
+    import torch
+    rng=np.random.default_rng(17);t=np.arange(18000)/200
+    x=np.column_stack([(1+.15*np.sin(.2*t+i))*np.sin(2*np.pi*(8+i)*t)+.2*rng.normal(size=len(t)) for i in range(3)])
+    features=np.log(eeg_band_power(x,bands=BANDS,sample_rate=200,target_rate=10)).reshape(900,-1)
+    features-=features[:50].mean(0);a=np.array([np.linspace(-.2,.8,15),np.sin(np.arange(15))])*.02
+    u=features@a.T;target=u+.004*np.sin(np.arange(900)[:,None]*.1)*np.array([1.,.7])
+    zero=voltage_proxy_correction(x,a,target,strength=0.)
+    corrected=voltage_proxy_correction(x,a,target)
+    if not np.array_equal(zero['corrected'],x):raise AssertionError('zero correction changed voltage')
+    if corrected['diagnostic']['after']>=corrected['diagnostic']['before']:raise AssertionError('synthetic reprojection did not improve')
+    y=torch.tensor(np.sin(np.arange(200)[None,:,None]*.03),dtype=torch.float64)
+    windows,_=waveform_windows(y,hop=20,span=40)
+    recovered=overlap_decode(windows,hop=20,channels=1,length=200)
+    error=float((recovered-y).abs().max())
+    if error>1e-12:raise AssertionError('overlap identity mismatch')
+    return dict(status='completed',measured_arrays_read=0,correction=corrected['diagnostic'],
+        zero_correction_max_abs=0.,voltage_closure_max_abs=float(np.max(np.abs(corrected['corrected']+corrected['remaining']-x))),
+        overlap_identity_max_abs=error)
+
+
+def _voltage_record(payload):
+    from src.data.dual_component_tokenizer import prepare_voltage_record
+    root,cfg,out,parent,rows=payload
+    pending=[]
+    for trial in sorted({r['trial_id'] for r in rows}):
+        if task_begin(out,'voltage_prepared',trial) is not None:
+            pending.extend(r for r in rows if r['trial_id']==trial)
+    if not pending:return dict(status='completed',skipped=True)
+    done=set();counts=Counter();started=time.monotonic()
+    try:
+        co=read_json(Path(parent)/'coordinates.json')
+        read_teacher=lambda row:read_arrays(parent,'teacher',row)
+        v=cfg['voltage']['correction']
+        for trial,arrays,meta in prepare_voltage_record(root,cfg,pending,co,read_teacher,
+                strength=v['strength'],max_log_gain=v['maximum_log_amplitude_gain'],backtracking=v['backtracking']):
+            done.add(trial)
+            if arrays is None:task_finish(out,'voltage_prepared',trial,'failed',**meta);counts['failed']+=1
+            else:
+                write_npz(array_paths(out,'voltage_prepared',dict(id=trial)),**arrays)
+                task_finish(out,'voltage_prepared',trial,'completed',metadata=meta);counts['completed']+=1
+    except Exception:
+        error=traceback.format_exc()
+        for trial in {r['trial_id'] for r in pending}-done:
+            task_finish(out,'voltage_prepared',trial,'failed',error=error);counts['failed']+=1
+    return dict(status='completed',record=rows[0]['join_key'],elapsed_seconds=time.monotonic()-started,
+        peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,**counts)
+
+
+def prepare_voltage(cfg,out,root,workers,*,final=False):
+    from src.data.dual_component_tokenizer import metadata_inventory
+    v=cfg['voltage'];parent=(Path(root)/v['parent_run']).resolve()
+    admitted=(Path(root)/'experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3').resolve()
+    if parent!=admitted or read_json(parent/'controller.json')['status']!='completed':
+        raise ValueError('exact completed frozen public teacher parent required')
+    if read_json(parent/'resolved_config.json')['config']['data']['protected_data']!='forbidden':
+        raise ValueError('protected source is not admitted')
+    if final and not (Path(out)/'voltage_selection.json').exists():
+        raise ValueError('freeze validation choice before accessing public test signals')
+    inventory=metadata_inventory(root,cfg)
+    parent_manifest=read_json(parent/'cache/manifest.json')
+    retained={r['trial_id'] for r in parent_manifest['rows']}
+    splits=['test'] if final else ['train','validation']
+    planned=[r for r in inventory['rows'] if r['split'] in splits]
+    rows=[r for r in planned if r['trial_id'] in retained]
+    plan=dict(schema='dual_component_voltage_plan_v1',parent=str(parent),rows=planned,
+        planned_trials=len({r['trial_id'] for r in planned}),parent_available_trials=len({r['trial_id'] for r in rows}),
+        parent_failed_trials=sorted({r['trial_id'] for r in planned}-retained),splits=splits,
+        ssms_refitted=0,protected_data='forbidden')
+    suffix='test' if final else 'development'
+    write_json(Path(out)/f'voltage_{suffix}_plan.json',plan)
+    grouped=defaultdict(list)
+    for row in rows:
+        if task_status(out,'voltage_prepared',row['trial_id'])['status'] not in TERMINAL:
+            grouped[row['join_key']].append(row)
+    payloads=[(str(root),cfg,str(out),str(parent),g) for _,g in sorted(grouped.items())]
+    results=[]
+    def progress(record,number):
+        write_json(Path(out)/f'voltage_{suffix}_progress.json',dict(completed_records=len(results)+number,
+            planned_records=len(payloads),last=record,updated=now()))
+    if payloads and not final:
+        remaining=list(payloads);bench=[]
+        for count in cfg['resources']['cpu_benchmark_workers']:
+            selected=remaining[:count];remaining=remaining[count:]
+            if not selected:break
+            started=time.monotonic();batch=_bounded_jobs(_voltage_record,selected,count,progress=progress)
+            elapsed=time.monotonic()-started;results.extend(batch)
+            bench.append(dict(workers=count,seconds=elapsed,completed_trials=sum(r.get('completed',0) for r in batch),
+                trials_per_second=sum(r.get('completed',0) for r in batch)/elapsed,
+                peak_worker_rss_kib=max(r.get('peak_rss_kib',0) for r in batch)))
+            write_json(Path(out)/'voltage_cpu_benchmark.json',dict(measurements=bench,
+                scope='distinct planned record batches; preparation reused, no extra SSM fits',
+                limitation='record sizes and native-load overhead differ; throughput is operational, not a controlled hardware comparison'))
+        if bench:
+            workers=max(bench,key=lambda r:r['trials_per_second'])['workers']
+            write_json(Path(out)/'voltage_cpu_choice.json',dict(workers=workers,reason='highest measured completed-trial throughput within memory/CPU bound'))
+        if remaining:results.extend(_bounded_jobs(_voltage_record,remaining,workers,progress=progress))
+    elif payloads:results=_bounded_jobs(_voltage_record,payloads,workers,progress=progress)
+    records=[task_status(out,'voltage_prepared',t) for t in sorted({r['trial_id'] for r in rows})]
+    counts=Counter(r['status'] for r in records)
+    summary=dict(status='completed',planned_trials=plan['planned_trials'],parent_failures=plan['parent_failed_trials'],
+        correction_outcomes=dict(counts),failed=[dict(trial=r['key'],error=r.get('error')) for r in records if r['status']!='completed'],
+        workers=workers,records=results,ssms_refitted=0)
+    write_json(Path(out)/f'voltage_{suffix}_prepare_summary.json',summary)
+    return pack_voltage(cfg,out,parent,plan,final=final)
+
+
+def pack_voltage(cfg,out,parent,plan,*,final=False):
+    folder=Path(out)/('voltage_test_cache' if final else 'voltage_cache');folder.mkdir(exist_ok=True)
+    if (folder/'manifest.json').exists():return read_json(folder/'manifest.json')
+    trials=sorted({r['trial_id'] for r in plan['rows']});successful=[];rows={'eeg':[],'hb':[]}
+    scale_path=Path(out)/'voltage_scales.json';totals=defaultdict(lambda:[0.,0])
+    for trial in trials:
+        record=task_status(out,'voltage_prepared',trial)
+        if record['status']!='completed':continue
+        meta=record['metadata'];group=meta['rows'];base=group[0];successful.append((trial,meta))
+        for channel in meta['eeg_channels']:
+            rows['eeg'].append(dict(dataset=base['dataset'],subject=base['subject'],record=base['record'],split=base['split'],
+                trial_id=trial,id=trial+'__electrode_'+channel,channel=channel,coordinate=base['dataset']+'|'+channel))
+        rows['hb'].extend(dict(dataset=r['dataset'],subject=r['subject'],record=r['record'],split=r['split'],
+            trial_id=trial,id=r['id'],channel=r['anchor']['hb_channel'],coordinate=r['coordinate']) for r in group)
+        if not final and base['split']=='train':
+            with np.load(array_paths(out,'voltage_prepared',dict(id=trial)),allow_pickle=False) as z:
+                for channel,value in zip(meta['eeg_channels'],z['eeg_u']):
+                    key=base['dataset']+'|'+channel;totals[key][0]+=float(np.sum(np.asarray(value,float)**2));totals[key][1]+=value.size
+    if not successful:raise ValueError('no admitted voltage targets; preserve failure evidence')
+    if final:scales=read_json(scale_path)
+    else:
+        old=read_json(Path(parent)/'cache/manifest.json')['observation_training_sd']
+        scales=dict(eeg={k:max(float(np.sqrt(s/n)),1e-8) for k,(s,n) in totals.items()},
+            hb={k:v[1:] for k,v in old.items()},fit='training-only raw EEG RMS without centering; unchanged parent Hb SD')
+        write_json(scale_path,scales)
+    arrays={};coordinates={}
+    for modality,length,channels in [('eeg',4000,1),('hb',200,2)]:
+        coordinates[modality]=sorted(scales[modality])
+        for row in rows[modality]:
+            if row['coordinate'] not in scales[modality]:raise ValueError('test/validation coordinate lacks training scale')
+            row['coordinate_index']=coordinates[modality].index(row['coordinate'])
+        for key in ['u','s','o']:
+            arrays[modality+'_'+key]=np.lib.format.open_memmap(folder/f'{modality}_{key}.npy',mode='w+',dtype='float32',
+                shape=(len(rows[modality]),length,channels))
+    position={'eeg':0,'hb':0};moments=defaultdict(lambda:np.zeros(4));derivatives=defaultdict(lambda:np.zeros(2))
+    for trial,meta in successful:
+        with np.load(array_paths(out,'voltage_prepared',dict(id=trial)),allow_pickle=False) as z:
+            for modality in ['eeg','hb']:
+                n=len(meta['eeg_channels']) if modality=='eeg' else 3
+                group=rows[modality][position[modality]:position[modality]+n]
+                scale=np.asarray([scales[modality][r['coordinate']] for r in group])
+                scale=scale.reshape(n,1,-1)
+                for key in ['u','s','o']:
+                    value=np.asarray(z[modality+'_'+key],float)
+                    if modality=='eeg':value=value[...,None]
+                    value=(value/scale).astype('float32')
+                    arrays[modality+'_'+key][position[modality]:position[modality]+n]=value
+                    if group[0]['split']=='train':
+                        v64=np.asarray(value,float);moments[modality+'_'+key]+=np.array([v64.sum(),np.square(v64).sum(),v64.size,0.])
+                        d=np.diff(v64,axis=1);derivatives[modality+'_'+key]+=np.array([np.square(d).sum(),d.size])
+                position[modality]+=n
+    for value in arrays.values():value.flush()
+    statistics={k:dict(variance=max(float(sq/n-(s/n)**2),1e-4),mean=float(s/n),
+        derivative_mse=max(float(derivatives[k][0]/derivatives[k][1]),1e-6)) for k,(s,sq,n,_) in moments.items()}
+    manifest=dict(schema='dual_component_voltage_cache_v1',rows=rows,coordinates=coordinates,
+        arrays={k:k+'.npy' for k in arrays},shapes={k:list(x.shape) for k,x in arrays.items()},
+        planned_trials=plan['planned_trials'],retained_trials=len(successful),statistics=statistics,
+        scale_source=str(scale_path),final=final,target='conditional voltage correction; fixed Tak Hb S/O',
+        source_parent=str(parent),protected_data='forbidden')
+    if final:manifest['statistics']=read_json(Path(out)/'voltage_cache/manifest.json')['statistics']
+    write_json(folder/'manifest.json',manifest);return manifest
+
+
+def load_voltage_cache(out,*,final=False):
+    folder=Path(out)/('voltage_test_cache' if final else 'voltage_cache')
+    manifest=read_json(folder/'manifest.json')
+    if manifest['schema']!='dual_component_voltage_cache_v1' or manifest['protected_data']!='forbidden':
+        raise ValueError('versioned public voltage cache required')
+    arrays={k:np.load(folder/v,mmap_mode='r',allow_pickle=False) for k,v in manifest['arrays'].items()}
+    return manifest,arrays
+
+
+def _voltage_batch(manifest,arrays,modality,indices,candidate,cfg,device,positions=None,*,load_targets=True):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import waveform_windows
+    settings=cfg['voltage'][modality];hop=settings['hop_samples'];span=candidate['span_samples']
+    indices=np.asarray(indices);rows=manifest['rows'][modality]
+    length=arrays[modality+'_u'].shape[1];channels=arrays[modality+'_u'].shape[2]
+    coordinates=np.array([rows[i]['coordinate_index'] for i in indices])
+    metadata=np.eye(len(manifest['coordinates'][modality]),dtype='float32')[coordinates]
+    def selected(key,width):
+        if positions is None:
+            value=torch.as_tensor(np.asarray(arrays[key][indices]).copy(),device=device)
+            return waveform_windows(value,hop=hop,span=width)
+        time_index=np.asarray(positions)[:,None]*hop-(width-hop)//2+np.arange(width)[None]
+        valid=(time_index>=0)&(time_index<length);take=np.clip(time_index,0,length-1)
+        value=np.asarray(arrays[key][indices[:,None],take,:]).copy()
+        mask=np.broadcast_to(valid[:,:,None],value.shape).copy()
+        value[~mask]=0
+        return torch.as_tensor(value.reshape(len(indices),1,-1),device=device),torch.as_tensor(mask.reshape(len(indices),1,-1),device=device)
+    inputs,masks=selected(modality+'_u',settings['context_samples'])
+    meta=torch.as_tensor(metadata,device=device)[:,None].expand(-1,inputs.shape[1],-1)
+    inputs=torch.cat((inputs,meta),-1);masks=torch.cat((masks,torch.ones_like(meta,dtype=torch.bool)),-1)
+    target={};target_mask={}
+    if load_targets:
+        for component,key in [('S','s'),('O','o')]:target[component],target_mask[component]=selected(modality+'_'+key,span)
+    return inputs,masks,target,target_mask
+
+
+def _voltage_predict(model,manifest,arrays,modality,indices,candidate,cfg,device):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import overlap_decode
+    with torch.inference_mode():
+        inputs,masks,_,_=_voltage_batch(manifest,arrays,modality,indices,candidate,cfg,device,load_targets=False)
+        result=model({modality:inputs},{modality:masks})[modality]
+        words={c:result[c].cpu().numpy() for c in ['S','O']}
+    setting=cfg['voltage'][modality];channels=arrays[modality+'_u'].shape[2];length=arrays[modality+'_u'].shape[1]
+    full={c:overlap_decode(value,hop=setting['hop_samples'],channels=channels,length=length) for c,value in words.items()}
+    full['sum']=full['S']+full['O']
+    return words,full
+
+
+def _voltage_codebooks(path):
+    from src.tokenizers.dual_component_tokenizer import WaveformDictionary
+    with np.load(path,allow_pickle=False) as archive:
+        result={}
+        for key in ['S','O','ordinary']:
+            result[key]=WaveformDictionary.from_state({n:archive[key+'_'+n] for n in
+                ['codewords','value_scale','delta_scale','channels','derivative_weight','dimension']})
+    return result
+
+
+def voltage_train(cfg,out,name,seed,device='cpu',memory_bytes=None,*,steps=None,job_override=None,export=True):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import DualComponentTokenizer,WaveformDictionary,overlap_decode,waveform_windows
+    settings=cfg['voltage'];candidate=next(c for c in settings['candidates'] if c['name']==name)
+    modality=candidate['modality'];spec=settings[modality]
+    job=Path(job_override) if job_override else Path(out)/'voltage_jobs'/name/f'seed_{seed}'
+    job.mkdir(parents=True,exist_ok=True)
+    if (job/'summary.json').exists():return read_json(job/'summary.json')
+    with owner_lock(job,'training'):
+        torch.set_num_threads(cfg['resources']['torch_threads']);torch.manual_seed(seed);np.random.seed(seed);random.seed(seed)
+        if device.startswith('cuda'):
+            torch.cuda.set_device(device);cap=memory_bytes or cfg['resources']['max_new_gpu_memory_mib']*2**20
+            torch.cuda.set_per_process_memory_fraction(max(cap-512*2**20,64*2**20)/torch.cuda.get_device_properties(device).total_memory,device)
+            torch.cuda.reset_peak_memory_stats(device)
+        manifest,arrays=load_voltage_cache(out);rows=manifest['rows'][modality]
+        if any(r['split'] not in ('train','validation') for r in rows):raise ValueError('test row entered voltage training')
+        training=np.array([r['split']=='train' for r in rows]);train_indices=np.flatnonzero(training)
+        groups=[np.array([i for i,r in enumerate(rows) if r['split']=='train' and r['dataset']==d]) for d in sorted({r['dataset'] for r in rows})]
+        if any(len(g)==0 for g in groups):raise ValueError('missing dataset training support')
+        channels=arrays[modality+'_u'].shape[2];length=arrays[modality+'_u'].shape[1]
+        model_cfg=dict(input_dims={modality:spec['context_samples']*channels+len(manifest['coordinates'][modality])},
+            target_dims={modality:candidate['span_samples']*channels},width=settings['width'],latent_dim=settings['latent_dim'],
+            codebook_size=settings['codebook_size'])
+        model=DualComponentTokenizer(model_cfg,'continuous_student').to(device)
+        optimizer=torch.optim.AdamW(model.parameters(),lr=settings['learning_rate'],weight_decay=settings['weight_decay'])
+        checkpoint=job/'checkpoint.pt';start=0;history=[];prior_elapsed=0.;budget=int(steps or settings['steps'])
+        if checkpoint.exists():
+            saved=torch.load(checkpoint,map_location=device,weights_only=False)
+            if saved['candidate']!=candidate or saved['seed']!=seed or saved['budget']!=budget:raise ValueError('voltage checkpoint contract drift')
+            model.load_state_dict(saved['model_state']);optimizer.load_state_dict(saved['optimizer_state'])
+            start=saved['step'];history=saved['history'];np.random.set_state(saved['numpy_rng']);torch.set_rng_state(saved['torch_rng'].cpu())
+            prior_elapsed=saved['elapsed_seconds']
+            if device.startswith('cuda') and saved.get('cuda_rng') is not None:torch.cuda.set_rng_state(saved['cuda_rng'].cpu(),device)
+        if start>budget:raise ValueError('checkpoint exceeded frozen step budget')
+        started=time.monotonic();model.train();statistics=manifest['statistics']
+        for step in range(start,budget):
+            batch=spec['batch_size'];group_ids=np.random.randint(len(groups),size=batch);ix=np.empty(batch,dtype=int)
+            for g,members in enumerate(groups):
+                take=group_ids==g;ix[take]=members[np.random.randint(len(members),size=int(take.sum()))]
+            positions=np.random.randint(length//spec['hop_samples'],size=batch) if modality=='eeg' else None
+            inputs,masks,targets,target_masks=_voltage_batch(manifest,arrays,modality,ix,candidate,cfg,device,positions)
+            result=model({modality:inputs},{modality:masks})[modality];loss=inputs.sum()*0.;terms={}
+            for component,key in [('S','s'),('O','o')]:
+                mask=target_masks[component];difference=result[component]-targets[component]
+                mse=(difference.square()*mask).sum()/mask.sum().clamp_min(1)
+                variance=statistics[modality+'_'+key]['variance'];loss=loss+mse/variance
+                terms[component]=float(mse.detach())
+                if modality=='hb' and candidate['boundary_weight']:
+                    full=overlap_decode(result[component],hop=spec['hop_samples'],channels=channels,length=length)
+                    truth=torch.as_tensor(np.asarray(arrays[modality+'_'+key][ix]).copy(),device=device)
+                    error=full.diff(dim=1)-truth.diff(dim=1)
+                    seam=error[:,spec['hop_samples']-1::spec['hop_samples']]
+                    loss=loss+candidate['boundary_weight']*seam.square().mean()/statistics[modality+'_'+key]['derivative_mse']
+                if candidate['overlap_weight']:
+                    blocks=result[component].reshape(batch,-1,candidate['span_samples'],channels)
+                    overlap=blocks[:,:-1,spec['hop_samples']:]-blocks[:,1:,:-spec['hop_samples']]
+                    loss=loss+candidate['overlap_weight']*overlap.square().mean()/variance
+            loss=loss/2
+            if not torch.isfinite(loss):raise FloatingPointError('nonfinite voltage training objective')
+            optimizer.zero_grad(set_to_none=True);loss.backward();torch.nn.utils.clip_grad_norm_(model.parameters(),5.);optimizer.step()
+            if (step+1)%settings['checkpoint_every']==0 or step+1==budget:
+                elapsed=prior_elapsed+time.monotonic()-started;history.append(dict(step=step+1,loss=float(loss.detach()),**terms))
+                _torch_save(checkpoint,dict(candidate=candidate,model_config=model_cfg,seed=seed,step=step+1,budget=budget,
+                    model_state=model.state_dict(),optimizer_state=optimizer.state_dict(),history=history,elapsed_seconds=elapsed,
+                    numpy_rng=np.random.get_state(),torch_rng=torch.get_rng_state(),cuda_rng=torch.cuda.get_rng_state(device) if device.startswith('cuda') else None))
+                write_json(job/'progress.json',dict(status='training',step=step+1,budget=budget,elapsed_seconds=elapsed,last=history[-1]))
+        model.eval();training_elapsed=prior_elapsed+time.monotonic()-started
+        if export:
+            book_path=job/'dictionaries.npz'
+            if not book_path.exists():
+                rng=np.random.default_rng(seed);count=settings['codebook_fit_patches']
+                fit_indices=rng.choice(train_indices,size=min(len(train_indices),max(256,int(np.ceil(count/(length//spec['hop_samples'])))*2)),replace=False)
+                samples={'S':[],'O':[],'ordinary':[]}
+                for begin in range(0,len(fit_indices),32):
+                    selection=fit_indices[begin:begin+32]
+                    words,_=_voltage_predict(model,manifest,arrays,modality,selection,candidate,cfg,device)
+                    raw=torch.as_tensor(np.asarray(arrays[modality+'_u'][selection]).copy())
+                    raw_words,valid=waveform_windows(raw,hop=spec['hop_samples'],span=candidate['span_samples'])
+                    take=valid.all(-1).numpy()
+                    for c in ['S','O']:samples[c].append(words[c][take])
+                    samples['ordinary'].append(raw_words.numpy()[take])
+                books={};levels=max(spec['codebook_levels'])
+                for c in ['S','O','ordinary']:
+                    book=WaveformDictionary(settings['codebook_size'],levels*(2 if c=='ordinary' else 1),channels,0.,seed,
+                        settings['codebook_fit_patches'],settings['codebook_iterations'])
+                    books[c]=book.fit(np.concatenate(samples[c]))
+                write_npz(book_path,**{c+'_'+k:v for c,book in books.items() for k,v in book.state().items()})
+            books=_voltage_codebooks(book_path)
+            evaluation=voltage_evaluate(cfg,out,job,model,candidate,manifest,arrays,books,device)
+        else:evaluation=None
+        result=dict(status='completed',candidate=candidate,seed=seed,step=budget,budget=budget,
+            training_elapsed_seconds=training_elapsed,elapsed_seconds=time.monotonic()-started+prior_elapsed,
+            steps_per_second=(budget-start)/max(time.monotonic()-started,1e-9) if not export else budget/training_elapsed,
+            peak_cuda_reserved_bytes=torch.cuda.max_memory_reserved(device) if device.startswith('cuda') else 0,
+            evaluation=evaluation,test_used=False)
+        write_json(job/'summary.json',result);return result
+
+
+def voltage_evaluate(cfg,out,job,model,candidate,manifest,arrays,books,device,*,final=False):
+    import torch
+    from scipy.ndimage import gaussian_filter1d
+    from src.tokenizers.dual_component_tokenizer import overlap_decode,waveform_windows
+    from src.analysis.dual_component_tokenizer import voltage_case_metrics,voltage_aggregate,_csv
+    modality=candidate['modality'];spec=cfg['voltage'][modality];rows=manifest['rows'][modality]
+    destination=Path(job)/('test_evaluation' if final else 'evaluation');destination.mkdir(exist_ok=True)
+    if (destination/'summary.json').exists():return read_json(destination/'summary.json')
+    n=len(rows);channels=arrays[modality+'_u'].shape[2];length=arrays[modality+'_u'].shape[1]
+    levels=spec['codebook_levels'];variants=['continuous','identity']+[f'vq{l}' for l in levels]+[f'ordinary_vq{2*l}' for l in levels]
+    if modality=='hb' and candidate['name']=='hb_blocks':variants.append('vq2_smoothed')
+    signals=['joint'] if channels==1 else ['joint','HbO','HbR']
+    metrics={name:np.empty((n,3,len(signals),5)) for name in variants}
+    split_array=np.array([r['split'] for r in rows]);dataset_array=np.array([r['dataset'] for r in rows])
+    subject_keys=sorted({(r['dataset'],r['subject']) for r in rows});subject_id=np.array([subject_keys.index((r['dataset'],r['subject'])) for r in rows])
+    counts={};seen={};size=cfg['voltage']['codebook_size'];level_count=max(levels)
+    for split in np.unique(split_array):
+        for dataset in ['pooled',*np.unique(dataset_array)]:
+            for c in ['S','O']:
+                for level in range(level_count):counts[(split,dataset,c,level)]=np.zeros(size,dtype='int64')
+        for c in ['S','O']:
+            for level in range(level_count):seen[(split,c,level)]=np.zeros((len(subject_keys),size),dtype=bool)
+    for begin in range(0,n,32):
+        ix=np.arange(begin,min(begin+32,n));words,full=_voltage_predict(model,manifest,arrays,modality,ix,candidate,cfg,device)
+        targets={c:np.asarray(arrays[modality+'_'+key][ix]) for c,key in [('S','s'),('O','o'),('sum','u')]}
+        metrics['continuous'][ix],_=voltage_case_metrics(full,targets,hop=spec['hop_samples'])
+        metrics['identity'][ix],_=voltage_case_metrics(dict(S=targets['sum'],O=np.zeros_like(targets['sum']),sum=targets['sum']),targets,hop=spec['hop_samples'])
+        ids={c:books[c].encode(words[c]) for c in ['S','O']}
+        for split in np.unique(split_array[ix]):
+            for c in ['S','O']:
+                for level in range(level_count):
+                    subset=split_array[ix]==split
+                    seen[(split,c,level)][subject_id[ix][subset,None],ids[c][subset,:,level]]=True
+                    for dataset in ['pooled',*np.unique(dataset_array[ix])]:
+                        take=subset if dataset=='pooled' else subset&(dataset_array[ix]==dataset)
+                        counts[(split,dataset,c,level)]+=np.bincount(ids[c][take,:,level].ravel(),minlength=size)
+        raw_windows,_=waveform_windows(torch.as_tensor(targets['sum']),hop=spec['hop_samples'],span=candidate['span_samples'])
+        ordinary_ids=books['ordinary'].encode(raw_windows.numpy())
+        for level in levels:
+            decoded={c:overlap_decode(books[c].decode(ids[c][...,:level]),hop=spec['hop_samples'],channels=channels,length=length) for c in ['S','O']}
+            decoded['sum']=decoded['S']+decoded['O'];metrics[f'vq{level}'][ix],_=voltage_case_metrics(decoded,targets,hop=spec['hop_samples'])
+            ordinary=overlap_decode(books['ordinary'].decode(ordinary_ids[...,:2*level]),hop=spec['hop_samples'],channels=channels,length=length)
+            metrics[f'ordinary_vq{2*level}'][ix],_=voltage_case_metrics(dict(sum=ordinary),targets,hop=spec['hop_samples'])
+            if 'vq2_smoothed' in metrics:
+                smoothed={c:gaussian_filter1d(decoded[c],sigma=1.,axis=1,mode='nearest',truncate=4.) for c in ['S','O']}
+                smoothed['sum']=smoothed['S']+smoothed['O'];metrics['vq2_smoothed'][ix],_=voltage_case_metrics(smoothed,targets,hop=spec['hop_samples'])
+        if begin%2048==0:write_json(destination/'progress.json',dict(completed_cases=int(ix[-1]+1),planned_cases=n,updated=now()))
+    health=[];threshold=cfg['voltage']['codebook_health']
+    for (split,dataset,component,level),count in counts.items():
+        if not count.sum():continue
+        probability=count/count.sum();nonzero=probability>0;perplexity=float(np.exp(-np.sum(probability[nonzero]*np.log(probability[nonzero]))))
+        active=float(np.mean(nonzero));required=threshold['train_active_fraction'] if split=='train' else threshold['validation_active_fraction']
+        health.append(dict(split=split,dataset=dataset,component=component,level=level,size=size,active_codes=int(nonzero.sum()),
+            active_fraction=active,perplexity=perplexity,max_probability=float(probability.max()),
+            code_counts=count.tolist(),code_subject_counts=seen[(split,component,level)].sum(0).tolist() if dataset=='pooled' else None,
+            passed=bool(active>=required and perplexity/size>=threshold['effective_fraction'] and probability.max()<=threshold['maximum_code_probability'])))
+    reports={}
+    for variant,value in metrics.items():
+        subjects,summary=voltage_aggregate(value,rows,modality=modality,variant=variant,signals=signals)
+        _csv(destination/f'{variant}_subjects.csv',subjects)
+        lev=int(variant.replace('vq','')) if variant.startswith('vq') and variant[2:].isdigit() else None
+        reports[variant]=dict(metrics=summary,health_pass=all(h['passed'] for h in health if h['dataset']=='pooled' and h['level']<lev) if lev else None,
+            bits_per_patch=2*lev*np.log2(size) if lev else None,
+            bits_per_second=2*lev*np.log2(size)*spec['sample_rate_hz']/spec['hop_samples'] if lev else None)
+    write_npz(destination/'case_metrics.npz',**metrics)
+    report=dict(status='completed',modality=modality,candidate=candidate,variants=reports,codebook_health=health,
+        cases=n,signals=signals,final=final,aggregation='case time mean -> equal cases within record -> equal records within subject -> equal subjects within dataset',
+        units='frozen training raw EEG RMS squared or inherited Hb observation SD squared',
+        boundary='squared error of signed adjacent-sample differences at token hop boundaries',
+        continuous_metadata='dataset/channel training scale only; no sample-specific decoder inputs')
+    write_json(destination/'summary.json',report);return report
+
+
+def voltage_final(cfg,out,name,seed,device,memory_bytes=None):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import DualComponentTokenizer
+    selection_path=Path(out)/'voltage_selection.json'
+    if not selection_path.exists():raise ValueError('validation selection must exist before test cache access')
+    selected=read_json(selection_path)
+    if name not in {'eeg_voltage','hb_blocks',selected['hb_candidate']} or seed not in [cfg['voltage']['seed'],*cfg['voltage']['confirmation_seeds']]:
+        raise ValueError('unselected candidate cannot access public test arrays')
+    job=Path(out)/'voltage_jobs'/name/f'seed_{seed}'
+    if (job/'test_result.json').exists():return read_json(job/'test_result.json')
+    training=read_json(job/'summary.json')
+    if training['status']!='completed' or training['step']!=cfg['voltage']['steps']:raise ValueError('completed fixed-budget checkpoint required')
+    torch.set_num_threads(cfg['resources']['torch_threads'])
+    if device.startswith('cuda'):
+        torch.cuda.set_device(device);cap=memory_bytes or cfg['resources']['max_new_gpu_memory_mib']*2**20
+        torch.cuda.set_per_process_memory_fraction(max(cap-512*2**20,64*2**20)/torch.cuda.get_device_properties(device).total_memory,device)
+    saved=torch.load(job/'checkpoint.pt',map_location=device,weights_only=False)
+    model=DualComponentTokenizer(saved['model_config'],'continuous_student').to(device);model.load_state_dict(saved['model_state']);model.eval()
+    manifest,arrays=load_voltage_cache(out,final=True)
+    if any(r['split']!='test' for rows in manifest['rows'].values() for r in rows):raise ValueError('final cache split mismatch')
+    result=voltage_evaluate(cfg,out,job,model,training['candidate'],manifest,arrays,_voltage_codebooks(job/'dictionaries.npz'),device,final=True)
+    result=dict(status='completed',candidate=training['candidate'],seed=seed,evaluation=result)
+    write_json(job/'test_result.json',result);return result
+
+
+def _launch_voltage(cfg,cfg_path,out,root,name,seed,device,workers,*,pilot=None,steps=None,final=False):
+    job=Path(pilot) if pilot else Path(out)/'voltage_jobs'/name/f'seed_{seed}';job.mkdir(parents=True,exist_ok=True)
+    command=[sys.executable,str(Path(__file__).resolve()),'--config',str(cfg_path),'--project-root',str(root),
+        '--output',str(out),'--stage','voltage-one','--candidate',name,'--seed',str(seed),'--device',device,
+        '--gpu-memory-bytes',str(cfg['resources']['max_new_gpu_memory_mib']*2**20//workers),'--parent-pid',str(os.getpid())]
+    if pilot:command.extend(['--pilot-output',str(pilot),'--steps',str(steps),'--no-export'])
+    if final:command.extend(['--evaluation-split','test'])
+    handle=(job/('test_process.log' if final else 'process.log')).open('a')
+    return subprocess.Popen(command,cwd=SOURCE,stdout=handle,stderr=subprocess.STDOUT),handle,job
+
+
+def voltage_jobs(cfg,cfg_path,out,root,devices,gpu_workers,pending,*,phase):
+    pending=list(pending);planned=len(pending);results=[];running=[];slots=[d for d in devices for _ in range(gpu_workers)]
+    final=phase=='test';filename='test_result.json' if final else 'summary.json'
+    while pending or running:
+        while pending and len(running)<len(slots):
+            name,seed=pending.pop(0);job=Path(out)/'voltage_jobs'/name/f'seed_{seed}'
+            if (job/filename).exists():results.append(read_json(job/filename));continue
+            usage=Counter(x[3] for x in running);device=next(d for d in slots if usage[d]<slots.count(d))
+            process,handle,job=_launch_voltage(cfg,cfg_path,out,root,name,seed,device,slots.count(device),final=final)
+            running.append((process,handle,(name,seed),device,job))
+        if not running:continue
+        time.sleep(.3)
+        for item in list(running):
+            process,handle,key,device,job=item;code=process.poll()
+            if code is None:continue
+            handle.close();running.remove(item)
+            result=read_json(job/filename) if (job/filename).exists() else dict(status='failed',candidate=key[0],seed=key[1],log=str(job/'process.log'))
+            if code!=0:result=dict(result,status='failed',returncode=code)
+            results.append(result)
+            write_json(Path(out)/'voltage_training_progress.json',dict(phase=phase,completed=len(results),planned=planned,
+                active=[dict(candidate=x[2][0],seed=x[2][1],device=x[3],pid=x[0].pid) for x in running],last=result.get('status'),updated=now()))
+    write_json(Path(out)/f'voltage_{phase}_jobs.json',dict(status='completed' if all(x['status']=='completed' for x in results) else 'failed',jobs=results))
+    if any(x['status']!='completed' for x in results):raise RuntimeError(f'voltage {phase} job failed; inspect retained process logs')
+    return results
+
+
+def voltage_benchmark(cfg,cfg_path,out,root,devices):
+    path=Path(out)/'voltage_gpu_benchmark.json'
+    if path.exists():return read_json(path)['workers_per_device']
+    benchmarks=[]
+    for count in [1,2]:
+        processes=[];started=time.monotonic()
+        for i,device in enumerate(devices):
+            for w in range(count):
+                pilot=Path(out)/'voltage_benchmark'/f'workers_{count}'/f'device_{i}_worker_{w}'
+                processes.append(_launch_voltage(cfg,cfg_path,out,root,'eeg_voltage',1700+i*2+w,device,count,pilot=pilot,steps=100))
+        records=[]
+        for process,handle,job in processes:
+            code=process.wait();handle.close();record=read_json(job/'summary.json') if (job/'summary.json').exists() else {}
+            if code or record.get('step')!=100 or record.get('budget')!=100:
+                raise RuntimeError('voltage fixed-100-step GPU benchmark failed')
+            records.append(record)
+        elapsed=time.monotonic()-started
+        benchmarks.append(dict(workers_per_device=count,seconds=elapsed,aggregate_steps_per_second=100*len(records)/elapsed,
+            jobs=records,peak_reserved_total_bytes=sum(r['peak_cuda_reserved_bytes'] for r in records)))
+    selected=max(benchmarks,key=lambda x:x['aggregate_steps_per_second'])['workers_per_device']
+    write_json(path,dict(status='completed',workers_per_device=selected,measurements=benchmarks,
+        reason='highest observed aggregate throughput; shared per-device 4GiB allocation bound with reserved CUDA context'))
+    return selected
+
+
+def select_voltage(cfg,results):
+    hb=[r for r in results if r['candidate']['modality']=='hb'];base=next(r for r in hb if r['candidate']['name']=='hb_blocks')
+    def metrics(result,variant='vq2'):return {(r['dataset'],r['component'],r['signal'],r['metric']):r['value'] for r in result['evaluation']['variants'][variant]['metrics']
+        if r['split']=='validation' and r['metric'] in ('NMSE','boundary_error_NMSE')}
+    baseline=metrics(base);candidates=[]
+    pairs=[(r,'vq2') for r in hb]
+    if cfg['voltage'].get('decoder_synthesis_sigma_samples')==1.:
+        pairs.append((base,'vq2_smoothed'))
+    for result,variant in pairs:
+        current=metrics(result,variant);comparisons=[dict(dataset=k[0],component=k[1],signal=k[2],metric=k[3],baseline=b,value=current[k],
+            ratio=current[k]/b if b else None) for k,b in baseline.items()]
+        good=all(x['ratio'] is not None and x['ratio']<=1.05 for x in comparisons if x['metric']=='NMSE')
+        boundary=float(np.mean([x['ratio'] for x in comparisons if x['metric']=='boundary_error_NMSE']))
+        candidates.append(dict(candidate=result['candidate']['name'],variant=variant,fidelity_noninferiority=good,boundary_ratio=boundary,comparisons=comparisons,
+            codebook_health_pass=result['evaluation']['variants']['vq2']['health_pass']))
+    eligible=[r for r in candidates if r['fidelity_noninferiority'] and r['codebook_health_pass']]
+    choice=min(eligible,key=lambda r:r['boundary_ratio']) if eligible else next(r for r in candidates if r['candidate']=='hb_blocks')
+    return dict(hb_candidate=choice['candidate'],hb_variant=choice['variant'],eeg_candidate='eeg_voltage',eeg_levels=4,hb_levels=2,
+        boundary_goal_met=bool(choice['fidelity_noninferiority'] and choice['boundary_ratio']<=1-cfg['voltage']['minimum_boundary_improvement']),
+        candidates=candidates,selection_split='validation',test_used=False,selected_at=now(),
+        interpretation='noninferiority screen is an engineering threshold, not a statistical noninferiority test')
+
+
+def run_voltage(cfg,cfg_path,out,root,devices,gpu_workers,workers):
+    if cfg['voltage'].get('reuse_run'):reuse_voltage(cfg,out,root)
+    synthetic_path=Path(out)/'voltage_synthetic.json'
+    if not synthetic_path.exists():write_json(synthetic_path,voltage_synthetic(cfg))
+    write_json(Path(out)/'voltage_stage.json',dict(stage='development_targets',updated=now()))
+    prepare_voltage(cfg,out,root,workers)
+    write_json(Path(out)/'voltage_stage.json',dict(stage='gpu_benchmark',updated=now()))
+    gpu_workers=voltage_benchmark(cfg,cfg_path,out,root,devices)
+    v=cfg['voltage'];write_json(Path(out)/'voltage_stage.json',dict(stage='screen_training',updated=now()))
+    screen=voltage_jobs(cfg,cfg_path,out,root,devices,gpu_workers,[(c['name'],v['seed']) for c in v['candidates']],phase='screen')
+    selection_path=Path(out)/'voltage_selection.json'
+    if not selection_path.exists():write_json(selection_path,select_voltage(cfg,screen))
+    selection=read_json(selection_path);candidates=sorted({'eeg_voltage','hb_blocks',selection['hb_candidate']})
+    write_json(Path(out)/'voltage_stage.json',dict(stage='seed_replication',updated=now()))
+    voltage_jobs(cfg,cfg_path,out,root,devices,gpu_workers,[(c,s) for c in candidates for s in v['confirmation_seeds']],phase='replication')
+    write_json(Path(out)/'voltage_stage.json',dict(stage='frozen_public_test_targets',updated=now()))
+    prepare_voltage(cfg,out,root,workers,final=True)
+    write_json(Path(out)/'voltage_stage.json',dict(stage='frozen_public_test',updated=now()))
+    final=voltage_jobs(cfg,cfg_path,out,root,devices,gpu_workers,[(c,s) for c in candidates for s in [v['seed'],*v['confirmation_seeds']]],phase='test')
+    summary=summarize_voltage(cfg,out,selection,final)
+    render_voltage(cfg,out,selection,device=devices[0])
+    write_json(Path(out)/'voltage_stage.json',dict(stage='completed',updated=now()))
+    return summary
+
+
+def reuse_voltage(cfg,out,root):
+    """Versioned decoder-only consumer; completed numerical artifacts stay immutable."""
+    import shutil
+    record_path=Path(out)/'voltage_input_reuse.json'
+    if record_path.exists():return read_json(record_path)
+    parent=(Path(root)/cfg['voltage']['reuse_run']).resolve()
+    admitted=(Path(root)/'experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v1').resolve()
+    if parent!=admitted:raise ValueError('exact completed voltage producer required')
+    while read_json(parent/'controller.json').get('status')!='completed':
+        unit=read_json(parent/'launch.json')['unit']
+        state=subprocess.check_output(['systemctl','--user','show',unit,'-p','ActiveState','--value'],text=True).strip()
+        if state not in ('active','activating'):raise RuntimeError('voltage producer is not completed or running')
+        write_json(Path(out)/'voltage_stage.json',dict(stage='waiting_for_completed_voltage_producer',parent=str(parent),updated=now()))
+        time.sleep(10)
+    source_cfg=read_json(parent/'resolved_config.json')['config'];candidate=deepcopy(cfg['voltage'])
+    for key in ['reuse_run','decoder_synthesis_sigma_samples','decoder_synthesis']:candidate.pop(key,None)
+    if candidate!=source_cfg['voltage']:raise ValueError('decoder-only reuse changed training or data contract')
+    names=['voltage_prepared','tasks','voltage_cache','voltage_test_cache','voltage_jobs','voltage_scales.json',
+        'voltage_development_plan.json','voltage_test_plan.json','voltage_development_prepare_summary.json',
+        'voltage_test_prepare_summary.json','voltage_cpu_benchmark.json','voltage_cpu_choice.json','voltage_gpu_benchmark.json',
+        'voltage_synthetic.json']
+    def link(src,dst):
+        if Path(dst).exists():return dst
+        os.link(src,dst);return dst
+    for name in names:
+        source=parent/name;target=Path(out)/name
+        if source.is_dir():shutil.copytree(source,target,copy_function=link,dirs_exist_ok=True)
+        elif source.exists() and not target.exists():shutil.copy2(source,target)
+    result=dict(schema='dual_voltage_decoder_reuse_v1',parent=str(parent),source_config=str(parent/'resolved_config.json'),
+        training_and_data_contract_equal=True,reused=names,new_training_steps=0,new_ssm_fits=0,
+        storage='hardlinks to completed producer arrays and checkpoint/evaluation artifacts; metadata copied where rewritten',
+        selection_source=str(Path(out)/'voltage_selection.json'))
+    write_json(record_path,result);return result
+
+
+def summarize_voltage(cfg,out,selection,final):
+    import csv
+    from src.analysis.dual_component_tokenizer import _csv,paired_subject_bootstrap
+    grouped=defaultdict(list)
+    for result in final:
+        name=result['candidate']['name'];modality=result['candidate']['modality'];seed=result['seed']
+        folder=Path(out)/'voltage_jobs'/name/f'seed_{seed}'/'test_evaluation'
+        main='vq4' if modality=='eeg' else 'vq2'
+        names={main:('selected' if name in ('eeg_voltage',selection['hb_candidate']) else 'hb_blocks'),
+            'continuous':name+'_continuous','identity':modality+'_identity',
+            ('ordinary_vq8' if modality=='eeg' else 'ordinary_vq4'):name+'_ordinary'}
+        if name=='hb_blocks':
+            names[main]='hb_blocks'
+            names['vq2_smoothed']=('selected' if selection.get('hb_variant')=='vq2_smoothed' else 'hb_blocks_smoothed')
+        for variant,label in names.items():
+            file=folder/f'{variant}_subjects.csv'
+            if not file.exists():continue
+            for row in csv.DictReader(file.open()):
+                key=(row['dataset'],row['subject'],modality,row['component'],row['signal'],row['metric'],label)
+                if row['value']:grouped[key].append((seed,float(row['value'])))
+    subjects=[]
+    for key,values in grouped.items():
+        # Identity baseline may have been evaluated under several Hb candidates.
+        by_seed=defaultdict(list)
+        for seed,value in values:by_seed[seed].append(value)
+        subjects.append(dict(zip(('dataset','subject','modality','component','signal','metric','model'),key),
+            value=float(np.mean([np.mean(x) for x in by_seed.values()])),seeds=len(by_seed)))
+    if selection['hb_candidate']=='hb_blocks' and selection.get('hb_variant','vq2')=='vq2':
+        subjects.extend(dict(r,model='selected') for r in subjects.copy() if r['modality']=='hb' and r['model']=='hb_blocks')
+    _csv(Path(out)/'voltage_analysis_subjects.csv',subjects)
+    grouped_summary=defaultdict(list)
+    for row in subjects:grouped_summary[tuple(row[k] for k in ('dataset','modality','component','signal','metric','model'))].append(row)
+    metrics=[dict(zip(('dataset','modality','component','signal','metric','model'),key),
+        value=float(np.mean([r['value'] for r in group])),subjects=len(group)) for key,group in grouped_summary.items()]
+    paired=[]
+    for dataset in sorted({r['dataset'] for r in subjects}):
+        for component in ['S','O','sum']:
+            for signal in ['joint','HbO','HbR']:
+                for metric in ['NMSE','boundary_error_NMSE']:
+                    subset=[r for r in subjects if (r['dataset'],r['modality'],r['component'],r['signal'],r['metric'])==(dataset,'hb',component,signal,metric)]
+                    first=[r for r in subset if r['model']=='selected'];second=[r for r in subset if r['model']=='hb_blocks']
+                    paired.append(dict(dataset=dataset,component=component,signal=signal,metric=metric,
+                        **paired_subject_bootstrap(first,second,value='value',samples=2000,seed=17)))
+    dev=read_json(Path(out)/'voltage_development_prepare_summary.json');test=read_json(Path(out)/'voltage_test_prepare_summary.json')
+    summary=dict(status='completed',experiment_id=cfg['experiment_id'],selection=selection,metrics=metrics,
+        hb_paired_subject_comparisons=paired,development_targets=dev,test_targets=test,
+        ssms_refitted=0,seeds=[cfg['voltage']['seed'],*cfg['voltage']['confirmation_seeds']],
+        interpretation='exploratory conditional voltage targets and fixed-Tak Hb reconstruction; no fresh test or physiological truth claim',
+        inference='paired whole-subject percentile intervals; seeds averaged within subject; no multiplicity-adjusted significance claims')
+    write_json(Path(out)/'voltage_summary.json',summary);return summary
+
+
+def render_voltage(cfg,out,selection,device='cpu'):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import DualComponentTokenizer,synthesize_component
+    from src.analysis.dual_component_tokenizer import render_voltage_examples
+    manifest,arrays=load_voltage_cache(out,final=True);scales=read_json(Path(out)/'voltage_scales.json')
+    seed=cfg['voltage']['seed'];models={};books={}
+    for name in {'eeg_voltage','hb_blocks',selection['hb_candidate']}:
+        folder=Path(out)/'voltage_jobs'/name/f'seed_{seed}'
+        saved=torch.load(folder/'checkpoint.pt',map_location=device,weights_only=False)
+        model=DualComponentTokenizer(saved['model_config'],'continuous_student').to(device)
+        model.load_state_dict(saved['model_state']);models[name]=(model.eval(),saved['candidate']);books[name]=_voltage_codebooks(folder/'dictionaries.npz')
+    with np.load(Path(out)/'voltage_jobs/hb_blocks'/f'seed_{seed}'/'test_evaluation/case_metrics.npz') as z:baseline_error=z['vq2'][:,2,0,0]
+    examples=[];hb_rows=manifest['rows']['hb']
+    for dataset in sorted({r['dataset'] for r in hb_rows}):
+        group=[i for i,r in enumerate(hb_rows) if r['dataset']==dataset];used=set()
+        for label,quantile in [('first_identity',None),('median_baseline_error',.5),('p90_baseline_error',.9)]:
+            eligible=[i for i in group if hb_rows[i]['subject'] not in used]
+            if not eligible:continue
+            i=eligible[0] if quantile is None else min(eligible,key=lambda j:abs(baseline_error[j]-np.quantile(baseline_error[group],quantile)))
+            used.add(hb_rows[i]['subject'])
+            for modality,index in [('hb',i),('eeg',next(j for j,r in enumerate(manifest['rows']['eeg']) if r['trial_id']==hb_rows[i]['trial_id']))]:
+                row=manifest['rows'][modality][index];spec=cfg['voltage'][modality];channels=arrays[modality+'_u'].shape[2]
+                true={c:np.asarray(arrays[modality+'_'+key][index]) for c,key in [('S','s'),('O','o'),('sum','u')]}
+                predictions={}
+                for role,name in [('selected','eeg_voltage' if modality=='eeg' else selection['hb_candidate']),('baseline','eeg_voltage' if modality=='eeg' else 'hb_blocks')]:
+                    model,candidate=models[name];word,continuous=_voltage_predict(model,manifest,arrays,modality,[index],candidate,cfg,device)
+                    levels=4 if modality=='eeg' else 2
+                    if role=='baseline' and modality=='eeg':levels=2
+                    sigma=cfg['voltage'].get('decoder_synthesis_sigma_samples',0.) if modality=='hb' and role=='selected' and selection.get('hb_variant')=='vq2_smoothed' else 0.
+                    prediction={c:synthesize_component(books[name][c].decode(books[name][c].encode(word[c],levels=levels)),
+                        hop=spec['hop_samples'],channels=channels,length=true['sum'].shape[0],smoothing_sigma=sigma)[0] for c in ['S','O']}
+                    prediction['sum']=prediction['S']+prediction['O'];predictions[role]=prediction
+                    if role=='selected':predictions['continuous']={c:v[0] for c,v in continuous.items()}
+                factor=scales['eeg'][row['coordinate']] if modality=='eeg' else 1.
+                examples.append(dict(row=row,modality=modality,selection=label,targets={k:v*factor for k,v in true.items()},
+                    predictions={role:{k:v*factor for k,v in d.items()} for role,d in predictions.items()},
+                    sample_rate_hz=spec['sample_rate_hz'],hop=spec['hop_samples'],candidate=(selection['hb_candidate']+' + fixed 100ms synthesis' if selection.get('hb_variant')=='vq2_smoothed' else selection['hb_candidate']) if modality=='hb' else 'eeg_voltage',
+                    baseline='2-level/branch' if modality=='eeg' else 'independent 2s blocks',
+                    selected_rate='4-level/branch; 560 bit/s/electrode' if modality=='eeg' else '2-level/branch; 28 bit/2s',
+                    units='uV' if modality=='eeg' else 'Frozen training SD'))
+    return render_voltage_examples(out,examples,read_json(Path(out)/'voltage_summary.json'))
 
 
 if __name__ == '__main__':

@@ -1076,3 +1076,126 @@ def render_refinement(cfg, run, selected, *, export=None):
                 f'{selected["bits"]:g} versus 14 bits / modality / 2s; fixed training-SD denominator; subjects weighted equally',fontsize=11)
             path=output/'seed_fidelity_comparison.png';fig.savefig(path,dpi=250);plt.close(fig);files.append(str(path))
     return files
+
+
+VOLTAGE_METRICS=('NMSE','centered_correlation','boundary_error_NMSE','boundary_jump_RMS','derivative_error_NMSE')
+
+
+def boundary_neighborhood_errors(prediction,target,*,hop=20,spans=(1,3,5,11)):
+    """Separate instantaneous seam jumps from persistent offsets across a seam.
+
+    An odd span k compares samples k intervals apart, centred on each seam.
+    The target's signed change is subtracted before squaring. Result [case,span]
+    averages boundaries and channels, with no sample-specific normalization.
+    """
+    a=np.asarray(prediction,float);b=np.asarray(target,float)
+    if a.shape!=b.shape or a.ndim!=3:raise ValueError('aligned case/time/channel waveforms required')
+    errors=[]
+    for span in spans:
+        if span<1 or span%2!=1:raise ValueError('positive odd boundary span required')
+        right=np.arange(hop,a.shape[1],hop)+(span-1)//2;left=right-span
+        take=(left>=0)&(right<a.shape[1]);left,right=left[take],right[take]
+        if not len(left):raise ValueError('no complete boundary neighborhoods')
+        difference=(a[:,right]-a[:,left])-(b[:,right]-b[:,left])
+        errors.append(np.mean(difference*difference,axis=(1,2)))
+    return np.stack(errors,axis=-1)
+
+
+def voltage_case_metrics(predictions,targets,*,hop):
+    """Per-electrode/ROI-case metrics in frozen observation units.
+
+    The boundary error compares *signed* adjacent-sample differences at hop
+    boundaries. A smooth but incorrect curve therefore cannot pass by erasing
+    legitimate slopes. HbO/HbR are also scored separately.
+    """
+    values=np.asarray(targets['sum'],float)
+    signals=[('joint',slice(None))] if values.shape[-1]==1 else [('joint',slice(None)),('HbO',slice(0,1)),('HbR',slice(1,2))]
+    result=np.full((len(values),3,len(signals),len(VOLTAGE_METRICS)),np.nan)
+    for j,component in enumerate(('S','O','sum')):
+        if component not in predictions:continue
+        a=np.asarray(predictions[component],float);b=np.asarray(targets[component],float)
+        if a.shape!=b.shape or a.shape!=values.shape:raise ValueError('same complete continuous support required')
+        for k,(_,select) in enumerate(signals):
+            x,y=a[:,:,select],b[:,:,select];dx,dy=np.diff(x,axis=1),np.diff(y,axis=1)
+            xc=x-x.mean(1,keepdims=True);yc=y-y.mean(1,keepdims=True)
+            denominator=np.sqrt(np.sum(xc*xc,axis=(1,2))*np.sum(yc*yc,axis=(1,2)))
+            corr=np.divide(np.sum(xc*yc,axis=(1,2)),denominator,out=np.full(len(x),np.nan),where=denominator>1e-12)
+            boundary=dx[:,hop-1::hop]-dy[:,hop-1::hop]
+            result[:,j,k,:]=np.stack((np.mean((x-y)**2,axis=(1,2)),corr,
+                np.mean(boundary**2,axis=(1,2)),np.sqrt(np.mean(dx[:,hop-1::hop]**2,axis=(1,2))),
+                np.mean((dx-dy)**2,axis=(1,2))),axis=-1)
+    return result,[x[0] for x in signals]
+
+
+def voltage_aggregate(values,rows,*,modality,variant,signals):
+    """Equal records within subject, then equal subjects; all case counts retained."""
+    grouped=defaultdict(lambda:defaultdict(list))
+    for i,row in enumerate(rows):grouped[(row['dataset'],row['split'],row['subject'])][row['record']].append(i)
+    def mean(x,axis=0):
+        n=np.isfinite(x).sum(axis=axis)
+        return np.divide(np.nansum(x,axis=axis),n,out=np.full(n.shape,np.nan),where=n>0)
+    subjects=[];summaries=defaultdict(list)
+    for (dataset,split,subject),records in grouped.items():
+        average=mean(np.stack([mean(values[index]) for index in records.values()]))
+        indices=[i for ids in records.values() for i in ids]
+        for c,component in enumerate(('S','O','sum')):
+            for s,signal in enumerate(signals):
+                for j,metric in enumerate(VOLTAGE_METRICS):
+                    value=float(average[c,s,j]);entry=dict(dataset=dataset,split=split,subject=subject,modality=modality,
+                        variant=variant,component=component,signal=signal,metric=metric,value=value if np.isfinite(value) else None,
+                        records=len(records),cases=len(indices),undefined_cases=int(np.sum(~np.isfinite(values[indices,c,s,j]))))
+                    subjects.append(entry);summaries[(dataset,split,component,signal,metric)].append(entry)
+    result=[]
+    for (dataset,split,component,signal,metric),group in summaries.items():
+        valid=[r['value'] for r in group if r['value'] is not None]
+        result.append(dict(dataset=dataset,split=split,modality=modality,component=component,signal=signal,metric=metric,
+            value=float(np.mean(valid)) if valid else None,subjects=len(valid),planned_subjects=len(group),
+            cases=sum(r['cases'] for r in group),undefined_cases=sum(r['undefined_cases'] for r in group)))
+    return subjects,result
+
+
+def render_voltage_examples(out,examples,summary):
+    import matplotlib;matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    out=Path(out);folder=out/'voltage_figures';folder.mkdir(exist_ok=True);files=[];index=[]
+    for item in examples:
+        row=item['row'];modality=item['modality'];channels=item['targets']['sum'].shape[-1]
+        show=400 if modality=='eeg' else 200
+        time_axis=np.arange(show)/item['sample_rate_hz']
+        fig,axes=plt.subplots(3,channels,figsize=(12 if channels==2 else 10,8),squeeze=False,constrained_layout=True)
+        for j,component in enumerate(['S','O','sum']):
+            truth=item['targets'][component]
+            for c in range(channels):
+                ax=axes[j,c];ax.plot(time_axis,truth[:show,c],color='black',lw=1.4,label='Conditional target' if component!='sum' else 'Observed voltage/Hb')
+                for role,color,style,label in [('baseline','#888888','--',item['baseline']),('selected','#0072B2','-',item['candidate']),('continuous','#D55E00',':','Before quantization')]:
+                    ax.plot(time_axis,item['predictions'][role][component][:show,c],color=color,ls=style,lw=1.2,label=label)
+                error=np.mean((item['predictions']['selected'][component][:,c]-truth[:,c])**2)
+                label=row['channel'] if modality=='eeg' else ['HbO','HbR'][c]
+                ax.set_title(f'{label} | {component} | complete-20s MSE {error:.4g}',fontsize=10)
+                ax.set_xlabel('Event time (s)');ax.set_ylabel(item['units']);ax.grid(alpha=.2)
+                if j==0:ax.legend(fontsize=7)
+                if modality=='hb':
+                    for t in range(2,20,2):ax.axvline(t,color='#bbbbbb',lw=.6,alpha=.5)
+        fig.suptitle(f'{modality}: {item["selected_rate"]} | seed 17 | public test\n{row["id"]}\n'
+            f'{item["selection"]}; '+('first 2s shown; metrics use all 20s' if modality=='eeg' else 'vertical lines: original 2s patch boundaries'),fontsize=10)
+        path=folder/f'{row["dataset"]}_{item["selection"]}_{modality}.png';fig.savefig(path,dpi=250);plt.close(fig)
+        files.append(str(path));index.append(dict(row=row,modality=modality,selection=item['selection']))
+    metrics=summary['metrics'];datasets=sorted({r['dataset'] for r in metrics})
+    fig,axes=plt.subplots(1,len(datasets),figsize=(12,4.5),squeeze=False,constrained_layout=True)
+    for ax,dataset in zip(axes[0],datasets):
+        labels=[];before=[];after=[]
+        for component in ['S','O','sum']:
+            for signal in ['HbO','HbR']:
+                lookup=lambda model:next(r['value'] for r in metrics if (r['dataset'],r['modality'],r['component'],r['signal'],r['metric'],r['model'])==(dataset,'hb',component,signal,'boundary_error_NMSE',model))
+                labels.append(component+' '+signal);before.append(lookup('hb_blocks'));after.append(lookup('selected'))
+        x=np.arange(len(labels));ax.bar(x-.18,before,width=.36,color='#888888',label='Independent 2s blocks')
+        label=summary['selection']['hb_candidate']+(' + 100ms synthesis' if summary['selection'].get('hb_variant')=='vq2_smoothed' else '')
+        ax.bar(x+.18,after,width=.36,color='#0072B2',label=label)
+        ax.set_xticks(x,labels,rotation=30);ax.set_ylabel('Signed boundary-difference error (training SD squared)')
+        ax.set_title(dataset);ax.legend(fontsize=8);ax.grid(axis='y',alpha=.2)
+    fig.suptitle('Public test Hb boundary error | seeds averaged within subject, subjects weighted equally',fontsize=11)
+    path=folder/'hb_boundary_comparison.png';fig.savefig(path,dpi=250);plt.close(fig);files.append(str(path))
+    _json(out/'voltage_figure_index.json',dict(files=files,examples=index,
+        selection='first identity, median and P90 baseline Hb error; distinct subjects; EEG first native-order retained electrode of same trial',
+        source='voltage_summary.json and frozen checkpoints; no fitted graphical smoothing'))
+    return files

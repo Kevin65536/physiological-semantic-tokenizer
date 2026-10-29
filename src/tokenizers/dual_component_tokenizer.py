@@ -424,6 +424,61 @@ def local_patch_context(values: torch.Tensor, radius: int = 0):
     return torch.cat(pieces, -1), torch.cat(masks, -1)
 
 
+def waveform_windows(values, *, hop, span):
+    """Centered fixed-grid windows and explicit out-of-window validity.
+
+    Values are [batch,time,channel]. Window centres are the centres of the
+    nonoverlapping hop cells. The integer grid is shared by inputs and outputs.
+    """
+    if values.ndim != 3 or hop < 1 or span < hop or (span-hop)%2 or values.shape[1]%hop:
+        raise ValueError('aligned [batch,time,channel], positive hop and centred span required')
+    n=values.shape[1]//hop;left=(span-hop)//2
+    indices=torch.arange(n,device=values.device)[:,None]*hop-left+torch.arange(span,device=values.device)[None]
+    valid=(indices>=0)&(indices<values.shape[1]);take=indices.clamp(0,values.shape[1]-1)
+    result=values[:,take,:]
+    mask=valid[None,:,:,None].expand_as(result)&torch.isfinite(result)
+    return torch.where(mask,result,0).flatten(-2),mask.flatten(-2)
+
+
+def overlap_decode(windows, *, hop, channels, length):
+    """Decode only supplied component waveforms with a fixed partition of unity.
+
+    Both numpy and torch values use the same sine-squared synthesis weights.
+    There is no measured-signal blending and no continuous per-window sidecar.
+    """
+    import numpy as np
+    is_torch=isinstance(windows,torch.Tensor)
+    if windows.shape[-1]%channels or length%hop or windows.shape[-2]!=length//hop:
+        raise ValueError('complete aligned component windows required')
+    span=windows.shape[-1]//channels
+    if span<hop or (span-hop)%2:raise ValueError('centred output span required')
+    left=(span-hop)//2
+    weights=np.ones(span) if span==hop else np.sin(np.pi*(np.arange(span)+.5)/span)**2
+    if is_torch:
+        result=windows.new_zeros((*windows.shape[:-2],length,channels));denom=windows.new_zeros(length)
+        w=torch.as_tensor(weights,device=windows.device,dtype=windows.dtype)
+    else:
+        result=np.zeros((*windows.shape[:-2],length,channels),dtype=windows.dtype);denom=np.zeros(length);w=weights
+    blocks=windows.reshape(*windows.shape[:-1],span,channels)
+    for i in range(windows.shape[-2]):
+        start=i*hop-left;lo=max(0,start);hi=min(length,start+span);a=lo-start;b=hi-start
+        result[...,lo:hi,:]=result[...,lo:hi,:]+blocks[...,i,a:b,:]*w[a:b,None]
+        denom[lo:hi]+=w[a:b]
+    return result/denom[...,None]
+
+
+def synthesize_component(windows, *, hop, channels, length, smoothing_sigma=0.):
+    """Fixed same-branch codeword synthesis; never accepts measured boundaries.
+
+    Gaussian synthesis has four-sigma finite support. It is linear in decoded
+    codewords, preserves constant signals and introduces no new token or sidecar.
+    """
+    from scipy.ndimage import gaussian_filter1d
+    value=overlap_decode(windows,hop=hop,channels=channels,length=length)
+    if smoothing_sigma<0:raise ValueError('nonnegative fixed synthesis width required')
+    return gaussian_filter1d(value,sigma=smoothing_sigma,axis=-2,mode='nearest',truncate=4.) if smoothing_sigma else value
+
+
 class WaveformDictionary:
     """Train-only waveform-space residual VQ; decoding is integer lookup/addition.
 
@@ -508,6 +563,19 @@ class WaveformDictionary:
         return dict(codewords=self.codewords, value_scale=self.value_scale, delta_scale=self.delta_scale,
             channels=self.channels, derivative_weight=self.derivative_weight, dimension=self.dimension,
             nominal_bits_per_component_patch=self.levels * math.log2(self.size))
+
+    @classmethod
+    def from_state(cls, state):
+        import numpy as np
+        words=np.asarray(state['codewords'],dtype='float32')
+        if words.ndim!=3 or not np.isfinite(words).all():raise ValueError('finite level/code/waveform dictionary required')
+        obj=cls(size=words.shape[1],levels=words.shape[0],channels=int(state['channels']),
+            derivative_weight=float(state['derivative_weight']))
+        obj.codewords=words;obj.dimension=int(state['dimension'])
+        obj.value_scale=float(state['value_scale']);obj.delta_scale=float(state['delta_scale'])
+        if words.shape[-1]!=obj.dimension or min(obj.value_scale,obj.delta_scale)<=0:
+            raise ValueError('inconsistent waveform dictionary state')
+        return obj
 
 
 __all__ = ["DualComponentTokenizer", "LocalComponentBranch", "TemporalPatchEncoder", "WaveformDictionary",

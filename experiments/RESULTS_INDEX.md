@@ -245,6 +245,24 @@ shows fixed validation examples, the continuous-to-hard gap and seed variation.
 Test subjects are excluded from refinement; same-validation seed repetitions do
 not supply independent data confirmation or a new masked-prediction result.
 
+The electrode-voltage generation is owned by
+[`voltage v1`](configs/physiology_semantic_tokenizer/dual_component_voltage_v1.yaml)
+and its decoder-only [`v2`](configs/physiology_semantic_tokenizer/dual_component_voltage_v2.yaml).
+The [producer summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v1/voltage_summary.json)
+retains all trained candidates, including rejected Hb boundary/overlap approaches.
+The [frozen synthesis selection](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2/voltage_selection.json)
+and [completed-artifact reuse](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2/voltage_input_reuse.json)
+explain the version transition without new fitting.
+Read the [final comparison](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2/voltage_summary.json)
+with [subject results](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2/voltage_analysis_subjects.csv)
+and [waveform figures](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2/voltage_figure_index.json).
+The [signed-change neighborhood audit](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2/boundary_neighborhood_audit_v1.json)
+separates abrupt seam jumps from wider patch offsets; the
+[fixed-word mean-range diagnostic](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v1/voltage_quantization_diagnostic_v1.json)
+localizes the EEG saturation failure. Neither post-evaluation diagnosis was used
+to tune the retained models. The [delivery verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2/delivery_verification_v1.json)
+checks fixed step budgets, target closure and independent Hb replay.
+
 ## Frozen relationships and local shape tokens — 2026-10-25
 
 The completed [TK-FUNCTIONAL parent summary](runs/physiology_semantic_tokenizer/functional_tokenizer/20261011_v1/summary.json)

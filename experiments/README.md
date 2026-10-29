@@ -421,6 +421,19 @@ contracts for same-modality spectral/temporal frontends and finite seed repeats.
 All preprocessing fits use training subjects; repeated seeds retain the same
 validation set and the original quality thresholds.
 
+Electrode-voltage targets and Hb boundary comparisons use the same runner with
+[`dual_component_voltage_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_voltage_v1.yaml):
+`--stage check`, `--stage synthetic`, then supervised `--stage voltage` under a
+fresh run. The parent Tak outputs remain fixed; native EEG is revalidated through
+the existing registry reader, corrected once per unique electrode, and used as
+the new voltage target. `test_dual_component_voltage.py` covers native proxy replay,
+zero-correction identity, overlapping ROI constraints, independent overlap decoding,
+signed boundary metrics, fixed budgets and the final public-test read order.
+The decoder-only [`voltage v2`](configs/physiology_semantic_tokenizer/dual_component_voltage_v2.yaml)
+uses the same `voltage` stage to consume the completed v1 run. It verifies equal
+data/training contracts and reuses completed artifacts; only fixed same-branch
+100 ms synthesis and the validation-frozen selection change.
+
 Response semantics, component attribution and conditional continuous or discrete representations.
 
 | Diagnostic / usage | Entry | Config | Targeted tests |

@@ -1,0 +1,78 @@
+schema: dual_component_voltage_v1
+experiment_id: TK-DUAL-VOLTAGE-v1
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml
+voltage:
+  parent_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3
+  scope: complete_retained_public_Single_Trial_and_Simultaneous_three_ROI_population
+  teacher: unchanged_retained_fixed_Tak_no_new_SSM_fits
+  selection_splits: [train, validation]
+  final_split: test
+  final_evaluation: frozen_validation_choice_only_no_test_tuning
+  channels: unique_union_of_existing_three_ROI_EEG_channels
+  correction:
+    strength: 1.0
+    maximum_log_amplitude_gain: 0.7
+    backtracking: [1.0, 0.5, 0.25, 0.125]
+    acceptance: first_strength_reducing_recomputed_joint_proxy_MSE
+    projection: minimum_log_power_change_joint_overlapping_ROI_constraints
+    smoothing: Gaussian_sigma_100ms_and_2s_cosine_application_margin
+    reference: preserve_original_native_reference_and_original_5s_proxy_reference
+    failed_correction: explicit_failure_no_silent_identity_substitution
+  eeg_target: conditional_corrected_voltage_S_and_fixed_raw_minus_corrected_O
+  hb_target: unchanged_full_Tak_output_and_fixed_complete_residual
+  input: same_modality_only_native_EEG_or_cached_Hb_plus_known_channel_identity
+  output_decode: integer_lookup_only_no_per_patch_continuous_sidecars
+  seed: 17
+  confirmation_seeds: [29, 43]
+  steps: 5000
+  checkpoint_every: 250
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  width: 128
+  latent_dim: 64
+  eeg:
+    batch_size: 512
+    context_samples: 400
+    hop_samples: 20
+    span_samples: 20
+    sample_rate_hz: 200
+    codebook_levels: [2, 4]
+  hb:
+    batch_size: 64
+    context_samples: 60
+    hop_samples: 20
+    sample_rate_hz: 10
+    codebook_levels: [2]
+  codebook_size: 128
+  codebook_fit_patches: 32768
+  codebook_iterations: 100
+  candidates:
+  - {name: eeg_voltage, modality: eeg, span_samples: 20, boundary_weight: 0.0, overlap_weight: 0.0}
+  - {name: hb_blocks, modality: hb, span_samples: 20, boundary_weight: 0.0, overlap_weight: 0.0}
+  - {name: hb_boundary, modality: hb, span_samples: 20, boundary_weight: 0.1, overlap_weight: 0.0}
+  - {name: hb_overlap, modality: hb, span_samples: 40, boundary_weight: 0.1, overlap_weight: 0.1}
+  baselines: [zero_correction_S_equals_raw_O_equals_zero, equal_rate_direct_observation_VQ, retained_hb_refinement_v3, posthoc_decoder_smoothing_diagnostic]
+  primary: subject_equal_S_O_and_total_NMSE_in_frozen_training_observation_RMS_or_SD
+  secondary: subject_equal_signed_boundary_difference_error_HbO_and_HbR_separately
+  diagnostic: [code_usage, centered_correlation, derivative_error, correction_proxy_reduction, correction_failure_rate, gain_clipping]
+  selection: lowest_Hb_boundary_error_among_candidates_with_at_most_5percent_relative_worse_S_O_total_NMSE_than_blocks_in_each_dataset_and_HbO_HbR_joint
+  minimum_boundary_improvement: 0.3
+  eeg_selection: four_levels_primary_two_levels_rate_diagnostic
+  stopping: four_fixed_screen_jobs_then_two_extra_seeds_each_for_EEG_selected_Hb_and_Hb_blocks_baseline_then_frozen_public_test
+  codebook_health: {train_active_fraction: 0.95, validation_active_fraction: 0.90, effective_fraction: 0.50, maximum_code_probability: 0.08}
+resources:
+  devices: [cuda:0, cuda:1]
+  cpu_workers: 8
+  cpu_benchmark_workers: [4, 8, 16]
+  gpu_workers_per_device: 1
+  max_new_gpu_memory_mib: 4096
+  torch_threads: 2
+  numerical_threads: 1
+claim_limits:
+- conditional_voltage_correction_not_SSM_generated_voltage_or_physiological_truth
+- voltage_residual_proxy_is_not_proxy_residual
+- electrode_identity_does_not_imply_cortical_source_identity
+- all_code_layers_and_output_support_are_counted
+- overlap_decode_reads_only_same_branch_fixed_codewords
+- no_new_masked_pretraining_or_crossmodal_gain_claim_from_tokenizer_reconstruction
+- public_test_reused_from_prior_explorations_not_fresh_confirmatory_evidence

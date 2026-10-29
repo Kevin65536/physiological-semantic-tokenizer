@@ -131,6 +131,35 @@ position within the existing window; it contains no subject, task label, Hb
 measurement or per-sample teacher output. Seed repetitions use the same validation
 subjects and measure optimization stability, not independent confirmation.
 
+### Electrode-voltage correction and Hb continuity — 2026-10-29
+
+[`dual_component_voltage_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_v1.yaml)
+versions the raw EEG consumer of the completed public dual-component parent.
+The unchanged retained Tak output supplies proxy targets; no SSM is refitted.
+The central registry and existing native reader revalidate the same two datasets,
+three ROI identities and subject split before signal access. All ROI constraints
+for a trial are mapped jointly to the unique union of their native electrodes,
+so an electrode has one voltage target even when it appears in multiple ROIs.
+
+The correction operates on the frozen, referenced five-band log-power projection.
+It keeps the native reference and the first five seconds unchanged, applies a
+bounded smooth amplitude adjustment, and admits the first predeclared strength
+that improves the re-extracted joint proxy error. Failed/non-improving trials
+remain explicit outcomes. Voltage S is the conditionally corrected native signal;
+voltage O is raw minus corrected, not the old proxy residual or physiological noise.
+The native voltage RMS is fitted per dataset/electrode on training subjects only;
+Hb targets and their training SD retain the parent identity.
+
+Development production/training/selection uses training and validation subjects.
+The existing public test partition is opened only after the finite validation
+choice and seed runs are fixed; it is not protected evidence and is not fresh
+confirmation after previous exploration. Full planned and retained denominators
+are carried through both phases. EEG tokens cover 100 ms at 200 Hz with a 2 s
+same-electrode input context. Hb retains 2 s token spacing and 6 s same-modality
+input; 4 s decoded windows may overlap using fixed weights and same-branch hard
+IDs only. All levels, support and bitrate are explicit; no sample-specific
+continuous decoder sidecar is introduced.
+
 ### v1 patch target (historical)
 
 The implemented v1 observation screen is retained as historical evidence. Its

@@ -30,6 +30,131 @@ STEPS = 900
 STUDENT = slice(300, 500)
 
 
+def voltage_proxy_correction(voltage, projection, target, *, strength=1.,
+                             max_log_gain=.7, backtracking=(1., .5, .25, .125)):
+    """Condition native voltage on frozen, possibly overlapping ROI proxies.
+
+    ``projection`` maps channel-major five-band referenced log power to each
+    ROI's original SSM coordinate. All ROIs use one correction per electrode.
+    Only the central 20 s and a 2 s cosine margin change; the 5 s reference is
+    retained. Backtracking uses the *recomputed* proxy, never another SSM fit.
+    This is a conditional voltage correction, not an inverse SSM observation.
+    """
+    from scipy.signal import butter, sosfiltfilt
+    from scipy.ndimage import gaussian_filter1d
+    x = np.asarray(voltage, float); a = np.asarray(projection, float)
+    target = np.asarray(target, float)
+    if (x.ndim != 2 or x.shape[0] != 18000 or a.ndim != 2
+            or a.shape[1] != x.shape[1] * 5 or target.shape != (900, len(a))
+            or not all(np.isfinite(v).all() for v in (x,a,target))
+            or not 0 <= strength <= 1 or max_log_gain <= 0):
+        raise ValueError('finite 90 s/200 Hz voltage, frozen ROI projection and 10 Hz targets required')
+    def features(value):
+        p = eeg_band_power(value, bands=BANDS, sample_rate=200, target_rate=10)
+        if np.any(p <= 0): raise ValueError('nonpositive native band power')
+        z = np.log(p).reshape(900,-1)
+        return z-z[:50].mean(0)
+    original = features(x); observed = original @ a.T
+    row_scale = np.linalg.norm(a,axis=1)
+    if np.any(row_scale < 1e-12): raise ValueError('degenerate proxy projection')
+    normal = a/row_scale[:,None]
+    difference = (target-observed)/row_scale
+    delta = difference @ np.linalg.pinv(normal, rcond=1e-10).T
+    feature_constraint_error = float(np.max(np.abs(delta @ a.T-(target-observed))))
+    delta = gaussian_filter1d(delta.reshape(900,x.shape[1],5),sigma=1.,axis=0,mode='nearest')
+    # Smooth application margins are outside the scored [0,20) event interval.
+    clock = np.arange(900)*.1-30.; envelope=np.zeros(900)
+    envelope[(clock>=0)&(clock<20)]=1.
+    left=(clock>=-2)&(clock<0);right=(clock>=20)&(clock<22)
+    envelope[left]=.5-.5*np.cos(np.pi*(clock[left]+2)/2)
+    envelope[right]=.5+.5*np.cos(np.pi*(clock[right]-20)/2)
+    native_clock=np.arange(18000)/200.; bin_clock=(np.arange(900)+.5)/10
+    band_signal=np.stack([sosfiltfilt(butter(4,[low,high],btype='bandpass',fs=200,output='sos'),x,axis=0)
+        for low,high in BANDS],axis=-1)
+    before=float(np.mean(((observed[STUDENT]-target[STUDENT])/row_scale)**2))
+    attempted=[]; best=None
+    if strength == 0 or before < 1e-16:
+        return dict(corrected=x.copy(),remaining=np.zeros_like(x),observed=observed,
+            corrected_proxy=observed.copy(),diagnostic=dict(status='identity',strength=0.,before=before,after=before,
+                feature_constraint_error=feature_constraint_error,attempted=[],maximum_log_gain=0.))
+    for fraction in backtracking:
+        alpha=float(strength*fraction)
+        unconstrained=.5*alpha*delta*envelope[:,None,None]
+        log_gain=np.clip(unconstrained,-max_log_gain,max_log_gain)
+        gain=np.empty_like(band_signal)
+        for c in range(x.shape[1]):
+            for b in range(5):
+                gain[:,c,b]=np.exp(np.interp(native_clock,bin_clock,log_gain[:,c,b],left=0.,right=0.))
+        corrected=x+np.sum((gain-1)*band_signal,axis=-1)
+        actual=features(corrected) @ a.T
+        after=float(np.mean(((actual[STUDENT]-target[STUDENT])/row_scale)**2))
+        record=dict(strength=alpha,after=after,relative_proxy_reduction=1-after/before,
+            clipped_fraction=float(np.mean(np.abs(unconstrained)>max_log_gain)),maximum_log_gain=float(np.max(np.abs(log_gain))))
+        attempted.append(record)
+        if after < before and np.isfinite(corrected).all():
+            best=dict(corrected=corrected,remaining=x-corrected,observed=observed,corrected_proxy=actual,
+                diagnostic=dict(record,status='corrected',before=before,feature_constraint_error=feature_constraint_error,
+                    attempted=attempted,projection_rank=int(np.linalg.matrix_rank(normal))))
+            break
+    if best is None:
+        # Explicit non-admission, not a silently relabelled zero correction.
+        return dict(corrected=x.copy(),remaining=np.zeros_like(x),observed=observed,
+            corrected_proxy=observed.copy(),diagnostic=dict(status='no_improving_correction',strength=0.,
+                before=before,after=before,attempted=attempted,feature_constraint_error=feature_constraint_error))
+    return best
+
+
+def prepare_voltage_record(project_root, cfg, rows, coordinates, read_teacher,
+                           *, strength=1., max_log_gain=.7,backtracking=(1.,.5,.25,.125)):
+    """Yield unique-electrode corrected targets using only admitted native data."""
+    root,record=_registered_record(project_root,cfg,rows)
+    native=load_native_eeg_record(root,record)
+    if native.sample_rate_hz != 200 or native.native_unit not in ('uV','µV','μV') or not native.unit_evidence:
+        raise ValueError('verified native 200 Hz microvolt EEG required')
+    channel_lookup={name.upper():i for i,name in enumerate(native.channel_names)}
+    by_trial=defaultdict(list)
+    for row in rows:by_trial[row['trial_id']].append(row)
+    for trial,group in by_trial.items():
+        try:
+            if len(group)!=3 or len({r['eeg_start_s'] for r in group})!=1:
+                raise ValueError('complete aligned three-ROI trial required')
+            group=sorted(group,key=lambda r:r['coordinate'])
+            names=sorted({n for r in group for n in r['anchor']['eeg_channels']},key=lambda n:channel_lookup[n.upper()])
+            start=round(group[0]['eeg_start_s']*200)
+            x=np.asarray(native.values[start:start+18000,[channel_lookup[n.upper()] for n in names]],float)
+            if x.shape!=(18000,len(names)):raise ValueError('complete 90 s raw support required')
+            a=np.zeros((len(group),len(names)*5));target=[];original=[];hb=[];hb_s=[]
+            for i,row in enumerate(group):
+                coordinate=coordinates[row['coordinate']]
+                loading=np.asarray(coordinate['pc']).reshape(6,5)*coordinate['eeg_factor']
+                for j,name in enumerate(row['anchor']['eeg_channels']):
+                    c=names.index(name);a[i,c*5:(c+1)*5]=loading[j]
+                teacher=read_teacher(row)
+                if str(teacher['identity'])!=row['id']:raise ValueError('retained teacher identity mismatch')
+                target.append(teacher['physical'][:,0]);original.append(teacher['u'][:,0])
+                hb.append(teacher['u'][STUDENT,1:]);hb_s.append(teacher['physical'][STUDENT,1:])
+            target=np.stack(target,axis=1);original=np.stack(original,axis=1)
+            result=voltage_proxy_correction(x,a,target,strength=strength,max_log_gain=max_log_gain,backtracking=backtracking)
+            lineage_error=float(np.max(np.abs(result['observed']-original)))
+            if lineage_error>1e-6:raise ValueError(f'native proxy replay mismatch: {lineage_error}')
+            if result['diagnostic']['status']=='no_improving_correction':
+                yield trial,None,dict(error='no_improving_correction',diagnostic=result['diagnostic']);continue
+            eeg=x[6000:10000].T.astype('float32');s=result['corrected'][6000:10000].T.astype('float32')
+            payload=dict(eeg_u=eeg,eeg_s=s,eeg_o=eeg-s,hb_u=np.asarray(hb,dtype='float32'),
+                hb_s=np.asarray(hb_s,dtype='float32'),projection=a,
+                original_proxy=result['observed'][STUDENT],target_proxy=target[STUDENT],
+                corrected_proxy=result['corrected_proxy'][STUDENT])
+            payload['hb_o']=payload['hb_u']-payload['hb_s']
+            metadata=dict(trial_id=trial,rows=group,eeg_channels=names,
+                native_unit=native.native_unit,native_source=str(native.source_path),
+                reference='unchanged dataset-native reference; no additional re-referencing',
+                diagnostic=dict(result['diagnostic'],native_proxy_replay_max_abs=lineage_error),
+                interpretation='S=SSM-guided conditional voltage correction; O=voltage correction residual; no voltage physiological-truth claim')
+            yield trial,payload,metadata
+        except Exception as exc:
+            yield trial,None,dict(error=f'{type(exc).__name__}: {exc}')
+
+
 def _json(value):
     def convert(x):
         if isinstance(x, np.ndarray): return x.tolist()
