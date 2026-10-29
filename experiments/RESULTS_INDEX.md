@@ -1070,6 +1070,16 @@ its own question and evidence contract.
 
 ## Comparison methods
 
+The [2026-10-29 one-page downstream result brief v2](../docs/reports/interpretability_analysis/20261029_downstream_best_available_v2/REPORT.pdf)
+and [editable table](../docs/reports/interpretability_analysis/20261029_downstream_best_available_v2/best_available.csv)
+show only admitted complete current-protocol LP/FT values with explicit tracks.
+Unadmitted cells retain a visible status; all original values remain in the
+[negative-result appendix](../docs/reports/interpretability_analysis/20261029_downstream_best_available_v2/negative_results.csv).
+The [Visual prediction audit](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/interim_20261029_115043_brief/visual_diagnostics_20261029_v1.json)
+checks the current public prediction identities, confusion and class support.
+The MA 30-second development diagnostic remains separate. The prior v1 export is
+retained; the dated source manifest identifies the owning aggregates.
+
 The separate [MA 30-second adaptation audit](../comparative_methods/ma_adaptation_audit_v1.yaml)
 retains its [sample plan](../comparative_methods/runs/performance_analysis/20261028_ma30_v1/plan.json),
 [identical-input audit](../comparative_methods/runs/performance_analysis/20261028_ma30_v1/input_audit.json),

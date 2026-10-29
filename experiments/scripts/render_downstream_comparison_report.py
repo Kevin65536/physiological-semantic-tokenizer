@@ -544,14 +544,149 @@ def render_pdf(text, path, archive):
     return check
 
 
+def render_brief(summary_path, audit_path, out):
+    """Compact overview of admitted values; preserve every rejected observation."""
+    summary = read(summary_path)
+    if summary.get('schema') != 'downstream_rebench_aggregate_v1':
+        raise ValueError('expected the owning public rebenchmark aggregate')
+    cutoff = datetime.fromtimestamp(summary_path.stat().st_mtime, timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M UTC+08:00')
+    specs = [(m, NAMES[m], 'EEG' if m in {'biot','cbramod','reve'} else '双模态', 'not_applicable')
+             for m in ['biot','cbramod','reve','efrm','sta_net','brainfusion']]
+    specs += [('signal_linear', label, mode_label, mode) for mode,label,mode_label in
+              [('eeg','EEG 简单基线','EEG'),('fnirs','Hb 简单基线','Hb'),('multimodal','双模态简单基线','双模态')]]
+    rows, selected = [], []
+    for method, label, modality, baseline in specs:
+        values = []
+        for task in ALL_TASKS:
+            candidates = [c for c in summary['cells'] if c['method']==method and c['task']==task
+                          and c['baseline_modality']==baseline]
+            complete = [c for c in candidates if c['coverage_complete'] and c['value'] is not None]
+            if complete:
+                admitted = [c for c in complete if c['decision'] in {'TABLE_READY','TABLE_READY_WITH_NOTE'}]
+                cell = max(admitted or complete, key=lambda c:c['value'])
+                tag = {'lp':'L','ft':'F','supervised':'S'}[cell['track']] if method!='signal_linear' else ''
+                rejected = cell['decision'] not in {'TABLE_READY','TABLE_READY_WITH_NOTE'}
+                marks = tag + ('†' if rejected else '') + ('*' if cell['reporting_track']=='open_world_pretrained_with_target_corpus_overlap' else '')
+                value = f"{cell['value']*(1 if task=='refed_regression' else 100):.{4 if task=='refed_regression' else 2}f}"
+                values.append('未达标' if rejected else value + (f'<sup>{marks}</sup>' if marks else ''))
+                interval = cell['uncertainty'].get('interval') or [None,None]
+                selected.append(dict(method=method,display_name=label,input_modality=modality,task=task,track=cell['track'],
+                    metric=cell['primary_name'],value=None if rejected else cell['value'],
+                    display_value='未达标' if rejected else value,decision=cell['decision'],
+                    ci_lower=interval[0],ci_upper=interval[1],subject_count=cell['subject_count'],
+                    completed_job_count=cell['completed_job_count'],planned_job_count=cell['planned_job_count'],
+                    reporting_track=cell['reporting_track'],B0=cell['B0']['value'],
+                    available_complete_tracks=';'.join(c['track'] for c in complete),
+                    selection='highest admitted complete current-protocol track; rejected observations in negative_results.csv',
+                    owning_summary=str(summary_path.resolve())))
+            elif candidates:
+                progress=max(candidates,key=lambda c:c['completed_job_count']/c['planned_job_count'])
+                values.append(f"未齐 {progress['completed_job_count']}/{progress['planned_job_count']}")
+                selected.append(dict(method=method,display_name=label,input_modality=modality,task=task,
+                    track=progress['track'],value=None,decision='INCOMPLETE',completed_job_count=progress['completed_job_count'],
+                    planned_job_count=progress['planned_job_count'],owning_summary=str(summary_path.resolve())))
+            else:
+                values.append('—')
+                selected.append(dict(method=method,display_name=label,input_modality=modality,task=task,value=None,decision='UNSUPPORTED'))
+        rows.append([label,modality,*values])
+    full_count=sum(c['coverage_complete'] and c['value'] is not None for c in summary['cells'])
+    md = f"""# 下游任务复现结果 · 汇报简表
+
+结果截点：**{cutoff}**。当前统一协议已有 **{full_count}/{len(summary['cells'])} 个完整结果组合**；主表只填完整且通过项目准入的数值。
+
+## 当前统一协议：通过准入的可用结果
+
+六个分类任务为 **macro-F1 × 100**；REFED 为 **CCC（无量纲）**，均越高越好。每格在该方法已准入的完整 LP／FT 结果中取较高点估计，并标轨道；这是汇报概览，不是统一轨道的论文排名。
+
+{table(['方法','输入','MI','MA','WG','n-back','DSR','Visual','REFED<br>CCC'],rows)}
+
+**L**：冻结编码器线性探测；**F**：全参数微调；**S**：监督适配／独立重实现。**未达标**：结果完整但未通过正常性能准入，原值全部保留在负结果附表。星号 *：REVE MI/MA 有目标语料重叠。**—**：不支持；“未齐”：完成／计划作业数。NormWear 已移出本轮。
+
+共同设置：严格跨被试 5 外折；神经训练 3 种子，固定官方编码器 LP 为确定性单种子。分类一般 8 秒、DSR 2 秒、REFED 20 秒；逐被试、种子等权。EEG-only 为 16 通道，双模态为任务原生面板。旧轮次成绩不参与本表择优。
+
+MI＝运动想象；MA＝心算；WG＝词语生成；n-back＝工作记忆；DSR＝Go/No-go；Visual＝四类认知动机；REFED＝连续情绪评分。分类和 CCC 不作跨指标平均。
+"""
+    # Keep the error-based reference visible despite CCC being the primary column.
+    sta=next(c for c in summary['cells'] if c['method']=='sta_net' and c['task']=='refed_regression')
+    error_direction = '高于' if sta['companion']['mae'] > sta['B0']['train_mean_errors']['mae'] else '不高于'
+    md += f"\nREFED 提醒：STA-Net CCC 为 {sta['value']:.4f}，MAE {sta['companion']['mae']:.2f}，{error_direction}训练均值预测的 {sta['B0']['train_mean_errors']['mae']:.2f}；相关与绝对误差分别判断。"
+    visual = [c for c in summary['cells'] if c['task']=='visual' and c['coverage_complete'] and c['value'] is not None]
+    if visual and all(c['value'] <= c['B0']['value'] for c in visual):
+        md += f"**Visual 当前已完成方法均未通过无信息参照检查，暂不报告正常性能分数。**"
+    md += '\n'
+    audit_rows=[]
+    if audit_path is not None:
+        audit=read(audit_path)
+        if audit['status']!='completed' or audit['failures']:
+            raise ValueError('MA diagnostic must retain all completed arms and failures')
+        results=audit['results'];base=results['baselines']['result']
+        audit_rows=[['验证 macro-F1',f"{base['eeg']['validation']['primary']*100:.2f}†",f"{base['fnirs']['validation']['primary']*100:.2f}",
+                    f"{base['multimodal']['validation']['primary']*100:.2f}",
+                    f"{results['cbramod_ft_source_head']['result']['validation']['primary']*100:.2f}",
+                    f"{results['sta_default']['result']['validation']['primary']*100:.2f}",
+                    f"{results['brainfusion']['result']['validation']['primary']*100:.2f}†"]]
+        md += '\n## MA 30 秒诊断：共同输入，单独汇报\n\n'
+        md += table(['设置','EEG 基线','Hb 基线','双模态基线','CBraMod FT','STA-Net','BrainFusion'],audit_rows)
+        md += "\n\n事件 **[-5,25) 秒**；共同 16 EEG／72 Hb 通道；15 名训练被试（900 样本）、8 名开发验证被试（480 样本），单种子。CBraMod 使用有序 token＋三层分类头；STA-Net 为默认设置。开发集选择 epoch，不能并入上方五折表。† 为诊断负结果：EEG 基线低于无信息参照，BrainFusion 有 stacking 不稳定。\n"
+    md += '\n主表及区间见 `best_available.csv`；全部未准入数值见 `negative_results.csv`，完整各轨道见 `all_current_cells.csv`。未达标任务不静默删除，也不使用未齐折／种子的成功子集。事实源见 `source_manifest.json`。\n'
+    out.mkdir(parents=True)
+    (out/'REPORT.md').write_text(md)
+    csv_write(out/'best_available.csv',selected)
+    negative=[]
+    for cell in summary['cells']:
+        if cell['coverage_complete'] and cell['value'] is not None and cell['decision'] not in {'TABLE_READY','TABLE_READY_WITH_NOTE'}:
+            negative.append(dict(method=cell['method'],task=cell['task'],track=cell['track'],baseline_modality=cell['baseline_modality'],
+                metric=cell['primary_name'],observed_value=cell['value'],B0=cell['B0']['value'],decision=cell['decision'],
+                subject_count=cell['subject_count'],completed_job_count=cell['completed_job_count'],
+                planned_job_count=cell['planned_job_count'],note=cell.get('note'),owning_summary=str(summary_path.resolve())))
+    csv_write(out/'negative_results.csv',negative)
+    shutil.copyfile(summary_path.with_name('cells.csv'),out/'all_current_cells.csv')
+    if audit_rows:
+        csv_write(out/'ma30_diagnostic.csv',[dict(method=h,value=v,metric='development subject macro-F1 x100',
+                   support='MA [-5,25); 15 train / 8 validation subjects; seed17',source=str(audit_path.resolve()))
+                   for h,v in zip(['EEG baseline','Hb baseline','multimodal baseline','CBraMod ordered-token FT','STA-Net default','BrainFusion'],audit_rows[0][1:])])
+    body=markdown.markdown(md,extensions=['tables'])
+    css="""body {font-family:sans-serif;font-size:9.2pt;line-height:1.35;color:#172033;}
+    h1 {font-size:20pt;color:#173d62;margin:0 0 8pt;} h2 {font-size:12pt;color:#173d62;margin:12pt 0 5pt;}
+    p {margin:5pt 0;} table {border-collapse:collapse;width:100%;font-size:8.8pt;margin:7pt 0;}
+    th {background-color:#e8eef4;} td,th {border:0.4pt solid #a7b2bf;padding:4pt 3pt;}
+    sup {font-size:6.5pt;}"""
+    story=fitz.Story(html='<html><body>'+body+'</body></html>',user_css=css)
+    media=fitz.paper_rect('a4');area=fitz.Rect(28,28,media.width-28,media.height-28)
+    pdf=story.write_with_links(lambda rect_num,filled:(media,area,None))
+    pdf.set_metadata({'title':'下游任务复现结果 · 汇报简表','author':'Project evidence review'})
+    pdf.save(out/'REPORT.pdf',garbage=4,deflate=True)
+    check=dict(pages=len(pdf),searchable_characters=sum(len(p.get_text()) for p in pdf),
+               tables_as_searchable_text=True,figures=0,
+               no_missing_glyph=all('�' not in p.get_text() for p in pdf))
+    if not check['no_missing_glyph']:raise ValueError('PDF contains missing glyphs')
+    preview=out/'preview';preview.mkdir()
+    for n,page in enumerate(pdf):page.get_pixmap(matrix=fitz.Matrix(1.4,1.4)).save(preview/f'page_{n+1:02d}.png')
+    dump(out/'source_manifest.json',dict(schema='downstream_brief_report_v1',created_at=datetime.now(timezone.utc).isoformat(),
+        result_cutoff=cutoff,owning_summary=str(summary_path.resolve()),owning_schedule=summary['schedule_path'],
+        owning_ma30_summary=str(audit_path.resolve()) if audit_path else None,
+        selection='per method/task maximum admitted complete LP/FT point estimate; unadmitted cells labelled 未达标; all rejected observations in negative_results.csv; historical and MA30 protocols never mixed',
+        valid_evaluation_jobs=summary['valid_evaluate_job_count'],complete_cells=full_count,pdf=check,
+        render_command=[sys.executable,str(Path(__file__).resolve()),'--brief','--summary',str(summary_path.resolve()),
+                        *(['--audit-summary',str(audit_path.resolve())] if audit_path else []),'--output',str(out)]))
+    shutil.copyfile(__file__,out/'renderer_source.py')
+    print(json.dumps(dict(output=str(out),pdf=check),ensure_ascii=False))
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--summary',type=Path,required=True)
-    parser.add_argument('--paper-values',type=Path,required=True)
+    parser.add_argument('--paper-values',type=Path)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--brief',action='store_true',help='compact best-complete-result overview with explicit tracks')
+    parser.add_argument('--audit-summary',type=Path,help='separate complete MA 30-second diagnostic')
     args=parser.parse_args()
     out=args.output.resolve()
     if out.exists():raise ValueError('dated exports require a fresh versioned output directory')
+    if args.brief:
+        render_brief(args.summary,args.audit_summary,out)
+        return
+    if args.paper_values is None:parser.error('--paper-values is required for the full comparison report')
     summary=read(args.summary);schedule=read(summary['schedule_path']);run=Path(schedule['run_root'])
     if summary['schema']!='downstream_rebench_aggregate_v1' or summary['scope'] is None:
         raise ValueError('expected retained downstream rebenchmark summary')
