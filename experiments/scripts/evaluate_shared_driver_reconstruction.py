@@ -8866,8 +8866,10 @@ def tak_fit_group(cfg, arm, y, operator, sd, mask, warm=None):
     dt=cfg['tensor']['dt_s'];data_weight=dt/s.get('observation_reference_dt_s',dt)
     starts = []
     references = np.array([f['reference'][name] for name in names])
-    values = [references] if not names else [np.array(kt if len(names)==2 else kt+gv)
-        for kt,gv in zip(f['starts_kappa_tau'],f['starts_gamma_tau_v'])]
+    values = ([references] if not names else [np.array(v,float) for v in arm['start_values']]
+        if 'start_values' in arm else [np.array(kt if len(names)==2 else kt+gv)
+        for kt,gv in zip(f['starts_kappa_tau'],f['starts_gamma_tau_v'])])
+    if any(v.shape!=(len(names),) for v in values):raise ValueError('One start value per named fitted parameter required')
     for v in values:
         start = dict(parameter_values=v)
         if warm is not None:
@@ -8897,14 +8899,16 @@ def tak_worker(payload):
     try:
         truth=None;factors=[]
         if spec['phase']=='synthetic':
-            yy,oo,ss,truth=tak_synthetic(cfg,spec['group']['seed'],spec['group']['scenario'])
+            yy,oo,ss,truth=(tak_task_parameter_synthetic(cfg,spec['group']['case'])
+                if cfg['schema']=='shared_driver_tak_task_parameters_v1'
+                else tak_synthetic(cfg,spec['group']['seed'],spec['group']['scenario']))
             y,op,sd=yy[None],oo[None],ss[None];factors=[1.]
         else:
             ys,ops,sds=[],[],[]
             for ref in refs:
                 with np.load(out/'prepared'/f"{ref['id']}__{spec['length_s']}.npz",allow_pickle=False) as a:
                     require_cached_hb_array(a)
-                    if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1'):
+                    if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1','shared_driver_tak_task_parameters_v1'):
                         require_10hz_eeg_proxy_array(a,steps=round(spec['length_s']/dt))
                     ys.append(a['target']);ops.append(a['operator']);sds.append(a['sd']);factors.append(float(a['hb_factor']))
             y,op,sd=np.array(ys),np.array(ops),np.array(sds)
@@ -8926,7 +8930,7 @@ def tak_worker(payload):
         if 'prediction' in fit:
             saved.update({k:fit[k] for k in ('driver','initial_state','prediction','canonical_prediction','states')})
         saved.update(target=y,operator=op,sd=sd,visible=mask,hb_factor=np.array(factors))
-        if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1'):
+        if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1','shared_driver_tak_task_parameters_v1'):
             saved.update(time_s=np.arange(y.shape[1])*dt,dt_s=np.array(dt),eeg_proxy_rate_hz=np.array(10.))
         for i,ref in enumerate(refs):
             row=dict(id=ref['id'],dataset=ref['dataset'],subject=ref['subject'],record=ref['record'],
@@ -8944,7 +8948,8 @@ def tak_worker(payload):
                     baseline[:,j]=np.interp(time_axis,time_axis[visible],y[i,visible,j])
                 row['interpolation_baseline']=volume_drive_metrics(y[i],baseline,sd[i],spec['condition'],dt=dt)
             if 'prediction' in fit:
-                pp=volume_drive_parameters(cfg,kappa=fit['kappa'],tau=fit['tau'],gamma=fit['gamma'])
+                pp=volume_drive_parameters(cfg,kappa=fit['kappa'],tau=fit['tau'],gamma=fit['gamma'],
+                                           neurovascular_gain=fit['neurovascular_gain'])
                 fine=nonlinear_driver_forward(fit['driver'][i],fit['initial_state'][i],pp,dt,
                     substeps=8,derivative=False,numerical_backend='numba',hemodynamics=arm['hemodynamics'],
                     viscoelastic_s=fit['viscoelastic_s'])
@@ -8959,8 +8964,9 @@ def tak_worker(payload):
                     initial_state=fit['initial_state'][i],driver_rms=float(np.sqrt(np.mean(fit['driver'][i]**2))),
                     state_extrema={name:[float(states[:,j].min()),float(states[:,j].max())]
                         for j,name in enumerate(('r','s','f','v','p','q'))},
-                    kappa=fit['kappa'],tau=fit['tau'],gamma=fit['gamma'],tau_v=fit['viscoelastic_s'])
+                    kappa=fit['kappa'],tau=fit['tau'],beta=fit['neurovascular_gain'],gamma=fit['gamma'],tau_v=fit['viscoelastic_s'])
                 if truth is not None:
+                    if 'beta' in truth:row.update(truth_beta=truth['beta'],beta_relative_error=fit['neurovascular_gain']/truth['beta']-1)
                     row.update(truth_kappa=truth['kappa'],truth_tau=truth['tau'],
                         kappa_relative_error=(fit['kappa']/truth['kappa']-1),tau_relative_error=(fit['tau']/truth['tau']-1),
                         driver_relative_rmse=float(np.sqrt(np.mean((fit['driver'][i]-truth['driver'])**2)/np.mean(truth['driver']**2))),
@@ -8984,14 +8990,16 @@ def tak_worker(payload):
         qualified=sum(r['qualified'] for r in result['rows']),rows=len(result['rows']))
 
 
-def tak_run(cfg,out,plan,phase,workers,pilot=False,*,specs=None):
+def tak_run(cfg,out,plan,phase,workers,pilot=False,*,specs=None,pilot_groups=None):
     if not os.environ.get('INVOCATION_ID') or not os.environ.get('SSM_SYSTEMD_UNIT'):
         raise ValueError('Tak fitting requires the recorded durable user-systemd supervisor')
     jobs=tak_specs(cfg,plan,phase) if specs is None else specs
     if pilot:
-        selected={}
-        for g in plan['groups']:selected.setdefault(g['refs'][0]['dataset'],g['id'])
-        jobs=[j for j in jobs if j['group']['id'] in selected.values() and j['length_s']==90 and j['condition']=='joint_full']
+        if pilot_groups is None:
+            selected={}
+            for g in plan['groups']:selected.setdefault(g['refs'][0]['dataset'],g['id'])
+            pilot_groups=set(selected.values())
+        jobs=[j for j in jobs if j['group']['id'] in pilot_groups and j['length_s']==90 and j['condition']=='joint_full']
     t=time.monotonic();terminal=[]
     # Warm-start dependencies are explicit phases, with all fixed fits complete
     # before parameter fitting. Each task is resumable and retains failed rows.
@@ -9071,7 +9079,7 @@ def tak_summarize(cfg,out,plan,phase='measured',*,specs=None):
         qualified_rows=sum(r['qualified'] for r in rows),groups=groups,paired_contrasts=contrasts,
         claim_limits=cfg['claim_limits'],source='tasks/*.json_and_matching_npz',
         aggregation=cfg['endpoints']['aggregation'],failure_policy=cfg['endpoints']['failures'])
-    if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1'):
+    if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1','shared_driver_tak_task_parameters_v1'):
         result.update(schema='shared_driver_tak_summary_v2',dt_s=cfg['tensor']['dt_s'],eeg_proxy_rate_hz=10.)
     write_json(out/(phase+'_summary.json'),result)
     write_json(out/(phase+'_rows.json'),rows)
@@ -9337,7 +9345,7 @@ def _tak_repeat_select(candidates, count):
     return [disjoint[i] for i in np.rint(np.linspace(0,len(disjoint)-1,count)).astype(int)]
 
 
-def _tak_repeat_candidates(record, events, anchor, *, coordinate=None):
+def _tak_repeat_candidates(record, events, anchor, *, coordinate=None, allowed_tasks=None):
     from collections import Counter
     from src.data.event_alignment import window_within_alignment_support
     de=record.manifest['array_shapes']['eeg'][0]/200.;dh=record.manifest['array_shapes']['fnirs'][0]/10.
@@ -9348,8 +9356,11 @@ def _tak_repeat_candidates(record, events, anchor, *, coordinate=None):
         if min(es,hs)<0 or es+90>de+1e-8 or hs+90>dh+1e-8:continue
         if ds!='refed' and not window_within_alignment_support(event,-5.,90.):continue
         metadata=event.get('metadata',{});task=metadata.get('task')
-        if ds=='eeg_fnirs_single_trial' and task!='motor_imagery':continue
-        if ds=='simultaneous_eeg_nirs' and task!='wg':continue
+        if allowed_tasks is not None:
+            if task not in allowed_tasks:continue
+        else:
+            if ds=='eeg_fnirs_single_trial' and task!='motor_imagery':continue
+            if ds=='simultaneous_eeg_nirs' and task!='wg':continue
         within=[e for e in ordered if es<=e['eeg_time_ms']/1000.<es+90]
         counts=dict(Counter(str(e.get('metadata',{}).get('condition_label',e['label'])) for e in within))
         if not counts or 'unknown' in counts:continue
@@ -9539,11 +9550,11 @@ def tak_repeatability_prepare(cfg,core,root,out,plan,workers):
     write_json(out/'preparation.json',result);return result
 
 
-def _tak_repeatability_statistics(frame, *, seed=20261028, bootstrap_repeats=2000):
+def _tak_repeatability_statistics(frame, *, seed=20261028, bootstrap_repeats=2000, parameters=('kappa','tau')):
     """Describe nested log estimates; clusters are subjects, never windows."""
     subjects=[];datasets=[];comparisons=[]
     for (dataset,tier,subject),part in frame.groupby(['dataset','analysis_tier','subject'],sort=True):
-        for parameter in ('kappa','tau'):
+        for parameter in parameters:
             good=part[part.qualified & np.isfinite(part[parameter]) & part[parameter].gt(0)]
             group_logs=[np.log(g[parameter].to_numpy(float)) for _,g in good.groupby('native_group')]
             means=np.array([v.mean() for v in group_logs]);center=float(means.mean()) if len(means) else np.nan
@@ -9706,6 +9717,423 @@ def tak_repeatability_main(args):
     print(json.dumps(serial({k:v for k,v in result.items() if k not in ('records','groups','native_groups','calibration_records','coordinates','record_workers','terminal','paired_contrasts','prepared_ids','failures')})),flush=True)
 
 
+def tak_task_parameter_config(path,root):
+    default=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_task_parameters_v1.yaml'
+    cfg=yaml.safe_load(Path(path or default).read_text())
+    if cfg!=yaml.safe_load(default.read_text()):raise ValueError('Unchanged task-parameter scope required')
+    parent=Path(root)/cfg['parent'];pcfg=json.loads((parent/'resolved_config.json').read_text())
+    if pcfg['schema']!='shared_driver_tak_repeatability_v1' or pcfg['data']['protected_data']!='forbidden':
+        raise ValueError('Exact public 10Hz repeatability parent required')
+    core=json.loads((parent/'resolved_model_config.json').read_text())
+    if core['tensor']['dt_s']!=.1 or core['arms'][1]['log_sd']!=[.125,.125]:raise ValueError('Parent model/clock mismatch')
+    core.update(schema=cfg['schema'],experiment_id=cfg['experiment_id'],seed=cfg['seed'])
+    core['fitting']['reference']['neurovascular_gain']=1.
+    core['fitting']['bounds']['neurovascular_gain']=cfg['model']['beta_bounds']
+    core['arms'].append(dict(name='tak_tau_beta',hemodynamics='tak',initial='volume_tied',tau_v=2,
+        fit=['tau','neurovascular_gain'],log_sd=[.125,.125],start_values=cfg['model']['tau_beta_starts'],warm='tak_fixed'))
+    core['task_synthetic']=cfg['synthetic'];core['claim_limits']=cfg['claim_limits']
+    core['data']['expected_records']=168+cfg['selection']['admitted_additional_windows']
+    core['endpoints']['contrasts']=[['tak_fixed','tak_repeat_narrow'],['tak_fixed','tak_tau_beta'],['tak_repeat_narrow','tak_tau_beta']]
+    return cfg,core
+
+
+def tak_task_parameter_synthetic(core,case):
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    seed,repeat,task,scenario=case['subject'],case['repeat'],case['task'],case['scenario']
+    rng=np.random.default_rng(core['seed']+100*seed+10*repeat+(task=='B'))
+    dt=.1;n=900;t=np.arange(n)*dt;phase=.7*repeat+.2*seed
+    driver=((.04*np.sin(2*np.pi*t/17+phase)+.018*np.cos(2*np.pi*t/7)) if task=='A'
+            else (.055*np.sin(2*np.pi*t/13+phase)+.012*np.cos(2*np.pi*t/5)))
+    driver*=1+.08*seed
+    tau=1.7+.3*seed;beta=.85+.15*seed
+    if task=='B' and scenario=='tau_shift':tau*=1.5
+    if task=='B' and scenario=='beta_shift':beta*=1.5
+    parameters=volume_drive_parameters(core,tau=tau,kappa=.64,neurovascular_gain=beta)
+    initial=np.array([.02,1.04,1.025,1.025,.99])
+    truth=nonlinear_driver_forward(driver,initial,parameters,dt,substeps=8,derivative=False,
+        numerical_backend='numba',hemodynamics='tak',viscoelastic_s=2.)
+    ref=np.eye(n);ref[:,:50]-=1/50;operator=np.kron(ref,np.eye(3))
+    clean=(operator@truth['canonical_prediction'].ravel()).reshape(n,3)
+    noise=rng.normal(size=(n,3))*np.array(core['synthetic']['noise_sd']);target=clean+ref@noise
+    truth.update(driver=driver,initial_state=initial,kappa=.64,tau=tau,beta=beta,clean=clean)
+    return target,operator,np.array(core['synthetic']['training_sd']),truth
+
+
+def tak_task_parameter_specs(core,plan,phase):
+    if phase!='synthetic':return tak_specs(core,plan,phase)
+    jobs=[];s=core['task_synthetic']
+    for scenario in s['scenarios']:
+        for subject in s['subjects']:
+            for repeat in s['repeats']:
+                for task in s['tasks']:
+                    case=dict(scenario=scenario,subject=subject,repeat=repeat,task=task)
+                    key=f'{scenario}__s{subject}__r{repeat}__{task}'
+                    group=dict(id=key,case=case,refs=[dict(id=key,dataset='synthetic',subject=f'seed{subject}',record=scenario)])
+                    for arm in core['arms']:
+                        jobs.append(dict(key=f'synthetic__{key}__90__joint_full__{arm["name"]}',phase='synthetic',
+                            group=group,length_s=90,condition='joint_full',arm=arm))
+    return jobs
+
+
+def tak_task_parameter_plan(cfg,core,root):
+    from collections import defaultdict
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.event_alignment import ADMISSIBLE_ALIGNMENT_CASES
+    parent=root/cfg['parent'];pp=json.loads((parent/'plan.json').read_text())
+    if json.loads((parent/'measured_summary.json').read_text())['status']!='completed':raise ValueError('Completed parent required')
+    if len(pp['records'])!=168:raise ValueError('Exact parent 168-window scope required')
+    templates={}
+    for ref in pp['records']:templates.setdefault((ref['dataset'],ref['subject']),ref)
+    index=CleanPhysiologyCacheIndex(root/cfg['data']['cache_root']);candidates={};excluded=[]
+    for record in index.records:
+        identity=(record.dataset_id,record.canonical_subject_id)
+        if identity not in templates or record.dataset_id not in cfg['endpoints']['task_sets']:continue
+        selection=cfg['selection'][record.dataset_id]
+        if record.base_record_id not in selection['additional_records']:continue
+        reports=index.reports_by_join_key.get(record.join_key,[])
+        if not reports or any(r.get('alignment_case') not in ADMISSIBLE_ALIGNMENT_CASES or r.get('label_sequence_match') is False for r in reports):
+            excluded.append(dict(join_key=record.join_key,reason='nonadmitted_alignment'));continue
+        template=templates[identity];anchor=deepcopy(template['anchor']);names=record.manifest['measurement']['fnirs_channel_names']
+        channel=anchor['hb_channel']+'_HbO'
+        if channel not in names:excluded.append(dict(join_key=record.join_key,reason='missing_parent_channel'));continue
+        anchor['hb_pair']=names.index(channel)//2
+        tasks=selection.get('additional_tasks',[selection.get('additional_task')])
+        rows=_tak_repeat_candidates(record,index.events_by_join_key.get(record.join_key,[]),anchor,
+            coordinate=template['coordinate'],allowed_tasks=tasks)
+        if not rows:excluded.append(dict(join_key=record.join_key,reason='no_complete_90s_task_candidate'))
+        for row in rows:candidates.setdefault(row['native_group_key'],[]).append(row)
+    refs=deepcopy(pp['records']);groups=deepcopy(pp['groups']);native_groups=deepcopy(pp['native_groups'])
+    added=[]
+    for key,rows in sorted(candidates.items()):
+        gid=f'ng{len(native_groups):03d}';selected=_tak_repeat_select(rows,2)
+        native_groups.append(dict(id=gid,native_group_key=key,dataset=rows[0]['dataset'],subject=rows[0]['subject'],
+            task=rows[0]['task'],available_candidates=len(rows),requested_windows=2,selected_windows=len(selected)))
+        for i,row in enumerate(selected):
+            ref=dict(row,native_group=gid,subset_index=i,side=i,analysis_tier='task_extension')
+            ref['id']=f'{ref["dataset"]}__{ref["subject"]}__{ref["record"]}__{gid}__w{i:02d}'
+            group=dict(id=f'g{len(groups):03d}',native_group=gid,refs=[ref]);groups.append(group);refs.append(ref);added.append(ref['id'])
+    if (len(added)!=cfg['selection']['admitted_additional_windows'] or
+            excluded!=[dict(join_key=cfg['selection']['metadata_exclusion'],reason='nonadmitted_alignment')]):
+        raise ValueError('Metadata-admissible task windows or exclusions changed')
+    annotations={r['id']:dict(scope='new_task' if r['id'] in added else 'parent',task=r['task']) for r in refs}
+    by_task=defaultdict(list)
+    for group in groups:
+        r=group['refs'][0]
+        if r['dataset'] in cfg['endpoints']['task_sets']:
+            by_task[(r['dataset'],r['subject'],r['task'])].append(r)
+    for identity,rows in by_task.items():
+        by_support=defaultdict(list)
+        for r in rows:by_support[r['native_group']].append(r)
+        ordered=sorted(by_support,key=lambda k:(by_support[k][0]['record'],min(r['eeg_start_s'] for r in by_support[k])))
+        if len(ordered)!=3 or any(len(by_support[k])!=2 for k in ordered):raise ValueError('Each primary task requires three supports and two disjoint windows per support')
+        for ordinal,key in enumerate(ordered):
+            for ref in by_support[key]:annotations[ref['id']]['task_repeat']=ordinal
+    return dict(schema='tak_task_parameter_plan_v1',records=refs,groups=groups,native_groups=native_groups,
+        annotations=annotations,new_window_ids=added,parent_window_ids=[r['id'] for r in pp['records']],
+        calibration_records=pp['calibration_records'],excluded=excluded,planned_windows=len(refs),
+        new_windows=len(added),inherited_task_rows=336,new_fitting_tasks=len(refs)*3-336,measured_arrays_read=0,
+        requested_new_windows=cfg['selection']['requested_additional_windows'],excluded_new_windows=6,
+        task_sets=cfg['endpoints']['task_sets'],dt_s=.1,eeg_proxy_rate_hz=10.,protected_reads=0)
+
+
+def tak_task_parameter_prepare(cfg,core,root,out,plan,workers):
+    from collections import defaultdict
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.ssm_prepared import fit_feature_coordinate,require_10hz_eeg_proxy_array,require_cached_hb_array
+    if serial(plan)!=serial(tak_task_parameter_plan(cfg,core,root)):raise ValueError('Frozen task metadata plan changed')
+    syn=json.loads((out/'synthetic_summary.json').read_text())
+    if syn['status']!='completed' or syn['terminal_rows']!=108:raise ValueError('Complete synthetic matrix required before new measured access')
+    parent=root/cfg['parent'];prep=json.loads((parent/'preparation.json').read_text());coordinates=prep['coordinates']
+    audit={}
+    for coordinate,co in coordinates.items():
+        chunks=[]
+        for ref in [r for r in plan['calibration_records'] if r['coordinate']==coordinate]:
+            with np.load(parent/'feature_cache'/(ref['id']+'.npz'),allow_pickle=False) as a:chunks.append((a['eeg'].copy(),a['hb'].copy()))
+        check=fit_feature_coordinate(chunks)
+        differences={key:float(np.max(np.abs(np.asarray(check[key])-np.asarray(co[key])))) for key in ('pc','eeg_factor','hb_factor','sd')}
+        if max(differences.values())>1e-12:raise ValueError('Parent development coordinate no longer reproduces')
+        audit[coordinate]=differences
+    # Copies preserve the original byte identity; their origin is explicit.
+    reused=[];(out/'prepared').mkdir(exist_ok=True);(out/'tasks').mkdir(exist_ok=True)
+    parent_ids=set(plan['parent_window_ids'])
+    for group in plan['groups']:
+        ref=group['refs'][0]
+        if ref['id'] not in parent_ids:continue
+        source=parent/'prepared'/f'{ref["id"]}__90.npz';destination=out/'prepared'/source.name
+        if not destination.exists():shutil.copy2(source,destination)
+        with np.load(destination,allow_pickle=False) as a:require_cached_hb_array(a);require_10hz_eeg_proxy_array(a,steps=900)
+        for arm in core['arms'][:2]:
+            stem=f'measured__{group["id"]}__90__joint_full__{arm["name"]}'
+            for extension in ('.json','.npz'):
+                source=parent/'tasks'/(stem+extension);destination=out/'tasks'/source.name
+                if source.exists() and not destination.exists():shutil.copy2(source,destination)
+                if source.exists() and source.read_bytes()!=destination.read_bytes():raise ValueError('Inherited task bytes changed')
+            reused.append(dict(key=stem,source=str(parent/'tasks'/(stem+'.json'))))
+    write_json(out/'inherited_tasks.json',dict(parent=str(parent),rows=reused,not_new_replications=True))
+    index=CleanPhysiologyCacheIndex(root/cfg['data']['cache_root']);lookup={r.join_key:r for r in index.records}
+    by_record=defaultdict(list)
+    for ref in plan['records']:
+        if ref['id'] not in parent_ids:by_record[ref['join_key']].append(ref)
+    jobs=[(core,str(root),str(out),lookup[key],refs) for key,refs in sorted(by_record.items())]
+    results=[];started=time.monotonic()
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futures={pool.submit(_tak_repeat_prepare_record,payload):payload[3].join_key for payload in jobs}
+        for future in as_completed(futures):
+            results.append(future.result());write_json(out/'progress.json',dict(phase='prepare',terminal_records=len(results),planned_records=len(jobs),elapsed_s=time.monotonic()-started))
+    prepared=list(parent_ids);failures=[]
+    for ref in [r for r in plan['records'] if r['id'] not in parent_ids]:
+        metadata=json.loads((out/'feature_cache'/(ref['id']+'.json')).read_text())
+        if metadata['status']!='completed':failures.append(metadata);continue
+        co=coordinates[ref['coordinate']]
+        with np.load(out/'feature_cache'/(ref['id']+'.npz'),allow_pickle=False) as a:
+            y=np.column_stack((a['eeg']@np.asarray(co['pc'])*co['eeg_factor'],a['hb']*co['hb_factor']))
+            target,operator=volume_drive_crop(y,dict(eeg=a['eeg_op'],hb=a['hb_op']),90,dt=.1)
+        np.savez_compressed(out/'prepared'/f'{ref["id"]}__90.npz',target=target,operator=operator,sd=np.array(co['sd']),
+            hb_factor=np.array(co['hb_factor']),fnirs_input=np.array('unified_cached_fnirs_v1'),eeg_proxy_input=np.array('eeg_log_bandpower_10hz_v1'),
+            eeg_proxy_rate_hz=np.array(10.),time_s=np.arange(900)*.1)
+        prepared.append(ref['id'])
+    result=dict(status='completed',planned_records=len(plan['records']),prepared_records=len(prepared),inherited_records=168,
+        new_records=len(prepared)-168,coordinates=coordinates,coordinate_audit=audit,failures=failures,record_workers=results,
+        raw_EEG_reads=sum(not r.get('cached',False) for r in results),raw_fnirs_reads=0,protected_reads=0,seconds=time.monotonic()-started)
+    write_json(out/'preparation.json',result);return result
+
+
+def _tak_task_predictions(x):
+    """Leave an entire support ordinal out; require both training supports/class.
+
+    x has [..., subject, repeat, task, feature] axes. NaNs yield abstentions.
+    Equidistant centroids also abstain rather than favoring the first label.
+    """
+    x=np.asarray(x,float);pred=np.full(x.shape[:-1],-1,dtype=int)
+    for fold in range(x.shape[-3]):
+        training=np.delete(x,fold,axis=-3);center=training.mean(axis=-3)
+        valid=np.isfinite(training).all(axis=(-3,-2,-1))
+        test=x[...,fold,:,:]
+        distance=np.sum((test[..., :,None,:]-center[...,None,:,:])**2,axis=-1)
+        distance=np.where(np.isfinite(distance),distance,np.inf)
+        best=np.argmin(distance,axis=-1)
+        minimum=distance.min(axis=-1,keepdims=True)
+        unique=np.sum(np.isclose(distance,minimum,rtol=1e-12,atol=1e-12),axis=-1)==1
+        valid=valid[...,None]&np.isfinite(test).all(axis=-1)&unique
+        pred[...,fold,:]=np.where(valid,best,-1)
+    return pred
+
+
+def _tak_task_discrimination(x, *, seed=20261028, permutations=10000):
+    x=np.asarray(x,float);n,repeats,classes,_=x.shape
+    expected=np.arange(classes);pred=_tak_task_predictions(x)
+    subject_accuracy=(pred==expected).mean(axis=(1,2));observed=float(subject_accuracy.mean())
+    rng=np.random.default_rng(seed)
+    order=np.argsort(rng.random((permutations,n,repeats,classes)),axis=-1)
+    shuffled=np.take_along_axis(np.broadcast_to(x,(permutations,)+x.shape),order[...,None],axis=-2)
+    null=(_tak_task_predictions(shuffled)==expected).mean(axis=(-3,-2,-1))
+    ix=np.random.default_rng(seed).integers(0,n,(2000,n))
+    ci=np.quantile(subject_accuracy[ix].mean(1),[.025,.975])
+    return dict(planned_subjects=n,planned_tests=pred.size,correct=int((pred==expected).sum()),
+        abstentions=int((pred<0).sum()),accuracy=observed,chance=1/classes,
+        ci95_low=ci[0],ci95_high=ci[1],permutation_p=(1+np.count_nonzero(null>=observed-1e-12))/(permutations+1),
+        null_mean=float(null.mean()),null_q95=float(np.quantile(null,.95)),
+        subject_accuracy=subject_accuracy,predictions=pred,null_accuracy=null)
+
+
+def tak_task_parameter_analyze(out,target):
+    cfg=json.loads((out/'resolved_config.json').read_text());core=json.loads((out/'resolved_model_config.json').read_text())
+    plan=json.loads((out/'plan.json').read_text());summary=json.loads((out/'measured_summary.json').read_text())
+    if cfg['schema']!='shared_driver_tak_task_parameters_v1' or cfg['data']['protected_data']!='forbidden':
+        raise ValueError('Exact public task-parameter evidence required')
+    if target.parent!=out or target.exists():raise ValueError('Fresh direct-child analysis required')
+    if summary['status']!='completed' or summary['terminal_rows']!=len(plan['records'])*3:
+        raise ValueError('All planned fits must be terminal')
+    rows=[];failures=[];checked=0;max_error=0.;parent_ids=set(plan['parent_window_ids'])
+    for group in plan['groups']:
+        ref=group['refs'][0];annotation=plan['annotations'][ref['id']]
+        for arm in core['arms']:
+            relative=Path('tasks')/f'measured__{group["id"]}__90__joint_full__{arm["name"]}.json'
+            meta=json.loads((out/relative).read_text());row=meta['rows'][0];fit=meta.get('fit',{})
+            if (len(meta['rows'])!=1 or meta['spec']['group']!=group or meta['spec']['arm']!=arm
+                    or row['id']!=ref['id'] or row['arm']!=arm['name']):raise ValueError('Task identity/arm mismatch')
+            values=dict(id=ref['id'],dataset=ref['dataset'],subject=ref['subject'],record=ref['record'],
+                native_group=ref['native_group'],subset_index=ref['subset_index'],analysis_tier=ref['analysis_tier'],
+                scope=annotation['scope'],task=annotation['task'],task_repeat=annotation.get('task_repeat',-1),
+                eeg_start_s=ref['eeg_start_s'],hb_start_s=ref['hb_start_s'],hb_channel=ref['anchor']['hb_channel'],
+                arm=arm['name'],qualified=row['qualified'],fit_status=row['fit_status'],
+                inherited=ref['id'] in parent_ids and arm['name']!='tak_tau_beta',source_task=str(relative))
+            for key in ('kappa','tau','full_hb_nmse','eeg_nmse','integration_max_training_sd'):values[key]=row.get(key,np.nan)
+            values['beta']=row.get('beta',fit.get('neurovascular_gain',np.nan))
+            starts=[s['parameter_values'] for s in fit.get('starts',[]) if s['converged']]
+            values['converged_starts']=len(starts)
+            values['minimum_log_parameter_boundary_distance']=min(fit.get('log_parameter_boundary_distance',[]) or [np.nan])
+            for i,name in enumerate(arm['fit']):
+                key='beta' if name=='neurovascular_gain' else name
+                values[key+'_start_span_pct']=(100*np.ptp(np.asarray(starts)[:,i])/values[key]
+                    if row['qualified'] and len(starts)>=2 else np.nan)
+            if row['qualified']:
+                with np.load((out/relative).with_suffix('.npz'),allow_pickle=False) as a:
+                    y,p,sd=a['target'],a['prediction'],a['sd']
+                    if y.shape!=(1,900,3) or p.shape!=y.shape or sd.shape!=(1,3):raise ValueError('10Hz tensor mismatch')
+                    e=np.mean(((p[0,:-1]-y[0,:-1])/sd[0])**2,axis=0)
+                    discrepancy=max(abs(e[1:].mean()-row['full_hb_nmse']),abs(e[0]-row['eeg_nmse']))
+                    if discrepancy>1e-10:raise ValueError('Saved score mismatch')
+                    max_error=max(max_error,float(discrepancy));checked+=1
+            else:failures.append(dict(id=ref['id'],arm=arm['name'],source_task=str(relative),fit_status=row['fit_status']))
+            rows.append(values)
+    frame=pd.DataFrame(rows);subjects=[];dispersions=[];comparisons=[]
+    arms=['tak_repeat_narrow','tak_tau_beta'];parameters={'tak_repeat_narrow':('kappa','tau'),'tak_tau_beta':('tau','beta')}
+    fixed=frame[frame.arm.eq('tak_fixed')][['id','qualified','full_hb_nmse']].rename(columns={'qualified':'fixed_qualified','full_hb_nmse':'fixed_full_hb_nmse'})
+    for arm in arms:
+        part=frame[frame.arm.eq(arm)&frame.scope.eq('parent')].merge(fixed,on='id',validate='one_to_one')
+        s,d,c=_tak_repeatability_statistics(part,parameters=parameters[arm],seed=cfg['seed'])
+        subjects.append(s.assign(arm=arm));dispersions.append(d.assign(arm=arm));comparisons.append(c.assign(arm=arm))
+    # All three arms use exactly the same successful windows in the main fit comparison.
+    reconstruction=[]
+    for (dataset,tier),part in frame[frame.scope.eq('parent')].groupby(['dataset','analysis_tier']):
+        valid=part.groupby('id').qualified.all();common=part[part.id.isin(valid[valid].index)]
+        r=dict(dataset=dataset,analysis_tier=tier,planned_windows=part.id.nunique(),paired_windows=int(valid.sum()),subjects=common.subject.nunique())
+        for arm in ['tak_fixed']+arms:
+            g=common[common.arm.eq(arm)].groupby(['subject','native_group']).full_hb_nmse.mean().groupby('subject').mean()
+            r[arm]=float(np.sqrt(g.mean()))
+            r[arm+'_qualified']=int(part[part.arm.eq(arm)].qualified.sum())
+        r['kappa_tau_minus_tau_beta']=r['tak_repeat_narrow']-r['tak_tau_beta'];reconstruction.append(r)
+    groups=[];task_subjects=[];classification=[];prediction_rows=[];contrast_rows=[];accuracy_comparisons=[];nulls={}
+    for dataset,tasks in cfg['endpoints']['task_sets'].items():
+        identities=sorted(frame[frame.dataset.eq(dataset)].subject.unique());by_arm={}
+        for arm in arms:
+            params=parameters[arm];reference=np.array([core['fitting']['reference']['neurovascular_gain' if p=='beta' else p] for p in params])
+            x=np.full((len(identities),3,len(tasks),2),np.nan)
+            for si,subject in enumerate(identities):
+                for ti,task in enumerate(tasks):
+                    for repeat in range(3):
+                        part=frame[frame.dataset.eq(dataset)&frame.subject.eq(subject)&frame.arm.eq(arm)&frame.task.eq(task)&frame.task_repeat.eq(repeat)]
+                        complete=len(part)==2 and part.qualified.all()
+                        logs=np.log(part[list(params)].to_numpy()).mean(0) if complete else np.full(2,np.nan)
+                        if complete:x[si,repeat,ti]=(logs-np.log(reference))/.125
+                        groups.append(dict(dataset=dataset,subject=subject,task=task,task_repeat=repeat,arm=arm,
+                            admitted_windows=len(part),qualified_windows=int(part.qualified.sum()),requested_windows=2,
+                            complete=bool(complete),**{p:np.exp(logs[j]) for j,p in enumerate(params)}))
+                    center=x[si,:,ti].mean(0)*.125+np.log(reference)
+                    task_subjects.append(dict(dataset=dataset,subject=subject,task=task,arm=arm,
+                        complete=bool(np.isfinite(center).all()),**{p:np.exp(center[j]) for j,p in enumerate(params)}))
+            result=_tak_task_discrimination(x,seed=cfg['seed'],permutations=cfg['endpoints']['classifier']['null_repeats'])
+            by_arm[arm]=result['subject_accuracy'];nulls[dataset+'__'+arm]=result.pop('null_accuracy')
+            predictions=result.pop('predictions');result.pop('subject_accuracy')
+            classification.append(dict(dataset=dataset,arm=arm,**result))
+            for si,subject in enumerate(identities):
+                for repeat in range(3):
+                    for ti,task in enumerate(tasks):
+                        p=int(predictions[si,repeat,ti]);prediction_rows.append(dict(dataset=dataset,arm=arm,subject=subject,
+                            heldout_support_ordinal=repeat,task=task,prediction=tasks[p] if p>=0 else 'abstain',correct=p==ti))
+            for ds,a,b in cfg['endpoints']['contrasts']:
+                if ds!=dataset:continue
+                delta=(x[:,:,tasks.index(b)]-x[:,:,tasks.index(a)]).mean(1)*.125
+                for j,parameter in enumerate(params):
+                    values=delta[:,j];good=values[np.isfinite(values)];n=len(good)
+                    ix=np.random.default_rng(cfg['seed']).integers(0,n,(2000,n)) if n else np.empty((0,0),int)
+                    ci=np.quantile(good[ix].mean(1),[.025,.975]) if n else [np.nan,np.nan]
+                    contrast_rows.append(dict(dataset=dataset,arm=arm,parameter=parameter,reference_task=a,candidate_task=b,
+                        planned_subjects=len(identities),paired_subjects=n,positive_subjects=int((good>0).sum()),
+                        mean_log_ratio=float(good.mean()) if n else np.nan,ratio_pct=100*np.expm1(good.mean()) if n else np.nan,
+                        ci95_low_pct=100*np.expm1(ci[0]),ci95_high_pct=100*np.expm1(ci[1])))
+        diff=by_arm[arms[1]]-by_arm[arms[0]];ix=np.random.default_rng(cfg['seed']).integers(0,len(diff),(2000,len(diff)))
+        ci=np.quantile(diff[ix].mean(1),[.025,.975]);accuracy_comparisons.append(dict(dataset=dataset,subjects=len(diff),
+            tau_beta_minus_kappa_tau=float(diff.mean()),ci95_low=ci[0],ci95_high=ci[1]))
+    p=np.array([r['permutation_p'] for r in classification]);order=np.argsort(p);adjusted=np.maximum.accumulate(p[order]*np.arange(len(p),0,-1))
+    for i,value in zip(order,adjusted):classification[i]['holm_p']=min(1.,float(value))
+    synthetic=[];synthetic_contrasts=[]
+    for spec in tak_task_parameter_specs(core,plan,'synthetic'):
+        row=json.loads((out/'tasks'/(spec['key']+'.json')).read_text())['rows'][0]
+        synthetic.append(dict(**spec['group']['case'],arm=spec['arm']['name'],qualified=row['qualified'],
+            **{k:row.get(k,np.nan) for k in ('tau','beta','truth_tau','truth_beta','full_hb_nmse','integration_max_training_sd')}))
+    sf=pd.DataFrame(synthetic)
+    for (scenario,arm,subject,repeat),part in sf.groupby(['scenario','arm','subject','repeat']):
+        a=part[part.task.eq('A')].iloc[0];b=part[part.task.eq('B')].iloc[0]
+        for parameter in ('tau','beta'):
+            synthetic_contrasts.append(dict(scenario=scenario,arm=arm,subject=subject,repeat=repeat,parameter=parameter,
+                qualified=bool(a.qualified and b.qualified),truth_log_ratio=np.log(b['truth_'+parameter]/a['truth_'+parameter]),
+                estimated_log_ratio=np.log(b[parameter]/a[parameter]) if a.qualified and b.qualified else np.nan))
+    target.mkdir();tables=dict(parameter_estimates=frame,subject_parameters=pd.concat(subjects),dispersion=pd.concat(dispersions),
+        reconstruction=pd.DataFrame(reconstruction),native_support_parameters=pd.DataFrame(groups),task_subject_parameters=pd.DataFrame(task_subjects),
+        task_classification=pd.DataFrame(classification),task_predictions=pd.DataFrame(prediction_rows),task_contrasts=pd.DataFrame(contrast_rows),
+        accuracy_pair_comparison=pd.DataFrame(accuracy_comparisons),synthetic_parameters=sf,synthetic_contrasts=pd.DataFrame(synthetic_contrasts))
+    for name,data in tables.items():data.to_csv(target/(name+'.csv'),index=False,encoding='utf-8-sig')
+    np.savez_compressed(target/'permutation_nulls.npz',**nulls)
+    result=dict(schema='tak_task_parameter_analysis_v1',status='completed',source_run=str(out),planned_windows=len(plan['records']),
+        requested_windows=len(plan['records'])+plan['excluded_new_windows'],excluded=plan['excluded'],planned_subjects=24,
+        planned_fits=len(frame),qualified_by_arm=frame.groupby('arm').qualified.sum().to_dict(),failures=failures,
+        checked_array_rows=checked,max_nmse_discrepancy=max_error,classification=classification,
+        accuracy_pair_comparison=accuracy_comparisons,reconstruction=reconstruction,contrasts=contrast_rows,
+        numerical=dict(maximum_start_span_pct=frame[[c for c in frame if c.endswith('_start_span_pct')]].max().max(),
+            maximum_integration_error=frame.loc[frame.qualified,'integration_max_training_sd'].max(),
+            boundary_fits=int((frame.qualified&frame.minimum_log_parameter_boundary_distance.lt(1e-6)).sum())),
+        definitions=dict(nrmse='last bin excluded; time/chromophore mean normalized squared error; native-support mean then subject mean then square root',
+            classification='within-subject leave-one-support-ordinal out; two 90s estimates form each support geometric center; two training supports per task; nearest centroid in log(parameter/reference)/0.125; incomplete training, missing test or tie abstains; all planned tests remain denominator',
+            null='10000 task-label permutations within subject and support ordinal; centroids recomputed; plus-one p; Holm over four dataset/pair tests',
+            intervals='2000 subject-cluster percentile bootstrap; parameter/accuracy differences are paired; frozen fits/scales; secondary intervals exploratory',
+            contrast='mean subject log(taskB/taskA), then exp minus 1; only subjects with all three complete supports in both tasks; signs are per subject',
+            causality='task, recording context, order and preprocessing can be confounded; parameter task association does not establish physiological identifiability'),
+        protected_reads=0,raw_signal_reads=0,refits=0)
+    write_json(target/'summary.json',result);shutil.copy2(Path(__file__),target/'analysis_source.py')
+    return result
+
+
+def tak_task_parameter_main(args):
+    root=args.project_root.resolve();cfg,core=tak_task_parameter_config(args.config,root);out=args.run_dir.resolve()
+    if not out.is_relative_to(root/cfg['output_root']) or out==root/cfg['output_root']:raise ValueError('Task-parameter output must be below the owning run root')
+    out.mkdir(parents=True,exist_ok=True);lock=(out/'controller.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    for name,value in [('resolved_config.json',cfg),('resolved_model_config.json',core)]:
+        path=out/name
+        if path.exists() and json.loads(path.read_text())!=serial(value):raise ValueError('Immutable task-parameter contract changed')
+        if not path.exists():write_json(path,value)
+    stage=args.task_parameter_stage
+    if stage in ('synthetic','prepare','pilot','run'):
+        if not os.environ.get('INVOCATION_ID') or not os.environ.get('SSM_SYSTEMD_UNIT'):raise ValueError('Durable supervisor required')
+        if not 1<=args.workers<=cfg['resources']['max_workers']:raise ValueError('Workers outside resource envelope')
+    if stage=='analyze':
+        result=tak_task_parameter_analyze(out,(args.task_parameter_analysis_output or out/'task_parameter_analysis_v1').resolve())
+    elif stage=='check':
+        from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+        case=dict(subject=0,repeat=0,task='B',scenario='beta_shift')
+        y,op,sd,truth=tak_task_parameter_synthetic(core,case)
+        if y.shape!=(900,3) or op.shape!=(2700,2700):raise ValueError('Synthetic tensor mismatch')
+        driver=truth['driver'][:40];initial=truth['initial_state']
+        params=dict(tau=truth['tau'],neurovascular_gain=truth['beta'])
+        def forward(values,substeps=2):
+            return nonlinear_driver_forward(driver,initial,volume_drive_parameters(core,**values),.1,
+                substeps=substeps,numerical_backend='numba',hemodynamics='tak',viscoelastic_s=2.)
+        prediction=forward(params);errors={};eps=1e-5
+        for name in params:
+            hi=forward(dict(params,**{name:params[name]+eps}))['canonical_prediction']
+            lo=forward(dict(params,**{name:params[name]-eps}))['canonical_prediction']
+            errors[name]=float(np.max(abs((hi-lo)/(2*eps)-prediction[name+'_jacobian'])))
+        replay_error=float(np.max(abs(forward(params,8)['canonical_prediction']-prediction['canonical_prediction'])))
+        if max(*errors.values(),replay_error)>1e-7:raise ValueError('Tau/beta tangent or replay check failed')
+        result=dict(status='passed',shape=list(y.shape),dt_s=.1,parameter_pair=['tau','neurovascular_gain'],
+            measured_arrays_read=0,protected_reads=0,truth_beta=truth['beta'],tangent_max_errors=errors,
+            integration_refinement_max_error=replay_error)
+        write_json(out/'software_checks.json',result)
+    elif stage=='plan':
+        result=tak_task_parameter_plan(cfg,core,root);path=out/'plan.json'
+        if path.exists() and json.loads(path.read_text())!=serial(result):raise ValueError('Immutable task plan changed')
+        if not path.exists():write_json(path,result)
+    else:
+        if json.loads((out/'software_checks.json').read_text())['status']!='passed':raise ValueError('Software checks required')
+        plan=json.loads((out/'plan.json').read_text())
+        if stage=='prepare':result=tak_task_parameter_prepare(cfg,core,root,out,plan,args.workers)
+        else:
+            phase='synthetic' if stage=='synthetic' else 'measured';specs=tak_task_parameter_specs(core,plan,phase)
+            if stage in ('synthetic','pilot','run'):
+                if phase=='measured' and json.loads((out/'preparation.json').read_text())['status']!='completed':raise ValueError('Prepared current inputs required')
+                pilot_groups=None
+                if stage=='pilot':
+                    chosen={}
+                    for g in plan['groups']:
+                        r=g['refs'][0];chosen.setdefault((r['dataset'],r['task']),g['id'])
+                    pilot_groups=set(chosen.values())
+                result=tak_run(core,out,plan,phase,args.workers,pilot=stage=='pilot',specs=specs,pilot_groups=pilot_groups)
+                if stage!='pilot':result=tak_summarize(core,out,plan,phase,specs=specs)
+            else:result=tak_summarize(core,out,plan,'measured',specs=specs)
+    print(json.dumps(serial({k:v for k,v in result.items() if k not in ('records','groups','native_groups','calibration_records','annotations','coordinates','record_workers','terminal','paired_contrasts','new_window_ids','parent_window_ids')})),flush=True)
+
+
 def tak_main(args):
     cfg=tak_config(args.config);root=args.project_root.resolve();out=args.run_dir.resolve()
     if not out.is_relative_to(root/cfg['output_root']) or out==root/cfg['output_root']:
@@ -9809,6 +10237,9 @@ def main():
     ap.add_argument('--decay-diagnostic',action='store_true')
     ap.add_argument('--tak-comparison',action='store_true')
     ap.add_argument('--tak-repeatability',action='store_true')
+    ap.add_argument('--tak-task-parameters',action='store_true')
+    ap.add_argument('--task-parameter-stage',choices=['check','plan','synthetic','prepare','pilot','run','summarize','analyze'],default='check')
+    ap.add_argument('--task-parameter-analysis-output',type=Path)
     ap.add_argument('--repeat-stage',choices=['check','plan','synthetic','prepare','pilot','run','summarize','analyze'],default='check')
     ap.add_argument('--repeat-analysis-output',type=Path)
     ap.add_argument('--tak-stage',choices=['check','plan','synthetic','prepare','pilot','measured','sensitivity','summarize','verify','audit','morphology'],default='check')
@@ -9826,6 +10257,10 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.tak_task_parameters:
+        if args.run_dir is None or any(value is True for key,value in vars(args).items() if key!='tak_task_parameters'):
+            ap.error('Tak task parameters require an exclusive mode and run-dir')
+        return tak_task_parameter_main(args)
     if args.tak_repeatability:
         if args.run_dir is None or any(value is True for key,value in vars(args).items() if key not in ('tak_repeatability',)):
             ap.error('Tak repeatability requires its own run-dir and exclusive mode; use --repeat-stage')

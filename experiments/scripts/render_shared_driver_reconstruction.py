@@ -9767,6 +9767,329 @@ def render_tak_repeatability(run, out, analysis=None):
     print(json.dumps(validation,ensure_ascii=False))
 
 
+def render_tak_task_parameters(run,out,analysis=None):
+    """Read-only matched parameter-pair and task-association figure collection."""
+    from html import escape
+    import os
+    import shutil
+    analysis=analysis or run/'task_parameter_analysis_v1'
+    evidence=json.loads((analysis/'summary.json').read_text());cfg=json.loads((run/'resolved_config.json').read_text())
+    if (evidence['status']!='completed' or evidence['schema']!='tak_task_parameter_analysis_v1'
+            or Path(evidence['source_run']).resolve()!=run.resolve()):raise ValueError('Completed exact analysis required')
+    if out.exists():raise ValueError('Choose a fresh versioned figure export')
+    out.mkdir(parents=True);(out/'figures').mkdir()
+    tables={name:pd.read_csv(analysis/(name+'.csv'),dtype={'subject':str}) for name in
+        ['parameter_estimates','subject_parameters','dispersion','reconstruction','native_support_parameters',
+         'task_subject_parameters','task_classification','task_contrasts','accuracy_pair_comparison','synthetic_contrasts']}
+    frame=tables['parameter_estimates'];disp=tables['dispersion'];classify=tables['task_classification']
+    if len(frame)!=evidence['planned_fits'] or frame[['id','arm']].duplicated().any():raise ValueError('Complete report denominator mismatch')
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':13,'axes.unicode_minus':False,'mathtext.fontset':'stix','axes.spines.top':False,'axes.spines.right':False})
+    names={'eeg_fnirs_single_trial':'Single-Trial','simultaneous_eeg_nirs':'Simultaneous','visual_cognitive_motivation':'Visual','refed':'REFED'}
+    arms=['tak_repeat_narrow','tak_tau_beta'];arm_labels={'tak_fixed':'固定参考参数','tak_repeat_narrow':'κ＋τ','tak_tau_beta':'τ＋β'}
+    arm_colors={'tak_fixed':'#7d858d','tak_repeat_narrow':'#186ca0','tak_tau_beta':'#c16220'}
+    param_labels={'kappa':r'$\kappa$ / s$^{-1}$','tau':r'$\tau$ / s','beta':r'$\beta$ / 模型相对增益'}
+    param_short={'kappa':'κ','tau':'τ','beta':'β'};refs={'kappa':.64,'tau':2.,'beta':1.}
+    task_labels={'motor_imagery':'运动想象','mental_arithmetic':'心算','wg':'词语生成','nback':'n-back','dsr':'Go/No-go'}
+    colors=['#62428a','#278575','#b68a1c'];markers=['o','s','^'];figures=[]
+    def short(s):return str(s).replace('subject_','').replace('VP','')
+    def save(fig,key,title,caption,interpretation):
+        path=out/'figures'/(key+'.png');fig.savefig(path,dpi=260,bbox_inches='tight',facecolor='white');plt.close(fig)
+        figures.append(dict(key=key,file=str(path.relative_to(out)),title=title,caption=caption,interpretation=interpretation))
+    def parameter_axis(ax,p,values):
+        lo=min(values.min(),refs[p])/1.15;hi=max(values.max(),refs[p])*1.15
+        ax.set_yscale('log');ax.set_ylim(lo,hi);ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x,_:f'{x:g}'))
+        ax.yaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+        ax.yaxis.set_major_locator(matplotlib.ticker.LogLocator(base=10,subs=[1,2,3,4,5,6,8],numticks=8))
+        ax.axhline(refs[p],ls='--',lw=1,color='#75808a');ax.set_ylabel(param_labels[p]+'（对数刻度）');ax.grid(axis='y',alpha=.17)
+    primary=frame[frame.scope.eq('parent')&frame.analysis_tier.eq('primary')&frame.arm.eq('tak_tau_beta')]
+    for number,param in enumerate(['tau','beta'],1):
+        fig,axes=plt.subplots(2,2,figsize=(12,8),sharey=True,layout='constrained')
+        for ax,(dataset,label) in zip(axes.flat,names.items()):
+            part=primary[primary.dataset.eq(dataset)];identities=sorted(part.subject.unique())
+            for x,subject in enumerate(identities):
+                rows=part[part.subject.eq(subject)].sort_values(['native_group','subset_index']);groups=list(rows.native_group.unique())
+                for offset,(_,r) in zip(np.linspace(-.25,.25,len(rows)),rows.iterrows()):
+                    if r.qualified:
+                        j=groups.index(r.native_group)%3;ax.scatter(x+offset,r[param],c=colors[j],marker=markers[j],s=45,edgecolors='white',linewidth=.3)
+                ss=tables['subject_parameters'];ss=ss[(ss.dataset==dataset)&(ss.subject==subject)&ss.analysis_tier.eq('primary')&ss.arm.eq('tak_tau_beta')&ss.parameter.eq(param)]
+                if len(ss):ax.plot([x-.29,x+.29],[ss.iloc[0].geometric_center]*2,c='#17212e',lw=1.8)
+            parameter_axis(ax,param,primary.loc[primary.qualified,param])
+            ax.set_xticks(range(len(identities)),[short(s)+f'\n{int(part[part.subject.eq(s)].qualified.sum())}/{len(part[part.subject.eq(s)])}' for s in identities])
+            ax.set_xlabel('被试 ID；合格/计划片段');ax.set_title(f'{label} · {int(part.qualified.sum())}/{len(part)} 片段')
+        handles=[matplotlib.lines.Line2D([],[],color=c,marker=m,ls='',label=f'原生记录/连续支持 {i+1}') for i,(c,m) in enumerate(zip(colors,markers))]
+        handles.append(matplotlib.lines.Line2D([],[],color='#17212e',label='被试几何中心'))
+        fig.legend(handles=handles,loc='outside lower center',ncol=4,fontsize=12)
+        fig.suptitle(f'τ＋β：{param_short[param]} 的同任务/条件重复估计\n每点为一段独立优化的90秒数据；共同 log-SD=0.125',fontsize=15)
+        d=disp[disp.arm.eq('tak_tau_beta')&disp.parameter.eq(param)&disp.analysis_tier.eq('primary')]
+        conclusion='；'.join(f'{names[r.dataset]} 分散比 {r.between_within_ratio:.2f} [{r.ratio_ci95_low:.2f}, {r.ratio_ci95_high:.2f}]' for r in d.itertuples())
+        save(fig,f'{number:02d}_{param}_repeatability',f'τ＋β 的 {param_short[param]} 重复估计',
+            '每点是一个不重叠90秒数据子集的常数估计，同色同形表示该被试同一记录/连续支持；不同被试的同编号不代表同一记录。黑线为先支持内、再支持间等权的log均值取指数。虚线为先验参考值，非正常范围；四库采用统一刻度。REFED此处仅含3条悲伤视频，其余情绪不计入同条件重复。',conclusion+'。应同时比较被试内点跨度和被试间中心差异，不能把共同窄先验造成的集中性视为独立验证。')
+    fig,axes=plt.subplots(1,2,figsize=(12,7.3),sharex=True,layout='constrained')
+    principal=disp[disp.analysis_tier.eq('primary')];limit=max(1.,principal.ratio_ci95_high.max())*1.15
+    for ax,arm in zip(axes,arms):
+        rows=principal[principal.arm.eq(arm)];labels=[]
+        for y,(dataset,param) in enumerate((d,p) for d in names for p in (('kappa','tau') if arm==arms[0] else ('tau','beta'))):
+            r=rows[(rows.dataset==dataset)&(rows.parameter==param)].iloc[0]
+            ax.plot([r.ratio_ci95_low,r.ratio_ci95_high],[y,y],c=arm_colors[arm],lw=2)
+            ax.scatter(r.between_within_ratio,y,c=arm_colors[arm],s=45)
+            ax.annotate(f'{r.between_within_ratio:.2f}',(r.between_within_ratio,y),xytext=(0,9),textcoords='offset points',ha='center',fontsize=12)
+            labels.append(names[dataset]+' '+param_short[param])
+        ax.axvline(1,c='#666',ls='--');ax.set_xlim(0,limit);ax.set_ylim(7.6,-.7);ax.set_yticks(range(8),labels)
+        ax.set_xlabel('被试间 / 被试内 对数RMS分散比');ax.set_title(arm_labels[arm]);ax.grid(axis='x',alpha=.15)
+    fig.suptitle('同一批数据比较两组参数的个体差异与重估波动\n点为观测分散比；线为2000次整被试重采样的探索性95%区间',fontsize=15)
+    counts={arm:int(((principal.arm==arm)&principal.ratio_ci95_low.gt(1)).sum()) for arm in arms}
+    save(fig,'03_pair_dispersion','两组参数的被试间/内分散对照',
+        '在原168片段中的同任务/情绪主分析上分别计算。每名被试先得到支持段等权log中心；被试间RMS为各中心绕总中心的均方根，被试内RMS为片段绕自身被试中心的平方偏离，先支持段、再被试等权后开方。比值不是ICC；共同先验会影响分子和分母。区间按6名被试重采样，拟合冻结，未作多重校正。',
+        f'区间完全高于1：κ＋τ为{counts[arms[0]]}/8项，τ＋β为{counts[arms[1]]}/8项。高于1支持本面板的被试区分，但不等于跨日稳定性或生理真值；跨1时仍不确定。')
+    supports=tables['native_support_parameters'];centers=tables['task_subject_parameters']
+    for number,arm in enumerate(arms,4):
+        parameters=('kappa','tau') if arm==arms[0] else ('tau','beta')
+        fig,axes=plt.subplots(2,2,figsize=(12,8.2),layout='constrained')
+        for column,(dataset,tasks) in enumerate(cfg['endpoints']['task_sets'].items()):
+            identities=sorted(frame[frame.dataset.eq(dataset)].subject.unique())
+            for ax,param in zip(axes[:,column],parameters):
+                part=supports[(supports.dataset==dataset)&(supports.arm==arm)]
+                for x,subject in enumerate(identities):
+                    yy=[];xx=[]
+                    for j,task in enumerate(tasks):
+                        position=x+(j-(len(tasks)-1)/2)*.24
+                        g=part[(part.subject==subject)&(part.task==task)]
+                        good=g[g.complete]
+                        ax.scatter(position+np.linspace(-.05,.05,len(good)),good[param],s=20,marker=markers[j],c=colors[j],alpha=.55)
+                        c=centers[(centers.dataset==dataset)&(centers.arm==arm)&(centers.subject==subject)&(centers.task==task)].iloc[0]
+                        if c.complete:ax.scatter(position,c[param],s=66,marker=markers[j],c=colors[j],edgecolors='white',linewidth=.5,zorder=5);xx.append(position);yy.append(c[param])
+                        else:ax.text(position,.02,'缺失',transform=ax.get_xaxis_transform(),rotation=90,ha='center',fontsize=11,color='#9c3b3b')
+                    ax.plot(xx,yy,c='#a6afb5',lw=1,zorder=1)
+                parameter_axis(ax,param,supports.loc[supports.arm.eq(arm)&supports.complete,param])
+                ax.set_xticks(range(len(identities)),[short(s) for s in identities]);ax.set_xlabel('被试 ID')
+                ax.set_title(names[dataset]+' · '+param_short[param])
+                if ax==axes[0,column]:ax.legend(handles=[matplotlib.lines.Line2D([],[],c=colors[j],marker=markers[j],ls='',label=task_labels[t]) for j,t in enumerate(tasks)],loc='best',fontsize=11)
+        fig.suptitle(f'{arm_labels[arm]}：同一被试在不同任务的参数估计\n小点为连续支持的两片段几何中心；大点为三个完整支持的任务几何中心',fontsize=15)
+        c=tables['task_contrasts'];c=c[c.arm.eq(arm)]
+        interpretation='；'.join(f'{names[r.dataset]} {task_labels[r.candidate_task]}/{task_labels[r.reference_task]} {param_short[r.parameter]} {r.ratio_pct:+.1f}%（{r.paired_subjects}/{r.planned_subjects}人）' for r in c.itertuples())
+        save(fig,f'{number:02d}_{"kappa_tau" if arm==arms[0] else "tau_beta"}_tasks',arm_labels[arm]+' 的同被试任务对照',
+            '每个参数在90秒拟合内固定，驱动和四个初态各段自由。任务标签不进入拟合。连接线仅连接同一被试不同任务的任务中心，不是生理时间轨迹。大点要求该任务3个支持全部完整；小点要求2段均数值合格。VP005的DSR整记录因连续时钟漂移排除，缺失可见。不同任务含各自原生条件组成，不能理解为每个90秒内都只有纯任务激活。',interpretation+'。这是条件估计的任务关联，记录顺序、状态和预处理仍可能贡献差异。')
+    contrasts=tables['task_contrasts'];fig,axes=plt.subplots(1,2,figsize=(12,6.5),sharex=True,layout='constrained')
+    lo=min(0.,contrasts.ci95_low_pct.min())-5;hi=max(0.,contrasts.ci95_high_pct.max())+5
+    for ax,arm in zip(axes,arms):
+        part=contrasts[contrasts.arm.eq(arm)]
+        for y,r in enumerate(part.itertuples()):
+            ax.plot([r.ci95_low_pct,r.ci95_high_pct],[y,y],c=arm_colors[arm],lw=2);ax.scatter(r.ratio_pct,y,c=arm_colors[arm],s=45)
+            value_label=f'{r.ratio_pct:+.2f}%' if abs(r.ratio_pct)<.1 else f'{r.ratio_pct:+.1f}%'
+            ax.annotate(value_label,(r.ratio_pct,y),xytext=(0,8),textcoords='offset points',ha='center',fontsize=12)
+        labels=[names[r.dataset]+' '+task_labels[r.candidate_task]+'/'+task_labels[r.reference_task]+'\n'+param_short[r.parameter]+f' · {r.paired_subjects}/{r.planned_subjects}人；正向{r.positive_subjects}' for r in part.itertuples()]
+        ax.set_yticks(range(len(part)),labels,fontsize=11);ax.set_ylim(len(part)-.4,-.7);ax.set_xlim(lo,hi);ax.axvline(0,c='#777',ls='--')
+        ax.set_xlabel('任务参数相对变化 / %');ax.set_title(arm_labels[arm]);ax.grid(axis='x',alpha=.15)
+    fig.suptitle('任务差异的方向、幅度和被试层不确定性\n每点先算被试内log比值、再跨被试平均，最后换算百分比',fontsize=15)
+    save(fig,'06_task_contrasts','任务参数差异及配对区间',
+        '横轴为100×[exp(平均log(任务B/任务A))−1]，正值表示B更高。线为2000次整被试配对bootstrap的95%百分位区间，拟合和尺度冻结；属于探索性次要分析，未作多重比较校正。只纳入两任务各3个支持均完整的被试；标签同时列配对/计划人数及正向人数。',
+        '区间跨零的对照不能确定总体方向。可见任务中心分离还需要图7的留出支持检验；单纯重建误差下降不能证明参数区分了任务。')
+    fig,axes=plt.subplots(1,2,figsize=(12,5.7),sharey=True,layout='constrained')
+    for ax,(dataset,tasks) in zip(axes,cfg['endpoints']['task_sets'].items()):
+        part=classify[classify.dataset.eq(dataset)]
+        for x,arm in enumerate(arms):
+            r=part[part.arm.eq(arm)].iloc[0]
+            ax.bar(x,100*r.accuracy,width=.48,color=arm_colors[arm],alpha=.9)
+            ax.errorbar(x,100*r.accuracy,yerr=[[100*(r.accuracy-r.ci95_low)],[100*(r.ci95_high-r.accuracy)]],fmt='none',c='#202b33',capsize=5)
+            ax.scatter(x,100*r.null_q95,marker='_',s=400,c='#333',zorder=4)
+            ax.text(x,102,f'{int(r.correct)}/{int(r.planned_tests)}正确；弃判{int(r.abstentions)}\nHolm p={r.holm_p:.4f}',ha='center',va='bottom',fontsize=12)
+        ax.axhline(100/len(tasks),c='#777',ls='--');ax.set_ylim(0,125);ax.set_yticks([0,25,50,75,100]);ax.set_xticks([0,1],[arm_labels[a] for a in arms])
+        ax.set_ylabel('完整计划分母的任务准确率 / %');ax.set_title(names[dataset]);ax.grid(axis='y',alpha=.15)
+    fig.legend(handles=[matplotlib.lines.Line2D([],[],c='#333',marker='_',ls='',label='置换零分布的95%分位'),matplotlib.lines.Line2D([],[],c='#777',ls='--',label='名义随机水平')],loc='outside lower center',ncol=2,fontsize=12)
+    fig.suptitle('用留出的连续支持检验参数能否区分任务\n被试内最近质心，无超参数选择；区间按整名被试重采样',fontsize=15)
+    interpretation='；'.join(f'{names[r.dataset]} {arm_labels[r.arm]}：{r.accuracy*100:.1f}%，Holm p={r.holm_p:.4f}' for r in classify.itertuples())
+    pair=tables['accuracy_pair_comparison'];interpretation+='。两组合的配对准确率差（τ＋β减κ＋τ）：'+'；'.join(f'{names[r.dataset]} {r.tau_beta_minus_kappa_tau*100:+.1f}百分点 [{r.ci95_low*100:+.1f}, {r.ci95_high*100:+.1f}]' for r in pair.itertuples())
+    save(fig,'07_heldout_task_discrimination','留出支持的任务区分',
+        '每名被试每次留出各任务同序号的1个连续支持，其余2个支持形成任务质心；输入为两参数的log(参数/参考)/0.125。每个支持要求2段完整拟合，缺训练类、缺测试支持或距离并列均弃判，仍计完整分母。Single-Trial共36次、Simultaneous共54次，重复支持不是独立被试。标签在被试内及支持序号内置换10000次，并重新计算质心；四项主检验作Holm校正。灰虚线为不含弃判惩罚的名义随机水平，黑短线的置换阈值包含弃判。',interpretation+'。置换依赖任务标签可交换假设，不能消除任务与记录场景的混杂。')
+    synth=tables['synthetic_contrasts'];scenarios=['unchanged_parameters','tau_shift','beta_shift'];scenario_labels=['真参数不变，驱动改变','真实 τ 增加50%','真实 β 增加50%']
+    fig,axes=plt.subplots(2,3,figsize=(12,7.4),sharey=True,layout='constrained')
+    for column,scenario in enumerate(scenarios):
+        for ax,param in zip(axes[:,column],['tau','beta']):
+            part=synth[synth.scenario.eq(scenario)&synth.parameter.eq(param)]
+            for x,arm in enumerate(arms):
+                g=part[part.arm.eq(arm)].sort_values(['subject','repeat']);v=100*np.expm1(g.estimated_log_ratio)
+                ax.scatter(x+np.linspace(-.12,.12,len(g)),v,c=arm_colors[arm],marker='o' if arm==arms[0] else 's',s=40)
+                ax.plot([x-.23,x+.23],[100*np.expm1(g.estimated_log_ratio.mean())]*2,c=arm_colors[arm],lw=2)
+            actual=100*np.expm1(part.truth_log_ratio.iloc[0]);ax.axhline(actual,c='#333',ls='--');ax.axhline(0,c='#ccc',lw=.6)
+            ax.set_xticks([0,1],[arm_labels[a] for a in arms]);ax.set_ylabel(param_short[param]+' 估计变化 / %');ax.set_title(scenario_labels[column]);ax.grid(axis='y',alpha=.15)
+    fig.suptitle('合成真值检验：变化可恢复，但存在收缩和串扰\n每点为一个生成种子的一对A/B驱动；3种子×2次重复；虚线为已知真变化',fontsize=15)
+    def synthetic_change(scenario,parameter):
+        rows=synth[synth.arm.eq('tak_tau_beta')&synth.scenario.eq(scenario)&synth.parameter.eq(parameter)&synth.qualified]
+        return 100*np.expm1(rows.estimated_log_ratio.mean())
+    save(fig,'08_synthetic_controls','合成不变与已知变化对照',
+        '保持物理初态、观测算子和评分尺度；任务A/B改变驱动频谱和幅度，三种情景共享同一噪声实现。真参数仅用于评分。横线为配对log变化的均值换成百分比，小点是6个成对样例，独立生成种子仅3个。κ＋τ臂固定β=1，图中β的0%是模型约束而非恢复能力。',
+        f'τ＋β在真参数不变时的平均伪变化：τ {synthetic_change("unchanged_parameters","tau"):+.2f}%、β {synthetic_change("unchanged_parameters","beta"):+.2f}%；'
+        f'真实增加50%时分别恢复τ约{synthetic_change("tau_shift","tau"):.1f}%、β约{synthetic_change("beta_shift","beta"):.1f}%。'
+        f'τ变化时β平均串扰约{synthetic_change("tau_shift","beta"):+.1f}%，β变化时τ约{synthetic_change("beta_shift","tau"):+.1f}%。'
+        '这些合成结果展示有限恢复能力，不能为实测参数提供直接生理标定。')
+    recon=tables['reconstruction'];fig,ax=plt.subplots(figsize=(11.7,6),layout='constrained')
+    ordering=[(d,'primary') for d in names]+[('refed','supplementary')];ticklabels=[]
+    for y,(dataset,tier) in enumerate(ordering):
+        r=recon[(recon.dataset==dataset)&recon.analysis_tier.eq(tier)].iloc[0]
+        ticklabels.append(names[dataset]+(' 主分析' if tier=='primary' else ' 跨情绪补充')+f'\n共同 {r.paired_windows}/{r.planned_windows} 片段')
+        for j,arm in enumerate(['tak_fixed']+arms):
+            position=y+(j-1)*.24;ax.barh(position,r[arm],height=.2,color=arm_colors[arm])
+            ax.text(r[arm]+.006,position,f'{r[arm]:.4f}',va='center',fontsize=12)
+    ax.set_yticks(range(5),ticklabels);ax.invert_yaxis();ax.set_xlim(0,recon[['tak_fixed']+arms].max().max()*1.16)
+    ax.set_xlabel('双 Hb NRMSE / 冻结开发集 SD（越低越好）');ax.grid(axis='x',alpha=.15)
+    fig.legend(handles=[matplotlib.patches.Patch(color=arm_colors[a],label=arm_labels[a]) for a in ['tak_fixed']+arms],loc='outside lower center',ncol=3)
+    fig.suptitle('同一批共同合格片段的重建对照\n三臂使用相同输入、同一尺度及相同驱动/初态自由度',fontsize=15)
+    save(fig,'09_reconstruction','三臂共同片段的重建误差',
+        '先对0–89.8秒的899点和两色团计算开发SD标准化平方误差，再支持内平均、被试内支持等权、被试等权，最后开方。只纳入三臂共同合格的身份，显示共同/计划片段。SD来自冻结开发集，非当前窗口SD；报告误差不乘优化目标的0.4权重。固定臂κ=0.64、τ=2、β=1；两自由臂都只放开一对参数。',
+        '重建误差较低说明在同观测下更好地条件拟合，不能单独证明参数稳定或可识别。全部任务的数值合格/计划见摘要，失败任务路径保留于owning analysis。')
+    def tab(headers,rows):return '<table><tr>'+''.join('<th>'+escape(str(h))+'</th>' for h in headers)+'</tr>'+''.join('<tr>'+''.join('<td>'+escape(str(v))+'</td>' for v in row)+'</tr>' for row in rows)+'</table>'
+    coverage=[]
+    for dataset,label in names.items():
+        part=frame[frame.dataset.eq(dataset)]
+        coverage.append([label]+[f'{int(part[part.arm.eq(a)].qualified.sum())}/{len(part[part.arm.eq(a)])}' for a in ['tak_fixed']+arms])
+    significant=int(classify.holm_p.lt(.05).sum())
+    stable=int(principal.ratio_ci95_low.gt(1).sum())
+    nonzero=int((contrasts.ci95_low_pct.gt(0)|contrasts.ci95_high_pct.lt(0)).sum())
+    sections=['<h1>τ＋β 与跨任务参数差异：报告备选图册</h1><p>实验合同：2026-10-28 · 10 Hz Tak · log先验SD=0.125 · 所有拟合标签盲</p>'
+        +f'<p>共{evidence["planned_subjects"]}名评价被试，{evidence["planned_windows"]}个可用90秒片段。原168片段上的固定参数和κ＋τ结果按身份复用，新增τ＋β及任务扩展拟合，不把复用结果称为新重复。预期276片段中，VP005的DSR有6段因连续时钟漂移排除。</p>'
+        +tab(['数据集','固定参数合格/计划','κ＋τ合格/计划','τ＋β合格/计划'],coverage)
+        +f'<p><b>本组结论：</b>τ＋β在四库共同片段上的Hb重建误差均低于κ＋τ。但{stable}/{len(principal)}项重复分散区间完全高于1，{significant}/{len(classify)}项任务区分通过Holm校正，{nonzero}/{len(contrasts)}项任务参数差异区间排除零。当前结果支持条件重建收益，尚未确认稳定的个体特征或可靠的跨支持任务区分。</p>'
+        +'<p>报告要分别回答三个问题：同条件的独立数据重估是否集中；同一被试换任务后是否改变；这种变化是否能区分留出的支持段。图1–3回答重复性，图4–7回答任务关联，图8给出真值对照的偏差，图9给出重建收益。</p>'
+        +f'<p>数值层面：独立复算{evidence["checked_array_rows"]}条合格结果，最大NMSE差{evidence["max_nmse_discrepancy"]:.2g}。多起点最大参数跨度{evidence["numerical"]["maximum_start_span_pct"]:.4g}%；积分加密最大差{evidence["numerical"]["maximum_integration_error"]:.3g}个训练SD。数值优化稳定不等于生理可识别。</p>',
+        '<h1>方法与信息边界</h1><p>τ是平均静脉通过时间（秒），κ是血管信号衰减系数（s⁻¹），β是神经驱动到血管舒张信号的有效相对增益。τ＋β臂固定κ=0.64；κ＋τ臂固定β=1；两臂的γ=0.32、静脉黏弹性时间2秒及观测增益不变。每段重估驱动和四个血管初态，拟合参数在整段内为常数。</p>'
+        '<p>参数先验作用于log(参数/参考值)，SD=0.125，参考τ=2、κ=0.64、β=1；这是共同软先验，不是生理正常范围。三个参数初值组合用于检查同一次优化，多起点不算独立重复。</p>'
+        '<p>先由开发被试生成六通道EEG的五频带100毫秒log功率，减前5秒参考，再应用冻结PCA及尺度；Hb来自统一v5/none带通缓存。四库的开发坐标逐项重算复现后才用于新任务，不用评价被试或任务标签重定尺度。β只在这些固定模型坐标中解释，不能直接比较为独立标定的耦合强度。</p>'
+        '<p>模型可见完整90秒处理后EEG/Hb，进行离线联合条件重建。任务分类的“留出”指参数读出的支持段留出：该段本身仍用完整观测估计参数，不是预测未见Hb或实时任务识别。Single-Trial对比运动想象/心算记录；Simultaneous对比词语生成/n-back/Go–No-go连续支持；Visual无新任务对照，REFED其他情绪单列补充。</p>'
+        '<p>每个任务计划3个原生支持、每支持2个不重叠片段。原始条件组成和记录顺序未被随机化，支持并非跨日独立重测。拟合失败和时钟不合格保持可见，不重新挑选更好样例。</p>']
+    rel=os.path.relpath(analysis,out)
+    source_tables=[['parameter_estimates','subject_parameters'],['parameter_estimates','subject_parameters'],
+        ['dispersion'],['native_support_parameters','task_subject_parameters'],['native_support_parameters','task_subject_parameters'],
+        ['task_contrasts'],['task_classification','task_predictions','accuracy_pair_comparison'],['synthetic_contrasts'],['reconstruction']]
+    for i,f in enumerate(figures,1):
+        f['source_tables']=[name+'.csv' for name in source_tables[i-1]]
+        links=' · '.join('<a href="'+escape(rel)+'/'+name+'">'+name+'</a>' for name in f['source_tables'])
+        sections.append('<h1>图 '+str(i)+' · '+escape(f['title'])+'</h1><img src="'+f['file']+'"><p>'+escape(f['caption'])+'</p><p><b>结果与解释：</b>'+escape(f['interpretation'])+'</p><p style="font-size:8pt">数据：'+links+'；计算：<a href="'+escape(rel)+'/analysis_source.py">保留分析源码</a>。</p>')
+    nominations=[('主图候选','图9：重建对照','最直接支持τ＋β的跨库条件重建收益。'),
+        ('个体差异展示候选','图2＋图3：β散点及分散区间','必须成对使用；展示个体分布及未确证重复性的限制。'),
+        ('任务检验的必要配套','图7＋图6：留出区分及参数差值','本轮未确认可靠任务区分，保留负结果。'),
+        ('方法与解释边界','图8：合成对照','已知变化可响应，但存在收缩及串扰。'),
+        ('完整补充','图1、图4、图5','保留τ重估以及两组合的全部任务点。')]
+    sections.append('<h1>报告候选图的使用顺序</h1>'+tab(['用途','图像组合','证据支持范围'],nominations)
+        +'<p>图3直接比较两组参数在同一批数据上的被试间/内分散；图5与图7共同判断τ＋β是否形成可复现的任务关联。图1、2、4保留所有被试及例外，避免仅展示好看的被试。图8应与任务差异配套，说明先验收缩和参数串扰。</p>'
+        '<p>任务读出四项主检验使用Holm校正。参数变化区间、重复分散区间和两臂准确率差区间均属探索性按被试重采样；不能把“一个显著另一个不显著”直接称为两臂显著不同。总体推断单位是被试，每库仅6名，不是数百个窗口。</p>'
+        '<p>本组最明确支持“τ＋β改善条件重建，且数值优化稳定”。β的个体分布可作为展示候选，但尚未确证稳定个体特征；任务区分证据未通过多重比较校正。不能将这些图写成“生理真值已恢复”“跨日稳定性已验证”或因果任务效应。完整分母、负结果和合成偏差应保留于相邻解释或附录。</p>')
+    css='body{font-family:sans-serif;font-size:10pt;line-height:1.38;color:#17212e}h1{font-size:17pt;color:#123e59}p{margin:7pt 0}img{width:100%}table{width:100%;border-collapse:collapse;font-size:9pt}td,th{border:.5pt solid #bbc9d1;padding:4pt}th{background:#edf3f7}'
+    rel=os.path.relpath(analysis,out)
+    nav='<p><a href="FIGURE_ATLAS.pdf">PDF图册</a> · <a href="'+escape(rel)+'/summary.json">owning分析摘要</a> · <a href="'+escape(rel)+'/parameter_estimates.csv">全部参数及原始任务路径</a> · <a href="'+escape(rel)+'/task_predictions.csv">每次留出判别</a></p>'
+    (out/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>τ/β与任务差异备选图</title><style>'+css+'body{max-width:1200px;margin:32px auto;padding:0 24px}section{margin:40px 0}</style><body>'+nav+''.join('<section>'+s+'</section>' for s in sections)+'</body></html>')
+    pdf=fitz.open()
+    def rectfn(number,filled):
+        if number>1:raise ValueError('Task figure section overflow: split visible explanation')
+        rect=fitz.paper_rect('a4');return rect,rect+(30,27,-30,-27),None
+    for section in sections:
+        part=fitz.Story(section,user_css=css,archive=fitz.Archive(str(out))).write_with_links(rectfn);pdf.insert_pdf(part);part.close()
+    pdf.save(out/'FIGURE_ATLAS.pdf',garbage=4,deflate=True)
+    validation=dict(pages=len(pdf),bitmap_image_objects=sum(len(p.get_images()) for p in pdf),searchable_characters=sum(len(p.get_text()) for p in pdf),figure_dpi=260)
+    if validation['bitmap_image_objects']!=len(figures):raise ValueError('Every complete figure must embed as one bitmap')
+    pdf.close();shutil.copy2(Path(__file__),out/'renderer_source.py')
+    (out/'source_manifest.json').write_text(json.dumps(dict(schema='tak_task_parameters_report_v1',source_run=str(run),analysis=str(analysis),figures=figures,report_nominations=nominations,validation=validation),ensure_ascii=False,indent=2)+'\n')
+    print(json.dumps(validation,ensure_ascii=False))
+
+
+def render_tak_parameter_candidates(run,out,analysis=None):
+    """Simplified six-point candidate panels from retained fits, without refitting."""
+    from html import escape
+    import os
+    import shutil
+    analysis=analysis or run/'task_parameter_analysis_v1'
+    evidence=json.loads((analysis/'summary.json').read_text())
+    cfg=json.loads((run/'resolved_config.json').read_text());plan=json.loads((run/'plan.json').read_text())
+    if (cfg.get('schema')!='shared_driver_tak_task_parameters_v1' or evidence.get('status')!='completed'
+            or Path(evidence['source_run']).resolve()!=run):raise ValueError('Completed public task-parameter evidence required')
+    if out.exists():raise ValueError('Use a fresh candidate export; preserve older reports')
+    frame=pd.read_csv(analysis/'parameter_estimates.csv',dtype={'subject':str})
+    frame=frame[frame.arm.eq('tak_tau_beta')&frame.scope.eq('parent')].copy()
+    selected=[];refed_selection={}
+    for (dataset,subject),g in frame.groupby(['dataset','subject'],sort=True):
+        chosen=g[g.analysis_tier.eq('primary')].copy()
+        if dataset=='refed':
+            extra=g[g.analysis_tier.eq('supplementary')].copy()
+            extra['video_number']=extra.record.str.extract(r'video_(\d+)',expand=False).astype(int)
+            extra=extra.sort_values('video_number').head(3)
+            chosen=pd.concat([chosen,extra.drop(columns='video_number')])
+            refed_selection[subject]=dict(retained_primary=sorted(g[g.analysis_tier.eq('primary')].record),
+                added_supplementary=list(extra.record))
+        if len(chosen)!=6 or not chosen.qualified.all():raise ValueError('Six distinct qualified retained fits per subject required; do not duplicate or replace failed points')
+        selected.append(chosen)
+    frame=pd.concat(selected,ignore_index=True)
+    if len(frame)!=144 or frame.id.duplicated().any():raise ValueError('Exact 24-subject six-point display required')
+    lookup={r['id']:r for r in plan['records']}
+    frame['condition_counts']=[json.dumps(lookup[key]['condition_counts'],ensure_ascii=False,sort_keys=True) for key in frame.id]
+    frame['display_role']=np.where(frame.analysis_tier.eq('primary'),'retained_primary','added_cross_emotion')
+    out.mkdir(parents=True);(out/'figures').mkdir()
+    frame.to_csv(out/'selected_parameters.csv',index=False,encoding='utf-8-sig')
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':13,'axes.unicode_minus':False,'mathtext.fontset':'stix','axes.spines.top':False,'axes.spines.right':False})
+    names={'eeg_fnirs_single_trial':'Single-Trial','simultaneous_eeg_nirs':'Simultaneous',
+           'visual_cognitive_motivation':'Visual','refed':'REFED'}
+    labels={'tau':r'$\tau$ / s','beta':r'$\beta$ / 模型相对增益'};reference={'tau':2.,'beta':1.}
+    figures=[];centers=[]
+    for parameter in ['tau','beta']:
+        fig,axes=plt.subplots(2,2,figsize=(12,8),sharey=True,layout='constrained')
+        maximum=max(frame[parameter].max(),reference[parameter])*1.12
+        for ax,(dataset,name) in zip(axes.flat,names.items()):
+            part=frame[frame.dataset.eq(dataset)];subjects=sorted(part.subject.unique(),key=lambda s:int(re.sub(r'\D','',s)))
+            for x,subject in enumerate(subjects):
+                rows=part[part.subject.eq(subject)].sort_values(['record','subset_index'])
+                values=rows[parameter].to_numpy(float);center=float(np.exp(np.log(values).mean()))
+                ax.scatter(x+np.linspace(-.24,.24,6),values,marker='o',s=47,c='#256b9a',edgecolors='white',linewidth=.4,zorder=3)
+                ax.plot([x-.29,x+.29],[center,center],c='#17212e',lw=1.8,zorder=4)
+                centers.append(dict(dataset=dataset,subject=subject,parameter=parameter,geometric_center=center))
+            ax.set_yscale('linear');ax.set_ylim(0,maximum);ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=6))
+            ax.axhline(reference[parameter],c='#7c8790',ls='--',lw=1)
+            ax.set_ylabel(labels[parameter]);ax.set_xlabel('被试 ID');ax.set_title(name)
+            ax.set_xticks(range(len(subjects)),[s.replace('subject_','').replace('VP','') for s in subjects])
+            ax.grid(axis='y',alpha=.17)
+            assert ax.get_yscale()=='linear' and all('\n' not in t.get_text() for t in ax.get_xticklabels())
+        fig.legend(handles=[matplotlib.lines.Line2D([],[],marker='o',c='#256b9a',ls='',label='90秒片段估计'),
+            matplotlib.lines.Line2D([],[],c='#17212e',lw=1.8,label='被试几何均值'),
+            matplotlib.lines.Line2D([],[],c='#7c8790',ls='--',label='先验参考值')],loc='outside lower center',ncol=3,fontsize=12)
+        symbol='τ' if parameter=='tau' else 'β';fig.suptitle(f'τ＋β联合拟合：{symbol} 的被试参数分布',fontsize=17)
+        filename=f'figures/{parameter}_six_points.png';fig.savefig(out/filename,dpi=260,bbox_inches='tight',facecolor='white');plt.close(fig)
+        figures.append(dict(parameter=parameter,file=filename,title=symbol+' 参数分布',axis_scale='linear',marker='o',color='#256b9a',points=144))
+    rel=os.path.relpath(analysis,out)
+    intro=('<h1>τ与β：简化后的最终使用候选</h1><p>2026-10-29 · 同一轮τ＋β联合拟合 · 沿用全部被试 · 每名被试6个不同数据片段。</p>'
+        '<p>所有点统一为蓝色圆点；横轴只保留被试编号，删除合格/计划数量。纵轴改为线性刻度，同一参数在四库使用相同范围。黑横线为图中6个估计的几何均值，灰虚线为共同先验参考。</p>'
+        '<p><b>REFED补点规则：</b>保留原3条悲伤视频video_2、video_6、video_13，再按视频编号从既有补充结果中取video_1（中性）、video_3（恐惧）、video_5（放松）。六名被试采用相同规则，未按参数集中程度选点。每点来自一条不同视频的前90秒，不是复制点或重复优化初值。</p>'
+        '<p>其他三库仍使用原主分析的6个不重叠90秒片段。参数在每次90秒拟合内保持常数，驱动和四个初态各段分别估计；log先验SD=0.125。隐藏来源分组仅改变图形编码，原生记录、时间支持和情绪身份仍保留在选点表。</p>'
+        '<p><b>解释范围：</b>REFED现为跨情绪的参数分布，不能直接称为同情绪重复稳定性。原报告的REFED三视频统计对应另一集合，不用于解释本图六点；本次没有新增拟合或稳定性检验。τ、β的数值和其余三库点的身份保持不变。</p>'
+        '<p>建议表述：“展示同一被试不同数据片段的参数分布及被试间中心差异；REFED包含跨情绪视频。”个别被试仍有明显波动，图中完整呈现。</p>')
+    sections=[intro]
+    for item in sorted(figures,key=lambda f:0 if f['parameter']=='beta' else 1):
+        sections.append('<h1>'+item['title']+'</h1><img src="'+item['file']+'"><p>每点为一个真实90秒数据片段的参数估计；所有被试均显示6点，使用同一种圆点和颜色。黑线为所示6点的几何均值，灰虚线为先验参考。纵轴采用线性尺度，四库同一参数的尺度一致。</p>'
+            '<p>REFED保留3条悲伤视频，并加入中性、恐惧、放松视频各1条；其余三库保持原主分析范围。补点依据固定视频编号，不依据参数值或重建误差。所有点均来自已完成且数值合格的拟合。</p>'
+            '<p class="source">选点与来源：<a href="selected_parameters.csv">selected_parameters.csv</a>；原估计：<a href="'+escape(rel)+'/parameter_estimates.csv">parameter_estimates.csv</a>。</p>')
+    css='body{font-family:sans-serif;font-size:10pt;line-height:1.4;color:#182733}h1{font-size:18pt;color:#173f5c}p{margin:7pt 0}img{width:100%}.source{font-size:8pt}'
+    nav='<p><a href="FIGURE_ATLAS.pdf">候选图册PDF</a> · <a href="selected_parameters.csv">144个点的身份与来源</a> · <a href="'+escape(rel)+'/summary.json">原实验分析</a></p>'
+    (out/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>τ与β六点候选图</title><style>'+css+'body{max-width:1100px;margin:30px auto;padding:0 24px}section{margin:35px 0}</style><body>'+nav+''.join('<section>'+s+'</section>' for s in sections)+'</body></html>')
+    pdf=fitz.open()
+    def rectfn(number,filled):
+        rect=fitz.paper_rect('a4');return rect,rect+(30,27,-30,-27),None
+    for section in sections:
+        part=fitz.Story(section,user_css=css,archive=fitz.Archive(str(out))).write_with_links(rectfn)
+        if len(part)!=1:raise ValueError('Split overflowing candidate explanation')
+        pdf.insert_pdf(part);part.close()
+    pdf.save(out/'FIGURE_ATLAS.pdf',garbage=4,deflate=True)
+    validation=dict(pages=len(pdf),bitmap_image_objects=sum(len(p.get_images()) for p in pdf),searchable_characters=sum(len(p.get_text()) for p in pdf),figure_dpi=260)
+    if validation['pages']!=3 or validation['bitmap_image_objects']!=2:raise ValueError('Two bitmap figures required')
+    pdf.close();shutil.copy2(Path(__file__),out/'renderer_source.py')
+    metadata=dict(schema='tak_six_point_candidates_v1',source_run=str(run),owning_analysis=str(analysis),figures=figures,
+        selection_rule='Retain all primary points; REFED adds the three lowest numeric video IDs among supplementary fits, identically per subject; no outcome-based selection',
+        refed_selection=refed_selection,display_centers=centers,center_definition='geometric mean of the six displayed estimates',
+        raw_signal_reads=0,protected_reads=0,refits=0,validation=validation)
+    (out/'source_manifest.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+'\n');print(json.dumps(validation,ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path)
@@ -9790,6 +10113,9 @@ def main():
     parser.add_argument('--tak-comparison', action='store_true', help='Render verified Tak core comparison')
     parser.add_argument('--tak-parameter-individuality', action='store_true', help='Render retained Tak prior, individual-parameter and independent-repeat evidence')
     parser.add_argument('--tak-repeatability', action='store_true', help='Render the new disjoint-subset repeatability experiment')
+    parser.add_argument('--tak-task-parameters', action='store_true', help='Render matched tau/beta and task-association evidence')
+    parser.add_argument('--tak-parameter-candidates', action='store_true', help='Render uniform-marker six-point tau/beta candidate panels')
+    parser.add_argument('--task-parameter-analysis', type=Path)
     parser.add_argument('--repeat-analysis', type=Path)
     parser.add_argument('--filter-retest', action='store_true', help='Render verified no-extra-component cached-input sensitivity')
     parser.add_argument('--decay-evidence', type=Path, help='Versioned replay-only evidence overlay; trajectories and fixed config remain under --run')
@@ -9802,6 +10128,14 @@ def main():
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.tak_parameter_candidates:
+        if args.run is None or any(v is True for k,v in vars(args).items() if k!='tak_parameter_candidates'):parser.error('Choose exclusive parameter-candidate mode and --run')
+        render_tak_parameter_candidates(args.run.resolve(),args.output.resolve(),args.task_parameter_analysis.resolve() if args.task_parameter_analysis else None)
+        return
+    if args.tak_task_parameters:
+        if args.run is None or any(v is True for k,v in vars(args).items() if k!='tak_task_parameters'):parser.error('Choose exclusive task-parameter report mode and --run')
+        render_tak_task_parameters(args.run.resolve(),args.output.resolve(),args.task_parameter_analysis.resolve() if args.task_parameter_analysis else None)
+        return
     if args.tak_repeatability:
         if args.run is None:parser.error('--tak-repeatability requires --run')
         if any(value is True for key,value in vars(args).items() if key!='tak_repeatability'):parser.error('Choose one report mode')

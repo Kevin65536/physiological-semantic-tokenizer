@@ -57,6 +57,29 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Matched τ/β and within-subject task parameters — 2026-10-28
+
+The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_tak_task_parameters_v1.yaml)
+owns the matched parameter-pair and task extension. Its
+[frozen plan](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/plan.json),
+[complete fitting summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/measured_summary.json)
+and [read-only analysis](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/task_parameter_analysis_v1/summary.json)
+retain all requested/admitted identities, paired estimates, task predictions,
+subject-level intervals and multiplicity-adjusted permutation results.
+The [independent readout check](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/analysis_validation.json)
+recomputes every held-out decision with a scalar implementation. Parent task and
+prepared-array identity is checked separately; reused results are not new repeats.
+
+The [report candidates](../docs/reports/interpretability_analysis/staging/03_tau_beta_task_parameters_20261029_v2/index.html)
+and [bitmap PDF atlas](../docs/reports/interpretability_analysis/staging/03_tau_beta_task_parameters_20261029_v2/FIGURE_ATLAS.pdf)
+separate reconstruction benefit, individual-parameter distributions, held-out
+task discrimination and synthetic bias. The full point population and negative
+comparisons accompany any nominated figure. Retain resolved contracts, source
+snapshots, supervised launches/logs, prepared observations, all task JSON/NPZ,
+the versioned analysis source/tables/nulls, and the
+[metadata-only first preflight failure](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1/preflight_failure.json).
+Original public data and protected comparison evidence remain unchanged.
+
 ## Complete public-inventory Tak mismatch — 2026-10-28
 
 The [four-axis contract](configs/physiology_semantic_tokenizer/tak_mismatch_v1.yaml)

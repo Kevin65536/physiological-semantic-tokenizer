@@ -203,6 +203,29 @@ Render with `render_shared_driver_reconstruction.py --tak-repeatability
 an explicit analysis version. Tests: `test_tak_repeatability.py` and the existing
 Tak/10 Hz suites. [Protocol](../docs/EXPERIMENT_PLAN.md#tak-参数的更多不重叠数据重复估计2026-10-28).
 
+The matched τ/β and within-subject task extension uses the same evaluation entry
+with `--tak-task-parameters --task-parameter-stage
+<check|plan|synthetic|prepare|pilot|run|summarize|analyze>` and
+[`shared_driver_tak_task_parameters_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_task_parameters_v1.yaml).
+It freezes the parent development coordinates, reuses parent tasks with explicit
+source identity, and adds metadata-admitted MI/MA and WG/n-back/DSR supports.
+Synthetic unchanged-parameter and known-shift controls precede new signal reads.
+Task labels only enter the postfit within-subject leave-support-out readout;
+missing supports and numerical failures retain the requested denominator.
+Tests: `test_tak_task_parameters.py` and the Tak/repeatability suites.
+The read-only `analyze` stage writes a fresh child (`--task-parameter-analysis-output`).
+Render the completed analysis with `render_shared_driver_reconstruction.py
+--tak-task-parameters --run <completed_run> --output <fresh_export>`;
+`--task-parameter-analysis` selects an explicit analysis version. The PNG/HTML
+collection and bitmap PDF preserve full coverage, paired task contrasts,
+held-out-support discrimination, null controls and all parameter estimates.
+The same renderer's `--tak-parameter-candidates --run <completed_run>
+--output <fresh_export>` makes uniform-marker, linear-axis six-point panels.
+It keeps all primary estimates and adds the three lowest numeric supplementary
+REFED video IDs per subject. The display inventory retains source task paths
+and conditions; this presentation subset does not redefine the original
+same-condition statistical analysis.
+
 Automatic fNIRS morphology scoring reads the retained targets and predictions
 without refitting or changing the parent evidence:
 

@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-10-28T16:22:10.954009+00:00",
+  "updated_at": "2026-10-28T16:35:33.179313+00:00",
   "tracks": [
     {
       "id": "main",
@@ -2801,6 +2801,42 @@
       "role": "diagnostic"
     },
     {
+      "id": "e.tak_task_parameters_contract",
+      "label": "τ/β与任务差异合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_task_parameters_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tak_task_parameters_plan",
+      "label": "冻结任务片段与时钟排除",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/plan.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_task_parameters_checks",
+      "label": "τ/β梯度与积分核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/software_checks.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_task_parameters_source",
+      "label": "拟合冻结源码",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/source_manifest.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_task_parameters_launch",
+      "label": "持久合成运行",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/launch_synthetic.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_task_parameters_resources",
+      "label": "资源与监督记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/resources.json",
+      "role": "diagnostic"
+    },
+    {
       "id": "e.ma30_adaptation_audit_contract",
       "label": "MA30适配查验合同",
       "path": "comparative_methods/ma_adaptation_audit_v1.yaml",
@@ -2846,6 +2882,60 @@
       "id": "e.ma30_adaptation_audit_stacking",
       "label": "BrainFusion元分类器只读核验",
       "path": "comparative_methods/runs/performance_analysis/20261028_ma30_v1/brainfusion_stacking_inspection.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_task_parameters_synthetic",
+      "label": "完整合成不变与已知变化对照",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/synthetic_summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tak_task_parameters_preparation",
+      "label": "新增任务准备及开发坐标复现",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/preparation.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tak_task_parameters_inheritance",
+      "label": "复用身份与双时钟不重叠核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/inheritance_and_plan_validation.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_task_parameters_measured_launch",
+      "label": "持久实测拟合启动",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/launch_measured.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tak_task_parameters_results",
+      "label": "完整三臂拟合终态",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/measured_summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tak_task_parameters_analysis",
+      "label": "配对参数与留出任务统计",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/task_parameter_analysis_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tak_task_parameters_analysis_validation",
+      "label": "独立重算180次任务判别",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2/analysis_validation.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_task_parameters_report",
+      "label": "参数及任务图像备选图册",
+      "path": "docs/reports/interpretability_analysis/staging/03_tau_beta_task_parameters_20261029_v2/FIGURE_ATLAS.pdf",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tak_task_parameters_preflight_failure",
+      "label": "首轮元数据时钟排除记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1/preflight_failure.json",
       "role": "diagnostic"
     }
   ],
@@ -7577,6 +7667,34 @@
       "next_step": "本轮冻结清单及报告已完成；保留全部重估与失败。后续独立重复或先验检验仅按新的用户要求开展，不由本次结果授予生理个体特质资格。"
     },
     {
+      "state_id": "main.tak_task_parameters@2026-10-28.v1-running",
+      "entity": "main.tak_task_parameters",
+      "label": "τ/β参数组合与同被试跨任务差异",
+      "track": "main",
+      "order": 200,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "descriptive",
+      "summary": "按用户2026-10-28要求，在原24名被试168片段上比较τ/β与κ/τ；新增102个元数据合格任务片段，VP005的DSR连续漂移排除6个预期片段并保留弃判分母。先执行108组合成参数不变/τ变化/β变化对照；随后按冻结清单准备及拟合，任务标签只用于事后留出支持段读出。",
+      "evidence_ids": [
+        "e.tak_task_parameters_contract",
+        "e.tak_task_parameters_plan",
+        "e.tak_task_parameters_checks",
+        "e.tak_task_parameters_source",
+        "e.tak_task_parameters_launch",
+        "e.tak_task_parameters_resources"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-10-28T15:46:52.242456+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak"
+      ],
+      "headline": false,
+      "next_step": "完成合成、实测及按被试聚类的任务读出；依据完整结果和视觉核验选入报告备选，保留负结果。"
+    },
+    {
       "state_id": "comparison.ma30_adaptation_audit@2026-10-29.v1-running",
       "entity": "comparison.ma30_adaptation_audit",
       "label": "MA共同30秒样本适配查验",
@@ -7633,6 +7751,45 @@
       ],
       "headline": false,
       "next_step": "以共同30秒输入和明确读出冻结后续比较方案；论文能力结论仍需多被试折/种子及配对统计。BrainFusion先解决跨被试组件与stacking稳定性，不以翻转分数或增加搜索掩盖负结果；本轮不启动扩大实验。"
+    },
+    {
+      "state_id": "main.tak_task_parameters@2026-10-28.v1-completed",
+      "entity": "main.tak_task_parameters",
+      "label": "τ/β参数组合与同被试跨任务差异",
+      "track": "main",
+      "order": 200,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "descriptive",
+      "summary": "270个实测片段三臂810条记录全部终结，κ/τ与τ/β各270/270合格，固定269/270；另6个预期DSR片段因VP005连续时钟漂移排除并保留任务弃判分母。τ/β相较κ/τ的主分析Hb NRMSE：Single-Trial 0.5071→0.4837、Simultaneous 0.7752→0.7403、Visual 0.6358→0.6003、REFED 0.2840→0.2814。两组合16项被试间/内分散区间无一完全高于1。任务准确率κ/τ→τ/β为Single-Trial 61.1%→33.3%、Simultaneous 35.2%→40.7%，四项Holm p均不低于0.1236；12项任务参数差值区间均跨零。合成108/108合格，真实+50%时τ/β臂恢复τ约33.9%、β约41.6%，保留收缩与串扰。支持条件重建收益，不确证稳定个体特征或可靠任务区分；809条合格数组及180次任务判别独立核验，9张PNG与12页位图图册完成。",
+      "evidence_ids": [
+        "e.tak_task_parameters_contract",
+        "e.tak_task_parameters_plan",
+        "e.tak_task_parameters_checks",
+        "e.tak_task_parameters_source",
+        "e.tak_task_parameters_launch",
+        "e.tak_task_parameters_resources",
+        "e.tak_task_parameters_synthetic",
+        "e.tak_task_parameters_preparation",
+        "e.tak_task_parameters_inheritance",
+        "e.tak_task_parameters_measured_launch",
+        "e.tak_task_parameters_results",
+        "e.tak_task_parameters_analysis",
+        "e.tak_task_parameters_analysis_validation",
+        "e.tak_task_parameters_report",
+        "e.tak_task_parameters_preflight_failure"
+      ],
+      "supersedes": [
+        "main.tak_task_parameters@2026-10-28.v1-running"
+      ],
+      "updated_at": "2026-10-28T16:35:33.179313+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak"
+      ],
+      "headline": false,
+      "next_step": "本轮冻结清单、分析与视觉审阅已完成。报告优先使用重建图；β个体散点须配分散区间，任务负结果及合成偏差配套保留。后续个体特征或任务确认需独立设计，当前结果不授予生理可识别性资格。"
     }
   ]
 }
