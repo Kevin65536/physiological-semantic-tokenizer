@@ -60,6 +60,56 @@ def _arrays(seed=0, scale=1.):
     return dict(eeg_logpower=eeg, hb=hb, hb_bin_phase_s=np.array([.037]))
 
 
+def test_plot_panel_covers_subject_tasks_and_keeps_complete_native_groups(cfg, tmp_path):
+    records = []
+    for ds in cfg['data']['datasets']:
+        for subject in ('one', 'two'):
+            for task in ('task_a', 'task_b'):
+                r = _record(subject, windows=[_window('a', native_support_id='native', hb_support_admitted=True),
+                    _window('b', start=30., native_support_id='native', hb_support_admitted=True),
+                    _window('gap', start=60., native_support_id=None, hb_support_admitted=False)])
+                r.update(dataset=ds, id=f'{ds}|{subject}|{task}', record=task)
+                for w in r['windows']: w['task'] = task
+                r['pairs'] = [dict(_pair(f'pair{k}'), component_indices=[2*k,2*k+1], status='available') for k in range(4)]
+                r['geometry_identity'] = {'fnirs': [dict(x=x,y=y,z=0.) for x,y in ((1,0),(1,0),(-1,0),(-1,0),(0,1),(0,1),(0,-1),(0,-1))]}
+                records.append(r)
+    plan = dict(records=records)
+    panel = runner.plot_priority_plan(cfg, tmp_path, plan)
+    assert panel['planned_cells'] == 16
+    assert panel['planned_groups'] == 48
+    assert panel['first_coverage_groups'] == 16
+    assert len(panel['excluded_support_groups']) == 48
+    first = panel['groups'][:16]
+    assert all(g['coverage_round'] == 0 for g in first)
+    assert len({(g['dataset'],g['subject'],g['task_label']) for g in first}) == 16
+    assert {g['dataset'] for g in first[:4]} == set(cfg['data']['datasets'])
+    full = {g['id']:g for _,g in runner.current_dof_groups(plan)}
+    for g in panel['groups']:
+        assert g['window_ids'] == [t['id'] for t in full[g['id']]['tasks']]
+        assert g['planned_windows'] == 2
+    # Resuming the frozen panel never reselects from fit outcomes.
+    assert runner.plot_priority_plan(cfg, tmp_path, dict(records=[])) == panel
+
+
+def test_plot_task_labels_preserve_refed_video_and_missing_native_tasks():
+    assert runner._plot_task_labels(dict(dataset='refed', record='video_12'), []) == ['emotion_video/video_12']
+    assert runner._plot_task_labels(dict(dataset='simultaneous_eeg_nirs', record='cnt_dsr'), []) == ['dsr']
+
+
+def test_plot_stage_reuses_terminal_groups_and_never_completes_full_campaign(cfg, tmp_path, monkeypatch):
+    record = _record(windows=[_window(native_support_id='native', hb_support_admitted=True)])
+    record['pairs'][0]['component_indices'] = [0, 1]
+    plan = dict(records=[record]); panel = runner.plot_priority_plan(cfg, tmp_path, plan)
+    group = panel['groups'][0]
+    runner.write_json(tmp_path/'current_dof'/'tasks'/f'{group["id"]}.json',
+        dict(id=group['id'], rows=[{}], status='partial_or_unavailable'))
+    monkeypatch.setattr(runner, '_current_group_job', lambda _: pytest.fail('terminal group refitted'))
+    result = runner.plot_priority_stage(cfg,tmp_path,plan,1)
+    assert result['reused_groups'] == 1 and result['terminal_groups'] == 1
+    assert result['full_campaign_completed'] is False
+    assert not (tmp_path/'current_dof'/'summary.json').exists()
+
+
 def test_unique_full_population_tasks_include_unavailable_EEG_and_geometry():
     records = [_record(), _record('bad', 1)]
     records[1]['windows'] = [

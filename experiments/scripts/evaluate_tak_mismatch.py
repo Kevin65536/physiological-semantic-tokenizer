@@ -16,10 +16,12 @@ from datetime import datetime, timezone
 from functools import lru_cache
 import csv
 import fcntl
+import gzip
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 import traceback
@@ -36,8 +38,11 @@ import yaml
 from src.inference.t3a_balloon_robust_ssm import BalloonFixedParameters, BalloonFreeParameters, BalloonParameters
 
 DEFAULT_CONFIG = ROOT/'experiments/configs/physiology_semantic_tokenizer/tak_mismatch_v1.yaml'
+DEFAULT_PHYSIOLOGY_CONFIG = ROOT/'experiments/configs/physiology_semantic_tokenizer/tak_mismatch_fixed_physiology_v1.yaml'
 ARTIFACT_ROOT = 'experiments/runs/physiology_semantic_tokenizer/tak_mismatch'
-STAGES = ('check', 'synthetic', 'plan', 'prepare', 'run', 'summarize', 'audit-status')
+PHYSIOLOGY_STAGES = ('physiology-extract', 'physiology-analyze', 'physiology-ocular', 'physiology-counterfactual', 'physiology-shapes')
+STAGES = ('check', 'synthetic', 'plan', 'prepare', 'run', 'summarize', 'audit-status', 'plot-plan', 'plot-run',
+          'physiology-topography', *PHYSIOLOGY_STAGES)
 CANDIDATES = ('nearest6', 'sixth_to_seventh', 'next6', 'random6')
 METRICS = ('D1', 'D_EH', 'D_obs', 'D_obs_ar1_sd0p05', 'D_obs_ar1_sd0p2', 'D_obs_iid_sd0p1',
            'D_drive_H', 'Delta_spatial', 'D4', 'D_J_E', 'D_J_O', 'D_J_R',
@@ -1143,6 +1148,148 @@ def current_dof_stage(cfg, out, plan, workers):
     return result
 
 
+def _plot_task_labels(record, windows):
+    """Metadata labels only; REFED videos remain separate plotting cells."""
+    if record['dataset'] == 'refed':
+        return ['emotion_video/'+record['record']]
+    labels = sorted({w.get('task') for w in windows if w.get('task')})
+    if labels:
+        return labels
+    if record['dataset'] == 'simultaneous_eeg_nirs':
+        return [record['record'].removeprefix('cnt_')]
+    if record['dataset'] == 'visual_cognitive_motivation':
+        return ['visual_cognitive_motivation']
+    return ['unlabeled_record/'+record['record']]
+
+
+def _plot_pairs(record, count=3):
+    """Deterministic farthest-point sampling in the admitted native geometry."""
+    geometry = record.get('geometry_identity', {}).get('fnirs', [])
+    points = {}
+    for pair in record['pairs']:
+        index = pair['component_indices'][0]
+        if index >= len(geometry):
+            continue
+        row = geometry[index]
+        point = np.array([row.get(k, np.nan) for k in ('x', 'y', 'z')], float)
+        if pair.get('status') == 'available' and np.isfinite(point).all():
+            points[pair['id']] = point
+    if not points:
+        return [p['id'] for p in sorted(record['pairs'], key=lambda p: p['id'])[:count]]
+    center = np.mean(list(points.values()), axis=0)
+    selected = [min(points, key=lambda k: (-float(np.linalg.norm(points[k]-center)), k))]
+    while len(selected) < min(count, len(points)):
+        selected.append(min((k for k in points if k not in selected),
+            key=lambda k: (-min(float(np.linalg.norm(points[k]-points[s])) for s in selected), k)))
+    return selected
+
+
+def plot_priority_plan(cfg, out, plan):
+    """Freeze a bounded plotting panel without modifying the full numerical plan."""
+    directory = Path(out)/'plot_priority_v1'; directory.mkdir(exist_ok=True)
+    target = directory/'plan.json'
+    if target.exists():
+        return read_json(target)
+    chosen = {r['id']: _plot_pairs(r) for r in plan['records']}
+    cells = defaultdict(list); excluded = []; seen = set()
+    for record, group in current_dof_groups(plan):
+        if group['pair'] not in chosen[record['id']]:
+            continue
+        windows = [record['windows'][t['window_index']] for t in group['tasks']]
+        if not any(w.get('hb_support_admitted', True) for w in windows):
+            excluded.append(dict(group_id=group['id'], record_id=record['id'], pair=group['pair'],
+                planned_windows=len(windows), reason='no_complete_native_Hb_support'))
+            continue
+        labels = _plot_task_labels(record, windows)
+        # A native support can contain several task labels. It remains one fit;
+        # all labels and window conditions are retained for the coverage table.
+        cell = (record['dataset'], record['subject'], '+'.join(labels))
+        item = {k: v for k, v in group.items() if k != 'tasks'}
+        item.update(task_label=cell[2], task_labels=labels,
+            conditions=sorted({w['condition'] for w in windows if w.get('condition')}),
+            pair_rank=chosen[record['id']].index(group['pair']),
+            planned_windows=len(windows),
+            paired_windows=sum(w.get('status') == 'available' for w in windows),
+            window_ids=[t['id'] for t in group['tasks']])
+        cells[cell].append(item); seen.add(record['id'])
+    for items in cells.values():
+        items.sort(key=lambda x: (x['pair_rank'], x['record_id'], x['native_support_id']))
+    keys = {ds: sorted((k for k in cells if k[0] == ds),
+        key=lambda k: (token(str(cfg['seed'])+'|'+k[1]), k[2])) for ds in cfg['data']['datasets']}
+    ordered = []
+    for round_index in range(max(map(len, cells.values()), default=0)):
+        queues = {ds: [cells[k][round_index] for k in keys[ds] if round_index < len(cells[k])]
+                  for ds in cfg['data']['datasets']}
+        for offset in range(max(map(len, queues.values()), default=0)):
+            for ds in cfg['data']['datasets']:
+                if offset < len(queues[ds]):
+                    ordered.append(dict(queues[ds][offset], coverage_round=round_index))
+    result = dict(schema='tak_mismatch_plot_priority_v1', created_utc=datetime.now(timezone.utc).isoformat(),
+        source_plan=str(Path(out)/'plan.json'), numerical_source=str(Path(out)/'source_manifest.json'),
+        selection='all_subjects_all_native_records_all_continuous_Hb_supports_three_geometry_farthest_pairs',
+        ordering='first_one_group_per_subject_task_cell_then_additional_supports_and_pairs_dataset_interleaved',
+        task_semantics='REFED videos separate; other native task labels; all parts/probes/sessions retained',
+        selection_uses_fit_results=False, unchanged_group_windows=True, pairs_per_record=3,
+        groups=ordered, planned_groups=len(ordered), planned_windows=sum(g['planned_windows'] for g in ordered),
+        planned_cells=len(cells), first_coverage_groups=sum(g['coverage_round']==0 for g in ordered),
+        excluded_support_groups=excluded,
+        excluded_records=[dict(record_id=r['id'], dataset=r['dataset'], subject=r['subject'],
+            reason=r.get('excluded_reason', 'no_admitted_windows')) for r in plan['records'] if r['id'] not in seen],
+        by_dataset={ds: dict(groups=sum(g['dataset']==ds for g in ordered),
+            cells=len(keys[ds]), subjects=len({k[1] for k in keys[ds]}),
+            records=len({g['record_id'] for g in ordered if g['dataset']==ds}),
+            windows=sum(g['planned_windows'] for g in ordered if g['dataset']==ds)) for ds in keys})
+    write_json(target, result)
+    return result
+
+
+def plot_priority_stage(cfg, out, plan, workers):
+    """Run only the frozen plotting panel using the unchanged group fitter."""
+    directory = Path(out)/'plot_priority_v1'; schedule = read_json(directory/'plan.json')
+    ids = {g['id'] for g in schedule['groups']}
+    payloads = {g['id']: (cfg, str(out), r, g) for r, g in current_dof_groups(plan) if g['id'] in ids}
+    if set(payloads) != ids:
+        raise ValueError('plot panel differs from the full frozen numerical identities')
+    existing = []; pending = []
+    for g in schedule['groups']:
+        p = Path(out)/'current_dof'/'tasks'/f'{g["id"]}.json'
+        if p.exists():
+            saved = read_json(p)
+            if saved.get('id') != g['id'] or len(saved['rows']) != g['planned_windows']:
+                raise ValueError('retained group identity/denominator mismatch')
+            existing.append(g['id'])
+        else:
+            pending.append(g)
+    started = time.monotonic(); finished = set(existing); samples = defaultdict(list)
+    def progress(count, result):
+        if result:
+            finished.add(result['group_id'])
+            value = read_json(Path(out)/'current_dof'/'tasks'/f'{result["group_id"]}.json')
+            if value.get('views'):
+                samples[value['dataset']].append(dict(seconds=value['elapsed_seconds'], windows=len(value['rows'])))
+        elapsed = time.monotonic()-started
+        cells = defaultdict(list)
+        for g in schedule['groups']:
+            cells[(g['dataset'], g['subject'], g['task_label'])].append(g)
+        write_json(directory/'progress.json', dict(stage='plot_priority_shared_parameters',
+            updated_utc=datetime.now(timezone.utc).isoformat(), started_utc=datetime.fromtimestamp(time.time()-elapsed, timezone.utc).isoformat(),
+            planned=schedule['planned_groups'], terminal=len(finished), reused=len(existing), new_terminal=count,
+            first_coverage_planned=schedule['first_coverage_groups'],
+            first_coverage_terminal=sum(g['id'] in finished for g in schedule['groups'] if g['coverage_round']==0),
+            cells_with_terminal=sum(any(g['id'] in finished for g in gg) for gg in cells.values()),
+            planned_cells=len(cells), elapsed_seconds=elapsed, workers=workers,
+            timing_samples=dict(samples), by_dataset={ds: dict(planned=v['groups'],
+                terminal=sum(g['id'] in finished for g in schedule['groups'] if g['dataset']==ds))
+                for ds,v in schedule['by_dataset'].items()}))
+    progress(0, None)
+    results = bounded_work(_current_group_job, (payloads[g['id']] for g in pending), workers, progress=progress)
+    result = dict(status='completed_plot_panel', planned_groups=len(ids), terminal_groups=len(finished),
+        reused_groups=len(existing), new_status_counts=dict(Counter(r['status'] for r in results)),
+        elapsed_seconds=time.monotonic()-started, full_campaign_completed=False)
+    write_json(directory/'summary.json', result)
+    return result
+
+
 def _csv(path, rows, fields):
     path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name+f'.{os.getpid()}.tmp')
@@ -1699,12 +1846,788 @@ def synthetic_stage(cfg, out, workers=1):
     return result
 
 
+PHYSIOLOGY_FIELDS = tuple(dict.fromkeys((
+    'id', 'dataset', 'subject', 'record_id', 'record', 'record_unit', 'record_order',
+    'record_order_source', 'repeat_id', 'repeat_kind', 'task_label', 'task_label_source',
+    'task', 'condition', 'native_support_id', 'native_support_admitted', 'native_support_start_s',
+    'native_support_end_s', 'window', 'window_index', 'pair', 'pair_index', 'fold',
+    'parameter_mode', 'panel_selected', 'window_start_s', 'window_start_clock', 'start_s',
+    'end_s', 'hb_start_s', 'eeg_start_s', 'eeg_filter_start_s', 'eeg_filter_end_s',
+    'actual_context_s', 'segment_index', 'hb_segment_index', 'window_status', 'window_reason',
+    'hb_support_admitted', 'hb_score_start_s', 'hb_score_stop_s', 'eeg_score_start_s',
+    'eeg_score_stop_s', 'score_start_relative_s', 'score_stop_relative_s', 'score_last_sample_relative_s',
+    'status', 'success', 'fixed_success', 'score_status', 'hb_only_success', 'eeg_only_success',
+    'joint_success', 'hb_only_status', 'eeg_only_status', 'joint_status',
+    'hb_only_solver_status', 'eeg_only_solver_status', 'joint_solver_status',
+    'spatial_success', 'spatial_status', 'wrong_success', 'wrong_status',
+    'selected_wrong_success', 'selected_wrong_status', 'eeg_input_status', 'selected_candidate',
+    'axis_3_selection_status', 'D_obs_status', 'drive_gap_status', 'observable_numerical_rank',
+    'observable_retained_rank', 'hb_time_count', 'hb_observation_count', 'eeg_count',
+    'array_path', 'weak_path', 'weak_pair_index', 'weak_metric_source', 'error', *METRICS)))
+PHYSIOLOGY_WEAK_FIELDS = ('dataset', 'subject', 'record_id', 'record', 'task_label', 'task_label_source',
+    'pair', 'pair_index', 'width_s', 'D_bal', 'status', 'weak_path', 'weak_pair_index',
+    'record_unit', 'record_order', 'record_order_source', 'repeat_id', 'repeat_kind',
+    'planned_centers', 'valid_centers', 'denominator', 'mean_denominator', 'excitation', 'native_support_id')
+
+
+def read_physiology_config(path=DEFAULT_PHYSIOLOGY_CONFIG):
+    cfg = yaml.safe_load(Path(path).read_text())
+    expected = yaml.safe_load(DEFAULT_PHYSIOLOGY_CONFIG.read_text())
+    for key, value in expected.items():
+        if cfg.get(key) != value:
+            raise ValueError(f'versioned fixed-physiology contract drift: {key}')
+    return cfg
+
+
+def _physiology_directory(cfg, parent, project_root):
+    parent = Path(parent).resolve()
+    if parent != (Path(project_root)/cfg['parent_run']).resolve():
+        raise ValueError('fixed physiology reads only its exact retained parent run')
+    directory = (parent/cfg['analysis_subdir']).resolve()
+    if directory.parent != parent or directory.name != 'fixed_physiology_v1':
+        raise ValueError('fixed physiology writes only its own analysis directory')
+    return directory
+
+
+def _physiology_plan(cfg, parent):
+    plan = read_json(Path(parent)/'plan.json')
+    panel = read_json(Path(parent)/cfg['scope']['array_source'])
+    planned = sum(len(r.get('windows', []))*len(r.get('pairs', [])) for r in plan['records'])
+    panel_ids = {identity for group in panel['groups'] for identity in group['window_ids']}
+    if planned != cfg['scope']['scalar_pair_windows'] or len(panel_ids) != cfg['scope']['array_pair_windows']:
+        raise ValueError('retained scalar inventory or frozen array-panel denominator changed')
+    return plan, panel, panel_ids
+
+
+def _physiology_record_metadata(record):
+    name, dataset = record['record'], record['dataset']
+    result = dict(record_unit=record['id'], repeat_id=record['id'], record_order=0,
+        record_order_source='not_applicable_single_record_per_task', repeat_kind='unavailable_native_repeat')
+    if dataset == 'eeg_fnirs_single_trial':
+        match = re.fullmatch(r'session_(\d+)', name)
+        result.update(record_order=int(match.group(1)) if match else None,
+            record_order_source='declared_native_session_index', repeat_kind='same_task_native_record')
+    elif dataset == 'visual_cognitive_motivation':
+        unit = re.sub(r'_Probe\d+$', '', record['id'], flags=re.IGNORECASE)
+        match = re.search(r'_Part(\d+)(?:_|$)', name, flags=re.IGNORECASE)
+        result.update(record_unit=unit, repeat_id=unit, record_order=int(match.group(1)) if match else None,
+            record_order_source='declared_native_part_index', repeat_kind='same_visit_cross_part')
+    elif dataset == 'refed':
+        result['repeat_kind'] = 'unavailable_different_video_stimuli'
+    return result
+
+
+def _physiology_task_label(record, window=None):
+    window = window or {}
+    if record['dataset'] == 'refed':
+        return 'emotion_video/'+record['record'], 'native_video_identity'
+    if record['dataset'] == 'visual_cognitive_motivation':
+        return 'visual_cognitive_motivation', 'native_record_single_task_no_condition_recovery'
+    if record['dataset'] == 'simultaneous_eeg_nirs':
+        return record['record'].removeprefix('cnt_'), 'native_record_task_identity'
+    if window.get('task'):
+        return window['task'], 'native_window_task'
+    labels = {w['task'] for w in record.get('windows', []) if w.get('task')}
+    if len(labels) == 1:
+        return next(iter(labels)), 'record_unique_native_task_for_Hb_only_window'
+    return 'unlabeled_record/'+record['record'], 'unavailable_unambiguous_native_task'
+
+
+def _physiology_write_csv(path, rows, fields):
+    path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name+f'.{os.getpid()}.tmp')
+    with gzip.open(temporary, 'wt', encoding='utf-8', newline='') as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields, extrasaction='ignore'); writer.writeheader()
+        for row in rows:
+            writer.writerow({k: '' if v is None else v for k, v in serial(row).items() if k in fields})
+    temporary.replace(path)
+
+
+def _physiology_merge_csv(paths, output, fields):
+    def rows():
+        for path in paths:
+            with gzip.open(path, 'rt', encoding='utf-8', newline='') as stream:
+                yield from csv.DictReader(stream)
+    _physiology_write_csv(output, rows(), fields)
+
+
+def _physiology_extract_record(payload):
+    parent, directory, record, panel_ids = payload
+    parent, directory = Path(parent), Path(directory)
+    stem = directory/'fixed_records'/token(record['id'])
+    target, summary_path = stem.with_suffix('.csv.gz'), stem.with_suffix('.json')
+    weak_target = stem.with_suffix('.weak.csv.gz')
+    planned = len(record.get('windows', []))*len(record.get('pairs', []))
+    if summary_path.exists() and target.exists() and weak_target.exists():
+        retained = read_json(summary_path)
+        if retained.get('record_id') != record['id'] or retained.get('planned') != planned:
+            raise ValueError('fixed extraction record identity changed')
+        if retained.get('status') == 'completed': return retained
+    metadata_path, _, _ = prepared_paths(parent, record['id'])
+    prepared = read_json(metadata_path) if metadata_path.exists() else {}
+    record_meta = _physiology_record_metadata(record)
+    supports = {s['id']: s for s in record.get('continuous_hb_segments', [])}
+    rows = []; statuses = Counter(); missing = unreadable = 0
+    for task in task_manifest(dict(records=[record])):
+        window = record['windows'][task['window_index']]
+        path = parent/'tasks'/f'{task["id"]}.json'
+        try:
+            retained = read_json(path) if path.exists() else dict(status='missing', success=False)
+            if not isinstance(retained, dict): raise ValueError('terminal JSON is not an object')
+        except (OSError, ValueError) as exc:
+            retained = dict(status='unreadable_terminal_json', success=False, error=str(exc)); unreadable += 1
+        if any(retained.get(k, task[k]) != task[k] for k in ('id', 'record_id', 'window', 'pair', 'parameter_mode')):
+            raise ValueError(f'fixed terminal identity changed: {task["id"]}')
+        if retained.get('status') == 'missing': missing += 1
+        label, label_source = _physiology_task_label(record, window)
+        support = supports.get(window.get('native_support_id'), {})
+        row = dict(task, **record_meta)
+        row.update({k: v for k, v in retained.items() if k in PHYSIOLOGY_FIELDS})
+        row.update(task_label=label, task_label_source=label_source, task=window.get('task'),
+            condition=window.get('condition'), parameter_mode='fixed', panel_selected=task['id'] in panel_ids,
+            native_support_id=window.get('native_support_id') or record['id']+'|unavailable_native_support',
+            native_support_admitted=bool(window.get('hb_support_admitted', False)),
+            native_support_start_s=support.get('start_s'), native_support_end_s=support.get('end_s'),
+            window_start_s=task['hb_start_s'], window_start_clock='native_cached_Hb_clock',
+            window_status=window.get('status'), window_reason=window.get('reason'),
+            fixed_success=bool(retained.get('success', False)),
+            score_start_relative_s=5., score_stop_relative_s=29.9, score_last_sample_relative_s=29.8,
+            hb_score_start_s=task['hb_start_s']+5., hb_score_stop_s=task['hb_start_s']+29.9,
+            eeg_score_start_s=task['eeg_start_s']+5. if task['eeg_start_s'] is not None else None,
+            eeg_score_stop_s=task['eeg_start_s']+29.9 if task['eeg_start_s'] is not None else None,
+            weak_path=retained.get('weak_path', prepared.get('weak_path')), weak_pair_index=task['pair_index'],
+            weak_metric_source='prepared_complete_native_record_pair_summary')
+        for key in ('eeg_filter_start_s', 'eeg_filter_end_s', 'segment_index', 'hb_segment_index', 'hb_support_admitted'):
+            row[key] = window.get(key)
+        for view in ('hb_only', 'eeg_only', 'joint'):
+            value = retained.get('view_statuses', {}).get(view, {})
+            row[view+'_success'] = bool(retained.get(view+'_success', value.get('success', False)))
+            row[view+'_status'] = value.get('status', 'unavailable')
+            row[view+'_solver_status'] = value.get('solver_status')
+        for name, value in (('spatial', retained.get('spatial_status')), *retained.get('wrong_statuses', {}).items()):
+            row[name+'_success'] = bool(value.get('success', False)) if isinstance(value, dict) else False
+            row[name+'_status'] = value.get('status') if isinstance(value, dict) else value
+        for width, weak in prepared.get('weak_summary', {}).get(str(task['pair_index']), {}).items():
+            row['D_bal_'+width] = weak.get('D_bal')
+        statuses[row['status']] += 1; rows.append(row)
+    weak_rows = []
+    label, source = _physiology_task_label(record)
+    for j, pair in enumerate(record.get('pairs', [])):
+        for width in (10., 20., 40.):
+            weak = prepared.get('weak_summary', {}).get(str(j), {}).get(f'{width:g}s', {})
+            weak_rows.append(dict(dataset=record['dataset'], subject=record['subject'], record_id=record['id'],
+                record=record['record'], task_label=label, task_label_source=source, pair=pair['id'], pair_index=j,
+                width_s=width, D_bal=weak.get('D_bal'), status=weak.get('status', 'unavailable_prepared_summary'),
+                weak_path=prepared.get('weak_path'), weak_pair_index=j, **record_meta,
+                planned_centers=weak.get('planned_centers', 0), valid_centers=weak.get('valid_centers', 0),
+                denominator=weak.get('denominator'), mean_denominator=weak.get('mean_denominator'),
+                excitation=weak.get('excitation'), native_support_id=record['id']+'|complete_record_weak_summary'))
+    _physiology_write_csv(target, rows, PHYSIOLOGY_FIELDS)
+    _physiology_write_csv(weak_target, weak_rows, PHYSIOLOGY_WEAK_FIELDS)
+    result = dict(schema='tak_mismatch_fixed_record_extract_v1', status='completed' if not missing and not unreadable else 'incomplete',
+        record_id=record['id'], dataset=record['dataset'], subject=record['subject'], planned=planned, rows=len(rows),
+        missing=missing, unreadable=unreadable, statuses=dict(statuses), panel_selected=sum(r['panel_selected'] for r in rows),
+        files=dict(metrics=str(target), weak=str(weak_target)), measured_arrays_read=0, model_fits=0)
+    write_json(summary_path, result); return result
+
+
+def physiology_extract_stage(cfg, parent, directory, plan, panel_ids, workers, *, max_records=None):
+    records = list(interleaved_records(dict(data=dict(datasets=plan['datasets'])), plan['records']))
+    pending = []
+    for record in records:
+        stem = Path(directory)/'fixed_records'/token(record['id'])
+        summary = stem.with_suffix('.json')
+        if (not summary.exists() or read_json(summary).get('status') != 'completed'
+                or not stem.with_suffix('.csv.gz').exists() or not stem.with_suffix('.weak.csv.gz').exists()):
+            pending.append(record)
+    selected = pending[:max_records] if max_records is not None else pending
+    started = time.monotonic()
+    bounded_work(_physiology_extract_record,
+        ((str(parent), str(directory), r, panel_ids) for r in selected), workers,
+        progress=_progress(directory, 'physiology-extract', len(selected), started))
+    results = [read_json(Path(directory)/'fixed_records'/f'{token(r["id"])}.json') for r in records
+               if (Path(directory)/'fixed_records'/f'{token(r["id"])}.json').exists()]
+    complete = len(results) == len(records) and all(r['status'] == 'completed' for r in results)
+    files = {}
+    if complete:
+        if sum(r['rows'] for r in results) != cfg['scope']['scalar_pair_windows'] or sum(r['panel_selected'] for r in results) != len(panel_ids):
+            raise ValueError('fixed extraction denominator disagrees with complete parent manifest')
+        files = dict(windows='fixed_window_metrics.csv.gz', weak='weak_record_metrics.csv.gz')
+        for key, fields in (('metrics', PHYSIOLOGY_FIELDS), ('weak', PHYSIOLOGY_WEAK_FIELDS)):
+            output = files['windows' if key == 'metrics' else 'weak']
+            _physiology_merge_csv([r['files'][key] for r in results], Path(directory)/output, fields)
+    result = dict(schema='tak_mismatch_fixed_physiology_extract_v1', status='completed' if complete else 'incomplete',
+        planned_records=len(records), terminal_records=len(results), new_records=len(selected),
+        planned=cfg['scope']['scalar_pair_windows'], rows=sum(r['rows'] for r in results),
+        panel_planned=len(panel_ids), panel_selected=sum(r['panel_selected'] for r in results),
+        missing=sum(r['missing'] for r in results), unreadable=sum(r['unreadable'] for r in results),
+        statuses=dict(sum((Counter(r['statuses']) for r in results), Counter())), files=files,
+        workers=workers, elapsed_seconds=time.monotonic()-started, measured_arrays_read=0, model_fits=0)
+    write_json(Path(directory)/'extraction_summary.json', result); return result
+
+
+def _physiology_read_frame(path):
+    import pandas as pd
+    identities = ('id', 'dataset', 'subject', 'record_id', 'record', 'task_label', 'pair',
+                  'window', 'native_support_id', 'record_unit', 'repeat_id', 'repeat_kind')
+    return pd.read_csv(path, dtype={key: str for key in identities}, low_memory=False)
+
+
+def _physiology_save_frame(directory, filename, frame):
+    path = Path(directory)/filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name+f'.{os.getpid()}.tmp')
+    frame.to_csv(temporary, index=False, compression='gzip' if filename.endswith('.gz') else None)
+    temporary.replace(path)
+    return filename
+
+
+def _physiology_examples(frame, cfg):
+    examples = []
+    panel = frame[frame.panel_selected.eq(True)].copy()
+    for dataset, planned in panel.groupby('dataset', sort=True):
+        used = set()
+        for metric, roles in (('D1', (('max', 1.), ('median', .5), ('p90', .9))),
+                              ('D_drive_H', (('drive_incompatible_p90', cfg['examples']['D_drive_H_quantile']),))):
+            candidates = planned[np.isfinite(planned[metric].to_numpy(float)) & planned.array_path.notna()].copy()
+            candidates = candidates.sort_values([metric, 'id'])
+            if candidates.empty: continue
+            values = candidates[metric].to_numpy(float)
+            for role, quantile in roles:
+                target = float(np.quantile(values, quantile))
+                eligible = candidates[~candidates.subject.isin(used)]
+                if eligible.empty: eligible = candidates
+                distances = abs(eligible[metric]-target)
+                chosen = eligible.assign(_distance=distances).sort_values(['_distance', 'id']).iloc[0]
+                used.add(chosen.subject)
+                row = {k: v for k, v in chosen.to_dict().items() if k != '_distance'}
+                row.update(role=role, selection_metric=metric, selection_quantile=quantile,
+                    selection_target=target, candidate_denominator=len(candidates),
+                    planned_panel_denominator=len(planned), unavailable_panel_count=len(planned)-len(candidates),
+                    selection_rank=int(np.flatnonzero(candidates.id.to_numpy() == chosen.id)[0])+1,
+                    interpretation='descriptive_example_selection_not_tuning_or_independent_evidence')
+                examples.append(row)
+    order = {'median':0, 'p90':1, 'max':2, 'drive_incompatible_p90':3}
+    examples.sort(key=lambda row:(row['dataset'],order[row['role']]))
+    return dict(schema='tak_mismatch_fixed_physiology_examples_v1', examples=examples,
+        selection='frozen_panel_D1_median_p90_max_and_D_drive_H_p90_distinct_subject_when_possible')
+
+
+def _physiology_summary(cfg, parent, directory):
+    stages = dict(extraction='extraction_summary.json', statistics='statistical_summary.json',
+        ocular='ocular_stage_summary.json', counterfactual='counterfactual_summary.json', shapes='shapes_summary.json')
+    retained = {stage: read_json(Path(directory)/name) for stage, name in stages.items()
+                if (Path(directory)/name).exists()}
+    statuses = {stage: retained.get(stage, {}).get('status', 'pending') for stage in stages}
+    files = {key: value for record in retained.values() for key, value in record.get('files', {}).items()}
+    fixed = read_json(Path(parent)/'resolved_config.json').get('fixed', {})
+    result = dict(schema='tak_mismatch_fixed_physiology_analysis_v1',
+        experiment_id=cfg['experiment_id'], created_utc=datetime.now(timezone.utc).isoformat(),
+        status='completed' if all(status == 'completed' for status in statuses.values()) else 'incomplete',
+        parameter_mode='fixed', fixed_parameters=fixed, parent_run=cfg['parent_run'],
+        interpretation=cfg['interpretation'], stages=statuses, files=files,
+        scope_description='全部473088个固定参数窗口×通道对用于标量分析；波形与EOG关联限定于预先冻结的38268个窗口×通道对三通道面板（103名被试）；不重新拟合模型。',
+        statistics=cfg['statistics'], examples=cfg['examples'],
+        repeatability_scope=dict(same_task_native_record='同任务跨原生记录重复性；不宣称跨日',
+            same_visit_cross_part='同次访问跨Part一致性；同步Probe不构成重复',
+            within_record_early_late='记录内早晚时间一致性；窗口不充当独立被试',
+            unavailable_different_video_stimuli='不同视频是不同刺激，不能估计原生记录重测'),
+        report_findings=[], model_fits=0, protected_data='forbidden',
+        claim_limits=['探索性冻结模型条件分析，不是随机任务因果效应或生理真值恢复',
+            'Hb残差与零预测MSE之比不是能量分解或R²，可大于1',
+            'EOG指标反映辅助通道活动关联，不识别脑源、眨眼真值或伪迹原因'])
+    write_json(Path(directory)/'summary.json', result); return result
+
+
+def _physiology_view_coverage(frame):
+    """Reuse the terminal-audit classifier on the retained flattened verdicts."""
+    result = {}
+    columns = ['dataset', 'status', 'eeg_input_status']
+    for view in ('hb_only', 'eeg_only', 'joint'):
+        columns.extend((view+'_status', view+'_solver_status', view+'_success'))
+    for dataset, group in frame[columns].groupby('dataset', sort=True):
+        views = {view: _audit_bucket() for view in ('hb_only', 'eeg_only', 'joint')}
+        for flat in group.to_dict('records'):
+            row = dict(status=flat['status'], eeg_input_status=flat['eeg_input_status'], view_statuses={})
+            for view in views:
+                status = flat[view+'_status']
+                if isinstance(status, str) and status != 'unavailable':
+                    row['view_statuses'][view] = dict(status=status, solver_status=flat[view+'_solver_status'],
+                        success=flat[view+'_success'] in (True, 1, 'True', 'true'))
+                if flat['status'] == 'missing':
+                    category, status, solver, reason = 'missing', None, None, 'missing_retained_terminal'
+                else:
+                    category, status, solver, reason = _audit_fixed_view(row, view)
+                _audit_count(views[view], category, task_status=flat['status'], view_status=status,
+                    solver_status=solver, reason=reason)
+        result[dataset] = {view: _audit_finish_bucket(bucket) for view, bucket in views.items()}
+    return dict(schema='tak_mismatch_fixed_physiology_view_coverage_v1', by_dataset=result,
+        unit='planned_fixed_window_pair', classification_owner='_audit_fixed_view',
+        interpretation='support_absence_numerical_nonconvergence_and_execution_failure_keep_separate_denominators')
+
+
+def _physiology_task_statistics(payload):
+    from src.analysis.tak_mismatch import paired_task_comparisons
+    frame, options = payload
+    return paired_task_comparisons(frame, **options)
+
+
+def _physiology_within_statistics(payload):
+    from src.analysis.tak_mismatch import within_record_consistency
+    frame, options = payload
+    return within_record_consistency(frame, **options)
+
+
+def physiology_analyze_stage(cfg, parent, directory, workers=1):
+    import pandas as pd
+    from src.analysis import tak_mismatch as analysis
+    extraction = read_json(Path(directory)/'extraction_summary.json')
+    if extraction['status'] != 'completed': raise ValueError('complete fixed extraction required before statistics')
+    frame = _physiology_read_frame(Path(directory)/extraction['files']['windows'])
+    if len(frame) != cfg['scope']['scalar_pair_windows']:
+        raise ValueError('fixed statistical input denominator changed')
+    metrics = tuple(dict.fromkeys((*cfg['statistics']['primary_metrics'], *cfg['statistics']['diagnostic_metrics'])))
+    tables = analysis.aggregate_fixed_metrics(frame, metrics=metrics)
+    for table in tables.values(): table['observational_unit'] = 'nonoverlapping_30s_window_pair'
+    # The weak metric is one retained complete-record/pair quantity.  Its
+    # repeated aliases in the window CSV never define its sample denominator.
+    weak = _physiology_read_frame(Path(directory)/extraction['files']['weak'])
+    for width in (10., 20., 40.):
+        name = f'D_bal_{width:g}s'
+        source = weak[weak.width_s.eq(width)].copy()
+        source[name] = source.D_bal
+        source['window_start_s'] = 0.  # One record-pair observation, not a sampled time point.
+        source['parameter_mode'] = 'fixed'
+        current = analysis.aggregate_fixed_metrics(source, metrics=(name,), include_hb_ratio=False)
+        for key, table in current.items():
+            table['observational_unit'] = 'native_record_pair'
+            tables[key] = pd.concat([tables[key], table], ignore_index=True)
+    options = {key: cfg['statistics'][key] for key in ('bootstrap_samples', 'seed')}
+    tables['subject_descriptives'] = analysis.summarize_subject_distributions(tables['subjects'], **options)
+    tables['task_descriptives'] = analysis.summarize_subject_distributions(tables['subject_tasks'], by=('dataset', 'task_label'), **options)
+    known = tables['subject_tasks'][~tables['subject_tasks'].task_label.str.startswith('unlabeled_record/')]
+    task_options = dict(options, permutation_samples=cfg['statistics']['permutation_samples'],
+        primary_metrics=cfg['statistics']['primary_metrics'])
+    task_groups = [group for _,group in known.groupby('dataset', sort=True)]
+    chunks = bounded_work(_physiology_task_statistics, ((group, task_options) for group in task_groups),
+        min(workers, max(1,len(task_groups))))
+    comparisons = pd.concat(chunks, ignore_index=True)
+    # Dataset jobs produce p values independently; the correction family still
+    # spans every dataset/task pair/primary endpoint in the complete report.
+    for family in ('primary', 'diagnostic'):
+        take = comparisons.fdr_family.eq(family)
+        values = comparisons.loc[take,'p_value'].to_numpy(float)
+        comparisons.loc[take,'q_value'] = analysis.benjamini_hochberg(values)
+        comparisons.loc[take,'fdr_family_size'] = int(np.isfinite(values).sum())
+    tables['task_comparisons'] = comparisons
+    stability_metrics = (*analysis.DEFAULT_METRICS, analysis.HB_RATIO)
+    repeat = analysis.native_record_repeatability(tables['native_pairs'][tables['native_pairs'].metric.isin(stability_metrics)], **options)
+    columns = [*analysis.DEFAULT_METRICS, 'zero_NMSE', 'dataset', 'subject', 'task_label',
+        'record_id', 'native_support_id', 'pair', 'window_start_s', 'parameter_mode']
+    within_groups = [group for _,group in frame[columns].groupby('dataset', sort=True)]
+    within_chunks = bounded_work(_physiology_within_statistics, ((group, options) for group in within_groups),
+        min(workers,max(1,len(within_groups))))
+    within = {key: pd.concat([chunk[key] for chunk in within_chunks], ignore_index=True)
+              for key in ('pairs','summary','records')}
+    tables.update(repeat_pairs=repeat['pairs'], repeat_summary=repeat['summary'],
+        within_record_pairs=within['pairs'], within_record_summary=within['summary'], within_record_records=within['records'])
+    files = {}
+    for key, table in tables.items():
+        filename = key+('.csv.gz' if key in ('native_pairs', 'native_records', 'within_record_records') else '.csv')
+        files[key] = _physiology_save_frame(directory, filename, table)
+    examples = _physiology_examples(frame, cfg)
+    write_json(Path(directory)/'examples.json', examples); files['examples'] = 'examples.json'
+    coverage = _physiology_view_coverage(frame)
+    write_json(Path(directory)/'view_coverage.json', coverage); files['view_coverage'] = 'view_coverage.json'
+    result = dict(schema='tak_mismatch_fixed_physiology_statistics_v1', status='completed', files=files,
+        rows=len(frame), subjects=len(frame[['dataset', 'subject']].drop_duplicates()),
+        planned_records=frame.record_id.nunique(), primary_metrics=cfg['statistics']['primary_metrics'],
+        task_comparisons=len(tables['task_comparisons']), model_fits=0, measured_arrays_read=0)
+    write_json(Path(directory)/'statistical_summary.json', result)
+    _physiology_summary(cfg, parent, directory)
+    return result
+
+
+def _physiology_record_jobs(stage, directory, records, worker, payload, workers, max_records):
+    """Shared bounded record scheduling for the three read-only array stages."""
+    directory = Path(directory); started = time.monotonic()
+    pending = [record for record in records
+               if not (directory/(stage+'_records')/f'{token(record["id"])}.json').exists()]
+    selected = pending[:max_records] if max_records is not None else pending
+    bounded_work(worker, (payload(record) for record in selected), workers,
+        progress=_progress(directory, 'physiology-'+stage, len(selected), started))
+    results = [read_json(directory/(stage+'_records')/f'{token(record["id"])}.json')
+               for record in records if (directory/(stage+'_records')/f'{token(record["id"])}.json').exists()]
+    complete = len(results) == len(records) and all(r['status'] == 'completed' for r in results)
+    return results, dict(status='completed' if complete else 'incomplete', planned_records=len(records),
+        terminal_records=len(results), new_records=len(selected), workers=workers,
+        elapsed_seconds=time.monotonic()-started, model_fits=0)
+
+
+def _physiology_panel_tasks(record, panel_ids):
+    return [task for task in task_manifest(dict(records=[record])) if task['id'] in panel_ids]
+
+
+def _physiology_ocular_record(payload):
+    parent_cfg, root, directory, record, selected_tasks = payload
+    from src.data.tak_mismatch_ocular import prepare_tak_ocular_record
+    directory = Path(directory); stem = directory/'ocular_records'/token(record['id'])
+    selected_windows = {t['window'] for t in selected_tasks}
+    indices = [i for i,w in enumerate(record['windows']) if w['id'] in selected_windows]
+    result = dict(schema='tak_mismatch_fixed_ocular_record_v1', record_id=record['id'],
+        dataset=record['dataset'], subject=record['subject'], status='completed', files={},
+        selected_windows=len(indices), measured_signal_reads=0, available_windows=0)
+    arrays = {}; metadata = dict(status='unavailable', reason='no_registered_native_EOG_auxiliary')
+    try:
+        if record['dataset'] in ('eeg_fnirs_single_trial', 'simultaneous_eeg_nirs'):
+            output = prepare_tak_ocular_record(root, record, cache_root=parent_cfg['data']['cache_root'],
+                index=_metadata_index(str(root), parent_cfg['data']['cache_root']))
+            metadata = output.pop('metadata')
+            original_count = len(record['windows'])
+            for key, value in output.items():
+                arrays[key] = value[indices] if key != 'time_s' and np.ndim(value) and np.shape(value)[0] == original_count else value
+            arrays['window_indices'] = np.asarray(indices, np.int64)
+            array_path = stem.with_suffix('.npz'); write_npz(array_path, **arrays)
+            result['files']['arrays'] = str(array_path)
+            result['measured_signal_reads'] = metadata.get('measured_signal_reads', 0)
+            result['available_windows'] = int(np.asarray(arrays['complete']).all(axis=1).sum())
+        result['metadata'] = metadata
+    except Exception as exc:
+        result.update(status='failed_exception', error=str(exc), traceback=traceback.format_exc(), metadata=metadata)
+    rows = []
+    for local, index in enumerate(indices):
+        window = record['windows'][index]
+        row = dict(dataset=record['dataset'], subject=record['subject'], record_id=record['id'],
+            window=window['id'], window_index=index, ocular_status=metadata.get('status'),
+            ocular_reason=metadata.get('reason'), eog_rms_combined=None,
+            eog_HEOG_rms=None, eog_VEOG_rms=None, eog_HEOG_peak_abs=None, eog_VEOG_peak_abs=None,
+            eog_HEOG_derivative_rms=None, eog_VEOG_derivative_rms=None)
+        if arrays:
+            row['eog_rms_combined'] = arrays['rms_combined'][local]
+            for j, channel in enumerate(('HEOG', 'VEOG')):
+                for field in ('rms', 'peak_abs', 'derivative_rms'):
+                    row['eog_'+channel+'_'+field] = arrays[field][local, j]
+            native = metadata.get('windows', [])[index]
+            row.update(ocular_status=native.get('status'), ocular_reason=native.get('reason'))
+        rows.append(row)
+    fields = ('dataset', 'subject', 'record_id', 'window', 'window_index', 'ocular_status', 'ocular_reason',
+        'eog_rms_combined', 'eog_HEOG_rms', 'eog_VEOG_rms', 'eog_HEOG_peak_abs', 'eog_VEOG_peak_abs',
+        'eog_HEOG_derivative_rms', 'eog_VEOG_derivative_rms')
+    path = stem.with_suffix('.csv.gz'); _physiology_write_csv(path, rows, fields)
+    result.update(files=dict(result['files'], windows=str(path)), fields=fields)
+    write_json(stem.with_suffix('.json'), result); return result
+
+
+def physiology_ocular_stage(parent_cfg, cfg, root, parent, directory, plan, panel_ids, workers, *, max_records=None):
+    records = list(interleaved_records(parent_cfg, plan['records']))
+    payload = lambda record: (parent_cfg, str(root), str(directory), record, _physiology_panel_tasks(record, panel_ids))
+    results, result = _physiology_record_jobs('ocular', directory, records, _physiology_ocular_record,
+        payload, workers, max_records)
+    result.update(schema='tak_mismatch_fixed_physiology_ocular_v1',
+        measured_signal_reads=sum(r['measured_signal_reads'] for r in results),
+        available_windows=sum(r['available_windows'] for r in results),
+        planned_native_records=sum(r['dataset'] in cfg['scope']['ocular_datasets'] for r in records), files={})
+    if result['status'] == 'completed':
+        filename = 'ocular_window_metrics.csv.gz'
+        _physiology_merge_csv([r['files']['windows'] for r in results], Path(directory)/filename, results[0]['fields'])
+        result['files']['ocular_windows'] = filename
+    write_json(Path(directory)/'ocular_stage_summary.json', result)
+    _physiology_summary(cfg, parent, directory)
+    return result
+
+
+def _physiology_counterfactual_record(payload):
+    parent_cfg, root, parent, directory, record, selected_tasks = payload
+    from src.data.tak_mismatch_ocular import prepare_tak_ocular_counterfactual
+    parent, directory = Path(parent), Path(directory)
+    stem = directory/'counterfactual_records'/token(record['id'])
+    result = dict(schema='tak_mismatch_fixed_counterfactual_record_v1', record_id=record['id'],
+        dataset=record['dataset'], subject=record['subject'], status='completed', files={},
+        measured_signal_reads=0, planned_window_pairs=len(selected_tasks), available_window_pairs=0)
+    try:
+        if not selected_tasks:
+            result['metadata'] = dict(status='unavailable', reason='no_frozen_panel_pairs')
+        else:
+            selection = _read_shared_json(str(parent/'spatial_selection.json'))
+            pair_ids = sorted({task['pair'] for task in selected_tasks})
+            models = {pair['id']: selection['models'].get(_group_key(record, pair), {}).get(str(record['fold']), {}).get('coordinate', {})
+                      for pair in record['pairs'] if pair['id'] in pair_ids}
+            prepared_path = prepared_paths(parent, record['id'])[1]
+            with np.load(prepared_path, allow_pickle=False) as retained:
+                output = prepare_tak_ocular_counterfactual(root, record, models, pair_ids, prepared=retained,
+                    cache_root=parent_cfg['data']['cache_root'], index=_metadata_index(str(root), parent_cfg['data']['cache_root']))
+            metadata = output.pop('metadata')
+            wanted = {task['window'] for task in selected_tasks}
+            indices = [i for i,w in enumerate(record['windows']) if w['id'] in wanted]
+            n = len(record['windows']); arrays = {}
+            for key, value in output.items():
+                arrays[key] = value[indices] if key not in ('time_s', 'pair_ids', 'frozen_pc', 'frozen_eeg_factor', 'channel_indices') and np.ndim(value) and np.shape(value)[0] == n else value
+            arrays['window_indices'] = np.asarray(indices, np.int64)
+            path = stem.with_suffix('.npz'); write_npz(path, **arrays)
+            result.update(metadata=metadata, files=dict(arrays=str(path)),
+                measured_signal_reads=metadata.get('measured_signal_reads', 0),
+                available_window_pairs=sum(bool(arrays['complete'][indices.index(t['window_index']), pair_ids.index(t['pair'])]) for t in selected_tasks))
+    except Exception as exc:
+        result.update(status='failed_exception', error=str(exc), traceback=traceback.format_exc())
+    write_json(stem.with_suffix('.json'), result); return result
+
+
+def physiology_counterfactual_stage(parent_cfg, cfg, root, parent, directory, plan, panel_ids, workers, *, max_records=None):
+    records = [r for r in interleaved_records(parent_cfg, plan['records']) if r['dataset'] in cfg['scope']['ocular_datasets']]
+    if len(records) != cfg['scope']['ocular_native_records']:
+        raise ValueError('native EOG record denominator changed')
+    payload = lambda record: (parent_cfg, str(root), str(parent), str(directory), record, _physiology_panel_tasks(record, panel_ids))
+    results, result = _physiology_record_jobs('counterfactual', directory, records, _physiology_counterfactual_record,
+        payload, workers, max_records)
+    result.update(schema='tak_mismatch_fixed_physiology_counterfactual_v1',
+        measured_signal_reads=sum(r['measured_signal_reads'] for r in results),
+        planned_window_pairs=sum(r['planned_window_pairs'] for r in results),
+        available_window_pairs=sum(r['available_window_pairs'] for r in results), files={})
+    write_json(Path(directory)/'counterfactual_summary.json', result)
+    _physiology_summary(cfg, parent, directory)
+    return result
+
+
+def _physiology_read_aux(path):
+    if not Path(path).exists(): return None
+    with np.load(path, allow_pickle=False) as arrays:
+        return {k: arrays[k] for k in arrays.files}
+
+
+def _physiology_aux_window(arrays, window_index, pair=None):
+    if arrays is None: return None
+    positions = np.flatnonzero(np.asarray(arrays['window_indices']) == window_index)
+    if len(positions) != 1: return None
+    i = int(positions[0])
+    if pair is None:
+        return {key: arrays[key][i] for key in ('rms_combined', 'rms_10hz', 'valid_mask')}
+    pairs = np.flatnonzero(np.asarray(arrays['pair_ids']).astype(str) == str(pair))
+    if len(pairs) != 1: return None
+    j = int(pairs[0])
+    return {key: arrays[key][i, j] for key in ('raw_proxy', 'clean_proxy', 'amplitude_proxy')}
+
+
+def _physiology_ocular_examples(panel, features, cfg, directory):
+    merged = features.merge(panel, on='id', how='left', validate='one_to_one', suffixes=('_feature',''))
+    required = ('eog_raw_DEH_mse', 'eog_clean_DEH_mse', 'eog_amplitude_DEH_mse', 'eog_rms')
+    examples = []; selections = []
+    for dataset in cfg['scope']['ocular_datasets']:
+        planned = merged[merged.dataset.eq(dataset)].copy()
+        valid = np.ones(len(planned),bool)
+        for column in required:
+            if column not in planned: valid[:] = False
+            else: valid &= np.isfinite(planned[column].to_numpy(float))
+        eligible = planned.loc[valid].copy()
+        eligible['clean_minus_amplitude_DEH_mse'] = eligible.get('eog_clean_DEH_mse', np.nan)-eligible.get('eog_amplitude_DEH_mse', np.nan)
+        used = set()
+        roles = (('high_eog_p90','eog_rms',.9,None),
+            ('improvement_p10','clean_minus_amplitude_DEH_mse',.1,'negative'),
+            ('nonimprovement_median','clean_minus_amplitude_DEH_mse',.5,'nonnegative'))
+        for role,metric,quantile,condition in roles:
+            candidates = eligible
+            if condition == 'negative': candidates = candidates[candidates[metric] < 0]
+            elif condition == 'nonnegative': candidates = candidates[candidates[metric] >= 0]
+            selection = dict(dataset=dataset, role=role, selection_metric=metric, selection_quantile=quantile,
+                planned_panel_denominator=len(planned), valid_counterfactual_denominator=len(eligible),
+                candidate_denominator=len(candidates), candidate_unit='frozen_window_pair',
+                status='selected' if len(candidates) else 'unavailable_no_candidates')
+            if candidates.empty:
+                selections.append(selection); continue
+            target = float(np.quantile(candidates[metric],quantile))
+            distinct = candidates[~candidates.subject.isin(used)]
+            if distinct.empty: distinct = candidates
+            chosen = distinct.assign(_distance=abs(distinct[metric]-target)).sort_values(['_distance','id']).iloc[0]
+            used.add(chosen.subject)
+            stem = token(chosen.record_id)
+            ocular_path = (Path(directory)/'ocular_records'/f'{stem}.npz').resolve()
+            counter_path = (Path(directory)/'counterfactual_records'/f'{stem}.npz').resolve()
+            ocular = _physiology_read_aux(ocular_path); counter = _physiology_read_aux(counter_path)
+            if ocular is None or counter is None: raise ValueError('selected EOG example lacks retained auxiliary arrays')
+            oi = np.flatnonzero(ocular['window_indices'] == chosen.window_index)
+            ci = np.flatnonzero(counter['window_indices'] == chosen.window_index)
+            pi = np.flatnonzero(counter['pair_ids'].astype(str) == str(chosen.pair))
+            if any(len(index) != 1 for index in (oi,ci,pi)):
+                raise ValueError('selected EOG example auxiliary identity is ambiguous')
+            metadata = read_json(Path(directory)/'ocular_records'/f'{stem}.json').get('metadata',{})
+            row = {k:v for k,v in chosen.to_dict().items() if k != '_distance'}
+            row.update(selection, selection_target=target, fixed_array_path=chosen.array_path,
+                ocular_array_path=str(ocular_path), counterfactual_array_path=str(counter_path),
+                ocular_array_index=int(oi[0]), counterfactual_window_index=int(ci[0]),
+                counterfactual_pair_index=int(pi[0]), source_units=metadata.get('native_unit','not_recorded'),
+                interpretation='posthoc_descriptive_example_after_complete_overall_statistics_not_population_evidence')
+            examples.append(row); selections.append(dict(selection, selection_target=target, selected_id=chosen.id))
+    return dict(schema='tak_mismatch_fixed_ocular_examples_v1', examples=examples, selections=selections,
+        selection='C_available_high_EOG_p90_negative_clean_minus_amplitude_p10_and_nonnegative_median',
+        array_index_contract='window_index_is_original_native_identity; use_ocular_array_index_and_counterfactual_window_index_for_subset_arrays')
+
+
+def _physiology_shape_record(payload):
+    parent, directory, record, selected_tasks = payload
+    from src.analysis.tak_mismatch import fixed_window_physiology_features
+    parent, directory = Path(parent), Path(directory)
+    stem = directory/'shape_records'/token(record['id'])
+    frame = _physiology_read_frame(directory/'fixed_records'/f'{token(record["id"])}.csv.gz')
+    selected_ids = {task['id'] for task in selected_tasks}
+    frame = frame[frame.id.isin(selected_ids)]
+    if len(frame) != len(selected_tasks): raise ValueError('frozen shape-panel identity changed')
+    ocular = _physiology_read_aux(directory/'ocular_records'/f'{token(record["id"])}.npz')
+    counter = _physiology_read_aux(directory/'counterfactual_records'/f'{token(record["id"])}.npz')
+    rows = []; errors = 0; arrays_read = 0
+    for row in frame.to_dict('records'):
+        features = dict(id=row['id'], dataset=row['dataset'], subject=row['subject'], record_id=row['record_id'],
+            pair=row['pair'], window=row['window'], window_index=row['window_index'], feature_status='unavailable_arrays')
+        try:
+            if isinstance(row.get('array_path'), str) and row['array_path']:
+                path = Path(row['array_path']).resolve()
+                if path != (parent/'tasks'/f'{row["id"]}.npz').resolve():
+                    raise ValueError('shape stage reads only the exact retained fixed task array')
+                with np.load(path, allow_pickle=False) as retained:
+                    arrays_read += 1
+                    features.update(fixed_window_physiology_features(retained, row,
+                        ocular=_physiology_aux_window(ocular, row['window_index']),
+                        counterfactual=_physiology_aux_window(counter, row['window_index'], row['pair'])))
+        except Exception as exc:
+            features.update(feature_status='failed_array_validation', error=str(exc)); errors += 1
+        rows.append(features)
+    import pandas as pd
+    table = pd.DataFrame(rows)
+    filename = stem.with_suffix('.csv.gz'); _physiology_save_frame(directory, str(filename.relative_to(directory)), table)
+    result = dict(schema='tak_mismatch_fixed_shape_record_v1', status='completed' if not errors else 'incomplete',
+        record_id=record['id'], rows=len(rows), arrays_read=arrays_read, errors=errors,
+        files=dict(features=str(filename)))
+    write_json(stem.with_suffix('.json'), result); return result
+
+
+def physiology_shapes_stage(cfg, parent, directory, plan, panel_ids, workers, *, max_records=None):
+    from src.analysis.tak_mismatch import analyze_fixed_physiology_features
+    import pandas as pd
+    for name in ('extraction', 'ocular', 'counterfactual'):
+        summary = Path(directory)/(name+('_stage_summary.json' if name == 'ocular' else '_summary.json'))
+        if not summary.exists() or read_json(summary)['status'] != 'completed':
+            raise ValueError(f'complete {name} stage required before shapes')
+    tasks = {r['id']: _physiology_panel_tasks(r, panel_ids) for r in plan['records']}
+    records = [r for r in plan['records'] if tasks[r['id']]]
+    payload = lambda record: (str(parent), str(directory), record, tasks[record['id']])
+    results, result = _physiology_record_jobs('shape', directory, records, _physiology_shape_record,
+        payload, workers, max_records)
+    result.update(schema='tak_mismatch_fixed_physiology_shapes_v1', files={},
+        planned=len(panel_ids), rows=sum(r['rows'] for r in results),
+        arrays_read=sum(r['arrays_read'] for r in results), errors=sum(r['errors'] for r in results))
+    if result['status'] == 'completed':
+        features = pd.concat([_physiology_read_frame(r['files']['features']) for r in results], ignore_index=True)
+        panel_frame = _physiology_read_frame(Path(directory)/'fixed_window_metrics.csv.gz')
+        panel_frame = panel_frame[panel_frame.panel_selected.eq(True)]
+        if len(features) != len(panel_ids) or set(features.id) != set(panel_frame.id):
+            raise ValueError('fixed shape feature denominator changed')
+        result['files']['shape_windows'] = _physiology_save_frame(directory, 'shape_window_features.csv.gz', features)
+        analysis = analyze_fixed_physiology_features(panel_frame, features, config=cfg['statistics'])
+        for key, value in analysis.items():
+            filename = key+('.csv' if isinstance(value, pd.DataFrame) else '.json')
+            if isinstance(value, pd.DataFrame): _physiology_save_frame(directory, filename, value)
+            else: write_json(Path(directory)/filename, value)
+            result['files'][key] = filename
+        examples = _physiology_ocular_examples(panel_frame, features, cfg, directory)
+        write_json(Path(directory)/'ocular_examples.json', examples)
+        result['files']['ocular_examples'] = 'ocular_examples.json'
+    write_json(Path(directory)/'shapes_summary.json', result)
+    _physiology_summary(cfg, parent, directory)
+    return result
+
+
+def _spatial_dataset_tables(payload):
+    from src.analysis import tak_mismatch as analysis
+    native, windows, geometry, examples = payload
+    halves = analysis.spatial_half_metrics(windows)
+    channels, maps = analysis.aggregate_spatial_maps(native, halves, geometry)
+    records, ranking = analysis.rank_spatial_patterns(maps, examples_per_dataset=examples)
+    return dict(channel_metrics=channels,map_values=maps,record_pattern_scores=records,
+        subject_ranking=ranking,record_similarities=analysis.spatial_record_similarities(maps, ranking))
+
+
+def physiology_topography_stage(cfg, parent, directory, output, *, examples_per_dataset=3, workers=1):
+    """Derive spatial maps from completed scalar evidence; no signal reads or fits."""
+    import shutil
+    import pandas as pd
+    from src.analysis import tak_mismatch as analysis
+    from src.data import channel_geometry
+    parent, directory, output = (Path(p).resolve() for p in (parent, directory, output))
+    if output.parent != directory or not output.name.startswith('spatial_patterns_'):
+        raise ValueError('spatial analysis writes a versioned direct child of its fixed-analysis owner')
+    if output.exists():
+        raise FileExistsError('spatial analysis requires a fresh output directory')
+    source = read_json(directory/'summary.json')
+    if (source.get('schema') != 'tak_mismatch_fixed_physiology_analysis_v1'
+            or source.get('status') != 'completed' or source.get('parameter_mode') != 'fixed'
+            or source.get('protected_data') != 'forbidden'):
+        raise ValueError('completed public fixed-parameter analysis required')
+    impact_path = directory/'visual_channel_impact_audit_v1.json'
+    impact = read_json(impact_path)
+    if impact.get('status') != 'confirmed' or Path(impact['retained_run']).resolve() != parent:
+        raise ValueError('the confirmed Visual impact audit must belong to this retained run')
+    output.mkdir()
+    sources = output/'source'; sources.mkdir()
+    for path in (Path(__file__), Path(analysis.__file__), Path(channel_geometry.__file__)):
+        shutil.copy2(path, sources/path.name)
+    started = time.monotonic()
+    plan = read_json(parent/'plan.json')
+    geometry = analysis.spatial_geometry_from_plan(plan)
+    native = pd.read_csv(directory/source['files']['native_pairs'], dtype={'subject':str})
+    columns = ['dataset','subject','task_label','record_id','record_unit','pair','native_support_id',
+        'window_start_s','parameter_mode','D1','zero_NMSE']
+    windows = pd.read_csv(directory/source['files']['windows'], usecols=columns, dtype={'subject':str})
+    if len(windows) != cfg['scope']['scalar_pair_windows']:
+        raise ValueError('retained scalar window denominator changed')
+    if set(windows.dataset) - set(('eeg_fnirs_single_trial','simultaneous_eeg_nirs','visual_cognitive_motivation','refed')):
+        raise ValueError('only registered public scalar evidence is admitted')
+    payloads = [(native[native.dataset.eq(ds)].copy(), windows[windows.dataset.eq(ds)].copy(),
+        geometry[geometry.dataset.eq(ds)].copy(), examples_per_dataset) for ds in sorted(windows.dataset.unique())]
+    chunks = bounded_work(_spatial_dataset_tables, payloads, min(workers,len(payloads)))
+    tables = {name:pd.concat([chunk[name] for chunk in chunks],ignore_index=True) for name in chunks[0]}
+    tables['channel_geometry'] = geometry
+    ranking = tables['subject_ranking']
+    files = {}
+    for name, frame in tables.items():
+        suffix = '.csv.gz' if name in ('channel_metrics','map_values') else '.csv'
+        files[name] = _physiology_save_frame(output, name+suffix, frame)
+    selected = ranking[ranking.selected]
+    result = dict(schema='tak_mismatch_spatial_patterns_v1',status='completed',created_utc=datetime.now(timezone.utc).isoformat(),
+        parent_run=str(parent),source_analysis=str(directory),owning_summary=str(directory/'summary.json'),
+        visual_impact_audit=str(impact_path),files=files,elapsed_s=time.monotonic()-started,
+        planned_window_pairs=len(windows),native_records=int(windows.record_id.nunique()),
+        subjects=len(ranking),selected_subjects=selected[['dataset','subject','rank','score']].to_dict('records'),
+        metrics=list(analysis.SPATIAL_METRICS),workers=min(workers,len(payloads)),model_fits=0,raw_signal_reads=0,protected_reads=0,
+        omitted_plan_records=[dict(record_id=r['id'],status=r.get('status'),reason=r.get('excluded_reason'))
+            for r in plan['records'] if r['id'] not in set(windows.record_id)],
+        selection=dict(endpoint='D1',examples_per_dataset=examples_per_dataset,minimum_window_fraction=.8,
+            minimum_common_locations=8,minimum_location_fraction=.8,minimum_valid_windows_per_half=2,
+            record_score='((P90-P10)/median) * clip(Moran_I,0,1) * clip(early_late_Spearman,0,1)',
+            subject_score='median eligible record score * eligible/planned acquisition records',
+            neighbours='symmetric 4 nearest projected positions; edges over 2.5 median nearest distance removed',
+            split='original record planned times; equal early/late counts; odd center omitted',
+            interpretation='data-selected illustration; early/late agreement also used in selection, not independent confirmation'),
+        aggregation=dict(record='all finite retained endpoints displayed, including partial time support; strict 80% coverage used only for selection',
+            coincident_positions='location-coincident channels average available numerators/denominators, with all members counted',
+            subject='available acquisition records equally weighted at each location; ROOT metrics squared before average; available/planned records retained',
+            Hb_ratio='matched-support mean residual MSE divided by mean zero-prediction MSE, not mean window ratios',
+            weak='complete native-record pair diagnostic; never count its repeated window aliases',
+            visual='simultaneous Probe1/2 form one acquisition map; EEG-dependent metrics not spatially interpreted',
+            normalization='frozen location-specific and outer-training-fold SD, not a common physical concentration unit'),
+        geometry='retained registry coordinates in plan; orthographic/template top view; coincident projected positions merged',
+        claim_limits=['no cortical source localization','selection is exploratory','windows/channels are not independent subjects',
+            'different REFED videos are different stimuli','Visual Hb-only exemption does not repair EEG identity'])
+    write_json(output/'summary.json', result)
+    return {key:result[key] for key in ('schema','status','subjects','selected_subjects','planned_window_pairs','elapsed_s')}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument('--analysis-config', type=Path, default=DEFAULT_PHYSIOLOGY_CONFIG)
     parser.add_argument('--stage', choices=STAGES, default='check')
     parser.add_argument('--project-root', type=Path, default=ROOT)
     parser.add_argument('--run-dir', type=Path)
+    parser.add_argument('--spatial-output', type=Path, help='Fresh spatial_patterns_* child of the completed fixed-physiology analysis')
+    parser.add_argument('--spatial-examples', type=int, default=3, help='Illustrative subjects selected per dataset')
     parser.add_argument('--workers', type=int, default=1)
     parser.add_argument('--max-tasks', type=int, help='Explicit bounded throughput pilot; never marks the full campaign complete')
     parser.add_argument('--max-records', type=int, help='Prepare-only dataset-round-robin resource pilot; the complete plan is retained')
@@ -1712,8 +2635,9 @@ def main(argv=None):
     if not 1 <= args.workers <= cfg['resources']['max_workers']: parser.error('workers outside reviewed resource envelope')
     if args.max_tasks is not None and (args.stage != 'run' or args.max_tasks < 1):
         parser.error('--max-tasks is a positive run-stage throughput pilot only')
-    if args.max_records is not None and (args.stage != 'prepare' or args.max_records < 1):
-        parser.error('--max-records is a positive prepare-stage throughput pilot only')
+    pilot_stages = ('prepare', 'physiology-extract', 'physiology-ocular', 'physiology-counterfactual', 'physiology-shapes')
+    if args.max_records is not None and (args.stage not in pilot_stages or args.max_records < 1):
+        parser.error('--max-records is a positive record-stage throughput pilot only')
     if args.stage == 'check':
         print(json.dumps(serial(check(cfg)), ensure_ascii=False, allow_nan=False)); return 0
     root = args.project_root.resolve()
@@ -1721,6 +2645,40 @@ def main(argv=None):
     owner = root/ARTIFACT_ROOT
     if out.parent != owner.resolve() or out.name != cfg['run_name']:
         parser.error('this contract writes only its exact versioned owning run directory')
+    if args.stage == 'physiology-topography':
+        analysis_cfg = read_physiology_config(args.analysis_config)
+        directory = _physiology_directory(analysis_cfg, out, root)
+        if args.spatial_output is None or args.spatial_examples < 1:
+            parser.error('physiology-topography requires a fresh --spatial-output and positive --spatial-examples')
+        result = physiology_topography_stage(analysis_cfg, out, directory, args.spatial_output,
+            examples_per_dataset=args.spatial_examples, workers=args.workers)
+        print(json.dumps(serial(result), ensure_ascii=False, allow_nan=False)); return 0
+    if args.spatial_output:
+        parser.error('--spatial-output belongs to physiology-topography only')
+    if args.stage in PHYSIOLOGY_STAGES:
+        analysis_cfg = read_physiology_config(args.analysis_config)
+        if args.workers > analysis_cfg['resources']['max_workers']:
+            parser.error('workers outside fixed-physiology resource envelope')
+        directory = _physiology_directory(analysis_cfg, out, root)
+        with run_lock(directory):
+            freeze_config(analysis_cfg, directory)
+            plan, panel, panel_ids = _physiology_plan(analysis_cfg, out)
+            if args.stage == 'physiology-extract':
+                result = physiology_extract_stage(analysis_cfg, out, directory, plan, panel_ids, args.workers,
+                    max_records=args.max_records)
+            elif args.stage == 'physiology-analyze':
+                result = physiology_analyze_stage(analysis_cfg, out, directory, args.workers)
+            elif args.stage == 'physiology-ocular':
+                result = physiology_ocular_stage(cfg, analysis_cfg, root, out, directory, plan, panel_ids,
+                    args.workers, max_records=args.max_records)
+            elif args.stage == 'physiology-counterfactual':
+                result = physiology_counterfactual_stage(cfg, analysis_cfg, root, out, directory, plan, panel_ids,
+                    args.workers, max_records=args.max_records)
+            else:
+                result = physiology_shapes_stage(analysis_cfg, out, directory, plan, panel_ids,
+                    args.workers, max_records=args.max_records)
+        print(json.dumps(serial(result), ensure_ascii=False, allow_nan=False))
+        return 0 if args.max_records is not None or result.get('status') == 'completed' else 2
     if args.stage == 'audit-status':
         result = terminal_status_audit_stage(cfg, out)
         print(json.dumps(serial(result), ensure_ascii=False, allow_nan=False))
@@ -1732,11 +2690,15 @@ def main(argv=None):
         else:
             if not (out/'plan.json').exists(): raise ValueError('plan stage required first')
             plan = read_json(out/'plan.json')
-            if args.stage == 'prepare': result = prepare_stage(cfg, out, root, plan, args.workers, max_records=args.max_records)
+            if args.stage == 'plot-plan': result = plot_priority_plan(cfg, out, plan)
+            elif args.stage == 'plot-run': result = plot_priority_stage(cfg, out, plan, args.workers)
+            elif args.stage == 'prepare': result = prepare_stage(cfg, out, root, plan, args.workers, max_records=args.max_records)
             elif args.stage == 'run': result = run_stage(cfg, out, plan, args.workers, max_tasks=args.max_tasks)
             else: result = summarize_stage(cfg, out, plan)
     display = result
-    if args.stage == 'plan':
+    if args.stage == 'plot-plan':
+        display = {key: result[key] for key in ('schema', 'planned_groups', 'planned_windows', 'planned_cells', 'by_dataset')}
+    elif args.stage == 'plan':
         display = {key: result[key] for key in ('schema', 'status', 'summary', 'measured_arrays_read')}
         display['record_count'] = len(result['records']); display['plan_path'] = str(out/'plan.json')
     print(json.dumps(serial(display), ensure_ascii=False, allow_nan=False)); return 0

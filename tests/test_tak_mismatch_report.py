@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 import fitz
 import numpy as np
@@ -606,3 +607,189 @@ def test_free_dobs_paired_description_is_window_relaxation_not_group_model_impro
     assert '不作改善判定' in text
     assert '改善方向仍不确定' not in text
     assert '不解释为组共享模型改善' in text
+
+
+def test_priority_panel_retains_pending_and_pairs_only_common_valid_windows(tmp_path):
+    run=tmp_path/'run';run.mkdir()
+    for name in ('plot_priority_v1', 'tasks', 'current_dof/tasks'): (run/name).mkdir(parents=True)
+    common=dict(dataset='fixture',subject='s1',task_label='task',record_id='r',pair='p')
+    groups=[dict(common,id='g1',planned_windows=2,window_ids=['w1','w2']),
+            dict(common,id='g2',planned_windows=1,window_ids=['w3'])]
+    _write(run/'plot_priority_v1'/'plan.json',dict(groups=groups))
+    for identity,value in (('w1',2.),('w2',100.),('w3',1000.)):
+        _write(run/'tasks'/f'{identity}.json',dict(id=identity,D1=value,D4=value,status='completed'))
+    _write(run/'current_dof'/'tasks'/'g1.json',dict(status='partial_or_unavailable',rows=[
+        dict(id='w1',D1_free=1.,D4_free=1.,hb_only_success=True,joint_success=True),
+        dict(id='w2',D1_free=None,D4_free=None,hb_only_success=False,joint_success=False)]))
+    _,windows,group_table,cells=renderer.priority_panel_tables(run)
+    assert len(windows)==3 and len(group_table)==2
+    cell=cells.iloc[0]
+    assert cell.planned_groups==2 and cell.terminal_groups==1
+    assert cell.D1_paired_windows==1
+    assert cell.D1_fixed_paired==2. and cell.D1_free_paired==1.
+    assert cell.D1_free_minus_fixed==-1.
+    assert windows.loc[windows.id=='w3','current_status'].item()=='pending'
+
+
+def _fixed_analysis(tmp_path):
+    run = tmp_path/'fixed_run'; analysis = run/'fixed_physiology_v1'
+    analysis.mkdir(parents=True)
+    subjects, cells = [], []
+    for metric in ('D1', 'D_EH', 'D_drive_H', 'Hb_residual_to_zero_MSE_ratio'):
+        for number in range(3):
+            row = dict(dataset='fixture', subject=f's{number}', metric=metric,
+                       value=.1+number*.2, planned_windows=2, available_windows=2)
+            subjects.append(row)
+            for task in ('task_a', 'task_b'):
+                cells.append(dict(row, task_label=task, planned_windows=1, available_windows=1))
+    pd.DataFrame(subjects).to_csv(analysis/'subjects.csv', index=False)
+    pd.DataFrame(cells).to_csv(analysis/'subject_tasks.csv', index=False)
+    _write(analysis/'examples.json', dict(examples=[]))
+    _write(analysis/'summary.json', dict(schema=renderer.FIXED_ANALYSIS_SCHEMA,
+        status='completed', parameter_mode='fixed',
+        scope_description='synthetic fixed fixture; no measured data authorization',
+        files=dict(subjects='subjects.csv', subject_tasks='subject_tasks.csv', examples='examples.json')))
+    return run, analysis
+
+
+def test_fixed_analysis_is_independent_of_pending_current_dof_and_keeps_denominators(tmp_path):
+    run, analysis = _fixed_analysis(tmp_path)
+    (run/'current_dof').mkdir()
+    _write(run/'current_dof/summary.json', dict(status='running'))
+    evidence = renderer.load_fixed_analysis(run, analysis)
+    assert len(evidence['tables']['subjects']) == 12
+    assert evidence['examples'] == []
+    subjects = evidence['tables']['subjects']
+    subjects.loc[0, 'available_windows'] = 3
+    subjects.to_csv(analysis/'subjects.csv', index=False)
+    with pytest.raises(ValueError, match='support denominator'):
+        renderer.load_fixed_analysis(run, analysis)
+
+
+def test_fixed_analysis_rejects_nonfixed_mode_and_escaping_declared_artifacts(tmp_path):
+    run, analysis = _fixed_analysis(tmp_path)
+    summary = json.loads((analysis/'summary.json').read_text())
+    summary['parameter_mode'] = 'current_dof'; _write(analysis/'summary.json', summary)
+    with pytest.raises(ValueError, match='fixed-parameter'):
+        renderer.load_fixed_analysis(run, analysis)
+    summary['parameter_mode'] = 'fixed'; summary['files']['subjects'] = '../outside.csv'
+    _write(analysis/'summary.json', summary)
+    with pytest.raises(ValueError, match='stay inside'):
+        renderer.load_fixed_analysis(run, analysis)
+
+
+def test_fixed_content_explains_ratio_conditions_and_physiology_limits(tmp_path):
+    run, analysis = _fixed_analysis(tmp_path)
+    content = renderer.build_fixed_content(renderer.load_fixed_analysis(run, analysis), tmp_path/'figures')
+    paragraphs = '\n'.join(block.get('text', '') for section in content['sections'] for block in section['blocks'])
+    assert '不是两个驱动之差' in paragraphs
+    assert '可大于 1' in paragraphs and '未解释方差' in paragraphs
+    assert '未应用项目通用缓存中的 EOG 回归步骤' in paragraphs
+    assert '不是分离出的神经真值' in paragraphs
+    assert '不能据此认定眼电造成失配' in paragraphs
+    assert all(Path(block['path']).suffix == '.png' for section in content['sections']
+               for block in section['blocks'] if block['type'] == 'figure')
+
+
+def test_fixed_task_contrast_matrix_sign_and_unadjusted_values_are_preserved(tmp_path, monkeypatch):
+    table = pd.DataFrame([dict(dataset='fixture', metric='D1', task_a='a', task_b='b',
+                              mean_difference=.3, q_value=.2)])
+    matrices = []
+    def inspect(fig, path):
+        matrices.extend(image.get_array().copy() for axis in fig.axes for image in axis.images)
+        renderer._plotting().close(fig)
+        return str(path)
+    monkeypatch.setattr(renderer, '_save', inspect)
+    renderer.fixed_task_contrast_figure(table, 'D1', tmp_path/'contrast.png')
+    np.testing.assert_allclose(matrices[0], [[0., .3], [-.3, 0.]])
+
+
+def test_fixed_heatmap_preserves_subject_ids_without_metric_support(tmp_path, monkeypatch):
+    run, analysis = _fixed_analysis(tmp_path)
+    evidence = renderer.load_fixed_analysis(run, analysis)
+    frame = evidence['tables']['subject_tasks']
+    frame.loc[(frame.subject == 's2') & (frame.metric == 'D1'), 'value'] = np.nan
+    labels, matrices = [], []
+    def inspect(fig, path):
+        labels.extend(tick.get_text() for tick in fig.axes[0].get_yticklabels())
+        matrices.append(fig.axes[0].images[0].get_array().copy())
+        renderer._plotting().close(fig)
+        return str(path)
+    monkeypatch.setattr(renderer, '_save', inspect)
+    renderer.fixed_subject_task_heatmap(evidence, 'fixture', 'D1', tmp_path/'ids.png', maximum=1.)
+    assert labels == ['s0', 's1', 's2']
+    assert np.ma.getmaskarray(matrices[0])[2].all()
+
+
+def test_ocular_examples_use_compressed_indices_and_reproduce_retained_scores(tmp_path):
+    run = _run(tmp_path)
+    evidence = dict(run=run)
+    fixed_example = dict(array_path='tasks/fixture.npz')
+    arrays = renderer._array_data(evidence, fixed_example)
+    raw = arrays['target'][:, 0]
+    proxies = dict(raw=raw, clean=raw*.85, amplitude=raw*.8)
+    ocular = np.ones((2, len(raw), 2))
+    np.savez_compressed(run/'ocular.npz', window_indices=[7, 9], rms_10hz=ocular,
+                        valid_mask=np.ones(ocular.shape, bool))
+    fields = {name+'_proxy': np.full((2, 2, len(raw)), np.nan) for name in proxies}
+    for name, value in proxies.items(): fields[name+'_proxy'][1, 1] = value
+    np.savez_compressed(run/'counterfactual.npz', window_indices=[8, 9],
+                        pair_ids=['unselected', 'pair0'], **fields)
+    example = dict(pair='pair0', window_index=9, fixed_array_path='tasks/fixture.npz',
+                   ocular_array_path='ocular.npz', counterfactual_array_path='counterfactual.npz',
+                   ocular_array_index=1, counterfactual_window_index=1, counterfactual_pair_index=1)
+    score = arrays['score_mask'][:, 0]
+    for name, value in proxies.items():
+        example['eog_'+name+'_DEH_mse'] = float(np.mean(((value[score]-arrays['hb_only_prediction'][score, 0])/arrays['sd'][0])**2))
+    loaded = renderer.ocular_example_arrays(evidence, example)
+    np.testing.assert_allclose(loaded['proxies']['raw'], raw)
+    assert loaded['activity'].shape == (len(raw), 2)
+    with pytest.raises(ValueError, match='different original window'):
+        renderer.ocular_example_arrays(evidence, dict(example, ocular_array_index=0))
+    with pytest.raises(ValueError, match='MSE disagrees'):
+        renderer.ocular_example_arrays(evidence, dict(example, eog_raw_DEH_mse=100.))
+
+
+def _visual_impact_fixture():
+    slots=[dict(slot=i,declared=f'old{i}',actual=f'new{i}' if i<2 else f'old{i}',
+                raw_channel=f'A{i+1}',mismatch=i<2) for i in range(6)]
+    return dict(schema='tak_mismatch_visual_channel_impact_audit_v1',status='confirmed',
+        report_notice='Visual映射命中；只修解释，不改变数字。',
+        scope=dict(dataset='visual_cognitive_motivation',native_records=1,subjects=1,
+                   distinct_selected_sites=1,affected_selected_sites=1),
+        nearest6_panels=[dict(pair_id='Probe1:CH1',nearest6=slots,mismatch_count=2)],
+        unaltered_numerical_evidence=dict(status='unchanged'),
+        comparison_audit=dict(path='metadata_audit.json'))
+
+
+def test_visual_revision_preserves_numbers_equations_and_unaffected_eog_context():
+    content=dict(title='retained',summary=['视觉认知与动机：D1=.3'],sections=[
+        dict(title='视觉认知与动机：任务分布',blocks=[
+            dict(type='table',columns=['metric','value'],rows=[['D1',.3],['D_EH',2.]],caption='retained'),
+            dict(type='figure',path='figures/a.png',caption='Visual retained curves',source='frozen'),
+            dict(type='equation',latex=r'D_1=0.3',caption='retained')]),
+        dict(title='EOG C：另两库',blocks=[dict(type='figure',path='figures/b.png',caption='ST/Sim C',source='frozen')])])
+    original=json.loads(json.dumps(content))
+    revised=renderer.revise_visual_mapping_content(content,_visual_impact_fixture(),'impact.json')
+    assert content==original
+    visual=next(s for s in revised['sections'] if s['title'].startswith('视觉认知'))
+    table=next(b for b in visual['blocks'] if b['type']=='table')
+    assert table['rows']==[['D1',.3],['D_EH',2.]]
+    assert next(b for b in visual['blocks'] if b['type']=='equation')['latex']==r'D_1=0.3'
+    assert '冻结错误映射下工程诊断' in next(b for b in visual['blocks'] if b['type']=='figure')['caption']
+    eog=next(s for s in revised['sections'] if s['title'].startswith('EOG C'))
+    assert eog['blocks'][0]['caption']=='ST/Sim C'
+    assert all(b.get('preserve_bitmap') is True for s in revised['sections'] for b in s['blocks'] if b['type']=='figure')
+    assert not content['sections'][1]['blocks'][0].get('preserve_bitmap',False)
+    assert 'v2' not in revised['title']
+    assert revised['interpretation_revision']['retained_table_cells_unchanged'] is True
+
+
+def test_visual_revision_rejects_unconfirmed_or_inconsistent_panel_audit():
+    content=dict(title='retained',summary=[],sections=[])
+    audit=_visual_impact_fixture();audit['status']='pending'
+    with pytest.raises(ValueError,match='confirmed owning'):
+        renderer.revise_visual_mapping_content(content,audit,'impact.json')
+    audit=_visual_impact_fixture();audit['nearest6_panels'][0]['mismatch_count']=3
+    with pytest.raises(ValueError,match='mismatch counts'):
+        renderer.revise_visual_mapping_content(content,audit,'impact.json')
