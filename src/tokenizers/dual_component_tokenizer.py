@@ -578,5 +578,124 @@ class WaveformDictionary:
         return obj
 
 
+class BandGainResidualPredictor(nn.Module):
+    """Estimate voltage O from observed bands and slow, bounded gains.
+
+    This is an encoder-side continuous estimator. Its output must be quantized
+    by a WaveformDictionary for deployment; the hard decoder never reads the
+    observed carriers or gains. The caller declares the filtering support.
+    """
+
+    def __init__(self, feature_mean, feature_scale, *, channels=16, width=64,
+                 context_bins=19, joint=False, max_log_gain=.7, hop=20):
+        super().__init__()
+        mean = torch.as_tensor(feature_mean, dtype=torch.float32)
+        scale = torch.as_tensor(feature_scale, dtype=torch.float32)
+        if (mean.ndim != 2 or mean.shape[-1] != 5 or scale.shape != mean.shape
+                or not torch.isfinite(mean).all() or not torch.isfinite(scale).all()
+                or not (scale > 0).all() or context_bins < 1 or context_bins % 2 != 1
+                or channels < 1 or width < 1 or hop < 1 or max_log_gain <= 0):
+            raise ValueError('finite training band scales and odd gain context required')
+        self.register_buffer('feature_mean', mean)
+        self.register_buffer('feature_scale', scale)
+        self.channels, self.hop = int(channels), int(hop)
+        self.joint, self.context_bins = bool(joint), int(context_bins)
+        self.max_log_gain = float(max_log_gain)
+        self.channel_embedding = nn.Embedding(len(mean), 8)
+        count = channels if joint else 1
+        self.network = nn.Sequential(
+            nn.Conv1d(13 * count + 1, width, 1), nn.GELU(),
+            nn.Conv1d(width, width, context_bins, padding=context_bins // 2, groups=width),
+            nn.GELU(), nn.Conv1d(width, width, 1), nn.GELU(),
+            nn.Conv1d(width, 5 * count, 1),
+        )
+        nn.init.zeros_(self.network[-1].weight)
+        nn.init.zeros_(self.network[-1].bias)
+
+    def forward(self, carriers, log_power, coordinate_ids):
+        if (carriers.ndim != 4 or log_power.ndim != 4 or carriers.shape[-1] != 5
+                or carriers.shape[:2] != log_power.shape[:2]
+                or carriers.shape[1] != self.channels or log_power.shape[-1] != 5
+                or carriers.shape[2] != log_power.shape[2] * self.hop
+                or coordinate_ids.shape != carriers.shape[:2]
+                or coordinate_ids.dtype != torch.long):
+            raise ValueError('aligned [batch,electrode,time,band] and integer coordinates required')
+        if (not torch.isfinite(carriers).all() or not torch.isfinite(log_power).all()
+                or (coordinate_ids < 0).any() or (coordinate_ids >= len(self.feature_mean)).any()):
+            raise ValueError('finite observed-only features and registered coordinates required')
+        batch, channels, steps, _ = log_power.shape
+        standardized = ((log_power - self.feature_mean[coordinate_ids, None, :])
+                        / self.feature_scale[coordinate_ids, None, :])
+        metadata = self.channel_embedding(coordinate_ids)[:, :, None, :].expand(-1, -1, steps, -1)
+        value = torch.cat((standardized, metadata), -1)
+        if self.joint:
+            value = value.permute(0, 1, 3, 2).reshape(batch, channels * 13, steps)
+        else:
+            value = value.reshape(batch * channels, steps, 13).transpose(1, 2)
+        # An explicit support channel distinguishes padded context from a
+        # genuine feature vector at the training mean.
+        value = torch.cat((value, value.new_ones((len(value), 1, steps))), 1)
+        nodes = self.max_log_gain * torch.tanh(self.network(value))
+        nodes = nodes.reshape(batch * channels, 5, steps)
+        native = torch.nn.functional.interpolate(nodes, size=carriers.shape[2],
+                                                  mode='linear', align_corners=False)
+        native = native.reshape(batch, channels, 5, -1).transpose(-1, -2)
+        residual = ((1 - native.exp()) * carriers).sum(-1)
+        return dict(O=residual, log_gain=nodes.reshape(batch, channels, 5, steps).transpose(-1, -2))
+
+
+class ProjectionGainResidualPredictor(nn.Module):
+    """EEG-reference-aware gain estimation in the frozen three-ROI subspace.
+
+    The observed proxy is an EEG measurement transform, not a teacher output.
+    The fixed projection inverse constrains gains to the target constructor's
+    shared electrode directions. The hard O consumer remains waveform lookup.
+    """
+    def __init__(self, proxy_mean, proxy_scale, gain_map, *, channels=16,
+                 width=64, context_bins=19, max_log_gain=.7, hop=20):
+        super().__init__()
+        mean=torch.as_tensor(proxy_mean,dtype=torch.float32)
+        scale=torch.as_tensor(proxy_scale,dtype=torch.float32)
+        mapping=torch.as_tensor(gain_map,dtype=torch.float32)
+        if (mean.ndim!=2 or mean.shape[-1]!=3 or scale.shape!=mean.shape
+                or mapping.shape!=(len(mean),channels*5,3) or not torch.isfinite(mean).all()
+                or not torch.isfinite(scale).all() or not torch.isfinite(mapping).all()
+                or not (scale>0).all() or context_bins<1 or context_bins%2!=1 or hop<1):
+            raise ValueError('training EEG proxy scales, fixed gain maps and odd context required')
+        self.register_buffer('proxy_mean',mean);self.register_buffer('proxy_scale',scale)
+        self.register_buffer('gain_map',mapping)
+        kernel=torch.exp(-.5*torch.arange(-4,5,dtype=torch.float32)**2);kernel/=kernel.sum()
+        self.register_buffer('gain_kernel',kernel.reshape(1,1,-1))
+        self.channels,self.hop,self.max_log_gain=channels,hop,float(max_log_gain)
+        self.dataset_embedding=nn.Embedding(len(mean),4)
+        self.network=nn.Sequential(nn.Conv1d(9,width,1),nn.GELU(),
+            nn.Conv1d(width,width,context_bins,padding=context_bins//2,groups=width),nn.GELU(),
+            nn.Conv1d(width,width,1),nn.GELU(),nn.Conv1d(width,3,1))
+        nn.init.zeros_(self.network[-1].weight);nn.init.zeros_(self.network[-1].bias)
+
+    def forward(self, carriers, observed_proxy, dataset_ids):
+        if (carriers.ndim!=4 or carriers.shape[1]!=self.channels or carriers.shape[-1]!=5
+                or observed_proxy.shape!=(len(carriers),carriers.shape[2]//self.hop,3)
+                or carriers.shape[2]%self.hop or dataset_ids.shape!=(len(carriers),)
+                or dataset_ids.dtype!=torch.long or (dataset_ids<0).any()
+                or (dataset_ids>=len(self.proxy_mean)).any()
+                or not torch.isfinite(carriers).all() or not torch.isfinite(observed_proxy).all()):
+            raise ValueError('aligned observed EEG carriers, proxy and dataset IDs required')
+        batch,steps,_=observed_proxy.shape
+        normalized=(observed_proxy-self.proxy_mean[dataset_ids,None])/self.proxy_scale[dataset_ids,None]
+        metadata=self.dataset_embedding(dataset_ids)[:,None].expand(-1,steps,-1)
+        time=torch.linspace(0,1,steps,device=carriers.device,dtype=carriers.dtype)[None,:,None].expand(batch,-1,-1)
+        features=torch.cat((normalized,metadata,time,torch.ones_like(time)),-1).transpose(1,2)
+        directions=self.network(features)
+        nodes=.5*torch.einsum('bkt,bdk->bdt',directions,self.gain_map[dataset_ids])
+        smooth=torch.nn.functional.conv1d(torch.nn.functional.pad(nodes.reshape(-1,1,steps),(4,4),mode='replicate'),self.gain_kernel)
+        nodes=smooth.reshape(batch,self.channels*5,steps).clamp(-self.max_log_gain,self.max_log_gain)
+        native=torch.nn.functional.interpolate(nodes,size=carriers.shape[2],mode='linear',align_corners=False)
+        native=native.reshape(batch,self.channels,5,-1).transpose(-1,-2)
+        return dict(O=((1-native.exp())*carriers).sum(-1),
+                    log_gain=nodes.reshape(batch,self.channels,5,steps).transpose(-1,-2))
+
+
 __all__ = ["DualComponentTokenizer", "LocalComponentBranch", "TemporalPatchEncoder", "WaveformDictionary",
-           "local_patch_context", "VARIANTS"]
+           "ProjectionGainResidualPredictor",
+           "BandGainResidualPredictor", "local_patch_context", "VARIANTS"]

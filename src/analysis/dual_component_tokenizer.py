@@ -1199,3 +1199,162 @@ def render_voltage_examples(out,examples,summary):
         selection='first identity, median and P90 baseline Hb error; distinct subjects; EEG first native-order retained electrode of same trial',
         source='voltage_summary.json and frozen checkpoints; no fitted graphical smoothing'))
     return files
+
+
+def eeg_residual_case_metrics(prediction, target, *, hop=20):
+    """Complete-window O errors in the frozen raw-observation training units."""
+    x, y = np.asarray(prediction, float), np.asarray(target, float)
+    if x.shape != y.shape or x.ndim != 2 or not np.isfinite(x).all() or not np.isfinite(y).all():
+        raise ValueError('aligned finite [case,time] residual waveforms required')
+    xc, yc = x - x.mean(1, keepdims=True), y - y.mean(1, keepdims=True)
+    denominator = np.sqrt(np.sum(xc * xc, axis=1) * np.sum(yc * yc, axis=1))
+    correlation = np.divide(np.sum(xc * yc, axis=1), denominator,
+                            out=np.full(len(x), np.nan), where=denominator > 1e-12)
+    difference = np.diff(x - y, axis=1)
+    return dict(NMSE=np.mean((x - y) ** 2, axis=1),
+                zero_NMSE=np.mean(y * y, axis=1),
+                prediction_power=np.mean(x * x, axis=1),
+                centered_correlation=correlation,
+                signed_projection=np.mean(x * y, axis=1),
+                boundary_error_NMSE=np.mean(difference[:, hop-1::hop] ** 2, axis=1),
+                derivative_error_NMSE=np.mean(difference ** 2, axis=1))
+
+
+def eeg_residual_aggregate(metrics, rows):
+    """Equal records per subject, then equal subjects; ratios after averaging.
+
+    Undefined correlations remain counted and are excluded only from that
+    metric's mean. Zero-prediction MSE and predicted power are retained so a
+    small error in raw-EEG units cannot masquerade as accurate residuals.
+    """
+    groups = defaultdict(lambda: defaultdict(list))
+    for i, row in enumerate(rows):
+        groups[(row['dataset'], row['split'], row['subject'])][row['record']].append(i)
+    def finite_mean(values):
+        values = np.asarray(values, float)
+        valid = np.isfinite(values)
+        return float(values[valid].mean()) if valid.any() else None
+    def ratios(record):
+        denominator = record['zero_NMSE']
+        record['zero_prediction_skill'] = 1 - record['NMSE'] / denominator if denominator > 0 else None
+        record['RMS_ratio'] = float(np.sqrt(record['prediction_power'] / denominator)) if denominator > 0 else None
+        record['signed_projection_ratio'] = record['signed_projection'] / denominator if denominator > 0 else None
+        return record
+    subjects = []
+    for (dataset, split, subject), records in sorted(groups.items()):
+        indices = [i for group in records.values() for i in group]
+        row = dict(dataset=dataset, split=split, subject=subject, records=len(records), cases=len(indices),
+                   undefined_correlations=int(np.sum(~np.isfinite(metrics['centered_correlation'][indices]))))
+        row.update({name: finite_mean([finite_mean(value[group]) for group in records.values()])
+                    for name, value in metrics.items()})
+        subjects.append(ratios(row))
+    datasets = []
+    for dataset, split in sorted({(r['dataset'], r['split']) for r in subjects}):
+        selected = [r for r in subjects if (r['dataset'], r['split']) == (dataset, split)]
+        row = dict(dataset=dataset, split=split, subjects=len(selected), cases=sum(r['cases'] for r in selected),
+                   undefined_correlations=sum(r['undefined_correlations'] for r in selected))
+        row.update({name: finite_mean([r[name] for r in selected]) for name in metrics})
+        datasets.append(ratios(row))
+    return subjects, datasets
+
+
+def summarize_eeg_o_run(run, output):
+    """Read completed subject tables and export paired, descriptive evidence."""
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    run, output = Path(run), Path(output)
+    result = json.loads((run/'eeg_o_summary.json').read_text())
+    if result['status'] != 'completed':raise ValueError('complete EEG-O producer required')
+    output.mkdir(parents=True, exist_ok=True)
+    parent=Path(result['source_parent']);candidate=result['selection']['candidate']
+    sources=[];paired=[];seeds=[]
+    for job in result['selected_results']:
+        seed=job['seed'];seeds.append(seed)
+        new_path=run/'eeg_o_jobs'/candidate/f'seed_{seed}'/'subjects.csv'
+        old_path=parent/'voltage_jobs/eeg_voltage'/f'seed_{seed}'/'evaluation/vq4_subjects.csv'
+        sources.extend([str(new_path),str(old_path)])
+        with new_path.open() as stream:new=list(csv.DictReader(stream))
+        with old_path.open() as stream:old=list(csv.DictReader(stream))
+        lookup={(r['dataset'],r['subject'],r['component'],r['metric']):r for r in old
+                if r['split']=='validation' and r['signal']=='joint'}
+        for row in new:
+            if row['variant']!='hard':continue
+            if row['split']!='validation':raise ValueError('non-validation row in EEG-O report')
+            key=(row['dataset'],row['subject']);base=lookup[(*key,'O','NMSE')]
+            if int(base['cases'])!=int(row['cases']):raise ValueError('unmatched residual case population')
+            record=dict(dataset=key[0],subject=key[1],seed=seed,cases=int(row['cases']),records=int(row['records']))
+            record.update({k:float(row[k]) for k in ['NMSE','zero_NMSE','prediction_power','centered_correlation',
+                'signed_projection','boundary_error_NMSE','derivative_error_NMSE','frozen_S_plus_O_NMSE']})
+            record['old_NMSE']=float(base['value'])
+            record['old_correlation']=float(lookup[(*key,'O','centered_correlation')]['value'])
+            record['old_sum_NMSE']=float(lookup[(*key,'sum','NMSE')]['value'])
+            paired.append(record)
+    groups=defaultdict(list)
+    for row in paired:groups[(row['dataset'],row['subject'])].append(row)
+    subjects=[]
+    for (dataset,subject),rows in sorted(groups.items()):
+        if {r['seed'] for r in rows}!=set(seeds):raise ValueError('missing paired optimization seed')
+        record=dict(dataset=dataset,subject=subject,cases=rows[0]['cases'],records=rows[0]['records'],seeds=len(rows))
+        record.update({k:float(np.mean([r[k] for r in rows])) for k in rows[0]
+                       if k not in ('dataset','subject','seed','cases','records')})
+        subjects.append(record)
+    comparisons=[]
+    for dataset in sorted({r['dataset'] for r in subjects}):
+        rows=[r for r in subjects if r['dataset']==dataset]
+        average={k:float(np.mean([r[k] for r in rows])) for k in rows[0]
+                 if k not in ('dataset','subject','cases','records','seeds')}
+        new=[dict(dataset=dataset,subject=r['subject'],NMSE=r['NMSE']) for r in rows]
+        old=[dict(dataset=dataset,subject=r['subject'],NMSE=r['old_NMSE']) for r in rows]
+        paired_error=paired_subject_bootstrap(new,old,samples=5000,seed=20261029)
+        comparisons.append(dict(dataset=dataset,subjects=len(rows),cases=sum(r['cases'] for r in rows),**average,
+            old_to_zero_ratio=average['old_NMSE']/average['zero_NMSE'],
+            new_to_zero_ratio=average['NMSE']/average['zero_NMSE'],
+            relative_error_reduction_percent=100*(1-average['NMSE']/average['old_NMSE']),
+            zero_prediction_skill=1-average['NMSE']/average['zero_NMSE'],
+            RMS_ratio=float(np.sqrt(average['prediction_power']/average['zero_NMSE'])),
+            signed_projection_ratio=average['signed_projection']/average['zero_NMSE'],paired_error=paired_error))
+    _csv(output/'paired_subject_seeds.csv',paired);_csv(output/'paired_subjects.csv',subjects)
+    cfg=json.loads((run/'resolved_config.json').read_text())['config']
+    summary=dict(source_run=str(run),producer_summary=str(run/'eeg_o_summary.json'),candidate=candidate,seeds=seeds,
+        source_tables=sources,comparisons=comparisons,
+        training_budget=[dict(candidate=r['candidate']['name'],seed=r['seed'],step=r['step'],budget=r['budget'])
+                         for r in json.loads((run/'eeg_o_screen_jobs.json').read_text())['jobs']
+                         +json.loads((run/'eeg_o_replication_jobs.json').read_text())['jobs']],
+        planned_trials=result['planned_trials'],retained_trials=result['retained_trials'],
+        input_support=cfg['eeg_o']['raw_input_support'],old_input_support='one electrode, local 2 s raw voltage',
+        bits_per_O_second_per_electrode=280,test_used=False,
+        aggregation='equal cases within record, equal records within subject, seeds averaged within subject, equal subjects; ratios calculated after averaging',
+        inference='paired whole-subject percentile95% interval; validation-selected candidate, fixed scales and selection, no multiplicity correction or independent confirmation')
+    _json(output/'summary.json',summary)
+    plt.rcParams.update({'font.size':9,'font.family':'DejaVu Sans'})
+    fig,axes=plt.subplots(len(comparisons),3,figsize=(14,7),squeeze=False)
+    fig.subplots_adjust(left=.075,right=.985,bottom=.20,top=.82,hspace=.45,wspace=.28)
+    titles=['O MSE / zero-prediction MSE (lower)','O centered correlation (higher)','Frozen S + O NMSE (lower)']
+    for i,row in enumerate(comparisons):
+        names=('old_to_zero_ratio','new_to_zero_ratio'),('old_correlation','centered_correlation'),('old_sum_NMSE','frozen_S_plus_O_NMSE')
+        for j,pair in enumerate(names):
+            ax=axes[i,j];ax.bar([0,1],[row[k] for k in pair],color=['#888888','#0072B2'],width=.55)
+            for seed_index,seed in enumerate(seeds):
+                data=[r for r in paired if r['dataset']==row['dataset'] and r['seed']==seed]
+                if j==0:vals=[np.mean([r['old_NMSE'] for r in data])/np.mean([r['zero_NMSE'] for r in data]),np.mean([r['NMSE'] for r in data])/np.mean([r['zero_NMSE'] for r in data])]
+                else:vals=[np.mean([r[k] for r in data]) for k in pair]
+                ax.scatter(np.array([0,1])+(seed_index-1)*.08,vals,color='black',s=20,marker=['o','^','s'][seed_index],zorder=3)
+            if j==0:ax.axhline(1,color='#333',ls='--',lw=1,label='Zero prediction')
+            ax.set_xticks([0,1],['Original','New']);ax.set_title(titles[j]);ax.grid(axis='y',alpha=.2)
+            for x,k in enumerate(pair):ax.annotate(f'{row[k]:.4g}',(x,row[k]),xytext=(0,5),textcoords='offset points',ha='center')
+            if j==0:
+                short='Single-Trial' if row['dataset']=='eeg_fnirs_single_trial' else 'Simultaneous'
+                ax.set_ylabel(f'{short}\n{row["subjects"]} validation subjects')
+            ax.margins(y=.20)
+            if j==0:ax.set_ylim(0,1.2)
+            elif j==1:ax.set_ylim(0,.5)
+            else:ax.set_ylim(0,1.2*max(max(r['old_sum_NMSE'],r['frozen_S_plus_O_NMSE']) for r in paired))
+    fig.suptitle(f'EEG-O refinement: {candidate} | fixed targets and O bitrate | three optimization seeds',fontsize=15,y=.98)
+    fig.text(.075,.90,'Bars: equal-subject means after seed averaging. Circle/triangle/square: seeds 17/29/43 on the same subjects; not confidence intervals.',fontsize=10)
+    support='New: retained 90 s EEG reference/filter support; central 20 s observed proxy.' if cfg['eeg_o'].get('architecture')=='projection_gain' else 'New: full 20 s EEG filtering; gain-network context is shorter.'
+    fig.text(.075,.115,'Original: single-electrode 2 s input. '+support,fontsize=10)
+    fig.text(.075,.075,'O = fixed conditional voltage correction residual. Both hard O decoders use 280 bit/s/electrode; no measured-signal or gain sidecar.',fontsize=10)
+    fig.text(.075,.035,'Identical development subjects and targets; input support differs. Paired subject intervals and all source tables are retained in summary.json.',fontsize=10)
+    fig.savefig(output/'eeg_o_comparison.png',dpi=250);plt.close(fig)
+    return summary

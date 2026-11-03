@@ -38,7 +38,7 @@ import yaml
 DEFAULT_CONFIG = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml'
 STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark',
           'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all', 'refine', 'refine-one',
-          'voltage', 'voltage-one')
+          'voltage', 'voltage-one', 'eeg-o', 'eeg-o-one')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
 
@@ -79,6 +79,24 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_eeg_o_v1':
+        extra = cfg
+        cfg = read_config(SOURCE / extra['base_contract'])
+        cfg.update(schema=extra['schema'], experiment_id=extra['experiment_id'],
+                   eeg_o=extra['eeg_o'], claim_limits=extra['claim_limits'])
+        cfg['resources'].update(extra['resources'])
+        spec = cfg['eeg_o']
+        names=(['proxy_short','proxy_full'] if spec.get('architecture')=='projection_gain'
+               else ['single_short','single_long','joint_long'])
+        if (spec['allowed_splits'] != ['train', 'validation'] or spec['test_access'] != 'forbidden'
+                or spec['sample_rate_hz'] != 200 or spec['hop_samples'] != 20
+                or spec['channels'] != 16 or spec['length_samples'] != 4000
+                or spec['codebook_size'] != 128 or spec['codebook_levels'] != 4
+                or spec['steps'] < 1 or spec['batch_trials'] < 1
+                or spec['bits_per_O_patch'] != 28 or spec['bits_per_O_second_per_electrode'] != 280
+                or [c['name'] for c in spec['candidates']] != names
+                or any(c['context_bins'] < 1 or c['context_bins'] % 2 != 1 for c in spec['candidates'])):
+            raise ValueError('finite EEG-O development-only tensor, candidate and bitrate contract required')
     if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_voltage_v1':
         extra=cfg;cfg=yaml.safe_load((SOURCE/extra['base_contract']).read_text())
         cfg.update(schema=extra['schema'],experiment_id=extra['experiment_id'],voltage=extra['voltage'],claim_limits=extra['claim_limits'])
@@ -926,11 +944,19 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema']=='dual_component_eeg_o_v1' and args.stage not in ('check','synthetic','eeg-o','eeg-o-one'):
+        raise ValueError('EEG-O refinement uses only its development stages')
+    if cfg['schema']=='dual_component_eeg_o_v1' and args.evaluation_split!='development':
+        raise ValueError('EEG-O refinement forbids test evaluation')
     if cfg['schema']=='dual_component_voltage_v1' and args.stage not in ('check','synthetic','voltage','voltage-one'):
         raise ValueError('voltage targets require their own versioned execution stages')
     if cfg['schema'] == 'dual_component_refinement_v1' and args.stage not in ('check', 'refine', 'refine-one'):
         raise ValueError('refinement uses its finite train/validation-only stages')
     if args.stage == 'check':
+        if cfg['schema']=='dual_component_eeg_o_v1':
+            print(json.dumps(dict(status='eeg_o_contract_valid', experiment_id=cfg['experiment_id'],
+                allowed_splits=cfg['eeg_o']['allowed_splits'], test_access='forbidden',
+                candidates=cfg['eeg_o']['candidates'], measured_arrays_read=0)));return
         if cfg['schema']=='dual_component_voltage_v1':
             print(json.dumps(dict(status='voltage_contract_valid',experiment_id=cfg['experiment_id'],
                 stages=['check','synthetic','voltage','voltage-one'],candidates=cfg['voltage']['candidates'],
@@ -939,12 +965,13 @@ def main(argv=None):
         print(json.dumps(dict(status='software_contract_valid', stages=STAGES, variants=VARIANTS,
             seeds=seeds(cfg), protected_data='forbidden', measured_arrays_read=0))); return
     if args.stage == 'synthetic':
-        result = voltage_synthetic(cfg) if cfg['schema']=='dual_component_voltage_v1' else synthetic(cfg)
+        result = (eeg_o_synthetic(cfg) if cfg['schema']=='dual_component_eeg_o_v1' else
+                  voltage_synthetic(cfg) if cfg['schema']=='dual_component_voltage_v1' else synthetic(cfg))
         if args.output: write_json(args.output / 'synthetic.json', result)
         print(json.dumps(serial(result))); return
     if args.output is None: raise ValueError('--output required for a retained run')
     out, root = args.output.resolve(), args.project_root.resolve()
-    if args.steps is not None and (args.stage not in ('train-one','voltage-one') or args.pilot_output is None):
+    if args.steps is not None and (args.stage not in ('train-one','voltage-one','eeg-o-one') or args.pilot_output is None):
         raise ValueError('step overrides require train-one and a separate --pilot-output')
     if args.pilot_output and args.pilot_output.resolve() == out:
         raise ValueError('pilot output must differ from the formal run root')
@@ -955,10 +982,13 @@ def main(argv=None):
     gpu_workers = args.gpu_workers or int(cfg.get('resources', {}).get('gpu_workers_per_device', 1))
     if gpu_workers not in (1, 2): raise ValueError('one or two measured GPU workers per device required')
     if args.parent_pid is not None:
-        if args.stage not in ('train-one', 'masked-one', 'refine-one','voltage-one') or os.getppid() != args.parent_pid:
+        if args.stage not in ('train-one', 'masked-one', 'refine-one','voltage-one','eeg-o-one') or os.getppid() != args.parent_pid:
             raise ValueError('worker must be a direct child of its live controller')
         freeze_contract(out, cfg, root)
-        if args.stage=='voltage-one':
+        if args.stage=='eeg-o-one':
+            result=eeg_o_train(cfg,out,args.candidate,args.seed,args.device,args.gpu_memory_bytes,
+                steps=args.steps,job_override=args.pilot_output,export=not args.no_export)
+        elif args.stage=='voltage-one':
             result=(voltage_final(cfg,out,args.candidate,args.seed,args.device,args.gpu_memory_bytes)
                 if args.evaluation_split=='test' else voltage_train(cfg,out,args.candidate,args.seed,args.device,args.gpu_memory_bytes,
                     steps=args.steps,job_override=args.pilot_output,export=not args.no_export))
@@ -979,7 +1009,9 @@ def main(argv=None):
         for stage in selected:
             write_json(out / 'controller.json', dict(status='running', stage=stage, pid=os.getpid(), updated=now(),
                 command=sys.argv, workers=workers, devices=devices, gpu_workers=gpu_workers))
-            if stage=='voltage': result=run_voltage(cfg,args.config.resolve(),out,root,devices,gpu_workers,workers)
+            if stage=='eeg-o': result=run_eeg_o(cfg,args.config.resolve(),out,root,devices,workers)
+            elif stage=='eeg-o-one': result=eeg_o_train(cfg,out,args.candidate,args.seed,args.device,args.gpu_memory_bytes)
+            elif stage=='voltage': result=run_voltage(cfg,args.config.resolve(),out,root,devices,gpu_workers,workers)
             elif stage=='voltage-one':result=voltage_train(cfg,out,args.candidate,args.seed,args.device,args.gpu_memory_bytes)
             elif stage == 'synthetic':
                 path = out / 'synthetic.json'
@@ -1834,9 +1866,11 @@ def voltage_final(cfg,out,name,seed,device,memory_bytes=None):
 
 
 def _launch_voltage(cfg,cfg_path,out,root,name,seed,device,workers,*,pilot=None,steps=None,final=False):
-    job=Path(pilot) if pilot else Path(out)/'voltage_jobs'/name/f'seed_{seed}';job.mkdir(parents=True,exist_ok=True)
+    residual=cfg['schema']=='dual_component_eeg_o_v1'
+    if residual and final:raise ValueError('EEG-O development cannot launch test evaluation')
+    job=Path(pilot) if pilot else Path(out)/('eeg_o_jobs' if residual else 'voltage_jobs')/name/f'seed_{seed}';job.mkdir(parents=True,exist_ok=True)
     command=[sys.executable,str(Path(__file__).resolve()),'--config',str(cfg_path),'--project-root',str(root),
-        '--output',str(out),'--stage','voltage-one','--candidate',name,'--seed',str(seed),'--device',device,
+        '--output',str(out),'--stage','eeg-o-one' if residual else 'voltage-one','--candidate',name,'--seed',str(seed),'--device',device,
         '--gpu-memory-bytes',str(cfg['resources']['max_new_gpu_memory_mib']*2**20//workers),'--parent-pid',str(os.getpid())]
     if pilot:command.extend(['--pilot-output',str(pilot),'--steps',str(steps),'--no-export'])
     if final:command.extend(['--evaluation-split','test'])
@@ -1846,10 +1880,11 @@ def _launch_voltage(cfg,cfg_path,out,root,name,seed,device,workers,*,pilot=None,
 
 def voltage_jobs(cfg,cfg_path,out,root,devices,gpu_workers,pending,*,phase):
     pending=list(pending);planned=len(pending);results=[];running=[];slots=[d for d in devices for _ in range(gpu_workers)]
+    prefix='eeg_o' if cfg['schema']=='dual_component_eeg_o_v1' else 'voltage'
     final=phase=='test';filename='test_result.json' if final else 'summary.json'
     while pending or running:
         while pending and len(running)<len(slots):
-            name,seed=pending.pop(0);job=Path(out)/'voltage_jobs'/name/f'seed_{seed}'
+            name,seed=pending.pop(0);job=Path(out)/(prefix+'_jobs')/name/f'seed_{seed}'
             if (job/filename).exists():results.append(read_json(job/filename));continue
             usage=Counter(x[3] for x in running);device=next(d for d in slots if usage[d]<slots.count(d))
             process,handle,job=_launch_voltage(cfg,cfg_path,out,root,name,seed,device,slots.count(device),final=final)
@@ -1863,23 +1898,26 @@ def voltage_jobs(cfg,cfg_path,out,root,devices,gpu_workers,pending,*,phase):
             result=read_json(job/filename) if (job/filename).exists() else dict(status='failed',candidate=key[0],seed=key[1],log=str(job/'process.log'))
             if code!=0:result=dict(result,status='failed',returncode=code)
             results.append(result)
-            write_json(Path(out)/'voltage_training_progress.json',dict(phase=phase,completed=len(results),planned=planned,
+            write_json(Path(out)/(prefix+'_training_progress.json'),dict(phase=phase,completed=len(results),planned=planned,
                 active=[dict(candidate=x[2][0],seed=x[2][1],device=x[3],pid=x[0].pid) for x in running],last=result.get('status'),updated=now()))
-    write_json(Path(out)/f'voltage_{phase}_jobs.json',dict(status='completed' if all(x['status']=='completed' for x in results) else 'failed',jobs=results))
+    write_json(Path(out)/f'{prefix}_{phase}_jobs.json',dict(status='completed' if all(x['status']=='completed' for x in results) else 'failed',jobs=results))
     if any(x['status']!='completed' for x in results):raise RuntimeError(f'voltage {phase} job failed; inspect retained process logs')
     return results
 
 
 def voltage_benchmark(cfg,cfg_path,out,root,devices):
-    path=Path(out)/'voltage_gpu_benchmark.json'
+    residual=cfg['schema']=='dual_component_eeg_o_v1'
+    prefix='eeg_o' if residual else 'voltage'
+    path=Path(out)/(prefix+'_gpu_benchmark.json')
     if path.exists():return read_json(path)['workers_per_device']
     benchmarks=[]
     for count in [1,2]:
         processes=[];started=time.monotonic()
         for i,device in enumerate(devices):
             for w in range(count):
-                pilot=Path(out)/'voltage_benchmark'/f'workers_{count}'/f'device_{i}_worker_{w}'
-                processes.append(_launch_voltage(cfg,cfg_path,out,root,'eeg_voltage',1700+i*2+w,device,count,pilot=pilot,steps=100))
+                pilot=Path(out)/(prefix+'_benchmark')/f'workers_{count}'/f'device_{i}_worker_{w}'
+                name=cfg['eeg_o']['candidates'][-1]['name'] if residual else 'eeg_voltage'
+                processes.append(_launch_voltage(cfg,cfg_path,out,root,name,1700+i*2+w,device,count,pilot=pilot,steps=100))
         records=[]
         for process,handle,job in processes:
             code=process.wait();handle.close();record=read_json(job/'summary.json') if (job/'summary.json').exists() else {}
@@ -2071,6 +2109,563 @@ def render_voltage(cfg,out,selection,device='cpu'):
                     selected_rate='4-level/branch; 560 bit/s/electrode' if modality=='eeg' else '2-level/branch; 28 bit/2s',
                     units='uV' if modality=='eeg' else 'Frozen training SD'))
     return render_voltage_examples(out,examples,read_json(Path(out)/'voltage_summary.json'))
+
+
+def _eeg_o_parent(cfg, out, root=None):
+    if root is None:
+        root = Path(read_json(Path(out) / 'resolved_config.json')['project_root'])
+    parent = (Path(root) / cfg['eeg_o']['parent_run']).resolve()
+    if read_json(parent / 'voltage_summary.json').get('status') != 'completed':
+        raise ValueError('completed retained voltage parent required')
+    return parent
+
+
+def _eeg_o_feature_worker(payload):
+    from src.data.dual_component_tokenizer import eeg_residual_band_features
+    source, destination, lo, hi = payload
+    values = np.load(source, mmap_mode='r', allow_pickle=False)
+    bands, features = eeg_residual_band_features(values[lo:hi, :, 0])
+    if destination:
+        for name, value in [('bands', bands), ('log_power', features)]:
+            target = np.lib.format.open_memmap(Path(destination) / (name + '.npy'), mode='r+')
+            target[lo:hi] = value
+            target.flush()
+    return dict(lo=lo, hi=hi, checksum=float(features.mean()),
+                peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+
+
+def eeg_o_prepare(cfg, out, root, workers):
+    from src.data.dual_component_tokenizer import load_eeg_residual_development
+    out = Path(out); parent = _eeg_o_parent(cfg, out, root)
+    manifest, arrays, trials = load_eeg_residual_development(parent)
+    folder = out / 'eeg_o_features'; folder.mkdir(exist_ok=True)
+    path = folder / 'manifest.json'
+    if path.exists():
+        result = read_json(path)
+        if result['source_parent'] != str(parent) or result['source_cases'] != len(manifest['rows']['eeg']):
+            raise ValueError('residual feature source drift')
+        return result
+    if cfg['eeg_o'].get('feature_reuse_run'):
+        reuse=(Path(root)/cfg['eeg_o']['feature_reuse_run']).resolve()
+        if read_json(reuse/'eeg_o_summary.json')['status']!='completed':raise ValueError('completed residual source required')
+        old_settings=read_json(reuse/'resolved_config.json')['config']['eeg_o']
+        for key in ['parent_run','overfit_patches','overfit_steps','codebook_size','codebook_levels','codebook_fit_patches','codebook_iterations']:
+            if cfg['eeg_o'][key]!=old_settings[key]:raise ValueError('residual diagnostic reuse contract drift')
+        result=read_json(reuse/'eeg_o_features/manifest.json')
+        if result['source_parent']!=str(parent) or result['trials']!=trials:raise ValueError('reuse identity mismatch')
+        for name in ['bands.npy','log_power.npy']:
+            destination=folder/name;original=reuse/'eeg_o_features'/name
+            if destination.exists():
+                if destination.resolve()!=original.resolve():raise ValueError('feature reuse path drift')
+            else:destination.symlink_to(original)
+        result.update(feature_reuse_run=str(reuse))
+        if cfg['eeg_o'].get('architecture')=='projection_gain':
+            result.update(eeg_o_prepare_projection(parent,folder,manifest,trials))
+        write_json(path,result)
+        write_json(out/'eeg_o_feature_progress.json',dict(status='completed',source_cases=len(manifest['rows']['eeg']),
+            reused_carriers=str(reuse),new_fields=['observed_EEG_proxy','fixed_training_projection'],updated=now()))
+        return result
+    raw_path = parent / 'voltage_cache/eeg_u.npy'
+    block = cfg['resources']['feature_block_cases']; n = len(arrays['eeg_u'])
+    benchmark_path = out / 'eeg_o_cpu_benchmark.json'
+    if benchmark_path.exists():
+        selected_workers = read_json(benchmark_path)['workers']
+    else:
+        measurements = []
+        for count in sorted({min(c, workers) for c in cfg['resources']['feature_benchmark_workers']}):
+            if count > len(os.sched_getaffinity(0)): continue
+            payloads = [(str(raw_path), None, lo, min(lo + block, min(n, 2048)))
+                        for lo in range(0, min(n, 2048), block)]
+            started = time.monotonic()
+            results = _bounded_jobs(_eeg_o_feature_worker, payloads, count)
+            if any('hi' not in r for r in results): raise RuntimeError('residual feature benchmark failed')
+            elapsed = time.monotonic() - started
+            measurements.append(dict(workers=count, seconds=elapsed, cases_per_second=min(n, 2048)/elapsed,
+                                     peak_worker_rss_kib=max(r['peak_rss_kib'] for r in results)))
+        selected_workers = max(measurements, key=lambda r: r['cases_per_second'])['workers']
+        write_json(benchmark_path, dict(workers=selected_workers, measurements=measurements,
+            reason='highest observed bounded feature throughput, including worker startup, on the same source rows'))
+    for name, shape in [('bands', (n, 4000, 5)), ('log_power', (n, 200, 5))]:
+        array_path = folder / (name + '.npy')
+        if not array_path.exists():
+            value = np.lib.format.open_memmap(array_path, mode='w+', dtype='float32', shape=shape);value.flush()
+        elif np.load(array_path, mmap_mode='r', allow_pickle=False).shape != shape:
+            raise ValueError('incomplete feature array shape mismatch')
+    progress_path = out / 'eeg_o_feature_progress.json'
+    done = set(read_json(progress_path).get('completed_blocks', [])) if progress_path.exists() else set()
+    payloads = [(str(raw_path), str(folder), lo, min(lo + block, n)) for lo in range(0, n, block) if lo not in done]
+    def progress(result, completed):
+        if 'lo' not in result:
+            write_json(progress_path, dict(status='failed', completed_blocks=sorted(done), failure=result))
+            raise RuntimeError('residual feature worker failed; retained partial cache')
+        done.add(result['lo'])
+        if completed % 16 == 0 or completed == len(payloads):
+            write_json(progress_path, dict(status='preparing', completed_blocks=sorted(done),
+                completed_cases=sum(min(block, n-lo) for lo in done), planned_cases=n, workers=selected_workers, updated=now()))
+    _bounded_jobs(_eeg_o_feature_worker, payloads, selected_workers, progress=progress)
+    features = np.load(folder / 'log_power.npy', mmap_mode='r', allow_pickle=False)
+    rows = manifest['rows']['eeg']; coordinates = manifest['coordinates']['eeg']
+    means, scales = [], []
+    for coordinate in coordinates:
+        ix = [i for i, row in enumerate(rows) if row['split']=='train' and row['coordinate']==coordinate]
+        if not ix: raise ValueError('coordinate lacks training support')
+        value = np.asarray(features[ix], dtype=float)
+        means.append(value.mean((0,1)).tolist());scales.append(np.maximum(value.std((0,1)), 1e-3).tolist())
+    result = dict(schema='eeg_o_band_features_v1', source_parent=str(parent), source_cases=n,
+        source_manifest=str(parent / 'voltage_cache/manifest.json'), trials=trials,
+        coordinates=coordinates, feature_mean=means, feature_scale=scales,
+        scale_fit='training subjects only, per dataset/electrode/band',
+        raw_support='full retained 20s offline EEG for zero-phase filtering',
+        planned_trials=manifest.get('planned_trials'), retained_trials=manifest.get('retained_trials'),
+        source_failures_preserved=True, test_used=False, feature_workers=selected_workers)
+    write_json(path, result)
+    write_json(progress_path, dict(status='completed', completed_blocks=sorted(done),
+        completed_cases=n, planned_cases=n, workers=selected_workers, updated=now()))
+    return result
+
+
+def eeg_o_prepare_projection(parent, folder, manifest, trials):
+    from src.data.dual_component_tokenizer import load_retained_eeg_projection
+    datasets=sorted({r['dataset'] for r in trials});maps={};values=[];dataset_ids=[]
+    rows=manifest['rows']['eeg']
+    for trial in trials:
+        status=task_status(parent,'voltage_prepared',trial['trial_id'])
+        if status.get('status')!='completed':raise ValueError('unavailable retained observed proxy')
+        expected=[rows[i] for i in trial['indices']]
+        observed,mapping=load_retained_eeg_projection(array_paths(parent,'voltage_prepared',dict(id=trial['trial_id'])),status['metadata'],expected)
+        dataset=trial['dataset']
+        if dataset in maps and not np.allclose(maps[dataset],mapping,rtol=0,atol=1e-7):
+            raise ValueError('projection must remain the same frozen training transform within a dataset')
+        maps[dataset]=mapping;values.append(observed);dataset_ids.append(datasets.index(dataset))
+    values=np.asarray(values,dtype='float32');ids=np.asarray(dataset_ids,dtype='int64')
+    means=[];scales=[]
+    for dataset in datasets:
+        ix=[i for i,r in enumerate(trials) if r['dataset']==dataset and r['split']=='train']
+        training=np.asarray(values[ix],float)
+        means.append(training.mean((0,1)).tolist());scales.append(np.maximum(training.std((0,1)),1e-3).tolist())
+    np.save(Path(folder)/'observed_proxy.npy',values);np.save(Path(folder)/'proxy_dataset_ids.npy',ids)
+    return dict(proxy_mean=means,proxy_scale=scales,gain_map=[maps[d].tolist() for d in datasets],proxy_datasets=datasets,
+        proxy_source_fields=['original_proxy','projection'],
+        raw_support='observed EEG proxy inherits original 90s EEG filtering and [-30,-25]s reference; central20s proxy/gain input; no Hb or teacher trajectory input')
+
+
+def _eeg_o_data(cfg, out):
+    from src.data.dual_component_tokenizer import load_eeg_residual_development
+    parent = _eeg_o_parent(cfg, out)
+    manifest, arrays, trials = load_eeg_residual_development(parent)
+    features = read_json(Path(out) / 'eeg_o_features/manifest.json')
+    if features['source_parent'] != str(parent) or features['trials'] != trials:
+        raise ValueError('residual feature/target identity mismatch')
+    arrays.update({key: np.load(Path(out) / 'eeg_o_features' / (key + '.npy'), mmap_mode='r', allow_pickle=False)
+                   for key in ('bands', 'log_power')})
+    if cfg['eeg_o'].get('architecture')=='projection_gain':
+        arrays.update({key:np.load(Path(out)/'eeg_o_features'/(key+'.npy'),mmap_mode='r',allow_pickle=False)
+                       for key in ('observed_proxy','proxy_dataset_ids')})
+    return parent, manifest, arrays, features
+
+
+def _eeg_o_batch(arrays, manifest, trial_indices, trials, device):
+    import torch
+    cases = np.asarray([trials[i]['indices'] for i in trial_indices])
+    coordinates = np.asarray([[manifest['rows']['eeg'][i]['coordinate_index'] for i in group] for group in cases])
+    carriers = torch.as_tensor(np.asarray(arrays['bands'][cases]), device=device)
+    features = (None if 'observed_proxy' in arrays else
+                torch.as_tensor(np.asarray(arrays['log_power'][cases]), device=device))
+    return cases, carriers, features, torch.as_tensor(coordinates, dtype=torch.long, device=device)
+
+
+def _eeg_o_sample_groups(trials):
+    groups = defaultdict(lambda: defaultdict(list))
+    for i, trial in enumerate(trials):
+        if trial['split']=='train':groups[trial['dataset']][trial['subject']].append(i)
+    return {d: list(subjects.values()) for d, subjects in sorted(groups.items())}
+
+
+def _eeg_o_sample(groups, count, rng):
+    datasets = list(groups); chosen = []
+    for _ in range(count):
+        subjects = groups[datasets[int(rng.integers(len(datasets)))]]
+        trials = subjects[int(rng.integers(len(subjects)))]
+        chosen.append(trials[int(rng.integers(len(trials)))])
+    return chosen
+
+
+def _eeg_o_prediction(model, carriers, power, coordinates, arrays, trial_indices, device):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import ProjectionGainResidualPredictor
+    if isinstance(model,ProjectionGainResidualPredictor):
+        proxy=torch.as_tensor(np.asarray(arrays['observed_proxy'][trial_indices]),device=device)
+        dataset_ids=torch.as_tensor(np.asarray(arrays['proxy_dataset_ids'][trial_indices]),device=device,dtype=torch.long)
+        return model(carriers,proxy,dataset_ids)['O']
+    return model(carriers,power,coordinates)['O']
+
+
+def eeg_o_train(cfg, out, name, seed, device='cpu', memory_bytes=None, *, steps=None, job_override=None, export=True):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import BandGainResidualPredictor, ProjectionGainResidualPredictor, WaveformDictionary
+    settings = cfg['eeg_o'];candidate = next(c for c in settings['candidates'] if c['name']==name)
+    job = Path(job_override) if job_override else Path(out) / 'eeg_o_jobs' / name / f'seed_{seed}'
+    job.mkdir(parents=True, exist_ok=True)
+    if (job/'summary.json').exists():return read_json(job/'summary.json')
+    with owner_lock(job, 'training'):
+        torch.set_num_threads(cfg['resources']['torch_threads']);torch.manual_seed(seed)
+        if device.startswith('cuda'):
+            torch.cuda.set_device(device)
+            cap=memory_bytes or cfg['resources']['max_new_gpu_memory_mib']*2**20
+            torch.cuda.set_per_process_memory_fraction(max(cap-512*2**20,64*2**20)/torch.cuda.get_device_properties(device).total_memory,device)
+            torch.cuda.reset_peak_memory_stats(device)
+        parent, manifest, arrays, features = _eeg_o_data(cfg, out)
+        trials = features['trials'];groups = _eeg_o_sample_groups(trials);rng=np.random.default_rng(seed)
+        model_config = dict(channels=settings['channels'], width=settings['width'], context_bins=candidate['context_bins'],
+            max_log_gain=settings['maximum_log_gain'], hop=settings['hop_samples'])
+        if settings.get('architecture')=='projection_gain':
+            model_config.update(proxy_mean=features['proxy_mean'],proxy_scale=features['proxy_scale'],gain_map=features['gain_map'])
+            model=ProjectionGainResidualPredictor(**model_config).to(device)
+        else:
+            model_config.update(feature_mean=features['feature_mean'],feature_scale=features['feature_scale'],joint=candidate['joint'])
+            model=BandGainResidualPredictor(**model_config).to(device)
+        optimizer=torch.optim.AdamW(model.parameters(),lr=settings['learning_rate'],weight_decay=settings['weight_decay'])
+        budget=int(steps or settings['steps']);checkpoint=job/'checkpoint.pt';start=0;history=[];prior_elapsed=0.
+        if checkpoint.exists():
+            saved=torch.load(checkpoint,map_location=device,weights_only=False)
+            if saved['candidate']!=candidate or saved['seed']!=seed or saved['budget']!=budget or saved['model_config']!=model_config:
+                raise ValueError('EEG-O checkpoint contract drift')
+            model.load_state_dict(saved['model_state']);optimizer.load_state_dict(saved['optimizer_state'])
+            start=saved['step'];history=saved['history'];rng.bit_generator.state=saved['rng_state']
+            prior_elapsed=saved['elapsed_seconds']
+        if start>budget:raise ValueError('checkpoint exceeded fixed EEG-O budget')
+        variance=manifest['statistics']['eeg_o']['variance'];delta_scale=manifest['statistics']['eeg_o']['derivative_mse']
+        started=time.monotonic();model.train()
+        for step in range(start,budget):
+            selected=_eeg_o_sample(groups,settings['batch_trials'],rng)
+            cases,carriers,power,coordinates=_eeg_o_batch(arrays,manifest,selected,trials,device)
+            target=torch.as_tensor(np.asarray(arrays['eeg_o'][cases])[...,0],device=device)
+            prediction=_eeg_o_prediction(model,carriers,power,coordinates,arrays,selected,device);error=prediction-target
+            mse=error.square().mean();derivative=error.diff(dim=-1).square().mean()
+            loss=mse/variance+settings['derivative_weight']*derivative/delta_scale
+            if not torch.isfinite(loss):raise FloatingPointError('nonfinite EEG-O objective')
+            optimizer.zero_grad(set_to_none=True);loss.backward();torch.nn.utils.clip_grad_norm_(model.parameters(),5.);optimizer.step()
+            if (step+1)%settings['checkpoint_every']==0 or step+1==budget:
+                elapsed=prior_elapsed+time.monotonic()-started
+                history.append(dict(step=step+1,loss=float(loss.detach()),MSE=float(mse.detach()),derivative_error=float(derivative.detach())))
+                _torch_save(checkpoint,dict(candidate=candidate,model_config=model_config,seed=seed,step=step+1,budget=budget,
+                    model_state=model.state_dict(),optimizer_state=optimizer.state_dict(),history=history,
+                    elapsed_seconds=elapsed,rng_state=rng.bit_generator.state))
+                write_json(job/'progress.json',dict(status='training',step=step+1,budget=budget,elapsed_seconds=elapsed,last=history[-1]))
+        training_elapsed=prior_elapsed+time.monotonic()-started;model.eval();evaluation=None
+        if export:
+            dictionary_path=job/'dictionary.npz'
+            if dictionary_path.exists():
+                with np.load(dictionary_path,allow_pickle=False) as z:book=WaveformDictionary.from_state(dict(z))
+            else:
+                fit_rng=np.random.default_rng(seed+101)
+                fit_trials=_eeg_o_sample(groups,max(32,2*len(features['coordinates'])),fit_rng)
+                samples=[]
+                with torch.inference_mode():
+                    for begin in range(0,len(fit_trials),settings['batch_trials']):
+                        cases,carriers,power,coordinates=_eeg_o_batch(arrays,manifest,fit_trials[begin:begin+settings['batch_trials']],trials,device)
+                        predicted=_eeg_o_prediction(model,carriers,power,coordinates,arrays,fit_trials[begin:begin+settings['batch_trials']],device).cpu().numpy()
+                        samples.append(predicted.reshape(-1,settings['hop_samples']))
+                book=WaveformDictionary(settings['codebook_size'],settings['codebook_levels'],1,0.,seed,
+                    settings['codebook_fit_patches'],settings['codebook_iterations']).fit(np.concatenate(samples))
+                write_npz(dictionary_path,**book.state())
+            evaluation=eeg_o_evaluate(cfg,out,job,model,book,seed,device)
+        result=dict(status='completed',candidate=candidate,seed=seed,step=budget,budget=budget,
+            model_parameters=sum(p.numel() for p in model.parameters()),training_elapsed_seconds=training_elapsed,
+            elapsed_seconds=time.monotonic()-started+prior_elapsed,steps_per_second=budget/max(training_elapsed,1e-9),
+            peak_cuda_reserved_bytes=torch.cuda.max_memory_reserved(device) if device.startswith('cuda') else 0,
+            evaluation=evaluation,test_used=False)
+        write_json(job/'summary.json',result)
+        write_json(job/'progress.json',dict(status='completed',step=budget,budget=budget,elapsed_seconds=result['elapsed_seconds']))
+        return result
+
+
+def eeg_o_synthetic(cfg):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import BandGainResidualPredictor, ProjectionGainResidualPredictor, WaveformDictionary
+    torch.set_num_threads(1);torch.manual_seed(17)
+    t=np.arange(800)/200
+    carriers=np.stack([np.sin(2*np.pi*f*t) for f in (2,6,10,20,35)],-1).astype('float32')[None,None]
+    power=np.log(np.maximum((carriers.reshape(1,1,40,20,5)**2).mean(3),1e-12))
+    projection=cfg['eeg_o'].get('architecture')=='projection_gain'
+    if projection:
+        mapping=np.zeros((1,5,3),dtype='float32');mapping[0,0,0]=1
+        model=ProjectionGainResidualPredictor([[0.]*3],[[1.]*3],mapping,channels=1,width=8,context_bins=19)
+        features=torch.zeros(1,40,3);coordinates=torch.zeros(1,dtype=torch.long)
+    else:
+        model=BandGainResidualPredictor([[0.]*5],[[1.]*5],channels=1,width=8,context_bins=19)
+        features=torch.tensor(power);coordinates=torch.zeros((1,1),dtype=torch.long)
+    x=torch.tensor(carriers)
+    zero=model(x,features,coordinates)['O']
+    if torch.count_nonzero(zero):raise AssertionError('zero gain must be exact zero residual')
+    coefficient=.1
+    with torch.no_grad():
+        model.network[-1].bias[0]=float(2*np.log(1-coefficient) if projection else np.arctanh(np.log(1-coefficient)/.7))
+    result=model(x,features,coordinates);expected=coefficient*x[...,0]
+    error=float(torch.max(abs(result['O']-expected)).detach())
+    result['O'].square().mean().backward()
+    if error>1e-6 or any(p.grad is not None and not torch.isfinite(p.grad).all() for p in model.parameters()):
+        raise AssertionError('band-gain synthetic identity or gradient failed')
+    rng=np.random.default_rng(17);waves=(rng.normal(size=(256,1))*np.sin(np.arange(20)[None]*.1)).astype('float32')
+    book=WaveformDictionary(16,2,max_iter=10).fit(waves)
+    restored=WaveformDictionary.from_state(book.state());ids=book.encode(waves)
+    if not np.array_equal(book.decode(ids),restored.decode(ids)):raise AssertionError('integer reload mismatch')
+    return dict(status='completed',experiment_id=cfg['experiment_id'],measured_arrays_read=0,
+        analytical_max_abs_error=error,zero_gain_identity=True,finite_gradients=True,integer_reload_exact=True)
+
+
+def eeg_o_overfit(cfg, out, device):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import DualComponentTokenizer
+    path=Path(out)/'overfit.json'
+    if path.exists():return read_json(path)
+    parent,manifest,arrays,features=_eeg_o_data(cfg,out);spec=cfg['eeg_o'];seed=spec['seed']
+    torch.set_num_threads(cfg['resources']['torch_threads']);torch.manual_seed(seed)
+    if device.startswith('cuda'):
+        torch.cuda.set_device(device)
+        torch.cuda.set_per_process_memory_fraction((cfg['resources']['max_new_gpu_memory_mib']-512)*2**20/torch.cuda.get_device_properties(device).total_memory,device)
+    rng=np.random.default_rng(seed);indices=np.array([i for i,r in enumerate(manifest['rows']['eeg']) if r['split']=='train'])
+    indices=rng.choice(indices,size=spec['overfit_patches'],replace=False);positions=rng.integers(0,200,len(indices))
+    candidate=next(c for c in cfg['voltage']['candidates'] if c['name']=='eeg_voltage')
+    inputs,masks,targets,target_masks=_voltage_batch(manifest,arrays,'eeg',indices,candidate,cfg,device,positions)
+    config=dict(input_dims={'eeg':inputs.shape[-1]},target_dims={'eeg':20},width=128,latent_dim=64,codebook_size=128)
+    branch=DualComponentTokenizer(config,'continuous_student').branches['eeg']['O'].to(device)
+    optimizer=torch.optim.AdamW(branch.parameters(),lr=.001,weight_decay=0.)
+    truth=targets['O'];mask=target_masks['O'];zero=float((truth.square()*mask).sum().cpu()/mask.sum().cpu())
+    history=[];started=time.monotonic()
+    for step in range(spec['overfit_steps']):
+        prediction=branch(inputs,masks)['waveform'];mse=((prediction-truth).square()*mask).sum()/mask.sum()
+        loss=mse/manifest['statistics']['eeg_o']['variance']
+        optimizer.zero_grad(set_to_none=True);loss.backward();optimizer.step()
+        if (step+1)%250==0 or step+1==spec['overfit_steps']:
+            history.append(dict(step=step+1,MSE=float(mse.detach()),zero_prediction_skill=1-float(mse.detach())/zero))
+            write_json(Path(out)/'overfit_progress.json',dict(step=step+1,budget=spec['overfit_steps'],last=history[-1]))
+    with torch.inference_mode():pred=branch(inputs,masks)['waveform'].cpu().numpy().ravel()
+    target=truth.cpu().numpy().ravel();mse=float(np.mean((pred-target)**2))
+    result=dict(status='completed',model='same-size original O MLP, fixed training patches only',
+        patches=len(indices),steps=spec['overfit_steps'],MSE=mse,zero_MSE=zero,zero_prediction_skill=1-mse/zero,
+        correlation=float(np.corrcoef(pred,target)[0,1]),RMS_ratio=float(np.sqrt(np.mean(pred**2)/np.mean(target**2))),
+        elapsed_seconds=time.monotonic()-started,history=history,
+        samples=[dict(id=manifest['rows']['eeg'][i]['id'],patch=int(p)) for i,p in zip(indices,positions)],
+        interpretation='training capacity check only; no validation or deployable improvement claim')
+    write_json(path,result)
+    del branch,optimizer,inputs,masks,targets,truth
+    if device.startswith('cuda'):torch.cuda.empty_cache()
+    return result
+
+
+def eeg_o_oracle(cfg, out):
+    from src.tokenizers.dual_component_tokenizer import WaveformDictionary
+    from src.analysis.dual_component_tokenizer import eeg_residual_case_metrics,eeg_residual_aggregate,_csv
+    folder=Path(out)/'oracle';folder.mkdir(exist_ok=True);path=folder/'summary.json'
+    if path.exists():return read_json(path)
+    parent,manifest,arrays,features=_eeg_o_data(cfg,out);settings=cfg['eeg_o'];rng=np.random.default_rng(settings['seed'])
+    rows=manifest['rows']['eeg'];train=np.array([i for i,r in enumerate(rows) if r['split']=='train'])
+    fit=rng.choice(train,size=min(512,len(train)),replace=False)
+    samples=np.asarray(arrays['eeg_o'][fit]).reshape(-1,20)
+    book=WaveformDictionary(settings['codebook_size'],settings['codebook_levels'],1,0.,settings['seed'],
+        settings['codebook_fit_patches'],settings['codebook_iterations']).fit(samples)
+    write_npz(folder/'dictionary.npz',**book.state())
+    validation=[i for i,r in enumerate(rows) if r['split']=='validation'];collected=defaultdict(list)
+    for start in range(0,len(validation),128):
+        indices=validation[start:start+128];truth=np.asarray(arrays['eeg_o'][indices])[:,:,0]
+        ids=book.encode(truth.reshape(len(truth),200,20));pred=book.decode(ids).reshape(truth.shape)
+        for k,v in eeg_residual_case_metrics(pred,truth).items():collected[k].append(v)
+    values={k:np.concatenate(v) for k,v in collected.items()}
+    subjects,metrics=eeg_residual_aggregate(values,[rows[i] for i in validation]);_csv(folder/'subjects.csv',subjects)
+    result=dict(status='completed',diagnostic_only=True,oracle_reads_O_target=True,metrics=metrics,
+        bits_per_O_second_per_electrode=280,training_cases=len(fit),validation_cases=len(validation),test_used=False,
+        interpretation='dictionary fitted only to training O targets; direct target encoding is a capacity reference, never a deployable student')
+    write_json(path,result);return result
+
+
+def eeg_o_evaluate(cfg, out, job, model, book, seed, device):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import DualComponentTokenizer
+    from src.analysis.dual_component_tokenizer import eeg_residual_case_metrics,eeg_residual_aggregate,_csv
+    path=Path(job)/'evaluation.json'
+    if path.exists():return read_json(path)
+    parent,manifest,arrays,features=_eeg_o_data(cfg,out);settings=cfg['eeg_o'];trials=features['trials']
+    selected=[i for i,r in enumerate(trials) if r['split']=='validation']
+    baseline_folder=parent/'voltage_jobs/eeg_voltage'/f'seed_{seed}'
+    saved=torch.load(baseline_folder/'checkpoint.pt',map_location=device,weights_only=False)
+    baseline=DualComponentTokenizer(saved['model_config'],'continuous_student').to(device)
+    baseline.load_state_dict(saved['model_state']);baseline.eval();baseline_book=_voltage_codebooks(baseline_folder/'dictionaries.npz')['S']
+    values={name:defaultdict(list) for name in ('continuous','hard')};case_order=[]
+    counts=np.zeros((book.levels,book.size),dtype='int64');replay_error=0.
+    for begin in range(0,len(selected),settings['batch_trials']):
+        with torch.inference_mode():
+            indices,carriers,power,coordinates=_eeg_o_batch(arrays,manifest,selected[begin:begin+settings['batch_trials']],trials,device)
+            prediction=_eeg_o_prediction(model,carriers,power,coordinates,arrays,selected[begin:begin+settings['batch_trials']],device).cpu().numpy().reshape(-1,4000)
+            ix=indices.ravel();truth=np.asarray(arrays['eeg_o'][ix])[:,:,0]
+            inputs,masks,_,_=_voltage_batch(manifest,arrays,'eeg',ix,saved['candidate'],cfg,device,load_targets=False)
+            sw=baseline.branches['eeg']['S'](inputs,masks)['waveform'].cpu().numpy()
+        frozen_s=baseline_book.decode(baseline_book.encode(sw)).reshape(-1,4000)
+        ids=book.encode(prediction.reshape(-1,200,20));hard=book.decode(ids).reshape(-1,4000)
+        # Decoder state round-trip is checked on the complete batch, with no inputs.
+        from src.tokenizers.dual_component_tokenizer import WaveformDictionary
+        independent=WaveformDictionary.from_state(book.state()).decode(ids).reshape(hard.shape)
+        replay_error=max(replay_error,float(np.max(abs(independent-hard))))
+        for level in range(book.levels):counts[level]+=np.bincount(ids[...,level].ravel(),minlength=book.size)
+        for name,pred in [('continuous',prediction),('hard',hard)]:
+            metrics=eeg_residual_case_metrics(pred,truth)
+            metrics['frozen_S_plus_O_NMSE']=np.mean((frozen_s+pred-np.asarray(arrays['eeg_u'][ix])[:,:,0])**2,axis=1)
+            for key,value in metrics.items():values[name][key].append(value)
+        case_order.extend(ix.tolist())
+        write_json(Path(job)/'evaluation_progress.json',dict(completed_trials=min(begin+settings['batch_trials'],len(selected)),
+            planned_trials=len(selected),updated=now()))
+    reports={};all_subjects=[];metrics_to_save={}
+    for name,terms in values.items():
+        terms={k:np.concatenate(v) for k,v in terms.items()}
+        subjects,metrics=eeg_residual_aggregate(terms,[manifest['rows']['eeg'][i] for i in case_order])
+        all_subjects.extend(dict(r,variant=name) for r in subjects);reports[name]=metrics
+        metrics_to_save.update({name+'_'+k:v for k,v in terms.items()})
+    _csv(Path(job)/'subjects.csv',all_subjects);write_npz(Path(job)/'case_metrics.npz',row_index=np.asarray(case_order),**metrics_to_save)
+    health=[]
+    for level,count in enumerate(counts):
+        p=count/count.sum();positive=p>0
+        health.append(dict(level=level,active_codes=int(positive.sum()),size=book.size,
+            perplexity=float(np.exp(-np.sum(p[positive]*np.log(p[positive])))),max_probability=float(p.max()),code_counts=count.tolist()))
+    old=read_json(baseline_folder/'evaluation/summary.json')['variants']['vq4']['metrics']
+    result=dict(status='completed',metrics=reports,codebook_health=health,validation_cases=len(case_order),
+        bits_per_O_second_per_electrode=280,integer_reload_max_abs=replay_error,
+        baseline=[r for r in old if r['split']=='validation' and r['signal']=='joint' and r['metric'] in ('NMSE','centered_correlation')],
+        S_branch='frozen original voltage S dictionary with the matching seed',
+        input_support=features['raw_support'],test_used=False)
+    if replay_error!=0:raise AssertionError('independent O integer decoder mismatch')
+    write_json(path,result);return result
+
+
+def select_eeg_o(results):
+    ranked=[]
+    for result in results:
+        if result['status']!='completed':continue
+        rows=result['evaluation']['metrics']['hard']
+        if not rows or any(r['split']!='validation' for r in rows):raise ValueError('EEG-O selection requires validation only')
+        ratios=[r['NMSE']/r['zero_NMSE'] for r in rows]
+        ranked.append(dict(candidate=result['candidate']['name'],worst_ratio=max(ratios),mean_ratio=float(np.mean(ratios))))
+    if not ranked:raise ValueError('no completed residual candidates')
+    winner=min(ranked,key=lambda r:(r['worst_ratio'],r['mean_ratio'],r['candidate']))
+    return dict(candidate=winner['candidate'],ranked=sorted(ranked,key=lambda r:r['worst_ratio']),
+                selection_split='validation',test_used=False,selected_at=now())
+
+
+def run_eeg_o(cfg, cfg_path, out, root, devices, workers):
+    settings=cfg['eeg_o'];out=Path(out)
+    synthetic_path=out/'synthetic.json'
+    if not synthetic_path.exists():write_json(synthetic_path,eeg_o_synthetic(cfg))
+    write_json(out/'eeg_o_stage.json',dict(stage='features',updated=now()))
+    prepare=eeg_o_prepare(cfg,out,root,workers)
+    write_json(out/'eeg_o_stage.json',dict(stage='benchmark',updated=now()))
+    concurrency=voltage_benchmark(cfg,cfg_path,out,root,devices)
+    # CPU dictionary reference and GPU memorization check are independent.
+    write_json(out/'eeg_o_stage.json',dict(stage='diagnostics',updated=now()))
+    if settings.get('feature_reuse_run'):
+        reuse=(Path(root)/settings['feature_reuse_run']).resolve()
+        for name in ['overfit.json','oracle']:
+            destination=out/name
+            if not destination.exists():destination.symlink_to(reuse/name,target_is_directory=name=='oracle')
+        overfit=read_json(out/'overfit.json');oracle=read_json(out/'oracle/summary.json')
+    else:
+        with ProcessPoolExecutor(max_workers=1,mp_context=multiprocessing.get_context('spawn')) as pool:
+            future=pool.submit(eeg_o_oracle,cfg,out)
+            overfit=eeg_o_overfit(cfg,out,devices[0]);oracle=future.result()
+    write_json(out/'eeg_o_diagnostics.json',dict(status='completed',overfit=overfit,oracle=oracle))
+    write_json(out/'eeg_o_stage.json',dict(stage='screen',updated=now()))
+    screen=voltage_jobs(cfg,cfg_path,out,root,devices,concurrency,
+        [(c['name'],settings['seed']) for c in settings['candidates']],phase='screen')
+    selection_path=out/'eeg_o_selection.json'
+    if not selection_path.exists():write_json(selection_path,select_eeg_o(screen))
+    selection=read_json(selection_path)
+    write_json(out/'eeg_o_stage.json',dict(stage='replication',updated=now()))
+    repetitions=voltage_jobs(cfg,cfg_path,out,root,devices,concurrency,
+        [(selection['candidate'],seed) for seed in settings['confirmation_seeds']],phase='replication')
+    selected=[r for r in screen if r['candidate']['name']==selection['candidate']]+repetitions
+    summary=dict(status='completed',experiment_id=cfg['experiment_id'],selection=selection,
+        selected_results=selected,diagnostics=dict(overfit='overfit.json',oracle='oracle/summary.json'),
+        planned_trials=prepare['planned_trials'],retained_trials=prepare['retained_trials'],
+        source_parent=prepare['source_parent'],ssms_refitted=0,test_used=False,
+        interpretation='exploratory fixed-target EEG O recovery; unchanged validation subjects across optimization seeds')
+    write_json(out/'eeg_o_summary.json',summary)
+    write_json(out/'eeg_o_stage.json',dict(stage='completed',updated=now()))
+    return summary
+
+
+def render_eeg_o_examples(cfg, out, destination):
+    """Frozen-model validation examples selected by target amplitude, not gain."""
+    import torch
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    from src.tokenizers.dual_component_tokenizer import BandGainResidualPredictor,ProjectionGainResidualPredictor,WaveformDictionary,DualComponentTokenizer
+    from src.analysis.dual_component_tokenizer import eeg_residual_case_metrics
+    out,destination=Path(out),Path(destination);destination.mkdir(parents=True,exist_ok=True)
+    result=read_json(out/'eeg_o_summary.json')
+    if result['status']!='completed':raise ValueError('completed residual run required')
+    parent,manifest,arrays,features=_eeg_o_data(cfg,out);seed=cfg['eeg_o']['seed'];device='cpu'
+    torch.set_num_threads(2)
+    name=result['selection']['candidate'];job=out/'eeg_o_jobs'/name/f'seed_{seed}'
+    saved=torch.load(job/'checkpoint.pt',map_location=device,weights_only=False)
+    cls=ProjectionGainResidualPredictor if 'proxy_mean' in saved['model_config'] else BandGainResidualPredictor
+    model=cls(**saved['model_config']);model.load_state_dict(saved['model_state']);model.eval()
+    with np.load(job/'dictionary.npz',allow_pickle=False) as z:book=WaveformDictionary.from_state(dict(z))
+    old_folder=parent/'voltage_jobs/eeg_voltage'/f'seed_{seed}'
+    old_saved=torch.load(old_folder/'checkpoint.pt',map_location=device,weights_only=False)
+    old_model=DualComponentTokenizer(old_saved['model_config'],'continuous_student')
+    old_model.load_state_dict(old_saved['model_state']);old_model.eval();old_book=_voltage_codebooks(old_folder/'dictionaries.npz')['O']
+    with np.load(old_folder/'evaluation/case_metrics.npz',allow_pickle=False) as z:energy=z['identity'][:,1,0,0].copy()
+    scales=read_json(parent/'voltage_scales.json')['eeg'];rows=manifest['rows']['eeg'];trials=features['trials']
+    trial_lookup={r['trial_id']:i for i,r in enumerate(trials)};examples=[]
+    for dataset in sorted({r['dataset'] for r in rows}):
+        population=[i for i,r in enumerate(rows) if r['dataset']==dataset and r['split']=='validation'];used=set()
+        for label,quantile in [('p10',.1),('median',.5),('p90',.9)]:
+            threshold=float(np.quantile(np.sqrt(energy[population]),quantile))
+            eligible=[i for i in population if rows[i]['subject'] not in used]
+            index=min(eligible,key=lambda i:abs(np.sqrt(energy[i])-threshold));row=rows[index];used.add(row['subject'])
+            trial_index=trial_lookup[row['trial_id']];within=trials[trial_index]['indices'].index(index)
+            with torch.inference_mode():
+                cases,carriers,power,coordinates=_eeg_o_batch(arrays,manifest,[trial_index],trials,device)
+                continuous=_eeg_o_prediction(model,carriers,power,coordinates,arrays,[trial_index],device).cpu().numpy()[0,within]
+                inputs,masks,_,_=_voltage_batch(manifest,arrays,'eeg',[index],old_saved['candidate'],cfg,device,load_targets=False)
+                old_words=old_model.branches['eeg']['O'](inputs,masks)['waveform'].cpu().numpy()
+            original=old_book.decode(old_book.encode(old_words)).reshape(1,4000)
+            hard=book.decode(book.encode(continuous.reshape(1,200,20))).reshape(1,4000)
+            truth=np.asarray(arrays['eeg_o'][index])[:,0][None]
+            old_metrics=eeg_residual_case_metrics(original,truth);new_metrics=eeg_residual_case_metrics(hard,truth)
+            def info(metrics):
+                return dict(NMSE=float(metrics['NMSE'][0]),correlation=float(metrics['centered_correlation'][0]),
+                    RMS_ratio=float(np.sqrt(metrics['prediction_power'][0]/metrics['zero_NMSE'][0])),
+                    zero_prediction_skill=1-float(metrics['NMSE'][0]/metrics['zero_NMSE'][0]))
+            old_info,new_info=info(old_metrics),info(new_metrics);factor=float(scales[row['coordinate']]);t=np.arange(4000)/200
+            fig,axes=plt.subplots(2,1,figsize=(14,7.5));fig.subplots_adjust(left=.07,right=.985,bottom=.22,top=.79,hspace=.42)
+            for ax,lo,hi in [(axes[0],0,4000),(axes[1],1600,2400)]:
+                ax.plot(t[lo:hi],truth[0,lo:hi]*factor,color='black',lw=1.6,label='Fixed O target')
+                ax.plot(t[lo:hi],original[0,lo:hi]*factor,color='#888888',ls='--',lw=1.2,label='Original hard O')
+                ax.plot(t[lo:hi],continuous[lo:hi]*factor,color='#d55e00',ls=':',lw=1.2,label='New before quantization')
+                ax.plot(t[lo:hi],hard[0,lo:hi]*factor,color='#0072b2',lw=1.3,label='New hard O')
+                ax.set_ylabel('Voltage correction residual (µV)');ax.set_xlabel('Event time (s)');ax.grid(alpha=.2)
+            axes[1].set_ylim(axes[0].get_ylim())
+            axes[0].set_title('Full 20 s scored support; amplitude scale is specific to this example')
+            axes[1].set_title('Fixed 8–12 s zoom; shared amplitude scale')
+            handles,labels=axes[0].get_legend_handles_labels();fig.legend(handles,labels,loc='upper center',bbox_to_anchor=(.53,.86),ncol=4,frameon=False)
+            title='Single-Trial' if dataset=='eeg_fnirs_single_trial' else 'Simultaneous'
+            fig.suptitle(f'{title} | {row["subject"]} / {row["record"]} / {row["trial_id"].split("__")[-1]} / {row["channel"]}\n'
+                f'{label} target-RMS example | validation | seed 17 | O bitrate 280 bit/s/electrode',fontsize=13,y=.985)
+            fig.text(.07,.105,f'Full 20 s old → new: correlation {old_info["correlation"]:.3f} → {new_info["correlation"]:.3f}; '
+                f'RMS ratio {old_info["RMS_ratio"]:.3f} → {new_info["RMS_ratio"]:.3f}; '
+                f'MSE / zero-MSE {1-old_info["zero_prediction_skill"]:.3f} → {1-new_info["zero_prediction_skill"]:.3f}.',fontsize=10)
+            support='90 s EEG reference/filter preprocessing' if cfg['eeg_o'].get('architecture')=='projection_gain' else 'full 20 s EEG filtering'
+            fig.text(.07,.065,f'Old input: single-electrode 2 s. New input: {support}. No Hb or teacher trajectories enter the encoder.',fontsize=10)
+            fig.text(.07,.025,f'Selection: target O RMS near {100*quantile:g}th percentile of {len(population):,} validation electrode-cases; distinct subjects; no candidate-error selection.',fontsize=10)
+            filename=f'{dataset}_{label}_O.png';fig.savefig(destination/filename,dpi=250);plt.close(fig)
+            write_npz(destination/f'{dataset}_{label}_O.npz',time_s=t,target_uV=truth[0]*factor,
+                      old_hard_uV=original[0]*factor,new_continuous_uV=continuous*factor,new_hard_uV=hard[0]*factor)
+            examples.append(dict(row=row,selection=label,target_RMS_quantile=quantile,candidate_cases=len(population),
+                old=old_info,new=new_info,figure=filename))
+    index=dict(source_run=str(out),source_selection=str(out/'eeg_o_selection.json'),examples=examples,
+        selected_seed=seed,selection_rule='validation target RMS P10/P50/P90 in frozen training raw-EEG units; distinct subjects',
+        target='fixed conditional voltage correction, not physiological noise truth',input_support=features['raw_support'])
+    write_json(destination/'figure_index.json',index);return index
 
 
 if __name__ == '__main__':

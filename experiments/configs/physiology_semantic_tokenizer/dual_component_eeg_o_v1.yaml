@@ -1,0 +1,65 @@
+schema: dual_component_eeg_o_v1
+experiment_id: TK-DUAL-EEG-O-v1
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_v2.yaml
+eeg_o:
+  parent_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  target: unchanged_retained_conditional_voltage_O
+  input: EEG_only_unique_16_electrodes_no_Hb_or_teacher_features
+  raw_input_support: full_retained_20s_offline_window_for_zero_phase_band_filtering
+  filter: fourth_order_Butterworth_five_bands_same_as_target_constructor
+  bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  sample_rate_hz: 200
+  hop_samples: 20
+  channels: 16
+  length_samples: 4000
+  maximum_log_gain: 0.7
+  width: 64
+  candidates:
+    - {name: single_short, context_bins: 19, joint: false}
+    - {name: single_long, context_bins: 59, joint: false}
+    - {name: joint_long, context_bins: 59, joint: true}
+  gain_context_note: gain_network_context_is_not_the_full_raw_input_support
+  steps: 5000
+  batch_trials: 8
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  derivative_weight: 0.05
+  checkpoint_every: 250
+  seed: 17
+  confirmation_seeds: [29, 43]
+  sampler: equal_dataset_then_equal_subject_then_uniform_trial
+  overfit_patches: 256
+  overfit_steps: 1500
+  codebook_size: 128
+  codebook_levels: 4
+  codebook_fit_patches: 32768
+  codebook_iterations: 100
+  dictionary_fit: training_predictions_only_for_students_training_targets_only_for_labelled_oracle
+  decoder: O_integer_lookup_and_addition_only_no_carrier_or_gain_sidecar
+  bits_per_O_patch: 28
+  bits_per_O_second_per_electrode: 280
+  primary: worst_dataset_validation_O_MSE_divided_by_zero_prediction_MSE
+  secondary: [centered_correlation, RMS_ratio, signed_projection_ratio, frozen_S_plus_new_O_NMSE]
+  diagnostic: [derivative_error, signed_boundary_error, usage_health, true_O_compression_oracle, training_patch_overfit]
+  baselines: [zero_O, retained_voltage_O_matching_seed, true_O_compression_oracle]
+  selection: minimum_worst_dataset_hard_O_to_zero_MSE_ratio_on_validation_seed17
+  stopping: three_fixed_candidates_then_two_selected_seed_repetitions_preserve_all_negative_results
+resources:
+  devices: [cuda:0, cuda:1]
+  cpu_workers: 16
+  feature_benchmark_workers: [4, 8, 16]
+  feature_block_cases: 32
+  benchmark_steps: 100
+  gpu_workers_per_device: 1
+  max_new_gpu_memory_mib: 4096
+  torch_threads: 2
+  numerical_threads: 1
+claim_limits:
+  - fixed_conditional_O_is_not_physiological_noise_truth
+  - band_filter_reads_full_20s_window_future_masks_must_close_over_entire_support
+  - no_Hb_or_teacher_or_O_target_in_student_forward
+  - oracle_is_a_capacity_reference_not_a_deployable_candidate
+  - same_validation_subject_seed_repetition_is_not_fresh_confirmation
+  - no_new_SSM_fits_or_protected_or_test_reads_or_masked_pretraining

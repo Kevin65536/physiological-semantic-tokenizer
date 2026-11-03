@@ -30,6 +30,94 @@ STEPS = 900
 STUDENT = slice(300, 500)
 
 
+def load_eeg_residual_development(parent, *, datasets=DATASETS, channels=16, length=4000):
+    """Validate the retained development boundary before opening EEG arrays.
+
+    Hb, teacher trajectories, test caches and raw datasets are not inputs to
+    this consumer. S and O are fixed supervised targets, never encoder inputs.
+    """
+    folder = Path(parent) / 'voltage_cache'
+    manifest = json.loads((folder / 'manifest.json').read_text())
+    if (manifest.get('schema') != 'dual_component_voltage_cache_v1'
+            or manifest.get('protected_data') != 'forbidden' or manifest.get('final', False)):
+        raise ValueError('retained public development voltage cache required')
+    rows = manifest['rows']['eeg']
+    if (not rows or {r['dataset'] for r in rows} != set(datasets)
+            or {r['split'] for r in rows} != {'train', 'validation'}
+            or len({r['id'] for r in rows}) != len(rows)):
+        raise ValueError('unique train/validation EEG identities required; test is forbidden')
+    subjects = defaultdict(set)
+    grouped = defaultdict(list)
+    for i, row in enumerate(rows):
+        subjects[(row['dataset'], row['subject'])].add(row['split'])
+        grouped[row['trial_id']].append(i)
+        if manifest['coordinates']['eeg'][row['coordinate_index']] != row['coordinate']:
+            raise ValueError('coordinate identity mismatch')
+    if any(len(splits) != 1 for splits in subjects.values()):
+        raise ValueError('subject crosses the development split')
+    trials = []
+    for trial, indices in sorted(grouped.items()):
+        group = [rows[i] for i in indices]
+        if (len(group) != channels or len({r['channel'] for r in group}) != channels
+                or len({(r['dataset'], r['subject'], r['record'], r['split']) for r in group}) != 1):
+            raise ValueError('one complete unique-electrode trial required')
+        trials.append({**{k: group[0][k] for k in ('dataset', 'subject', 'record', 'split')},
+                       'trial_id': trial, 'indices': indices})
+    expected = (len(rows), length, 1)
+    for key in ('eeg_u', 'eeg_s', 'eeg_o'):
+        if manifest['arrays'][key] != key + '.npy':
+            raise ValueError('unexpected retained EEG array path')
+        if 'shapes' in manifest and tuple(manifest['shapes'][key]) != expected:
+            raise ValueError('retained voltage shape contract mismatch')
+    arrays = {key: np.load(folder / manifest['arrays'][key], mmap_mode='r', allow_pickle=False)
+              for key in ('eeg_u', 'eeg_s', 'eeg_o')}
+    if any(value.shape != expected or value.dtype != np.float32 for value in arrays.values()):
+        raise ValueError('float32 retained EEG target shapes required')
+    return manifest, arrays, trials
+
+
+def eeg_residual_band_features(observed, *, sample_rate=200, hop=20):
+    """Observed-only five-band features on the caller's complete support.
+
+    Zero-phase IIR filtering reads the full supplied window. A shorter gain
+    network context does not shorten this raw-input support. No target or
+    other modality is accepted by this function.
+    """
+    from scipy.signal import butter, sosfiltfilt
+    value = np.asarray(observed, dtype=np.float64)
+    if value.ndim != 2 or value.shape[1] % hop or sample_rate != 200 or not np.isfinite(value).all():
+        raise ValueError('finite [electrode-case,time] 200 Hz observations required')
+    bands = np.stack([sosfiltfilt(butter(4, limits, btype='bandpass', fs=sample_rate, output='sos'),
+                                  value, axis=1) for limits in BANDS], axis=-1).astype('float32')
+    power = np.mean(bands.astype('float64').reshape(len(value), -1, hop, 5) ** 2, axis=2)
+    return bands, np.log(np.maximum(power, 1e-12)).astype('float32')
+
+
+def load_retained_eeg_projection(path, metadata, expected_rows):
+    """Read only the observed EEG proxy and its frozen training projection.
+
+    The native producer separately replay-checked this observed proxy. Its
+    original 90 s EEG filtering and five-second reference remain part of the
+    input support; the adjacent teacher/Hb fields in the NPZ are not read.
+    """
+    replay_error=float(metadata.get('diagnostic', {}).get('native_proxy_replay_max_abs', float('inf')))
+    if (not expected_rows or {r['split'] for r in expected_rows} - {'train', 'validation'}
+            or len({r['trial_id'] for r in expected_rows}) != 1
+            or metadata.get('trial_id') != expected_rows[0]['trial_id']
+            or metadata.get('eeg_channels') != [r['channel'] for r in expected_rows]
+            or not np.isfinite(replay_error) or replay_error > 1e-6):
+        raise ValueError('verified matching development EEG proxy identity required')
+    with np.load(path, allow_pickle=False) as archive:
+        observed = np.asarray(archive['original_proxy'], dtype=float)
+        projection = np.asarray(archive['projection'], dtype=float)
+    if (observed.shape != (200, 3) or projection.shape != (3, len(expected_rows) * 5)
+            or not np.isfinite(observed).all() or not np.isfinite(projection).all()):
+        raise ValueError('finite observed EEG projection shapes required')
+    row_scale = np.linalg.norm(projection, axis=1)
+    if (row_scale < 1e-12).any():raise ValueError('degenerate observed EEG projection')
+    return (observed / row_scale).astype('float32'), np.linalg.pinv(projection / row_scale[:, None], rcond=1e-10).astype('float32')
+
+
 def voltage_proxy_correction(voltage, projection, target, *, strength=1.,
                              max_log_gain=.7, backtracking=(1., .5, .25, .125)):
     """Condition native voltage on frozen, possibly overlapping ROI proxies.
