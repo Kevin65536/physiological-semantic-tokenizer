@@ -1,0 +1,58 @@
+schema: visual_investigation_v1
+experiment_id: VISUAL-INVESTIGATION-v1
+scope: public_development_diagnostic_no_report_export
+inventory: comparative_methods/runs/downstream_rebench_v1/20261016_v2/inventory.json
+splits: comparative_methods/runs/downstream_rebench_v1/20261016_v2/splits.json
+task: visual
+outer_fold: 0
+inner_fold: 0
+seed: 17
+lineage: all_current_inventory_events_native_type_and_trigger_metadata_only
+measured_inputs: outer0_inner0_train_and_validation_subjects_only
+protected_and_outer_evaluation_signals: not_read
+input:
+  common_eeg_channels: frozen_16_channel_panel
+  common_fnirs_channels: both_real_probes_96_Hb_channels
+  reference_window_s: [0, 8]
+  temporal_diagnostic_window_s: [0, 12]
+  filtering: retained_offline_v5_none_no_new_signal_processing
+  sample_filtering: none_method_specific
+targets:
+  four_class: [RR, RF, FF, FR]
+  motivation: [want_to_remember, do_not_want_to_remember]
+  recognition: [remembered, forgot]
+  binary_targets: diagnostic_decomposition_not_replacement_of_four_class
+probes:
+  C: 1.0
+  class_weights: [none, balanced]
+  features: [eeg_bandpower, Hb_moments, concatenation]
+  windows_s: [8, 12]
+  within_subject_control: chronological_70_30_with_one_trial_gap_same_features
+  small_sample_fit: first_8_events_per_class_from_training_only
+  null: fixed_seed_training_label_permutation
+cbramod:
+  linear_probe: [mean, ordered_flatten]
+  fine_tune: [mean, ordered_source_head, ordered_source_head_balanced]
+  small_sample_positive_control: ordered_source_head_8_training_events_per_class
+  max_epochs: 30
+  min_epochs: 15
+  patience: 10
+  optimizer: adamw
+  learning_rate: 0.0001
+  weight_decay: 0.05
+  gradient_clip_norm: 1
+  lr_schedule: cosine
+  batch_size: 32
+  microbatch_size: 32
+  selection: development_subject_macro_f1_not_outer_test
+metrics:
+  primary: subject_equal_macro_f1
+  diagnostic: balanced_accuracy_per_class_recall_confusion_train_validation_gap
+  inference: descriptive_single_development_split_and_seed_no_confirmatory_claim
+stopping: fixed_arms_terminal_no_score_driven_search_or_label_flip
+artifacts: comparative_methods/runs/performance_analysis/20261029_visual_investigation_v1
+resources:
+  threads_per_job: 4
+  maximum_gpu_jobs_per_device: 1
+  cpu_thread_budget: 12
+  ram_budget_gib: 40

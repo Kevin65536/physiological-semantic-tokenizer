@@ -69,6 +69,14 @@ versioned window, sample migration, masks and adapter shapes. The explicit
 30-second support for every task. This diagnostic does not establish a final
 paper ranking or extend historical protected-data access.
 
+The [Visual investigation](visual_investigation_v1.yaml) uses
+[`investigate_visual_v1.py`](performance_analysis/investigate_visual_v1.py) to audit
+native label/trigger lineage and run fixed development controls for class balance,
+label dimensions, time support and CBraMod readout. Its
+[tests](../tests/test_visual_investigation.py) cover label semantics and split/window
+boundaries. It writes only to its analysis run; inclusion in a presentation report
+requires the user's later decision.
+
 Build a new run only after its inventory, splits, multimodal input audit and resource
 smoke are retained. Use the same controller's `--build-config`, `--run-root`,
 `--source-root` and `--smoke-summary` options. The generated `jobs.json` owns the

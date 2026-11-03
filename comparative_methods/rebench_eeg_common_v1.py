@@ -29,6 +29,10 @@ def encoding_duration(task: str, profile: Mapping[str, Any]) -> float:
         if task != "mental_arithmetic" or profile.get("window_start_s") != -5:
             raise ValueError("MA 30s diagnostic requires mental_arithmetic and [-5,25) support")
         duration = 30.0
+    elif schema == "visual_12s_diagnostic_v1":
+        if task != "visual" or profile.get("window_start_s") != 0:
+            raise ValueError("Visual 12s diagnostic requires visual and [0,12) support")
+        duration = 12.0
     elif schema == "downstream_rebench_v1":
         duration = 20.0 if task == "refed_regression" else (2.0 if task == "dsr" else 8.0)
     else:

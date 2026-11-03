@@ -58,7 +58,7 @@ def synthetic_smoke(task: str, profile: dict, device: str, trainable: bool = Fal
 
 
 class CBraModAuditModel(nn.Module):
-    """Explicit MA diagnostic; same observations, controlled scale and readout.
+    """Explicit classification diagnostic; controlled scale and readout.
 
     The caller supplies training-standardized EEG. The physical-scale control
     restores its measured microvolt coordinate using training statistics only.
@@ -72,6 +72,7 @@ class CBraModAuditModel(nn.Module):
         self.readout = profile.get("audit_readout", "mean")
         self.scale_mode = profile.get("audit_scale", "train_sd")
         self.head_kind = profile.get("audit_head", "none")
+        classes = int(profile.get("num_classes", 2))
         if self.readout not in {"mean", "flatten"} or self.scale_mode not in {"train_sd", "physical_100uv"}:
             raise ValueError("unknown CBraMod diagnostic readout or scale")
         if self.head_kind not in {"none", "linear", "source_mlp"}:
@@ -90,9 +91,9 @@ class CBraModAuditModel(nn.Module):
             # Only the input dimension changes with the shared 30 s window.
             hidden = 800
             self.head = nn.Sequential(nn.Linear(self.feature_dim, hidden), nn.ELU(), nn.Dropout(.1),
-                                      nn.Linear(hidden, 200), nn.ELU(), nn.Dropout(.1), nn.Linear(200, 2))
+                                      nn.Linear(hidden, 200), nn.ELU(), nn.Dropout(.1), nn.Linear(200, classes))
         elif self.head_kind == "linear":
-            self.head = nn.Linear(self.feature_dim, 2)
+            self.head = nn.Linear(self.feature_dim, classes)
         else:
             self.head = nn.Identity()
         self.head.requires_grad_(trainable)
