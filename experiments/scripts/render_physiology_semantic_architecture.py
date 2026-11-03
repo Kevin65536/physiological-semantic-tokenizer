@@ -707,13 +707,804 @@ def render_svg(
 '''
 
 
+def render_framework_20261029(output: Path, *, layout: str = "detailed") -> list[Path]:
+    """Export a dated, read-free presentation of the Tak/voltage runtime.
+
+    This is a communication asset, not an architecture or execution-state owner.
+    Numerical traces below are explicitly illustrative. No measured arrays,
+    checkpoints, protected evidence, or historical figure specifications are read.
+    Equations and editable layout are retained here; PDF figures are PNG objects.
+
+    Content owners checked for this snapshot:
+      docs/EXPERIMENT_PLAN.md, sections dated 2026-10-27 through 2026-10-29;
+      docs/DATA_CONTRACT.md, independent Tak targets / electrode voltage;
+      experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_v2.yaml;
+      src/data/dual_component_tokenizer.py;
+      src/tokenizers/dual_component_tokenizer.py;
+      experiments/scripts/run_dual_component_tokenizer.py, voltage_train;
+      research_state/registry.json, completed dual-component / voltage records.
+    The selected Hb synthesis is owned by the retained v2 voltage_selection.json.
+    """
+    import json
+
+    import fitz
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib import colors, font_manager, patches
+    from PIL import Image
+
+    if layout not in {"detailed", "flow", "token_first"}:
+        raise ValueError("Framework layout must be detailed, flow or token_first")
+    if output.exists() and any(output.iterdir()):
+        raise ValueError("Use a fresh versioned export directory; retained exports are immutable")
+    output.mkdir(parents=True, exist_ok=True)
+    regular = Path("/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc")
+    bold = regular.with_name("NotoSerifCJK-Bold.ttc")
+    if not regular.exists() or not bold.exists():
+        raise FileNotFoundError("Noto Serif CJK regular and bold fonts are required")
+    matplotlib.rcParams.update({
+        "mathtext.fontset": "cm", "svg.fonttype": "none", "axes.unicode_minus": False,
+        "savefig.facecolor": "white", "font.family": "serif",
+    })
+    ink, gray, line = "#282828", "#747474", "#A1A1A1"
+    blue, orange, purple = "#306FB6", "#D18431", "#9160C0"
+    red, teal, fill = "#D95757", "#229B94", "#F0F0F0"
+    sources = [
+        "docs/EXPERIMENT_PLAN.md", "docs/DATA_CONTRACT.md", "docs/ARCHITECTURE.md",
+        "experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml",
+        "experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_v2.yaml",
+        "src/data/dual_component_tokenizer.py", "src/tokenizers/dual_component_tokenizer.py",
+        "src/tokenizers/ema_vector_quantizer.py", "src/foundation/dual_component_masked.py",
+        "src/analysis/dual_component_tokenizer.py",
+        "experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml",
+        "experiments/scripts/run_dual_component_tokenizer.py", "research_state/registry.json",
+        "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/"
+        "20261029_voltage_v2/voltage_selection.json",
+    ]
+    metadata = {"Date": "2026-10-29", "Creator": str(Path(__file__).relative_to(REPO_ROOT)),
+                "Description": "Dated explanatory projection; all waveforms are schematic. Sources: "
+                + "; ".join(sources)}
+
+    class Plate:
+        def __init__(self, name, title, subtitle, height, width=2000):
+            self.name, self.height, self.title, self.width = name, height, title, width
+            self.fig = plt.figure(figsize=(width / 100, height / 100), dpi=100)
+            self.ax = self.fig.add_axes((0, 0, 1, 1))
+            self.ax.set(xlim=(0, width), ylim=(height, 0))
+            self.ax.axis("off")
+            self.texts = []
+            self.t(65, 53, title, 25, boldface=True)
+            self.t(65, 96, subtitle, 12.5, color=gray)
+            self.t(width-85, 53, "结构示意 · 2026-10-29" if layout=="token_first" else "方法快照 · 2026-10-29",
+                   10, color=gray, ha="right")
+
+        def t(self, x, y, value, size=13, *, color=ink, ha="left", boldface=False):
+            text = self.ax.text(x, y, value, va="center", ha=ha, fontsize=size,
+                                color=color, fontproperties=font_manager.FontProperties(
+                                    fname=bold if boldface else regular), linespacing=1.6)
+            self.texts.append(text)
+            return text
+
+        def m(self, x, y, value, size=19, *, color=ink, ha="center"):
+            text = self.ax.text(x, y, "$" + value + "$", va="center", ha=ha,
+                                fontsize=size, color=color, math_fontfamily="cm")
+            self.texts.append(text)
+            return text
+
+        def box(self, x, y, w, h, *, face="white", edge=line, dashed=False):
+            self.ax.add_patch(patches.Rectangle((x, y), w, h, facecolor=face,
+                              edgecolor=edge, linewidth=1.05,
+                              linestyle=(0, (4, 3)) if dashed else "solid"))
+
+        def block(self, x, y, w, h, heading, detail="", *, dashed=False, face=fill):
+            self.box(x, y, w, h, face=face, dashed=dashed)
+            self.t(x + w/2, y + (27 if detail else h/2), heading, 14, ha="center")
+            if detail:
+                self.t(x + w/2, y + h/2 + 15, detail, 11.5, color=gray, ha="center")
+
+        def segment(self, points, *, color=ink, dashed=False, width=1.25):
+            x, y = zip(*points)
+            self.ax.plot(x, y, color=color, lw=width, solid_capstyle="butt",
+                         linestyle=(0, (4, 2.6)) if dashed else "solid")
+
+        def arrow(self, points, *, color=ink, dashed=False, width=1.25):
+            if len(points) > 2:
+                self.segment(points[:-1], color=color, dashed=dashed, width=width)
+            self.ax.add_patch(patches.FancyArrowPatch(points[-2], points[-1],
+                              arrowstyle="-|>", mutation_scale=11, linewidth=width,
+                              color=color, shrinkA=0, shrinkB=0,
+                              linestyle=(0, (4, 2.6)) if dashed else "solid"))
+
+        def rule(self, y, dashed=False):
+            self.segment([(65, y), (1915, y)], color="#CBCBCB", dashed=dashed, width=.8)
+
+        def section(self, y, label):
+            self.t(65, y, label, 17, boldface=True)
+
+        def wave(self, x, y, w, h, kind="eeg", *, color=None):
+            self.box(x, y, w, h, edge="#A7A7A7")
+            t = np.linspace(0, 1, 240)
+            if kind.startswith("eeg"):
+                q = (.47*np.sin(2*np.pi*12*t) + .23*np.sin(2*np.pi*27*t + .3)
+                     + .14*np.sin(2*np.pi*4*t)) * (.8 + .2*np.cos(2*np.pi*t))
+                if kind == "eeg_residual":
+                    q = .65*np.sin(2*np.pi*11*t)*np.exp(-((t-.55)/.25)**2)
+                self.ax.plot(x+8+(w-16)*t, y+h/2-q*h*.35, lw=1, color=color or blue)
+            elif kind == "hb":
+                q = np.exp(-((t-.42)/.19)**2) - .18*np.exp(-((t-.84)/.15)**2)
+                self.ax.plot(x+8+(w-16)*t, y+h*.52-q*h*.35, lw=1.3, color=red)
+                self.ax.plot(x+8+(w-16)*t, y+h*.52+q*h*.27, lw=1.3, color=teal)
+            else:
+                q = np.exp(-((t-.38)/.19)**2) - .36*np.exp(-((t-.78)/.18)**2)
+                if kind in ("residual", "hb_residual"):
+                    q = .45*np.sin(2*np.pi*2*t)+.16*np.sin(2*np.pi*5*t)
+                self.ax.plot(x+8+(w-16)*t, y+h*.60-q*h*.4, lw=1.45, color=color or blue)
+                if kind in ("hb_component", "hb_residual"):
+                    self.ax.plot(x+8+(w-16)*t, y+h*.46+q*h*.28,
+                                 lw=1.15, color=color or blue, linestyle=(0,(3,2)))
+
+        def book(self, x, y, w, h, color, levels):
+            rgb = np.asarray(colors.to_rgb(color))
+            for row in range(4):
+                for col in range(3):
+                    alpha = [.28, .46, .65, .9][(row+col)%4]
+                    self.box(x+col*(w/3), y+row*(h/4), w/3-3, h/4-3,
+                             face=tuple(1-alpha*(1-rgb)), edge="white")
+            self.box(x+w/3-1, y+h/4-1, w/3-1, h/4-1, face="none", edge=ink)
+            self.t(x+w/2, y+h+18, f"{levels} 层 × 128 码字", 10.5, color=gray, ha="center")
+
+        def tokens(self, x, y, color, levels=1):
+            rgb = np.asarray(colors.to_rgb(color))
+            for layer in range(min(levels, 4)):
+                for pos in range(4):
+                    alpha = .32 + .16*((pos+layer)%4)
+                    self.box(x+pos*31, y+layer*13, 27, 10 if levels>1 else 26,
+                             face=tuple(1-alpha*(1-rgb)), edge="white")
+
+        def predictor(self, x, y, modality, component):
+            self.ax.add_patch(patches.Polygon([(x,y-39),(x+185,y-27),(x+185,y+27),(x,y+39)],
+                              facecolor=fill, edgecolor="#888888", lw=1.1))
+            self.m(x+92, y-5, rf"F_{{{modality}}}^{{{component}}}=D_{{{modality}}}^{{{component}}}\circ E_{{{modality}}}^{{{component}}}", 18)
+            self.t(x+92, y+22, "编码 → 连续波形预测", 10, color=gray, ha="center")
+
+        def save(self):
+            self.fig.canvas.draw()
+            renderer = self.fig.canvas.get_renderer()
+            outside = [t.get_text() for t in self.texts
+                       if not self.fig.bbox.contains(*t.get_window_extent(renderer).get_points()[0])
+                       or not self.fig.bbox.contains(*t.get_window_extent(renderer).get_points()[1])]
+            if outside:
+                raise ValueError(f"Clipped figure labels in {self.name}: {outside}")
+            bounds = [(t, t.get_window_extent(renderer)) for t in self.texts]
+            overlapping = []
+            for i, (first, a) in enumerate(bounds):
+                for second, b in bounds[i+1:]:
+                    if min(a.x1,b.x1)-max(a.x0,b.x0)>2 and min(a.y1,b.y1)-max(a.y0,b.y0)>2:
+                        overlapping.append((first.get_text(),second.get_text()))
+            if overlapping:
+                raise ValueError(f"Overlapping figure labels in {self.name}: {overlapping}")
+            png, svg = output/f"{self.name}.png", output/f"{self.name}.svg"
+            self.fig.savefig(png, dpi=300, metadata={"Description": metadata["Description"]})
+            self.fig.savefig(svg, metadata=dict(metadata, Title=self.title))
+            with Image.open(png) as original:
+                preview = original.convert("RGB")
+                preview.thumbnail((2200, 1800))
+                preview.save(output/f"{self.name}_preview.png")
+            plt.close(self.fig)
+            return png, svg
+
+    def finish(figures, captions, pdf_name):
+        # Complete bitmap figures, with searchable titles/captions outside them.
+        pdf = fitz.open()
+        for index, ((png, _), caption) in enumerate(zip(figures, captions), 1):
+            with Image.open(png) as im:
+                width, height = im.size
+            page_width = max(1440, width/300*72+48)
+            image_height = (page_width-48)*height/width
+            page = pdf.new_page(width=page_width, height=image_height+108)
+            page.insert_font(fontname="china-s")
+            page.insert_text((24,28), f"项目方法框架 · 2026-10-29 · 图 {index}/{len(figures)}",
+                             fontname="china-s",fontsize=12)
+            page.insert_image(fitz.Rect(24,40,page_width-24,40+image_height),filename=str(png))
+            remaining = page.insert_textbox(fitz.Rect(24,52+image_height,page_width-24,100+image_height),
+                                           caption,fontname="china-s",fontsize=11)
+            if remaining < 0:
+                raise ValueError("PDF caption exceeds its allotted searchable area")
+        pdf.subset_fonts()
+        pdf_path = output/pdf_name
+        pdf.save(pdf_path,garbage=4,deflate=True)
+        pdf.close()
+        with fitz.open(pdf_path) as check:
+            if len(check)!=len(figures) or any(len(page.get_images())!=1 or not page.get_text().strip()
+                                              for page in check):
+                raise ValueError("PDF must have one complete bitmap figure and searchable captions per page")
+        index = {"kind":"dated_framework_export", "snapshot_date":"2026-10-29", "layout":layout,
+                 "sources":sources,"generator":str(Path(__file__).relative_to(REPO_ROOT)),
+                 "waveforms":"illustrative_not_experiment_results", "dpi":300,
+                 "figures":[{"png":a.name,"svg":b.name} for a,b in figures],"pdf":pdf_path.name,
+                 "pdf_figures":"one_png_image_object_per_page; selectable_titles_and_captions"}
+        if layout == "token_first":
+            index["architecture_basis"] = (
+                "User-requested token-first architecture; hard_student EMA-VQ and frozen-ID reader interfaces; "
+                "conditional voltage target adapter retained; not a claim of a completed integrated voltage campaign")
+        (output/"figure_index.json").write_text(json.dumps(index,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+        return [path for pair in figures for path in pair]+[pdf_path]
+
+    if layout == "token_first":
+        # This view follows the user's requested architecture, not the experimental
+        # continuous-prediction-then-waveform-quantization deployment projection.
+        from matplotlib import patheffects
+        p = Plate("project_framework_token_first", "Tak 教师引导的双分支 Tokenizer 与预训练模型",
+                  "编码 → 量化为 token → 解码为时序；教师监督、VQ 约束与掩码预训练通过实际数据流连接。",
+                  1840, width=2800)
+
+        def neural_block(x, y, w, h, title, color, *, decoder=False):
+            points = ([(x,y+12),(x+w,y),(x+w,y+h),(x,y+h-12)] if decoder else
+                      [(x,y),(x+w,y+12),(x+w,y+h-12),(x,y+h)])
+            p.ax.add_patch(patches.Polygon(points,facecolor="#F4F4F4",edgecolor="#7F7F7F",lw=1.15))
+            p.t(x+w/2,y+23,title,14,ha="center",boldface=True)
+            layers = [(x+35,[y+53,y+76]),(x+w/2,[y+46,y+65,y+84]),(x+w-35,[y+53,y+76])]
+            for (a,ys),(b,zs) in zip(layers,layers[1:]):
+                for ay in ys:
+                    for by in zs:
+                        p.segment([(a,ay),(b,by)],color="#999999",width=.65)
+            for a,ys in layers:
+                for yy in ys:
+                    p.ax.add_patch(patches.Circle((a,yy),5,facecolor=color,edgecolor="white",lw=.5,zorder=4))
+
+        # Each modality remains a complete encoder -> hard token -> temporal decoder path.
+        for modality,title,offset,is_eeg in [("E","EEG Tokenizer",0,True),("F","fNIRS Tokenizer",580,False)]:
+            p.box(800,150+offset,1935,460,edge="#7C8991",dashed=True)
+            p.t(830,180+offset,title,20,boldface=True)
+            p.t(2705,180+offset,"编码器 · 码本 · 解码器按模态与分支独立",12,color=gray,ha="right")
+            p.box(1140,200+offset,330,285,face="#FAFAFA",edge="#7D898F")
+            p.t(1305,220+offset,"VQ → token 序列",15.5,ha="center",boldface=True)
+            p.t(1305,474+offset,"EMA 码本 · 梯度直通",11,ha="center",color=gray)
+            for component,base_y,color in [("S",260,blue),("O",440,orange)]:
+                yy=base_y+offset
+                neural_block(885,yy-48,190,96,f"{component} 编码器",color)
+                p.arrow([(1085,yy),(1129,yy)])
+                rgb=np.asarray(colors.to_rgb(color))
+                for row in range(3):
+                    for col in range(3):
+                        alpha=[.32,.55,.82][(row+col)%3]
+                        p.box(1165+col*16,yy-24+row*16,14,14,
+                              face=tuple(1-alpha*(1-rgb)),edge="white")
+                p.box(1180,yy-9,16,16,face="none",edge=ink)
+                p.arrow([(1223,yy),(1262,yy)],color=color,width=1)
+                for token in range(5):
+                    alpha=[.3,.47,.65,.85,.57][token]
+                    p.box(1273+token*33,yy-20,28,40,face=tuple(1-alpha*(1-rgb)),edge="white")
+                p.arrow([(1480,yy),(1529,yy)])
+                neural_block(1540,yy-48,190,96,f"{component} 解码器",color,decoder=True)
+                p.arrow([(1740,yy),(1788,yy)])
+                kind=("eeg" if component=="S" else "eeg_residual") if is_eeg else (
+                    "hb_component" if component=="S" else "hb_residual")
+                p.wave(1800,yy-33,205,66,kind,color=color)
+                p.t(1800,yy-59,f"{component} 时序",14,color=color)
+                p.arrow([(2016,yy),(2103,yy)])
+                p.box(2115,yy-38,210,76,edge=purple,face="#FCFAFE")
+                p.t(2220,yy-19,"分量重建",12,ha="center",color=gray)
+                p.m(2220,yy+13,rf"\mathcal{{L}}_{component}",24,color=purple)
+
+            # Sum reconstruction is shown as an observation-space diagnostic, not
+            # silently added to the registered S/O/VQ training objective.
+            cy=350+offset
+            p.arrow([(1902,293+offset),(1902,332+offset)])
+            p.arrow([(1902,407+offset),(1902,368+offset)])
+            p.ax.add_patch(patches.Circle((1902,cy),17,facecolor="white",edgecolor=ink,lw=1))
+            p.t(1902,cy-1,"+",18,ha="center")
+            p.arrow([(1921,cy),(1983,cy)])
+            p.wave(1995,cy-26,130,52,"eeg" if is_eeg else "hb")
+            p.t(2060,cy-46,"总观测",11.5,ha="center",color=gray)
+            p.t(2060,cy+44,"重建诊断",11,ha="center",color=gray)
+
+            p.box(1170,510+offset,270,58,edge=purple,face="#FCFAFE")
+            p.m(1229,540+offset,r"\mathcal{L}_{\rm VQ}",21,color=purple)
+            p.t(1349,540+offset,"承诺项（S/O）",11,ha="center",color=gray)
+            p.arrow([(1305,485+offset),(1305,510+offset)])
+            p.box(2435,315+offset,280,115,edge=purple,face="#F6F0FA")
+            p.m(2575,336+offset,rf"\mathcal{{L}}_{modality}",22,color=purple)
+            p.m(2575,371+offset,r"\mathcal{L}_S+\lambda_O\mathcal{L}_O",20,color=purple)
+            p.m(2575,408+offset,r"+\,\beta\mathcal{L}_{\rm VQ}",19,color=purple)
+            p.arrow([(2220,298+offset),(2220,350+offset),(2424,350+offset)],color=purple)
+            p.arrow([(2220,402+offset),(2220,397+offset),(2424,397+offset)],color=purple)
+            p.arrow([(1440,539+offset),(1490,539+offset),(1490,590+offset),
+                     (2575,590+offset),(2575,430+offset)],color=purple)
+
+        # Raw observations fan out, retaining the same-modality student boundary.
+        for title,cy,kind in [("EEG 电位",350,"eeg"),("fNIRS",1240,"hb")]:
+            p.t(170,cy-62,title,18,ha="center",boldface=True)
+            p.wave(80,cy-35,180,70,kind)
+            if kind=="hb":p.t(170,cy+57,"HbO / HbR",12,ha="center",color=gray)
+        p.arrow([(270,350),(840,350)])
+        p.arrow([(270,1240),(750,1240),(750,930),(840,930)])
+        for cy in (350,930):
+            for branch_y in (cy-90,cy+90):
+                p.arrow([(840,cy),(840,branch_y),(873,branch_y)])
+        p.ax.plot(340,350,"o",color=ink,markersize=3)
+        p.ax.plot(720,1240,"o",color=ink,markersize=3)
+
+        # Expanded mechanistic teacher: observations -> conditional fit -> RK4
+        # dynamics/readouts -> frozen targets. It contains no invented neural ODE.
+        p.box(60,490,650,650,face="#FCFAFE",edge=purple,dashed=True)
+        p.t(90,517,"Tak 条件教师",18,boldface=True)
+        p.t(680,517,"离线 90 秒配对支持",11.5,color=gray,ha="right")
+        p.block(90,550,590,65,"配对观测变换","EEG 功率 / PCA  ·  Hb 对齐 / 参考",face="white")
+        p.arrow([(385,615),(385,640)])
+        p.box(90,640,590,72,face="#F4EFF8",edge=purple)
+        p.m(385,662,r"\mathcal{L}_T=\mathcal{L}_{\rm fit}+\lambda_rR_r+\lambda_0R_0+\lambda_fR_f",19,color=purple)
+        p.t(385,697,"观测误差 · 驱动平滑 · 初态先验 · 血流先验",11,ha="center",color=gray)
+        p.arrow([(155,712),(155,762)],color=gray,dashed=True)
+        p.t(145,738,"拟合",10.5,color=gray,ha="right")
+        p.box(245,723,455,151,edge="#8E969D",dashed=True)
+        p.t(473,744,"Tak 动力学 · RK4 积分",13,ha="center",boldface=True)
+        p.box(90,763,135,65,face="white")
+        p.t(157,782,"共享驱动",12,ha="center")
+        p.m(157,809,r"r(t)",18)
+        p.arrow([(225,796),(261,796)])
+        p.box(270,763,170,65,face=fill)
+        p.t(355,782,"血流响应",12.5,ha="center")
+        p.m(355,810,r"s,\ f",18)
+        p.arrow([(440,796),(480,796)])
+        p.box(490,763,190,65,face=fill)
+        p.t(585,782,"血容量 / 脱氧",12,ha="center")
+        p.m(585,810,r"v,\ q",18)
+        p.t(355,843,"参数固定",10.5,color=gray,ha="center")
+        p.t(355,861,"四初态与驱动共同拟合",10,color=gray,ha="center")
+        p.arrow([(157,828),(157,900)])
+        p.arrow([(585,828),(585,900)])
+        p.box(90,910,230,35)
+        p.t(205,928,"EEG 代理读出",12.5,ha="center")
+        p.box(90,962,230,35)
+        p.t(205,980,"条件电压修正",12.5,ha="center")
+        p.arrow([(205,945),(205,962)])
+        p.box(445,910,235,35)
+        p.t(563,928,"HbO/HbR 读出",12.5,ha="center")
+        p.box(445,962,235,35)
+        p.t(563,980,"时间箱 / 参考",12.5,ha="center")
+        p.arrow([(563,945),(563,962)])
+        p.arrow([(90,928),(75,928),(75,677),(90,677)],color=gray,dashed=True,width=1)
+        p.arrow([(680,980),(695,980),(695,677),(680,677)],color=gray,dashed=True,width=1)
+        p.arrow([(205,997),(205,1020)])
+        p.arrow([(563,997),(563,1020)])
+        p.box(90,1020,590,80,edge=purple,face="white")
+        p.t(385,1040,"冻结分量目标",14,ha="center",boldface=True)
+        p.m(385,1073,r"S^*,\qquad O^*=X-S^*",22,color=purple)
+        p.t(385,1120,"条件模型目标；保留原测量坐标",11,ha="center",color=gray)
+
+        # One target bundle routes to the matching modality/branch reconstruction loss.
+        p.segment([(680,1060),(735,1060),(735,650),(2765,650)],color=purple,dashed=True)
+        p.segment([(2765,260),(2765,1020)],color=purple,dashed=True)
+        p.t(2410,630,"冻结监督目标（按模态与分支对应）",12,color=purple,ha="center")
+        for yy,component in [(260,"S"),(440,"O"),(840,"S"),(1020,"O")]:
+            p.arrow([(2765,yy),(2333,yy)],color=purple,dashed=True)
+            p.m(2370,yy-20,rf"{component}^*",18,color=purple)
+        # Connect both measured modalities to the teacher's observation transform,
+        # rather than terminating the Hb input near its frozen output targets.
+        p.arrow([(340,350),(340,550)])
+        hb_input,=p.ax.plot([720,720],[1240,585],color=ink,lw=1.25,zorder=5)
+        hb_input.set_path_effects([patheffects.Stroke(linewidth=4,foreground="white"),patheffects.Normal()])
+        p.arrow([(720,585),(680,585)])
+
+        # Pretraining uses four distinct vocabularies and explicit stream identity.
+        p.box(65,1350,2670,390,edge="#6E8787",dashed=True)
+        p.t(95,1380,"预训练模型",20,boldface=True)
+        p.t(1900,1380,"预训练时冻结 Tokenizer；输入仅为整数 token",12,color=gray,ha="right")
+        p.box(105,1420,320,260,edge="#9CA4AA",face="white")
+        p.t(265,1445,"时间块 / 模态块遮挡",14,ha="center",boldface=True)
+        for stream,(name,color) in enumerate([(r"E_S",blue),(r"E_O",orange),(r"F_S",blue),(r"F_O",orange)]):
+            yy=1480+stream*43
+            p.m(145,yy,name,16)
+            for j in range(5):
+                p.box(185+j*40,yy-13,33,27,face="#D5D7DA" if j in (2,3) else color,edge="white")
+        p.t(265,1662,"S / O 同步遮挡",11.5,ha="center",color=gray)
+        p.arrow([(425,1540),(480,1540)])
+        p.box(490,1450,300,190,edge=line,face=fill)
+        p.t(640,1480,"Token embedding",16,ha="center",boldface=True)
+        p.t(640,1530,"＋ 时间位置编码",14,ha="center")
+        p.t(640,1575,"＋ 模态 / 分支编码",14,ha="center")
+        p.arrow([(790,1540),(853,1540)])
+        p.box(865,1410,590,260,edge="#74858B",face="#F5F7F8")
+        p.t(1160,1440,"Transformer × 2",18,ha="center",boldface=True)
+        p.box(900,1470,520,66,edge=line,face="white")
+        p.t(1160,1503,"LayerNorm → 多头注意力 → 残差",14,ha="center")
+        p.arrow([(1160,1536),(1160,1570)])
+        p.box(900,1570,520,66,edge=line,face="white")
+        p.t(1160,1603,"LayerNorm → 前馈网络 → 残差",14,ha="center")
+        p.t(1160,1653,"共享跨模态上下文",11.5,color=gray,ha="center")
+        p.arrow([(1420,1603),(1438,1603),(1438,1540),(1455,1540)])
+        p.segment([(1455,1540),(1484,1540)])
+        p.ax.plot(1484,1540,"o",color=ink,markersize=3)
+        p.arrow([(1484,1540),(1484,1505),(1528,1505)])
+        p.box(1540,1450,270,110,edge=line,face=fill)
+        p.t(1675,1476,"四路 token 预测头",15,ha="center",boldface=True)
+        p.t(1675,1524,"各自词表分类",13,ha="center",color=gray)
+        p.arrow([(1810,1505),(1860,1505)])
+        p.box(1870,1450,200,110,edge=line)
+        p.t(1970,1470,"token 概率",13,ha="center")
+        for j,hh in enumerate([18,45,31,62,23]):
+            p.box(1900+j*29,1550-hh,18,hh,edge="white",face=blue)
+        p.arrow([(2070,1505),(2168,1505)])
+        p.box(2180,1475,330,105,edge=purple,face="#FCFAFE")
+        p.m(2345,1503,r"\mathcal{L}_{\rm mask}",25,color=purple)
+        p.t(2345,1545,"遮挡 token 交叉熵（S/O 求和）",12,ha="center",color=gray)
+        p.box(2180,1400,330,47,edge=purple)
+        p.t(2345,1424,"原 token（监督标签）",13,ha="center",color=purple)
+        p.arrow([(2345,1447),(2345,1475)],color=purple,dashed=True)
+
+        p.arrow([(1484,1540),(1484,1635),(1528,1635)],color=gray,dashed=True)
+        p.box(1540,1600,270,70,edge=gray,dashed=True)
+        p.t(1675,1635,"任务头（接口）",14,ha="center")
+        p.arrow([(1810,1635),(1882,1635)],color=gray,dashed=True)
+        p.box(1895,1600,175,70,edge=gray,dashed=True)
+        p.t(1982,1635,"任务输出",13,ha="center")
+        p.arrow([(2070,1635),(2168,1635)],color=gray,dashed=True)
+        p.box(2180,1610,330,80,edge=gray,dashed=True)
+        p.m(2345,1640,r"\mathcal{L}_{\rm task}",23)
+        p.t(2345,1672,"监督任务损失（接口）",11.5,ha="center",color=gray)
+        p.t(2610,1618,"任务标签",12,color=gray,ha="center")
+        p.arrow([(2580,1650),(2510,1650)],color=gray,dashed=True)
+        p.t(95,1714,"灰色 token 为被遮挡位置；任务头为下游接口。",11.5,color=gray)
+
+        # The bus carries typed integer streams. Only the four explicit dots are
+        # junctions; white under-strokes make unrelated supervision crossings clear.
+        bus,=p.ax.plot([1505,1505],[260,1320],color="#405B69",lw=1.55,zorder=5)
+        bus.set_path_effects([patheffects.Stroke(linewidth=5,foreground="white"),patheffects.Normal()])
+        for yy in (260,440,840,1020):p.ax.plot(1505,yy,"o",color="#405B69",markersize=4,zorder=6)
+        p.arrow([(1505,1320),(50,1320),(50,1540),(105,1540)],color="#405B69")
+        p.t(1070,1298,"冻结后的四路整数 token",13,color="#405B69",ha="center")
+        p.arrow([(1505,1320),(2345,1320),(2345,1400)],color=purple,dashed=True)
+        p.t(1950,1298,"遮挡位置的原 token 标签",12,color=purple,ha="center")
+
+        p.arrow([(80,1780),(140,1780)])
+        p.t(155,1780,"前向数据流",12)
+        p.arrow([(440,1780),(500,1780)],color=purple,dashed=True)
+        p.t(515,1780,"冻结目标监督",12,color=purple)
+        p.t(890,1780,"S：条件分量",13,color=blue)
+        p.t(1210,1780,"O：固定残差",13,color=orange)
+        p.m(1970,1780,r"\mathcal{L}_{\rm tok}=(\mathcal{L}_E+\mathcal{L}_F)/2",21,color=purple)
+        p.t(80,1819,"VQ 承诺项：编码向量与选中码字的均方差（码字停止梯度）；码本采用 EMA 更新。",11,color=gray)
+        p.t(2735,1819,"S/O 在有效时刻按训练观测尺度计算归一化误差；波形仅为结构示意。",11,color=gray,ha="right")
+        return finish([p.save()], [
+            "按用户指定的先量化、后时序解码路线绘制。教师、Tokenizer 与预训练模型各自优化；S/O 重建、VQ 承诺项和掩码交叉熵分别标出，码本采用 EMA 更新。电压目标衔接与任务头为结构表达，本图不声明该完整组合已完成实验验证。"
+        ], "project_framework.pdf")
+
+    if layout == "flow":
+        p = Plate("project_framework_flow", "Tak 引导的双分量 Tokenizer",
+                  "同模态独立预测与量化，冻结教师目标监督分量学习。", 1180)
+
+        # Both observations fan out to their own student and the shared teacher.
+        for title, cy, kind, detail in [
+            ("EEG",340,"eeg","原始电位"), ("fNIRS",915,"hb","HbO / HbR")]:
+            p.t(170,cy-65,title,20,ha="center",boldface=True)
+            p.wave(80,cy-35,180,70,kind)
+            p.t(170,cy+62,detail,13,color=gray,ha="center")
+
+        # The two modality enclosures describe modules, not chronological stages.
+        for title, offset, is_eeg in [("EEG Tokenizer",0,True),("fNIRS Tokenizer",575,False)]:
+            p.box(450,160+offset,1465,330,edge="#78858B",dashed=True)
+            p.t(480,185+offset,title,18,boldface=True)
+            p.t(1885,185+offset,"S / O 分支独立",12,color=gray,ha="right")
+            p.box(855,211+offset,275,245,face="white",edge="#A1A1A1")
+            p.t(992,232+offset,"预测分量",14,ha="center")
+            p.box(1250,211+offset,600,245,face="#FAFAFA",edge="#7D898F")
+            p.t(1550,235+offset,"量化 → token 序列",17,ha="center",boldface=True)
+            for component, base_y, color, pale in [
+                ("S",275,blue,"#EFF5FB"),("O",405,orange,"#FBF2E8")]:
+                yy = base_y+offset
+                p.box(535,yy-39,235,78,face=pale,edge=color)
+                p.t(652,yy-11,f"{component} 分支",16,color=color,ha="center",boldface=True)
+                p.t(652,yy+20,"编码与分量预测",12,ha="center",color=gray)
+                p.arrow([(781,yy),(884,yy)])
+                kind = ("eeg" if component=="S" else "eeg_residual") if is_eeg else (
+                    "hb_component" if component=="S" else "hb_residual")
+                p.wave(895,yy-25,200,50,kind,color=color)
+                p.arrow([(1106,yy),(1238,yy)])
+                p.t(1290,yy,component,17,color=color,ha="center",boldface=True)
+                rgb = np.asarray(colors.to_rgb(color))
+                for token in range(8):
+                    alpha = [.3,.52,.72,.94][token%4]
+                    p.box(1350+token*49,yy-24,43,48,
+                          face=tuple(1-alpha*(1-rgb)),edge="white")
+                p.t(1770,yy,"…",18,color=color,ha="center")
+            p.t(1550,443+offset,"词表拟合训练集预测",10.5,color=gray,ha="center")
+
+        # Draw these edges after the module enclosures so their input ports remain visible.
+        for cy in (340,915):
+            p.arrow([(270,cy),(484,cy)])
+            p.ax.plot(305,cy,"o",color=ink,markersize=3)
+            for branch_y in (cy-65,cy+65):
+                p.arrow([(484,cy),(484,branch_y),(523,branch_y)])
+        p.arrow([(305,340),(305,590),(330,590)])
+        p.arrow([(305,915),(305,665),(330,665)])
+
+        # Loss reads the paired S/O predictions, before quantization. The targets
+        # are frozen, so there is no teacher input or teacher gradient in a student.
+        p.box(330,525,350,190,face="#F7F3FA",edge=purple,dashed=True)
+        p.t(505,550,"Tak 教师与目标构建",16,ha="center",boldface=True)
+        p.t(505,583,"配对拟合 · 冻结目标",12,color=gray,ha="center")
+        p.t(505,620,"EEG：电压修正",14,ha="center")
+        p.t(505,669,"fNIRS：Hb 预测",14,ha="center")
+
+        for y,title in [(535,"EEG loss"),(635,"fNIRS loss")]:
+            p.box(900,y,350,90,face="#FCFAFE",edge=purple)
+            p.t(1075,y+19,title,13,ha="center")
+            p.m(1075,y+55,r"\frac{\mathcal{L}_S+\mathcal{L}_O}{2}",23,color=purple)
+        p.arrow([(995,456),(995,535)])
+        p.arrow([(995,786),(995,725)])
+        p.arrow([(680,620),(745,620),(745,575),(900,575)],color=purple,dashed=True)
+        p.arrow([(680,669),(775,669),(775,675),(900,675)],color=purple,dashed=True)
+        p.t(815,553,"EEG 目标",11.5,color=purple,ha="center")
+        p.t(835,651,"Hb 目标",11.5,color=purple,ha="center")
+
+        p.t(1550,586,"分量 loss：归一化 MSE",16,ha="center",color=purple)
+        p.t(1550,626,"按训练分量方差归一化，S / O 等权",12,ha="center",color=gray)
+
+        p.arrow([(80,1120),(143,1120)])
+        p.t(158,1120,"数据流",12)
+        p.arrow([(400,1120),(463,1120)],color=purple,dashed=True)
+        p.t(478,1120,"冻结目标监督",12,color=purple)
+        p.t(940,1120,"S：条件分量",13,color=blue)
+        p.t(1300,1120,"O：固定残差",13,color=orange)
+        p.t(1915,1158,"示意波形 · 量化后解码省略",10,color=gray,ha="right")
+        return finish([p.save()], [
+            "统一数据流图。两模态各自预测 S/O 分量并量化为 token；O 目标为测量减冻结 S 目标。教师目标与量化前预测计算归一化 MSE，S/O 等权。量化后的查表与合成省略。"
+        ], "project_framework.pdf")
+
+    # Main plate: the deployed predictor/word lookup path, not historical latent VQ.
+    p = Plate("01_project_framework", "图组 1A  |  Tak 条件分解与双分量 Tokenizer：完整框架",
+              "离线配对观测构建条件目标；各模态独立预测、离散编码与解码；S 为条件分量，O 为固定残差。", 1440)
+    p.section(145, "(a)  离线构建并冻结监督目标")
+    p.box(65, 185, 235, 165)
+    p.wave(82, 202, 91, 51, "eeg")
+    p.wave(188, 202, 94, 51, "hb")
+    p.t(182, 277, "同步 EEG + fNIRS", 13, ha="center")
+    p.t(182, 310, "Single-Trial / Simultaneous", 10.5, color=gray, ha="center")
+    p.arrow([(308,265),(344,265)])
+    p.block(355,185,320,165,"统一观测坐标",
+            "EEG：五频带功率 → 10 Hz 代理\nHbO/HbR：统一缓存 → 10 Hz\nPCA、参考和尺度按合同冻结")
+    p.arrow([(684,265),(725,265)])
+    p.box(735,185,375,165,face=fill)
+    p.t(922,215,"固定参考 Tak 教师",15,ha="center")
+    p.m(922,256,r"r(t)\ \longrightarrow\ (s,f,v,q)\ \longrightarrow\ \widetilde{\mathbf{u}}(t)",20)
+    p.t(922,296,"90 秒配对支持：拟合驱动与四初态",11.5,ha="center",color=gray)
+    p.t(922,326,"保留结果复用；电位版不新增 SSM 拟合",10.5,ha="center",color=gray)
+    p.arrow([(1118,265),(1166,265)])
+    p.box(1177,179,738,177)
+    p.t(1199,205,"20 秒目标  [0,20) s",14,boldface=True)
+    p.t(1199,247,"EEG",12.5)
+    p.m(1530,247,r"S_E^*=\mathcal{C}(X_E;\widetilde u_E),\qquad O_E^*=X_E-S_E^*",20,color=purple)
+    p.t(1199,293,"fNIRS",12.5)
+    p.m(1530,293,r"S_F^*=\widetilde{\mathbf{u}}_F,\qquad O_F^*=X_F-S_F^*",20,color=purple)
+    p.t(1199,332,r"$\mathcal{C}$：冻结代理引导的电压幅度修正；两类目标均为条件估计。",10.5,color=gray)
+    p.rule(386)
+    p.section(420,"(b)  单模态独立分词与整数解码")
+    p.t(1915,420,"E：EEG；F：fNIRS；四个分支各有独立预测器与词表",11.5,color=gray,ha="right")
+    for x,label in [(158,"同模态输入"),(432,"连续分量预测"),(657,"预测波形片段"),
+                    (844,"波形空间词表"),(1062,"整数 token 序列"),(1297,"整数查表与合成"),
+                    (1525,"分量重建"),(1810,"完整测量重建")]:
+        p.t(x,450,label,12,ha="center")
+
+    for modality, center, title, levels, kind, context in [
+        ("E",610,"EEG",4,"eeg","200 Hz · 单电极 2 秒上下文"),
+        ("F",955,"fNIRS",2,"hb","10 Hz · 6 秒；红 HbO / 绿 HbR")]:
+        upper, lower = center-70, center+70
+        p.t(77,center-115,title,16,boldface=True)
+        p.wave(77,center-42,175,84,kind)
+        p.m(164,center+66,rf"X_{{{modality}}}",19)
+        p.t(164,center+100,context,10.5,color=gray,ha="center")
+        p.t(164,center+126,"另含有效掩码与已知通道身份",10,color=gray,ha="center")
+        p.segment([(253,center),(285,center)])
+        p.ax.plot(285,center,"o",color=ink,markersize=3)
+        for component, yy, color in [("S",upper,blue),("O",lower,orange)]:
+            p.arrow([(285,center),(285,yy),(335,yy)])
+            p.predictor(343,yy,modality,component)
+            p.m(435,yy-58,rf"{component}_{{{modality}}}^*\ \dashrightarrow\ \mathcal{{L}}_{{{modality}}}^{{{component}}}",16,color=purple)
+            p.arrow([(435,yy-45),(435,yy-32)],color=purple,dashed=True)
+            p.arrow([(537,yy),(580,yy)])
+            wave_kind = ("eeg" if component=="S" else "eeg_residual") if modality=="E" else ("hb_component" if component=="S" else "hb_residual")
+            p.wave(590,yy-28,135,56,wave_kind,color=color)
+            p.m(657,yy-52,rf"\widetilde{{{component}}}_{{{modality},p}}",18,color=color)
+            p.arrow([(734,yy),(779,yy)])
+            p.book(789,yy-33,115,66,color,levels)
+            p.m(846,yy-57,rf"Q_{{{modality}}}^{{{component}}}",18,color=color)
+            p.arrow([(917,yy),(983,yy)])
+            p.tokens(1001,yy-(26 if levels==4 else 13),color,levels)
+            p.m(1062,yy-55,rf"\mathbf{{k}}_{{{modality},p}}^{{{component}}}",18,color=color)
+            p.t(1062,yy+53,"列：时间片；行：量化层",9.7,color=gray,ha="center")
+            p.arrow([(1134,yy),(1208,yy)])
+            p.box(1220,yy-36,155,72,face=fill)
+            p.m(1297,yy-13,rf"\sum_\ell c_{{{modality},\ell,k_\ell}}^{{{component}}}",16)
+            p.t(1297,yy+24,"固定码字 · 拼接" if modality=="E" else "码字 · 固定合成",10.5,color=gray,ha="center")
+            p.arrow([(1386,yy),(1443,yy)])
+            p.wave(1453,yy-28,145,56,wave_kind,color=color)
+            p.m(1525,yy-54,rf"\widehat{{{component}}}_{{{modality}}}",20,color=color)
+            p.arrow([(1607,yy),(1663,yy),(1663,center+(-18 if component=="S" else 18))])
+        p.ax.add_patch(patches.Circle((1663,center),17,facecolor="white",edgecolor=ink,lw=1))
+        p.t(1663,center-1,"+",19,ha="center")
+        p.arrow([(1683,center),(1724,center)])
+        p.wave(1734,center-37,174,74,kind)
+        p.m(1821,center-62,rf"\widehat X_{{{modality}}}=\widehat S_{{{modality}}}+\widehat O_{{{modality}}}",19)
+        p.t(1818,center+66,"对齐原测量坐标",11,color=gray,ha="center")
+        if modality=="E":
+            p.t(1050,center+155,"100 ms 输出 / 步幅；每分支 4 层；双分支合计 560 bit/s / 电极",11,color=gray,ha="center")
+        else:
+            p.t(1050,center+149,"2 秒输出 / 步幅；每分支 2 层；双分支合计 14 bit/s / Hb 通道对",11,color=gray,ha="center")
+            p.t(1818,center+104,"Hb：逐分支固定 100 ms 高斯合成",10,color=gray,ha="center")
+            p.t(1910,813,"Hb 分量图：实线 HbO，虚线 HbR",10.5,color=gray,ha="right")
+    p.rule(786,True)
+    p.rule(1130)
+    p.section(1155,"(c)  训练、验证与后续表示接口")
+    p.block(65,1190,575,137,"训练顺序与输入边界",
+            "冻结目标 → 独立连续监督 → 训练预测拟合词表\n部署：同模态输入 → 整数 ID → 固定码字\n任务标签不进入教师与 tokenizer")
+    p.block(685,1190,575,137,"分开评价分量、总重建与码本",
+            "S / O / 总误差 · 同码率直接量化 · 码字占用\nHb 边界跳变与较宽时间跨度分别核验\n先记录内汇总，再按被试等权；保留失败分母")
+    p.block(1305,1190,610,137,"冻结码流 → 上下文 / 下游接口",
+            "时间块 / 模态块联合遮挡 S、O → token 预测\n功率代理旧版已有掩码先导；本电位版尚未开展\n任务迁移与生理解释分别验证",dashed=True,face="white")
+    p.arrow([(80,1362),(142,1362)])
+    p.t(157,1362,"部署前向",11)
+    p.arrow([(340,1362),(402,1362)],color=purple,dashed=True)
+    p.t(417,1362,"冻结目标，仅训练监督",11,color=purple)
+    p.box(800,1353,45,18,dashed=True)
+    p.t(860,1362,"需区分版本的研究接口",11,color=gray)
+    p.t(1915,1362,"蓝：S 条件分量    橙：O 固定残差",11,ha="right")
+    p.t(65,1406,"结构与示意波形用于解释实现，不是实验曲线；条件分解与重建保真不等于生理真值或已证实跨模态收益。",11,color=red)
+    figures = [p.save()]
+
+    p = Plate("02_teacher_and_targets", "图组 1B  |  从配对观测到冻结目标",
+              "固定参考 Tak 动力学约束共享驱动；EEG 电位通过代理引导的条件修正获得目标，Hb 保留完整模型输出。", 1210)
+    p.section(145,"(a)  连续观测、Tak 动力学与观测回放")
+    p.wave(70,204,180,75,"eeg")
+    p.t(160,184,"原生 EEG 电位",12.5,ha="center")
+    p.t(160,303,"200 Hz · μV",11,color=gray,ha="center")
+    p.arrow([(260,241),(310,241)])
+    p.block(322,192,322,108,"区域功率代理",
+            "6 电极 × 5 频带 → 100 ms 功率\n对数 / 参考 → 训练 PCA 与尺度")
+    p.wave(70,370,180,75,"hb")
+    p.t(160,350,"缓存 HbO / HbR",12.5,ha="center")
+    p.t(160,469,"原生单位与时钟保留",11,color=gray,ha="center")
+    p.arrow([(260,407),(310,407)])
+    p.block(322,356,322,108,"统一 Hb 观测",
+            "带通缓存 → 10 Hz 时间箱\n5 秒可见参考与共同正尺度")
+    p.arrow([(652,241),(679,241),(679,320),(700,320)])
+    p.segment([(652,407),(679,407),(679,320)])
+    p.box(711,179,620,312,face=fill)
+    p.t(1021,208,"Tak 血流动力学核心",15,ha="center")
+    p.m(1021,251,r"\dot s=r-\kappa s-\gamma(f-1),\qquad\dot f=s",21)
+    p.m(1021,301,r"\dot v=\frac{f-v^{1/\alpha}}{\tau+\tau_v},\qquad f_{\rm out}=v^{1/\alpha}+\tau_v\dot v",20)
+    p.m(1021,361,r"\dot q=\frac{fE(f)/E_0-f_{\rm out}q/v}{\tau},\quad E(f)=1-(1-E_0)^{1/f}",20)
+    p.t(1021,420,"r：共享驱动；s：流量诱导信号",11.5,ha="center",color=gray)
+    p.t(1021,452,"f / v / q：相对静息的血流 / 血容量 / 脱氧 Hb",11.5,ha="center",color=gray)
+    p.arrow([(1342,330),(1382,330)])
+    p.box(1393,179,522,312)
+    p.t(1654,208,"物理读出 → 同坐标观测算子",14,ha="center")
+    p.m(1654,260,r"H_O=P_0(v-1)-Q_0(q-1)",21)
+    p.m(1654,304,r"H_R=Q_0(q-1)",21)
+    p.m(1654,357,r"\widetilde{\mathbf{u}}=\mathcal{A}[\,r,H_O,H_R\,]",23,color=purple)
+    p.t(1654,406,r"$P_0$ / $Q_0$：静息总 Hb / 脱氧 Hb 的基准量",11,color=gray,ha="center")
+    p.t(1654,437,r"$\mathcal{A}$：时间箱、参考及冻结观测变换",11,color=gray,ha="center")
+    p.t(1654,469,"固定参数；拟合完整驱动与四个初态",11,color=gray,ha="center")
+    p.t(65,511,r"$\kappa$：衰减；$\gamma$：反馈；$\tau$：转运时间；$\tau_v$：黏弹时间（两者均为秒）；$\alpha$：血管弹性指数；$E_0$：静息氧提取率。",10.5,color=gray)
+    p.t(65,540,"时间坐标：教师使用事件 [−30,60) s 的 90 秒支持；目标取 [0,20) s；参考为 [−30,−25) s。",11,color=gray)
+    p.rule(556)
+    p.section(591,"(b)  两种测量坐标分别构造 S / O")
+    p.t(78,633,"EEG：冻结代理引导原始电压幅度修正",14,boldface=True)
+    p.box(66,660,1155,243)
+    p.block(86,688,300,97,"联合区域约束",
+            "三个区域共享唯一电极集合\n最小对数功率改动 → 平滑幅度增益")
+    p.arrow([(399,736),(438,736)])
+    p.box(449,685,425,104,face=fill)
+    p.m(662,714,r"S_E^*=X_E+\sum_b(g_b-1)\,B_bX_E",20,color=blue)
+    p.m(662,760,r"O_E^*=X_E-S_E^*",21,color=orange)
+    p.arrow([(884,736),(923,736)])
+    p.block(934,688,265,97,"实际回算功率代理",
+            "重新滤波 / 功率 / 参考 / PCA\n仅接受代理误差下降的修正")
+    p.t(88,826,"B：五频带滤波；g：平滑增益；保持原生电压参考和原 5 秒功率参考。",11.5,color=gray)
+    p.t(88,861,"100 ms 平滑，目标两端各 2 秒余弦过渡；回退强度固定，失败保留。",11.5,color=gray)
+    p.t(1280,633,"fNIRS：完整 Tak 读出与固定差值",14,boldface=True)
+    p.box(1265,660,650,243)
+    p.m(1590,710,r"S_F^*=\widetilde{\mathbf{u}}_F",25,color=blue)
+    p.m(1590,765,r"O_F^*=X_F-S_F^*",25,color=orange)
+    p.t(1590,825,"HbO / HbR 在同一观测坐标中逐点相减",12,ha="center",color=gray)
+    p.t(1590,864,r"两模态均满足：$S^*+O^*=X$",12,ha="center",color=gray)
+    p.rule(938)
+    p.section(973,"(c)  条件目标的用途与独立诊断")
+    p.block(65,1010,575,116,"教师的用途",
+            "目标只监督本模态连续预测器；部署不读取教师\n本版复用保留 Tak 结果，不重新拟合 SSM")
+    p.block(685,1010,575,116,"数值与分解核验",
+            "物理域 / 收敛 / 积分加密 / 目标闭合\n保留计划分母、数值失败和修正失败")
+    p.block(1305,1010,610,116,"另行开展的模型诊断",
+            "Hb 可拟合性 · EEG–Hb 驱动一致性\n空间对应 · 联合三观测失配；与分词评价分开")
+    p.t(65,1170,"解释边界：电压 S 是条件幅度修正，O 是对应差值；二者不直接命名为“真实神经信号”与“纯噪声”。",11.5,color=red)
+    figures.append(p.save())
+
+    p = Plate("03_discrete_tokens_and_evaluation", "图组 1C  |  离散词表、部署接口与评价边界",
+              "当前电位版本采用连续分量预测后的波形空间残差量化；训练、词典拟合、冻结推理和研究接口分别展开。", 1320)
+    p.section(145,"(a)  先学习分量预测，再拟合训练波形词表")
+    p.block(65,195,300,146,"同模态输入",
+            "EEG：单电极原生电压\nHb：同一通道对的 HbO/HbR\n附有效掩码、已知通道身份\n被试划分：训练 / 验证 / 测试 = 6/2/2")
+    p.arrow([(376,267),(423,267)])
+    p.block(435,195,355,146,"S / O 独立连续预测器",
+            "各自的 MLP 编码器与波形解码器\n128 隐层 → 64 维潜变量\n仅分支目标误差参与主训练")
+    p.arrow([(800,267),(849,267)])
+    p.block(860,195,480,146,"冻结训练预测 → 波形空间词典",
+            "分别收集训练集 S / O 连续预测\n逐层 MiniBatch K-means 拟合量化残差\n每层 128 个码字；模态、分支、层均独立")
+    p.arrow([(1350,267),(1398,267)])
+    p.block(1410,195,505,146,"验证集选择 → 冻结部署",
+            "固定预测器、词表、尺度与合成方式\n推理只需本模态输入；解码只需整数 ID\n逐片段均值 / 幅度不作为连续旁路")
+    p.m(613,395,r"\mathcal{L}_m=\frac{1}{2}\sum_{a\in\{S,O\}}\frac{\operatorname{MSE}_{\Omega}(\widetilde Y_m^a,Y_m^{a*})}{v_{m,a}^{\rm train}}",24,color=purple)
+    p.t(1338,381,"Ω：有效目标元素；v：训练分量方差（实现设数值下限）。",11.5,color=gray,ha="center")
+    p.t(1338,413,"本页为选中的 EEG 与 Hb blocks 路径；边界 / 重叠损失属于其他候选。",11,color=gray,ha="center")
+    p.rule(452)
+    p.section(487,"(b)  每个分量独立做逐层残差量化与整数查表")
+    p.wave(73,566,177,86,"smooth",color=blue)
+    p.m(161,536,r"\rho_0=\widetilde Y_p^a",21,color=blue)
+    p.arrow([(262,608),(311,608)])
+    for i,x in enumerate([325,570,815,1060]):
+        p.book(x,567,118,80,blue,1)
+        p.m(x+59,537,rf"Q_{{{i+1}}}^a",21,color=blue)
+        p.m(x+59,699,rf"k_{{{i+1}}}^a",20)
+        if i<3:
+            p.arrow([(x+132,608),(x+229,608)])
+            p.t(x+182,581,"减去码字",10,color=gray,ha="center")
+    p.arrow([(1192,608),(1256,608)])
+    p.box(1268,550,647,132,face=fill)
+    p.m(1591,593,r"\widehat Y_p^a=\sum_{\ell=1}^{L_m}c_{m,\ell,k_{p,\ell}^a}^a",20)
+    p.t(1591,659,"同一分支的固定码字相加 → 时间拼接 / 固定合成",11.5,color=gray,ha="center")
+    p.m(639,760,r"k_\ell=\arg\min_k\|\rho_{\ell-1}-c_{\ell,k}\|_2^2,\qquad\rho_\ell=\rho_{\ell-1}-c_{\ell,k_\ell}",23)
+    p.t(639,795,"ρ 表示逐层量化误差；O 表示冻结的测量减条件分量。",10.5,color=gray,ha="center")
+    p.t(1591,709,"图示 4 层为 EEG；Hb 使用前 2 层。",11.5,ha="center",color=gray)
+    p.t(1591,752,r"Hb 高斯合成：$\sigma=100$ ms，截断于 $\pm4\sigma$。",11.5,ha="center",color=gray)
+    p.t(1591,789,"输出支持两端各增 0.4 秒；后续遮挡需计入。",11.5,ha="center",color=gray)
+    p.box(65,813,1850,101)
+    for x,label,values in [
+        (230,"模态 / 原生输入","EEG：200 Hz 单电极\nfNIRS：10 Hz HbO/HbR 通道对"),
+        (700,"可见上下文 → 单词输出 / 步幅","2 秒 → 0.1 秒 / 0.1 秒\n6 秒 → 2 秒 / 2 秒"),
+        (1145,"每分支层数 / 码字数","4 层 × 128\n2 层 × 128"),
+        (1640,"S + O 总名义码率","560 bit/s / 电极\n14 bit/s / Hb 通道对")]:
+        p.t(x,837,label,11.5,ha="center",boldface=True)
+        p.t(x,882,values,11,ha="center",color=gray)
+    p.rule(947)
+    p.section(982,"(c)  三类问题使用各自的证据，不能互相替代")
+    p.block(65,1019,575,179,"本电位版：分量与波形保真",
+            "S / O / 总重建误差；HbO、HbR 分列\n评分：EEG 用训练 RMS，Hb 用训练 SD\n对照：连续预测、同码率直接量化、零修正\n按完整被试汇总；码字健康与波形误差分列")
+    p.block(685,1019,575,179,"保留功率代理版：掩码先导",
+            "冻结词表 → 联合遮挡 S/O → Transformer\n时间块与模态块；输出 token 概率\n与插值、自身模态、错配和时间移位比较\n电位词表尚未重新开展该先导",face="white",dashed=True)
+    p.block(1305,1019,610,179,"下游任务：独立比较轨道",
+            "EEG / fNIRS / 融合表征 → 任务读出\n线性探测与微调，沿用各任务划分和标签\n与现有方法在共同支持和预算内比较\n本电位词表的任务迁移收益尚待验证",face="white",dashed=True)
+    p.t(65,1240,"训练目标、码本与变换按训练 / 验证边界冻结；现有公开测试结果属于探索性证据。",11.5,color=gray)
+    p.t(65,1281,"读图约定：波形与码字色块均为示意；分词重建、上下文补全、任务性能与生理解释是四个不同结论。",11.5,color=red)
+    figures.append(p.save())
+
+    captions = [
+        "完整框架。主图按 2026-10-29 电位 v2 实现绘制：连续分量预测后进行波形空间量化，S/O 独立查表解码。紫色虚线表示冻结目标的训练监督。",
+        "目标构建。Tak 教师基于配对观测形成条件预测；EEG 目标另经代理引导的电压幅度修正。模型目标、观测残差与生理真值保持概念区分。",
+        "离散与评价。整数码率计入全部分支和量化层；Hb 固定合成扩展输出支持。保留功率代理版的掩码结果不自动转移到本电位版。",
+    ]
+    return finish(figures, captions, "project_framework_atlas.pdf")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", type=Path, default=DEFAULT_SPEC)
     parser.add_argument("--changes", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--check", action="store_true", help="Fail when output differs from a fresh render")
+    parser.add_argument("--framework-20261029", action="store_true",
+                        help="Export the dated Tak/voltage framework PNG, SVG and bitmap PDF atlas to a fresh directory")
+    parser.add_argument("--framework-layout", choices=("detailed", "flow", "token_first"), default="detailed",
+                        help="Use flow for the compact current projection, or token_first for the requested encoder/VQ/decoder/consumer architecture")
     args = parser.parse_args()
+
+    if args.framework_20261029:
+        if args.check or args.changes:
+            parser.error("The dated framework export does not accept --check or --changes")
+        for path in render_framework_20261029(args.output.resolve(), layout=args.framework_layout):
+            print(path)
+        return 0
 
     spec = load_json(args.spec)
     changes = load_json(args.changes) if args.changes else None

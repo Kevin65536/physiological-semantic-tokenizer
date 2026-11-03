@@ -102,6 +102,29 @@ def test_report_keeps_cjk_and_tables_searchable_and_figures_bitmap(tmp_path):
     title_flow.doc.close()
 
 
+def test_report_revision_preserves_exported_png_without_resampling(tmp_path):
+    content = _content(tmp_path)
+    block = content["sections"][0]["blocks"][1]
+    content["sections"][0]["blocks"] = [block]
+    source = tmp_path / "report_content.json"
+    source.write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
+    first = tmp_path / "export_v1"
+    renderer.render_report(source, first)
+    previous_png = first / "figures/figure_01.png"
+    block.update(path=str(previous_png), preserve_bitmap=True)
+    source.write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
+    revised = tmp_path / "export_v2"
+    audit = renderer.render_report(source, revised)
+    assert (revised / "figures/figure_01.png").read_bytes() == previous_png.read_bytes()
+    assert audit["assets"][0]["preserved_bitmap"] is True
+    with Image.open(previous_png) as original, fitz.open(revised / "TECHNICAL_REPORT.pdf") as pdf:
+        embedded = next(image for page in pdf for image in page.get_image_info())
+        assert (embedded["width"], embedded["height"]) == original.size
+    block["preserve_bitmap"] = "true"
+    with pytest.raises(ValueError, match="preserve_bitmap"):
+        renderer.validate_content(content, tmp_path)
+
+
 def test_equation_uses_latex_png_in_both_exports_and_retains_source(tmp_path):
     content = _content(tmp_path)
     equation = {"type": "equation", "latex": r"\begin{aligned}y_t &= Hx_t + \epsilon_t\\x_{t+1}&=Ax_t\end{aligned}",

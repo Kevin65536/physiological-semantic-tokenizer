@@ -10,7 +10,8 @@ Content has ``title``, optional ``subtitle``, ``date``, ``summary`` and
 ``provenance`` string lists, and ``sections``. A section has ``title`` and either
 ordered ``blocks`` or ``paragraphs``, ``equations``, ``figures`` and ``tables``.
 Blocks have ``type`` paragraph/heading/figure/equation/table. Paragraph/heading
-use ``text``; figures use ``path`` and ``caption``; equations use bare ``latex``
+use ``text``; figures use ``path`` and ``caption`` (``preserve_bitmap`` keeps
+an already exported PNG unchanged); equations use bare ``latex``
 (aligned and matrices are supported) and optional caption/explanation; tables
 use ``columns`` and rectangular ``rows``, with optional relative ``widths``.
 All non-text blocks may carry a ``source`` string. Optional top-level ``sources``
@@ -108,6 +109,9 @@ def validate_content(content, base):
                 _string(block.get("caption"), "figure.caption")
                 if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}:
                     raise ValueError(f"figure must be a bitmap: {path}")
+                preserve = block.get("preserve_bitmap", False)
+                if not isinstance(preserve, bool) or (preserve and path.suffix.lower() != ".png"):
+                    raise ValueError("preserve_bitmap requires a boolean and a PNG source")
                 with Image.open(path) as image:
                     image.verify()
             elif kind == "equation":
@@ -546,10 +550,15 @@ def render_report(content_path, output):
                         original = image.size
                     width = min(BODY_WIDTH, 540 / ratio)
                     height = width * ratio
-                    pixels = _png(source_path, path, width, height, FIGURE_DPI)
+                    if block.get("preserve_bitmap", False):
+                        shutil.copyfile(source_path, path)
+                        pixels = original
+                    else:
+                        pixels = _png(source_path, path, width, height, FIGURE_DPI)
                     label = block.get("label", f"图 {figure_index}")
                     extra = {"original_path": str(source_path.resolve()), "original_pixels": list(original),
-                             "pixels": list(pixels), "dpi": FIGURE_DPI}
+                             "pixels": list(pixels), "dpi": FIGURE_DPI,
+                             "preserved_bitmap": block.get("preserve_bitmap", False)}
                     portable_block["path"] = path.relative_to(output).as_posix()
                 else:
                     equation_index += 1
