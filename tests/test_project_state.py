@@ -61,8 +61,11 @@ def test_current_registry_is_lightweight_and_views_are_readable(registry_repo):
 
     readme = render_readme_block(registry)
     assert "### Next steps" in readme
-    assert "Tak" in readme
-    assert "10 Hz" in readme
+    current = _current_by_entity(registry)
+    for track in registry["tracks"]:
+        headline = current[track["headline_entity"]]
+        assert f"**{track['label']}**（{headline['label']}）" in readme
+        assert headline["summary"] in readme
 
     snapshot = current_snapshot(registry)
     assert snapshot["status_axes"] == ["execution", "scientific_verdict"]
@@ -74,7 +77,8 @@ def test_current_registry_is_lightweight_and_views_are_readable(registry_repo):
 
 
 def test_execution_and_scientific_verdict_remain_independent():
-    current = _current_by_entity(_registry())
+    registry = _registry()
+    current = _current_by_entity(registry)
 
     assert current["main.r1p"]["execution"] == "stopped"
     assert current["main.r1p"]["scientific_verdict"] == "rejected"
@@ -90,10 +94,16 @@ def test_execution_and_scientific_verdict_remain_independent():
     assert current["comparison.efrm"]["execution"] == "stopped"
     assert current["comparison.efrm"]["scientific_verdict"] == "mixed"
 
-    assert current["main.program"]["execution"] == "planned"
-    assert current["main.program"]["scientific_verdict"] == "unreviewed"
-    assert current["main.program"]["state_id"] == "main.program@2026-10-27.tak-10hz-baseline"
-    assert "e.eeg_proxy_10hz_contract" in current["main.program"]["evidence_ids"]
+    baseline = next(record for record in registry["records"]
+        if record["state_id"] == "main.program@2026-10-27.tak-10hz-baseline")
+    assert baseline["execution"] == "planned"
+    assert baseline["scientific_verdict"] == "unreviewed"
+    assert "e.eeg_proxy_10hz_contract" in baseline["evidence_ids"]
+    assert "Tak" in baseline["summary"] and "10 Hz" in baseline["summary"]
+    assert current["main.program"]["execution"] == "completed"
+    assert current["main.program"]["scientific_verdict"] == "inconclusive"
+    assert current["main.program"]["state_id"] == "main.program@2026-10-29.voltage-completed"
+    assert "e.dual_voltage_v2_results" in current["main.program"]["evidence_ids"]
     assert current["main.eeg_proxy_rate"]["scientific_verdict"] == "inconclusive"
     assert current["main.eeg_proxy_rate"]["supersedes"] == ["main.eeg_proxy_rate@2026-10-10.v1"]
     assert current["main.shared_driver_tak"]["execution"] == "completed"

@@ -39,6 +39,28 @@ Read the original dataset documentation listed in
 [`DATASETS_DESCRIPTION.md`](DATASETS_DESCRIPTION.md) before changing a loader
 or interpreting units, task labels, timing, or licensing.
 
+## Visual EEG channel identity finding — 2026-10-29
+
+The native `Raw_EEG_channel_reference.xls` owns the Visual EDF `A*` channel to
+electrode mapping; `Location.ced` supplies geometry by **electrode name**. Its
+`Number` column is not the raw amplifier channel ID. The retained v5 producer
+inferred `A<Number>` from that geometry table: the
+[channel audit](../comparative_methods/runs/performance_analysis/20261029_visual_investigation_v1/channel_identity_audit_v2.json)
+identifies 13 wrong names among its 30 loaded EEG channels and six different
+physical electrodes in the declared 16-channel benchmark panel. A64 is documented
+as FCz and an independent EDF read confirms a nonconstant EEG signal; the retained
+reader excluded it. Case-only FP1/Fp1 and FP2/Fp2 differences are not counted.
+
+These Visual v5 arrays and predictions retain their historical identity but do
+not satisfy the declared physical-channel contract. Their scores cannot qualify
+the intended channel/geometry configuration, regardless of whether a score is
+above chance. A production repair requires versioned input metadata/cache and
+consumer validation; do not relabel v5 arrays or checkpoints in place. The
+investigation's `corrected_panel_v1` is an explicit same-event selection view from
+retained storage, checked against the native mapping. It corrects the fixed
+16-channel panel only, does not add FCz or repair every v5 consumer, and does not
+authorize a full cache rebuild or benchmark relaunch.
+
 ## Canonical sample identity
 
 The join key is composed from stable dataset-native identity, not array order:
@@ -159,6 +181,28 @@ same-electrode input context. Hb retains 2 s token spacing and 6 s same-modality
 input; 4 s decoded windows may overlap using fixed weights and same-branch hard
 IDs only. All levels, support and bitrate are explicit; no sample-specific
 continuous decoder sidecar is introduced.
+
+The [EEG-O refinement contract](../experiments/configs/physiology_semantic_tokenizer/dual_component_eeg_o_v1.yaml)
+reads only this generation's retained development cache. It rejects test rows,
+cross-split subjects and incomplete electrode groups before opening arrays.
+The original S/O targets and observation scales remain fixed. Band carriers and
+100 ms log powers are derived from observed EEG only; feature centering/scaling
+uses training subjects. Zero-phase filtering reads the complete retained 20 s
+window, even when the gain network has a shorter temporal context. These tokens
+therefore have an offline 20 s input boundary; future masks must cover it.
+The carrier/gain calculation is internal to the encoder. O is independently
+decoded from waveform dictionary IDs with no raw-input or gain sidecar. Direct
+compression of training O labels is an explicitly separate capacity reference.
+
+The [reference-aware EEG-O version](../experiments/configs/physiology_semantic_tokenizer/dual_component_eeg_o_v2.yaml)
+additionally reads only `original_proxy` and `projection` from the matching
+retained development trial. These are observed EEG and the unchanged training
+projection; neighboring Hb, teacher-target and corrected-proxy fields are not
+encoder inputs. The observed proxy inherits the producer's 90 s native EEG
+filtering and [-30,-25] s reference. Its central 20 s sequence therefore cannot
+be described as having a 20 s raw-input boundary. Fixed projection directions
+are checked for consistency within each dataset; new proxy scaling fits only
+training subjects. The same O targets and independent integer decoder remain.
 
 ### v1 patch target (historical)
 
@@ -335,6 +379,14 @@ increments and the declared null comparisons are the evidence surface.
 - 这些目标仍是完整支持上的离线处理特征。更密时间点不增加独立被试数，也
   不保证频带功率估计的精度或生理参数可识别性。旧 4 Hz 配置、源码快照及
   实测证据保留原身份；以下按日期保留的 4 Hz 描述只约束对应历史版本。
+
+2026-10-29 对 `tak_mismatch/20261028_v1` 的冻结源码与准备元数据复核确认：该版本
+直接从 `load_native_eeg_record` 的头皮通道计算功率，native reader 只将HEOG/VEOG
+分离为辅助通道，没有应用通用缓存路径的EOG回归。不能将缓存分支的清理声明套用到
+该保留EEG代理。其固定参数生理分析仅把EOG活动和回归后冻结PCA读出作为独立诊断，
+不回写父EEG输入、训练坐标或固定拟合；缺少登记EOG的Visual/REFED不得以额区EEG
+替代真实眼电通道。具体诊断边界见
+[`tak_mismatch_fixed_physiology_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/tak_mismatch_fixed_physiology_v1.yaml)。
 
 ### 新 Hb 建模输入统一使用带通缓存 — 2026-10-27
 

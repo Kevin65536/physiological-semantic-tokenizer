@@ -57,6 +57,25 @@ useful in this workspace but are not part of the tracked paper record. For manus
 Methods/Results, start with the linked human-readable reports and campaign tables;
 use local payloads only when a report explicitly requires them.
 
+## Spatial τ/β case selection and contour display — 2026-10-29
+
+The [spatial contract](configs/physiology_semantic_tokenizer/shared_driver_tak_topography_v1.yaml),
+[frozen candidate inventory](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261029_tau_beta_topography_v1/plan.json),
+[selection scores](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261029_tau_beta_topography_v1/screen_summary.json)
+and [user-requested stop record](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261029_tau_beta_topography_v1/measured_execution.json)
+retain the exploratory scope and partial fitting denominator. Preserve all
+source snapshots, synthetic controls, preparation, task JSON/NPZ and launch logs;
+the incomplete matrix does not establish a full between-subject spatial result.
+The [contour style preview](../docs/reports/interpretability_analysis/20261029_tau_beta_topomap_style_preview_v3/index.html)
+uses a complete retained subject without refitting. The
+[three-subject examples](../docs/reports/interpretability_analysis/20261029_tau_beta_topomap_examples_v1/index.html)
+use a common first-window convention with missing locations visible and shared
+parameter color scales. Their original points and
+range-preserving display convention are explicit; finer image pixels do not
+increase measurement resolution. Visual results inherit the
+[documented EEG identity defect](../docs/DATA_CONTRACT.md#visual-eeg-channel-identity-finding--2026-10-29)
+and are excluded from this preview.
+
 ## Matched τ/β and within-subject task parameters — 2026-10-28
 
 The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_tak_task_parameters_v1.yaml)
@@ -96,6 +115,42 @@ residuals; `tasks/` and `current_dof/tasks/` own fixed and shared-parameter
 fits. These are filtered-coordinate descriptive diagnostics, separate from the
 historical inlet-balance compatibility evidence below. Registered lifecycle
 and scientific interpretation remain in the research-state registry.
+The bounded [subject/task plotting panel](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/plot_priority_v1/plan.json)
+has its own [supervised launch](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/plot_priority_v1/launch.json)
+and versioned [plot exports](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/plot_priority_v1/exports/).
+Those exports preserve pending/failed denominators and do not imply completion
+of the original full shared-parameter inventory.
+
+The [fixed-parameter physiological exploration](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/fixed_physiology_v1/summary.json)
+uses the [reviewed analysis contract](configs/physiology_semantic_tokenizer/tak_mismatch_fixed_physiology_v1.yaml)
+and [frozen execution source](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/fixed_physiology_v1/source_pipeline_manifest_v1.json).
+It retains full fixed-result distributions, paired task comparisons, repeatability,
+residual direction geometry and a prespecified EOG panel with an amplitude-matched
+preprocessing control. [Numerical checks](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/fixed_physiology_v1/verification.json)
+and all failures remain with the analysis; no parent SSM is refitted.
+The [physiological mismatch report](../docs/reports/interpretability_analysis/20261029_fixed_tak_physiology_mismatch_v3/TECHNICAL_REPORT.html)
+([PDF](../docs/reports/interpretability_analysis/20261029_fixed_tak_physiology_mismatch_v3/TECHNICAL_REPORT.pdf),
+[bitmap atlas](../docs/reports/interpretability_analysis/20261029_fixed_tak_physiology_mismatch_v3/FIGURE_ATLAS.pdf))
+separates measured associations, preprocessing sensitivity and unverified
+physiological attribution; it is a communication export of these owning tables.
+The [Visual channel impact audit](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/fixed_physiology_v1/visual_channel_impact_audit_v1.json)
+owns the revised interpretation boundary: Visual results involving EEG or
+spatial geometry retain only their historical erroneous-mapping meaning;
+independently audited Hb-only endpoints retain their original conditions.
+The [v1 report](../docs/reports/interpretability_analysis/20261029_fixed_tak_physiology_mismatch_v1/TECHNICAL_REPORT.html)
+and all numerical evidence remain unchanged.
+
+The [spatial mismatch analysis](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/fixed_physiology_v1/spatial_patterns_v2/summary.json)
+retains all record/channel metrics and exploratory candidate rankings. Its
+[MNE-style gallery](../docs/reports/interpretability_analysis/20261029_fixed_tak_spatial_mismatch_v2/index.html)
+and [PDF](../docs/reports/interpretability_analysis/20261029_fixed_tak_spatial_mismatch_v2/report/TECHNICAL_REPORT.pdf)
+show selected subject maps, early/late checks and all native records by metric.
+Partial time support remains visible; the stricter coverage threshold belongs
+only to case selection. Visual maps are limited to the independently audited
+Hb-only endpoints. [Numerical verification](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/fixed_physiology_v1/spatial_patterns_v2/verification.json)
+checks the retained scalar values and record-equal aggregation. The initial
+derived analysis and the first incomplete PDF export remain at their original
+versioned paths; neither replaces the parent fixed evidence.
 
 ## Sensor proxy interventions under fixed Tak — 2026-10-27
 
@@ -262,6 +317,14 @@ separates abrupt seam jumps from wider patch offsets; the
 localizes the EEG saturation failure. Neither post-evaluation diagnosis was used
 to tune the retained models. The [delivery verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2/delivery_verification_v1.json)
 checks fixed step budgets, target closure and independent Hb replay.
+
+The [frozen S-token lag reanalysis](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_s_token_lags_v1/summary.json)
+owns subsequent conditional token counts and within-subject random-pairing
+controls. Its [report](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_s_token_lags_v1/REPORT.md)
+and [three-panel heatmap atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_s_token_lags_v1/heatmaps/index.html)
+provide the same vocabulary order across datasets and subjects; figure definitions
+and source identities remain in the run, under the
+[analysis contract](configs/physiology_semantic_tokenizer/dual_component_token_lags_v1.yaml).
 
 ## Frozen relationships and local shape tokens — 2026-10-25
 

@@ -17,6 +17,7 @@ come from the [project registry view](../docs/PROJECT_STATUS.md).
 | Replay T3, Step5 or overnight diagnostics | [Recorded diagnostic entries](#t3-step5-and-overnight-diagnostic-replay) |
 | Find retained evidence | [Result index](RESULTS_INDEX.md) and [run-directory contract](runs/README.md) |
 | Compare downstream task-label performance | [Comparison methods](../comparative_methods/README.md), [new rebenchmark design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1), [retained comparison protocol](../docs/comparisons/PROTOCOL.md), and [dated comparison report renderer](scripts/render_downstream_comparison_report.py) (`--summary`, `--paper-values`, fresh `--output`; report only, no fitting) |
+| Assemble the interpretability presentation | [Presentation renderer](scripts/render_interpretability_presentation.py) (`--output <fresh_versioned_export>`): explicit retained figures and summaries, editable PPTX, bitmap-figure PDF and per-slide source audit; no dataset loading or fitting |
 
 The SSM suites evaluate observation reconstruction, reliability and conditional
 representations. Downstream task-label benchmarks have a separate comparison
@@ -128,10 +129,44 @@ The read-only [`render_tak_mismatch.py`](scripts/render_tak_mismatch.py) exports
 dataset distributions and preselected time curves after both parameter modes
 are terminal, including signed residuals and instantaneous spatial error
 differences on their retained scoring supports. Revisions use fresh export
-directories. Tests: `test_tak_mismatch.py`, `test_tak_mismatch_data.py`,
+directories. The metadata-only `plot-plan` and supervised `plot-run` stages use
+the bounded, coverage-first panel at `plot_priority_v1/plan.json`; the original
+group fits and evidence identities are unchanged. The renderer's explicit
+`--priority-panel` mode can export pending/failed coverage and matched results
+before the full campaign finishes, to a fresh directory on each invocation.
+Tests: `test_tak_mismatch.py`, `test_tak_mismatch_data.py`,
 `test_tak_mismatch_runner.py`, `test_tak_mismatch_current_dof.py`,
 `test_tak_mismatch_report.py`; independent replay equivalence is covered by
 `test_shared_driver_replay_equivalence.py`.
+
+The fixed-result physiological exploration uses the same evaluator's
+`physiology-extract`, `physiology-analyze`, `physiology-ocular`,
+`physiology-counterfactual`, and `physiology-shapes` stages with
+[`tak_mismatch_fixed_physiology_v1.yaml`](configs/physiology_semantic_tokenizer/tak_mismatch_fixed_physiology_v1.yaml).
+Full-denominator scalar statistics and the prespecified array/EOG panel remain
+separate. It changes no parent fit; EOG regression sensitivity keeps the Hb-only
+readout and PCA/scale frozen and includes a mean/SD-matched proxy control.
+`render_tak_mismatch.py --fixed-analysis <analysis> --output <fresh-export>`
+consumes the explicit completed analysis manifest. The same renderer's
+`--revise-report <previous-export> --visual-channel-audit <audit> --output <fresh-export>`
+applies the confirmed Visual interpretation boundary while retaining the
+previous report, numerical tables and bitmap figures. Tests:
+`test_tak_mismatch_analysis.py`, `test_tak_mismatch_fixed_physiology.py`,
+`test_tak_mismatch_physiology.py`, `test_tak_mismatch_ocular.py`, and the existing
+report tests.
+
+The evaluator's read-only `physiology-topography` stage consumes those completed
+scalar tables and the retained registry geometry, writing a fresh
+`--spatial-output <fixed-analysis/spatial_patterns_version>` child. It keeps
+every record/channel denominator and ranks illustrative subjects with
+`--spatial-examples 3`. The same renderer's `--spatial-analysis <completed-analysis>
+--output <fresh-export> --workers 2` creates MNE-style maps, a bitmap PDF report
+and a complete per-record/metric PNG gallery. Spatial contrast, neighbouring
+agreement and early/late consistency select cases; they are not an independent
+confirmation. Partial time support stays visible, while Visual EEG-dependent
+maps remain excluded from spatial interpretation under the owning impact audit.
+Tests: `test_tak_mismatch_spatial.py`, the report/runner suites and the registered
+geometry projection check in `test_tak_topography.py`.
 
 The bounded sensor-proxy suite uses
 [`evaluate_shared_driver_sensor_proxy.py`](scripts/evaluate_shared_driver_sensor_proxy.py)
@@ -225,6 +260,35 @@ It keeps all primary estimates and adds the three lowest numeric supplementary
 REFED video IDs per subject. The display inventory retains source task paths
 and conditions; this presentation subset does not redefine the original
 same-condition statistical analysis.
+
+The spatial τ/β case study uses this evaluation entry with `--tak-topography
+--topography-stage <check|plan|synthetic|screen|prepare|pilot|run|analyze>` and
+[`shared_driver_tak_topography_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_topography_v1.yaml).
+It freezes a complete metadata candidate pool, selects illustrative subjects
+using repeated cached-Hb spatial patterns, then fits all available sites with
+one development-only coordinate per dataset. Source geometry, missing coverage,
+all selection scores and numerical failures remain explicit. Tests:
+`test_tak_topography.py` plus the Tak/10 Hz suites.
+The `analyze` stage verifies retained prediction scores before writing a fresh
+direct-child analysis; `--topography-analysis-output` selects its versioned path.
+The existing renderer's `--tak-topography --run <completed_run>
+--output <fresh_export>` creates absolute and subject-centered sensor maps,
+independent-repeat comparisons, reconstruction quality and synthetic controls.
+It shows observed positions without spatial interpolation and keeps one color
+scale per dataset and parameter across subjects and repeats. The HTML and
+searchable bitmap PDF atlas link directly to the owning analysis tables.
+For a display-only contour preview from retained partial results, use the same
+renderer with `--tak-topography-style-preview --run <run> --output <fresh_export>`.
+It selects the first non-Visual subject with two complete qualified maps,
+uses range-preserving local display smoothing inside measured coverage, and
+starts no fits. The frozen primary map contract and source estimates remain
+unchanged; the preview records its separate interpolation/display convention.
+Add `--topography-examples 3` to export three distinct subjects on the common
+first-window convention, retaining all subjects with at least 90% available
+positions in this stopped run. All panels share parameter color scales;
+unfinished positions retain explicit crosses and blank neighborhoods. The
+single-subject preview keeps its original two-repeat computation, with the
+aggregation label omitted from the figure and retained in the companion text.
 
 Automatic fNIRS morphology scoring reads the retained targets and predictions
 without refitting or changing the parent evidence:
@@ -433,6 +497,37 @@ The decoder-only [`voltage v2`](configs/physiology_semantic_tokenizer/dual_compo
 uses the same `voltage` stage to consume the completed v1 run. It verifies equal
 data/training contracts and reuses completed artifacts; only fixed same-branch
 100 ms synthesis and the validation-frozen selection change.
+
+EEG-O recovery uses the same entry with
+[`dual_component_eeg_o_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_eeg_o_v1.yaml):
+`--stage check`, `--stage synthetic`, then supervised `--stage eeg-o` under a
+fresh run. The finite development-only comparison uses observed band carriers,
+bounded gain prediction, a training-patch memorization check and a labelled O
+compression reference. Full-window filtering, gain context and independent
+integer decoding remain distinct. `test_dual_component_eeg_o.py` covers the
+pre-read split boundary, EEG-only features, analytic gains, gradient/context
+checks, subject aggregation, fixed budgets and complete fixture evaluation.
+The [reference-aware v2](configs/physiology_semantic_tokenizer/dual_component_eeg_o_v2.yaml)
+uses the same stages and read-only v1 band features. It adds the producer's
+observed EEG proxy and fixed training projection, with the original 90 s EEG
+reference/filter support explicit. Its two gain-context candidates predict
+three shared correction directions; Hb and teacher-output fields stay excluded.
+
+Frozen S-token lag inspection uses
+[`scripts/analyze_dual_component_token_lags.py`](scripts/analyze_dual_component_token_lags.py)
+with [`dual_component_token_lags_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_token_lags_v1.yaml).
+It replays the completed voltage model on public validation/test subjects, joins
+native trial/ROI identities, and compares 2 s lag-cell counts against whole-trial
+pairing permutations within subject, record, condition and session. Run its
+synthetic tests, `--stage benchmark`, then supervised `--stage all`; no model is
+fitted. `test_dual_component_token_lags.py` covers lag direction, context edges,
+matched-null expectations, task-locked negative controls and synthetic delays.
+After completion, `--stage report` renders the statistical summaries and
+`--stage heatmaps` exports the EEG/fNIRS, EEG/lag and expected-Hb-rank triptychs.
+Codeword order and the 24-word overview selection use training evidence only;
+full 128-word views retain the vocabulary. Group/individual and overview/full
+views declare their separate shared color scales. The lag heatmap shows
+descriptive divergence from matched random pairings, not significance.
 
 Response semantics, component attribution and conditional continuous or discrete representations.
 
