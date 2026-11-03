@@ -1,0 +1,38 @@
+schema: dual_component_token_lags_v1
+experiment_id: TK-DUAL-S-TOKEN-LAGS-v1
+parent_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2
+output: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_s_token_lags_v1
+intent: exploratory_reanalysis_of_completed_public_frozen_models
+splits: [validation, test]
+seeds: [17, 29, 43]
+primary_seed: 17
+primary_levels: [0, 0]
+secondary_levels: all_4_EEG_by_2_Hb_separately
+lags_seconds: [-8, -6, -4, -2, 0, 2, 4, 6, 8]
+alignment: same_trial_same_retained_ROI_six_EEG_electrodes_to_one_Hb_pair
+eeg_event: occurrence_of_an_EEG_S_word_in_a_2s_cell
+hb_event: Hb_S_word_at_the_lagged_2s_cell
+edge_policy: both_2s_cells_in_indices_1_to_8_with_full_encoder_context
+lag_resolution: 2s_cell_center_difference_individual_EEG_word_offsets_plus_or_minus_0.95s
+null_model: permute_whole_Hb_trials_within_subject_record_condition_session_preserve_ROIs_time_and_autocorrelation
+primary_permutations: 999
+secondary_permutations: 199
+permutation_seed: 20261029
+primary_endpoint: equal_subject_mutual_information_above_matched_trial_permutation_null
+secondary_endpoint: supported_positive_lag_token_pair_conditional_probability_and_subject_variation
+pair_min_eeg_occurrences: 200
+pair_min_expected_count: 20
+pair_min_trials: 10
+multiplicity: max_over_lags_for_MI_and_max_over_supported_pairs_and_positive_lags_for_pair_examples_then_Holm_over_subjects
+stopping: three_frozen_seeds_all_declared_levels_and_lags_no_model_fitting
+protected_data: forbidden
+claim_limits:
+  - conditional_model_S_words_are_not_physiological_truth
+  - offline_context_and_teacher_supervision_preclude_causal_delay_claims
+  - public_holdout_subjects_have_been_explored_previously_not_fresh_confirmation
+  - trials_exchangeable_only_conditionally_on_declared_strata_residual_drift_may_remain
+  - different_seed_code_numbers_are_not_corresponding_symbols
+resources:
+  export_workers: 3
+  analysis_workers: 6
+  numerical_threads: 1

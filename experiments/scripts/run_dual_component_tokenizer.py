@@ -38,7 +38,7 @@ import yaml
 DEFAULT_CONFIG = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml'
 STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark',
           'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all', 'refine', 'refine-one',
-          'voltage', 'voltage-one', 'eeg-o', 'eeg-o-one')
+          'voltage', 'voltage-one', 'voltage-token-atlas', 'eeg-o', 'eeg-o-one')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
 
@@ -939,6 +939,9 @@ def parse_args(argv=None):
     parser.add_argument('--parent-pid', type=int, help=argparse.SUPPRESS)
     parser.add_argument('--gpu-memory-bytes', type=int, help=argparse.SUPPRESS)
     parser.add_argument('--evaluation-split', choices=('development','test'),default='development',help=argparse.SUPPRESS)
+    parser.add_argument('--analysis-output', type=Path, help='Fresh direct-child retained-token analysis export')
+    parser.add_argument('--report-output', type=Path, help='Fresh figure collection for the retained-token atlas')
+    parser.add_argument('--token-source-analysis', type=Path, help='Reuse complete token assignments for shape-diverse display examples, without inference')
     return parser.parse_args(argv)
 
 
@@ -948,7 +951,7 @@ def main(argv=None):
         raise ValueError('EEG-O refinement uses only its development stages')
     if cfg['schema']=='dual_component_eeg_o_v1' and args.evaluation_split!='development':
         raise ValueError('EEG-O refinement forbids test evaluation')
-    if cfg['schema']=='dual_component_voltage_v1' and args.stage not in ('check','synthetic','voltage','voltage-one'):
+    if cfg['schema']=='dual_component_voltage_v1' and args.stage not in ('check','synthetic','voltage','voltage-one','voltage-token-atlas'):
         raise ValueError('voltage targets require their own versioned execution stages')
     if cfg['schema'] == 'dual_component_refinement_v1' and args.stage not in ('check', 'refine', 'refine-one'):
         raise ValueError('refinement uses its finite train/validation-only stages')
@@ -971,6 +974,11 @@ def main(argv=None):
         print(json.dumps(serial(result))); return
     if args.output is None: raise ValueError('--output required for a retained run')
     out, root = args.output.resolve(), args.project_root.resolve()
+    if args.stage=='voltage-token-atlas':
+        if args.analysis_output is None or args.report_output is None:raise ValueError('Explicit analysis and report destinations required')
+        result=(voltage_token_shape_examples(cfg,out,args.token_source_analysis.resolve(),args.analysis_output.resolve(),args.report_output.resolve())
+            if args.token_source_analysis else voltage_token_atlas(cfg,out,args.analysis_output.resolve(),args.report_output.resolve(),args.devices or ['cpu']))
+        print(json.dumps(serial(result)));return
     if args.steps is not None and (args.stage not in ('train-one','voltage-one','eeg-o-one') or args.pilot_output is None):
         raise ValueError('step overrides require train-one and a separate --pilot-output')
     if args.pilot_output and args.pilot_output.resolve() == out:
@@ -2109,6 +2117,160 @@ def render_voltage(cfg,out,selection,device='cpu'):
                     selected_rate='4-level/branch; 560 bit/s/electrode' if modality=='eeg' else '2-level/branch; 28 bit/2s',
                     units='uV' if modality=='eeg' else 'Frozen training SD'))
     return render_voltage_examples(out,examples,read_json(Path(out)/'voltage_summary.json'))
+
+
+def voltage_token_atlas_manifest(cfg,out):
+    """Check the retained public boundary before opening observation arrays."""
+    if cfg.get('schema')!='dual_component_voltage_v1' or cfg['data']['protected_data']!='forbidden':
+        raise ValueError('Public voltage contract required')
+    saved=read_json(out/'resolved_config.json')['config']
+    if saved['voltage']!=cfg['voltage'] or saved['data']!=cfg['data']:raise ValueError('Retained voltage contract mismatch')
+    if read_json(out/'voltage_summary.json').get('status')!='completed':raise ValueError('Completed tokenizer evaluation required')
+    selection=read_json(out/'voltage_selection.json')
+    if selection.get('selection_split')!='validation' or selection.get('test_used') is not False:raise ValueError('Frozen validation selection required')
+    manifest=read_json(out/'voltage_test_cache/manifest.json')
+    if manifest.get('schema')!='dual_component_voltage_cache_v1' or manifest.get('protected_data')!='forbidden' or manifest.get('final') is not True:
+        raise ValueError('Previously evaluated public test cache required')
+    for modality in ['eeg','hb']:
+        rows=manifest['rows'][modality]
+        if not rows or any(r['split']!='test' or r['dataset'] not in cfg['data']['datasets'] for r in rows):raise ValueError('Unexpected token-atlas population')
+        if len({r['id'] for r in rows})!=len(rows):raise ValueError('Duplicate token-atlas case identity')
+    return manifest,selection
+
+
+def _voltage_token_export_examples(book,ids,raw,population_rows,spec,selected,folder):
+    from src.analysis.dual_component_tokenizer import _csv
+    details=[]
+    for order,item in enumerate(selected):
+        code=np.array(item['ids'],dtype='int16');case,position=np.where(np.all(ids==code,axis=-1))
+        if len(case)!=item['occurrences']:raise ValueError('All-member token count mismatch')
+        sample=position[:,None]*spec['hop_samples']+np.arange(spec['hop_samples'])[None]
+        original=np.asarray(raw[case[:,None],sample,:]);decoded=book.decode(code).reshape(spec['hop_samples'],raw.shape[2])
+        direct=sum(book.codewords[level][int(value)] for level,value in enumerate(code)).reshape(decoded.shape)
+        if not np.array_equal(decoded,direct):raise ValueError('Independent integer-only prototype decoding mismatch')
+        filename=f'example_{order+1:02d}.npz';write_npz(folder/filename,original=original,prototype=decoded,case_indices=case,patch_indices=position,ids=code)
+        memberships=[dict(case_index=int(i),patch_index=int(j),token_start_s=float(j*spec['hop_samples']/spec['sample_rate_hz']),**population_rows[i]) for i,j in zip(case,position)]
+        _csv(folder/f'example_{order+1:02d}_members.csv',memberships)
+        dataset_counts=Counter(population_rows[i]['dataset'] for i in case);subjects={(population_rows[i]['dataset'],population_rows[i]['subject']) for i in case}
+        details.append(dict(item,file=filename,subjects=len(subjects),dataset_counts=dict(dataset_counts),
+            rows=int(len(set(case))),coordinates=len({population_rows[i]['coordinate'] for i in case}),
+            raw_minus_S_RMS=float(np.sqrt(np.mean((original-decoded)**2))),
+            display_all_members=True,independent_decoder_max_difference=0.))
+    return details
+
+
+def _voltage_token_atlas_assign(cfg,out,export,manifest,selection,modality,device):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import DualComponentTokenizer
+    folder=export/modality;folder.mkdir(exist_ok=True)
+    if (folder/'summary.json').exists():return read_json(folder/'summary.json')
+    name=selection['eeg_candidate' if modality=='eeg' else 'hb_candidate'];seed=cfg['voltage']['seed']
+    job=out/'voltage_jobs'/name/f'seed_{seed}';saved=torch.load(job/'checkpoint.pt',map_location='cpu',weights_only=False)
+    if saved['step']!=saved['budget'] or read_json(job/'test_evaluation/summary.json').get('status')!='completed':raise ValueError('Completed selected model required')
+    candidate=saved['candidate'];spec=cfg['voltage'][modality];levels=int(selection[modality+'_levels'])
+    if candidate['span_samples']!=spec['hop_samples']:raise ValueError('Single fixed prototype requires the selected nonoverlap support')
+    if device.startswith('cuda'):
+        torch.cuda.set_device(device);torch.cuda.set_per_process_memory_fraction(3*2**30/torch.cuda.get_device_properties(device).total_memory,device)
+        torch.cuda.reset_peak_memory_stats(device)
+    model=DualComponentTokenizer(saved['model_config'],'continuous_student').to(device);model.load_state_dict(saved['model_state']);model.eval()
+    book=_voltage_codebooks(job/'dictionaries.npz')['S']
+    if book.levels<levels:raise ValueError('Complete selected S-code tuple required')
+    raw=np.load(out/'voltage_test_cache'/manifest['arrays'][modality+'_u'],mmap_mode='r',allow_pickle=False)
+    shape=tuple(manifest['shapes'][modality+'_u'])
+    if raw.shape!=shape or shape[0]!=len(manifest['rows'][modality]):raise ValueError('Observation identity/shape mismatch')
+    arrays={modality+'_u':raw};patches=shape[1]//spec['hop_samples'];dimensions=spec['hop_samples']*shape[2]
+    if shape[1]%spec['hop_samples'] or book.dimension!=dimensions:raise ValueError('Full nonpadded patch support required')
+    def infer(indices,check=False):
+        with torch.inference_mode():
+            inputs,masks,_,_=_voltage_batch(manifest,arrays,modality,indices,candidate,cfg,device,load_targets=False)
+            words=model.branches[modality]['S'](inputs,masks)['waveform']
+            if check:
+                complete=model({modality:inputs},{modality:masks})[modality]['S']
+                if not torch.equal(words,complete):raise ValueError('Independent S branch changed frozen full-model output')
+            return book.encode(words.cpu().numpy(),levels=levels)
+    benchmarks=[]
+    for batch in [32,128]:
+        indices=np.arange(min(batch,shape[0]));started=time.monotonic();result=infer(indices,check=batch==32)
+        benchmarks.append(dict(batch_cases=len(indices),seconds=time.monotonic()-started,patches=result.shape[0]*patches))
+    batch=max(benchmarks,key=lambda b:b['patches']/b['seconds'])['batch_cases']
+    path=folder/'s_ids.npy';progress_path=folder/'progress.json';begin=0
+    if path.exists():
+        ids=np.load(path,mmap_mode='r+');progress=read_json(progress_path);begin=int(progress['completed_cases'])
+        if ids.shape!=(shape[0],patches,levels) or progress['source_checkpoint']!=str(job/'checkpoint.pt'):raise ValueError('Assignment resume identity mismatch')
+    else:
+        ids=np.lib.format.open_memmap(path,mode='w+',dtype='int16',shape=(shape[0],patches,levels));ids[:]=-1;ids.flush()
+        write_json(progress_path,dict(completed_cases=0,planned_cases=shape[0],source_checkpoint=str(job/'checkpoint.pt')))
+    started=time.monotonic()
+    for offset in range(begin,shape[0],batch):
+        stop=min(offset+batch,shape[0]);ids[offset:stop]=infer(np.arange(offset,stop));ids.flush()
+        write_json(progress_path,dict(completed_cases=stop,planned_cases=shape[0],source_checkpoint=str(job/'checkpoint.pt'),
+            elapsed_s=time.monotonic()-started,patches_per_second=(stop-begin)*patches/max(time.monotonic()-started,1e-9),batch_cases=batch))
+    if np.any(ids<0) or np.any(ids>=book.size):raise ValueError('Incomplete token assignment')
+    from src.analysis.dual_component_tokenizer import token_tuple_catalog,select_token_tuple_examples
+    catalog=token_tuple_catalog(ids,manifest['rows'][modality],size=book.size)
+    write_npz(folder/'catalog.npz',**catalog)
+    selected=select_token_tuple_examples(catalog,book,levels=levels,count=3)
+    details=_voltage_token_export_examples(book,ids,raw,manifest['rows'][modality],spec,selected,folder)
+    summary=dict(status='completed',modality=modality,source_checkpoint=str(job/'checkpoint.pt'),source_dictionary=str(job/'dictionaries.npz'),
+        assignment_source=str(out/'voltage_test_cache/manifest.json'),cases=shape[0],patches_per_case=patches,total_patches=int(shape[0]*patches),
+        levels=levels,codebook_size=book.size,unique_tuples=len(catalog['keys']),eligible_tuples=int(((catalog['counts']>=20)&(catalog['subject_counts']>=2)).sum()),
+        selected=details,selection='Among 25 most frequent complete tuples occurring >=20 times in >=2 subjects: most frequent, then two greedy farthest decoded waveforms by RMS distance (amplitude and shape); no closeness-to-input selection',
+        benchmarks=benchmarks,batch_cases=batch,device=device,seconds=time.monotonic()-started,
+        peak_cuda_allocated_mib=torch.cuda.max_memory_allocated(device)/2**20 if device.startswith('cuda') else 0,
+        scope='all previously evaluated public-test cases; normalized raw observations u; no per-patch centering/scaling; complete S tuple; before cross-token Hb synthesis',
+        hop_samples=spec['hop_samples'],sample_rate_hz=spec['sample_rate_hz'],channels=shape[2],new_fits=0)
+    write_json(folder/'summary.json',summary);return summary
+
+
+def voltage_token_atlas(cfg,out,export,report,devices):
+    import shutil
+    import torch
+    from concurrent.futures import ThreadPoolExecutor
+    if export.parent!=out or export==out or report.is_relative_to(out):raise ValueError('Direct-child analysis and separate report destinations required')
+    if not os.environ.get('INVOCATION_ID'):raise ValueError('Durable supervisor required for complete token assignment replay')
+    manifest,selection=voltage_token_atlas_manifest(cfg,out)
+    export.mkdir(exist_ok=True);torch.set_num_threads(2)
+    with owner_lock(export):
+        provenance=dict(schema='voltage_S_token_correspondence_v1',source_run=str(out),seed=cfg['voltage']['seed'],
+            modalities=['eeg','hb'],scope='all retained public-test cases',source_cache=str(out/'voltage_test_cache/manifest.json'),
+            output_support=dict(eeg='100ms, 20 samples, 4 IDs',hb='2s, 20 HbO/HbR sample pairs, 2 IDs'),
+            label='S decoder prototype, before Hb cross-token synthesis; original means observed input u, not S teacher target',
+            protected_reads=0,raw_dataset_reads=0,new_fits=0)
+        if (export/'source.json').exists() and read_json(export/'source.json')!=provenance:raise ValueError('Frozen analysis provenance changed')
+        write_json(export/'source.json',provenance)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures={m:pool.submit(_voltage_token_atlas_assign,cfg,out,export,manifest,selection,m,devices[i%len(devices)]) for i,m in enumerate(['eeg','hb'])}
+            results={m:f.result() for m,f in futures.items()}
+        summary=dict(status='completed',**provenance,results=results);write_json(export/'summary.json',summary)
+        shutil.copy2(Path(__file__),export/'runner_source.py');shutil.copy2(SOURCE/'src/analysis/dual_component_tokenizer.py',export/'analysis_source.py')
+        from src.analysis.dual_component_tokenizer import render_token_correspondence
+        render_token_correspondence(export,report)
+        return dict(status='completed',analysis=str(export),report=str(report),total_patches={m:r['total_patches'] for m,r in results.items()})
+
+
+def voltage_token_shape_examples(cfg,out,source,export,report):
+    """Display-only selection from immutable complete assignments; no encoder replay."""
+    import shutil
+    from src.analysis.dual_component_tokenizer import select_token_tuple_examples,render_token_correspondence
+    manifest,selection=voltage_token_atlas_manifest(cfg,out);parent=read_json(source/'summary.json')
+    if parent['status']!='completed' or Path(parent['source_run'])!=out or export.parent!=source or export.exists():raise ValueError('Completed assignment source and fresh child display analysis required')
+    launch=read_json(source/'launch.json');command=launch['command'];frequency_report=command[command.index('--report-output')+1]
+    export.mkdir();results={}
+    for modality in ['eeg','hb']:
+        folder=export/modality;folder.mkdir();old=parent['results'][modality]
+        ids=np.load(source/modality/'s_ids.npy',mmap_mode='r',allow_pickle=False)
+        raw=np.load(out/'voltage_test_cache'/manifest['arrays'][modality+'_u'],mmap_mode='r',allow_pickle=False)
+        if ids.shape[:2]!=(len(raw),old['patches_per_case']) or ids.shape[2]!=old['levels']:raise ValueError('Complete source assignment shape required')
+        with np.load(source/modality/'catalog.npz',allow_pickle=False) as a:catalog={k:a[k] for k in a.files}
+        book=_voltage_codebooks(Path(old['source_dictionary']))['S'];selected=select_token_tuple_examples(catalog,book,levels=old['levels'],count=3,mode='shape')
+        details=_voltage_token_export_examples(book,ids,raw,manifest['rows'][modality],cfg['voltage'][modality],selected,folder)
+        result={k:old[k] for k in ['modality','cases','patches_per_case','total_patches','levels','codebook_size','unique_tuples','eligible_tuples','hop_samples','sample_rate_hz','channels','scope','source_checkpoint','source_dictionary']}
+        result.update(status='completed',selected=details,assignment_summary=str(source/modality/'summary.json'),
+            selection='Among complete tuples with >=20 members and >=2 subjects, take 25 largest time-centered decoded RMS prototypes; first largest RMS then two greedy farthest centered waveforms; display original levels unchanged; no raw-fit selection',new_fits=0,new_encoder_replays=0)
+        write_json(folder/'summary.json',result);results[modality]=result
+    summary={k:v for k,v in parent.items() if k!='results'};summary.update(results=results,selection_view='shape',assignment_source=str(source),frequency_report=frequency_report,new_encoder_replays=0)
+    write_json(export/'summary.json',summary);shutil.copy2(Path(__file__),export/'runner_source.py');shutil.copy2(SOURCE/'src/analysis/dual_component_tokenizer.py',export/'analysis_source.py')
+    render_token_correspondence(export,report);return dict(status='completed',analysis=str(export),report=str(report),new_encoder_replays=0)
 
 
 def _eeg_o_parent(cfg, out, root=None):

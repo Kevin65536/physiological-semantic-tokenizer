@@ -12,10 +12,49 @@ from src.data.dual_component_tokenizer import voltage_proxy_correction,BANDS
 from src.inference.observation_baselines import eeg_band_power
 from src.tokenizers.dual_component_tokenizer import waveform_windows,overlap_decode,WaveformDictionary,synthesize_component
 from src.analysis.dual_component_tokenizer import voltage_case_metrics,voltage_aggregate,boundary_neighborhood_errors
+from src.analysis.dual_component_tokenizer import token_tuple_catalog,select_token_tuple_examples
 
 ROOT=Path(__file__).resolve().parents[1]
 SPEC=importlib.util.spec_from_file_location('voltage_runner',ROOT/'experiments/scripts/run_dual_component_tokenizer.py')
 runner=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(runner)
+
+
+def test_full_token_tuple_counts_do_not_merge_first_level_or_repeated_subjects():
+    ids=np.array([[[1,2],[1,3]],[[1,2],[1,2]],[[1,3],[1,3]]],dtype='int16')
+    rows=[dict(dataset='a',subject='s'),dict(dataset='a',subject='s'),dict(dataset='b',subject='s')]
+    result=token_tuple_catalog(ids,rows,size=4)
+    np.testing.assert_array_equal(result['keys'],[6,7])
+    np.testing.assert_array_equal(result['counts'],[3,3])
+    np.testing.assert_array_equal(result['subject_counts'],[1,2])
+    with pytest.raises(ValueError):token_tuple_catalog(ids.astype(float),rows,size=4)
+    broken=ids.copy();broken[0,0,1]=-1
+    with pytest.raises(ValueError):token_tuple_catalog(broken,rows,size=4)
+
+
+def test_token_examples_use_complete_integer_decoding_and_population_coverage():
+    book=WaveformDictionary(size=4,levels=2,channels=1)
+    book.codewords=np.array([[[0,0],[1,1],[2,2],[3,3]],[[0,0],[1,-1],[2,-2],[3,-3]]],dtype='float32')
+    book.dimension=2;book.value_scale=book.delta_scale=1.
+    catalog=dict(keys=np.array([0,1,2,3]),counts=np.array([100,90,80,1000]),subject_counts=np.array([3,2,2,1]))
+    result=select_token_tuple_examples(catalog,book,levels=2,count=3)
+    assert [r['key'] for r in result]==[0,2,1]
+    assert [r['ids'] for r in result]==[[0,0],[0,2],[0,1]]
+    assert sum(r['occurrences'] for r in result)==270
+    shapes=select_token_tuple_examples(catalog,book,levels=2,count=3,mode='shape')
+    assert [r['key'] for r in shapes]==[2,0,1]
+
+
+def test_token_atlas_rejects_wrong_split_before_observation_arrays(tmp_path,monkeypatch):
+    cfg=dict(schema='dual_component_voltage_v1',voltage={},data=dict(protected_data='forbidden',datasets=['a']))
+    (tmp_path/'resolved_config.json').write_text(json.dumps(dict(config=cfg)))
+    (tmp_path/'voltage_summary.json').write_text(json.dumps(dict(status='completed')))
+    (tmp_path/'voltage_selection.json').write_text(json.dumps(dict(selection_split='validation',test_used=False)))
+    cache=tmp_path/'voltage_test_cache';cache.mkdir()
+    manifest=dict(schema='dual_component_voltage_cache_v1',protected_data='forbidden',final=True,
+        rows={m:[dict(id=m,dataset='a',subject='s',split='train')] for m in ['eeg','hb']})
+    (cache/'manifest.json').write_text(json.dumps(manifest))
+    monkeypatch.setattr(np,'load',lambda *a,**k:pytest.fail('No arrays before metadata acceptance'))
+    with pytest.raises(ValueError,match='population'):runner.voltage_token_atlas_manifest(cfg,tmp_path)
 
 
 @pytest.fixture(scope='module')

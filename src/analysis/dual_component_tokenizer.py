@@ -1154,6 +1154,131 @@ def voltage_aggregate(values,rows,*,modality,variant,signals):
     return subjects,result
 
 
+def token_tuple_catalog(ids,rows,*,size=128):
+    """Count complete residual-VQ tuples without merging shared first-level IDs."""
+    ids=np.asarray(ids)
+    if ids.ndim!=3 or len(ids)!=len(rows) or ids.dtype.kind not in 'iu' or np.any(ids<0) or np.any(ids>=size):
+        raise ValueError('Complete integer [case,patch,level] IDs and aligned identities required')
+    if size**ids.shape[-1]>np.iinfo(np.int64).max:raise ValueError('Tuple packing would overflow')
+    packed=np.zeros(ids.shape[:2],dtype='int64')
+    for level in range(ids.shape[-1]):packed=packed*size+ids[...,level]
+    keys,counts=np.unique(packed,return_counts=True)
+    subjects=sorted({(r['dataset'],r['subject']) for r in rows});lookup={s:i for i,s in enumerate(subjects)}
+    sid=np.array([lookup[(r['dataset'],r['subject'])] for r in rows],dtype='int64')
+    if size**ids.shape[-1]*len(subjects)>np.iinfo(np.int64).max:raise ValueError('Subject/tuple packing would overflow')
+    pairs=np.unique(packed*len(subjects)+sid[:,None]);subject_keys,subject_counts=np.unique(pairs//len(subjects),return_counts=True)
+    if not np.array_equal(keys,subject_keys):raise ValueError('Tuple subject-count identity mismatch')
+    return dict(keys=keys,counts=counts,subject_counts=subject_counts)
+
+
+def select_token_tuple_examples(catalog,book,*,levels,count=3,mode='frequency'):
+    """Choose frequent prototypes spanning amplitude/shape, never input fit error."""
+    eligible=np.flatnonzero((catalog['counts']>=20)&(catalog['subject_counts']>=2))
+    frequency_order=sorted(eligible,key=lambda i:(-int(catalog['counts'][i]),int(catalog['keys'][i])))
+    if mode not in ('frequency','shape'):raise ValueError('Unknown token illustration selection')
+    order=frequency_order if mode=='shape' else frequency_order[:25]
+    if len(order)<count:raise ValueError('Too few repeated multi-subject full tuples for the requested examples')
+    keys=catalog['keys'][order].copy();codes=np.zeros((len(keys),levels),dtype='int16')
+    for level in range(levels-1,-1,-1):codes[:,level]=keys%book.size;keys//=book.size
+    if keys.any():raise ValueError('Tuple level count does not match dictionary')
+    waves=book.decode(codes).astype(float)
+    if mode=='shape':
+        shaped=waves.reshape(len(waves),-1,book.channels);centered=shaped-shaped.mean(axis=1,keepdims=True)
+        dynamic=np.sqrt(np.mean(centered**2,axis=(1,2)));top=np.argsort(-dynamic,kind='stable')[:25]
+        order=[order[i] for i in top];codes=codes[top];waves=centered.reshape(len(waves),-1)[top]
+    selected=[0]
+    while len(selected)<count:
+        distance=np.min(np.mean((waves[:,None,:]-waves[selected][None,:,:])**2,axis=-1),axis=1)
+        distance[selected]=-1;selected.append(int(np.argmax(distance)))
+    return [dict(key=int(catalog['keys'][order[i]]),ids=codes[i].tolist(),occurrences=int(catalog['counts'][order[i]]),
+        subject_count=int(catalog['subject_counts'][order[i]]),candidate_rank=i+1,
+        frequency_rank=frequency_order.index(order[i])+1) for i in selected]
+
+
+def render_token_correspondence(analysis,out):
+    """Dark fixed S prototypes against every assigned raw input patch in pale blue."""
+    import os
+    import shutil
+    from html import escape
+    import matplotlib;matplotlib.use('Agg')
+    from matplotlib import pyplot as plt,font_manager
+    from matplotlib.collections import LineCollection
+    from matplotlib.lines import Line2D
+    import fitz
+    analysis,out=Path(analysis),Path(out);summary=json.loads((analysis/'summary.json').read_text())
+    if summary['status']!='completed' or summary['protected_reads']!=0 or summary['new_fits']!=0:raise ValueError('Completed retained-only token analysis required')
+    if out.exists():raise ValueError('Preserve previous figure exports; choose a fresh output')
+    out.mkdir(parents=True);(out/'figures').mkdir()
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':12,'axes.unicode_minus':False,'axes.spines.top':False,'axes.spines.right':False})
+    figures=[];pages=[];source=escape(os.path.relpath(analysis,out));dark='#14578a';light='#9ec9ef'
+    for modality in ['hb','eeg']:
+        result=summary['results'][modality];channels=result['channels'];items=[]
+        for item in result['selected']:
+            with np.load(analysis/modality/item['file'],allow_pickle=False) as a:raw=a['original'];prototype=a['prototype'];codes=a['ids']
+            if len(raw)!=item['occurrences'] or raw.shape[1:]!=prototype.shape or codes.tolist()!=item['ids']:
+                raise ValueError('Prototype/cloud identity or complete-member count mismatch')
+            items.append((item,raw,prototype))
+        fig,axes=plt.subplots(channels,len(items),figsize=(14,7.4 if channels==2 else 4.7),squeeze=False,layout='constrained')
+        labels=['HbO','HbR'] if modality=='hb' else ['EEG']
+        shape_view=summary.get('selection_view')=='shape';limits=[]
+        for channel in range(channels):
+            low=min(min(float(raw[:,:,channel].min()),float(prototype[:,channel].min())) for _,raw,prototype in items)
+            high=max(max(float(raw[:,:,channel].max()),float(prototype[:,channel].max())) for _,raw,prototype in items)
+            margin=max((high-low)*.06,1e-4);limits.append((low-margin,high+margin))
+        time_axis=np.arange(result['hop_samples'])/result['sample_rate_hz']*(1000 if modality=='eeg' else 1)
+        for col,(item,raw,prototype) in enumerate(items):
+            code=' · '.join(map(str,item['ids']))
+            for channel in range(channels):
+                ax=axes[channel,col];coordinates=np.stack([np.broadcast_to(time_axis,raw[:,:,channel].shape),raw[:,:,channel]],axis=-1)
+                ax.add_collection(LineCollection(coordinates,colors=light,linewidths=.65,alpha=.13,rasterized=True,zorder=1))
+                ax.plot(time_axis,prototype[:,channel],color=dark,lw=2.7,zorder=3)
+                low,high=limits[channel]
+                if shape_view:
+                    low=min(float(raw[:,:,channel].min()),float(prototype[:,channel].min()));high=max(float(raw[:,:,channel].max()),float(prototype[:,channel].max()))
+                    margin=max((high-low)*.06,1e-4);low-=margin;high+=margin
+                ax.set_xlim(0,result['hop_samples']/result['sample_rate_hz']*(1000 if modality=='eeg' else 1));ax.set_ylim(low,high);ax.grid(alpha=.12)
+                ax.set_xlabel('片段内时间 / 毫秒' if modality=='eeg' else '片段内时间 / 秒')
+                ax.set_ylabel(labels[channel]+(' / 冻结训练RMS' if modality=='eeg' else ' / 冻结训练SD'))
+                ax.set_title('S-token ['+code+f']\n{item["occurrences"]}个原始片段 · {item["subjects"]}名被试',fontsize=11)
+        fig.suptitle(('HbO / HbR' if modality=='hb' else 'EEG')+'：S-token解码波形与全部对应原始片段'+('\n各列纵轴独立缩放，保留所有原始幅度' if shape_view else ''),fontsize=17)
+        fig.legend(handles=[Line2D([],[],color=dark,lw=2.7,label='S-token解码波形'),Line2D([],[],color=light,lw=1.5,label='对应的全部原始输入片段')],
+            loc='outside lower center',ncol=2,fontsize=12)
+        file='figures/'+modality+'_S_token_correspondence.png';fig.savefig(out/file,dpi=260,facecolor='white');plt.close(fig)
+        figures.append(dict(modality=modality,file=file,examples=len(items),plotted_lines=[item['occurrences'] for item,_,_ in items],all_members=True))
+        caption=('每列是一个完整S码组合，深蓝线由所有层的固定码字相加直接得到；浅蓝细线逐条绘制该组合在已评价公开测试集中的全部原始输入片段，没有抽样或按贴合程度筛除。'
+            +('同列HbO/HbR属于同一批2秒片段。这里显示单码原型，未应用依赖邻码的100ms拼接后平滑。' if modality=='hb' else '每条EEG片段为100毫秒；编码器使用的同电极2秒上下文未在横轴展开。')
+            +('各列使用独立纵轴范围，完整显示原始极值；跨列比较幅度须读刻度。' if shape_view else '同一信号的三列共用完整纵轴范围，保留所有极值。')
+            +'浅蓝是观测输入u，深蓝仅为S分支；两者差异还包含O分支，不能直接当作完整S+O重建误差。')
+        pages.append('<h1>'+('HbO/HbR' if modality=='hb' else 'EEG')+'：S-token与原始输入对应</h1><img width="750" src="'+file+'"><p>'+caption+'</p><p class="source">来源：<a href="'+source+'/'+modality+'/summary.json">完整分母与选码规则</a>；同目录example_*_members.csv记录每条浅蓝线的身份。</p>')
+    counts={m:summary['results'][m]['total_patches'] for m in ['eeg','hb']}
+    intro='<h1>S-token重建与原始信号：蓝色对应图</h1><p>来源：已完成的电极电压版tokenizer v2，固定seed 17。模型、词表、训练尺度及测试被试均不改变；本次只回放编码和整数解码，不训练、不重新拟合SSM。</p>'
+    intro+=f'<p>统计范围为此前已评价的公开测试集，两库各6名被试：EEG共{counts["eeg"]:,}个100毫秒片段，Hb共{counts["hb"]:,}个2秒双Hb片段。EEG的完整S-token为4层整数码组合，Hb为2层；不能只用第一层ID把不同完整解码波形混为一类。</p>'
+    intro+=('<p>选例先要求同一完整组合至少出现20次、覆盖至少2名被试，再按解码原型的时间变化RMS选前25组。第一例取变化最大，另两例在去时间均值的原型上依次取波形距离较大的组合；这里只在选例时去均值，实际图中的原始幅度保持不变。选择不使用原始片段贴合误差，属于形态展示样例，不是频率代表或随机样本。</p>' if summary.get('selection_view')=='shape' else
+        '<p>选例先要求同一完整组合至少出现20次、覆盖至少2名被试，再取频次最高的25组：第一例为最高频，另两例按解码波形RMS距离依次选择差异较大的原型。此规则展示常见码的幅度与形状范围，没有按原始片段贴合程度选图；不代表总体最优或随机样本。</p>')
+    if summary.get('selection_view')=='shape':
+        diagnostic=escape(os.path.relpath(Path(summary['frequency_report']),out))
+        intro+='<p>最高频码的幅度饱和和接近平坦的原型保留于<a href="'+diagnostic+'/index.html">高频码完整诊断图</a>，本组形态展示不替代这些负结果。</p>'
+    intro+='<p>每个所选码组合的全部匹配片段都画成浅蓝背景；深蓝为该S-token唯一的独立解码原型。原始输入保持缓存的冻结训练尺度，不逐片段去均值、对齐峰值或归一化。EEG单位为各数据集/电极的训练RMS，Hb为继承的训练观测SD；跨坐标的原生μV或浓度单位不能直接合并成一条固定原型。</p>'
+    intro+='<p>S是条件模型分量，不是原始观测u本身。Hb的S来自固定Tak输出监督，电压S来自条件幅度修正；它们均不是已知生理真值。本图说明“一组原始片段对应一个离散表示”的关系，完整观测重建仍需S+O。</p>'
+    sections=[intro]+pages;css='body{font-family:sans-serif;font-size:10pt;line-height:1.45;color:#223746}h1{font-size:18pt;margin:0 0 10pt}p{margin:8pt 0}.source{font-size:8pt}img{max-width:100%}'
+    (out/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>S-token对应图</title><style>'+css+'body{max-width:1150px;margin:30px auto;padding:0 24px}section{margin:35px 0}img{width:100%}</style><body><p><a href="FIGURE_ATLAS.pdf">PDF图册</a></p>'+''.join('<section>'+p+'</section>' for p in sections)+'</body></html>')
+    pdf=fitz.open()
+    def rectfn(number,filled):
+        r=fitz.Rect(0,0,842,595);return r,r+(32,25,-32,-25),None
+    for page in sections:
+        part=fitz.Story(page,user_css=css,archive=fitz.Archive(str(out))).write_with_links(rectfn)
+        if len(part)!=1:raise ValueError('Token-atlas page overflow; split the visible explanation')
+        pdf.insert_pdf(part);part.close()
+    pdf.save(out/'FIGURE_ATLAS.pdf',garbage=4,deflate=True)
+    validation=dict(pages=len(pdf),bitmap_images=sum(len(p.get_images()) for p in pdf),searchable_characters=sum(len(p.get_text()) for p in pdf),png_dpi=260)
+    if validation['bitmap_images']!=2 or validation['searchable_characters']<800:raise ValueError('Searchable bitmap atlas verification failed')
+    pdf.close();_json(out/'source_manifest.json',dict(owning_analysis=str(analysis),figures=figures,validation=validation,refits=0))
+    shutil.copy2(Path(__file__),out/'renderer_source.py');return figures
+
+
 def render_voltage_examples(out,examples,summary):
     import matplotlib;matplotlib.use('Agg')
     from matplotlib import pyplot as plt
