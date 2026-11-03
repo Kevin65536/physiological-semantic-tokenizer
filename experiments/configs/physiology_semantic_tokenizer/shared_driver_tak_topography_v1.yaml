@@ -1,0 +1,80 @@
+schema: shared_driver_tak_topography_v1
+experiment_id: SSM-TAK-TOPOGRAPHY-v1
+created: '2026-10-29'
+seed: 20261029
+parent: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261028_tak_tau_beta_tasks_v1_run2
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+run_name: 20261029_tau_beta_topography_v1
+scope: exploratory_clear_spatial_examples_not_population_confirmation
+data:
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation, refed]
+  protected_data: forbidden
+  cache_root: data/cache/physiology_semantic_clean_v5
+  geometry_root: data/cache/physiology_semantic_clean_v5/channel_geometry
+  refed_geometry_root: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20261013_refed_graphical_registration_v1/channel_geometry
+  fnirs_input: unified_cached_fnirs_v1
+  raw_reads: registered_native_EEG_only_for_selected_and_development_subjects
+  development_subjects: exact_six_per_dataset_from_parent_repeatability_calibration_identities
+  evaluation_pool: other_registered_public_subjects_metadata_admitted_before_signal_reads
+  window_seconds: 90
+  repeats: 2
+  single_trial: first_admitted_MI_window_in_session_00_and_session_02
+  simultaneous: first_admitted_WG_window_in_each_of_first_two_continuous_supports
+  visual: first_and_last_nonoverlap_common_event_windows_in_first_admitted_two_probe_recording
+  refed: first_90_seconds_of_video_2_and_video_6_both_Sad
+  missing: retain_record_geometry_support_and_fit_failures_no_padding_or_mirroring
+screen:
+  input: cached_Hb_only_no_parameter_fits_or_neural_labels
+  minimum_common_site_fraction: 0.8
+  score: positive_Spearman_of_log_Hb_dynamic_RMS_maps_times_minimum_of_repeat_log_RMS_P90_minus_P10
+  dynamic_RMS: sqrt_mean_of_time_centered_HbO_and_HbR_variances_over_899_scored_bins
+  candidates_per_dataset: 3
+  tie_break: canonical_subject_id
+  selection_intent: illustrative_outcome_selected_examples_never_population_inference
+  retained: full_eligible_pool_scores_exclusions_and_all_selected_subject_results
+model:
+  parameters: [tau, neurovascular_gain]
+  log_prior_sd: [0.125, 0.125]
+  reference: {tau: 2.0, neurovascular_gain: 1.0}
+  baseline: fixed_reference_with_same_driver_and_four_initial_state_freedom
+  source: unchanged_parent_Tak_solver_penalties_bounds_initialization_and_10Hz_weights
+  fit_unit: one_Hb_pair_one_90s_window_parameters_constant_within_window
+  spatial_input: six_nearest_EEG_channels_by_admitted_geometry
+  coordinate: one_development_fitted_PC1_and_common_Hb_factor_per_dataset_shared_across_all_sites_subjects_repeats
+  coordinate_training: all_available_sites_of_the_frozen_development_subjects_two_metadata_windows
+  no_site_normalization: true
+  interpretation: conditional_effective_parameter_map_not_physiological_ground_truth
+synthetic:
+  scenarios: [uniform, structured]
+  subjects: [0, 1]
+  repeats: [0, 1]
+  spatial_nodes: [0, 1, 2, 3, 4, 5]
+  truth: uniform_or_prescribed_tau_beta_spatial_pattern_fixed_across_repeats
+  nuisance: spatial_and_repeat_dependent_drivers_same_noise_across_scenarios
+  required_before_screen: completed_matrix_and_passed_software_tensor_geometry_checks
+  failures: preserve_false_uniform_map_structure_shrinkage_and_cross_talk_no_retuning
+endpoints:
+  primary: absolute_and_subject_centered_tau_beta_maps_with_repeat_comparison
+  secondary: common_site_repeat_Spearman_and_log_RMS_difference_between_and_within_subjects
+  reconstruction: paired_free_vs_fixed_Hb_NRMSE_with_complete_failure_denominators
+  sample_units: subjects_are_independent_units_channels_and_repeats_are_dependent
+  null: no_reproducible_spatial_parameter_structure_beyond_reestimate_variation
+  inference: descriptive_case_study_no_population_p_values
+  stopping: three_metadata_screened_candidates_per_dataset_all_available_sites_two_windows_no_result_driven_expansion
+geometry:
+  projection: native_xy_for_mnt_and_REFED_paper_visual_CED_minus_y_x
+  duplicate_locations: geometric_mean_of_parameter_estimates_at_identical_registered_template_locations_keep_membership
+  interpolation: none_primary_maps_colored_observed_nodes_only
+  outside_coverage: blank_or_grey_never_extrapolated
+  spatial_claim: sensor_position_head_projection_not_individual_cortical_registration
+report:
+  destination: docs/reports/interpretability_analysis
+  include: all_selected_subjects_both_repeats_absolute_maps_centered_maps_fit_quality_missingness_and_synthetic_controls
+  colors: shared_parameter_scale_across_subjects_and_repeats_within_dataset_no_per_map_autoscale
+  selection: rank_actual_parameter_spatial_contrast_repeat_consistency_and_fit_coverage_for_illustration_keep_all_candidates
+resources:
+  max_workers: 32
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  supervisor: user_systemd_with_linger
+  sizing: live_resources_and_measured_pilot

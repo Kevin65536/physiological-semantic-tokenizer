@@ -10090,6 +10090,425 @@ def render_tak_parameter_candidates(run,out,analysis=None):
     (out/'source_manifest.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+'\n');print(json.dumps(validation,ensure_ascii=False))
 
 
+def render_tak_topography(run,out,analysis=None):
+    """Render all prespecified spatial cases, repeats, and their limiting evidence."""
+    from html import escape
+    import os
+    import shutil
+    from matplotlib.colors import Normalize,TwoSlopeNorm
+    from matplotlib.patches import Circle
+    analysis=analysis or run/'topography_analysis_v1'
+    evidence=json.loads((analysis/'summary.json').read_text())
+    if evidence.get('data_identity',{}).get('interpretation')!='diagnostic_only_invalid_EEG_identity':
+        raise ValueError('The documented Visual channel-identity impact must accompany this dated experiment')
+    cfg=json.loads((run/'resolved_config.json').read_text())
+    plan=json.loads((run/'measured_plan.json').read_text())
+    if (cfg.get('schema')!='shared_driver_tak_topography_v1' or cfg['data']['protected_data']!='forbidden'
+            or evidence.get('status')!='completed' or Path(evidence['source_run']).resolve()!=run):
+        raise ValueError('Completed public spatial evidence required')
+    if out.exists():raise ValueError('Use a fresh versioned topography export')
+    def read(name):return pd.read_csv(analysis/(name+'.csv'),dtype={'subject':str,'location_id':str})
+    cells=read('parameter_cells');loc=read('location_estimates');means=read('mean_maps')
+    repeats=read('repeatability');between=read('between_subject');datasets=read('dataset_summary')
+    reconstruction=read('reconstruction');ranking=read('display_ranking');synthetic=read('synthetic_cells')
+    associations=read('input_associations')
+    if len(cells)!=evidence['planned_cells'] or len(ranking)!=len(plan['subjects']):raise ValueError('Spatial table denominator mismatch')
+    out.mkdir(parents=True);(out/'figures').mkdir()
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':11,'axes.unicode_minus':False,'mathtext.fontset':'stix','axes.spines.top':False,'axes.spines.right':False})
+    names={'eeg_fnirs_single_trial':'Single-Trial','simultaneous_eeg_nirs':'Simultaneous','visual_cognitive_motivation':'Visual','refed':'REFED'}
+    symbols={'tau':r'$\tau$','beta':r'$\beta$'}
+    units={'tau':'秒','beta':'模型相对增益'}
+    figures=[];sections=[];scale_records=[]
+    source=os.path.relpath(analysis,out)
+    def num(x,digits=2):return f'{x:.{digits}f}' if np.isfinite(x) else '不可计算'
+    def sid(s):return s.replace('subject_','')
+    def tab(headers,rows):
+        return '<table><tr>'+''.join('<th>'+escape(str(h))+'</th>' for h in headers)+'</tr>'+''.join('<tr>'+''.join('<td>'+escape(str(v))+'</td>' for v in row)+'</tr>' for row in rows)+'</table>'
+    def save(fig,name,title,caption,tables):
+        if name.startswith('visual_cognitive_motivation'):
+            title+='【仅诊断：EEG通道身份错误】'
+            fig.text(.5,.93,'Visual：EEG通道身份错误，不能用于脑区或局部输入解释',ha='center',fontsize=10,color='#a03525')
+        filename='figures/'+name+'.png';fig.savefig(out/filename,dpi=260,facecolor='white');plt.close(fig)
+        links='；'.join('<a href="'+escape(source+'/'+t+'.csv')+'">'+escape(t+'.csv')+'</a>' for t in tables)
+        sections.append('<h1>'+escape(title)+'</h1><img width="750" src="'+filename+'"><p>'+caption+'</p><p class="source">Owning evidence：'+links+'</p>')
+        figures.append(dict(name=name,file=filename,title=title,caption=caption,evidence_tables=tables))
+    def head(ax,g,column,norm,cmap):
+        ax.add_patch(Circle((0,0),1,facecolor='#f7f8fa',edgecolor='#65727d',lw=1.1,zorder=0))
+        ax.plot([-.1,0,.1],[.995,1.13,.995],c='#65727d',lw=1.1)
+        ax.text(0,1.19,'前',ha='center',va='center',fontsize=10)
+        ax.text(-1.15,0,'左',ha='center',fontsize=10);ax.text(1.15,0,'右',ha='center',fontsize=10)
+        geo=g[np.isfinite(g.x)&np.isfinite(g.y)];good=geo[np.isfinite(geo[column])]
+        missing=geo[~np.isfinite(geo[column])]
+        ax.scatter(good.x,good.y,c=good[column],norm=norm,cmap=cmap,s=110,edgecolor='#384550',lw=.45,zorder=3)
+        if len(missing):ax.scatter(missing.x,missing.y,c='#777',marker='x',s=70,lw=1.5,zorder=4)
+        ax.set(xlim=(-1.27,1.27),ylim=(-1.15,1.3),aspect='equal');ax.axis('off')
+    for ds,label in names.items():
+        subjects=ranking[ranking.dataset.eq(ds)].subject.tolist()
+        for parameter in ('tau','beta'):
+            rows=loc[loc.dataset.eq(ds)].copy();rows.loc[~truth(rows.complete),parameter]=np.nan
+            values=rows[parameter].dropna();maximum=max(float(values.max()) if len(values) else 1.,2. if parameter=='tau' else 1.)*1.02
+            norm=Normalize(0,maximum);scale_records.append(dict(dataset=ds,parameter=parameter,kind='absolute',vmin=0,vmax=maximum))
+            fig,axes=plt.subplots(2,len(subjects),figsize=(12,7.15),squeeze=False)
+            fig.subplots_adjust(left=.035,right=.88,bottom=.08,top=.87,wspace=.08,hspace=.2)
+            for col,subject in enumerate(subjects):
+                rr=repeats[(repeats.dataset==ds)&(repeats.subject==subject)&(repeats.parameter==parameter)].iloc[0]
+                for row in range(2):
+                    g=rows[(rows.subject==subject)&(rows.map_repeat==row)];ax=axes[row,col]
+                    head(ax,g,parameter,norm,'viridis')
+                    ax.set_title(f'{sid(subject)} · 片段 {"AB"[row]}',fontsize=12,pad=8)
+                    if row==1:ax.text(.5,-.06,f'重复相关 {num(rr.spearman)} · 配对 {int(rr.paired_locations)}/{int(rr.planned_locations)}',transform=ax.transAxes,ha='center',fontsize=10)
+            cb=fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm,cmap='viridis'),cax=fig.add_axes([.91,.19,.018,.58]))
+            cb.set_label(symbols[parameter]+' / '+units[parameter],fontsize=12)
+            fig.suptitle(f'{label}：'+symbols[parameter]+' 的空间估计与独立重复',fontsize=17,y=.98)
+            fig.text(.46,.015,'俯视模板头皮投影 · 每点为一个测量位置 · 全部面板共用线性色标 · 空白区域未测量',ha='center',fontsize=10)
+            save(fig,ds+'_'+parameter+'_absolute',label+'：'+('τ' if parameter=='tau' else 'β')+' 绝对空间分布',
+                '列为不同被试，A/B为两个独立90秒片段；每个位置分别拟合，参数在片段内为常数。下方相关是共同位置的Spearman排序相关；同色表示相同参数值。灰叉为缺失或数值不合格，同坐标通道取几何均值。颜色不延伸到未测量区域；模板投影不代表个体皮层定位。',
+                ['location_estimates','repeatability'])
+        fig,axes=plt.subplots(2,len(subjects),figsize=(12,7.15),squeeze=False)
+        fig.subplots_adjust(left=.035,right=.87,bottom=.08,top=.87,wspace=.08,hspace=.2)
+        for row,parameter in enumerate(('tau','beta')):
+            subset=means[(means.dataset==ds)&(means.parameter==parameter)]
+            maximum=max(float(subset.relative_percent.abs().max()) if len(subset) else 1.,1e-3)
+            norm=TwoSlopeNorm(vmin=-maximum,vcenter=0,vmax=maximum)
+            scale_records.append(dict(dataset=ds,parameter=parameter,kind='relative_percent',vmin=-maximum,vmax=maximum))
+            for col,subject in enumerate(subjects):
+                original=loc[(loc.dataset==ds)&(loc.subject==subject)&(loc.map_repeat==0)][['location_id','x','y']]
+                values=subset[subset.subject.eq(subject)][['location_id','relative_percent']]
+                g=original.merge(values,on='location_id',how='left');head(axes[row,col],g,'relative_percent',norm,'RdBu_r')
+                axes[row,col].set_title(sid(subject)+' · '+symbols[parameter],fontsize=12,pad=8)
+            cb=fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm,cmap='RdBu_r'),cax=fig.add_axes([.905,.56 if row==0 else .15,.018,.29]))
+            cb.set_label(symbols[parameter]+' 相对自身空间均值 / %',fontsize=10)
+        fig.suptitle(label+'：去除被试整体水平后的空间分布',fontsize=17,y=.98)
+        fig.text(.46,.015,'A/B几何均值地图 · 红色高于自身空间几何均值，蓝色低于均值 · 同一行共用色标',ha='center',fontsize=10)
+        save(fig,ds+'_centered',label+'：区域形状与被试差异',
+            '先对同位置A/B参数取几何均值，再除以该被试所有共同位置的空间几何均值，减1后乘100%。图中零点表示该被试的整体水平，排除了全头参数一起升高的影响。τ与β各用自己的对称色标；应先看前两页A/B是否重复，再判断本页形状差异。',
+            ['mean_maps','between_subject','dataset_summary'])
+        detail=[]
+        for subject in subjects:
+            for p in ('tau','beta'):
+                rr=repeats[(repeats.dataset==ds)&(repeats.subject==subject)&(repeats.parameter==p)].iloc[0]
+                g=means[(means.dataset==ds)&(means.subject==subject)&(means.parameter==p)]
+                def area(row):
+                    return ('左' if row.x<-.15 else '右' if row.x>.15 else '中线')+('前' if row.y>.33 else '后' if row.y<-.33 else '中部')
+                extrema=(area(g.loc[g.value.idxmax()])+' / '+area(g.loc[g.value.idxmin()])) if len(g) else '缺失'
+                detail.append([sid(subject),'τ' if p=='tau' else 'β',num(rr.spearman),num(rr.mean_map_geometric_center,3),num(rr.mean_map_spatial_range_pct,1)+'%',extrema])
+        result_page='<h1>'+label+'：数值与空间读法</h1>'+tab(['被试','参数','A/B排序相关','空间几何均值','P90/P10跨度','最高/最低位置投影'],detail)
+        result_page+='<p>跨度为两次估计的几何均值地图中P90/P10的比值减1，以百分比表示；均值的单位为τ秒、β模型相对增益。末列描述极值测量点位于模板投影的哪一侧：横坐标±0.15、纵坐标±0.33作粗分界，不是皮层分区或区域效应检验。</p>'
+        z=datasets[datasets.dataset.eq(ds)].set_index('parameter')
+        result_page+='<p>去除整体水平后，异被试/同被试空间形状差异比：τ为'+num(z.loc['tau','between_within_shape_ratio'])+'，β为'+num(z.loc['beta','between_within_shape_ratio'])+'。若小于或接近1，本组选例中的被试间形状差异未明显超过两次重估的变化；大于1也只构成这3名选例的描述线索。</p>'
+        r=reconstruction[reconstruction.dataset.eq(ds)].iloc[0]
+        result_page+=f'<p>双Hb训练尺度NRMSE：固定参数 {num(r.fixed_hb_nrmse,3)} → 自由τ＋β {num(r.free_hb_nrmse,3)}；配对 {int(r.paired_cells)}/{int(r.planned_cells)} 个位置×片段。参数排序重复、波形误差及生理真实性是不同问题，不能相互替代。</p>'
+        if ds=='visual_cognitive_motivation':
+            result_page+='<p><b>本库仅保留为输入身份缺陷的诊断：</b>原生读取器将Location.ced的Number误当EDF原始A通道编号，并排除A64/FCz。近邻EEG输入及共同开发坐标受影响；即使Hb位置正确、参数图重复，也不能支持声明的局部脑区解释。本库不进入最终使用候选。</p>'
+        result_page+='<p class="source">Owning evidence：<a href="'+escape(source)+'/repeatability.csv">repeatability.csv</a>；<a href="'+escape(source)+'/dataset_summary.csv">dataset_summary.csv</a>；<a href="'+escape(source)+'/mean_maps.csv">mean_maps.csv</a>。</p>'
+        sections.append(result_page)
+    fig,axes=plt.subplots(2,2,figsize=(12,7.15),layout='constrained')
+    for ax,(ds,label) in zip(axes.flat,names.items()):
+        for j,p in enumerate(('tau','beta')):
+            a=repeats[(repeats.dataset==ds)&(repeats.parameter==p)];b=between[(between.dataset==ds)&(between.parameter==p)]
+            ax.scatter(np.repeat(j-.14,len(a)),a.centered_log_rms*100,c='#256b9a',marker='o',s=48,zorder=3)
+            ax.scatter(np.repeat(j+.14,len(b)),b.centered_log_rms*100,c='#c36433',marker='^',s=53,zorder=3)
+            summary=datasets[(datasets.dataset==ds)&(datasets.parameter==p)].iloc[0]
+            ax.plot([j-.23,j-.05],[summary.within_centered_log_rms*100]*2,c='#256b9a',lw=2)
+            ax.plot([j+.05,j+.23],[summary.between_centered_log_rms*100]*2,c='#c36433',lw=2)
+        ax.set_xticks([0,1],[symbols['tau'],symbols['beta']]);ax.set_title(label+(' · 仅诊断，EEG身份错误' if ds=='visual_cognitive_motivation' else ' · 各3名被试／3对被试'))
+        ax.set_ylabel('去中心空间差异 / 100 × log-RMS');ax.set_ylim(bottom=0);ax.grid(axis='y',alpha=.2)
+    fig.suptitle('空间形状差异：同一被试两次重估 vs 不同被试',fontsize=16)
+    fig.legend(handles=[matplotlib.lines.Line2D([],[],marker='o',c='#256b9a',ls='',label='同一被试 A/B'),matplotlib.lines.Line2D([],[],marker='^',c='#c36433',ls='',label='不同被试均值地图')],loc='outside lower center',ncol=2)
+    save(fig,'within_between','空间形状差异是否大于重复变化',
+        '比较共同位置的参数对数，分别减去地图在这些位置的均值，再计算差值的均方根。圆点为一名被试的A/B差异，三角为一对被试的A/B均值地图差异；短线为三点的均方根。值越大，形状差别越大；100×log-RMS不是百分比。被试对互相关联，本图无显著性检验；四库纵轴各自缩放。',
+        ['repeatability','between_subject','dataset_summary'])
+    fig,axes=plt.subplots(1,2,figsize=(12,5),layout='constrained')
+    for j,(ds,label) in enumerate(names.items()):
+        r=reconstruction[reconstruction.dataset.eq(ds)].iloc[0]
+        axes[0].bar(j-.18,r.fixed_hb_nrmse,.35,color='#788791',label='固定 τ、β' if j==0 else None)
+        axes[0].bar(j+.18,r.free_hb_nrmse,.35,color='#256b9a',label='自由 τ＋β' if j==0 else None)
+        axes[0].text(j,max(r.fixed_hb_nrmse,r.free_hb_nrmse)*1.04,f'{int(r.paired_cells)}/{int(r.planned_cells)}',ha='center',fontsize=10)
+        g=cells[cells.dataset.eq(ds)&truth(cells.qualified)]
+        for k,subject in enumerate(sorted(g.subject.unique())):
+            z=g[g.subject.eq(subject)].hb_relative_rmse
+            axes[1].scatter(j+(k-1)*.15,z.median(),c='#256b9a',s=45)
+            axes[1].plot([j+(k-1)*.15]*2,[z.quantile(.1),z.quantile(.9)],c='#256b9a',lw=1)
+    for ax in axes:ax.set_xticks(range(4),['Single-Trial','Simultaneous','Visual*','REFED'],rotation=12);ax.set_ylim(bottom=0);ax.grid(axis='y',alpha=.15)
+    axes[0].set_ylabel('Hb NRMSE / 冻结开发集SD');axes[0].set_title('固定参数对照与自由拟合');axes[0].legend()
+    axes[1].set_ylabel('Hb残差RMS / 本片段目标动态RMS');axes[1].set_title('自由拟合：各被试中位数及P10–P90')
+    fig.suptitle('数值合格、误差降低和波形恢复分别判断',fontsize=16)
+    save(fig,'reconstruction_quality','参数地图对应怎样的重建质量',
+        '左：逐时间与HbO/HbR的训练尺度NMSE，按通道→片段→被试等权平均后开根；标注为配对合格/计划单元。右：点为被试中位数，竖线为位置×片段的P10–P90，非置信区间；分母为本片段双Hb去均值动态RMS，接近1表示残差与目标动态同量级。Visual*存在EEG通道身份错误，仅作诊断。',
+        ['reconstruction','parameter_cells'])
+    fig,axes=plt.subplots(2,2,figsize=(12,7.15),layout='constrained')
+    for row,p in enumerate(('tau','beta')):
+        for col,scenario in enumerate(('uniform','structured')):
+            ax=axes[row,col];g=synthetic[(synthetic.arm=='tak_tau_beta')&(synthetic.scenario==scenario)]
+            for (subject,repeat),z in g.groupby(['subject','map_repeat']):
+                z=z.sort_values('node');color=['#256b9a','#c36433'][int(subject)]
+                ax.plot(z.node,z[p],marker='o',ls=['-','--'][int(repeat)],c=color,lw=1.5,label=f'生成被试{subject} · {"AB"[int(repeat)]}')
+                if repeat==0:ax.plot(z.node,z['truth_'+p],c=color,ls=':',lw=2)
+            ax.set_title(('平坦真值' if col==0 else '已知空间结构')+' · '+symbols[p]);ax.set_xlabel('生成位置编号（非真实脑区）')
+            ax.set_ylabel(symbols[p]+' / '+units[p]);ax.grid(alpha=.15)
+    axes[0,0].legend(fontsize=9,ncol=2);fig.suptitle('合成对照：结构恢复与平坦真值的虚假起伏',fontsize=16)
+    save(fig,'synthetic_controls','合成真值对照界定空间图的解释边界',
+        '颜色区分两个生成被试，实线/虚线分别为重复A/B，点线为无噪声生成器的真实参数；各面板独立纵轴。每次仍重新估计驱动、初态和τ/β。平坦真值出现的小幅空间起伏说明估计噪声仍存在；有结构时可检查排序恢复和向先验的收缩。此合成范围不能直接校准实测置信区间。',
+        ['synthetic_cells'])
+    fig,axes=plt.subplots(2,2,figsize=(12,7.15),layout='constrained')
+    colors=['#256b9a','#c36433','#6c729b']
+    for ax,(ds,label) in zip(axes.flat,names.items()):
+        for j,subject in enumerate(ranking[ranking.dataset.eq(ds)].subject):
+            g=loc[loc.dataset.eq(ds)&loc.subject.eq(subject)&truth(loc.complete)]
+            for repeat,marker in [(0,'o'),(1,'^')]:
+                z=g[g.map_repeat.eq(repeat)]
+                ax.scatter(z.hb_eeg_amplitude_ratio,z.beta,c=colors[j],s=23,marker=marker,alpha=.75,label=sid(subject) if repeat==0 else None)
+        ax.set_title(label+(' · 仅诊断，EEG身份错误' if ds=='visual_cognitive_motivation' else ''));ax.set_xlabel('Hb动态RMS / EEG代理SD（模型坐标）');ax.set_ylabel(symbols['beta']+' / 模型相对增益');ax.legend(fontsize=9);ax.grid(alpha=.15)
+    fig.suptitle('β空间差异是否伴随观测幅度比例变化',fontsize=16)
+    save(fig,'beta_amplitude','β与观测幅度比例：保留混杂解释',
+        '每点是一个位置×片段，颜色为被试，圆/三角为A/B。横轴为该片段双Hb去均值动态RMS除以EEG代理SD，两者在同一数据集冻结坐标下计算。相关不代表因果，也可能来自观测增益、局部输入或模型条件性；这些点不是独立被试。四库横纵轴各自缩放，β数值不跨库解释。',
+        ['location_estimates','input_associations'])
+    summary_rows=[]
+    for ds,label in names.items():
+        for p in ('tau','beta'):
+            z=datasets[(datasets.dataset==ds)&(datasets.parameter==p)].iloc[0]
+            summary_rows.append([label,'τ' if p=='tau' else 'β',num(z.median_within_spearman),num(z.median_between_spearman),num(z.between_within_shape_ratio)])
+    main_table=tab(['数据集','参数','同被试重复相关中位数','异被试相关中位数','异/同形状差异比'],summary_rows)
+    intro='<h1>τ与β的空间分布：区域差异是否可重复</h1><p>2026-10-29 · 全部12名入选被试 · 每人2个90秒片段 · 每个Hb位置分别拟合。</p>'
+    intro+='<p>本组回答三个问题：参数是否随测量位置变化；同一被试的区域高低排序能否在另一片段重现；去除整体参数高低后，不同被试的空间形状是否仍不同。图像是模板头皮投影上的条件有效参数，不能直接称为个体皮层生理真值。</p>'
+    intro+=f'<p>计划{evidence["planned_cells"]}个位置×片段单元；自由拟合数值合格{evidence["qualified_free"]}个，固定参数对照合格{evidence["qualified_fixed"]}个。失败记录共{len(evidence["failures"])}条，完整保留在原分析。每库3名被试；通道和片段不是额外独立样本。</p>'+main_table
+    intro+='<p>相关接近1表示区域排序相似；异/同形状差异比大于1表示异被试均值地图的差别大于同被试A/B重估变化，均为描述量。只有两次重复且经过选例，不能据此作人群显著性或参数可识别性结论。</p>'
+    intro+='<p><b>Visual只作诊断，不进入候选：</b>独立原生通道审计确认沿用读取器的EEG名称映射错误；近邻输入及共同坐标受影响。完整影响记录见<a href="'+escape(source)+'/data_identity_impact.json">data_identity_impact.json</a>。</p>'
+    methods='<h1>样例选择、拟合与读图方法</h1><p>从103名公开被试中留出原24名开发被试，剩余79名为候选。仅用缓存双Hb动态RMS的空间对比及两片段重复相关，每库预先选3人；全部入选者的参数图均在本图册中，不因结果不理想替换。列内按τ/β中较低的重复相关排序，其次按空间幅度排序，仅用于展示。</p>'
+    methods+='<p>Single-Trial使用session_00和02的首个MI窗口；Simultaneous使用前两个连续WG支持；Visual使用首个合格记录中两探头共同的首尾非重叠窗口；REFED使用video_2和video_6的前90秒。A/B各自重拟合，Visual两探头共享同一时间片段，合并为一张图。</p>'
+    methods+='<p>输入为最近6个EEG通道的5频带对数功率和该位置HbO/HbR，10Hz、每段900点。每库用原6名开发被试的所有可用位置共同拟合一个主成分坐标、Hb缩放及SD，评价被试不参与；所有位置共用该坐标，不逐位置归一化。β因此是该模型坐标下的相对增益。</p>'
+    methods+='<p>每个位置×片段同时估计τ、β、完整驱动和4个初态；参数在90秒内不变。共同对数先验SD=0.125，参考τ=2秒、β=1，κ=0.64、γ=0.32、τv=2固定。固定参数基线具有相同驱动和初态自由度。完整窗口的EEG/Hb均可见，属于条件重建。</p>'
+    methods+='<p>τ控制血液通过血液室的时间尺度；β是神经驱动进入血管舒张信号变化率的乘数，表示该模型坐标下的神经血管耦合增益。数据以各片段前5秒作参考；误差评分使用前899个0.1秒采样点，排除无完整积分区间的最后一点，尺度始终固定于开发集。</p>'
+    methods+='<p>圆点表示实际注册测量位置，鼻尖朝前；无插值、无镜像补点、无覆盖外推。每库同一参数在所有被试和A/B间共用线性色标；不同库独立缩放且坐标标定不同。相同投影位置的通道保留成员身份并取参数几何均值，任何成员失败则该位置显示缺失。</p>'
+    methods+='<p>绝对图回答参数有多大；相对图回答比该被试自身均值高低多少。重复图、形状比较、波形残差和观测幅度关联必须一起阅读；误差改善本身不证明参数具有唯一的生理解释。</p>'
+    run_link=escape(os.path.relpath(run,out))
+    methods+='<p class="source">Owning evidence：<a href="'+run_link+'/resolved_config.json">冻结配置</a>；<a href="'+run_link+'/measured_plan.json">每个位置及A/B窗口身份</a>；<a href="'+run_link+'/spatial_coordinates.json">开发集坐标与尺度</a>；<a href="'+run_link+'/source_snapshot/src/inference/shared_driver_reconstruction.py">冻结模型实现</a>。</p>'
+    full_sections=[intro,methods]+sections
+    css='body{font-family:sans-serif;font-size:10pt;line-height:1.4;color:#182733}h1{font-size:18pt;color:#173f5c;margin:0 0 10pt}p{margin:6pt 0}img{max-width:100%}table{border-collapse:collapse;width:100%;font-size:10pt}td,th{border:0.4pt solid #aab5bf;padding:6pt}.source{font-size:8pt;color:#596773}'
+    nav='<p><a href="FIGURE_ATLAS.pdf">可检索PDF图册</a> · <a href="'+escape(source)+'/summary.json">原始分析</a> · <a href="'+escape(source)+'/display_ranking.csv">全部选例排序</a></p>'
+    (out/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>τ与β空间分布</title><style>'+css+'body{max-width:1150px;margin:30px auto;padding:0 24px}section{margin:35px 0}img{width:100%}</style><body>'+nav+''.join('<section>'+s+'</section>' for s in full_sections)+'</body></html>')
+    pdf=fitz.open()
+    def rectfn(number,filled):
+        rect=fitz.Rect(0,0,842,595);return rect,rect+(32,25,-32,-25),None
+    for section in full_sections:
+        part=fitz.Story(section,user_css=css,archive=fitz.Archive(str(out))).write_with_links(rectfn)
+        if len(part)!=1:raise ValueError('Split overflowing topography page; '+re.sub('<[^>]+>',' ',section)[:100])
+        pdf.insert_pdf(part);part.close()
+    pdf.save(out/'FIGURE_ATLAS.pdf',garbage=4,deflate=True)
+    outside=[]
+    for page in pdf:
+        for block in page.get_text('blocks'):
+            if block[6]==0 and not page.rect.contains(fitz.Rect(block[:4])):outside.append(page.number+1)
+    validation=dict(pages=len(pdf),bitmap_image_objects=sum(len(p.get_images()) for p in pdf),searchable_characters=sum(len(p.get_text()) for p in pdf),text_outside_pages=outside,figure_dpi=260)
+    if validation['bitmap_image_objects']!=len(figures) or outside or validation['searchable_characters']<1000:raise ValueError('Bitmap/text export validation failed')
+    pdf.close();shutil.copy2(Path(__file__),out/'renderer_source.py')
+    metadata=dict(schema='tak_topography_export_v1',source_run=str(run),owning_analysis=str(analysis),figures=figures,color_scales=scale_records,
+        subject_order=ranking[['dataset','subject']].to_dict('records'),raw_signal_reads=0,protected_reads=0,refits=0,validation=validation)
+    (out/'source_manifest.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+'\n');print(json.dumps(validation,ensure_ascii=False))
+
+
+def _tak_topography_display_field(xy,values,grid,missing=None):
+    """Positive, range-preserving display smoothing with explicit missing holes."""
+    from scipy.interpolate import LinearNDInterpolator
+    from scipy.ndimage import gaussian_filter
+    xx,yy=np.meshgrid(grid,grid);values=np.asarray(values,float)
+    if not np.isfinite(values).all() or np.any(values<=0):raise ValueError('Finite positive retained parameters required')
+    raw=LinearNDInterpolator(xy,np.log(values))(xx,yy);valid=np.isfinite(raw)&(xx**2+yy**2<=1)
+    sigma=.035/(grid[1]-grid[0]);weights=gaussian_filter(valid.astype(float),sigma,mode='constant')
+    smooth=gaussian_filter(np.where(valid,raw,0.),sigma,mode='constant')
+    z=np.full(raw.shape,np.nan);z[valid]=np.exp(smooth[valid]/weights[valid])
+    for point in ([] if missing is None else missing):
+        radius=.35*np.min(np.linalg.norm(xy-point,axis=1))
+        z[(xx-point[0])**2+(yy-point[1])**2<=radius**2]=np.nan
+    if np.nanmin(z)<values.min()-1e-12 or np.nanmax(z)>values.max()+1e-12:raise ValueError('Display smoothing exceeded observed parameter range')
+    return z
+
+
+def _tak_topography_contour_panel(ax,xy,field,grid,norm,title,missing=None):
+    from matplotlib.patches import Circle,Ellipse
+    xx,yy=np.meshgrid(grid,grid)
+    im=ax.imshow(field,extent=(grid[0],grid[-1],grid[0],grid[-1]),origin='lower',cmap='RdBu_r',norm=norm,interpolation='bilinear')
+    ax.contour(xx,yy,field,levels=np.linspace(norm.vmin,norm.vmax,9)[1:-1],colors='#40474c',linewidths=.65,alpha=.7)
+    ax.scatter(xy[:,0],xy[:,1],c='#242a30',s=7,alpha=.65,zorder=4)
+    if missing is not None and len(missing):ax.scatter(missing[:,0],missing[:,1],c='#252a30',s=45,marker='x',linewidths=1.1,zorder=6)
+    ax.add_patch(Circle((0,0),1,facecolor='none',edgecolor='#40474c',lw=1.5,zorder=5))
+    for side in [-1,1]:ax.add_patch(Ellipse((side*1.015,0),.1,.38,facecolor='none',edgecolor='#40474c',lw=1.3))
+    ax.plot([-.1,0,.1],[.995,1.13,.995],c='#40474c',lw=1.5)
+    ax.text(-1.17,0,'左',ha='center',va='center',fontsize=10);ax.text(1.17,0,'右',ha='center',va='center',fontsize=10)
+    ax.set(xlim=(-1.26,1.26),ylim=(-1.08,1.18),aspect='equal');ax.axis('off');ax.set_title(title,fontsize=13)
+    return im
+
+
+def render_tak_topography_style_preview(run,out,*,examples=1):
+    """Post-hoc display variant from a complete retained subject; never refit."""
+    from html import escape
+    import os
+    import shutil
+    from scipy.stats import spearmanr
+    from matplotlib.colors import TwoSlopeNorm
+    if examples==3:return render_tak_topography_examples(run,out)
+    cfg=json.loads((run/'resolved_config.json').read_text());plan=json.loads((run/'measured_plan.json').read_text())
+    if cfg.get('schema')!='shared_driver_tak_topography_v1' or cfg['data']['protected_data']!='forbidden':raise ValueError('Public spatial contract required')
+    if out.exists():raise ValueError('Preserve existing previews; use a fresh export')
+    groups={}
+    for group in plan['groups']:
+        ref=group['refs'][0]
+        if ref['dataset']=='visual_cognitive_motivation':continue
+        groups.setdefault((ref['dataset'],ref['subject']),[]).append(group)
+    selected=None
+    for identity,candidates in sorted(groups.items()):
+        rows=[]
+        for group in candidates:
+            ref=group['refs'][0];path=run/'tasks'/f'measured__{group["id"]}__90__joint_full__tak_tau_beta.json'
+            if not path.exists():break
+            task=json.loads(path.read_text())
+            if task['spec']['group']!=group or len(task['rows'])!=1 or task['rows'][0]['id']!=ref['id']:raise ValueError('Retained point identity mismatch')
+            row=task['rows'][0]
+            if not row['qualified'] or ref['xy'] is None:break
+            rows.append(dict(dataset=identity[0],subject=identity[1],site=ref['site_id'],repeat=ref['map_repeat'],
+                x=ref['xy'][0],y=ref['xy'][1],tau=row['tau'],beta=row['beta'],source_task=str(path)))
+        if len(rows)!=len(candidates):continue
+        frame=pd.DataFrame(rows);a=frame[frame.repeat.eq(0)].set_index('site');b=frame[frame.repeat.eq(1)].set_index('site')
+        if len(a)>=6 and set(a.index)==set(b.index):selected=identity;break
+    if selected is None:raise ValueError('No complete retained subject with two maps; no new fitting is started')
+    if frame[['repeat','x','y']].duplicated().any():raise ValueError('Preview requires unique registered positions')
+    out.mkdir(parents=True);(out/'figures').mkdir();frame.to_csv(out/'display_points.csv',index=False,encoding='utf-8-sig')
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':12,'axes.unicode_minus':False,'mathtext.fontset':'stix'})
+    xy=a[['x','y']].to_numpy();b=b.loc[a.index];grid=np.linspace(-1.03,1.03,320);xx,yy=np.meshgrid(grid,grid)
+    fields={};scales={};correlations={};ranges={}
+    for p in ['tau','beta']:
+        av=a[p].to_numpy();bv=b[p].to_numpy();values=[av,bv,np.sqrt(av*bv)]
+        for j,v in enumerate(values):
+            fields[p,j]=_tak_topography_display_field(xy,v,grid)
+        minimum=min(float(np.nanmin(fields[p,j])) for j in range(3));maximum=max(float(np.nanmax(fields[p,j])) for j in range(3))
+        center=float(np.exp(np.log(np.r_[av,bv]).mean()));scales[p]=TwoSlopeNorm(vmin=minimum,vcenter=center,vmax=maximum)
+        correlations[p]=float(spearmanr(av,bv).statistic)
+        ranges[p]=dict(observed_min=float(min(av.min(),bv.min())),observed_max=float(max(av.max(),bv.max())),
+            displayed_interpolated_min=minimum,displayed_interpolated_max=maximum,color_center=center)
+    names={'eeg_fnirs_single_trial':'Single-Trial','simultaneous_eeg_nirs':'Simultaneous','refed':'REFED'}
+    titles={'tau':r'$\tau$ / 秒','beta':r'$\beta$ / 模型相对增益'};figures=[]
+    for name,indices in [('mean_maps',[2]),('independent_repeats',[0,1])]:
+        fig,axes=plt.subplots(len(indices),2,figsize=(10,4.7 if len(indices)==1 else 8.5),squeeze=False,layout='constrained')
+        for col,p in enumerate(['tau','beta']):
+            for row,j in enumerate(indices):
+                im=_tak_topography_contour_panel(axes[row,col],xy,fields[p,j],grid,scales[p],titles[p]+('' if j==2 else ' · 片段 '+('A' if j==0 else 'B')))
+            cb=fig.colorbar(im,ax=axes[:,col].tolist(),fraction=.035,pad=.01,shrink=.87);cb.ax.tick_params(labelsize=10)
+        fig.suptitle(names[selected[0]]+' · 被试'+selected[1].replace('subject_','')+'：连续色彩与等值线预览',fontsize=16)
+        file='figures/'+name+'.png';fig.savefig(out/file,dpi=260,facecolor='white');plt.close(fig);figures.append(file)
+    rel=escape(os.path.relpath(run,out));summary=('仅改变绘图，不新增拟合。按数据集与被试ID排序，选取首位两段所有位置均已完成且数值合格的被试，未按参数颜色或相关选例。'
+        f'每幅图{len(a)}个小点为实际Hb测量位置；底色先在参数对数上作三角网线性插值，再作正权重局部平滑（高斯SD为头半径的0.035），色条显示原参数单位。'
+        '平滑只用于显示，可能使测量点处的底色略偏离其原值；不会产生超出原始参数范围的峰谷。只在测量点凸包与头圆的交集内绘制，覆盖外留白；原点及显示范围均保留于清单。'
+        '每个参数的A/B与均值图使用同一色标；白色为两片段全部位置的参数几何均值，红色较高、蓝色较低，不代表参数正负。'
+        '图面网格加密不增加测量空间分辨率，也不提供个体皮层定位。')
+    body='<h1>连续头皮地形图：样式预览</h1><p>'+summary+f'</p><p>两片段{len(a)}个位置的排序相关：τ='+f'{correlations["tau"]:.3f}'+'，β='+f'{correlations["beta"]:.3f}'+'。只描述该被试；两片段几何均值图不替代独立重复。</p>'
+    for file in figures:body+='<p><a href="'+file+'"><img src="'+file+'"></a></p>'
+    body+='<p>来源：<a href="display_points.csv">全部测量点与原任务路径</a>；<a href="'+rel+'/measured_plan.json">冻结空间计划</a>；<a href="'+rel+'/measured_execution.json">停止记录</a>。</p>'
+    (out/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>连续头皮地形图预览</title><style>body{max-width:1100px;margin:30px auto;padding:0 24px;font-family:sans-serif;line-height:1.65;color:#263746}img{width:100%}</style><body>'+body+'</body></html>')
+    manifest=dict(schema='tak_topography_style_preview_v1',source_run=str(run),subject=selected,selection='first lexically ordered non-Visual subject with all planned positions qualified in both repeats; no outcome ranking',
+        points_per_repeat=len(a),display_variant='User-requested smooth contour preview supersedes primary no-interpolation display only; frozen fit contract unchanged',
+        interpolation='LinearNDInterpolator of log parameter, followed by normalized positive Gaussian display smoothing (sigma=0.035 head radius); exp output bounded by observed range; original convex-hull/head mask retained; no extrapolation',
+        grid_shape=[320,320],figures=figures,parameter_ranges=ranges,repeat_spearman=correlations,raw_signal_reads=0,protected_reads=0,refits=0)
+    (out/'source_manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n');shutil.copy2(Path(__file__),out/'renderer_source.py')
+    print(json.dumps(manifest,ensure_ascii=False))
+
+
+def render_tak_topography_examples(run,out):
+    """Three distinct retained subjects on one common window and display convention."""
+    from html import escape
+    import os
+    import shutil
+    from matplotlib.colors import TwoSlopeNorm
+    cfg=json.loads((run/'resolved_config.json').read_text());plan=json.loads((run/'measured_plan.json').read_text())
+    if cfg.get('schema')!='shared_driver_tak_topography_v1' or cfg['data']['protected_data']!='forbidden':raise ValueError('Public spatial evidence required')
+    if out.exists():raise ValueError('Choose a fresh examples export')
+    rows=[]
+    for group in plan['groups']:
+        ref=group['refs'][0]
+        if ref['map_repeat']!=0 or ref['dataset']=='visual_cognitive_motivation':continue
+        path=run/'tasks'/f'measured__{group["id"]}__90__joint_full__tak_tau_beta.json'
+        row=dict(ref,qualified=False,tau=np.nan,beta=np.nan,status='not_completed',source_task=str(path))
+        if path.exists():
+            task=json.loads(path.read_text())
+            if task['spec']['group']!=group or len(task['rows'])!=1 or task['rows'][0]['id']!=ref['id']:raise ValueError('Retained example identity mismatch')
+            fit=task['rows'][0];row.update(qualified=fit['qualified'],status=fit['fit_status'])
+            if fit['qualified']:row.update(tau=fit['tau'],beta=fit['beta'])
+        row.update(x=ref['xy'][0] if ref['xy'] is not None else np.nan,y=ref['xy'][1] if ref['xy'] is not None else np.nan)
+        rows.append(row)
+    inventory=[];selected=[]
+    all_points=pd.DataFrame(rows)
+    for (dataset,subject),g in all_points.groupby(['dataset','subject'],sort=True):
+        valid=g.qualified&np.isfinite(g[['x','y','tau','beta']]).all(axis=1)
+        item=dict(dataset=dataset,subject=subject,planned=len(g),available=int(valid.sum()),fraction=float(valid.mean()))
+        inventory.append(item)
+        if valid.mean()>=.9 and valid.sum()>=6:selected.append(item)
+    if len(selected)!=3 or len({x['dataset'] for x in selected})!=1:
+        raise ValueError('This retained export needs exactly three same-dataset subjects with >=90% first-window coverage; no new fits are started')
+    out.mkdir(parents=True);(out/'figures').mkdir()
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    if font.exists():
+        font_manager.fontManager.addfont(str(font));plt.rcParams['font.family']=font_manager.FontProperties(fname=str(font)).get_name()
+    plt.rcParams.update({'font.size':12,'axes.unicode_minus':False,'mathtext.fontset':'stix'})
+    grid=np.linspace(-1.03,1.03,320);maps={};scales={};ranges={};export_rows=[]
+    for item in selected:
+        subject=item['subject'];g=all_points[(all_points.dataset==item['dataset'])&(all_points.subject==subject)].copy()
+        if not np.isfinite(g[['x','y']]).all().all() or g[['x','y']].duplicated().any():raise ValueError('Unique known sensor positions required')
+        good=g[g.qualified];missing=g[~g.qualified][['x','y']].to_numpy();xy=good[['x','y']].to_numpy()
+        item['missing_sites']=g.loc[~g.qualified,'site_id'].tolist();item['record']=g.record.iloc[0]
+        maps[subject]=dict(points=good,xy=xy,missing=missing)
+        for p in ['tau','beta']:maps[subject][p]=_tak_topography_display_field(xy,good[p].to_numpy(),grid,missing)
+        export_rows.append(g)
+    displayed=pd.concat(export_rows,ignore_index=True)
+    displayed.to_csv(out/'display_points.csv',index=False,encoding='utf-8-sig')
+    for p in ['tau','beta']:
+        values=displayed.loc[displayed.qualified,p]
+        center=float(np.exp(np.mean([np.log(maps[x['subject']]['points'][p]).mean() for x in selected])))
+        scales[p]=TwoSlopeNorm(vmin=float(values.min()),vcenter=center,vmax=float(values.max()))
+        ranges[p]=dict(vmin=scales[p].vmin,vmax=scales[p].vmax,center=center,
+            interpolated_min=min(float(np.nanmin(maps[x['subject']][p])) for x in selected),
+            interpolated_max=max(float(np.nanmax(maps[x['subject']][p])) for x in selected))
+    labels={'tau':r'$\tau$ / 秒','beta':r'$\beta$ / 模型相对增益'}
+    dataset_names={'eeg_fnirs_single_trial':'Single-Trial','simultaneous_eeg_nirs':'Simultaneous','refed':'REFED'}
+    figures=[]
+    for item in selected:
+        subject=item['subject'];m=maps[subject];fig,axes=plt.subplots(1,2,figsize=(10,4.9),layout='constrained')
+        for ax,p in zip(axes,['tau','beta']):
+            im=_tak_topography_contour_panel(ax,m['xy'],m[p],grid,scales[p],labels[p],m['missing'])
+            cb=fig.colorbar(im,ax=ax,fraction=.035,pad=.01,shrink=.87);cb.ax.tick_params(labelsize=10)
+        fig.suptitle(dataset_names[item['dataset']]+' · 被试'+subject.replace('subject_',''),fontsize=17)
+        fig.supxlabel('黑点：已完成位置    ×：未完成位置',fontsize=10)
+        file='figures/'+subject+'.png';fig.savefig(out/file,dpi=260,facecolor='white');plt.close(fig);figures.append(dict(subject=subject,file=file))
+    fig,axes=plt.subplots(3,2,figsize=(10,13.7),layout='constrained')
+    for row,item in enumerate(selected):
+        m=maps[item['subject']]
+        for col,p in enumerate(['tau','beta']):
+            im=_tak_topography_contour_panel(axes[row,col],m['xy'],m[p],grid,scales[p],item['subject'].replace('subject_','被试')+' · '+labels[p],m['missing'])
+            cb=fig.colorbar(im,ax=axes[row,col],fraction=.035,pad=.01,shrink=.85);cb.ax.tick_params(labelsize=10)
+    fig.suptitle(dataset_names[selected[0]['dataset']]+'：三个空间分布样例',fontsize=17)
+    fig.supxlabel('同一参数共用色标    黑点：已完成位置    ×：未完成位置',fontsize=10)
+    overview='figures/three_examples.png';fig.savefig(out/overview,dpi=260,facecolor='white');plt.close(fig)
+    rel=escape(os.path.relpath(run,out))
+    text='<h1>τ与β：三个空间分布样例</h1><p>图中已删除“两片段几何均值”标注。三个样例分别来自不同被试，统一使用首个90秒片段（map_repeat=0、session_00），不混用单片段和两片段汇总。</p>'
+    text+='<p>选取停止运行后，首个片段覆盖达到90%的全部三名非Visual被试，未按参数极值或颜色强弱二次排序。覆盖分别为36/36、35/36、35/36；缺失是未完成拟合，保留叉号与周围留白，没有补算参数。Visual因EEG通道身份缺陷不参与。</p>'
+    text+='<p>各参数在三人之间共用数值范围、颜色中心与等值线；白色中心为三名被试各自空间几何均值的几何平均，红高蓝低。使用原参数单位；底色为对数参数的三角网线性插值加SD=0.035头半径的正权重局部显示平滑，不超出观测范围。插值覆盖外及缺失点周围留白，黑点为实际位置。此展示不增加测量分辨率，也不等同于个体皮层定位或重复性检验。</p>'
+    text+='<p><a href="'+overview+'">三样例合图</a> · <a href="display_points.csv">测量点、缺失与源任务</a> · <a href="'+rel+'/measured_plan.json">冻结计划</a> · <a href="'+rel+'/measured_execution.json">停止记录</a></p>'
+    for item in figures:text+='<h2>'+item['subject'].replace('subject_','被试')+'</h2><a href="'+item['file']+'"><img src="'+item['file']+'"></a>'
+    (out/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>三个空间分布样例</title><style>body{max-width:1100px;margin:30px auto;padding:0 24px;font-family:sans-serif;line-height:1.65;color:#263746}img{width:100%}</style><body>'+text+'</body></html>')
+    manifest=dict(schema='tak_topography_three_examples_v1',source_run=str(run),selected=selected,candidate_coverage=inventory,
+        selection='All three non-Visual retained subjects with >=90% qualified first-window coverage; no parameter-outcome ranking',
+        computation='first 90s window per subject, not across-repeat aggregation',figures=figures,overview=overview,color_scales=ranges,
+        missing_display='cross and blank disk radius 0.35 times distance to closest available point; no estimated value at missing site',
+        interpolation='Shared range-preserving linear log-parameter interpolation and Gaussian display smoothing sigma=0.035 head radius, masked to measured convex hull/head and missing-point holes',
+        raw_signal_reads=0,protected_reads=0,refits=0)
+    (out/'source_manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n');shutil.copy2(Path(__file__),out/'renderer_source.py')
+    print(json.dumps(dict(selected=selected,figures=figures,color_scales=ranges),ensure_ascii=False))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path)
@@ -10115,6 +10534,10 @@ def main():
     parser.add_argument('--tak-repeatability', action='store_true', help='Render the new disjoint-subset repeatability experiment')
     parser.add_argument('--tak-task-parameters', action='store_true', help='Render matched tau/beta and task-association evidence')
     parser.add_argument('--tak-parameter-candidates', action='store_true', help='Render uniform-marker six-point tau/beta candidate panels')
+    parser.add_argument('--tak-topography', action='store_true', help='Render spatial tau/beta estimates, repeats and limiting controls')
+    parser.add_argument('--tak-topography-style-preview', action='store_true', help='Draw smooth contours from a complete retained subject without refitting')
+    parser.add_argument('--topography-examples', type=int, choices=[1,3], default=1, help='One complete two-repeat preview or three first-window subject examples')
+    parser.add_argument('--topography-analysis', type=Path)
     parser.add_argument('--task-parameter-analysis', type=Path)
     parser.add_argument('--repeat-analysis', type=Path)
     parser.add_argument('--filter-retest', action='store_true', help='Render verified no-extra-component cached-input sensitivity')
@@ -10128,6 +10551,14 @@ def main():
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.tak_topography_style_preview:
+        if args.run is None or any(v is True for k,v in vars(args).items() if k!='tak_topography_style_preview'):parser.error('Choose exclusive topography preview mode and --run')
+        render_tak_topography_style_preview(args.run.resolve(),args.output.resolve(),examples=args.topography_examples)
+        return
+    if args.tak_topography:
+        if args.run is None or any(v is True for k,v in vars(args).items() if k!='tak_topography'):parser.error('Choose exclusive topography mode and --run')
+        render_tak_topography(args.run.resolve(),args.output.resolve(),args.topography_analysis.resolve() if args.topography_analysis else None)
+        return
     if args.tak_parameter_candidates:
         if args.run is None or any(v is True for k,v in vars(args).items() if k!='tak_parameter_candidates'):parser.error('Choose exclusive parameter-candidate mode and --run')
         render_tak_parameter_candidates(args.run.resolve(),args.output.resolve(),args.task_parameter_analysis.resolve() if args.task_parameter_analysis else None)

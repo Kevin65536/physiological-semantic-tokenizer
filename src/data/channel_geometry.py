@@ -20,6 +20,23 @@ from .clean_physiology_cache import base_record_id, canonical_subject_id
 CHANNEL_GEOMETRY_SCHEMA = "physiology_channel_geometry_v1"
 
 
+def project_head_topview(row: Mapping[str, Any]) -> np.ndarray:
+    """Project registered template coordinates, with right +x and anterior +y.
+
+    This preserves the registered drawing/orthographic convention; it is not
+    an individual cortical localization or a distance calibration.
+    """
+    value = np.asarray([row.get(k, np.nan) for k in ("x", "y", "z")], float)
+    if not np.isfinite(value).all():
+        raise ValueError("Known channel geometry required")
+    frame = row.get("coordinate_system")
+    if frame in ("EEGLAB_CED_cartesian", "referenced_visual_eeg_head_coordinates"):
+        return np.asarray([-value[1], value[0]])
+    if frame in ("dataset_mnt_pos_3d", "refed_paper_layout_2d_v1"):
+        return value[:2]
+    raise ValueError("Unsupported topography frame: " + str(frame))
+
+
 @dataclass(frozen=True)
 class ChannelGeometryRecord:
     dataset_id: str

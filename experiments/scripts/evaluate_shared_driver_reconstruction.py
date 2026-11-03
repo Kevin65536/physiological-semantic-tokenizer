@@ -19,6 +19,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import resource
 import shutil
 import sys
@@ -39,6 +40,7 @@ from src.inference.shared_driver_reconstruction import build_shared_driver_desig
 from src.inference.observation_baselines import native_feature_operators, visible_feature_interpolation
 from src.data.ssm_prepared import read_prepared_arrays as semantics_prepared_arrays
 from src.data.ssm_prepared import prepared_target as semantics_target
+from src.data.channel_geometry import project_head_topview as _tak_topography_xy
 
 DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml'
 LEGACY_DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_reconstruction_v1.yaml'
@@ -8900,7 +8902,7 @@ def tak_worker(payload):
         truth=None;factors=[]
         if spec['phase']=='synthetic':
             yy,oo,ss,truth=(tak_task_parameter_synthetic(cfg,spec['group']['case'])
-                if cfg['schema']=='shared_driver_tak_task_parameters_v1'
+                if cfg['schema'] in ('shared_driver_tak_task_parameters_v1','shared_driver_tak_topography_v1')
                 else tak_synthetic(cfg,spec['group']['seed'],spec['group']['scenario']))
             y,op,sd=yy[None],oo[None],ss[None];factors=[1.]
         else:
@@ -8908,7 +8910,7 @@ def tak_worker(payload):
             for ref in refs:
                 with np.load(out/'prepared'/f"{ref['id']}__{spec['length_s']}.npz",allow_pickle=False) as a:
                     require_cached_hb_array(a)
-                    if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1','shared_driver_tak_task_parameters_v1'):
+                    if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1','shared_driver_tak_task_parameters_v1','shared_driver_tak_topography_v1'):
                         require_10hz_eeg_proxy_array(a,steps=round(spec['length_s']/dt))
                     ys.append(a['target']);ops.append(a['operator']);sds.append(a['sd']);factors.append(float(a['hb_factor']))
             y,op,sd=np.array(ys),np.array(ops),np.array(sds)
@@ -8930,7 +8932,7 @@ def tak_worker(payload):
         if 'prediction' in fit:
             saved.update({k:fit[k] for k in ('driver','initial_state','prediction','canonical_prediction','states')})
         saved.update(target=y,operator=op,sd=sd,visible=mask,hb_factor=np.array(factors))
-        if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1','shared_driver_tak_task_parameters_v1'):
+        if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1','shared_driver_tak_task_parameters_v1','shared_driver_tak_topography_v1'):
             saved.update(time_s=np.arange(y.shape[1])*dt,dt_s=np.array(dt),eeg_proxy_rate_hz=np.array(10.))
         for i,ref in enumerate(refs):
             row=dict(id=ref['id'],dataset=ref['dataset'],subject=ref['subject'],record=ref['record'],
@@ -9079,7 +9081,7 @@ def tak_summarize(cfg,out,plan,phase='measured',*,specs=None):
         qualified_rows=sum(r['qualified'] for r in rows),groups=groups,paired_contrasts=contrasts,
         claim_limits=cfg['claim_limits'],source='tasks/*.json_and_matching_npz',
         aggregation=cfg['endpoints']['aggregation'],failure_policy=cfg['endpoints']['failures'])
-    if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1','shared_driver_tak_task_parameters_v1'):
+    if cfg['schema'] in ('shared_driver_tak_10hz_v2','shared_driver_tak_repeatability_v1','shared_driver_tak_task_parameters_v1','shared_driver_tak_topography_v1'):
         result.update(schema='shared_driver_tak_summary_v2',dt_s=cfg['tensor']['dt_s'],eeg_proxy_rate_hz=10.)
     write_json(out/(phase+'_summary.json'),result)
     write_json(out/(phase+'_rows.json'),rows)
@@ -9748,6 +9750,11 @@ def tak_task_parameter_synthetic(core,case):
     tau=1.7+.3*seed;beta=.85+.15*seed
     if task=='B' and scenario=='tau_shift':tau*=1.5
     if task=='B' and scenario=='beta_shift':beta*=1.5
+    if 'spatial_node' in case:
+        theta=2*np.pi*case['spatial_node']/6
+        driver*=1+.15*np.cos(theta+.4*seed)
+        if scenario=='structured':
+            tau*=np.exp(.3*np.cos(theta+.7*seed));beta*=np.exp(.3*np.sin(theta+.7*seed))
     parameters=volume_drive_parameters(core,tau=tau,kappa=.64,neurovascular_gain=beta)
     initial=np.array([.02,1.04,1.025,1.025,.99])
     truth=nonlinear_driver_forward(driver,initial,parameters,dt,substeps=8,derivative=False,
@@ -10134,6 +10141,539 @@ def tak_task_parameter_main(args):
     print(json.dumps(serial({k:v for k,v in result.items() if k not in ('records','groups','native_groups','calibration_records','annotations','coordinates','record_workers','terminal','paired_contrasts','new_window_ids','parent_window_ids')})),flush=True)
 
 
+def tak_topography_config(path,root):
+    default=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_topography_v1.yaml'
+    cfg=yaml.safe_load(Path(path or default).read_text())
+    if cfg!=yaml.safe_load(default.read_text()):raise ValueError('Unchanged versioned topography scope required')
+    parent=Path(root)/cfg['parent'];previous=json.loads((parent/'resolved_config.json').read_text())
+    if previous['schema']!='shared_driver_tak_task_parameters_v1' or previous['data']['protected_data']!='forbidden':raise ValueError('Exact public tau/beta parent required')
+    if json.loads((parent/'measured_summary.json').read_text())['status']!='completed':raise ValueError('Completed parameter parent required')
+    core=json.loads((parent/'resolved_model_config.json').read_text())
+    core.update(schema=cfg['schema'],experiment_id=cfg['experiment_id'],seed=cfg['seed'])
+    core['arms']=[a for a in core['arms'] if a['name'] in ('tak_fixed','tak_tau_beta')]
+    core['endpoints']['contrasts']=[['tak_fixed','tak_tau_beta']]
+    core['claim_limits']=['exploratory_observation_selected_examples_not_population_confirmation',
+        'shared_development_coordinate_across_sites_not_per_site_normalization',
+        'template_sensor_projection_not_individual_cortical_registration',
+        'parameter_maps_are_conditional_estimates_not_physiological_truth']
+    core['data']['expected_records']='frozen_topography_plan';return cfg,core
+
+
+def _tak_topography_subject_plan(cfg,index,geometries,dataset,subject,role):
+    from collections import defaultdict
+    from src.data.event_alignment import ADMISSIBLE_ALIGNMENT_CASES
+    from src.data.tak_mismatch import select_tak_mismatch_channels
+    records=[r for r in index.records if r.dataset_id==dataset and r.canonical_subject_id==subject
+        and (dataset!='refed' or r.signal_branch=='hbo_hbr')]
+    candidates={};record_meta={};excluded=[]
+    for record in sorted(records,key=lambda r:r.base_record_id):
+        name=record.base_record_id
+        wanted=(name in ('session_00','session_02') if dataset=='eeg_fnirs_single_trial' else
+            name=='cnt_wg' if dataset=='simultaneous_eeg_nirs' else
+            name in ('video_2','video_6') if dataset=='refed' else 'Probe' in name)
+        if not wanted:continue
+        reports=index.reports_by_join_key.get(record.join_key,[])
+        if (not reports or any(r.get('alignment_case') not in ADMISSIBLE_ALIGNMENT_CASES or r.get('label_sequence_match') is False for r in reports)
+                or (dataset=='visual_cognitive_motivation' and subject=='S06' and 'part1' in name.lower())):
+            excluded.append(dict(record=name,reason='nonadmitted_alignment_or_Visual_S06_Part1'));continue
+        m=record.manifest['measurement'];gi=geometries[dataset]
+        e=gi.for_channels(record=record,modality='eeg',channel_names=m['eeg_channel_names'])
+        h=gi.for_channels(record=record,modality='fnirs',channel_names=m['fnirs_channel_names'])
+        pairs=select_tak_mismatch_channels(e,h,seed=cfg['seed'])
+        probe=(re.search(r'Probe[12]',name).group() if dataset=='visual_cognitive_motivation' else None)
+        for pair in pairs:
+            pair['site_id']=(probe+':'+pair['name']) if probe else pair['name']
+            try:pair['xy']=_tak_topography_xy(h[pair['component_indices'][0]]).tolist()
+            except ValueError:pair['xy']=None
+        anchor=dict(hb_channel=pairs[0]['name'],hb_pair=pairs[0]['native_index'],eeg_channels=pairs[0].get('channel_set_names',{}).get('nearest6',[]))
+        rows=_tak_repeat_candidates(record,index.events_by_join_key.get(record.join_key,[]),anchor,coordinate=dataset+'__spatial')
+        if not rows:excluded.append(dict(record=name,reason='no_admitted_90s_window'));continue
+        for row in rows:row.update(region='spatial',site='all_pairs',partition=role)
+        candidates[name]=rows;record_meta[name]=dict(join_key=record.join_key,record=name,pairs=pairs,
+            eeg_channels=m['eeg_channel_names'],hb_channels=m['fnirs_channel_names'],geometry=dict(eeg=e,fnirs=h),source_files=record.manifest['source_files'])
+    chosen=[]
+    if dataset=='eeg_fnirs_single_trial' or dataset=='refed':
+        names=['session_00','session_02'] if dataset=='eeg_fnirs_single_trial' else ['video_2','video_6']
+        if any(n not in candidates for n in names):raise ValueError('Both prespecified native records required')
+        chosen=[(candidates[n][0],i) for i,n in enumerate(names)]
+    elif dataset=='simultaneous_eeg_nirs':
+        support=defaultdict(list)
+        for row in candidates.get('cnt_wg',[]):support[row['native_group_key']].append(row)
+        groups=sorted(support.values(),key=lambda g:g[0]['eeg_start_s'])
+        if len(groups)<2:raise ValueError('Two distinct admitted WG supports required')
+        chosen=[(groups[i][0],i) for i in range(2)]
+    else:
+        stems=sorted({re.sub(r'_Probe[12]$','',name) for name in candidates})
+        for stem in stems:
+            if stem+'_Probe1' not in candidates or stem+'_Probe2' not in candidates:continue
+            a=candidates[stem+'_Probe1'];b={r['event_id']:r for r in candidates[stem+'_Probe2']}
+            common=[r for r in a if r['event_id'] in b and abs(r['eeg_start_s']-b[r['event_id']]['eeg_start_s'])<.001]
+            selected=_tak_repeat_select(common,2)
+            if len(selected)==2 and abs(b[selected[1]['event_id']]['hb_start_s']-b[selected[0]['event_id']]['hb_start_s'])>=90:
+                chosen=[(r,i) for i,ref in enumerate(selected) for r in (ref,b[ref['event_id']])];break
+        if len(chosen)!=4:raise ValueError('Two matched nonoverlap windows in both Visual probes required')
+    windows=[]
+    for ref,repeat in chosen:
+        record=record_meta[ref['record']]
+        windows.append(dict(ref,id=f'{dataset}__{subject}__{ref["record"]}__map{repeat}',map_repeat=repeat,
+            pairs=record['pairs'],eeg_channels=record['eeg_channels'],hb_channels=record['hb_channels'],geometry=record['geometry']))
+    return dict(id=dataset+'__'+subject,dataset=dataset,subject=subject,role=role,windows=windows,metadata_exclusions=excluded)
+
+
+def tak_topography_plan(cfg,root):
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import ChannelGeometryIndex
+    parent_plan=json.loads((root/cfg['parent']/'plan.json').read_text())
+    training={ds:sorted({r['subject'] for r in parent_plan['calibration_records'] if r['dataset']==ds}) for ds in cfg['data']['datasets']}
+    if any(len(s)!=6 for s in training.values()):raise ValueError('Six original development subjects per dataset required')
+    cache=root/cfg['data']['cache_root'];index=CleanPhysiologyCacheIndex(cache)
+    geometry=ChannelGeometryIndex(cache,geometry_root=root/cfg['data']['geometry_root'])
+    geometries={ds:geometry for ds in cfg['data']['datasets']}
+    geometries['refed']=ChannelGeometryIndex(cache,geometry_root=root/cfg['data']['refed_geometry_root'])
+    identities=sorted({(r.dataset_id,r.canonical_subject_id) for r in index.records if r.dataset_id in cfg['data']['datasets']})
+    subjects=[];excluded=[]
+    for ds,subject in identities:
+        role='development' if subject in training[ds] else 'candidate'
+        try:subjects.append(_tak_topography_subject_plan(cfg,index,geometries,ds,subject,role))
+        except (ValueError,KeyError,TypeError) as exc:excluded.append(dict(dataset=ds,subject=subject,role=role,reason=str(exc)))
+    if any(r['role']=='development' for r in excluded):raise ValueError('Original development coverage incomplete: '+str(excluded))
+    return dict(schema='tak_topography_plan_v1',subjects=subjects,excluded=excluded,development_subjects=training,
+        registered_subjects=len(identities),planned_candidates=sum(s['role']=='candidate' for s in subjects),
+        planned_development=sum(s['role']=='development' for s in subjects),measured_signal_reads=0,protected_reads=0)
+
+
+def _tak_topography_screen_score(a,b,minimum_fraction=.8):
+    from scipy.stats import spearmanr
+    keys=sorted(set(a)|set(b));common=[k for k in keys if k in a and k in b and np.isfinite([a[k],b[k]]).all() and min(a[k],b[k])>0]
+    result=dict(planned_sites=len(keys),common_sites=len(common),coverage=len(common)/len(keys) if keys else 0.,eligible=False,
+        score=np.nan,rank_correlation=np.nan,minimum_log_spatial_range=np.nan)
+    if len(common)<3 or len(common)<minimum_fraction*len(keys):return result
+    x=np.log([a[k] for k in common]);y=np.log([b[k] for k in common])
+    rho=float(spearmanr(x,y).statistic) if min(np.std(x),np.std(y))>0 else 0.
+    spread=min(float(np.diff(np.quantile(z,[.1,.9]))[0]) for z in (x,y))
+    result.update(eligible=True,score=max(0.,rho)*spread,rank_correlation=rho,minimum_log_spatial_range=spread)
+    return result
+
+
+def _tak_topography_screen_worker(payload):
+    cfg,root_string,out_string,subject=payload;root,out=Path(root_string),Path(out_string)
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import load_cached_fnirs_record
+    from src.inference.observation_baselines import disjoint_native_bin_operator
+    path=out/'screen'/(subject['id']+'.json')
+    if path.exists():return json.loads(path.read_text())
+    index=CleanPhysiologyCacheIndex(root/cfg['data']['cache_root']);records={r.join_key:r for r in index.records}
+    maps=[{},{}];failures=[];cache={};started=time.monotonic()
+    for ref in subject['windows']:
+        target=out/'spatial_features'/(ref['id']+'.npz');target.parent.mkdir(exist_ok=True)
+        try:
+            if ref['join_key'] not in cache:cache[ref['join_key']]=load_cached_fnirs_record(root,records[ref['join_key']])
+            c=cache[ref['join_key']];take=(c['time_s']>=ref['hb_start_s'])&(c['time_s']<ref['hb_start_s']+90)
+            op=disjoint_native_bin_operator(c['time_s'][take]-ref['hb_start_s'],steps=900,dt=.1,reference_steps=50)
+            count=len(ref['pairs']);hb=(op['raw']@c['values'][take].reshape(take.sum(),-1)).reshape(900,count,2)
+            valid=np.asarray(c['valid_mask'][take].all(axis=(0,2)))&np.isfinite(hb).all(axis=(0,2))
+            np.savez_compressed(target,hb=hb,hb_op=op['model'],valid=valid)
+            for pair in ref['pairs']:
+                i=pair['native_index'];good=bool(valid[i] and pair['status']=='available' and pair['xy'] is not None)
+                maps[ref['map_repeat']][pair['site_id']]=float(np.sqrt(np.var(hb[:-1,i],axis=0).mean())) if good else np.nan
+            write_json(target.with_suffix('.json'),dict(status='completed',ref=ref,fnirs_provenance=c['provenance']))
+        except Exception as exc:
+            failures.append(dict(id=ref['id'],reason=repr(exc)))
+            for pair in ref['pairs']:maps[ref['map_repeat']][pair['site_id']]=np.nan
+            write_json(target.with_suffix('.json'),dict(status='failed',ref=ref,error=repr(exc)))
+    result=dict(id=subject['id'],dataset=subject['dataset'],subject=subject['subject'],role=subject['role'],
+        **_tak_topography_screen_score(*maps,minimum_fraction=cfg['screen']['minimum_common_site_fraction']),
+        maps=maps,failures=failures,seconds=time.monotonic()-started,protected_reads=0,raw_reads=0)
+    write_json(path,result);return result
+
+
+def tak_topography_screen(cfg,root,out,plan,workers):
+    syn=json.loads((out/'synthetic_summary.json').read_text())
+    if syn['status']!='completed' or syn['terminal_rows']!=96:raise ValueError('Complete spatial synthetic matrix required before measured screen')
+    if serial(plan)!=serial(tak_topography_plan(cfg,root)):raise ValueError('Frozen public metadata changed')
+    rows=[];started=time.monotonic()
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        iterator=iter(plan['subjects']);active={}
+        def submit():
+            try:s=next(iterator)
+            except StopIteration:return
+            active[pool.submit(_tak_topography_screen_worker,(cfg,str(root),str(out),s))]=s['id']
+        for _ in range(workers*2):submit()
+        while active:
+            ready,_=wait(active,return_when=FIRST_COMPLETED)
+            for f in ready:rows.append(f.result());active.pop(f);submit()
+            write_json(out/'progress.json',dict(phase='screen',terminal=len(rows),planned=len(plan['subjects']),seconds=time.monotonic()-started))
+    selected=[]
+    for ds in cfg['data']['datasets']:
+        candidates=[r for r in rows if r['dataset']==ds and r['role']=='candidate' and r['eligible']]
+        ordered=sorted(candidates,key=lambda r:(-r['score'],r['subject']))
+        if len(ordered)<3:raise ValueError('Insufficient eligible subjects for spatial case screen: '+ds)
+        selected.extend(r['id'] for r in ordered[:3])
+    result=dict(schema='tak_topography_screen_v1',status='completed',selected_subject_ids=selected,
+        selection_rule=cfg['screen'],subjects=[{k:v for k,v in r.items() if k!='maps'} for r in rows],
+        source='screen/*.json_and_spatial_features/*.npz',seconds=time.monotonic()-started,protected_reads=0)
+    write_json(out/'screen_summary.json',result);return result
+
+
+def tak_topography_specs(core,phase):
+    if phase!='synthetic':raise ValueError('Spatial synthetic specs only')
+    jobs=[]
+    for scenario in ('uniform','structured'):
+        for subject in (0,1):
+            for repeat in (0,1):
+                for node in range(6):
+                    key=f'{scenario}__s{subject}__r{repeat}__n{node}'
+                    case=dict(subject=subject,repeat=repeat,task='A' if repeat==0 else 'B',scenario=scenario,spatial_node=node)
+                    group=dict(id=key,case=case,refs=[dict(id=key,dataset='synthetic',subject=f'seed{subject}',record=scenario)])
+                    for arm in core['arms']:jobs.append(dict(key=f'synthetic__{key}__90__joint_full__{arm["name"]}',phase='synthetic',group=group,length_s=90,condition='joint_full',arm=arm))
+    return jobs
+
+
+def _tak_topography_eeg_worker(payload):
+    cfg,core,root_string,out_string,subject=payload;root,out=Path(root_string),Path(out_string)
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.unified_physiology import load_native_eeg_record,canonical_channel_name
+    from src.inference.observation_baselines import eeg_band_power
+    index=CleanPhysiologyCacheIndex(root/cfg['data']['cache_root']);lookup={r.join_key:r for r in index.records}
+    native_cache={};power_cache={};rows=[];started=time.monotonic()
+    for ref in subject['windows']:
+        path=out/'spatial_features'/(ref['id']+'_eeg.npz');meta=path.with_suffix('.json')
+        if meta.exists():rows.append(json.loads(meta.read_text()));continue
+        try:
+            record=lookup[ref['join_key']]
+            if record.manifest['source_files']!=ref['source_files']:raise ValueError('Frozen registered native EEG source changed')
+            if ref['join_key'] not in native_cache:native_cache[ref['join_key']]=load_native_eeg_record(root,record)
+            native=native_cache[ref['join_key']];start=round(ref['eeg_start_s']*native.sample_rate_hz);n=round(90*native.sample_rate_hz)
+            key=(str(native.source_path),start,n)
+            if key not in power_cache:
+                channels={canonical_channel_name(str(name)).upper():i for i,name in enumerate(native.channel_names)}
+                indices=[channels[canonical_channel_name(name).upper()] for name in ref['eeg_channels']]
+                values=native.values[start:start+n,indices]
+                if start<0 or len(values)!=n:raise ValueError('Incomplete native 90s EEG window')
+                valid=np.isfinite(values).all(0);features=np.full((900,len(indices),5),np.nan)
+                if valid.any():
+                    power=eeg_band_power(values[:,valid],bands=core['tensor']['eeg_bands_hz'],sample_rate=native.sample_rate_hz,target_rate=10.)
+                    if np.any(power<=0):raise ValueError('Nonpositive EEG power')
+                    features[:,valid]=np.log(power);features[:,valid]-=features[:50,valid].mean(0,keepdims=True)
+                power_cache[key]=features
+            features=power_cache[key]
+            if features.shape!=(900,len(ref['eeg_channels']),5):raise ValueError('EEG feature/channel identity mismatch')
+            np.savez_compressed(path,eeg=features)
+            result=dict(id=ref['id'],status='completed',source=str(native.source_path),native_rate=native.sample_rate_hz,
+                native_unit=native.native_unit,eeg_proxy_rate_hz=10.,reference_steps=50,
+                channels=ref['eeg_channels'],valid_channels=int(np.isfinite(features).all(axis=(0,2)).sum()))
+        except Exception as exc:result=dict(id=ref['id'],status='failed',error=repr(exc))
+        write_json(meta,result);rows.append(result)
+    return dict(id=subject['id'],rows=rows,seconds=time.monotonic()-started,peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+
+
+def tak_topography_prepare(cfg,core,root,out,plan,workers):
+    from src.data.ssm_prepared import fit_feature_coordinate
+    if serial(plan)!=serial(tak_topography_plan(cfg,root)):raise ValueError('Frozen public plan changed before native reads')
+    screen=json.loads((out/'screen_summary.json').read_text())
+    if screen['status']!='completed':raise ValueError('Completed frozen case selection required')
+    selected=set(screen['selected_subject_ids']);subjects=[s for s in plan['subjects'] if s['role']=='development' or s['id'] in selected]
+    if len(selected)!=12 or any(s['role']=='development' and s['id'] in selected for s in subjects):raise ValueError('Three candidate subjects per dataset disjoint from development required')
+    details=[];started=time.monotonic()
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        jobs={pool.submit(_tak_topography_eeg_worker,(cfg,core,str(root),str(out),s)):s['id'] for s in subjects}
+        for f in as_completed(jobs):
+            details.append(f.result());write_json(out/'progress.json',dict(phase='native_features',terminal=len(details),planned=len(subjects),seconds=time.monotonic()-started))
+    coordinates={};coordinate_sources={}
+    def features(ref):
+        h=out/'spatial_features'/(ref['id']+'.npz');e=out/'spatial_features'/(ref['id']+'_eeg.npz')
+        if not h.exists() or not e.exists():return None
+        with np.load(h,allow_pickle=False) as a:hb=a['hb'];op=a['hb_op'];valid=a['valid']
+        with np.load(e,allow_pickle=False) as a:eeg=a['eeg']
+        return eeg,hb,valid,op
+    for ds in cfg['data']['datasets']:
+        sources=[]
+        def chunks():
+            for subject in subjects:
+                if subject['dataset']!=ds or subject['role']!='development':continue
+                for ref in subject['windows']:
+                    arrays=features(ref)
+                    if arrays is None:continue
+                    eeg,hb,valid,_=arrays
+                    for pair in ref['pairs']:
+                        if pair['status']!='available' or not valid[pair['native_index']]:continue
+                        x=eeg[:,pair['channel_sets']['nearest6']].reshape(900,30);y=hb[:,pair['native_index']]
+                        if not np.isfinite(x).all():continue
+                        sources.append(dict(subject=subject['subject'],window=ref['id'],site=pair['site_id']))
+                        yield x,y
+        co=fit_feature_coordinate(chunks())
+        if {s['subject'] for s in sources}!=set(plan['development_subjects'][ds]):raise ValueError('All six original development subjects must contribute the shared spatial coordinate')
+        coordinates[ds]=co;coordinate_sources[ds]=sources
+    write_json(out/'spatial_coordinates.json',dict(schema='tak_spatial_coordinate_v1',coordinates=coordinates,training_sources=coordinate_sources,
+        grouping='one_common_coordinate_per_dataset_all_regions_both_repeats',evaluation_subjects_used=False))
+    (out/'prepared').mkdir(exist_ok=True);refs=[];groups=[];failures=[];spatial_subjects=[]
+    for subject in subjects:
+        if subject['id'] not in selected:continue
+        spatial_subjects.append(subject)
+        for ref in subject['windows']:
+            arrays=features(ref);co=coordinates[ref['dataset']]
+            for pair in ref['pairs']:
+                key=ref['id']+'__'+pair['site_id'].replace(':','_')
+                item={k:ref[k] for k in ('dataset','subject','record','join_key','eeg_start_s','hb_start_s','map_repeat','condition_counts','alignment_support','native_session')}
+                item.update(id=key,site_id=pair['site_id'],xy=pair['xy'],window_id=ref['id'],hb_pair=pair['native_index'],
+                    eeg_channels=pair.get('channel_set_names',{}).get('nearest6',[]),native_group=key,geometry_status=pair['status'])
+                refs.append(item);groups.append(dict(id=f'g{len(groups):04d}',refs=[item]))
+                destination=out/'prepared'/(key+'__90.npz')
+                if destination.exists():continue
+                try:
+                    if arrays is None or pair['status']!='available' or pair['xy'] is None:raise ValueError('Unavailable features or geometry')
+                    eeg,hb,valid,hb_op=arrays;i=pair['native_index']
+                    x=eeg[:,pair['channel_sets']['nearest6']].reshape(900,30)
+                    if not valid[i] or not np.isfinite(x).all():raise ValueError('Unavailable Hb pair or required EEG channel')
+                    y=np.column_stack((x@np.asarray(co['pc'])*co['eeg_factor'],hb[:,i]*co['hb_factor']))
+                    eeg_op=np.eye(900);eeg_op[:,:50]-=1/50
+                    target,operator=volume_drive_crop(y,dict(eeg=eeg_op,hb=hb_op),90,dt=.1)
+                    np.savez_compressed(destination,target=target,operator=operator,sd=np.array(co['sd']),hb_factor=np.array(co['hb_factor']),
+                        fnirs_input=np.array('unified_cached_fnirs_v1'),eeg_proxy_input=np.array('eeg_log_bandpower_10hz_v1'),
+                        eeg_proxy_rate_hz=np.array(10.),time_s=np.arange(900)*.1)
+                except Exception as exc:failures.append(dict(id=key,error=repr(exc)))
+    measured=dict(schema='tak_topography_measured_plan_v1',records=refs,groups=groups,subjects=spatial_subjects,
+        selected_subject_ids=screen['selected_subject_ids'],selection_source='screen_summary.json',planned_windows=len(refs),protected_reads=0)
+    path=out/'measured_plan.json'
+    if path.exists() and json.loads(path.read_text())!=serial(measured):raise ValueError('Immutable measured spatial plan changed')
+    if not path.exists():write_json(path,measured)
+    result=dict(status='completed',planned_windows=len(refs),prepared_windows=sum((out/'prepared'/(r['id']+'__90.npz')).exists() for r in refs),
+        failures=failures,coordinates='spatial_coordinates.json',feature_workers=details,seconds=time.monotonic()-started,raw_fnirs_reads=0,protected_reads=0)
+    write_json(out/'preparation.json',result);return result
+
+
+def _tak_topography_map_statistics(locations):
+    """Describe paired map shape without treating locations as subjects."""
+    from scipy.stats import spearmanr
+    from itertools import combinations
+    repeat_rows=[];means=[];between=[];regions=[]
+    def rho(a,b):
+        return float(spearmanr(a,b).statistic) if len(a)>=3 and min(np.std(a),np.std(b))>1e-12 else np.nan
+    for (ds,subject),part in locations.groupby(['dataset','subject'],sort=True):
+        a=part[part.map_repeat.eq(0)].set_index('location_id');b=part[part.map_repeat.eq(1)].set_index('location_id')
+        planned=sorted(set(a.index)|set(b.index));common=sorted(set(a[a.complete].index)&set(b[b.complete].index))
+        for parameter in ('tau','beta'):
+            x=np.log(a.loc[common,parameter].to_numpy(float));y=np.log(b.loc[common,parameter].to_numpy(float))
+            center=(x+y)/2;cx=x-x.mean() if len(x) else x;cy=y-y.mean() if len(y) else y
+            record=dict(dataset=ds,subject=subject,parameter=parameter,planned_locations=len(planned),paired_locations=len(common),
+                coverage=len(common)/len(planned) if planned else 0.,spearman=rho(x,y),
+                absolute_log_rms=float(np.sqrt(np.mean((x-y)**2))) if len(x) else np.nan,
+                centered_log_rms=float(np.sqrt(np.mean((cx-cy)**2))) if len(x) else np.nan,
+                mean_map_geometric_center=float(np.exp(center.mean())) if len(center) else np.nan,
+                mean_map_spatial_range_pct=100*np.expm1(np.quantile(center,.9)-np.quantile(center,.1)) if len(center) else np.nan,
+                median_hb_relative_rmse=float(np.median(np.r_[a.loc[common,'hb_relative_rmse'],b.loc[common,'hb_relative_rmse']])) if len(common) else np.nan)
+            repeat_rows.append(record)
+            for key,value in zip(common,center):
+                row=a.loc[key];ratio=(float(value-center.mean()))
+                means.append(dict(dataset=ds,subject=subject,parameter=parameter,location_id=key,x=row.x,y=row.y,
+                    value=float(np.exp(value)),centered_log=ratio,relative_percent=100*np.expm1(ratio),
+                    member_sites=row.member_sites,member_count=int(row.member_count)))
+    mean_frame=pd.DataFrame(means,columns=['dataset','subject','parameter','location_id','x','y','value','centered_log','relative_percent','member_sites','member_count'])
+    for (ds,parameter),part in mean_frame.groupby(['dataset','parameter'],sort=True):
+        for a,b in combinations(sorted(part.subject.unique()),2):
+            left=part[part.subject.eq(a)].set_index('location_id');right=part[part.subject.eq(b)].set_index('location_id')
+            common=sorted(set(left.index)&set(right.index));x=np.log(left.loc[common,'value'].to_numpy());y=np.log(right.loc[common,'value'].to_numpy())
+            if len(x):cx=x-x.mean();cy=y-y.mean()
+            between.append(dict(dataset=ds,parameter=parameter,subject_a=a,subject_b=b,common_locations=len(common),spearman=rho(x,y),
+                absolute_log_rms=float(np.sqrt(np.mean((x-y)**2))) if len(x) else np.nan,
+                centered_log_rms=float(np.sqrt(np.mean((cx-cy)**2))) if len(x) else np.nan))
+        for subject,g in part.groupby('subject'):
+            for region,v in g.assign(region=np.where(g.y>.33,'anterior',np.where(g.y<-.33,'posterior','central'))).groupby('region'):
+                regions.append(dict(dataset=ds,subject=subject,parameter=parameter,projection_region=region,
+                    locations=len(v),geometric_mean=float(np.exp(np.log(v.value).mean())),
+                    interpretation='coarse_sensor_projection_region_not_cortical_parcellation'))
+    repeats=pd.DataFrame(repeat_rows);other=pd.DataFrame(between,columns=['dataset','parameter','subject_a','subject_b','common_locations','spearman','absolute_log_rms','centered_log_rms']);datasets=[]
+    for (ds,parameter),g in repeats.groupby(['dataset','parameter']):
+        bb=other[(other.dataset==ds)&(other.parameter==parameter)]
+        within=float(np.sqrt(np.mean(g.centered_log_rms**2)));inter=float(np.sqrt(np.mean(bb.centered_log_rms**2))) if len(bb) else np.nan
+        datasets.append(dict(dataset=ds,parameter=parameter,selected_subjects=len(g),subject_pairs=len(bb),
+            median_within_spearman=float(g.spearman.dropna().median()) if g.spearman.notna().any() else np.nan,
+            median_between_spearman=float(bb.spearman.dropna().median()) if len(bb) and bb.spearman.notna().any() else np.nan,
+            within_centered_log_rms=within,between_centered_log_rms=inter,between_within_shape_ratio=inter/within if within>1e-12 else np.nan))
+    return dict(repeatability=repeats,mean_maps=mean_frame,between_subject=other,regions=pd.DataFrame(regions,columns=['dataset','subject','parameter','projection_region','locations','geometric_mean','interpretation']),dataset_summary=pd.DataFrame(datasets))
+
+
+def _tak_topography_identity_impact(plan,audit):
+    """Trace the independently documented Visual name defect to this frozen plan."""
+    if audit.get('schema')!='visual_channel_identity_audit_v2':raise ValueError('Documented native-channel identity audit required')
+    named={r['current'].upper():r for r in audit['channel_comparison'] if r['current'] is not None}
+    rows=[]
+    for ref in plan['records']:
+        if ref['dataset']!='visual_cognitive_motivation':continue
+        bad=[]
+        for channel in ref['eeg_channels']:
+            row=named[channel.upper()]
+            if not row['matches']:bad.append(dict(declared=channel,actual=row['documented'],raw_channel=row['raw_channel']))
+        rows.append(dict(id=ref['id'],subject=ref['subject'],site_id=ref['site_id'],map_repeat=ref['map_repeat'],mismatched_local_channels=bad))
+    return dict(schema='tak_topography_identity_impact_v1',dataset='visual_cognitive_motivation',
+        interpretation='diagnostic_only_invalid_EEG_identity',planned_cells=len(rows),
+        cells_with_directly_mismatched_local_channels=sum(bool(r['mismatched_local_channels']) for r in rows),
+        reason='Frozen native reader uses Location.ced Number as raw A-channel ID and excludes A64/FCz; shared coordinate also inherits this mapping. All Visual maps lack the declared local EEG identity, including positions whose nearest-six names happen to match.',
+        cells=rows)
+
+
+def tak_topography_analyze(out,target):
+    from scipy.stats import spearmanr
+    cfg=json.loads((out/'resolved_config.json').read_text());core=json.loads((out/'resolved_model_config.json').read_text())
+    plan=json.loads((out/'measured_plan.json').read_text());summary=json.loads((out/'measured_summary.json').read_text())
+    if cfg['schema']!='shared_driver_tak_topography_v1' or cfg['data']['protected_data']!='forbidden':raise ValueError('Public spatial contract required')
+    if target.exists() or target.parent!=out:raise ValueError('Fresh direct-child spatial analysis required')
+    if summary['status']!='completed' or summary['terminal_rows']!=2*len(plan['records']):raise ValueError('All spatial fitting tasks must be terminal')
+    audit_path=CODE_ROOT/'comparative_methods/runs/performance_analysis/20261029_visual_investigation_v1/channel_identity_audit_v2.json'
+    identity=_tak_topography_identity_impact(plan,json.loads(audit_path.read_text()))
+    identity['owning_audit']=str(audit_path)
+    identity['frozen_reader']=str(out/'data_source_snapshot_v2/src/data/unified_physiology.py')
+    rows=[];failures=[];checked=0;max_error=0.;spans=[]
+    for group in plan['groups']:
+        ref=group['refs'][0];arms={}
+        for arm in core['arms']:
+            path=out/'tasks'/f'measured__{group["id"]}__90__joint_full__{arm["name"]}.json';task=json.loads(path.read_text())
+            if task['spec']['group']!=group or task['spec']['arm']!=arm or len(task['rows'])!=1 or task['rows'][0]['id']!=ref['id']:raise ValueError('Spatial task identity mismatch')
+            row=task['rows'][0];fit=task.get('fit',{});detail=dict(row)
+            if row['qualified']:
+                with np.load(path.with_suffix('.npz'),allow_pickle=False) as a:
+                    y,p,sd=a['target'],a['prediction'],a['sd']
+                    if y.shape!=(1,900,3) or p.shape!=y.shape or sd.shape!=(1,3):raise ValueError('Spatial retained array shape mismatch')
+                    err=np.mean(((p[0,:-1]-y[0,:-1])/sd[0])**2,axis=0)
+                    difference=max(abs(err[1:].mean()-row['full_hb_nmse']),abs(err[0]-row['eeg_nmse']))
+                    if difference>1e-9:raise ValueError('Spatial score mismatch')
+                    checked+=1;max_error=max(max_error,float(difference))
+                    dynamic=float(np.sqrt(np.var(y[0,:-1,1:],axis=0).mean()));neural=float(np.std(y[0,:-1,0]))
+                    detail.update(hb_relative_rmse=float(np.sqrt(np.mean((p[0,:-1,1:]-y[0,:-1,1:])**2))/dynamic) if dynamic>0 else np.nan,
+                        hb_eeg_amplitude_ratio=dynamic/neural if neural>0 else np.nan)
+            else:failures.append(dict(id=ref['id'],arm=arm['name'],status=row['fit_status'],source_task=str(path.relative_to(out))))
+            detail['source_task']=str(path.relative_to(out))
+            detail['boundary']=min(fit.get('log_parameter_boundary_distance',[]) or [np.inf])<=1e-6
+            values=[s['parameter_values'] for s in fit.get('starts',[]) if s['converged']]
+            if row['qualified'] and arm['fit'] and len(values)>1:
+                spans.extend((100*np.ptp(np.asarray(values),axis=0)/np.asarray(fit['parameter_values'])).tolist())
+            arms[arm['name']]=detail
+        free=arms['tak_tau_beta'];fixed=arms['tak_fixed']
+        rows.append(dict(id=ref['id'],dataset=ref['dataset'],subject=ref['subject'],record=ref['record'],site_id=ref['site_id'],
+            map_repeat=ref['map_repeat'],x=ref['xy'][0] if ref['xy'] is not None else np.nan,y=ref['xy'][1] if ref['xy'] is not None else np.nan,
+            qualified=free['qualified'],fixed_qualified=fixed['qualified'],fit_status=free['fit_status'],tau=free.get('tau',np.nan),beta=free.get('beta',np.nan),
+            full_hb_nmse=free.get('full_hb_nmse',np.nan),fixed_full_hb_nmse=fixed.get('full_hb_nmse',np.nan),eeg_nmse=free.get('eeg_nmse',np.nan),
+            hb_relative_rmse=free.get('hb_relative_rmse',np.nan),hb_eeg_amplitude_ratio=free.get('hb_eeg_amplitude_ratio',np.nan),
+            boundary=free['boundary'],integration_max_training_sd=free.get('integration_max_training_sd',np.nan),source_task=free['source_task']))
+    frame=pd.DataFrame(rows);locations=[]
+    for (ds,subject,repeat),part in frame.groupby(['dataset','subject','map_repeat'],sort=True):
+        grouped={}
+        for row in part.to_dict('records'):
+            key=(round(row['x'],6),round(row['y'],6)) if np.isfinite([row['x'],row['y']]).all() else ('missing',row['site_id'])
+            grouped.setdefault(key,[]).append(row)
+        for members in grouped.values():
+            complete=all(r['qualified'] for r in members);first=members[0];site_names=sorted(r['site_id'] for r in members)
+            values={p:float(np.exp(np.mean(np.log([r[p] for r in members])))) if complete else np.nan for p in ('tau','beta')}
+            locations.append(dict(dataset=ds,subject=subject,map_repeat=repeat,location_id='|'.join(site_names),
+                x=first['x'],y=first['y'],member_sites=json.dumps(site_names),member_count=len(members),complete=complete,
+                qualified_channels=sum(r['qualified'] for r in members),boundary=any(r['boundary'] for r in members),
+                hb_relative_rmse=float(np.mean([r['hb_relative_rmse'] for r in members])) if complete else np.nan,
+                hb_eeg_amplitude_ratio=float(np.exp(np.mean(np.log([r['hb_eeg_amplitude_ratio'] for r in members])))) if complete else np.nan,**values))
+    loc=pd.DataFrame(locations);stats=_tak_topography_map_statistics(loc)
+    reconstruction=[]
+    for ds,g in frame.groupby('dataset'):
+        common=g[g.qualified&g.fixed_qualified];entry=dict(dataset=ds,planned_cells=len(g),qualified_free=int(g.qualified.sum()),qualified_fixed=int(g.fixed_qualified.sum()),paired_cells=len(common))
+        for label,column in [('free','full_hb_nmse'),('fixed','fixed_full_hb_nmse')]:
+            value=common.groupby(['subject','map_repeat'])[column].mean().groupby('subject').mean()
+            entry[label+'_hb_nrmse']=float(np.sqrt(value.mean())) if len(value) else np.nan
+        entry['fixed_minus_free']=entry['fixed_hb_nrmse']-entry['free_hb_nrmse'];reconstruction.append(entry)
+    associations=[]
+    for (ds,subject,repeat),g in loc[loc.complete].groupby(['dataset','subject','map_repeat']):
+        z=g[np.isfinite(g.hb_eeg_amplitude_ratio)&g.hb_eeg_amplitude_ratio.gt(0)]
+        associations.append(dict(dataset=ds,subject=subject,map_repeat=repeat,locations=len(z),
+            beta_vs_Hb_EEG_amplitude_ratio_Spearman=float(spearmanr(z.beta,z.hb_eeg_amplitude_ratio).statistic) if len(z)>=3 else np.nan))
+    synthetic=[]
+    for spec in tak_topography_specs(core,'synthetic'):
+        row=json.loads((out/'tasks'/(spec['key']+'.json')).read_text())['rows'][0];case=spec['group']['case']
+        synthetic.append(dict(scenario=case['scenario'],subject=case['subject'],map_repeat=case['repeat'],node=case['spatial_node'],arm=spec['arm']['name'],qualified=row['qualified'],
+            **{k:row.get(k,np.nan) for k in ('tau','beta','truth_tau','truth_beta','full_hb_nmse')}))
+    sf=pd.DataFrame(synthetic);synthetic_summary={}
+    for p in ('tau','beta'):
+        null=sf[sf.arm.eq('tak_tau_beta')&sf.scenario.eq('uniform')&sf.qualified]
+        structured=sf[sf.arm.eq('tak_tau_beta')&sf.scenario.eq('structured')&sf.qualified]
+        synthetic_summary[p]=dict(uniform_max_apparent_spatial_range_pct=max(100*(g[p].max()/g[p].min()-1) for _,g in null.groupby(['subject','map_repeat'])),
+            structured_truth_spearman=[float(spearmanr(g[p],g['truth_'+p]).statistic) for _,g in structured.groupby(['subject','map_repeat'])])
+    ranking=[]
+    for (ds,subject),g in stats['repeatability'].groupby(['dataset','subject']):
+        good=frame[frame.dataset.eq(ds)&frame.subject.eq(subject)]
+        ranking.append(dict(dataset=ds,subject=subject,minimum_parameter_repeat_spearman=float(g.spearman.min(skipna=False)),
+            mean_spatial_range_pct=float(g.mean_map_spatial_range_pct.mean()),qualified_cells=int(good.qualified.sum()),planned_cells=len(good),
+            median_hb_relative_rmse=float(good.loc[good.qualified,'hb_relative_rmse'].median())))
+    ranks=pd.DataFrame(ranking).sort_values(['dataset','minimum_parameter_repeat_spearman','mean_spatial_range_pct'],ascending=[True,False,False])
+    ranks['candidate_role']=np.where(ranks.dataset.eq(identity['dataset']),identity['interpretation'],'illustrative_parameter_map')
+    target.mkdir();tables=dict(parameter_cells=frame,location_estimates=loc,reconstruction=pd.DataFrame(reconstruction),input_associations=pd.DataFrame(associations),
+        synthetic_cells=sf,display_ranking=ranks,**stats)
+    for name,table in tables.items():table.to_csv(target/(name+'.csv'),index=False,encoding='utf-8-sig')
+    write_json(target/'data_identity_impact.json',identity)
+    result=dict(schema='tak_topography_analysis_v1',status='completed',source_run=str(out),selected_subject_ids=plan['selected_subject_ids'],
+        planned_cells=len(frame),qualified_free=int(frame.qualified.sum()),qualified_fixed=int(frame.fixed_qualified.sum()),failures=failures,
+        checked_array_rows=checked,max_nmse_discrepancy=max_error,numerical=dict(maximum_start_span_pct=max(spans,default=np.nan),
+        boundary_cells=int(frame.boundary.sum()),maximum_integration_difference=float(frame.loc[frame.qualified,'integration_max_training_sd'].max())),
+        dataset_summary=stats['dataset_summary'].to_dict('records'),reconstruction=reconstruction,synthetic=synthetic_summary,
+        data_identity=dict(dataset=identity['dataset'],interpretation=identity['interpretation'],
+            source='data_identity_impact.json',owning_audit=str(audit_path),planned_cells=identity['planned_cells'],
+            cells_with_directly_mismatched_local_channels=identity['cells_with_directly_mismatched_local_channels']),
+        definitions=dict(locations='geometric mean of all channels at an identical rounded registered XY; incomplete location stays unavailable; channel memberships retained',
+            repeat='Spearman across common complete locations for A/B; centered log RMS removes each map own mean on the common location set',
+            between='compare subject geometric A/B mean maps on common locations; centered log RMS removes global parameter level; subject pairs are dependent',
+            spatial_range='100*(exp(P90(log parameter)-P10(log parameter))-1) on each subject A/B mean map',
+            relative_map='100*(parameter divided by that subject spatial geometric mean minus 1); absolute maps remain separate',
+            reconstruction='paired successful native channels; time and Hb species NMSE then channels within map, repeats within subject, subjects equal, square root',
+            hb_relative_rmse='model-coordinate pooled Hb residual RMS divided by pooled time-centered target Hb RMS; differs from training-SD NRMSE',
+            inference='exploratory selected cases; channels are dependent measurements; no population significance or physiological identification'),
+        protected_reads=0,raw_signal_reads=0,refits=0)
+    write_json(target/'summary.json',result);shutil.copy2(Path(__file__),target/'analysis_source.py');return result
+
+
+def tak_topography_main(args):
+    root=args.project_root.resolve();cfg,core=tak_topography_config(args.config,root);out=args.run_dir.resolve()
+    if not out.is_relative_to(root/cfg['output_root']) or out==root/cfg['output_root']:raise ValueError('Existing Tak run namespace required')
+    out.mkdir(parents=True,exist_ok=True);lock=(out/'controller.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    for name,value in [('resolved_config.json',cfg),('resolved_model_config.json',core)]:
+        path=out/name
+        if path.exists() and json.loads(path.read_text())!=serial(value):raise ValueError('Immutable topography contract changed')
+        if not path.exists():write_json(path,value)
+    stage=args.topography_stage
+    if stage in ('synthetic','screen','prepare','pilot','run'):
+        if not os.environ.get('INVOCATION_ID') or not os.environ.get('SSM_SYSTEMD_UNIT'):raise ValueError('Durable supervisor required')
+        if not 1<=args.workers<=cfg['resources']['max_workers']:raise ValueError('Worker envelope exceeded')
+    if stage=='analyze':
+        result=tak_topography_analyze(out,(args.topography_analysis_output or out/'topography_analysis_v1').resolve())
+    elif stage=='check':
+        case=dict(subject=0,repeat=0,task='A',scenario='structured',spatial_node=0)
+        y,op,sd,truth=tak_task_parameter_synthetic(core,case)
+        if y.shape!=(900,3) or op.shape!=(2700,2700) or len(tak_topography_specs(core,'synthetic'))!=96:raise ValueError('Spatial tensor/spec mismatch')
+        np.testing.assert_allclose(_tak_topography_xy(dict(x=.95,y=.309,z=-.03,coordinate_system='EEGLAB_CED_cartesian')),[-.309,.95])
+        result=dict(status='passed',shape=list(y.shape),synthetic_tasks=96,geometry_axis_check='passed',measured_signal_reads=0,protected_reads=0)
+        write_json(out/'software_checks.json',result)
+    elif stage=='plan':
+        result=tak_topography_plan(cfg,root);path=out/'plan.json'
+        if path.exists() and json.loads(path.read_text())!=serial(result):raise ValueError('Immutable public inventory changed')
+        if not path.exists():write_json(path,result)
+    else:
+        if json.loads((out/'software_checks.json').read_text())['status']!='passed':raise ValueError('Software checks required')
+        plan=json.loads((out/'plan.json').read_text())
+        if stage=='screen':result=tak_topography_screen(cfg,root,out,plan,args.workers)
+        elif stage=='prepare':result=tak_topography_prepare(cfg,core,root,out,plan,args.workers)
+        else:
+            phase='synthetic' if stage=='synthetic' else 'measured'
+            if phase=='synthetic':specs=tak_topography_specs(core,phase)
+            else:
+                if json.loads((out/'preparation.json').read_text())['status']!='completed':raise ValueError('Completed spatial preparation required')
+                plan=json.loads((out/'measured_plan.json').read_text());specs=tak_specs(core,plan,phase)
+            pilots=None
+            if stage=='pilot':
+                chosen={}
+                for g in plan['groups']:
+                    r=g['refs'][0]
+                    if r['geometry_status']=='available':chosen.setdefault((r['dataset'],r['map_repeat']),g['id'])
+                pilots=set(chosen.values())
+            result=tak_run(core,out,plan,phase,args.workers,pilot=stage=='pilot',specs=specs,pilot_groups=pilots)
+            if stage!='pilot':result=tak_summarize(core,out,plan,phase,specs=specs)
+    brief={k:v for k,v in result.items() if k not in ('subjects','groups','records','feature_workers','terminal','paired_contrasts')}
+    print(json.dumps(serial(brief)),flush=True)
+
+
 def tak_main(args):
     cfg=tak_config(args.config);root=args.project_root.resolve();out=args.run_dir.resolve()
     if not out.is_relative_to(root/cfg['output_root']) or out==root/cfg['output_root']:
@@ -10238,6 +10778,9 @@ def main():
     ap.add_argument('--tak-comparison',action='store_true')
     ap.add_argument('--tak-repeatability',action='store_true')
     ap.add_argument('--tak-task-parameters',action='store_true')
+    ap.add_argument('--tak-topography',action='store_true')
+    ap.add_argument('--topography-stage',choices=['check','plan','synthetic','screen','prepare','pilot','run','analyze'],default='check')
+    ap.add_argument('--topography-analysis-output',type=Path)
     ap.add_argument('--task-parameter-stage',choices=['check','plan','synthetic','prepare','pilot','run','summarize','analyze'],default='check')
     ap.add_argument('--task-parameter-analysis-output',type=Path)
     ap.add_argument('--repeat-stage',choices=['check','plan','synthetic','prepare','pilot','run','summarize','analyze'],default='check')
@@ -10257,6 +10800,9 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.tak_topography:
+        if args.run_dir is None or any(v is True for k,v in vars(args).items() if k!='tak_topography'):ap.error('Exclusive topography mode and run-dir required')
+        return tak_topography_main(args)
     if args.tak_task_parameters:
         if args.run_dir is None or any(value is True for key,value in vars(args).items() if key!='tak_task_parameters'):
             ap.error('Tak task parameters require an exclusive mode and run-dir')
