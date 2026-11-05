@@ -30,8 +30,8 @@ def create_model(task: str, profile: dict, device: str, trainable: bool = False)
         device=device,
         method_root=Path(profile.get("method_root", METHOD_ROOT)),
     )
-    if identity.n_channels < 16:
-        raise ValueError("BIOT checkpoint cannot represent the 16-channel panel")
+    if identity.n_channels < len(profile["channel_names"]):
+        raise ValueError("BIOT checkpoint cannot represent the requested channel panel")
     return BIOTRebenchFeatures(
         encoder,
         task=task,

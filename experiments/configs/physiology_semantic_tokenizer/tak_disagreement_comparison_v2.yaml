@@ -1,0 +1,26 @@
+schema: tak_disagreement_comparison_v2
+experiment_id: SSM-TAK-DISAGREEMENT-COMPARISON-v2
+created: '2026-11-05'
+source_summary: experiments/runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/fixed_physiology_v2/four_dataset_disagreements_v1/summary.json
+output_prefix: four_dataset_disagreements_
+scope:
+  input: completed_v1_matched_scalar_maps_only
+  raw_signal_reads: false
+  protected_data: forbidden
+  model_fitting: none
+  parent_writes: none
+statistics:
+  seed: 20261105
+  bootstrap_samples: 5000
+  permutation_samples: 100000
+  comparison: complete_the_v1_relaxed_coverage_sensitivity_with_paired_record_identity
+  primary: preserve_all_v1_strict_results_including_unavailable_Simultaneous
+  sensitivity: finite_full_record_maps_same_as_original_report
+  unchanged: matched_windows_8and80percent_common_sites_80percent_planned_records_for_hotspots
+  paired_estimand: mean_subject_difference_of_medians_on_same_record_pairs
+  multiplicity: relaxed_4datasets_4endpoints_2contrasts_one_separate_BH_family
+  interpretation: posthoc_coverage_sensitivity_not_replacement_of_v1_primary
+resources:
+  max_workers: 4
+  work_unit: dataset
+  numerical_threads: 1

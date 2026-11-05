@@ -164,7 +164,8 @@ def test_pack_common_training_scale_preserves_sum_and_failure_denominator(tmp_pa
     assert np.load(tmp_path / 'hb_input.npy').shape == (6, 10, 40)
 
 
-def test_teacher_fixed_tak_stays_in_observation_space(monkeypatch):
+@pytest.mark.parametrize('eeg_visible', [True, False])
+def test_teacher_fixed_tak_stays_in_observation_space(monkeypatch, eeg_visible):
     import src.inference.shared_driver_reconstruction as implementation
     r = row(); a = prepared(r)
     co = dict(pc=np.r_[1., np.zeros(29)], eeg_factor=.025, hb_factor=.01,
@@ -175,6 +176,8 @@ def test_teacher_fixed_tak_stays_in_observation_space(monkeypatch):
         assert kwargs['parameter_names'] == []
         assert kwargs['data_weight'] == .4
         assert not kwargs['visible'][0, -1].any()
+        assert np.all(kwargs['visible'][0, :-1, 0] == eeg_visible)
+        assert kwargs['visible'][0, :-1, 1:].all()
         return dict(status='converged', converged=True, prediction=np.zeros_like(observations),
             objective=.1,
             driver=np.zeros((1, 900)), initial_state=np.array([[0, 1, 1, 1, 1]]),
@@ -182,7 +185,7 @@ def test_teacher_fixed_tak_stays_in_observation_space(monkeypatch):
     monkeypatch.setattr(implementation, 'fit_nonlinear_shared_parameters', fit)
     monkeypatch.setattr(implementation, 'nonlinear_driver_forward', lambda *args, **kwargs:
         dict(canonical_prediction=np.zeros((900, 3))))
-    result, status = data.produce_teacher(a, co, cfg)
+    result, status = data.produce_teacher(a, co, cfg, eeg_visible=eeg_visible)
     assert status['accepted'] and status['teacher_arm'] == 'tak_fixed'
     np.testing.assert_array_equal(result['physical'], 0)
     np.testing.assert_array_equal(result['remaining'], result['u'])

@@ -77,7 +77,8 @@ class CBraModAuditModel(nn.Module):
             raise ValueError("unknown CBraMod diagnostic readout or scale")
         if self.head_kind not in {"none", "linear", "source_mlp"}:
             raise ValueError("unknown CBraMod diagnostic head")
-        self.feature_dim = 200 if self.readout == "mean" else 16 * (self.base.input_samples // 200) * 200
+        self.channels = len(profile.get("channel_names", range(16)))
+        self.feature_dim = 200 if self.readout == "mean" else self.channels * (self.base.input_samples // 200) * 200
         self.supports_fnirs = False
         scaler = profile["audit_training_eeg_scaler"]
         self.register_buffer("input_mean", torch.tensor(scaler["mean"], dtype=torch.float32))
@@ -100,13 +101,13 @@ class CBraModAuditModel(nn.Module):
         self.to(device)
 
     def forward(self, eeg, *, eeg_mask=None):
-        if eeg.shape[1:] != (16, self.base.input_samples):
+        if eeg.shape[1:] != (self.channels, self.base.input_samples):
             raise ValueError("CBraMod audit input differs from its shared panel/window")
         if eeg_mask is not None and not bool(eeg_mask.all()):
             raise ValueError("CBraMod audit requires complete measured EEG support")
         if self.scale_mode == "physical_100uv":
             eeg = (eeg * self.input_scale + self.input_mean) / 100.0
-        tokens = self.base.encoder(eeg.reshape(len(eeg), 16, -1, 200))
+        tokens = self.base.encoder(eeg.reshape(len(eeg), self.channels, -1, 200))
         features = tokens.mean((1, 2)) if self.readout == "mean" else tokens.flatten(1)
         return self.head(features)
 

@@ -38,14 +38,17 @@ import yaml
 DEFAULT_CONFIG = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml'
 STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark',
           'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all', 'refine', 'refine-one',
-          'voltage', 'voltage-one', 'voltage-token-atlas', 'eeg-o', 'eeg-o-one')
+          'voltage', 'voltage-one', 'voltage-token-atlas', 'eeg-o', 'eeg-o-one',
+          'voltage-teacher-plan', 'voltage-teacher-pilot', 'voltage-teacher', 'voltage-teacher-report',
+          'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
 
 
 def serial(value):
     if isinstance(value, dict): return {str(k): serial(v) for k, v in value.items()}
-    if isinstance(value, (tuple, list, np.ndarray)): return [serial(v) for v in value]
+    if isinstance(value, np.ndarray): return serial(value.tolist())
+    if isinstance(value, (tuple, list)): return [serial(v) for v in value]
     if isinstance(value, np.generic): return serial(value.item())
     if isinstance(value, Path): return str(value)
     if isinstance(value, float) and not np.isfinite(value): return None
@@ -79,6 +82,36 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_latent_health_v1':
+        extra = cfg
+        cfg = read_config(SOURCE / extra['base_contract'])
+        cfg.update(schema=extra['schema'], experiment_id=extra['experiment_id'],
+                   latent_health=extra['latent_health'], claim_limits=extra['claim_limits'])
+        cfg['resources'].update(extra['resources'])
+        s = cfg['latent_health']
+        if (s['parent_run'] != 'experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3'
+                or s['allowed_splits'] != ['train', 'validation'] or s['test_access'] != 'forbidden'
+                or s['measured_modality'] != 'hb' or s['parent_steps'] != [250, 550]
+                or s['event_support_s'] != [-5, 25] or s['seconds'] != 30 or s['sample_rate_hz'] != 10
+                or s['patch_seconds'] != 2 or s['patches'] != 15 or s['channels'] != 2 or s['input_dim'] != 40
+                or s['cross_modality'] or s['cross_branch_decoder'] or s['continuous_sidecars']
+                or s['codebook_sizes'] != [128, 512] or s['candidates'] != ['continuous', 'vq128', 'vq512']
+                or s['seeds'] != [17, 29, 43] or s['dropout'] != 0.
+                or s['warmup_steps'] != 1000 or s['continuation_steps'] != 2000
+                or s['revival_stop_after_steps'] > s['continuation_steps'] - 500):
+            raise ValueError('fixed global latent health tensor, development boundary and finite matrix required')
+    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_voltage_teacher_v1':
+        extra = cfg
+        cfg = read_config(SOURCE / extra['base_contract'])
+        cfg.update(schema=extra['schema'], experiment_id=extra['experiment_id'],
+                   voltage_teacher=extra['voltage_teacher'], claim_limits=extra['claim_limits'])
+        cfg['resources'].update(extra['resources'])
+        s = cfg['voltage_teacher']
+        if (s['allowed_splits'] != ['train', 'validation'] or s['test_access'] != 'forbidden'
+                or s['stft'] != dict(samples=200, hop=50, window='hann', boundary='zeros', full_spectrum=True)
+                or s['arms'] != ['raw', 'legacy_target', 'eog_regression', 'wiener', 'physics_wiener', 'shifted_physics']
+                or s['amplitudes_training_rms'] != [.5, 1., 2.]):
+            raise ValueError('fixed voltage teacher transform, development scope and finite arms required')
     if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_eeg_o_v1':
         extra = cfg
         cfg = read_config(SOURCE / extra['base_contract'])
@@ -947,6 +980,32 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema'] == 'dual_component_latent_health_v1':
+        result = latent_health_dispatch(args, cfg)
+        print(json.dumps(serial(result)))
+        return
+    if cfg['schema'] == 'dual_component_voltage_teacher_v1':
+        if args.stage not in ('check', 'synthetic', 'voltage-teacher-plan', 'voltage-teacher-pilot',
+                              'voltage-teacher', 'voltage-teacher-report'):
+            raise ValueError('target-feasibility contract cannot launch tokenizer training')
+        if args.stage == 'check':
+            print(json.dumps(dict(status='voltage_teacher_contract_valid', measured_arrays_read=0,
+                experiment_id=cfg['experiment_id'], protected_data='forbidden', test_access='forbidden')))
+            return
+        if args.output is None:
+            raise ValueError('--output required for retained feasibility evidence')
+        if args.stage == 'voltage-teacher-report':
+            from src.analysis.dual_component_tokenizer import render_voltage_teacher_report
+            result = render_voltage_teacher_report(args.output, args.analysis_output)
+        elif args.stage == 'synthetic':
+            result = voltage_teacher_synthetic(cfg, args.output)
+        else:
+            with owner_lock(args.output):
+                freeze_contract(args.output, cfg, args.project_root)
+                result = run_voltage_teacher(cfg, args.output, args.project_root,
+                    args.workers or cfg['resources']['cpu_workers'], args.stage)
+        print(json.dumps(serial(result)))
+        return
     if cfg['schema']=='dual_component_eeg_o_v1' and args.stage not in ('check','synthetic','eeg-o','eeg-o-one'):
         raise ValueError('EEG-O refinement uses only its development stages')
     if cfg['schema']=='dual_component_eeg_o_v1' and args.evaluation_split!='development':
@@ -2828,6 +2887,847 @@ def render_eeg_o_examples(cfg, out, destination):
         selected_seed=seed,selection_rule='validation target RMS P10/P50/P90 in frozen training raw-EEG units; distinct subjects',
         target='fixed conditional voltage correction, not physiological noise truth',input_support=features['raw_support'])
     write_json(destination/'figure_index.json',index);return index
+
+
+def _voltage_teacher_read(path):
+    with np.load(path, allow_pickle=False) as archive:
+        return {key: archive[key] for key in archive.files}
+
+
+def _voltage_teacher_preparation(payload):
+    from src.data.dual_component_tokenizer import prepare_voltage_teacher_record
+    cfg, out, root, entries = payload
+    out = Path(out); parent = Path(root)/cfg['voltage_teacher']['parent_run']
+    started = time.monotonic(); results = []
+    pending = [e for e in entries if not (out/'prepared'/f"{e['id']}.json").exists()]
+    if not pending:
+        return dict(status='reused', subject=entries[0]['subject'])
+    try:
+        co = read_json(parent/'coordinates.json')
+        def read_parent(stage, row):
+            source = Path(root)/cfg['voltage_teacher']['legacy_voltage_run'] if stage=='voltage_prepared' else parent
+            return read_arrays(source, stage, row)
+        for entry, arrays, meta in prepare_voltage_teacher_record(root, cfg, pending, co, read_parent):
+            write_npz(out/'prepared'/f"{entry['id']}.npz", **arrays)
+            write_json(out/'prepared'/f"{entry['id']}.json", dict(status='completed', **meta))
+            results.append(entry['id'])
+    except Exception:
+        error = traceback.format_exc()
+        for entry in pending:
+            if entry['id'] not in results:
+                write_json(out/'prepared'/f"{entry['id']}.json", dict(status='failed', entry=entry, error=error))
+    return dict(subject=entries[0]['subject'], completed=len(results), elapsed_seconds=time.monotonic()-started,
+        peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+
+
+def _voltage_teacher_fit(payload):
+    from src.data.dual_component_tokenizer import produce_teacher
+    cfg, out, entry, roi, calibration = payload
+    out = Path(out); key = entry['id']+f'__{roi}' + ('__Hb_only' if calibration else '')
+    destination = out/'physical'/key
+    if destination.with_suffix('.json').exists():
+        return read_json(destination.with_suffix('.json'))
+    started = time.monotonic()
+    try:
+        base = _voltage_teacher_read(out/'prepared'/f"{entry['id']}.npz")
+        features = _voltage_teacher_read(out/'features'/f"{entry['id']}.npz")
+        co = read_json(out/'coordinates.json')[entry['rows'][roi]['coordinate']]
+        indices = base['roi_indices'][roi]
+        from src.data.ssm_prepared import EEG_PROXY_INPUT_SCHEMA
+        from src.data.unified_physiology import CACHED_FNIRS_INPUT_SCHEMA
+        a = dict(features=features['ell'].reshape(900, -1, 5)[:, indices].reshape(900, 30),
+            eeg=base['x'][6000:10000, indices].astype('float32'), hb=base['hb'][:, roi],
+            native_time=base['hb_native_time'][:, roi], time_s=np.arange(900)*.1,
+            identity=np.array(entry['rows'][roi]['id']), eeg_proxy_input=np.array(EEG_PROXY_INPUT_SCHEMA),
+            eeg_proxy_rate_hz=np.array(10.), fnirs_input=np.array(CACHED_FNIRS_INPUT_SCHEMA))
+        tak = read_json(out/'teacher_config.json')
+        arrays, status = produce_teacher(a, co, tak, eeg_visible=not calibration)
+        if arrays is not None:
+            write_npz(destination.with_suffix('.npz'), **arrays)
+        report = dict(key=key, entry_id=entry['id'], subject=entry['subject'], split=entry['split'], roi=roi,
+            calibration=calibration, status='completed' if status.get('accepted') else 'failed',
+            fit=status, elapsed_seconds=time.monotonic()-started,
+            peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:
+        report = dict(key=key, entry_id=entry['id'], subject=entry['subject'], split=entry['split'], roi=roi,
+            calibration=calibration, status='failed', error=traceback.format_exc(),
+            elapsed_seconds=time.monotonic()-started)
+    write_json(destination.with_suffix('.json'), report)
+    return report
+
+
+def _voltage_teacher_evaluation(payload):
+    from src.data.dual_component_tokenizer import (voltage_wiener_target, voltage_eog_reference,
+        voltage_teacher_intervention, paired_voltage_targets, voltage_proxy_correction, voltage_stft)
+    from src.analysis.dual_component_tokenizer import voltage_teacher_natural_metrics, voltage_teacher_delta_metrics
+    cfg, out, entry, donor_id = payload
+    out = Path(out); spec = cfg['voltage_teacher']; folder = out/'evaluation'/entry['id']
+    if (folder/'metrics.json').exists():
+        return read_json(folder/'metrics.json')
+    started = time.monotonic()
+    try:
+        base = _voltage_teacher_read(out/'prepared'/f"{entry['id']}.npz")
+        model = _voltage_teacher_read(out/'noise_model.npz')
+        co = read_json(out/'coordinates.json'); confidence = read_json(out/'physical_variance.json')
+        x, eog = base['x'], base['eog']; c = x.shape[1]
+        projection = np.zeros((3, c*5)); physical = []; hb_fit = []; failures = []
+        features = _voltage_teacher_read(out/'features'/f"{entry['id']}.npz")['ell']
+        variance = []
+        for roi, row in enumerate(entry['rows']):
+            cc = co[row['coordinate']]; loadings = np.asarray(cc['pc']).reshape(6, 5)*cc['eeg_factor']
+            for j, channel in enumerate(base['roi_indices'][roi]):
+                projection[roi, channel*5:(channel+1)*5] = loadings[j]
+            path = out/'physical'/f"{entry['id']}__{roi}"
+            status = read_json(path.with_suffix('.json'))
+            if status['status'] == 'completed':
+                fit = _voltage_teacher_read(path.with_suffix('.npz'))
+                physical.append(fit['physical'][:, 0]); hb_fit.append(fit['physical'][:, 1:]/cc['hb_factor'])
+                variance.append(confidence[row['coordinate']]['variance'])
+            else:
+                # Explicitly recorded abstention; it is not a successful physical estimate.
+                physical.append(features @ projection[roi]); hb_fit.append(np.full((900, 2), np.nan))
+                variance.append(1e12); failures.append(roi)
+        physical = np.stack(physical, axis=1); variance = np.asarray(variance)
+        def estimate(value, reference, *, legacy=None):
+            w = voltage_wiener_target(value, reference, model, spec)
+            p = voltage_wiener_target(value, reference, model, spec, projection=projection,
+                physical=physical, physical_variance=variance)
+            shifted = voltage_wiener_target(value, reference, model, spec, projection=projection,
+                physical=np.roll(physical, 450, axis=0), physical_variance=variance)
+            old = (voltage_proxy_correction(value, base['legacy_projection'], base['legacy_physical'])
+                   if legacy is None else dict(corrected=legacy, diagnostic={'status': 'retained_replay'}))
+            return dict(raw=value.copy(), legacy_target=old['corrected'],
+                eog_regression=value-voltage_eog_reference(reference, spec) @ model['transfer'],
+                wiener=w['s'], physics_wiener=p['s'], shifted_physics=shifted['s']), dict(
+                    clipped_fraction=p['clipped_fraction'], power_floor_fraction=p['power_floor_fraction'],
+                    closure_max_abs=p['closure_max_abs'], legacy_status=old['diagnostic']['status'])
+        baseline, diagnostics = estimate(x, eog, legacy=base['legacy_s'])
+        _, frames, ze = voltage_stft(voltage_eog_reference(eog, spec), spec)
+        activity = np.sum(abs(ze)**2, axis=(1, 2))
+        low = np.interp(np.arange(len(x))/200, frames, activity) <= model['low_eog_threshold']
+        common = {k: entry[k] for k in ('id', 'subject', 'split', 'slot')}
+        natural = [dict(common, method=method, **voltage_teacher_natural_metrics(
+            x, value, eog, model['voltage_scale'], low)) for method, value in baseline.items()]
+        write_npz(folder/'base.npz', x=x.astype('float32'), eog=eog.astype('float32'),
+            **{k: v.astype('float32') for k, v in baseline.items() if k != 'raw'},
+            physical=physical, proxy=features @ projection.T, hb=base['hb'],
+            hb_fit=np.stack(hb_fit, axis=1), legacy_proxy=base['legacy_proxy'],
+            legacy_physical=base['legacy_physical'], projection=projection, physical_variance=variance,
+            low_eog=low, channels=base['channels'], voltage_scale=model['voltage_scale'])
+        perturbations, paired_checks = [], []
+        if entry['split'] == 'validation':
+            donor = _voltage_teacher_read(out/'prepared'/f'{donor_id}.npz')['eog']
+            for kind in spec['perturbations']:
+                for amplitude in spec['amplitudes_training_rms']:
+                    n, reference = voltage_teacher_intervention(x, eog, donor, model, spec, kind, amplitude, spec['seed'])
+                    estimates, diag = estimate(x+n, reference)
+                    for method, value in estimates.items():
+                        metric = voltage_teacher_delta_metrics(baseline[method], value, n, kind)
+                        perturbations.append(dict(common, method=method, kind=kind, amplitude=amplitude,
+                            **metric, legacy_status=diag['legacy_status']))
+                    if kind != 'neural_alpha':
+                        pair = paired_voltage_targets(x, baseline['physics_wiener'], n)
+                        paired_checks.append(dict(kind=kind, amplitude=amplitude,
+                            S_change_max_abs=float(np.max(abs(pair['s']-baseline['physics_wiener']))),
+                            O_change_error_max_abs=float(np.max(abs(pair['o']-(x-baseline['physics_wiener'])-n))),
+                            closure_max_abs=float(np.max(abs(pair['x']-pair['s']-pair['o'])))))
+                    if amplitude == 1.:
+                        sl = slice(6000, 10000)
+                        arrays = dict(x=(x+n)[sl].astype('float32'), n=n[sl].astype('float32'),
+                            **{k: v[sl].astype('float32') for k, v in estimates.items() if k != 'raw'})
+                        if kind != 'neural_alpha':
+                            arrays.update(paired_s=pair['s'][sl].astype('float32'), paired_o=pair['o'][sl].astype('float32'))
+                        write_npz(folder/f'{kind}.npz', **arrays)
+        report = dict(status='completed', entry=entry, natural=natural, perturbations=perturbations,
+            paired_checks=paired_checks, physics_failed_rois=failures, diagnostics=diagnostics,
+            elapsed_seconds=time.monotonic()-started, peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:
+        report = dict(status='failed', entry=entry, error=traceback.format_exc(), elapsed_seconds=time.monotonic()-started)
+    write_json(folder/'metrics.json', report)
+    return report
+
+
+def voltage_teacher_synthetic(cfg, out):
+    from src.data.dual_component_tokenizer import (fit_voltage_noise_model, voltage_wiener_target,
+        voltage_proxy_correction, paired_voltage_targets, eeg_band_power, BANDS)
+    out = Path(out); path = out/'synthetic.json'; spec = cfg['voltage_teacher']
+    if path.exists():
+        return read_json(path)
+    started = time.monotonic(); t = np.arange(18000)/200
+    def generate(seed):
+        rng = np.random.default_rng(seed); c = 6
+        clean = np.zeros((len(t), c))
+        for j in range(c):
+            for frequency, amp in ((3, 2), (6, 3), (10, 7), (19, 3), (36, 1)):
+                envelope = 1+.35*np.sin(2*np.pi*.04*t+rng.uniform(0, 6))
+                clean[:, j] += amp*envelope*np.sin(2*np.pi*(frequency+rng.uniform(-.2,.2))*t+rng.uniform(0,6))
+        eog = np.zeros((len(t), 2))
+        for j in range(2):
+            for onset in rng.uniform(5, 85, 20):
+                eog[:, j] += rng.uniform(25, 90)*np.exp(-.5*((t-onset)/rng.uniform(.10, .30))**2)
+        transfer = np.array([[.7,.6,.45,.15,.1,.05],[.2,-.2,.1,-.1,.05,-.05]])
+        return dict(x=clean+eog@transfer, eog=eog, clean=clean, split='train')
+    training = [generate(seed) for seed in spec['synthetic_train_seeds']]
+    model = fit_voltage_noise_model(training, spec)
+    a = np.zeros((2, 30)); a[0, 2::5] = 1/6; a[1, 0::5] = 1/6
+    metrics, maximum_closure = [], 0.
+    for seed in spec['synthetic_eval_seeds']:
+        sample = generate(seed); x, clean, eog = sample['x'], sample['clean'], sample['eog']
+        powers = np.log(eeg_band_power(clean, bands=BANDS, sample_rate=200, target_rate=10)).reshape(900,30)
+        powers -= powers[:50].mean(0); prior = powers @ a.T
+        no = voltage_wiener_target(x, eog, model, spec)
+        phys = voltage_wiener_target(x, eog, model, spec, projection=a, physical=prior,
+            physical_variance=np.ones(2)*.05)
+        wrong = voltage_wiener_target(x, eog, model, spec, projection=a, physical=np.roll(prior,450,axis=0)+2.,
+            physical_variance=np.ones(2)*.05)
+        legacy = voltage_proxy_correction(x,a,prior)
+        outputs = dict(raw=x, legacy_target=legacy['corrected'], wiener=no['s'], physics_oracle=phys['s'],
+            wrong_physics=wrong['s'])
+        sl = slice(6000,10000); denominator = np.mean(clean[sl]**2)
+        for name, s in outputs.items():
+            metrics.append(dict(seed=seed, method=name, clean_NMSE=float(np.mean((s[sl]-clean[sl])**2)/denominator),
+                correlation=float(np.corrcoef(s[sl].ravel(),clean[sl].ravel())[0,1])))
+        pair = paired_voltage_targets(x, phys['s'], x-clean)
+        maximum_closure = max(maximum_closure, float(np.max(abs(pair['s']+pair['o']-pair['x']))))
+        if seed == spec['synthetic_eval_seeds'][0]:
+            write_npz(out/'synthetic_example.npz', x=x, clean=clean, eog=eog, **{k:v for k,v in outputs.items() if k!='raw'})
+    report = dict(schema='voltage_teacher_synthetic_v1', status='completed', metrics=metrics,
+        training_seeds=spec['synthetic_train_seeds'], evaluation_seeds=spec['synthetic_eval_seeds'],
+        maximum_pair_closure=maximum_closure, physical_prior=spec['synthetic_physical_prior'],
+        elapsed_seconds=time.monotonic()-started)
+    write_json(path,report)
+    return report
+
+
+def run_voltage_teacher(cfg, out, root, workers, stage):
+    from src.data.dual_component_tokenizer import (voltage_teacher_plan, fit_voltage_noise_model,
+        voltage_power_evidence)
+    from src.data.ssm_prepared import fit_feature_coordinate, EEG_PROXY_INPUT_SCHEMA
+    from src.data.unified_physiology import CACHED_FNIRS_INPUT_SCHEMA
+    from src.analysis.dual_component_tokenizer import summarize_voltage_teacher
+    out, root = Path(out), Path(root); spec=cfg['voltage_teacher']
+    expected_parent = 'experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3'
+    if spec['parent_run'] != expected_parent:
+        raise ValueError('exact retained public parent required')
+    if spec['legacy_voltage_run'] != expected_parent.replace('20261028_v3','20261029_voltage_v1'):
+        raise ValueError('exact retained legacy voltage label run required')
+    retained = read_json(root/spec['parent_run']/'inventory.json')
+    panel = voltage_teacher_plan(cfg,retained)
+    if (out/'plan.json').exists() and read_json(out/'plan.json') != panel:
+        raise ValueError('panel drift; preserve the original run')
+    write_json(out/'plan.json',panel)
+    if stage == 'voltage-teacher-plan':
+        return dict(status='planned', windows=len(panel['rows']), planned=panel['planned_windows'], measured_arrays_read=0)
+    write_json(out/'controller.json',dict(status='running',stage='synthetic',pid=os.getpid(),updated=now()))
+    voltage_teacher_synthetic(cfg,out)
+    groups=defaultdict(list)
+    for entry in panel['rows']:groups[entry['subject']].append(entry)
+    write_json(out/'controller.json',dict(status='running',stage='preparing',pid=os.getpid(),updated=now(),workers=workers))
+    prepared = _bounded_jobs(_voltage_teacher_preparation,
+        [(cfg,str(out),str(root),group) for group in groups.values()],workers,inflight=1)
+    write_json(out/'preparation.json',prepared)
+    available = [e for e in panel['rows'] if read_json(out/'prepared'/f"{e['id']}.json")['status']=='completed']
+    if not (out/'noise_model.npz').exists():
+        training=[]
+        for entry in available:
+            if entry['split']=='train':
+                training.append(dict(_voltage_teacher_read(out/'prepared'/f"{entry['id']}.npz"),split='train'))
+        model=fit_voltage_noise_model(training,spec)
+        write_npz(out/'noise_model.npz',**model)
+    model=_voltage_teacher_read(out/'noise_model.npz')
+    if not (out/'noise_calibration.json').exists():
+        write_json(out/'noise_calibration.json',dict(training_ids=[e['id'] for e in available if e['split']=='train'],
+            low_eog_threshold=model['low_eog_threshold'], low_eog_training_frames=model['low_eog_training_frames'],
+            transfer=model['transfer'], noise_model='EOG-derived covariance, conditional mean zero'))
+    for entry in available:
+        path=out/'features'/f"{entry['id']}.npz"
+        if not path.exists():
+            a=_voltage_teacher_read(out/'prepared'/f"{entry['id']}.npz")
+            evidence=voltage_power_evidence(a['x'],a['eog'],model,spec)
+            write_npz(path,ell=evidence['ell'],power=evidence['power'],reference=evidence['reference'])
+    if not (out/'coordinates.json').exists():
+        chunks=defaultdict(list); ids=defaultdict(list)
+        for entry in available:
+            if entry['split']!='train':continue
+            a=_voltage_teacher_read(out/'prepared'/f"{entry['id']}.npz")
+            features=_voltage_teacher_read(out/'features'/f"{entry['id']}.npz")['ell'].reshape(900,-1,5)
+            for i,row in enumerate(entry['rows']):
+                chunks[row['coordinate']].append((features[:,a['roi_indices'][i]].reshape(900,30),a['hb'][:,i]))
+                ids[row['coordinate']].append(row['id'])
+        coordinates={}
+        for key,values in chunks.items():
+            coordinates[key]=dict(fit_feature_coordinate(values),training_ids=ids[key],
+                eeg_proxy_input=EEG_PROXY_INPUT_SCHEMA,fnirs_input=CACHED_FNIRS_INPUT_SCHEMA,
+                feature_generation='noise_subtracted_bandpower_v1_new_coordinate_not_legacy_PCA')
+        write_json(out/'coordinates.json',coordinates)
+    tak=yaml.safe_load((SOURCE/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml').read_text())
+    write_json(out/'teacher_config.json',tak)
+    jobs=[(cfg,str(out),entry,roi,False) for entry in available for roi in range(3)]
+    jobs += [(cfg,str(out),entry,roi,True) for entry in available if entry['split']=='train' and entry['slot']==0 for roi in range(3)]
+    if stage=='voltage-teacher-pilot':
+        jobs=jobs[:2]
+    def progress(result, count):
+        write_json(out/'controller.json',dict(status='running',stage='physical',pid=os.getpid(),updated=now(),
+            planned_fits=len(jobs),terminal_fits=count,workers=workers,last_fit=result.get('key')))
+    write_json(out/'controller.json',dict(status='running',stage='physical',pid=os.getpid(),updated=now(),planned_fits=len(jobs),workers=workers))
+    results=_bounded_jobs(_voltage_teacher_fit,jobs,min(workers,len(jobs)),inflight=1,progress=progress)
+    write_json(out/('pilot.json' if stage=='voltage-teacher-pilot' else 'physical_fits.json'),results)
+    if stage=='voltage-teacher-pilot':
+        write_json(out/'controller.json',dict(status='pilot_completed',updated=now()))
+        return dict(status='pilot_completed', fits=results)
+    coordinates=read_json(out/'coordinates.json'); confidence={}
+    for key,co in coordinates.items():
+        calibrated=[r for r in results if r.get('calibration') and r['status']=='completed'
+            and next(e for e in available if e['id']==r['entry_id'])['rows'][r['roi']]['coordinate']==key]
+        errors=[]
+        for r in calibrated:
+            a=_voltage_teacher_read(out/'physical'/f"{r['key']}.npz")
+            errors.append(float(np.mean((a['physical'][50:-1,0]-a['u'][50:-1,0])**2)))
+        variance=max(float(np.mean(errors)),float(co['sd'][0])**2) if errors else 1e12
+        confidence[key]=dict(variance=variance, Hb_only_calibration_errors=errors,
+            calibration_subjects=[r['subject'] for r in calibrated], planned_subjects=len(spec['train_subjects']),
+            trustworthy=False, interpretation='conservative_training_cross_modality_error_floor_not_posterior_uncertainty')
+    write_json(out/'physical_variance.json',confidence)
+    validation=sorted([e for e in available if e['split']=='validation' and e['slot']==1],key=lambda e:e['subject'])
+    donor={e['subject']:validation[(i+1)%len(validation)]['id'] for i,e in enumerate(validation)}
+    write_json(out/'controller.json',dict(status='running',stage='interventions',pid=os.getpid(),updated=now(),workers=workers))
+    evaluations=_bounded_jobs(_voltage_teacher_evaluation,
+        [(cfg,str(out),e,donor.get(e['subject'])) for e in available],workers,inflight=1)
+    report=summarize_voltage_teacher(out,panel,evaluations,results,cfg)
+    write_json(out/'summary.json',report)
+    write_json(out/'controller.json',dict(status='completed',updated=now(),summary='summary.json'))
+    return report
+
+
+def _latent_health_trial(payload):
+    from src.data.dual_component_tokenizer import latent_health_hb_patch
+    parent, trial, scales, spec = payload
+    started = time.monotonic()
+    try:
+        # Split is checked before opening even the retained teacher file.
+        if any(r['split'] not in spec['allowed_splits'] for r in trial['rows']):
+            raise ValueError('development-only Hb read boundary')
+        samples = []
+        for row in trial['rows']:
+            arrays = read_arrays(parent, 'teacher', row,
+                keys=('identity', 'teacher_arm', 'u', 'physical', 'remaining'))
+            samples.append(latent_health_hb_patch(row, arrays, scales[row['coordinate']], spec))
+        return dict(status='completed', trial_id=trial['trial_id'], rows=trial['rows'],
+                    arrays={k: np.stack([r[k] for r in samples]) for k in ('u', 'S', 'O')},
+                    retained_bytes=sum(array_paths(parent, 'teacher', r).stat().st_size for r in trial['rows']),
+                    elapsed_seconds=time.monotonic() - started)
+    except Exception:
+        return dict(status='failed', trial_id=trial['trial_id'], error=traceback.format_exc(),
+                    elapsed_seconds=time.monotonic() - started)
+
+
+def prepare_latent_health(cfg, out, root, workers):
+    from src.data.dual_component_tokenizer import latent_health_plan
+    out, root = Path(out), Path(root)
+    spec = cfg['latent_health']; parent = root / spec['parent_run']
+    plan_path = out / 'plan.json'
+    if not plan_path.exists():
+        write_json(plan_path, latent_health_plan(parent, spec))
+    plan = read_json(plan_path)
+    if (plan['parent'] != str(parent.resolve()) or plan['allowed_splits'] != ['train', 'validation']
+            or plan['test_access'] != 'forbidden' or plan['protected_data'] != 'forbidden'):
+        raise ValueError('frozen public development plan required before retained array reads')
+    destination = out / 'cache'; destination.mkdir(exist_ok=True)
+    if (destination / 'manifest.json').exists():
+        return read_json(destination / 'manifest.json')
+    payloads = [(str(parent), t, plan['observation_training_sd'], spec) for t in plan['trials']]
+    timings = []
+    for count in cfg['resources']['prepare_benchmark_workers']:
+        start = time.monotonic()
+        sample = _bounded_jobs(_latent_health_trial, payloads[:64], count)
+        seconds = time.monotonic() - start
+        timings.append(dict(workers=count, seconds=seconds, trials_per_second=len(sample) / seconds,
+                            retained_MiB_per_second=sum(r.get('retained_bytes', 0) for r in sample) / seconds / 1024 ** 2,
+                            failures=sum(r['status'] != 'completed' for r in sample)))
+    selected_workers = min(workers, max(timings, key=lambda r: r['trials_per_second'])['workers'])
+    write_json(out / 'prepare_resources.json', dict(benchmarks=timings, selected_workers=selected_workers,
+        reason='highest measured retained-file throughput within the CPU ceiling; competing Tak and downstream jobs retained'))
+    def progress(result, completed):
+        if completed % 100 == 0 or completed == len(payloads):
+            write_json(out / 'prepare_progress.json', dict(completed=completed, planned=len(payloads),
+                last_trial=result.get('trial_id'), last_status=result['status'], updated=now()))
+    started = time.monotonic()
+    results = _bounded_jobs(_latent_health_trial, payloads, selected_workers, progress=progress)
+    bytrial = {r['trial_id']: r for r in results if 'trial_id' in r}
+    failures = list(plan['failures']); complete = []
+    for trial in plan['trials']:
+        result = bytrial.get(trial['trial_id'], dict(status='failed', trial_id=trial['trial_id'], error='worker did not return identity'))
+        if result['status'] == 'completed':
+            complete.append(result)
+        else:
+            failures.append({k: v for k, v in result.items() if k != 'arrays'})
+    if not complete:
+        write_json(out / 'prepare_failures.json', failures)
+        raise ValueError('no complete three-location Hb trials; failures retained')
+    rows = [row for result in complete for row in result['rows']]
+    values = {k: np.concatenate([r['arrays'][k] for r in complete]) for k in ('u', 'S', 'O')}
+    for key, value in values.items():
+        temporary = destination / f'{key}.tmp.npy'
+        np.save(temporary, value, allow_pickle=False)
+        temporary.replace(destination / f'{key}.npy')
+    train = np.array([r['split'] == 'train' for r in rows])
+    balance = {c: np.maximum(values[c][train].reshape(-1, 2).var(0, dtype=np.float64),
+                             spec['minimum_target_variance']).tolist() for c in ('S', 'O')}
+    result = dict(schema='dual_component_latent_health_cache_v1', status='completed', rows=rows,
+        arrays={k: f'{k}.npy' for k in values}, shapes={k: list(v.shape) for k, v in values.items()},
+        planned_trials=plan['planned_trials'], retained_trials=len(complete),
+        planned_windows=plan['planned_windows'], retained_windows=len(rows), failures=failures,
+        parent_identity=plan['parent_identity'], plan_identity=plan['identity'], parent=str(parent.resolve()),
+        target_variance=balance, variance_fit='training subjects only, separate component and color',
+        observation_training_sd=plan['observation_training_sd'],
+        normalization='parent training observation SD; no new per-window centering or scaling',
+        event_support_s=[-5, 25], parent_reference_event_s=[-30, -25],
+        test_arrays_read=0, ssms_refitted=0, eeg_arrays_used_as_inputs=0,
+        elapsed_seconds=time.monotonic() - started,
+        subjects={ds: {sp: len({r['subject'] for r in rows if r['dataset'] == ds and r['split'] == sp})
+                       for sp in ('train', 'validation')} for ds in sorted({r['dataset'] for r in rows})})
+    write_json(destination / 'manifest.json', result)
+    return result
+
+
+def load_latent_health_cache(out):
+    folder = Path(out) / 'cache'; manifest = read_json(folder / 'manifest.json')
+    if (manifest['schema'] != 'dual_component_latent_health_cache_v1' or manifest['test_arrays_read'] != 0
+            or any(r['split'] not in ('train', 'validation') for r in manifest['rows'])):
+        raise ValueError('development-only latent health cache required before arrays')
+    arrays = {k: np.load(folder / manifest['arrays'][k], mmap_mode='r', allow_pickle=False) for k in ('u', 'S', 'O')}
+    if any(v.shape != (len(manifest['rows']), 15, 40) or v.dtype != np.float32 for v in arrays.values()):
+        raise ValueError('latent health cache tensor/dtype mismatch')
+    return manifest, arrays
+
+
+def _latent_health_groups(rows):
+    groups = defaultdict(lambda: defaultdict(list))
+    for i, row in enumerate(rows):
+        if row['split'] == 'train':
+            groups[row['dataset']][row['subject']].append(i)
+    return [[np.array(indices) for _, indices in sorted(subjects.items())] for _, subjects in sorted(groups.items())]
+
+
+def _latent_health_sample(rng, groups, count):
+    indices = []
+    for _ in range(count):
+        subjects = groups[int(rng.integers(len(groups)))]; choices = subjects[int(rng.integers(len(subjects)))]
+        indices.append(int(rng.choice(choices)))
+    return np.array(indices)
+
+
+def evaluate_latent_health(cfg, model, arrays, manifest, job, device):
+    import torch
+    from src.analysis.dual_component_tokenizer import latent_hb_fidelity, latent_codebook_health, _csv
+    spec = cfg['latent_health']; rows = manifest['rows']; count = len(rows)
+    predictions = {c: np.empty((count, 15, 40), dtype='float32') for c in ('S', 'O', 'sum')}
+    ids = {c: np.empty((count, 15), dtype='int16') for c in ('S', 'O')} if model.hard else {}
+    latents = {c: np.empty((count, 15, spec['latent_dim']), dtype='float32') for c in ('S', 'O')}
+    maximum_decode_difference = 0.; model.eval()
+    before = {c: b['quantizer'].codebook.clone() for c, b in model.branches.items()}
+    with torch.inference_mode():
+        for start in range(0, count, spec['evaluation_batch_size']):
+            stop = min(start + spec['evaluation_batch_size'], count)
+            x = torch.as_tensor(np.array(arrays['u'][start:stop]), device=device)
+            result = model(x)
+            for c in predictions:
+                predictions[c][start:stop] = result[c].cpu().numpy()
+            for c in latents:
+                latents[c][start:stop] = result['latent'][c].cpu().numpy()
+            if model.hard:
+                replay = model.decode_ids(result['ids'])
+                for c in ('S', 'O'):
+                    ids[c][start:stop] = result['ids'][c].cpu().numpy()
+                    maximum_decode_difference = max(maximum_decode_difference, float((replay[c] - result[c]).abs().max()))
+    if maximum_decode_difference > 2e-5:
+        raise AssertionError('hard forward does not reproduce integer-only decoding')
+    if any(not torch.equal(before[c], b['quantizer'].codebook) for c, b in model.branches.items()):
+        raise AssertionError('evaluation changed the frozen codebook')
+    fidelity = latent_hb_fidelity(predictions, arrays, rows)
+    _csv(Path(job) / 'subject_metrics.csv', fidelity.pop('subjects'))
+    validation = np.flatnonzero([r['split'] == 'validation' for r in rows])
+    write_npz(Path(job) / 'validation_predictions.npz', row_index=validation,
+              **{k: v[validation] for k, v in predictions.items()})
+    health, geometry = {}, []
+    for c, values in latents.items():
+        for split in ('train', 'validation'):
+            selected = np.array([r['split'] == split for r in rows])
+            x = np.asarray(values[selected], dtype=float).reshape(-1, spec['latent_dim'])
+            covariance = x.T @ x / len(x) - np.outer(x.mean(0), x.mean(0))
+            eigen = np.linalg.eigvalsh(covariance).clip(0)
+            geometry.append(dict(branch=c, split=split, participation_rank=float(eigen.sum() ** 2 /
+                max(float(np.square(eigen).sum()), 1e-30)), dimension=spec['latent_dim']))
+        if model.hard:
+            q = model.branches[c]['quantizer']
+            h = latent_codebook_health(ids[c], q.codebook.cpu().numpy(), rows, spec['health'])
+            _csv(Path(job) / f'{c}_code_coverage.csv', h.pop('coverage'))
+            h.update(total_revivals=int(q.revival_count), ema_updates=int(q.update_count))
+            health[c] = h
+    context = []
+    if model.hard:
+        write_npz(Path(job) / 'hard_ids.npz', **ids)
+        write_npz(Path(job) / 'codebooks.npz', **{c: b['quantizer'].codebook.cpu().numpy() for c, b in model.branches.items()})
+        for dataset in sorted({r['dataset'] for r in rows}):
+            choices = {}
+            for i in validation:
+                r = rows[i]
+                if r['dataset'] == dataset:
+                    choices.setdefault(r['subject'], i)
+            selected = np.array(list(choices.values()))
+            if len(selected) < 2:
+                continue
+            donors = np.roll(selected, 1)
+            x = np.array(arrays['u'][selected]); changed = np.array(arrays['u'][donors]); changed[:, 7] = x[:, 7]
+            with torch.inference_mode():
+                result = model(torch.as_tensor(changed, device=device))
+            for c in ('S', 'O'):
+                context.append(dict(dataset=dataset, branch=c, examples=len(selected),
+                    central_patch=7, central_event_seconds=[9, 11],
+                    ID_change_fraction=float(np.mean(result['ids'][c][:, 7].cpu().numpy() != ids[c][selected, 7])),
+                    central_reconstruction_change_NMSE=float(np.mean(np.square(
+                        result[c][:, 7].cpu().numpy() - predictions[c][selected, 7]))),
+                    source_ids=[rows[i]['id'] for i in selected], donor_ids=[rows[i]['id'] for i in donors],
+                    meaning='one first validation window per subject; other-subject same-dataset context, central observation fixed; diagnostic only'))
+    return dict(fidelity=fidelity, health=health, latent_geometry=geometry, context_replacement=context,
+        integer_decode_max_abs_difference=maximum_decode_difference, test_used=False,
+        health_pass=all(h['passed'] for h in health.values()) if health else None)
+
+
+def train_latent_health(cfg, out, candidate, seed, device, *, memory_bytes=None, pilot_output=None, steps=None):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import GlobalLatentComponentTokenizer
+    spec = cfg['latent_health']; out = Path(out)
+    if candidate not in ['warmup', *spec['candidates']] or seed not in spec['seeds']:
+        raise ValueError('unregistered latent health job')
+    pilot = pilot_output is not None
+    if (steps is not None and not pilot) or (pilot and (steps is None or not 1 <= steps <= cfg['resources']['benchmark_steps'])):
+        raise ValueError('step overrides are bounded resource pilots only')
+    job = Path(pilot_output) if pilot else out / 'latent_health' / candidate / f'seed_{seed}'
+    if pilot and not job.resolve().is_relative_to((out / 'benchmark').resolve()):
+        raise ValueError('resource pilot artifacts must remain under this run benchmark directory')
+    job.mkdir(parents=True, exist_ok=True)
+    if (job / 'summary.json').exists():
+        return read_json(job / 'summary.json')
+    with owner_lock(job, 'training'):
+        try:
+            torch.set_num_threads(cfg['resources']['torch_threads'])
+            random.seed(seed); torch.manual_seed(seed)
+            if device.startswith('cuda'):
+                torch.cuda.set_device(device)
+                budget_bytes = memory_bytes or cfg['resources']['max_new_gpu_memory_mib'] * 1024 ** 2
+                torch.cuda.set_per_process_memory_fraction(budget_bytes / torch.cuda.get_device_properties(device).total_memory, device)
+                torch.cuda.reset_peak_memory_stats(device)
+            manifest, arrays = load_latent_health_cache(out)
+            groups = _latent_health_groups(manifest['rows'])
+            if len(groups) != 2 or any(not group for group in groups):
+                raise ValueError('both registered training datasets required')
+            hard = candidate.startswith('vq'); size = int(candidate[2:]) if hard else 128
+            model = GlobalLatentComponentTokenizer(spec, codebook_size=size, hard=hard).to(device)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=spec['learning_rate'], weight_decay=spec['weight_decay'])
+            rng = np.random.default_rng(seed + (0 if candidate == 'warmup' else 1000))
+            budget = steps if pilot else spec['warmup_steps' if candidate == 'warmup' else 'continuation_steps']
+            signature = dict(schema=cfg['schema'], candidate=candidate, seed=seed, budget=budget,
+                             spec=spec, plan_identity=manifest['plan_identity'], pilot=pilot)
+            checkpoint = job / 'checkpoint.pt'; history = []; start = 0
+            if checkpoint.exists():
+                saved = torch.load(checkpoint, map_location=device, weights_only=False)
+                if saved['signature'] != signature:
+                    raise ValueError('latent health resume signature changed')
+                model.load_state_dict(saved['model_state']); optimizer.load_state_dict(saved['optimizer_state'])
+                start, history = int(saved['step']), saved['history']
+                rng.bit_generator.state = saved['numpy_rng']; torch.set_rng_state(saved['torch_rng'].cpu())
+                if device.startswith('cuda') and saved.get('cuda_rng') is not None:
+                    torch.cuda.set_rng_state(saved['cuda_rng'].cpu(), device)
+            elif candidate != 'warmup' and not pilot:
+                warmup = out / 'latent_health/warmup' / f'seed_{seed}'
+                if not (warmup / 'summary.json').exists() or read_json(warmup / 'summary.json')['status'] != 'completed':
+                    raise ValueError('same-seed completed continuous warmup required')
+                saved = torch.load(warmup / 'checkpoint.pt', map_location=device, weights_only=False)
+                if saved['step'] != spec['warmup_steps'] or saved['signature']['plan_identity'] != manifest['plan_identity']:
+                    raise ValueError('warmup exposure or data identity mismatch')
+                weights = {k: v for k, v in saved['model_state'].items() if '.quantizer.' not in k}
+                loaded = model.load_state_dict(weights, strict=False)
+                if loaded.unexpected_keys or any('.quantizer.' not in k for k in loaded.missing_keys):
+                    raise ValueError('warmup architecture mismatch')
+            if start > budget:
+                raise ValueError('checkpoint exceeds fixed step budget')
+            if hard and not bool(model.branches['S']['quantizer'].initialized):
+                initialization = _latent_health_sample(np.random.default_rng(seed + 9000), groups, spec['initialization_rows'])
+                if any(manifest['rows'][i]['split'] != 'train' for i in initialization):
+                    raise AssertionError('non-training initialization row')
+                model.initialize_codebooks(torch.as_tensor(np.array(arrays['u'][initialization]), device=device))
+                write_json(job / 'initialization.json', dict(row_indices=initialization, split='train',
+                    patches=len(initialization) * spec['patches'], targets_used=False))
+            variances = {c: torch.as_tensor(manifest['target_variance'][c], dtype=torch.float32, device=device)
+                         for c in ('S', 'O')}
+            started = time.monotonic(); model.train()
+            for step in range(start, budget):
+                indices = _latent_health_sample(rng, groups, spec['batch_size'])
+                x = torch.as_tensor(np.array(arrays['u'][indices]), device=device)
+                result = model(x)
+                loss = result['commitment']; parts = {}
+                for c in ('S', 'O'):
+                    target = torch.as_tensor(np.array(arrays[c][indices]), device=device)
+                    error = (result[c] - target).reshape(-1, 2).square()
+                    term = (error / variances[c]).mean()
+                    loss = loss + term / 2
+                    parts[c] = float(error.mean().detach())
+                if not bool(torch.isfinite(loss)):
+                    raise FloatingPointError('nonfinite latent health loss')
+                optimizer.zero_grad(set_to_none=True); loss.backward()
+                norm = torch.nn.utils.clip_grad_norm_(model.parameters(), spec['gradient_clip'])
+                if not bool(torch.isfinite(norm)):
+                    raise FloatingPointError('nonfinite latent health gradient')
+                optimizer.step()
+                if (step + 1) % spec['checkpoint_every'] == 0 or step + 1 == budget:
+                    item = dict(step=step + 1, loss=float(loss.detach()), waveform_MSE=parts,
+                        elapsed_seconds=time.monotonic() - started,
+                        batch_health={c: {k: float(v.detach()) for k, v in h.items()}
+                                      for c, h in result['health'].items()})
+                    history.append(item)
+                    _torch_save(checkpoint, dict(signature=signature, model_state=model.state_dict(),
+                        optimizer_state=optimizer.state_dict(), step=step + 1, history=history,
+                        numpy_rng=rng.bit_generator.state, torch_rng=torch.get_rng_state(),
+                        cuda_rng=torch.cuda.get_rng_state(device) if device.startswith('cuda') else None))
+                    write_json(job / 'progress.json', dict(status='training', candidate=candidate, seed=seed,
+                        step=step + 1, budget=budget, updated=now(), last=item))
+            elapsed = time.monotonic() - started
+            result = dict(status='completed', candidate=candidate, seed=seed, completed_steps=budget,
+                total_exposure_steps=budget + (spec['warmup_steps'] if candidate != 'warmup' and not pilot else 0),
+                resumed_from_step=start, elapsed_training_seconds=elapsed,
+                steps_per_second=(budget - start) / max(elapsed, 1e-9),
+                peak_cuda_allocated_bytes=torch.cuda.max_memory_allocated(device) if device.startswith('cuda') else 0,
+                peak_cuda_reserved_bytes=torch.cuda.max_memory_reserved(device) if device.startswith('cuda') else 0,
+                peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                nominal_bits_per_branch_patch=float(np.log2(size)) if hard else None,
+                phase='resource_pilot' if pilot else candidate, test_used=False,
+                source_checkpoint=str(checkpoint), history=history)
+            if candidate != 'warmup' and not pilot:
+                result['evaluation'] = evaluate_latent_health(cfg, model, arrays, manifest, job, device)
+            write_json(job / 'summary.json', result)
+            write_json(job / 'progress.json', dict(status='completed', step=budget, budget=budget, updated=now()))
+            return result
+        except Exception:
+            write_json(job / 'failure.json', dict(status='failed', candidate=candidate, seed=seed,
+                updated=now(), error=traceback.format_exc(), checkpoint_preserved=(job / 'checkpoint.pt').exists()))
+            raise
+
+
+def latent_health_jobs(cfg, cfg_path, out, root, devices, workers, jobs, *, benchmark_name=None):
+    """Bounded child jobs under the single durable suite controller."""
+    pending = list(jobs); total = len(pending); active = []; results = []
+    slots = [device for device in devices for _ in range(workers)]
+    started = time.monotonic()
+    while pending or active:
+        while pending and len(active) < len(slots):
+            candidate, seed = pending.pop(0)
+            job = (Path(out) / 'benchmark' / benchmark_name / f'seed_{seed}' if benchmark_name
+                   else Path(out) / 'latent_health' / candidate / f'seed_{seed}')
+            if (job / 'summary.json').exists():
+                results.append(read_json(job / 'summary.json')); continue
+            if (job / 'failure.json').exists():
+                results.append(read_json(job / 'failure.json')); continue
+            used = Counter(item['device'] for item in active)
+            device = next(d for d in slots if used[d] < slots.count(d))
+            job.mkdir(parents=True, exist_ok=True)
+            memory = cfg['resources']['max_new_gpu_memory_mib'] * 1024 ** 2 // slots.count(device)
+            command = [sys.executable, str(Path(__file__).resolve()), '--config', str(cfg_path),
+                '--project-root', str(root), '--output', str(out), '--stage', 'latent-health-one',
+                '--candidate', candidate, '--seed', str(seed), '--device', device,
+                '--gpu-memory-bytes', str(memory), '--parent-pid', str(os.getpid())]
+            if benchmark_name:
+                command += ['--pilot-output', str(job), '--steps', str(cfg['resources']['benchmark_steps'])]
+            log = (job / 'process.log').open('a')
+            process = subprocess.Popen(command, cwd=SOURCE, stdout=log, stderr=subprocess.STDOUT)
+            write_json(job / 'launch.json', dict(command=command, working_directory=str(SOURCE),
+                pid=process.pid, controller_pid=os.getpid(), device=device, memory_bytes=memory, launched_at=now()))
+            active.append(dict(process=process, log=log, candidate=candidate, seed=seed, device=device, job=job))
+        if not active:
+            continue
+        time.sleep(.25)
+        for item in list(active):
+            code = item['process'].poll()
+            if code is None:
+                continue
+            item['log'].close(); active.remove(item); job = item['job']
+            record = (read_json(job / 'summary.json') if code == 0 and (job / 'summary.json').exists()
+                      else read_json(job / 'failure.json') if (job / 'failure.json').exists()
+                      else dict(status='failed', candidate=item['candidate'], seed=item['seed'],
+                                returncode=code, log=str(job / 'process.log')))
+            results.append(record)
+        write_json(Path(out) / 'training_progress.json', dict(phase=benchmark_name or 'training',
+            completed=len(results), planned=total, elapsed_seconds=time.monotonic() - started,
+            active=[dict(candidate=x['candidate'], seed=x['seed'], device=x['device'], pid=x['process'].pid) for x in active],
+            updated=now()))
+    return dict(results=results, wall_seconds=time.monotonic() - started)
+
+
+def benchmark_latent_health(cfg, cfg_path, out, root, devices):
+    path = Path(out) / 'benchmark.json'
+    if path.exists():
+        return read_json(path)
+    trials = []
+    for workers in (1, 2):
+        report = latent_health_jobs(cfg, cfg_path, out, root, devices[:1], workers,
+            [('vq512', seed) for seed in cfg['latent_health']['seeds'][:workers]], benchmark_name=f'workers_{workers}')
+        if any(r['status'] != 'completed' for r in report['results']):
+            trials.append(dict(workers=workers, status='failed', jobs=report['results'])); continue
+        trials.append(dict(workers=workers, status='completed', wall_seconds=report['wall_seconds'],
+            aggregate_steps_per_second=sum(r['completed_steps'] for r in report['results']) / report['wall_seconds'],
+            steady_steps_per_second=sum(r['steps_per_second'] for r in report['results']),
+            maximum_worker_reserved_bytes=max(r['peak_cuda_reserved_bytes'] for r in report['results'])))
+    complete = [r for r in trials if r['status'] == 'completed']
+    if not complete:
+        write_json(path, dict(status='failed', trials=trials))
+        raise RuntimeError('both supervised GPU resource pilots failed')
+    choice = max(complete, key=lambda r: r['aggregate_steps_per_second'])
+    result = dict(status='completed', trials=trials, gpu_workers_per_device=choice['workers'], devices=devices[:1],
+        reason='highest measured aggregate throughput within the memory cap; CUDA1 reserved for competing jobs',
+        estimated_training_seconds=(3 * cfg['latent_health']['warmup_steps'] + 9 * cfg['latent_health']['continuation_steps']) /
+            max(choice['steady_steps_per_second'], 1e-9), measured_at=now())
+    write_json(path, result)
+    return result
+
+
+def summarize_latent_health(cfg, out, results):
+    spec = cfg['latent_health']; manifest, _ = load_latent_health_cache(out)
+    complete = [r for r in results if r['status'] == 'completed' and 'evaluation' in r]
+    comparisons = []
+    for seed in spec['seeds']:
+        baseline = next((r for r in complete if r['candidate'] == 'continuous' and r['seed'] == seed), None)
+        if baseline is None:
+            continue
+        lookup = {tuple(m[k] for k in ('dataset', 'split', 'branch', 'signal', 'metric')): m
+                  for m in baseline['evaluation']['fidelity']['metrics']}
+        for result in complete:
+            if result['seed'] != seed or result['candidate'] == 'continuous':
+                continue
+            for metric in result['evaluation']['fidelity']['metrics']:
+                if metric['metric'] != 'NMSE' or metric['split'] != 'validation':
+                    continue
+                key = tuple(metric[k] for k in ('dataset', 'split', 'branch', 'signal', 'metric'))
+                b = lookup[key]
+                comparisons.append(dict(candidate=result['candidate'], seed=seed,
+                    dataset=metric['dataset'], branch=metric['branch'], signal=metric['signal'],
+                    continuous_NMSE=b['value'], hard_NMSE=metric['value'],
+                    hard_minus_continuous=metric['value'] - b['value'], subjects=metric['subjects']))
+    result = dict(status='completed' if len(complete) == 9 else 'completed_with_failures',
+        experiment_id=cfg['experiment_id'], measured_modality='hb', eeg_measured=False,
+        planned_jobs=9, completed_jobs=len(complete),
+        failures=[{k: r.get(k) for k in ('candidate', 'seed', 'status', 'error', 'log')} for r in results if r['status'] != 'completed'],
+        planned_trials=manifest['planned_trials'], retained_trials=manifest['retained_trials'],
+        planned_windows=manifest['planned_windows'], retained_windows=manifest['retained_windows'],
+        data_failures=manifest['failures'], subjects=manifest['subjects'],
+        results=[{k: r[k] for k in ('candidate', 'seed', 'total_exposure_steps', 'nominal_bits_per_branch_patch', 'evaluation')} for r in complete],
+        quantization_comparisons=comparisons, test_used=False, ssms_refitted=0, selection='none',
+        interpretation='engineering health and hard-decoding evidence only; new EEG supervision remains independent',
+        completed_at=now())
+    write_json(Path(out) / 'summary.json', result)
+    return result
+
+
+def synthetic_latent_health(cfg):
+    import torch
+    from src.tokenizers.dual_component_tokenizer import GlobalLatentComponentTokenizer
+    torch.set_num_threads(2); torch.manual_seed(117)
+    cases = []
+    for modality, dimension in [('hb', 40), ('eeg_interface', 400)]:
+        spec = dict(cfg['latent_health'], input_dim=dimension, width=16, latent_dim=8, heads=2,
+                    encoder_layers=1, decoder_layers=1, kmeans_iters=3)
+        model = GlobalLatentComponentTokenizer(spec, codebook_size=8, hard=True)
+        t = torch.linspace(0, 30, 15 * dimension)
+        phases = torch.arange(4.)[:, None]
+        source = torch.sin(t[None] * .7 + phases).reshape(4, 15, dimension)
+        residual = .2 * torch.cos(t[None] * 1.3 + phases).reshape(4, 15, dimension)
+        x = source + residual
+        model.initialize_codebooks(x)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=.001)
+        for _ in range(8):
+            model.train(); result = model(x)
+            loss = (result['S'] - source).square().mean() + (result['O'] - residual).square().mean() + result['commitment']
+            optimizer.zero_grad(); loss.backward(); optimizer.step()
+        model.eval()
+        with torch.inference_mode():
+            result = model(x); replay = model.decode_ids(result['ids'])
+        difference = max(float((replay[c] - result[c]).abs().max()) for c in ('S', 'O'))
+        if not torch.isfinite(loss) or difference > 2e-5:
+            raise AssertionError('synthetic global hard-token decoding failed')
+        cases.append(dict(modality=modality, input_shape=list(x.shape),
+            ID_shape=list(result['ids']['S'].shape), output_shape=list(replay['S'].shape),
+            steps=8, finite_loss=float(loss.detach()), integer_decode_max_abs_difference=difference))
+    return dict(status='passed', cases=cases, measured_arrays_read=0,
+                interpretation='software interface and gradient/replay evidence, not measured EEG health')
+
+
+def latent_health_dispatch(args, cfg):
+    from src.data.dual_component_tokenizer import latent_health_plan
+    allowed = ('check', 'synthetic', 'latent-health-plan', 'latent-health-prepare',
+               'latent-health-benchmark', 'latent-health-one', 'latent-health')
+    if args.stage not in allowed or args.evaluation_split != 'development':
+        raise ValueError('latent health cannot launch legacy stages or test evaluation')
+    if args.stage == 'check':
+        return dict(status='latent_health_contract_valid', experiment_id=cfg['experiment_id'],
+                    measured_modality='hb', measured_arrays_read=0, test_access='forbidden')
+    if args.output is None:
+        raise ValueError('explicit fresh latent health run output required')
+    out, root = args.output.resolve(), args.project_root.resolve()
+    if args.stage == 'synthetic':
+        result = synthetic_latent_health(cfg); write_json(out / 'synthetic.json', result); return result
+    if args.stage == 'latent-health-one':
+        if args.parent_pid is not None and os.getppid() != args.parent_pid:
+            raise ValueError('worker must be a direct child of its suite controller')
+        freeze_contract(out, cfg, root)
+        result = train_latent_health(cfg, out, args.candidate, args.seed, args.device,
+            memory_bytes=args.gpu_memory_bytes, pilot_output=args.pilot_output, steps=args.steps)
+        return {k: result[k] for k in ('status', 'candidate', 'seed', 'completed_steps', 'total_exposure_steps')}
+    if args.steps is not None or args.pilot_output is not None:
+        raise ValueError('resource overrides only apply to bounded child pilots')
+    devices = args.devices or cfg['resources']['devices']
+    if devices != ['cuda:0']:
+        raise ValueError('this resource contract reserves CUDA1 for existing jobs')
+    with owner_lock(out):
+        freeze_contract(out, cfg, root)
+        try:
+            plan = latent_health_plan(root / cfg['latent_health']['parent_run'], cfg['latent_health'])
+            if (out / 'plan.json').exists() and read_json(out / 'plan.json') != serial(plan):
+                raise ValueError('retained parent or development plan changed')
+            write_json(out / 'plan.json', plan)
+            if args.stage == 'latent-health-plan':
+                return dict(status='planned', planned_trials=plan['planned_trials'], planned_windows=plan['planned_windows'], measured_arrays_read=0)
+            if not (out / 'synthetic.json').exists() or read_json(out / 'synthetic.json')['status'] != 'passed':
+                raise ValueError('synthetic software checks must pass before measured cache access')
+            write_json(out / 'controller.json', dict(status='running', stage='prepare', pid=os.getpid(), updated=now()))
+            prepared = prepare_latent_health(cfg, out, root, args.workers or cfg['resources']['cpu_workers'])
+            if args.stage == 'latent-health-prepare':
+                write_json(out / 'controller.json', dict(status='prepared', updated=now()))
+                return dict(status='prepared', retained_trials=prepared['retained_trials'], retained_windows=prepared['retained_windows'])
+            write_json(out / 'controller.json', dict(status='running', stage='benchmark', pid=os.getpid(), updated=now()))
+            benchmark = benchmark_latent_health(cfg, args.config.resolve(), out, root, devices)
+            if benchmark['status'] != 'completed':
+                raise RuntimeError('resource benchmark failed; retained evidence requires review')
+            if args.stage == 'latent-health-benchmark':
+                write_json(out / 'controller.json', dict(status='benchmarked', updated=now()))
+                return benchmark
+            workers = benchmark['gpu_workers_per_device']; seeds = cfg['latent_health']['seeds']
+            write_json(out / 'controller.json', dict(status='running', stage='warmup', pid=os.getpid(),
+                devices=devices, workers=workers, updated=now(), estimated_training_seconds=benchmark['estimated_training_seconds']))
+            warmup = latent_health_jobs(cfg, args.config.resolve(), out, root, devices, workers,
+                [('warmup', seed) for seed in seeds])
+            if any(r['status'] != 'completed' for r in warmup['results']):
+                raise RuntimeError('continuous warmup failed; downstream jobs not substituted')
+            write_json(out / 'controller.json', dict(status='running', stage='training', pid=os.getpid(),
+                devices=devices, workers=workers, updated=now(), planned_jobs=9))
+            trained = latent_health_jobs(cfg, args.config.resolve(), out, root, devices, workers,
+                [(candidate, seed) for candidate in cfg['latent_health']['candidates'] for seed in seeds])
+            summary = summarize_latent_health(cfg, out, trained['results'])
+            write_json(out / 'controller.json', dict(status=summary['status'], stage='latent-health',
+                pid=os.getpid(), updated=now(), planned_jobs=9, completed_jobs=summary['completed_jobs']))
+            return dict(status=summary['status'], completed_jobs=summary['completed_jobs'], summary=str(out / 'summary.json'))
+        except Exception:
+            write_json(out / 'controller.json', dict(status='failed', stage=args.stage, pid=os.getpid(),
+                updated=now(), error=traceback.format_exc()))
+            raise
 
 
 if __name__ == '__main__':

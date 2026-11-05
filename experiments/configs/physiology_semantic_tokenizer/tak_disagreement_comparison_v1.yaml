@@ -1,0 +1,54 @@
+schema: tak_disagreement_comparison_v1
+experiment_id: SSM-TAK-DISAGREEMENT-COMPARISON-v1
+created: '2026-11-05'
+source_summary: experiments/runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/fixed_physiology_v2/four_dataset_patterns_fixed_v2/summary.json
+output_prefix: four_dataset_disagreements_
+scope:
+  input: retained_public_fixed_window_scalars_geometry_and_weak_record_maps
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, visual_cognitive_motivation, refed]
+  visual_identity: corrected_native_v2_only
+  raw_signal_reads: false
+  protected_data: forbidden
+  model_fitting: none
+  parent_writes: none
+  completed_tasks: immutable
+metrics:
+  primary: [D1, D_drive_H]
+  amplitude_controls: [Hb_residual_to_zero_MSE_ratio, drive_replay_to_zero_MSE_ratio]
+  secondary: [D_EH]
+  common_window: finite_D1_D_drive_H_D_EH_and_positive_zero_NMSE_before_aggregation
+  common_scale: frozen_training_Hb_SD_for_D1_and_D_drive_H
+  drive_replay: same_fixed_parameters_and_rest_initial_state_retained_regularized_DC
+  ratios: aggregate_squared_numerator_and_same_zero_MSE_denominator_before_dividing
+  interpretation: observed_processed_Hb_not_raw_physical_concentration_or_neural_truth
+statistics:
+  seed: 20261105
+  bootstrap_samples: 5000
+  permutation_samples: 100000
+  minimum_subjects: 6
+  minimum_site_windows_fraction: 0.8
+  minimum_common_sites: 8
+  minimum_common_site_fraction: 0.8
+  primary_endpoint: centered_rho
+  additional_endpoints: [raw_rho, early_late_rho, hotspot_excess]
+  contrasts: [drive_minus_Hb, normalized_drive_minus_Hb]
+  paired_estimand: mean_subject_difference_of_medians_on_same_record_pairs
+  paired_tests: two_sided_subject_sign_flip_exact_through_16_else_Monte_Carlo_plus_one
+  multiplicity: all_4datasets_4endpoints_2contrasts_one_BH_family
+  bootstrap_unit: subject_with_fits_scales_and_leave_other_subject_templates_frozen
+  scalar_repeat_comparison: paired_4value_subject_bootstrap_difference_of_dependent_Spearman_pointwise_diagnostic_CI
+  same_subject_pairs: Single_Trial_same_task_Simultaneous_cross_task_Visual_cross_Part_REFED_cross_video
+  persistence: top_ceil_quarter_at_least_80percent_of_records_minimum2_and80percent_planned
+  overlap_reference: k_over_N_descriptive_only_no_independent_channel_p_value
+  sensitivity: relaxed_finite_map_coverage_and_shared_amplitude_denominator
+  independent_prediction: baseline_minus_EEG_NMSE_zero_template_wrong_12test_BH_family
+  region: complete_three_regions_posterior_minus_frontal_exploratory_separate_BH_family
+  association: record_spatial_ranks_then_subject_median_target_amplitude_and_retained_40s_weak_balance
+  selection: all_planned_subjects_no_illustrative_case_selection
+  stopping: one_complete_retained_inventory_no_optional_stopping
+  interpretation: posthoc_exploratory_nominal_intervals_not_independent_confirmation
+resources:
+  max_workers: 4
+  work_unit: dataset
+  numerical_threads: 1
+  resume: completed_dataset_tables_only_with_identical_resolved_contract

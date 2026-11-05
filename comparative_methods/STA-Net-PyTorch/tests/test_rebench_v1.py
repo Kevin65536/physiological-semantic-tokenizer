@@ -80,6 +80,23 @@ def test_refed_native_sequence_loss_masks_missing_targets_and_backpropagates():
     assert model.backbone.block1.fgsa.channel_pooling.weight.grad is not None
 
 
+def test_frozen_refed_thirty_step_head_and_masked_loss_are_real_temporal_outputs():
+    profile = {**_profile("refed_regression"), "input_window_schema": "downstream_input_v1",
+               "duration_s": 30, "window_start_s": 0}
+    model = module.create_model("refed_regression", profile, "cpu")
+    eeg, fnirs = torch.randn(2, 4, 300), torch.randn(2, 8, 60)
+    target = torch.randn(2, 2, 30); mask = torch.ones_like(target, dtype=torch.bool); mask[:, :, -4:] = False
+    prediction = model(eeg, fnirs)
+    assert prediction.shape == (2, 2, 30)
+    assert not torch.allclose(prediction[..., 0], prediction[..., 1])
+    first = model.supervised_loss(eeg, fnirs, target, mask)
+    target[~mask] = float("nan")
+    second = model.supervised_loss(eeg, fnirs, target, mask)
+    torch.testing.assert_close(first["main"], second["main"])
+    second["total"].backward()
+    assert torch.isfinite(second["total"]) and model.backbone.eeg_head.weight.grad is not None
+
+
 def test_common_window_mismatch_is_a_failure_not_silent_crop():
     model = module.create_model("dsr", _profile("dsr"), "cpu")
     with pytest.raises(ValueError, match="common encoding window"):

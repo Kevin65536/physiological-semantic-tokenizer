@@ -77,6 +77,25 @@ label dimensions, time support and CBraMod readout. Its
 boundaries. It writes only to its analysis run; inclusion in a presentation report
 requires the user's later decision.
 
+The [frozen-input diagnostic](downstream_input_audit_v1.yaml) uses
+[`audit_downstream_inputs_v1.py`](performance_analysis/audit_downstream_inputs_v1.py)
+to audit retained public production predictions and test the corrected downstream
+cache on its existing train/validation partitions. The new
+`FrozenInputBenchmarkDataset` in the data owner joins Visual probe views into one
+event, orders real Hb pairs, and supplies a common EEG panel to every method.
+Native-channel capacity, legacy Visual electrode selection, time support,
+readout, scaling, short supervision and stacking diagnostics remain separate
+arms. REFED retains its actual 30-point masked target sequence. These are
+development-selected results, not final test values or automatic replacements
+for the running frozen benchmark. The [design boundary](../docs/EXPERIMENT_PLAN.md#frozen-downstream-input-audit)
+and `test_downstream_input_benchmark.py` / `test_downstream_input_audit.py` cover
+the versioned consumer and diagnostic; existing method suites cover adapters.
+Its [bounded follow-up](downstream_input_followup_v1.yaml) checks the discovered
+BrainFusion HRF time-grid mismatch with paired refits, and the actual 30-step
+STA-Net REFED head. The explicit `physical_common_grid_v1` profile samples the
+kernel at the common Hb period; `retained_sample_index_v1` preserves the old
+control. Old snapshots and protected method packages are unchanged.
+
 Build a new run only after its inventory, splits, multimodal input audit and resource
 smoke are retained. Use the same controller's `--build-config`, `--run-root`,
 `--source-root` and `--smoke-summary` options. The generated `jobs.json` owns the

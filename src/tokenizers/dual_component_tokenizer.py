@@ -1,7 +1,8 @@
-"""Local, independently decodable SSM-component and full-residual vocabularies.
+"""Independent SSM-component and full-residual vocabularies.
 
-All tensors end in a flattened *local* patch dimension. Leading dimensions
-identify independent patches; neither encoder nor decoder mixes those axes.
+The retained local models do not mix leading patch axes. The explicitly
+versioned GlobalLatentComponentTokenizer mixes the declared time-patch axis
+within one location and keeps each branch's integer decoder independent.
 Teacher components are training targets, never inputs to a student forward.
 The component-compression reference has a separate explicit input method.
 """
@@ -696,6 +697,119 @@ class ProjectionGainResidualPredictor(nn.Module):
                     log_gain=nodes.reshape(batch,self.channels,5,steps).transpose(-1,-2))
 
 
-__all__ = ["DualComponentTokenizer", "LocalComponentBranch", "TemporalPatchEncoder", "WaveformDictionary",
+class GlobalLatentComponentTokenizer(nn.Module):
+    """One latent ID per patch/branch; global time context, no continuous bypass.
+
+    Input is [batch, patches, samples * channels] for one optical/electrode
+    location. The two color channels remain jointly represented inside every
+    Hb patch. No branch can read another branch's IDs, or another modality.
+    Decoder context is the complete same-branch sequence, so an ID does not
+    have a context-independent waveform interpretation.
+    """
+
+    def __init__(self, cfg: Mapping, *, codebook_size: int = 128, hard: bool = True):
+        super().__init__()
+        self.input_dim = int(cfg['input_dim'])
+        self.patches = int(cfg['patches'])
+        self.hard = bool(hard)
+        width, latent, heads = (int(cfg[k]) for k in ('width', 'latent_dim', 'heads'))
+        if (self.input_dim < 1 or self.patches < 1 or width < 2 or width % 2
+                or latent < 1 or heads < 1 or width % heads or codebook_size < 2):
+            raise ValueError('positive patch/latent dimensions and compatible attention heads required')
+        position = torch.arange(self.patches, dtype=torch.float32)[:, None]
+        frequency = torch.exp(torch.arange(0, width, 2, dtype=torch.float32) * (-math.log(10000.) / width))
+        encoding = torch.zeros(1, self.patches, width)
+        encoding[0, :, 0::2], encoding[0, :, 1::2] = torch.sin(position * frequency), torch.cos(position * frequency)
+        self.register_buffer('position', encoding)
+        self.branches = nn.ModuleDict()
+        for component in COMPONENTS:
+            def blocks(count):
+                layer = nn.TransformerEncoderLayer(width, heads, dim_feedforward=width * 2,
+                    dropout=float(cfg.get('dropout', 0.)), activation='gelu', batch_first=True, norm_first=True)
+                return nn.TransformerEncoder(layer, int(count), norm=nn.LayerNorm(width), enable_nested_tensor=False)
+            self.branches[component] = nn.ModuleDict(dict(
+                input=nn.Sequential(nn.Linear(self.input_dim, width), nn.GELU()),
+                encoder=blocks(cfg['encoder_layers']), to_latent=nn.Linear(width, latent),
+                from_latent=nn.Linear(latent, width), decoder=blocks(cfg['decoder_layers']),
+                output=nn.Linear(width, self.input_dim),
+                quantizer=EMAVectorQuantizer(codebook_size=codebook_size, embedding_dim=latent,
+                    decay=float(cfg.get('ema_decay', .99)), commitment_cost=float(cfg.get('commitment_cost', .25)),
+                    kmeans_init=True, kmeans_iters=int(cfg.get('kmeans_iters', 20)),
+                    revive_dead_codes=True, dead_code_threshold=float(cfg.get('dead_code_threshold', .1)),
+                    revival_warmup_steps=int(cfg.get('revival_warmup_steps', 100)),
+                    revival_interval=int(cfg.get('revival_interval', 50)),
+                    revival_stop_after_steps=int(cfg.get('revival_stop_after_steps', 1500)),
+                    max_revivals_per_event=int(cfg.get('max_revivals_per_event', 8)),
+                    revival_strategy='diverse_farthest', revival_count_prior='uniform_batch')))
+
+    def encode_continuous(self, values: torch.Tensor) -> dict[str, torch.Tensor]:
+        if (values.ndim != 3 or tuple(values.shape[1:]) != (self.patches, self.input_dim)
+                or not values.is_floating_point() or not bool(torch.isfinite(values).all())):
+            raise ValueError('complete finite [batch, declared patches, patch features] observations required')
+        return {c: b['to_latent'](b['encoder'](b['input'](values) + self.position))
+                for c, b in self.branches.items()}
+
+    def _decode_component(self, component: str, latent: torch.Tensor) -> torch.Tensor:
+        branch = self.branches[component]
+        return branch['output'](branch['decoder'](branch['from_latent'](latent) + self.position))
+
+    def forward(self, values: torch.Tensor, *, quantize: bool | None = None) -> dict:
+        use_hard = self.hard if quantize is None else bool(quantize)
+        latents = self.encode_continuous(values)
+        result, ids, health = {}, {}, {}
+        commitment = values.sum() * 0.
+        for component, latent in latents.items():
+            if use_hard:
+                quantizer = self.branches[component]['quantizer']
+                if not self.training and not bool(quantizer.initialized):
+                    raise RuntimeError('training-only codebook initialization required')
+                output = quantizer(latent)
+                value = output.quantized
+                ids[component], health[component] = output.hard_ids, output.health
+                commitment = commitment + output.commitment_loss
+            else:
+                value = latent
+            result[component] = self._decode_component(component, value)
+        return dict(result, sum=result['S'] + result['O'], ids=ids, latent=latents,
+                    health=health, commitment=commitment / len(COMPONENTS))
+
+    @torch.no_grad()
+    def initialize_codebooks(self, training_values: torch.Tensor) -> None:
+        """Caller supplies training observations only; no targets or validation."""
+        mode = self.training
+        self.eval()
+        latents = self.encode_continuous(training_values)
+        for component, latent in latents.items():
+            q = self.branches[component]['quantizer']
+            if bool(q.initialized):
+                raise RuntimeError('codebook already initialized; do not refit a retained vocabulary')
+            if latent.numel() // latent.shape[-1] < q.codebook_size:
+                raise ValueError('at least K training patches required for vocabulary initialization')
+            q.train()
+            q(latent)
+        self.train(mode)
+
+    def decode_ids(self, ids: Mapping[str, torch.Tensor]) -> dict:
+        if not isinstance(ids, Mapping) or set(ids) != set(COMPONENTS):
+            raise ValueError('only S/O integer sequences are accepted; no sidecars')
+        result, shape = {}, None
+        for component in COMPONENTS:
+            value = ids[component]
+            q = self.branches[component]['quantizer']
+            if (not isinstance(value, torch.Tensor) or value.dtype not in
+                    (torch.uint8, torch.int8, torch.int16, torch.int32, torch.int64)
+                    or value.ndim != 2 or value.shape[1] != self.patches):
+                raise ValueError('one integer ID per declared time patch required')
+            if shape is not None and value.shape != shape:
+                raise ValueError('S/O sequence support must match')
+            if not bool(q.initialized) or bool((value < 0).any()) or bool((value >= q.codebook_size).any()):
+                raise ValueError('initialized vocabulary and in-range IDs required')
+            shape = value.shape
+            result[component] = self._decode_component(component,
+                q.get_embedding(value.to(device=q.codebook.device, dtype=torch.long)))
+        return dict(result, sum=result['S'] + result['O'])
+
+
+__all__ = ["DualComponentTokenizer", "GlobalLatentComponentTokenizer", "LocalComponentBranch", "TemporalPatchEncoder", "WaveformDictionary",
            "ProjectionGainResidualPredictor",
            "BandGainResidualPredictor", "local_patch_context", "VARIANTS"]

@@ -1,0 +1,66 @@
+schema: dual_component_voltage_teacher_v1
+experiment_id: TK-EEG-VOLTAGE-TEACHER-v1
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml
+voltage_teacher:
+  parent_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3
+  legacy_voltage_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v1
+  dataset: simultaneous_eeg_nirs
+  record: cnt_nback
+  train_subjects: [VP001, VP003, VP006, VP007, VP008, VP009]
+  validation_subjects: [VP002, VP005, VP014, VP017, VP019]
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  selection: first_and_last_complete_three_ROI_native_90s_windows_before_signal_access
+  windows_per_subject: 2
+  channels: unique_union_of_three_parent_ROIs
+  sample_rate_hz: 200
+  seconds: 90
+  score_seconds: [30, 50]
+  reference_seconds: [0, 5]
+  stft: {samples: 200, hop: 50, window: hann, boundary: zeros, full_spectrum: true}
+  eog_band_hz: [0.5, 15.0]
+  noise: training_pooled_HEOG_VEOG_transfer_then_local_spectral_covariance
+  conditional_artifact_mean: zero
+  regression_ridge: 0.001
+  signal_covariance_shrinkage: 0.2
+  low_eog_quantile: 0.5
+  power_floor_fraction: 0.01
+  spectral_smoothing_frames: 2.0
+  log_power_variance: {minimum: 0.05, noise_fraction_multiplier: 2.0}
+  maximum_log_power_change: 1.4
+  physical: refit_fixed_Tak_on_noise_subtracted_power_new_training_PCA_and_scales
+  physical_variance: max_training_Hb_only_out_of_modality_prediction_MSE_and_training_proxy_variance
+  failed_physics: retain_failure_and_explicit_no_physics_fallback
+  arms: [raw, legacy_target, eog_regression, wiener, physics_wiener, shifted_physics]
+  perturbations: [ocular, unreferenced_muscle, neural_alpha]
+  amplitudes_training_rms: [0.5, 1.0, 2.0]
+  ocular_donor: next_validation_subject_last_window_shifted_7s
+  ocular_mixing: training_transfer_times_fixed_30percent_channel_mismatch
+  paired_labels: S_unchanged_O_adds_known_artifact_no_teacher_refit
+  robustness: recompute_voltage_estimator_with_frozen_physical_prediction_and_training_calibration
+  neural_control: S_should_add_neural_burst_O_should_not_absorb_it
+  synthetic_train_seeds: [100, 101, 102, 103, 104, 105]
+  synthetic_eval_seeds: [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211]
+  synthetic_physical_prior: known_clean_log_power_upper_bound_not_a_fitted_Tak_prediction
+  endpoints:
+    primary: validation_subject_equal_delta_S_error_relative_to_known_intervention
+    secondary: synthetic_clean_voltage_NRMSE_and_natural_low_EOG_distortion
+    diagnostic: [closure, EOG_correlation, band_power_ratio, physical_increment, failures]
+  normalization: fixed_per_channel_training_voltage_RMS_except_delta_error_uses_injection_RMS
+  aggregation: mean_squared_time_channel_error_then_window_mean_then_subject_mean
+  intervals: paired_subject_bootstrap_2000_percentile_95_exploratory_no_significance_claim
+  null: no_gain_from_physics_over_same_noise_estimator
+  stopping: fixed_panel_and_three_amplitudes_no_validation_tuning
+  seed: 20261105
+resources:
+  cpu_workers: 8
+  numerical_threads: 1
+  max_in_flight_per_worker: 1
+claim_limits:
+- teacher_target_feasibility_only_no_tokenizer_training_or_decoder_claim
+- natural_EEG_has_no_clean_neural_ground_truth
+- physical_model_outputs_power_proxy_and_Hb_not_native_voltage
+- paired_label_invariance_is_a_definition_not_measured_robustness
+- EOG_transfer_can_remove_correlated_neural_activity_and_miss_other_artifacts
+- full_90s_offline_support_and_processed_Hb_not_realtime_or_hidden_modality_prediction
+- previously_examined_public_development_subjects_not_protected_confirmation

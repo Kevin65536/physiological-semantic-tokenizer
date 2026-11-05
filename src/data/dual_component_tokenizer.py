@@ -30,6 +30,345 @@ STEPS = 900
 STUDENT = slice(300, 500)
 
 
+def latent_health_plan(parent, spec):
+    """Metadata-only admission of retained public train/validation Hb targets."""
+    parent = Path(parent)
+    if (spec['allowed_splits'] != ['train', 'validation'] or spec['test_access'] != 'forbidden'
+            or spec['measured_modality'] != 'hb' or spec['parent_steps'] != [250, 550]):
+        raise ValueError('registered Hb development-only 30-second scope required before arrays')
+    resolved = json.loads((parent / 'resolved_config.json').read_text())['config']
+    state = json.loads((parent / 'controller.json').read_text())
+    manifest = json.loads((parent / 'cache/manifest.json').read_text())
+    source = json.loads((parent / 'inventory.json').read_text())
+    if (resolved['data']['protected_data'] != 'forbidden' or state['status'] != 'completed'
+            or manifest['schema'] != 'dual_component_training_cache_v1'
+            or manifest['target_units'] != 'training_observation_SD'
+            or resolved['teacher']['arm'] != 'tak_fixed'
+            or resolved['tensor']['teacher_steps'] != 900):
+        raise ValueError('completed fixed-Tak public parent with frozen scales required before arrays')
+    planned = [r for r in source['rows'] if r['split'] in spec['allowed_splits']]
+    retained = {r['id']: r for r in manifest['rows'] if r['split'] in spec['allowed_splits']}
+    subjects, groups = {}, defaultdict(list)
+    for row in planned:
+        if row['dataset'] not in DATASETS:
+            raise ValueError('unregistered dataset in development inventory')
+        key = (row['dataset'], row['subject'])
+        if key in subjects and subjects[key] != row['split']:
+            raise ValueError('subject appears in multiple partitions')
+        subjects[key] = row['split']
+        if row['id'] in retained and retained[row['id']] != row:
+            raise ValueError('parent inventory and retained row identity disagree')
+        groups[row['trial_id']].append(row)
+    trials, failures = [], []
+    for trial, group in groups.items():
+        if len(group) == 3 and all(r['id'] in retained for r in group):
+            trials.append(dict(trial_id=trial, rows=group))
+        else:
+            failures.append(dict(trial_id=trial, status='parent_unavailable', planned_windows=len(group)))
+    return dict(schema='dual_component_latent_health_plan_v1', parent=str(parent.resolve()),
+        parent_identity=manifest['identity'], planned_trials=len(groups), planned_windows=len(planned),
+        trials=trials, failures=failures, observation_training_sd=manifest['observation_training_sd'],
+        allowed_splits=spec['allowed_splits'], test_access='forbidden', protected_data='forbidden',
+        measured_arrays_read=0, identity=identity_digest(planned),
+        event_support_s=spec['event_support_s'], parent_reference_event_s=[-30, -25],
+        target='retained_fixed_Tak_conditional_output_and_residual_not_physiological_truth')
+
+
+def latent_health_hb_patch(row, arrays, scale, spec):
+    """Extract observed paired Hb and frozen labels without fitting or centering."""
+    if row['split'] not in ('train', 'validation') or row['dataset'] not in DATASETS:
+        raise ValueError('test/protected or unknown rows cannot enter latent health data')
+    if spec['parent_steps'] != [250, 550] or spec['patches'] != 15 or spec['input_dim'] != 40:
+        raise ValueError('exact 30-second paired Hb patch contract required')
+    if str(np.asarray(arrays['identity'])) != row['id'] or str(np.asarray(arrays['teacher_arm'])) != 'tak_fixed':
+        raise ValueError('frozen teacher identity or arm mismatch')
+    scale = np.asarray(scale, dtype=float)
+    if scale.shape != (3,) or not np.isfinite(scale).all() or np.any(scale <= 0):
+        raise ValueError('positive frozen training observation scales required')
+    values = {}
+    for key, field in (('u', 'u'), ('S', 'physical'), ('O', 'remaining')):
+        source = np.asarray(arrays[field], dtype=float)
+        if source.shape != (900, 3):
+            raise ValueError('retained 90-second observation-coordinate trajectory required')
+        value = source[250:550, 1:] / scale[1:]
+        if not np.isfinite(value).all():
+            raise ValueError('nonfinite Hb support is a retained failure, not an imputed sample')
+        values[key] = value.reshape(15, 40).astype('float32')
+    if not np.allclose(values['u'], values['S'] + values['O'], rtol=2e-6, atol=2e-6):
+        raise ValueError('frozen S/O decomposition does not close in observation coordinates')
+    return values
+
+
+def voltage_teacher_plan(cfg, retained):
+    """Select a finite public development panel using identities, before arrays."""
+    spec = cfg['voltage_teacher']
+    if (spec['dataset'] != 'simultaneous_eeg_nirs' or spec['record'] != 'cnt_nback'
+            or spec['allowed_splits'] != ['train', 'validation']
+            or spec['test_access'] != 'forbidden' or spec['windows_per_subject'] != 2
+            or spec['sample_rate_hz'] != 200 or spec['seconds'] != 90
+            or spec['score_seconds'] != [30, 50]
+            or cfg['data']['protected_data'] != 'forbidden'):
+        raise ValueError('bounded native-voltage public development contract required')
+    selected, excluded = [], []
+    for split in spec['allowed_splits']:
+        subjects = spec[split + '_subjects']
+        if not subjects or not set(subjects) <= set(retained['subjects'][spec['dataset']][split]):
+            raise ValueError('subjects must retain the parent development partition')
+        for subject in subjects:
+            groups = defaultdict(list)
+            for row in retained['rows']:
+                if (row['dataset'], row['subject'], row['record']) == (spec['dataset'], subject, spec['record']):
+                    if row['split'] != split:
+                        raise ValueError('subject crosses the frozen split')
+                    groups[row['trial_id']].append(row)
+            complete = [sorted(g, key=lambda r: r['coordinate']) for g in groups.values()
+                        if len(g) == 3 and len({r['coordinate'] for r in g}) == 3
+                        and len({r['eeg_start_s'] for r in g}) == 1]
+            complete.sort(key=lambda g: (g[0]['eeg_start_s'], g[0]['trial_id']))
+            if len(complete) < 2 or complete[-1][0]['eeg_start_s'] - complete[0][0]['eeg_start_s'] < 90:
+                excluded.append(dict(subject=subject, split=split, reason='two_disjoint_windows_unavailable'))
+                continue
+            for slot, group in enumerate((complete[0], complete[-1])):
+                selected.append(dict(id=group[0]['trial_id'], subject=subject, split=split,
+                    record=spec['record'], dataset=spec['dataset'], slot=slot, rows=group,
+                    candidate_trials=len(complete)))
+    return dict(schema='voltage_teacher_panel_v1', rows=selected, excluded=excluded,
+        planned_subjects=sum(len(spec[k + '_subjects']) for k in spec['allowed_splits']),
+        planned_windows=2 * sum(len(spec[k + '_subjects']) for k in spec['allowed_splits']),
+        selection=spec['selection'], protected_data='forbidden', measured_arrays_read=0)
+
+
+def prepare_voltage_teacher_record(root, cfg, entries, coordinates, read_parent):
+    """Reuse the registered native reader and exact retained physical baselines."""
+    rows = [r for entry in entries for r in entry['rows']]
+    if any(r['split'] not in ('train', 'validation') or r['dataset'] != 'simultaneous_eeg_nirs' for r in rows):
+        raise ValueError('only the frozen public development panel may be read')
+    root, record = _registered_record(root, cfg, rows)
+    native = load_native_eeg_record(root, record)
+    if (native.sample_rate_hz != 200 or native.native_unit not in ('uV', 'µV', 'μV')
+            or not native.unit_evidence or native.auxiliary_values is None
+            or set(native.auxiliary_channel_names) != {'HEOG', 'VEOG'}):
+        raise ValueError('native microvolt EEG and genuine HEOG/VEOG required')
+    lookup = {n: i for i, n in enumerate(native.channel_names)}
+    for entry in entries:
+        group = entry['rows']
+        names = sorted({n for r in group for n in r['anchor']['eeg_channels']}, key=lookup.get)
+        first = round(group[0]['eeg_start_s'] * 200)
+        x = np.asarray(native.values[first:first + 18000, [lookup[n] for n in names]], float)
+        eog = np.asarray(native.auxiliary_values[first:first + 18000], float)
+        if x.shape != (18000, len(names)) or eog.shape != (18000, 2):
+            raise ValueError('complete 90-second native support required')
+        a = np.zeros((3, len(names) * 5)); physical, original, hb = [], [], []
+        old_hb, roi_indices, hb_native_time = [], [], []
+        for i, row in enumerate(group):
+            co = coordinates[row['coordinate']]
+            indices = [names.index(n) for n in row['anchor']['eeg_channels']]
+            roi_indices.append(indices)
+            loading = np.asarray(co['pc']).reshape(6, 5) * co['eeg_factor']
+            for j, c in enumerate(indices):
+                a[i, c * 5:(c + 1) * 5] = loading[j]
+            old = read_parent('teacher', row)
+            prepared = read_parent('prepared', row)
+            if str(old['identity']) != row['id'] or str(prepared['identity']) != row['id']:
+                raise ValueError('retained observation/teacher identity mismatch')
+            physical.append(old['physical'][:, 0]); original.append(old['u'][:, 0])
+            hb.append(prepared['hb']); old_hb.append(old['physical'][:, 1:] / co['hb_factor'])
+            hb_native_time.append(prepared['native_time'])
+        physical = np.stack(physical, axis=1)
+        legacy = voltage_proxy_correction(x, a, physical)
+        replay = float(np.max(np.abs(legacy['observed'] - np.stack(original, axis=1))))
+        if replay > 1e-6:
+            raise ValueError('retained raw-voltage proxy replay failed')
+        retained_voltage = read_parent('voltage_prepared', dict(id=entry['id']))
+        if (not np.array_equal(retained_voltage['eeg_u'], x[6000:10000].T.astype('float32'))
+                or not np.array_equal(retained_voltage['eeg_s'], legacy['corrected'][6000:10000].T.astype('float32'))):
+            raise ValueError('current S/O label replay differs from the retained voltage target')
+        payload = dict(x=x, eog=eog, legacy_s=legacy['corrected'], legacy_projection=a,
+            legacy_proxy=legacy['observed'], legacy_physical=physical,
+            hb=np.stack(hb, axis=1), legacy_hb=np.stack(old_hb, axis=1),
+            hb_native_time=np.stack(hb_native_time, axis=1),
+            roi_indices=np.asarray(roi_indices), channels=np.asarray(names))
+        metadata = dict(entry=entry, eeg_unit=native.native_unit, reference=native.reference,
+            native_source=str(native.source_path), native_start_sample=first,
+            sample_rate_hz=200, support_seconds=90, score_relative_seconds=[30, 50],
+            eog_names=list(native.auxiliary_channel_names), channels=names,
+            native_proxy_replay_max_abs=replay, legacy_diagnostic=legacy['diagnostic'])
+        metadata['legacy_supervision_float32_exact'] = True
+        yield entry, payload, metadata
+
+
+def voltage_stft(x, spec):
+    """All Fourier bins, zero-extended Hann analysis with exact overlap-add."""
+    from scipy.signal import stft
+    value = np.asarray(x, float)
+    if value.ndim != 2 or not np.isfinite(value).all():
+        raise ValueError('finite time-by-channel voltage required')
+    n = spec['stft']['samples']; hop = spec['stft']['hop']
+    f, t, z = stft(value, fs=200, nperseg=n, noverlap=n-hop, window='hann',
+        boundary='zeros', padded=True, axis=0)
+    return f, t, z.transpose(2, 0, 1)
+
+
+def voltage_istft(z, length, spec):
+    from scipy.signal import istft
+    n = spec['stft']['samples']; hop = spec['stft']['hop']
+    _, x = istft(np.asarray(z).transpose(2, 1, 0), fs=200, nperseg=n,
+        noverlap=n-hop, window='hann', boundary=True)
+    return x.T[:length]
+
+
+def voltage_eog_reference(eog, spec):
+    from scipy.signal import butter, sosfiltfilt
+    value = np.asarray(eog, float)
+    if value.ndim != 2 or value.shape[1] != 2 or not np.isfinite(value).all():
+        raise ValueError('two finite measured EOG references required')
+    return sosfiltfilt(butter(4, spec['eog_band_hz'], fs=200, btype='bandpass', output='sos'), value, axis=0)
+
+
+def fit_voltage_noise_model(training, spec):
+    """Estimate one transfer and full-rank spectral background on train only.
+
+    EOG regression supplies a noise *covariance*, with zero conditional mean
+    in the Wiener arm. It is an uncertain nuisance model, never clean truth.
+    """
+    from scipy.signal import butter, sosfiltfilt
+    if not training or any(a.get('split') != 'train' for a in training):
+        raise ValueError('noise calibration may use training subjects only')
+    c = np.shape(training[0]['x'])[1]
+    ee = np.zeros((2, 2)); ex = np.zeros((2, c))
+    filtered = []
+    for item in training:
+        e = voltage_eog_reference(item['eog'], spec)
+        x = np.asarray(item['x'], float)
+        if x.shape != (18000, c):
+            raise ValueError('matching native EEG channels and support required')
+        low = sosfiltfilt(butter(4, spec['eog_band_hz'], fs=200, btype='bandpass', output='sos'), x, axis=0)
+        ee += e.T @ e; ex += e.T @ low
+        filtered.append((x, e))
+    b = np.linalg.solve(ee + spec['regression_ridge'] * np.diag(np.diag(ee)), ex)
+    reference_frames, residuals, powers = [], [], []
+    for x, e in filtered:
+        _, t, ze = voltage_stft(e, spec)
+        energy = np.sum(abs(ze)**2, axis=(1, 2))
+        residual = x - e @ b
+        _, _, zr = voltage_stft(residual, spec)
+        reference_frames.append(energy); residuals.append(zr)
+        powers.append(eeg_band_power(residual, bands=BANDS, sample_rate=200, target_rate=10))
+    threshold = float(np.quantile(np.concatenate(reference_frames), spec['low_eog_quantile']))
+    cov = np.zeros((residuals[0].shape[1], c, c), complex); count = 0
+    for energy, z in zip(reference_frames, residuals):
+        low = energy <= threshold
+        cov += np.einsum('tfc,tfd->fcd', z[low], z[low].conj()); count += low.sum()
+    if count < c:
+        raise ValueError('insufficient low-EOG training frames')
+    cov /= count
+    diagonal = np.maximum(np.real(np.diagonal(cov, axis1=-2, axis2=-1)), 1e-14)
+    correlation = cov / np.sqrt(diagonal[:, :, None] * diagonal[:, None, :])
+    shrink = spec['signal_covariance_shrinkage']
+    correlation = (1-shrink)*correlation + shrink*np.eye(c)[None]
+    return dict(transfer=b, correlation=correlation,
+        spectral_floor=np.maximum(diagonal*spec['power_floor_fraction'], 1e-12),
+        band_floor=np.maximum(np.median(np.concatenate(powers), axis=0)*spec['power_floor_fraction'], 1e-12),
+        voltage_scale=np.sqrt(np.mean(np.concatenate([x*x for x, _ in filtered]), axis=0)),
+        low_eog_threshold=np.asarray(threshold), low_eog_training_frames=np.asarray(count))
+
+
+def voltage_power_evidence(x, eog, model, spec):
+    """Return noise-subtracted 100 ms band power in the new reference gauge."""
+    noise = voltage_eog_reference(eog, spec) @ model['transfer']
+    px = eeg_band_power(x, bands=BANDS, sample_rate=200, target_rate=10)
+    pn = eeg_band_power(noise, bands=BANDS, sample_rate=200, target_rate=10)
+    pe = np.maximum(px-pn, model['band_floor'])
+    log = np.log(pe); reference = log[:50].mean(axis=0)
+    ell = (log-reference).reshape(len(log), -1)
+    rho = np.clip(pn / np.maximum(px, model['band_floor']), 0, 1).reshape(len(log), -1)
+    return dict(ell=ell, power=pe, noise=noise, noise_fraction=rho,
+        floor_fraction=float(np.mean(px-pn <= model['band_floor'])), reference=reference)
+
+
+def fuse_voltage_power(ell, noise_fraction, projection, physical, variance, spec):
+    """Precision-weighted low-rank log-power correction; no voltage synthesis."""
+    a = np.asarray(projection, float); target = np.asarray(physical, float)
+    value = np.asarray(ell, float); variance = np.asarray(variance, float)
+    if (a.ndim != 2 or a.shape[1] != value.shape[1] or target.shape != (len(value), len(a))
+            or variance.shape != (len(a),) or np.any(variance <= 0)
+            or not all(np.isfinite(v).all() for v in (a, target, value, variance))):
+        raise ValueError('finite same-gauge physical target, projection and positive variance required')
+    settings = spec['log_power_variance']
+    sigma = settings['minimum'] + settings['noise_fraction_multiplier']*np.asarray(noise_fraction)
+    matrix = np.einsum('rc,tc,sc->trs', a, sigma, a) + np.diag(variance)[None]
+    correction = sigma * (np.linalg.solve(matrix, (target-value @ a.T)[..., None])[..., 0] @ a)
+    bound = spec['maximum_log_power_change']
+    return np.clip(correction, -bound, bound), float(np.mean(abs(correction) > bound))
+
+
+def voltage_wiener_target(x, eog, model, spec, *, projection=None, physical=None,
+                          physical_variance=None):
+    """Full-spectrum multichannel voltage posterior and exact residual label."""
+    from scipy.ndimage import gaussian_filter1d
+    x = np.asarray(x, float)
+    evidence = voltage_power_evidence(x, eog, model, spec)
+    f, t, z = voltage_stft(x, spec)
+    _, _, zn = voltage_stft(evidence['noise'], spec)
+    width = spec['spectral_smoothing_frames']
+    kn = gaussian_filter1d(zn[..., :, None]*zn[..., None, :].conj(), width, axis=0, mode='nearest')
+    observed = gaussian_filter1d(abs(z)**2, width, axis=0, mode='nearest')
+    ps = np.maximum(observed - np.real(np.diagonal(kn, axis1=-2, axis2=-1)), model['spectral_floor'])
+    delta = np.zeros_like(evidence['ell']); clipped = 0.
+    if physical is not None:
+        delta, clipped = fuse_voltage_power(evidence['ell'], evidence['noise_fraction'],
+            projection, physical, physical_variance, spec)
+        changes = delta.reshape(len(delta), x.shape[1], 5)
+        for band, (lo, hi) in enumerate(BANDS):
+            bins = (f >= lo) & (f < hi if band < 4 else f <= hi)
+            for channel in range(x.shape[1]):
+                factor = np.exp(np.interp(t, (np.arange(len(delta))+.5)/10, changes[:, channel, band]))
+                ps[:, bins, channel] *= factor[:, None]
+    d = np.sqrt(ps)
+    ks = d[..., :, None] * model['correlation'][None] * d[..., None, :]
+    # A positive-definite signal covariance retains all sensor directions.
+    estimated = (ks @ np.linalg.solve(ks+kn, z[..., None]))[..., 0]
+    s = voltage_istft(estimated, len(x), spec)
+    o = x-s
+    return dict(s=s, o=o, ell=evidence['ell'], delta=delta,
+        noise=evidence['noise'], noise_fraction=evidence['noise_fraction'],
+        power_floor_fraction=evidence['floor_fraction'], clipped_fraction=clipped,
+        closure_max_abs=float(np.max(abs(s+o-x))))
+
+
+def paired_voltage_targets(x, s, disturbance):
+    """The augmentation contract, deliberately independent of teacher fitting."""
+    x, s, n = (np.asarray(v, float) for v in (x, s, disturbance))
+    if x.shape != s.shape or x.shape != n.shape or not all(np.isfinite(v).all() for v in (x, s, n)):
+        raise ValueError('finite identical native voltage shapes required')
+    return dict(x=x+n, s=s.copy(), o=x-s+n)
+
+
+def voltage_teacher_intervention(x, eog, donor, model, spec, kind, amplitude, seed):
+    """Known added perturbations; no validation fit and no clean-EEG claim."""
+    from scipy.signal import butter, sosfiltfilt
+    rng = np.random.default_rng(seed); x = np.asarray(x, float)
+    t = np.arange(len(x))/200; channels = x.shape[1]
+    envelope = np.exp(-.5*((t-40.)/2.)**2)
+    added_reference = np.zeros_like(eog)
+    if kind == 'ocular':
+        added_reference = np.roll(voltage_eog_reference(donor, spec), 1400, axis=0)*envelope[:, None]
+        mismatch = 1 + .3*np.sin(np.arange(channels)*1.7+.4)
+        n = (added_reference @ model['transfer'])*mismatch
+    elif kind == 'unreferenced_muscle':
+        carrier = sosfiltfilt(butter(4, [25, 70], fs=200, btype='bandpass', output='sos'),
+            rng.normal(size=x.shape), axis=0)
+        n = carrier*envelope[:, None]
+    elif kind == 'neural_alpha':
+        topology = np.cos(np.linspace(-1, 1, channels)*np.pi/2)
+        n = (np.sin(2*np.pi*10*t+.3)*envelope)[:, None]*topology
+    else:
+        raise ValueError('unknown prespecified perturbation')
+    score = slice(6000, 10000)
+    scale = amplitude*np.sqrt(np.mean(np.asarray(model['voltage_scale'])**2)) / np.sqrt(np.mean(n[score]**2))
+    return n*scale, np.asarray(eog)+added_reference*scale
+
+
 def load_eeg_residual_development(parent, *, datasets=DATASETS, channels=16, length=4000):
     """Validate the retained development boundary before opening EEG arrays.
 
@@ -429,7 +768,8 @@ def fit_training_coordinates(rows, read_arrays):
     return coordinates
 
 
-def produce_teacher(arrays, coordinate, tak_cfg, *, arm_name='tak_fixed', warm_start=None):
+def produce_teacher(arrays, coordinate, tak_cfg, *, arm_name='tak_fixed', warm_start=None,
+                    eeg_visible=True):
     """Fit the declared Tak arm; return observation-space u, S and full residual.
 
     Fixed-reference Tak is the default engineering teacher. ``tak_fit`` may be
@@ -462,6 +802,8 @@ def produce_teacher(arrays, coordinate, tak_cfg, *, arm_name='tak_fixed', warm_s
     for k, op in enumerate((ops['eeg'], ops['model'], ops['model'])):
         operator[k::3, k::3] = op
     mask = np.ones_like(u, bool); mask[-1] = False
+    if not eeg_visible:
+        mask[:, 0] = False
     names = arm['fit']
     values = [fitting['reference'][name] for name in names]
     starts = [dict(parameter_values=np.asarray(values))]

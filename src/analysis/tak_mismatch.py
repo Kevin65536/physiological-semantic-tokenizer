@@ -21,6 +21,8 @@ ROOT_METRICS = frozenset(("D1", "D_EH", "D_drive_H", "D_obs", "D4", "D_J_E", "D_
 DEFAULT_METRICS = ("D1", "D_EH", "D_drive_H", "D_obs", "Delta_spatial", "D4")
 PRIMARY_METRICS = ("D1", "D_EH", "D_drive_H")
 HB_RATIO = "Hb_residual_to_zero_MSE_ratio"
+DRIVE_RATIO = "drive_replay_to_zero_MSE_ratio"
+DISAGREEMENT_METRICS = ("D1", "D_drive_H", HB_RATIO, DRIVE_RATIO, "D_EH")
 METRIC_DEFINITIONS = {
     "D1": dict(direction="lower", unit="training Hb SD", description="Hb-only standardized Hb residual RMS"),
     "D_EH": dict(direction="lower", unit="training EEG SD", description="Hb-only predicted EEG minus observed EEG proxy RMS"),
@@ -29,6 +31,7 @@ METRIC_DEFINITIONS = {
     "Delta_spatial": dict(direction="positive_favors_selected", unit="training Hb SD squared", description="nearest-neighborhood minus selected-neighborhood independent EEG-to-Hb MSE"),
     "D4": dict(direction="lower", unit="training component SD", description="joint EEG/Hb standardized residual RMS"),
     HB_RATIO: dict(direction="lower", unit="ratio", description="matched-support Hb residual MSE divided by zero-prediction MSE; can exceed one; not explained variance or an energy decomposition"),
+    DRIVE_RATIO: dict(direction="lower", unit="ratio", description="common-initial-state drive Hb replay squared gap divided by matched target zero-prediction MSE; not a prediction error or explained variance"),
 }
 
 SPATIAL_METRICS = ("D1", HB_RATIO, "D_bal_10s", "D_bal_20s", "D_bal_40s",
@@ -58,9 +61,11 @@ _STABILITY_SUMMARY = ("dataset", "task_label", "repeat_kind", "metric", "planned
 
 def _checked_windows(frame: pd.DataFrame, metrics: Sequence[str]) -> pd.DataFrame:
     required = {*_SUBJECT_TASK, "record_id", "native_support_id", "pair", "window_start_s"}
-    columns = set(metrics) - {HB_RATIO}
+    columns = set(metrics) - {HB_RATIO, DRIVE_RATIO}
     if HB_RATIO in metrics:
         columns |= {"D1", "zero_NMSE"}
+    if DRIVE_RATIO in metrics:
+        columns |= {"D_drive_H", "zero_NMSE"}
     missing = (required | columns) - set(frame.columns)
     if missing:
         raise ValueError(f"missing fixed-analysis columns: {sorted(missing)}")
@@ -93,8 +98,8 @@ def _checked_windows(frame: pd.DataFrame, metrics: Sequence[str]) -> pd.DataFram
 
 
 def _parts(data: pd.DataFrame, metric: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    if metric == HB_RATIO:
-        value = data["D1"].to_numpy(float)
+    if metric in (HB_RATIO, DRIVE_RATIO):
+        value = data["D1" if metric == HB_RATIO else "D_drive_H"].to_numpy(float)
         denominator = data["zero_NMSE"].to_numpy(float)
         valid = np.isfinite(value) & np.isfinite(denominator) & (denominator > 0)
         return value * value, denominator, valid
@@ -769,14 +774,14 @@ def spatial_geometry_from_plan(plan: dict) -> pd.DataFrame:
     return frame
 
 
-def spatial_half_metrics(windows: pd.DataFrame) -> pd.DataFrame:
+def spatial_half_metrics(windows: pd.DataFrame, *, metrics=("D1", HB_RATIO)) -> pd.DataFrame:
     """Retained D1 and matched Hb ratio in early/late halves, at each Hb site.
 
     The split uses the original record's ordered planned times.  An odd middle
     window is omitted.  Two valid distinct windows per site/half are required;
     this is a selection diagnostic, not an independent validation experiment.
     """
-    data = _checked_windows(windows, ("D1", HB_RATIO))
+    data = _checked_windows(windows, metrics)
     data["period"] = "middle"
     for _, group in data.groupby(["dataset", "subject", "record_id"], sort=False):
         times = np.sort(group.window_start_s.unique())
@@ -788,7 +793,7 @@ def spatial_half_metrics(windows: pd.DataFrame) -> pd.DataFrame:
     data = data[data.period.ne("middle")].copy()
     keys = ["dataset", "subject", "task_label", "record_id", "record_unit", "pair", "period"]
     outputs = []
-    for metric in ("D1", HB_RATIO):
+    for metric in metrics:
         numerator, denominator, valid = _parts(data, metric)
         source = data[keys].copy()
         source["aggregation_numerator"] = np.where(valid, numerator, np.nan)
@@ -808,7 +813,8 @@ def spatial_half_metrics(windows: pd.DataFrame) -> pd.DataFrame:
 
 
 def aggregate_spatial_maps(native_pairs: pd.DataFrame, halves: pd.DataFrame,
-                           geometry: pd.DataFrame, *, minimum_window_fraction: float = .8) -> tuple[pd.DataFrame, pd.DataFrame]:
+                           geometry: pd.DataFrame, *, minimum_window_fraction: float = .8,
+                           metrics=SPATIAL_METRICS) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Record/site maps and record-equal subject maps with explicit missingness.
 
     Coincident projected positions are combined before plotting.  ROOT metrics
@@ -818,7 +824,7 @@ def aggregate_spatial_maps(native_pairs: pd.DataFrame, halves: pd.DataFrame,
     """
     if not 0 < minimum_window_fraction <= 1:
         raise ValueError("minimum_window_fraction must be in (0, 1]")
-    source = native_pairs[native_pairs.metric.isin(SPATIAL_METRICS)].copy()
+    source = native_pairs[native_pairs.metric.isin(metrics)].copy()
     source["period"] = "full"
     source = pd.concat([source, halves], ignore_index=True)
     channel = source.merge(geometry, on=["dataset", "subject", "record_id", "pair"], how="left", validate="many_to_one")
@@ -981,7 +987,7 @@ def spatial_record_similarities(maps: pd.DataFrame, ranking: pd.DataFrame) -> pd
     return pd.DataFrame(rows)
 
 
-def spatial_region_patterns(maps: pd.DataFrame) -> dict[str, pd.DataFrame]:
+def spatial_region_patterns(maps: pd.DataFrame, *, metrics=None) -> dict[str, pd.DataFrame]:
     """Descriptive sensor-region contrasts from retained record/subject maps.
 
     AF/Fp, C/FC and P/O prefixes define montage locations, not cortical ROIs.
@@ -989,7 +995,8 @@ def spatial_region_patterns(maps: pd.DataFrame) -> dict[str, pd.DataFrame]:
     a regional comparison uses subjects with all three regions. No new tests.
     """
     datasets = ("eeg_fnirs_single_trial", "simultaneous_eeg_nirs")
-    metrics = ("D1", HB_RATIO, "D_bal_10s", "D_bal_20s", "D_bal_40s", "D_EH")
+    if metrics is None:
+        metrics = ("D1", HB_RATIO, "D_bal_10s", "D_bal_20s", "D_bal_40s", "D_EH")
     source = maps[maps.dataset.isin(datasets) & maps.metric.isin(metrics)
                   & maps.period.isin(("full", "subject_mean"))].copy()
     keys = ["dataset", "subject", "record_unit", "period", "task_label", "metric"]
@@ -1229,7 +1236,9 @@ def four_dataset_pattern_tables(subjects: pd.DataFrame, shapes: pd.DataFrame,
 
 
 def fixed_population_patterns(maps: pd.DataFrame, *, seed=20261104,
-                              bootstrap_samples=5000, permutation_samples=100000):
+                              bootstrap_samples=5000, permutation_samples=100000,
+                              metrics=("D1", HB_RATIO), include_regions=True,
+                              require_window_coverage=False):
     """All-subject fixed-map checks, without shared-parameter dependencies.
 
     Region tests are an exploratory six-test family (two registered montages,
@@ -1242,8 +1251,11 @@ def fixed_population_patterns(maps: pd.DataFrame, *, seed=20261104,
     keys = ['dataset', 'subject', 'record_unit', 'period', 'metric', 'location_id']
     if maps.duplicated(keys).any():
         raise ValueError('Duplicate spatial observation')
-    source = maps[maps.metric.isin(('D1', HB_RATIO))].copy()
+    source = maps[maps.metric.isin(metrics)].copy()
     source['subject'] = source.subject.astype(str)
+    if require_window_coverage:
+        source['display_valid'] &= source.selection_valid.astype(bool)
+        source['display_value'] = source.display_value.where(source.display_valid)
     rows = []
     for (dataset, subject, record, metric), block in source[source.period.isin(['early','late'])].groupby(
             ['dataset','subject','record_unit','metric'], sort=True):
@@ -1257,7 +1269,15 @@ def fixed_population_patterns(maps: pd.DataFrame, *, seed=20261104,
             planned_locations=len(planned), common_locations=len(common),
             value=_rho(a.loc[common,'display_value'].to_numpy(float), b.loc[common,'display_value'].to_numpy(float))
                 if len(common)>=max(8,.8*len(planned)) else np.nan))
-    early = pd.DataFrame(rows)
+    early = pd.DataFrame(rows,columns=['dataset','subject','record_unit','metric',
+        'planned_locations','common_locations','value'])
+    if require_window_coverage:
+        identity = ['dataset', 'subject', 'record_unit', 'metric']
+        planned = source[source.period.eq('full')].groupby(identity).size().reset_index(name='all_locations')
+        early = planned.merge(early, on=identity, how='left', validate='one_to_one')
+        early['planned_locations'] = early.planned_locations.fillna(early.all_locations)
+        early['common_locations'] = early.common_locations.fillna(0)
+        early = early.drop(columns='all_locations')
     early_subjects = early.groupby(['dataset','subject','metric']).value.agg(['median','count','size']).reset_index()
     early_subjects = early_subjects.rename(columns={'median':'value','count':'available_records','size':'planned_records'})
 
@@ -1270,10 +1290,13 @@ def fixed_population_patterns(maps: pd.DataFrame, *, seed=20261104,
     full.loc[~full.display_valid.astype(bool),'display_value'] = np.nan
     full['centered'] = np.nan
     for _, block in full.groupby(['dataset','acquisition','metric','location_id'],sort=False):
-        for i in block.index:
-            others=block.loc[block.subject.ne(full.loc[i,'subject']),'display_value'].dropna()
+        values=block.display_value.to_numpy(float);subjects=block.subject.to_numpy()
+        centered=np.full(len(block),np.nan)
+        for i in range(len(block)):
+            others=values[(subjects!=subjects[i]) & np.isfinite(values)]
             if len(others)>=3:
-                full.loc[i,'centered']=full.loc[i,'display_value']-others.median()
+                centered[i]=values[i]-np.median(others)
+        full.loc[block.index,'centered']=centered
     pairs=[];hotspot_locations=[]
     for (dataset, subject, metric), block in full.groupby(['dataset','subject','metric'],sort=True):
         records={k:g.set_index('location_id') for k,g in block.groupby('record_unit',sort=True)}
@@ -1297,13 +1320,15 @@ def fixed_population_patterns(maps: pd.DataFrame, *, seed=20261104,
             if dataset=='eeg_fnirs_single_trial' and a.task_label.iloc[0]!=b.task_label.iloc[0]:
                 continue
             planned=a.index.union(b.index);common=a.index.intersection(b.index)
-            good=[k for k in common if np.isfinite(a.loc[k,'display_value']) and np.isfinite(b.loc[k,'display_value'])]
+            av=a.loc[common,'display_value'];bv=b.loc[common,'display_value']
+            finite=np.isfinite(av.to_numpy(float))&np.isfinite(bv.to_numpy(float))
+            good=common[finite]
             adequate=len(good)>=max(8,.8*len(planned))
             row=dict(dataset=dataset,subject=subject,metric=metric,record_a=first,record_b=second,
                 task_a=a.task_label.iloc[0],task_b=b.task_label.iloc[0],planned_locations=len(planned),
                 common_locations=len(good),same_task=bool(a.task_label.iloc[0]==b.task_label.iloc[0]),
                 raw_rho=_rho(a.loc[good,'display_value'].to_numpy(float),b.loc[good,'display_value'].to_numpy(float)) if adequate else np.nan)
-            centered=[k for k in good if np.isfinite(a.loc[k,'centered']) and np.isfinite(b.loc[k,'centered'])]
+            centered=good[np.isfinite(a.loc[good,'centered'].to_numpy(float))&np.isfinite(b.loc[good,'centered'].to_numpy(float))]
             row['centered_locations']=len(centered)
             row['centered_rho']=_rho(a.loc[centered,'centered'].to_numpy(float),b.loc[centered,'centered'].to_numpy(float)) if len(centered)>=max(8,.8*len(planned)) else np.nan
             row.update(hotspot_overlap=np.nan,hotspot_random_reference=np.nan,hotspot_excess=np.nan,hotspot_k=0,hotspot_cutoff_tie=False)
@@ -1348,13 +1373,184 @@ def fixed_population_patterns(maps: pd.DataFrame, *, seed=20261104,
             eligible_locations=len(valid),stable_locations=len(stable),
             maximum_persistence=valid.fraction.max() if len(valid) else np.nan,
             stable_members=';'.join(stable.sort_values(['fraction','pair_members'],ascending=[False,True]).pair_members)))
+    result=dict(early_late_records=early,early_late_subjects=early_subjects,
+        spatial_record_pairs=pairs,spatial_repeat_subjects=persons,spatial_repeat_summary=pd.DataFrame(summaries),
+        hotspot_record_locations=locations,hotspot_persistence=persistence,hotspot_subjects=pd.DataFrame(hot_subjects))
+    if not include_regions:
+        return result
     regions=spatial_region_patterns(maps)
     tests=regions['regional_contrasts'].query("level == 'subject' and contrast == 'posterior_minus_frontal'")
     tests=tests[tests.metric.isin(['D1',HB_RATIO,'D_bal_40s'])].copy()
     tests=tests.rename(columns={'metric':'endpoint'})
     tests['analysis']='regional';tests['fdr_family']='exploratory_2datasets_3metrics'
     stats=_effect_summary(tests,bootstrap_samples=bootstrap_samples,permutation_samples=permutation_samples,seed=seed)
-    return dict(early_late_records=early,early_late_subjects=early_subjects,
-        spatial_record_pairs=pairs,spatial_repeat_subjects=persons,spatial_repeat_summary=pd.DataFrame(summaries),
-        hotspot_record_locations=locations,hotspot_persistence=persistence,hotspot_subjects=pd.DataFrame(hot_subjects),
-        regional_tests=stats, **regions)
+    return dict(**result,regional_tests=stats, **regions)
+
+
+def matched_disagreement_windows(windows: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """One common finite window set, preserving every planned identity.
+
+    D_drive_H needs both independent fits and a successful common-state replay.
+    No metric is recomputed from signal arrays. A positive retained zero-MSE
+    gives both amplitude controls exactly the same numerator support.
+    """
+    data = _checked_windows(windows, DISAGREEMENT_METRICS)
+    columns = ['D1', 'D_drive_H', 'D_EH', 'zero_NMSE']
+    valid = np.isfinite(data[columns]).all(axis=1) & data.zero_NMSE.gt(0)
+    keys = ['dataset', 'subject', 'record_id', 'pair', 'window_start_s']
+    support = data[keys].copy()
+    for metric in columns:
+        support[metric+'_available'] = np.isfinite(data[metric])
+    support['common_available'] = valid
+    data.loc[~valid, columns] = np.nan
+    return data, support
+
+
+def disagreement_paired_stability(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Paired subject effects on the same record pairs, before aggregation.
+
+    Positive differences favor drive disagreement. The two contrasts compare
+    unnormalised Hb-SD metrics, then their common-zero-MSE ratio controls.
+    Template estimation remains frozen in these conditional comparisons.
+    """
+    contrasts = (('D_drive_H', 'D1', 'drive_minus_Hb'),
+                 (DRIVE_RATIO, HB_RATIO, 'normalized_drive_minus_Hb'))
+    pairs = tables['spatial_record_pairs']
+    early = tables['early_late_records']
+    rows = []
+    for drive, hb, contrast in contrasts:
+        for endpoint in ('raw_rho', 'centered_rho', 'hotspot_excess', 'early_late_rho'):
+            source = early if endpoint == 'early_late_rho' else pairs
+            value = 'value' if endpoint == 'early_late_rho' else endpoint
+            keys = ['dataset', 'subject', *(['record_unit'] if endpoint == 'early_late_rho' else ['record_a', 'record_b'])]
+            a = source[source.metric.eq(drive)][keys+[value]].rename(columns={value:'drive'})
+            b = source[source.metric.eq(hb)][keys+[value]].rename(columns={value:'hb'})
+            matched = a.merge(b, on=keys, how='outer', validate='one_to_one')
+            for (dataset, subject), group in matched.groupby(['dataset','subject'], sort=True):
+                good = np.isfinite(group[['drive','hb']]).all(axis=1)
+                av, bv = group.loc[good,'drive'].median(), group.loc[good,'hb'].median()
+                rows.append(dict(analysis='paired_stability', dataset=dataset, subject=subject,
+                    endpoint=endpoint, contrast=contrast, fdr_family='paired_stability_all_32',
+                    value=av-bv, drive_value=av, hb_value=bv,
+                    planned_pairs=len(group), available_pairs=int(good.sum())))
+    return pd.DataFrame(rows)
+
+
+def disagreement_map_associations(maps: pd.DataFrame, weak_maps: pd.DataFrame) -> pd.DataFrame:
+    """Record spatial associations, then subject medians; no source attribution.
+
+    The weak balance is an existing whole-record 40 s statistic, not matched
+    window evidence. It shares the Hb processing chain and model assumptions.
+    """
+    full = maps[maps.period.eq('full')].copy()
+    full['value'] = full.display_value.where(full.selection_valid)
+    weak = weak_maps[weak_maps.period.eq('full') & weak_maps.metric.eq('D_bal_40s')].copy()
+    weak['value'] = weak.display_value.where(weak.selection_valid)
+    keys = ['dataset', 'subject', 'record_unit', 'location_id']
+    source = pd.concat([full[keys+['metric','value']], weak[keys+['metric','value']]], ignore_index=True)
+    if source.duplicated(keys+['metric']).any():
+        raise ValueError('duplicate association location')
+    comparisons = [('D_drive_H','D1'), (DRIVE_RATIO,HB_RATIO)]
+    comparisons += [(metric, other) for metric in DISAGREEMENT_METRICS for other in ('zero_NMSE','D_bal_40s')]
+    rows=[]
+    for (dataset, subject, record), group in source.groupby(keys[:3], sort=True):
+        wide=group.pivot(index='location_id',columns='metric',values='value')
+        for first,second in comparisons:
+            a=wide.reindex(columns=[first,second]);good=np.isfinite(a).all(axis=1)
+            n=int(good.sum())
+            rho=_rho(a.loc[good,first].to_numpy(),a.loc[good,second].to_numpy()) if n>=max(8,.8*len(a)) else np.nan
+            rows.append(dict(dataset=dataset,subject=subject,record_unit=record,
+                first=first,second=second,value=rho,common_locations=n,planned_locations=len(a)))
+    records=pd.DataFrame(rows)
+    subjects=records.groupby(['dataset','subject','first','second']).value.agg(['median','count','size']).reset_index()
+    return records, subjects.rename(columns={'median':'value','count':'available_records','size':'planned_records'})
+
+
+def disagreement_repeat_comparison(pairs: pd.DataFrame, *, bootstrap_samples=5000, seed=20261105):
+    """Paired bootstrap of dependent across-person repeat correlations.
+
+    All four values are resampled together. Intervals are pointwise exploratory
+    diagnostics, not a test of identical absolute measurements or map shape.
+    """
+    rows=[];rng=np.random.default_rng(seed)
+    for drive,hb,name in (('D_drive_H','D1','drive_minus_Hb'),(DRIVE_RATIO,HB_RATIO,'normalized_drive_minus_Hb')):
+        for identity,g in pairs.groupby(['dataset','task_label','repeat_kind'],dropna=False,sort=True):
+            wide=g[g.metric.isin((drive,hb))].pivot(index='subject',columns='metric',values=['value_a','value_b'])
+            columns=pd.MultiIndex.from_tuples([('value_a',drive),('value_b',drive),('value_a',hb),('value_b',hb)])
+            a=wide.reindex(columns=columns).to_numpy(float);a=a[np.isfinite(a).all(axis=1)]
+            row=dict(zip(['dataset','task_label','repeat_kind'],identity),contrast=name,
+                subjects=len(a),planned_subjects=len(wide),drive_rho=np.nan,hb_rho=np.nan,
+                difference=np.nan,ci_low=np.nan,ci_high=np.nan)
+            if len(a)>=2:
+                row['drive_rho']=_rho(a[:,0],a[:,1]);row['hb_rho']=_rho(a[:,2],a[:,3])
+                row['difference']=row['drive_rho']-row['hb_rho']
+            if len(a)>=6:
+                draws=_bootstrap(a,lambda d:_rho_batch(d[:,:,:2])-_rho_batch(d[:,:,2:]),bootstrap_samples,rng)
+                finite=draws[np.isfinite(draws)]
+                if len(finite):row['ci_low'],row['ci_high']=np.quantile(finite,[.025,.975])
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def disagreement_dataset_tables(windows: pd.DataFrame, geometry: pd.DataFrame,
+                                weak_maps: pd.DataFrame, *, bootstrap_samples=5000,
+                                permutation_samples=100000, seed=20261105) -> dict[str, pd.DataFrame]:
+    """Complete matched-support comparison from retained public scalar evidence.
+
+    All five endpoints use identical windows before any nonlinear aggregation.
+    Primary maps require 80% planned windows at each physical member, 8 and 80%
+    common sites; failed/absent people remain in denominators. No waveform,
+    parameter, fit, EEG feature or source coordinate is changed here.
+    """
+    data,support=matched_disagreement_windows(windows)
+    metrics=(*DISAGREEMENT_METRICS,'zero_NMSE')
+    aggregate=aggregate_fixed_metrics(data,metrics=metrics,include_hb_ratio=False)
+    halves=spatial_half_metrics(data,metrics=metrics)
+    _,maps=aggregate_spatial_maps(aggregate['native_pairs'],halves,geometry,metrics=metrics)
+    patterns=fixed_population_patterns(maps,metrics=DISAGREEMENT_METRICS,include_regions=False,
+        require_window_coverage=True,bootstrap_samples=bootstrap_samples,
+        permutation_samples=permutation_samples,seed=seed)
+    # Descriptive historical-coverage sensitivity: any finite full-record map.
+    # Early/late remains on the original stricter per-half selection support.
+    relaxed=fixed_population_patterns(maps,metrics=DISAGREEMENT_METRICS,include_regions=False,
+        require_window_coverage=False,bootstrap_samples=bootstrap_samples,
+        permutation_samples=permutation_samples,seed=seed)
+    tables=dict(**patterns,**aggregate,window_support=support,map_values=maps,
+        relaxed_spatial_repeat_subjects=relaxed['spatial_repeat_subjects'],
+        relaxed_spatial_repeat_summary=relaxed['spatial_repeat_summary'],
+        relaxed_hotspot_subjects=relaxed['hotspot_subjects'])
+    tables['paired_stability_subjects']=disagreement_paired_stability(patterns)
+    tables['paired_stability_tests']=_effect_summary(tables['paired_stability_subjects'],
+        bootstrap_samples=bootstrap_samples,permutation_samples=permutation_samples,seed=seed)
+    tables['subject_descriptives']=summarize_subject_distributions(aggregate['subjects'],
+        bootstrap_samples=bootstrap_samples,seed=seed)
+    repeat=native_record_repeatability(aggregate['native_pairs'],bootstrap_samples=bootstrap_samples,seed=seed)
+    tables.update(repeat_pairs=repeat['pairs'],repeat_summary=repeat['summary'])
+    tables['repeat_metric_comparison']=disagreement_repeat_comparison(repeat['pairs'],bootstrap_samples=bootstrap_samples,seed=seed)
+    within=within_record_consistency(data,metrics=DISAGREEMENT_METRICS,include_hb_ratio=False,
+        bootstrap_samples=bootstrap_samples,seed=seed)
+    tables.update(within_record_pairs=within['pairs'],within_record_summary=within['summary'])
+    tables['within_metric_comparison']=disagreement_repeat_comparison(within['pairs'],bootstrap_samples=bootstrap_samples,seed=seed)
+    records,people=disagreement_map_associations(maps,weak_maps)
+    tables.update(association_records=records,association_subjects=people)
+    # Region effects remain exploratory and share the strict map coverage rule.
+    regional_maps=maps.copy()
+    regional_maps['display_value']=regional_maps.display_value.where(regional_maps.selection_valid)
+    if set(maps.dataset)&{'eeg_fnirs_single_trial','simultaneous_eeg_nirs'}:
+        regions=spatial_region_patterns(regional_maps,metrics=DISAGREEMENT_METRICS)
+        tables.update(regions)
+    # Baseline comparisons require the exact same windows as each baseline;
+    # independent prediction stays separate from the common-state replay gap.
+    gains=data.copy();gain_names=[]
+    for baseline in ('zero','template','wrong'):
+        column=baseline+'_NMSE'
+        if column in gains and 'prediction_NMSE' in gains:
+            name='EEG_prediction_gain_over_'+baseline;gain_names.append(name)
+            valid=np.isfinite(gains[column])&np.isfinite(gains.prediction_NMSE)&support.common_available
+            gains[name]=(gains[column]-gains.prediction_NMSE).where(valid)
+    if gain_names:
+        gain=aggregate_fixed_metrics(gains,metrics=gain_names,include_hb_ratio=False)['subjects']
+        gain['analysis']='independent_prediction';gain['endpoint']=gain.metric
+        gain['contrast']='baseline_minus_EEG_MSE';gain['fdr_family']='prediction_baselines_all_12'
+        tables['prediction_baseline_subjects']=gain
+    return tables

@@ -4287,6 +4287,239 @@ def _finish_fixed_pattern_report(run,analysis,output,summary,tables,maps,figures
     return dict(output=str(output),pages=checks['exports']['TECHNICAL_REPORT.pdf']['pages'],figures=len(figures))
 
 
+def render_disagreement_comparison(run, analysis, output):
+    """All-subject paired comparison; figures are PNG and tables stay selectable."""
+    import shutil
+    import pandas as pd
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from src.analysis.tak_mismatch import HB_RATIO, DRIVE_RATIO, DISAGREEMENT_METRICS
+    run,analysis,output=(Path(p).resolve() for p in (run,analysis,output))
+    summary=_json(analysis/'summary.json')
+    if (summary.get('schema')!='tak_mismatch_disagreement_comparison_v1' or summary.get('status')!='completed'
+            or Path(summary['parent_run']).resolve()!=run or not analysis.is_relative_to(run)):
+        raise ValueError('Completed versioned disagreement analysis required')
+    if output.exists():raise FileExistsError('Use a fresh disagreement report export')
+    output.mkdir(parents=True);plots=output/'plots';plots.mkdir()
+    tables={name:pd.read_csv(analysis/path,dtype={'subject':str}) for name,path in summary['files'].items()}
+    plt=_plotting()
+    plt.rcParams.update({'font.size':11,'axes.titlesize':12,'xtick.labelsize':11,'ytick.labelsize':10})
+    datasets=summary['config']['scope']['datasets']
+    labels=dict(zip(datasets,('Single-Trial','Simultaneous','Visual','REFED')))
+    metric_labels={'D1':'D1','D_drive_H':'Drive',HB_RATIO:'RH',DRIVE_RATIO:'RD','D_EH':'DEH'}
+    colors={'D1':'#236fa4','D_drive_H':'#c65d31',HB_RATIO:'#26918b',DRIVE_RATIO:'#a64a82','D_EH':'#79716e'}
+    shown=['D1','D_drive_H',HB_RATIO,DRIVE_RATIO]
+    fmt=lambda x:f'{x:.3f}' if pd.notna(x) and np.isfinite(float(x)) else '不可用'
+    def section(title,blocks):return dict(title=title,page_break=True,blocks=blocks)
+    def table(columns,rows):return _table(columns,rows)
+    def source(name):return str(analysis/summary['files'][name])
+    figures={}
+    def save(name,fig,caption,evidence):
+        path=plots/(name+'.png');fig.savefig(path,dpi=250,bbox_inches='tight');plt.close(fig)
+        block=dict(type='figure',path=str(path),caption=caption,source=source(evidence),preserve_bitmap=True)
+        figures[name]=block;return block
+    def points(name,frame,caption,evidence,limits=(-1.05,1.15)):
+        fig,axes=plt.subplots(2,2,figsize=(8,5.4),sharey=True)
+        for ax,ds in zip(axes.ravel(),datasets):
+            for i,metric in enumerate(shown):
+                g=frame[frame.dataset.eq(ds)&frame.metric.eq(metric)].sort_values('subject')
+                v=g.value.dropna().to_numpy(float)
+                ax.scatter(i+.13*np.sin(np.arange(len(v))*2.4),v,c=colors[metric],s=17,alpha=.72)
+                if len(v):
+                    q=np.quantile(v,[.25,.5,.75]);ax.plot([i,i],q[[0,2]],c='black',lw=2)
+                    ax.scatter([i],[q[1]],facecolor='white',edgecolor='black',s=35,zorder=5)
+                ax.text(i,limits[1]-.08,f'{len(v)}/{len(g)}',ha='center',fontsize=10)
+            ax.set(title=labels[ds],xticks=range(4),xticklabels=[metric_labels[m] for m in shown],ylim=limits)
+            ax.set_ylabel('热点重合率 − k/N' if name=='hotspot_excess' else '空间 Spearman ρ')
+            ax.axhline(0,c='#999999',lw=.7);ax.grid(axis='y',alpha=.15)
+        fig.tight_layout()
+        return save(name,fig,caption,evidence)
+    repeated=tables['spatial_repeat_subjects'];paired=tables['paired_stability_tests']
+    primary=paired[paired.endpoint.eq('centered_rho')]
+    decisions=[]
+    for contrast in ('drive_minus_Hb','normalized_drive_minus_Hb'):
+        group=primary[primary.contrast.eq(contrast)]
+        decisions.append(dict(contrast=contrast,drive_favors=int(((group['mean']>0)&group.q_value.lt(.05)).sum()),
+            hb_favors=int(((group['mean']<0)&group.q_value.lt(.05)).sum()),uncertain=int(group.q_value.ge(.05).sum())))
+    content=dict(schema='source_diagnostics_report_v1',title='EEG–Hb驱动分歧与Hb重建失配：全被试配对比较',
+        subtitle='重复性、持续热点、幅度对照与论文解释边界',date=datetime.now(ZoneInfo('Asia/Hong_Kong')).date().isoformat(),
+        provenance=[f"沿用{summary['planned_subjects']}名被试、{summary['planned_windows']}个计划窗口×Hb位置。Visual只使用更正后的原生EEG身份。",
+            '本次只重汇总保留标量与位置；没有新读取原始信号，没有重拟合模型，没有新增受保护评价。'],
+        summary=[
+            '核心问题是哪个分歧更能重复描述个体空间结构。误差较大或检验p值较小，本身不能证明生理来源更明确。',
+            '论文建议：若主线是个体血流模型相容性，以Hb重建失配为主，联合呈现D1与R_H；驱动分歧作为跨模态代理一致性的次要分析。REFED的反向结果及严格覆盖损失必须保留。',
+            f"主端点为去群体模板后的跨记录空间相关。原尺度比较中，驱动分歧显著更高{decisions[0]['drive_favors']}库，Hb失配显著更高{decisions[0]['hb_favors']}库；共同幅度归一化后分别为{decisions[1]['drive_favors']}库、{decisions[1]['hb_favors']}库（32项配对检验BH校正）。",
+            'REFED是重要反例：原尺度Hb误差更稳定，但共同幅度归一化后驱动分歧更稳定；此时两者的空间重复性均低于前三库的主要Hb结果。不能宣称一个指标在四库全面胜出。',
+            '所有方法先匹配窗口，再比较相同记录对；不把窗口、通道或记录对当作独立被试。负结果与不可用分母保留。'],sections=[],sources=[str(analysis/'summary.json')])
+    sections=content['sections']
+    coverage=[];support=tables['window_support']
+    for ds in datasets:
+        g=support[support.dataset.eq(ds)]
+        coverage.append([labels[ds],g.subject.nunique(),len(g),int(g.D1_available.sum()),int(g.D_drive_H_available.sum()),int(g.common_available.sum())])
+    sections.append(section('1. 同一批观测上的比较及覆盖损失',[
+        table(['数据集','计划人','计划窗对','Hb失配可用','驱动回放可用','共同窗对'],coverage),
+        _paragraph('一窗对为一个30秒目标窗×一个HbO/HbR测点。共同窗要求D1、Drive、DEH均有限，且同窗零预测MSE为正；先把其余窗标为不可用，再聚合全部指标。只有Hb拟合而无EEG或回放成功的窗不进入配对比较，仍保留在计划分母。'),
+        _paragraph('主地图要求每个物理成员至少80%计划窗口可用；记录对要求至少8个且80%共同测点。早晚每半至少2个有效窗口。Visual的同步Probe按采集合并；不能增加独立样本量。'),
+        _paragraph('跨记录含义：Single-Trial只比较同任务记录，Simultaneous跨任务，Visual同次访问跨Part，REFED跨视频；后三者不称为同条件跨日重测。'),
+        _paragraph('来源：'+source('window_support'))]))
+    sections.append(section('2. 两种分歧的计算路径不同',[
+        dict(type='equation',latex=r'D_1=\sqrt{\left\langle\frac{(H-\widehat H_H)^2}{\sigma_H^2}\right\rangle},\qquad D_{\mathrm{drive},H}=\sqrt{\left\langle\frac{[\mathcal G(r_E;x_{\rm rest})-\mathcal G(r_H;x_{\rm rest})]^2}{\sigma_H^2}\right\rangle}',
+             caption='H为处理后并扣除窗首5秒参考的双Hb；σ_H为冻结训练SD。平均在5.0–29.8秒的249个有效时刻及两个色团上计算。'),
+        _paragraph('D1：Hb-only拟合看到当前窗口双Hb，估计驱动与四个初态；比较处理观测与该条件重建。其余血流参数固定。它度量模型对当前Hb的描述误差。'),
+        _paragraph('Drive：EEG-only和Hb-only分别估计驱动；将两个驱动输入相同固定模型G、相同静息初态，再比较双Hb回放。驱动保留拟合正则化所选择的直流水平，不等于直接的去均值驱动差，也不是独立Hb预测误差。'),
+        _paragraph('EEG目标是六个近邻电极×五频带对数功率的训练折第一主成分。当前窗首5秒参考，90秒原生上下文用于EEG处理；Hb来自既有离线滤波缓存。“原始Hb与重建”在本报告中具体指处理观测，不是未经处理的光强或绝对浓度。'),
+        dict(type='equation',latex=r'R_H=\frac{\langle (H-\widehat H_H)^2/\sigma_H^2\rangle}{\langle H^2/\sigma_H^2\rangle},\qquad R_D=\frac{\langle[\mathcal G(r_E)-\mathcal G(r_H)]^2/\sigma_H^2\rangle}{\langle H^2/\sigma_H^2\rangle}',
+             caption='图表缩写RH和RD分别对应上述两个共同分母比值；Drive对应D_drive,H。比值在窗口平方量、记录等权聚合后形成，不是先平均窗口比值。'),
+        _paragraph('DEH是Hb-only解的EEG读出与实测EEG代理之间的RMS差，以训练EEG SD计，仅作辅助。D1和Drive虽同用Hb SD，误差对象和初态不同；不能把数值更大解释为某方法更差或某生理成分更多。')]))
+    sections.append(section('3. 统计判据：先比较稳定性，再讨论机制',[
+        _paragraph('主端点为去模板跨记录空间Spearman相关：在每条记录、每个位置减去其他被试同位置中位数，再比较本人的两张地图。每人对可用记录对取中位数。模板固定于当前证据；区间不传播模板估计不确定性。'),
+        _paragraph('次端点为原地图相关、记录内早晚相关与热点重合超额。热点取共同位置中最高ceil(N/4)个；重合率为交集数/k，超额为重合率减k/N。k/N仅为等大小随机集合参考，不是空间独立性显著性检验。'),
+        _paragraph('每个方法对的比较先限制到双方均有效的相同记录对，再分别取被试中位数并作“驱动−Hb”差。平均被试差为推断对象；95%区间为5000次整被试自助法，双侧符号置换在≤16人时穷举，其余100000次加一校正。'),
+        _paragraph('四库×四个稳定性端点×原尺度/共同幅度分母两种比较，计划32项构成同一BH家族，可检验项统一校正，不可用项保留。独立预测基线和区域探索各自另成完整家族。没有测试“非负误差大于零”来替代生理证据。'),
+        _paragraph('当前为看过既有报告之后的探索性分析；名义区间与本轮BH不覆盖历史探索或后续择优选入论文。稳定性只说明可重复描述，不能区分固定测量链、个体生理和模型/代理限制。')]))
+    for endpoint,title in [('centered_rho','4. 主端点：去群体模板后的个体地图'),('raw_rho','5. 原空间地图与测点排序'),('hotspot_excess','6. 反复高分歧位置的重合')]:
+        frame=repeated[repeated.endpoint.eq(endpoint)]
+        limits=(-.3,.85) if endpoint=='hotspot_excess' else (-1.05,1.15)
+        figure=points(endpoint,frame,'每点一名被试，白点为被试中位数，黑线为四分位距；上方为可用/计划人数。D1与Drive为原尺度，RH与RD为共同目标幅度分母对照。横轴按固定方法顺序，纵轴所有数据集共用。','spatial_repeat_subjects',limits)
+        rows=[]
+        for ds in datasets:
+            row=[labels[ds]]
+            for m in shown:
+                v=frame[frame.dataset.eq(ds)&frame.metric.eq(m)].value
+                row.append(f'{fmt(v.median())} ({v.notna().sum()}/{len(v)})')
+            rows.append(row)
+        caption='数值为被试中位数；括号为可用/计划人数。'
+        sections.append(section(title,[figure,table(['数据集','D1','Drive','RH','RD'],rows),_paragraph(caption),
+            _paragraph('原地图和去模板地图一起判断：群体共有测点图形可能提高原相关。去模板仍保留个体固定光路、训练尺度与传感器条件。热点超额为描述量，未把相邻测点当独立随机位置进行检验。')]))
+    early=tables['early_late_subjects']
+    sections.append(section('7. 同一记录内的早晚空间一致性',[
+        points('early_late',early,'每点为一人：先对同一记录前后半段计算地图相关，再取该人的记录中位数。使用原始计划时间划分，不因失败而移动切分点；奇数个窗口时省略中间窗。','early_late_subjects'),
+        _paragraph('这里衡量空间排序是否在记录内持续，和“跨被试误差大小的早晚相关”不是同一统计量。短记录若每半不足2个有效窗，则该记录不可用；全体被试与计划记录分母保留。')]))
+    for contrast,title in [('drive_minus_Hb','8. 原尺度配对检验：驱动分歧是否更稳定'),('normalized_drive_minus_Hb','9. 共同幅度分母后的配对检验')]:
+        g=paired[paired.contrast.eq(contrast)]
+        endpoint_labels={'centered_rho':'去模板相关','raw_rho':'原相关','early_late_rho':'早晚相关','hotspot_excess':'热点超额'}
+        rows=[[labels[r.dataset],endpoint_labels[r.endpoint],f'{r.subjects}/{r.planned_subjects}',fmt(r.mean),f'[{fmt(r.ci_low)}, {fmt(r.ci_high)}]',f'{r.q_value:.4g}' if pd.notna(r.q_value) else '不可用'] for r in g.itertuples()]
+        sections.append(section(title,[table(['数据集','端点','配对人','平均差','95%区间','BH q'],rows),
+            _paragraph('差值方向为驱动指标减Hb重建指标，正值表示驱动分歧的空间重复性更高；不是误差大小或生理正确率的差。区间跨零或q≥0.05时，当前证据不足以判定优势。所有比较共用32项BH家族。'),
+            _paragraph('来源：'+source('paired_stability_tests'))]))
+    relaxed_repeat=tables['relaxed_spatial_repeat_subjects']
+    relaxed_center=relaxed_repeat[relaxed_repeat.endpoint.eq('centered_rho')]
+    rows=[]
+    for ds in datasets:
+        row=[labels[ds]]
+        for metric in shown:
+            v=relaxed_center[relaxed_center.dataset.eq(ds)&relaxed_center.metric.eq(metric)].value
+            row.append(f'{fmt(v.median())} ({v.notna().sum()}/{len(v)})')
+        rows.append(row)
+    sections.append(section('9A. 沿用原报告时间覆盖规则的敏感性结果',[
+        points('relaxed_centered',relaxed_center,'仍匹配相同窗口与相同记录对，但允许由部分有效时间计算全记录地图；共同测点仍要求至少8个且80%。各点和分母定义与主分析相同。','relaxed_spatial_repeat_subjects'),
+        table(['数据集','D1','Drive','RH','RD'],rows),
+        _paragraph('严格80%窗口门槛下，Simultaneous仅1/26人有原地图配对，去群体模板后为0/26，无法检验该主端点。保留这一不可评价结果，同时使用预设的宽松覆盖敏感性检验原报告的范围；没有补齐缺失时间，没有改变任何观测值或拟合。'),
+        _paragraph('宽松结果不能替代严格结果证明完整时间覆盖；它回答的是“可用时间片段汇总得到的地图是否重复”。')]))
+    if 'relaxed_paired_stability_tests' in tables:
+        g=tables['relaxed_paired_stability_tests'];rows=[]
+        for r in g[g.endpoint.eq('centered_rho')].itertuples():
+            rows.append([labels[r.dataset],'RD−RH' if r.contrast.startswith('normalized') else 'Drive−D1',
+                f'{r.subjects}/{r.planned_subjects}',fmt(r.mean),f'[{fmt(r.ci_low)}, {fmt(r.ci_high)}]',f'{r.q_value:.4g}' if pd.notna(r.q_value) else '不可用'])
+        sections.append(section('9B. 宽松覆盖下的配对比较仍保留独立检验家族',[
+            table(['数据集','比较','人','平均差','95%区间','BH q'],rows),
+            _paragraph('完整32项宽松覆盖检验另成一个BH家族，本页只展示事先定义的去模板主端点。补充计算在看到严格覆盖损失后开展，保留v1严格分析和全部数值，并独立复现原宽松被试统计；这是探索性敏感性分析。'),
+            _paragraph('来源：'+source('relaxed_paired_stability_tests'))]))
+    hot=tables['hotspot_subjects'];relaxed=tables['relaxed_hotspot_subjects'];rows=[]
+    for ds in datasets:
+        for m in shown:
+            g=hot[hot.dataset.eq(ds)&hot.metric.eq(m)];r=relaxed[relaxed.dataset.eq(ds)&relaxed.metric.eq(m)]
+            rows.append([labels[ds],metric_labels[m],f'{(g.stable_locations>0).sum()}/{(g.eligible_locations>0).sum()}/{len(g)}',
+                fmt(g.loc[g.eligible_locations>0,'stable_locations'].median()),f'{(r.stable_locations>0).sum()}/{(r.eligible_locations>0).sum()}/{len(r)}'])
+    sections.append(section('10. 持续热点必须同时报告可评价分母',[
+        table(['数据集','指标','持续/可评/计划人','可评者热点数中位','宽松持续/可评/计划'],rows),
+        _paragraph('持续热点：同一位置至少在80%可评价记录中进入该人的最高四分之一，同时至少2条且80%的计划记录可评价。主分析要求每条记录至少80%计划窗口支持；宽松列允许任意有限全记录值，只用于覆盖敏感性。'),
+        _paragraph('不能把可评价子集的高频热点比例推广到所有计划被试；没有足够记录的被试不等于没有热点。并列截点按固定位置顺序处理，完整并列频率保留在逐位置表中。')]))
+    repeat=tables['repeat_summary'];rows=[]
+    task_names={'mental_arithmetic':'心算','motor_imagery':'运动想象','visual_cognitive_motivation':'视觉任务'}
+    for r in repeat[repeat.metric.isin(shown)&repeat.status.eq('available')].itertuples():
+        rows.append([labels[r.dataset],task_names.get(r.task_label,r.task_label),metric_labels[r.metric],r.subjects,fmt(r.spearman_rho),f'[{fmt(r.rho_ci_low)}, {fmt(r.rho_ci_high)}]'])
+    sections.append(section('11. 被试差异大小的重复性与空间稳定性分开解释',[
+        table(['数据集','任务','指标','人','重复ρ','95%区间'],rows),
+        _paragraph('每人先汇总最早、最晚同任务记录的共同测点，再在被试之间计算Spearman相关；Visual仅同次访问跨Part。相关高表示“第一次分歧较大的人第二次也较大”，不是地图相同、数值相等或波形复现。'),
+        _paragraph('两个候选指标的重复相关差，另以同一被试的四个值一起重采样，保留在repeat_metric_comparison.csv.gz；这是点式探索区间，未再解释为校正后的优胜检验。Simultaneous没有原生同任务独立重复；REFED不同视频不替代同条件重测。')]))
+    assoc=tables['association_subjects'];rows=[]
+    for ds in datasets:
+        for other in ('zero_NMSE','D_bal_40s'):
+            row=[labels[ds],'目标幅度' if other=='zero_NMSE' else '40秒弱平衡']
+            for m in shown:
+                v=assoc[assoc.dataset.eq(ds)&assoc['first'].eq(m)&assoc['second'].eq(other)].value
+                row.append(f'{fmt(v.median())} ({v.notna().sum()}/{len(v)})')
+            rows.append(row)
+    sections.append(section('12. 空间模式与幅度、模型平衡偏离的关系',[
+        table(['数据集','对照变量','D1','Drive','RH','RD'],rows),
+        _paragraph('每条记录在共同测点上计算空间Spearman相关，再取被试记录中位数，表中再取被试中位数。括号为可用/计划人。目标幅度是同窗零预测MSE；弱平衡是保留的小信号近似、整记录40秒核统计，时间支持不同，只作辅助；并非精确非线性脱氧Hb平衡残差。'),
+        _paragraph('较强幅度相关提示误差排序可能部分反映信号幅值或尺度。共同幅度分母可减弱这一路径，但小分母也可能放大不稳定性。与弱平衡相关表示两种模型失配描述在空间上同向，仍共享Hb观测和模型假设，不能充当独立生理验证。')]))
+    baseline=tables['prediction_baseline_tests'];rows=[]
+    for r in baseline.itertuples():
+        base=r.endpoint.replace('EEG_prediction_gain_over_','')
+        rows.append([labels[r.dataset],{'zero':'零变化','template':'训练模板','wrong':'错配EEG'}.get(base,base),f'{r.subjects}/{r.planned_subjects}',fmt(r.mean),f'[{fmt(r.ci_low)}, {fmt(r.ci_high)}]',f'{r.q_value:.4g}' if pd.notna(r.q_value) else '不可用'])
+    sections.append(section('13. EEG分歧的下游含义由隐藏Hb预测核对',[
+        table(['数据集','基线','人','基线−EEG MSE','95%区间','BH q'],rows),
+        _paragraph('四库相对零变化预测的平均收益均为负，约−0.110至−0.153训练Hb SD平方；当前EEG-only预测在这组共同支持上均劣于零基线。相对错误供体也没有在本轮完整基线家族内获得显著优势。'),
+        _paragraph('预测时当前窗口Hb隐藏，EEG-only单独拟合；上表正值有利于EEG预测。zero为零变化预测，template为训练折模板，wrong为原协议中同被试同条件、实际滤波支持不重叠的EEG供体。每种比较单独匹配有效窗口，且限制在本轮共同支持内。'),
+        _paragraph('单位为冻结训练Hb SD平方。先窗口平方量，再原生记录、被试等权；计划12项基线比较，11项可检验项统一BH，REFED错误供体不可用。Drive大并不自动意味着EEG有可用的跨模态预测信息，也不代表Hb反演驱动是真实神经活动。')]))
+    regions=tables['regional_tests'];rows=[]
+    for r in regions.itertuples():
+        rows.append([labels[r.dataset],metric_labels[r.endpoint],f'{r.subjects}/{r.planned_subjects}',fmt(r.mean),f'[{fmt(r.ci_low)}, {fmt(r.ci_high)}]',f'{r.q_value:.4g}' if pd.notna(r.q_value) else '不可用'])
+    sections.append(section('14. 区域方向作为辅助，不替代个体重复性',[
+        table(['数据集','指标','人','后部−前额','95%区间','BH q'],rows),
+        _paragraph('仅对Single-Trial和Simultaneous已有的前额、中央、后部前缀分区计算；要求三个区域完整，先区域位置中位数，再作被试内差。十项区域检验共一BH家族。它是测点区分，不能等同于个体皮层定位；跨指标的原始差值量纲不同。')]))
+    ocular=tables['retained_ocular_associations'];rows=[]
+    for r in ocular[ocular.analysis.eq('cross_window_partial')&ocular.endpoint.isin(['D1','D_drive_H'])].itertuples():
+        rows.append([labels[r.dataset],metric_labels[r.endpoint],r.subjects,fmt(r.mean),
+            f'[{fmt(r.ci_low)}, {fmt(r.ci_high)}]',f'{r.q_value:.4g}'])
+    sections.append(section('14A. 眼电对照限制“生理解释更清楚”的说法',[
+        table(['数据集','指标','人','偏秩相关均值','95%区间','原BH q'],rows),
+        _paragraph('这是保留的三测点面板结果：同一记录跨窗口计算眼电RMS与失配平方量的秩关联，并控制EEG代理与Hb目标幅度；记录等权，再被试等权。这里不是空间热点的眼电回归，也不是本轮共同窗的重新估计。'),
+        _paragraph('D1仍有眼电相关性，Simultaneous尤其明显；不能因为它更稳定就称其更纯粹或已定位生理来源。Drive的关联较小也不能单独证明它更接近神经活动。两列未做新的配对眼电效应差检验，不能用两列p值大小给方法排序。'),
+        _paragraph('R_H并未在这份保留眼电面板中完成同样控制，不能将D1或Drive的眼电结论直接套用给比值指标。原反事实中清理EEG相对原代理有收益，但相对均值/SD匹配对照的区间跨零，尚不能归为眼源去除的独有贡献。')]))
+    rows=[];shapes=tables['retained_shape_subjects']
+    for ds in datasets:
+        def median_metric(metric,endpoint):
+            v=relaxed_repeat[relaxed_repeat.dataset.eq(ds)&relaxed_repeat.metric.eq(metric)&relaxed_repeat.endpoint.eq(endpoint)].value
+            return f'{fmt(v.median())} ({v.notna().sum()}/{len(v)})'
+        shape=shapes[shapes.dataset.eq(ds)&shapes.feature.eq('drive_E_H_correlation')].value
+        rows.append([labels[ds],median_metric('D_EH','raw_rho'),median_metric('D_EH','centered_rho'),
+            median_metric('D_drive_H','centered_rho'),fmt(shape.median())])
+    sections.append(section('14B. 辅助EEG读出误差与直接驱动形态',[
+        table(['数据集','DEH原空间ρ','DEH去模板ρ','Drive去模板ρ','直接驱动形态ρ'],rows),
+        _paragraph('前三列沿用宽松覆盖的全被试地图，括号为可用/计划人。DEH是Hb解的EEG读出与功率代理之间的差；它可以有重复的空间分布，而两条驱动在窗口内仍几乎不相关。'),
+        _paragraph('最后一列来自原三测点面板：每窗在评分支持去均值后计算EEG-only与Hb-only驱动的Pearson相关，先窗口、记录、被试汇总，再取被试中位数。它没有覆盖全通道波形，不能被当作全被试空间相关的同一端点。'),
+        _paragraph('低驱动形态相关是当前代理与条件模型的一致性限制；没有真实神经驱动测量，无法单凭此项判断哪条驱动正确。')]))
+    sections.append(section('15. 论文选择应对应可证明的科学问题',[
+        table(['判断维度','Hb观测−重建失配','EEG−Hb驱动分歧'],[
+            ['直接回答','当前固定模型能否描述处理Hb','当前EEG代理与Hb条件驱动是否相容'],
+            ['额外依赖','Hb处理、模型、驱动/初态正则化','另加EEG频带/PCA/空间代理、两次拟合与回放初态'],
+            ['可支持表述','可重复的模型失配空间表型','可重复的跨模态代理不一致'],
+            ['不能直接支持','异常生理来源或病理定位','真实神经血管解耦或神经驱动真值']]),
+        _paragraph('若论文主张是“稳定的个体血流模型失配”，应优先选择去模板后仍稳定、共同幅度对照仍成立、覆盖充分的Hb指标。若主张是“当前EEG代理不足以解释Hb驱动”，则驱动分歧可作为独立问题或次要分析，并同时报告隐藏Hb预测与代理/眼电敏感性。'),
+        _paragraph('依据本轮结果，更合适的论文安排是以Hb模型失配为主要分析，同时报告D1与R_H，避免仅靠原尺度稳定性；驱动分歧放在跨模态一致性的次要分析。REFED中R_H稳定性弱、归一化驱动指标相对更高的结果必须保留，不能将前三库叙述外推为普遍规律。'),
+        _paragraph('R_H与弱平衡偏离的空间关系比归一化驱动差更一致，因而“模型相容性不足”的解释更集中；但二者共享Hb与模型假设，这仅支持解释的一致性，不证明某个生理过程或脑区异常。'),
+        _paragraph('本轮可比较统计稳健性，不能仅凭同一批数据决定哪个指标更接近真实生理机制。保留眼电分析来自预先冻结的三位置面板，且只有部分数据集；相关、幅度匹配控制和回归敏感性均不能完成因果分离。'),
+        _paragraph('最终正文应公开指标选择发生在本次探索之后；避免选择单个优势数据集、单个热点或最小p值作为确认性结论。REFED与Visual的覆盖和条件差异应作为结果呈现。')]))
+    sections.append(section('附录：证据、复现和方法限制',[
+        _paragraph('Owning evidence：'+str(analysis/'summary.json')),
+        _paragraph('summary.json的files字段明确定位每张数值表：v1目录保留完整配对分析与四库分区，v2目录保留补充覆盖检验并引用原表；各版本的resolved_config.json固定口径，source保存执行源码，execution.log和launch.json记录独立后台服务。报告只汇总这些事实。'),
+        _paragraph('独立复核见v2目录verification_v2.json：逐窗共同掩码、618个被试级指标、70个记录地图/热点样本、2060个宽松被试端点和完整BH家族已复算通过；未读取原始信号。'),
+        _paragraph('这里没有重读受保护数据，没有重拟合或新增干预，也没有给生理解释打一个未经验证的综合分数。失败支持与不可评价人数不能视作零失配。'),
+        _paragraph('模型依据：Tak等，2015，Dynamic causal modelling for functional near-infrared spectroscopy，https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf 。光学混合和非皮层贡献仍是解释边界；原报告的机制文献不构成本轮因果证据。')]))
+    sections[-1]['blocks'].extend([
+        _paragraph('Kirilina等，2012，https://pmc.ncbi.nlm.nih.gov/articles/PMC3348501/ ：独立多模态测量支持头皮血流可贡献任务相关fNIRS变化，不能据此认定本研究热点来自头皮。'),
+        _paragraph('Yücel等，2015，https://pmc.ncbi.nlm.nih.gov/articles/PMC4717232/ ：短距离回归可改善不同自主反应任务的血流响应定位，提示需要独立浅表参照；本轮没有此项干预。')])
+    path=output/'report_content.json';path.write_text(json.dumps(content,ensure_ascii=False,indent=2)+'\n')
+    checks=render_report(path,output/'report')
+    shutil.copy2(Path(__file__),output/'renderer_source.py')
+    (output/'source_manifest.json').write_text(json.dumps(dict(schema='tak_disagreement_report_v1',owning_analysis=str(analysis/'summary.json'),
+        figures=figures,bitmap_figures=True,raw_signal_reads=0,model_fits=0),ensure_ascii=False,indent=2)+'\n')
+    return dict(output=str(output),pages=checks['exports']['TECHNICAL_REPORT.pdf']['pages'],figures=len(figures))
+
+
 def render_four_dataset_patterns(run, analysis, output):
     """Four-dataset synthesis using the corrected Visual numerical owner."""
     import shutil
@@ -4295,6 +4528,8 @@ def render_four_dataset_patterns(run, analysis, output):
     from src.analysis.tak_mismatch import HB_RATIO
     run, analysis, output = (Path(p).resolve() for p in (run, analysis, output))
     summary = _json(analysis/'summary.json')
+    if summary.get('schema')=='tak_mismatch_disagreement_comparison_v1':
+        return render_disagreement_comparison(run,analysis,output)
     if summary.get('schema')=='tak_mismatch_four_dataset_fixed_patterns_v1':
         return render_four_dataset_fixed_patterns(run,analysis,output)
     if (summary.get('schema') != 'tak_mismatch_four_dataset_patterns_v1'

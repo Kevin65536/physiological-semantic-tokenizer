@@ -179,7 +179,21 @@ regional contrasts, record-map stability and repeated high-mismatch locations.
 Top-quarter overlap and per-location persistence keep their missing-record
 denominators; they do not assume neighbouring channels are independent. The same
 renderer accepts this fixed-only summary and does not resume shared-parameter fits.
-Its scalp maps reuse the vertex-centred azimuthal-equidistant display projection,
+The all-subject disagreement comparison uses this same stage with
+`--fixed-only --disagreement-config <contract> --pattern-output <fresh_child> --workers 4`.
+[`tak_disagreement_comparison_v1.yaml`](configs/physiology_semantic_tokenizer/tak_disagreement_comparison_v1.yaml)
+matches retained windows before comparing Hb reconstruction residuals, independent
+drive Hb replay gaps, their common-amplitude ratios and EEG readout disagreement.
+It preserves failed support, strict window-coverage maps, paired subject effects,
+hotspot persistence, prediction baselines and an explicit relaxed-coverage sensitivity.
+[`v2`](configs/physiology_semantic_tokenizer/tak_disagreement_comparison_v2.yaml)
+reads only the completed v1 maps to finish the relaxed-coverage paired comparisons;
+it preserves v1 results and independently reproduces the retained subject statistics.
+The existing `--four-dataset-analysis` renderer accepts the resulting summary.
+Tests: `test_tak_disagreement_comparison.py`, `test_tak_mismatch_spatial.py`,
+`test_tak_mismatch_runner.py` and `test_tak_mismatch_report.py`.
+
+The fixed-pattern report's scalp maps reuse the vertex-centred azimuthal-equidistant display projection,
 with MNE full-head extrapolation and a dashed measured-node convex hull. REFED
 keeps its registered planar layout. Exported display coordinates are separate
 from the unchanged statistical locations and values.
@@ -559,6 +573,35 @@ Tests: `test_model_compatibility.py`, `test_model_compatibility_runner.py`,
 | Independent observation information and nonlinear counterfactuals | [`scripts/evaluate_hbo_hbr_calibration.py`](scripts/evaluate_hbo_hbr_calibration.py): `--check-only`, `--inventory-only`, bounded `--pilot N`, then full run under a durable supervisor with `--output-dir <fresh audit child>`; `--resume` retains atomic panel results | [`hbo_hbr_calibration_v1.yaml`](configs/physiology_semantic_tokenizer/hbo_hbr_calibration_v1.yaml): A metadata inventory, B conditional nonlinear recovery with independent optical/noise records; [A–D dependency contract](../docs/EXPERIMENT_PLAN.md#独立观测信息与非线性双向反事实2026-09-18), [v2 attribution contract](configs/physiology_semantic_tokenizer/hbo_hbr_calibration_v2.yaml) adds mean/noise factorials, oracle ablations, continuous context and profiles; actual-file audit uses `scripts/audit_hbo_hbr_calibration_sources.py`, bitmap report uses `scripts/render_hbo_hbr_calibration_report.py`; no teacher qualification | `test_hbo_hbr_calibration.py`; nonlinear sensitivities, optical/processing closure, paired counterfactuals, independent calibration, no-truth-start recovery array-free inventory, fixed-nuisance fitting, continuous common support and exact eta/matrix equivalence |
 
 ### Semantic and tokenizer development
+
+The 30-second global latent health pilot uses the same dual-component runner
+with [`dual_component_latent_health_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml).
+Run `--stage check`, `--stage synthetic --output <fresh-run>`, then supervised
+`--stage latent-health --output <same-run>`. Its metadata plan, retained Hb
+preparation, resource benchmark, continuous warmups and finite K128/K512 jobs
+share that run; `latent-health-plan`, `latent-health-prepare` and
+`latent-health-benchmark` expose the same stages for inspection. HbO/HbR are
+jointly reconstructed, with one latent ID per 2-second patch and independent
+S/O decoders over all 15 same-branch time patches. Only retained public
+train/validation Hb targets enter measured training. EEG uses synthetic
+interface checks pending the independent supervision decision. The
+[design](../docs/EXPERIMENT_PLAN.md#30-秒全局交互与潜在词表健康度起点2026-11-05)
+owns interpretation; `test_dual_component_latent_health.py` covers partition
+rejection, global support, branch isolation, integer replay, subject metrics,
+dataset-specific collapse and exact continuation budgets.
+
+The native-voltage target feasibility pilot uses the existing dual-component
+runner with [`dual_component_voltage_teacher_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_voltage_teacher_v1.yaml):
+`--stage check`, `--stage voltage-teacher-plan`, then supervised
+`--stage voltage-teacher-pilot` / `--stage voltage-teacher` and
+`--stage voltage-teacher-report --analysis-output <fresh-export>`.
+It compares retained S/O labels to an EOG-covariance Wiener estimate with and
+without a newly calibrated Tak power prior, on a fixed public development
+panel. Synthetic known-voltage recovery, paired-label identities and estimator
+responses to added artifacts/neural bursts are distinct endpoints. No tokenizer
+is trained. The [design](../docs/EXPERIMENT_PLAN.md#eeg-电压监督目标的有限可行性试验2026-11-05)
+owns the interpretation; `test_dual_component_voltage_teacher.py` covers the
+native transform, covariance, pairing and pre-read partition boundaries.
 
 The independent Tak-component/residual generation uses
 [`scripts/run_dual_component_tokenizer.py`](scripts/run_dual_component_tokenizer.py)

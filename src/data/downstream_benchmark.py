@@ -1,4 +1,4 @@
-"""Public v5 measurement inventory and subject folds for DOWNSTREAM-REBENCH-v1.
+"""Versioned downstream inventories and measurement adapters.
 
 Inventory construction reads the central manifest and event index only. Signal
 arrays are opened lazily by the existing unified loader, without normalization
@@ -16,6 +16,8 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import quote
 
 import numpy as np
+
+from .downstream_input_cache import DownstreamInputDataset
 
 from .clean_physiology_cache import (
     CleanPhysiologyCacheIndex,
@@ -56,6 +58,160 @@ EEG_ONLY_CHANNELS = {
     "visual_cognitive_motivation": ["Fp1", "Fp2", "F3", "F4", "FC3", "FC4", "C3", "C4", "CP3", "CP4", "P3", "P4", "O1", "O2", "Fz", "Cz"],
     "refed": ["FP1", "FP2", "F3", "F4", "FC3", "FC4", "C3", "C4", "CP3", "CP4", "P3", "P4", "O1", "O2", "FZ", "CZ"],
 }
+
+# The cache keeps dataset-native task names; the model/metric interface uses the
+# retained benchmark vocabulary. This mapping changes neither label order nor IDs.
+FROZEN_INPUT_TASKS = {**{name: name for name in TASKS},
+                      "visual": "visual_cognitive_motivation", "refed_regression": "emotion_video"}
+FROZEN_INPUT_WINDOW_SCHEMA = "downstream_input_v1"
+VISUAL_LEGACY_PHYSICAL_PANEL = [
+    "Fp1", "Fp2", "F3", "F4", "FC3", "FC4", "C3", "C4",
+    "F8", "T7", "CP3", "CP4", "PO3", "PO4", "Fz", "Cz",
+]
+
+
+def frozen_input_groups(samples: Sequence[Mapping[str, Any]], task: str,
+                        splits: Sequence[str]) -> list[list[int]]:
+    """Resolve one prediction per dependency before any measurement read.
+
+    Visual probe views carry the same EEG/event/label and are joined, including
+    single-probe events. Other datasets retain the cache's original window IDs.
+    """
+    if task not in FROZEN_INPUT_TASKS or not splits or not set(splits) <= {"train", "validation", "test"}:
+        raise ValueError("explicit known task and subject partitions are required")
+    groups: dict[str, list[int]] = {}
+    for index, row in enumerate(samples):
+        if row["task"] != FROZEN_INPUT_TASKS[task] or row["split"] not in splits:
+            continue
+        key = row["dependency_id"] if task == "visual" else row["id"]
+        members = groups.setdefault(key, [])
+        if members:
+            first = samples[members[0]]
+            for field in ("subject", "split", "dataset", "task", "class_index", "eeg_start_s", "duration_s"):
+                if row[field] != first[field]:
+                    raise ValueError(f"Visual dependency views disagree on {field}")
+            probes = [re.search(r"_Probe([12])$", str(samples[i]["record"]), re.I) for i in [*members, index]]
+            if any(probe is None for probe in probes) or len({probe.group(1) for probe in probes}) != len(probes):
+                raise ValueError("Visual dependency must have distinct documented probes")
+        members.append(index)
+    return [groups[key] for key in sorted(groups)]
+
+
+class FrozenInputBenchmarkDataset:
+    """Use the frozen downstream cache without rebuilding splits or signals.
+
+    Every modality shares a named EEG panel and the same event denominator.
+    ``legacy_visual16`` is an explicitly misselected physical-panel control,
+    never an alternative corrected channel contract. The caller chooses splits
+    explicitly; diagnostic entrypoints restrict them before constructing this
+    adapter. All methods receive HbO then HbR, with real probe-qualified names.
+    """
+
+    def __init__(self, cache_root: str | Path, *, task: str, splits: Sequence[str],
+                 eeg_panel: str = "matched16"):
+        if task not in FROZEN_INPUT_TASKS:
+            raise ValueError(f"unknown frozen-input task: {task}")
+        self.reader = DownstreamInputDataset(cache_root, task=FROZEN_INPUT_TASKS[task])
+        self.task = task
+        self.groups = frozen_input_groups(self.reader.samples, task, splits)
+        if not self.groups:
+            raise ValueError("empty frozen-input task/partition")
+        self.rows = [self.reader.samples[group[0]] for group in self.groups]
+        self.indices = list(range(len(self.groups)))
+        self.dataset_id = TASKS[task]["dataset_id"]
+        keys = sorted({self.reader.samples[i]["join_key"] for group in self.groups for i in group})
+        representative = self.reader.records[keys[0]]
+        measurement = representative.manifest["measurement"]
+        native_names = measurement["eeg_channel_names"]
+        if eeg_panel == "matched16":
+            requested = EEG_ONLY_CHANNELS[self.dataset_id]
+        elif eeg_panel == "native":
+            requested = native_names
+        elif eeg_panel == "legacy_visual16" and task == "visual":
+            requested = VISUAL_LEGACY_PHYSICAL_PANEL
+        else:
+            raise ValueError("unknown physical EEG panel")
+        names_by_case = {name.casefold(): name for name in native_names}
+        if len(names_by_case) != len(native_names) or any(name.casefold() not in names_by_case for name in requested):
+            raise ValueError("ambiguous or unavailable real EEG electrode")
+        eeg_names = [names_by_case[name.casefold()] for name in requested]
+        hb_geometry: dict[str, Any] = {}
+        native_hb = measurement["fnirs_channel_names"]
+        for key in keys:
+            record = self.reader.records[key]
+            meta = record.manifest["measurement"]
+            if ({name.casefold() for name in meta["eeg_channel_names"]} != set(names_by_case)
+                    or meta["fnirs_channel_names"] != native_hb):
+                raise ValueError("frozen task lacks a common real sensor panel")
+            probe = re.search(r"_Probe([12])$", record.base_record_id, re.I) if task == "visual" else None
+            if task == "visual" and probe is None:
+                raise ValueError("Visual record lacks a documented probe identity")
+            prefix = f"Probe{probe.group(1)}:" if probe else ""
+            rows = self.reader.geometry.for_channels(record=record, modality="fnirs", channel_names=native_hb)
+            for name, row in zip(native_hb, rows, strict=True):
+                hb_geometry.setdefault(prefix + name, dict(row, channel_name=prefix + name))
+        expected_hb = [f"{probe}:{name}" for probe in ("Probe1", "Probe2") for name in native_hb] if task == "visual" else native_hb
+        locations = list(dict.fromkeys(re.sub(r"_(HbO|HbR)$", "", name) for name in expected_hb))
+        hb_names = [f"{name}_{component}" for component in ("HbO", "HbR") for name in locations]
+        if set(hb_names) != set(expected_hb) or any(name not in hb_geometry for name in hb_names):
+            raise ValueError("Hb panel needs actual paired identities and geometry")
+        eeg_geometry = self.reader.geometry.for_channels(record=representative, modality="eeg", channel_names=eeg_names)
+        duration = 2.0 if task == "dsr" else 30.0
+        offset = 0.0 if task in {"dsr", "refed_regression"} else -5.0
+        if any(row["duration_s"] != duration for row in self.rows):
+            raise ValueError("cache window duration disagrees with frozen task")
+        self.profile = dict(
+            input_window_schema=FROZEN_INPUT_WINDOW_SCHEMA, window_start_s=offset,
+            duration_s=duration, input_samples=round(duration * 200), fnirs_samples=round(duration * 10),
+            target_samples=round(duration) if task == "refed_regression" else 1,
+            sampling_rate_hz=200.0, fnirs_sampling_rate_hz=10.0,
+            channel_names=eeg_names, fnirs_channel_names=hb_names, fnirs_location_names=locations,
+            fnirs_component_order="hbo_then_hbr", num_classes=len(TASKS[task]["classes"]),
+            classes=TASKS[task]["classes"], eeg_panel=eeg_panel,
+            eeg_geometry=eeg_geometry, fnirs_geometry=[hb_geometry[name] for name in hb_names],
+            eeg_unit=measurement["eeg_preprocessing_state"]["canonical_unit"],
+            input_plan=str(Path(cache_root).resolve() / "input_plan.json"),
+            visual_views="one_event_shared_EEG_concatenated_real_probes_missing_probe_masked",
+        )
+        self._hb_positions = {name: index for index, name in enumerate(hb_names)}
+
+    def __len__(self) -> int:
+        return len(self.groups)
+
+    def __getitem__(self, index: int) -> dict[str, Any]:
+        group, row = self.groups[index], self.rows[index]
+        parts = [self.reader[i] for i in group]
+        first = parts[0]
+        source_indices = {name.casefold(): i for i, name in enumerate(first["channel_names"]["eeg"])}
+        eeg_indices = [source_indices[name.casefold()] for name in self.profile["channel_names"]]
+        eeg = first["eeg"][eeg_indices]
+        eeg_mask = first["valid_mask"]["eeg"][eeg_indices]
+        hb = np.zeros((len(self.profile["fnirs_channel_names"]), self.profile["fnirs_samples"]), dtype=np.float64)
+        hb_mask = np.zeros(hb.shape, dtype=bool)
+        for part in parts:
+            if (not np.array_equal(part["eeg"][eeg_indices], eeg)
+                    or not np.array_equal(part["valid_mask"]["eeg"][eeg_indices], eeg_mask)):
+                raise ValueError("Visual probe views disagree on shared EEG")
+            probe = re.search(r"_Probe([12])$", part["record"], re.I) if self.task == "visual" else None
+            prefix = f"Probe{probe.group(1)}:" if probe else ""
+            for source, name in enumerate(part["channel_names"]["fnirs"]):
+                destination = self._hb_positions[prefix + name]
+                hb[destination] = part["fnirs"][source]
+                hb_mask[destination] = part["valid_mask"]["fnirs"][source]
+        if self.task == "refed_regression":
+            target, target_mask = first["label"]["values"], first["label"]["valid_mask"]
+        else:
+            target, target_mask = np.int64(first["label"]["class_index"]), np.bool_(True)
+        identity = row["dependency_id"] + "|offset=-5|duration=30|joined_probes" if self.task == "visual" else row["id"]
+        return dict(eeg=eeg, fnirs=hb, target=target, target_valid_mask=target_mask,
+                    channel_valid_mask=dict(eeg=eeg_mask, fnirs=hb_mask),
+                    valid_mask=dict(eeg=eeg_mask.any(0), fnirs=hb_mask.any(0)),
+                    sample_id=identity, subject_id=row["subject"], record_id=row["record"].split("_Probe")[0],
+                    split=row["split"], task_id=self.task, dataset_id=self.dataset_id,
+                    dependency_id=row["dependency_id"], source_sample_ids=[self.reader.samples[i]["id"] for i in group],
+                    channel_names=dict(eeg=self.profile["channel_names"], fnirs=self.profile["fnirs_channel_names"]),
+                    unit=first["unit"], window_start_s=self.profile["window_start_s"],
+                    window_duration_s=self.profile["duration_s"], output_coordinate="measurement")
 
 
 def _load_object(value: Mapping[str, Any] | str | Path) -> Mapping[str, Any]:

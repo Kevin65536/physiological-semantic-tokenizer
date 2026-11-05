@@ -313,9 +313,18 @@ class RebenchBrainFusionEstimator:
         if eeg_rate <= 0 or fnirs_rate <= 0 or eeg_rate % fnirs_rate:
             raise ValueError("BrainFusion needs an integer EEG/fNIRS sampling-rate ratio")
         self.duration_s = encoding_duration(self.task, profile)
+        default_grid = "physical_common_grid_v1" if profile.get("input_window_schema") == "downstream_input_v1" else "retained_sample_index_v1"
+        hrf_grid = str(profile.get("nvc_hrf_grid", default_grid))
+        if hrf_grid not in {"retained_sample_index_v1", "physical_common_grid_v1"}:
+            raise ValueError("unknown BrainFusion HRF time-grid contract")
         self.nvc_config = NVCConfig(
             eeg_sampling_rate_hz=eeg_rate, fnirs_sampling_rate_hz=fnirs_rate,
             eeg_window_samples=eeg_rate // fnirs_rate,
+            # Retained v1 used a 1 s kernel at 10 Hz, compressing physical time.
+            # Keep that replay identity; the explicit physical profile corrects
+            # the kernel sampling interval, without changing the NVC operator.
+            hrf_tr=1.0 / fnirs_rate if hrf_grid == "physical_common_grid_v1" else 1.0,
+            hrf_oversampling=1,
         )
         self.csp_config = CSPConfig(
             components_per_class=int(profile.get("components_per_class", 2)),
@@ -346,6 +355,10 @@ class RebenchBrainFusionEstimator:
             "selection_metric": "subject_equal_macro_f1_fixed_training_classes",
             "fnirs_component_order": profile.get("fnirs_component_order", "hbo_then_hbr"),
             "nvc_config": asdict(self.nvc_config),
+            "nvc_hrf_grid": hrf_grid,
+            "nvc_effective_kernel_step_s": 1.0 / fnirs_rate,
+            "nvc_declared_hrf_step_s": self.nvc_config.hrf_tr / self.nvc_config.hrf_oversampling,
+            "nvc_prewindow_state": "zero_padding_before_the_common_encoding_window",
             "feature_batch_size": int(profile.get("feature_batch_size", 32)),
             "unsupported_tasks": UNSUPPORTED_TASKS,
         }

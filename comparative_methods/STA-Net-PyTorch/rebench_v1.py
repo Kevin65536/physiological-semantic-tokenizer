@@ -183,7 +183,7 @@ class SameWindowSTANet(nn.Module):
         config = STANetConfig(
             task_type=task_type,
             output_dim=output_dim,
-            sequence_length=20 if task_type == "regression" else 1,
+            sequence_length=(int(duration) if profile.get("input_window_schema") == "downstream_input_v1" else 20) if task_type == "regression" else 1,
             dropout=float(profile.get("dropout", 0.5)),
             embedding_dim=int(profile.get("embedding_dim", 256)),
             attention_heads=int(profile.get("attention_heads", 10)),
@@ -213,7 +213,7 @@ class SameWindowSTANet(nn.Module):
             "fnirs_segment_starts": list(self.segment_starts),
             "extra_temporal_context_s": 0,
             "output_kind": self.output_kind,
-            "output_shape": ["B", output_dim, 20] if task_type == "regression" else ["B", output_dim],
+            "output_shape": ["B", output_dim, config.sequence_length] if task_type == "regression" else ["B", output_dim],
             "source_deviations": [
                 "canonical_real_channel_geometry_interpolated_to_fixed_grid",
                 "task_encoding_window_replaces_historical_3s_eeg_13s_hb_context",

@@ -34,18 +34,28 @@ def score_predictions(target: np.ndarray, prediction: np.ndarray, mask: np.ndarr
             record_scores = []
             for record in sorted(set(records[chosen])):
                 selected = chosen & (records == record)
-                dimensions = []
+                dimensions, maes, rmses = [], [], []
                 for dimension in range(2):
                     valid = mask[selected, dimension].astype(bool)
-                    dimensions.append(concordance(target[selected, dimension][valid], prediction[selected, dimension][valid]))
+                    y, p = target[selected, dimension][valid], prediction[selected, dimension][valid]
+                    dimensions.append(concordance(y, p))
+                    residual = np.asarray(p, dtype=float) - np.asarray(y, dtype=float)
+                    maes.append(float(np.abs(residual).mean()) if residual.size else None)
+                    rmses.append(float(np.sqrt(np.square(residual).mean())) if residual.size else None)
                 # A missing dimension stays an explicit failed record endpoint.
                 value = float(np.mean(dimensions)) if all(value is not None for value in dimensions) else None
                 record_scores.append(dict(record_id=record, score=value, ccc_by_dimension=dimensions,
+                                          mae_by_dimension=maes, rmse_by_dimension=rmses,
+                                          mae=float(np.mean(maes)) if all(v is not None for v in maes) else None,
+                                          rmse=float(np.mean(rmses)) if all(v is not None for v in rmses) else None,
                                           sample_count=int(selected.sum())))
             valid_records = [row["score"] for row in record_scores if row["score"] is not None]
             value = float(np.mean(valid_records)) if valid_records else None
             per_subject.append(dict(subject_id=subject, score=value, records=record_scores,
                                     record_count=len(record_scores), defined_record_count=len(valid_records), sample_count=int(chosen.sum())))
+            for error in ("mae", "rmse"):
+                values = [row[error] for row in record_scores]
+                per_subject[-1][error] = float(np.mean(values)) if all(v is not None for v in values) else None
         else:
             valid = mask[chosen].astype(bool)
             value = f1_score(target[chosen][valid], prediction[chosen][valid], labels=np.arange(num_classes), average="macro", zero_division=0)
@@ -64,6 +74,10 @@ def score_predictions(target: np.ndarray, prediction: np.ndarray, mask: np.ndarr
     if task != "refed_regression":
         valid = mask.astype(bool)
         result["pooled_balanced_accuracy"] = float(balanced_accuracy_score(target[valid], prediction[valid]))
+    else:
+        for error in ("mae", "rmse"):
+            values = [row[error] for row in per_subject]
+            result[error] = float(np.mean(values)) if all(v is not None for v in values) else None
     return result
 
 

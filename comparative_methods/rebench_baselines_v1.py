@@ -105,8 +105,14 @@ class SignalFeatures(nn.Module):
         self.use_fnirs = self.baseline_modality in {"fnirs", "multimodal"}
         self.supports_fnirs = self.use_fnirs
         self.sequence_features = task == "refed_regression"
-        self.segments = 20 if self.sequence_features else 1
         duration = int(encoding_duration(task, profile))
+        self.segments = duration if self.sequence_features else 1
+        if not self.sequence_features and profile.get("classification_segments", 1) != 1:
+            if profile.get("input_window_schema") != "downstream_input_v1":
+                raise ValueError("segmented classification features require the frozen downstream input")
+            self.segments = int(profile["classification_segments"])
+            if self.segments < 1 or duration % self.segments:
+                raise ValueError("classification segments must divide the physical window")
         self.input_samples = duration * 200
         self.fnirs_samples = duration * 10
         self.eeg_channels = len(profile.get("channel_names", ()))
@@ -132,6 +138,9 @@ class SignalFeatures(nn.Module):
         if self.use_fnirs:
             feature_names.extend(f"fnirs:{name}:{stat}" for name in profile["fnirs_channel_names"]
                                  for stat in ("mean", "population_sd", "slope_per_s", "input_coverage"))
+        if not self.sequence_features and self.segments > 1:
+            self.feature_dim *= self.segments
+            feature_names = [f"segment{segment}:{name}" for segment in range(self.segments) for name in feature_names]
         self.metadata = {
             "schema": "downstream_rebench_signal_features_v1",
             "method_identity": self.method_identity,
@@ -140,6 +149,7 @@ class SignalFeatures(nn.Module):
             "feature_dim": self.feature_dim,
             "feature_names": feature_names,
             "sequence_features": self.sequence_features,
+            "segment_count": self.segments,
             "supports_mask": True,
             "deterministic": True,
             "trainable_parameter_count": 0,
@@ -150,8 +160,8 @@ class SignalFeatures(nn.Module):
                 "band_boundaries": "low_inclusive_high_exclusive_except_45Hz_inclusive",
                 "formula": "log1p(sum_band(w_k*abs(rfft(m*(x-mean_valid)))^2)/(N*n_valid))",
                 "one_sided_weight": "1 at DC/Nyquist; 2 at other positive frequencies",
-                "segment_seconds": 1 if self.sequence_features else duration,
-                "frequency_spacing_hz": 1.0 if self.sequence_features else 1.0 / duration,
+                "segment_seconds": duration / self.segments,
+                "frequency_spacing_hz": self.segments / duration,
                 "partial_support": "zero_weight_invalid_samples; normalize_by_observed_count; no_interpolation; fewer_than_2_valid_samples_fixed_zero_and_feature_mask_false",
                 "limitation": "1s_REFED_has_1Hz_nominal_bins; shorter_or_gapped_support_has_mask_window_bias_and_poorer_effective_resolution",
             },
@@ -159,7 +169,7 @@ class SignalFeatures(nn.Module):
                 "source": "valid_native_sample_moments_and_OLS_time_slope",
                 "formula": "mean=sum_valid(x)/n; sd=sqrt(sum_valid((x-mean)^2)/n); slope=sum_valid((t-mean_t)*(x-mean))/sum_valid((t-mean_t)^2)",
                 "time_units": "seconds",
-                "segment_seconds": 1 if self.sequence_features else duration,
+                "segment_seconds": duration / self.segments,
                 "partial_support": "mean_sd_require_1_sample; slope_requires_2_distinct_times; unavailable_features_fixed_zero_and_feature_mask_false",
             },
             "coverage": "per_channel_n_valid/N; observed_even_when_zero; derived_only_from_selected_input_masks",
@@ -187,7 +197,7 @@ class SignalFeatures(nn.Module):
         output, supported = torch.cat(features, -1), torch.cat(supports, -1)
         present = torch.stack(recorded).any(0)
         if not self.sequence_features:
-            output, supported, present = output[:, 0], supported[:, 0], present[:, 0]
+            output, supported, present = output.flatten(1), supported.flatten(1), present.any(1)
         return output, supported, present
 
     def forward(self, eeg: torch.Tensor, fnirs: torch.Tensor | None = None, *,

@@ -45,6 +45,24 @@ def _profile():
     }
 
 
+def test_physical_hrf_grid_preserves_a_known_five_second_response_and_legacy_identity():
+    from nilearn.glm.first_level import spm_hrf
+    profile = {**_profile(), "input_window_schema": "downstream_input_v1", "window_start_s": -5.,
+               "duration_s": 30., "sampling_rate_hz": 200, "fnirs_sampling_rate_hz": 10}
+    physical = module.create_estimator(profile)
+    legacy = module.create_estimator({**profile, "nvc_hrf_grid": "retained_sample_index_v1"})
+    assert physical.nvc_config.hrf_tr == .1 and legacy.nvc_config.hrf_tr == 1.
+    kernel = spm_hrf(.1, oversampling=1, time_length=32)
+    assert len(kernel) == 320 and 4.5 <= kernel.argmax() / 10 <= 6.
+    eeg = torch.zeros(1, 1, 6000, dtype=torch.float64); eeg[..., 400:420] = 1
+    summary = eeg.numpy().reshape(300, 20).mean(1)
+    response = torch.as_tensor(np.convolve(summary, kernel)[:300]).reshape(1, 1, 300)
+    actual = physical._new_features()._nvc(eeg, response, -response).sum(-1)
+    old = legacy._new_features()._nvc(eeg, response, -response).sum(-1)
+    torch.testing.assert_close(actual, torch.tensor([[1., -1.]], dtype=torch.float64), atol=1e-12, rtol=1e-12)
+    assert abs(float(old[0, 0])) < .5
+
+
 def test_chunked_sufficient_statistics_match_dense_feature_algorithm():
     eeg, hb, labels, _, identities = _signals()
     estimator = module.create_estimator(_profile())

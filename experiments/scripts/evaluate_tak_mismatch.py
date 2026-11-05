@@ -2997,6 +2997,197 @@ def physiology_four_dataset_stage(parent, directory, spatial, panel_export, outp
     return {k:result[k] for k in ('schema','status','planned_subjects','shared_groups','shared_windows')}
 
 
+def _disagreement_dataset_job(payload):
+    """One independently resumable dataset; retained scalar files only."""
+    import pandas as pd
+    from src.analysis import tak_mismatch as analysis
+    dataset, windows, geometry, weak_maps, cfg, destination = payload
+    destination=Path(destination)
+    marker=destination/'summary.json'
+    if marker.exists():
+        summary=read_json(marker)
+        if summary.get('status')=='completed' and summary.get('config')==cfg:
+            return summary
+        raise ValueError('dataset resume contract mismatch')
+    destination.mkdir(exist_ok=True)
+    started=time.monotonic()
+    stat=cfg['statistics']
+    tables=analysis.disagreement_dataset_tables(windows,geometry,weak_maps,
+        bootstrap_samples=stat['bootstrap_samples'],permutation_samples=stat['permutation_samples'],seed=stat['seed'])
+    files={}
+    for name,frame in tables.items():
+        path=destination/(name+'.csv.gz')
+        frame.to_csv(path,index=False,compression='gzip');files[name]=path.name
+    summary=dict(dataset=dataset,status='completed',files=files,config=cfg,
+        planned_windows=len(windows),planned_subjects=windows.subject.nunique(),
+        common_windows=int(tables['window_support'].common_available.sum()),elapsed_s=time.monotonic()-started)
+    write_json(marker,summary)
+    return summary
+
+
+def read_disagreement_config(path):
+    cfg=yaml.safe_load(Path(path).read_text())
+    schemas={f'tak_disagreement_comparison_v{i}' for i in (1,2)}
+    if cfg.get('schema') not in schemas:raise ValueError('Unknown disagreement comparison schema')
+    owner=ROOT/'experiments/configs/physiology_semantic_tokenizer'/f"{cfg['schema']}.yaml"
+    expected=yaml.safe_load(owner.read_text())
+    if cfg!=expected:
+        raise ValueError('Versioned disagreement contract drift')
+    return cfg
+
+
+def _disagreement_coverage_job(payload):
+    from src.analysis import tak_mismatch as analysis
+    dataset,maps,cfg=payload;stat=cfg['statistics']
+    tables=analysis.fixed_population_patterns(maps,metrics=analysis.DISAGREEMENT_METRICS,
+        include_regions=False,require_window_coverage=False,bootstrap_samples=stat['bootstrap_samples'],
+        permutation_samples=stat['permutation_samples'],seed=stat['seed'])
+    paired=analysis.disagreement_paired_stability(tables)
+    paired['fdr_family']='relaxed_paired_stability_all_32'
+    return dataset,dict(relaxed_spatial_record_pairs=tables['spatial_record_pairs'],
+        relaxed_paired_stability_subjects=paired)
+
+
+def _disagreement_coverage_comparison(config,cfg,source_path,source,output,workers):
+    import pandas as pd
+    import shutil
+    from concurrent.futures import as_completed
+    from src.analysis import tak_mismatch as analysis
+    if source.get('status')!='completed':raise ValueError('Completed first comparison required')
+    output=Path(output).resolve()
+    if output.parent!=source_path.parent.parent or not output.name.startswith(cfg['output_prefix']):
+        raise ValueError('Coverage comparison belongs to the existing fixed-analysis owner')
+    output.mkdir(exist_ok=True)
+    if (output/'summary.json').exists():raise FileExistsError('Completed comparison is immutable')
+    start=time.monotonic();write_json(output/'resolved_config.json',cfg)
+    snapshot=output/'source';snapshot.mkdir(exist_ok=True)
+    for path in (Path(config),Path(__file__),Path(analysis.__file__)):shutil.copy2(path,snapshot/path.name)
+    maps=pd.read_csv(source_path.parent/source['files']['map_values'],dtype={'subject':str})
+    datasets=source['config']['scope']['datasets'];completed=[]
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futures={pool.submit(_disagreement_coverage_job,(ds,maps[maps.dataset.eq(ds)],cfg)):ds for ds in datasets}
+        for future in as_completed(futures):
+            ds,tables=future.result();completed.append(tables)
+            print(json.dumps(dict(dataset=ds,status='coverage_paired_completed',elapsed_s=time.monotonic()-start)),flush=True)
+    files={name:str((source_path.parent/path).resolve()) for name,path in source['files'].items()}
+    tables={name:pd.concat([d[name] for d in completed],ignore_index=True) for name in completed[0]}
+    old=pd.read_csv(source_path.parent/source['files']['relaxed_spatial_repeat_subjects'],dtype={'subject':str})
+    keys=['dataset','subject','metric'];endpoints=['raw_rho','centered_rho','hotspot_overlap','hotspot_excess']
+    recovered=tables['relaxed_spatial_record_pairs'].groupby(keys)[endpoints].median().reset_index().melt(
+        id_vars=keys,value_vars=endpoints,var_name='endpoint',value_name='recovered')
+    check=old.merge(recovered,on=keys+['endpoint'],validate='one_to_one')
+    if len(check)!=len(old) or not np.allclose(check.value,check.recovered,atol=1e-12,rtol=0,equal_nan=True):
+        raise ValueError('Coverage update changed retained subject statistics')
+    tables['relaxed_paired_stability_tests']=analysis._effect_summary(tables['relaxed_paired_stability_subjects'],
+        bootstrap_samples=cfg['statistics']['bootstrap_samples'],permutation_samples=cfg['statistics']['permutation_samples'],
+        seed=cfg['statistics']['seed'])
+    for name,frame in tables.items():
+        path=output/(name+'.csv.gz');frame.to_csv(path,index=False,compression='gzip');files[name]=path.name
+    result=dict(source,files=files,previous_comparison=str(source_path),coverage_config=cfg,
+        created_utc=datetime.now(timezone.utc).isoformat(),coverage_elapsed_s=time.monotonic()-start,
+        coverage_reproduction=dict(subject_endpoint_checks=len(check),maximum_absolute_difference=float((check.value-check.recovered).abs().max())))
+    write_json(output/'summary.json',result)
+    return result
+
+
+def physiology_disagreement_comparison(config, output, workers):
+    """Versioned all-subject secondary analysis; no signal access or fitting."""
+    import shutil
+    import pandas as pd
+    from src.analysis import tak_mismatch as analysis
+    config=Path(config).resolve();cfg=read_disagreement_config(config)
+    if not 1<=workers<=cfg['resources']['max_workers']:
+        raise ValueError('Worker count exceeds dataset work units')
+    source_path=(ROOT/cfg['source_summary']).resolve();source=read_json(source_path)
+    if cfg['schema']=='tak_disagreement_comparison_v2':
+        if source.get('schema')!='tak_mismatch_disagreement_comparison_v1':raise ValueError('Coverage update requires the completed first comparison')
+        return _disagreement_coverage_comparison(config,cfg,source_path,source,output,workers)
+    if source.get('schema')!='tak_mismatch_four_dataset_fixed_patterns_v1' or source.get('status')!='completed':
+        raise ValueError('Completed public fixed four-dataset source required')
+    owners=[Path(source['sources'][key]) for key in ('reference_fixed_summary','corrected_fixed_summary')]
+    summaries=[read_json(path) for path in owners]
+    if any(s.get('status')!='completed' or s.get('parameter_mode')!='fixed' or s.get('protected_data')!='forbidden' for s in summaries):
+        raise ValueError('Only completed public fixed evidence is admitted')
+    output=Path(output).resolve()
+    if output.parent!=source_path.parent.parent or not output.name.startswith(cfg['output_prefix']):
+        raise ValueError('Comparison output must be a fresh versioned child of the existing fixed analysis')
+    output.mkdir(exist_ok=True)
+    resolved=output/'resolved_config.json'
+    if resolved.exists() and read_json(resolved)!=cfg:
+        raise ValueError('Cannot resume a different comparison contract')
+    if (output/'summary.json').exists():
+        raise FileExistsError('Completed comparisons are immutable; select a fresh output')
+    write_json(resolved,cfg)
+    snapshot=output/'source';snapshot.mkdir(exist_ok=True)
+    for path in (config,Path(__file__),Path(analysis.__file__)):
+        target=snapshot/path.name
+        if target.exists() and target.read_bytes()!=path.read_bytes():
+            raise ValueError('Resume requires identical execution sources')
+        if not target.exists():shutil.copy2(path,target)
+    start=time.monotonic();write_json(output/'progress.json',dict(status='loading_retained_scalars',completed=[]))
+    columns=['dataset','subject','task_label','record_id','native_support_id','pair','window_start_s','parameter_mode',
+        'D1','D_drive_H','D_EH','zero_NMSE','prediction_NMSE','template_NMSE','wrong_NMSE',
+        'record_unit','repeat_id','repeat_kind','record_order']
+    inputs=[];geometries=[];weak=[]
+    for i,(owner,summary) in enumerate(zip(owners,summaries)):
+        data=pd.read_csv(owner.parent/summary['files']['windows'],usecols=columns,dtype={'subject':str},low_memory=False)
+        is_visual=data.dataset.eq('visual_cognitive_motivation');data=data[is_visual if i else ~is_visual]
+        inputs.append(data)
+        plan=read_json(source['sources']['corrected_plan' if i else 'reference_plan'])
+        geometry=analysis.spatial_geometry_from_plan(plan)
+        is_visual=geometry.dataset.eq('visual_cognitive_motivation');geometries.append(geometry[is_visual if i else ~is_visual])
+        maps=pd.read_csv(source['sources']['corrected_maps' if i else 'reference_maps'],dtype={'subject':str})
+        is_visual=maps.dataset.eq('visual_cognitive_motivation')
+        weak.append(maps[(is_visual if i else ~is_visual)&maps.metric.eq('D_bal_40s')])
+    windows=pd.concat(inputs,ignore_index=True);geometry=pd.concat(geometries,ignore_index=True);weak=pd.concat(weak,ignore_index=True)
+    if len(windows)!=source['planned_windows'] or windows.groupby('dataset').subject.nunique().sum()!=source['planned_subjects']:
+        raise ValueError('Source inventory denominator drift')
+    from src.data.unified_physiology import VISUAL_CHANNEL_IDENTITY_SCHEMA
+    visual=geometry[geometry.dataset.eq('visual_cognitive_motivation')]
+    if not visual.native_eeg_identity.eq(VISUAL_CHANNEL_IDENTITY_SCHEMA).all():
+        raise ValueError('Corrected Visual EEG identities required')
+    chunks=output/'datasets';chunks.mkdir(exist_ok=True)
+    payloads=[(ds,windows[windows.dataset.eq(ds)].copy(),geometry[geometry.dataset.eq(ds)].copy(),
+        weak[weak.dataset.eq(ds)].copy(),cfg,str(chunks/ds)) for ds in cfg['scope']['datasets']]
+    from concurrent.futures import as_completed
+    completed=[]
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futures={pool.submit(_disagreement_dataset_job,p):p[0] for p in payloads}
+        for future in as_completed(futures):
+            result=future.result();completed.append(result)
+            print(json.dumps(dict(dataset=result['dataset'],status='completed',elapsed_s=result['elapsed_s']),ensure_ascii=False),flush=True)
+            write_json(output/'progress.json',dict(status='analyzing_retained_scalars',
+                completed=[s['dataset'] for s in completed],elapsed_s=time.monotonic()-start))
+    tables={}
+    for item in completed:
+        for name,filename in item['files'].items():
+            tables.setdefault(name,[]).append(pd.read_csv(chunks/item['dataset']/filename,dtype={'subject':str}))
+    tables={key:pd.concat(values,ignore_index=True) for key,values in tables.items()}
+    # The family spans all four datasets; dataset-local q values are not final.
+    stat=cfg['statistics'];opts=dict(bootstrap_samples=stat['bootstrap_samples'],
+        permutation_samples=stat['permutation_samples'],seed=stat['seed'])
+    tables['paired_stability_tests']=analysis._effect_summary(tables['paired_stability_subjects'],**opts)
+    tables['prediction_baseline_tests']=analysis._effect_summary(tables['prediction_baseline_subjects'],**opts)
+    regional=tables['regional_contrasts'].query("level == 'subject' and contrast == 'posterior_minus_frontal'").copy()
+    regional['analysis']='regional';regional['endpoint']=regional.metric
+    regional['fdr_family']='exploratory_regions_2datasets_5metrics'
+    tables['regional_tests']=analysis._effect_summary(regional,**opts)
+    # Keep existing shape/EOG evidence explicitly secondary and separately sampled.
+    for name in ('shape_subjects','ocular_associations'):
+        tables['retained_'+name]=pd.read_csv(source_path.parent/source['files'][name],dtype={'subject':str})
+    files={}
+    for name,frame in tables.items():
+        path=output/(name+'.csv.gz');frame.to_csv(path,index=False,compression='gzip');files[name]=path.name
+    result=dict(schema='tak_mismatch_disagreement_comparison_v1',status='completed',
+        created_utc=datetime.now(timezone.utc).isoformat(),parent_run=source['parent_run'],
+        source_summary=str(source_path),sources=source['sources'],config=cfg,files=files,
+        planned_subjects=source['planned_subjects'],planned_windows=len(windows),
+        datasets={s['dataset']:{k:v for k,v in s.items() if k not in ('files','config','dataset')} for s in completed},
+        raw_signal_reads=0,model_fits=0,protected_reads=0,elapsed_s=time.monotonic()-start,workers=workers)
+    write_json(output/'summary.json',result);write_json(output/'progress.json',dict(status='completed',elapsed_s=result['elapsed_s']))
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
@@ -3010,11 +3201,18 @@ def main(argv=None):
     parser.add_argument('--pattern-output', type=Path, help='Fresh mechanism_patterns_* child of the fixed-physiology analysis')
     parser.add_argument('--reference-run', type=Path, help='Explicit retained four-dataset run for the corrected-Visual review')
     parser.add_argument('--fixed-only', action='store_true', help='Four-dataset fixed census review; no shared-fit dependency')
+    parser.add_argument('--disagreement-config', type=Path, help='Retained-scalar all-subject disagreement comparison contract')
     parser.add_argument('--spatial-examples', type=int, default=3, help='Illustrative subjects selected per dataset')
     parser.add_argument('--workers', type=int, default=1)
     parser.add_argument('--max-tasks', type=int, help='Explicit bounded throughput pilot; never marks the full campaign complete')
     parser.add_argument('--max-records', type=int, help='Prepare-only dataset-round-robin resource pilot; the complete plan is retained')
-    args = parser.parse_args(argv); cfg = read_config(args.config)
+    args = parser.parse_args(argv)
+    if args.disagreement_config:
+        if args.stage!='physiology-four-dataset' or not args.fixed_only or not args.pattern_output:
+            parser.error('disagreement comparison requires physiology-four-dataset, fixed-only and a fresh pattern-output')
+        result=physiology_disagreement_comparison(args.disagreement_config,args.pattern_output,args.workers)
+        print(json.dumps({k:result[k] for k in ('status','planned_subjects','planned_windows','elapsed_s')},ensure_ascii=False));return 0
+    cfg = read_config(args.config)
     if not 1 <= args.workers <= cfg['resources']['max_workers']: parser.error('workers outside reviewed resource envelope')
     if args.max_tasks is not None and (args.stage != 'run' or args.max_tasks < 1):
         parser.error('--max-tasks is a positive run-stage throughput pilot only')

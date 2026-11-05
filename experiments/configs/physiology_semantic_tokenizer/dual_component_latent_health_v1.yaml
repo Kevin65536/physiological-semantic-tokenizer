@@ -1,0 +1,86 @@
+schema: dual_component_latent_health_v1
+experiment_id: TK-DUAL-LATENT-HEALTH-v1
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml
+latent_health:
+  parent_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v3
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  measured_modality: hb
+  eeg_scope: synthetic_interface_only_pending_voltage_supervision_decision
+  target: retained_fixed_Tak_Hb_pair_S_and_full_fixed_residual_O
+  input: observed_HbO_HbR_pair_only_no_teacher_or_EEG_input
+  parent_steps: [250, 550]
+  event_support_s: [-5, 25]
+  seconds: 30
+  sample_rate_hz: 10
+  patch_seconds: 2
+  patches: 15
+  channels: 2
+  input_dim: 40
+  encoder_context: all_15_patches_within_one_optical_location
+  decoder_context: all_15_hard_IDs_of_the_same_branch_and_location
+  cross_modality: false
+  cross_branch_decoder: false
+  continuous_sidecars: false
+  normalization: frozen_parent_training_observation_SD_no_patch_centering
+  reconstruction_loss: equal_S_O_and_HbO_HbR_training_target_variance_normalized_MSE
+  minimum_target_variance: 0.01
+  seeds: [17, 29, 43]
+  candidates: [continuous, vq128, vq512]
+  codebook_sizes: [128, 512]
+  width: 64
+  latent_dim: 32
+  heads: 4
+  encoder_layers: 2
+  decoder_layers: 2
+  dropout: 0.0
+  warmup_steps: 1000
+  continuation_steps: 2000
+  batch_size: 64
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  gradient_clip: 5.0
+  checkpoint_every: 250
+  evaluation_batch_size: 128
+  initialization_rows: 256
+  kmeans_iters: 20
+  ema_decay: 0.99
+  commitment_cost: 0.25
+  dead_code_threshold: 0.1
+  revival_warmup_steps: 100
+  revival_interval: 50
+  revival_stop_after_steps: 1500
+  max_revivals_per_event: 8
+  health:
+    train_active_fraction: 0.95
+    validation_active_fraction: 0.90
+    effective_fraction: 0.50
+    maximum_code_probability: 0.08
+  health_scope: each_branch_each_dataset_and_pooled_train_validation_full_population
+  diagnostics: [independent_subject_record_coverage, latent_participation_rank, codebook_participation_rank, nearest_code_distance, revival_history, hard_minus_continuous_NMSE, context_replacement_ID_change]
+  primary: frozen_full_population_code_usage_not_last_batch_usage
+  secondary: separate_S_O_and_sum_HbO_HbR_subject_equal_NMSE
+  baseline: matched_total_exposure_continuous_model_from_the_same_seed_warmup
+  null: occupancy_or_effective_support_fails_in_either_branch_or_dataset
+  selection: none_all_fixed_candidates_and_seeds_reported
+  stopping: three_seed_warmups_then_nine_fixed_continuation_jobs_all_terminal
+  claim: engineering_health_screen_not_final_EEG_supervision_or_physiological_qualification
+resources:
+  devices: [cuda:0]
+  gpu_workers_per_device: 2
+  cpu_workers: 4
+  prepare_benchmark_workers: [1, 4]
+  benchmark_steps: 100
+  max_new_gpu_memory_mib: 3072
+  torch_threads: 2
+  numerical_threads: 1
+  max_in_flight_per_worker: 2
+  supervisor: user_systemd_linger
+claim_limits:
+- full_30s_context_tokens_are_not_independent_2s_observations
+- integer_decoder_reads_same_branch_sequence_only
+- HbO_HbR_joint_code_does_not_impose_fixed_anticorrelation
+- health_does_not_replace_separate_component_waveform_fidelity
+- EEG_supervision_not_selected_by_this_Hb_experiment
+- no_new_Tak_fitting_or_test_or_protected_data_or_masked_pretraining
+- retained_filter_and_reference_support_exceeds_nominal_30s_encoder_input

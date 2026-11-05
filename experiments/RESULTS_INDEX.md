@@ -16,6 +16,50 @@ scientific verdicts. Its owning record is
 and access boundaries remain in the [experiment plan](../docs/EXPERIMENT_PLAN.md)
 and [data contract](../docs/DATA_CONTRACT.md).
 
+## EEG voltage S/O target feasibility — 2026-11-05
+
+The [fixed public development contract](configs/physiology_semantic_tokenizer/dual_component_voltage_teacher_v1.yaml)
+compares the retained actual voltage labels with EOG-supported covariance
+estimation, its new-coordinate Tak power prior, and matched no-prior/shifted-prior
+controls. The completed [numerical summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2/summary.json)
+owns results; [independent array verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2/verification.json)
+checks original-label replay and saved intervention scores. Retain the
+[subject table](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2/intervention_subjects.csv),
+[paired physical contrasts](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2/physics_paired_comparisons.csv),
+[physical fit outcomes](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2/physical_fits.json)
+and [confidence calibration](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2/physical_variance.json).
+
+The [detailed illustrated report](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2/export_v3/index.html)
+links its bitmap PDF, full-electrode atlas and per-page array evidence. It
+distinguishes slow physical proxy/Hb reconstruction, native-voltage labels,
+paired-label identities and estimator responses. This is a target-generation
+pilot, not tokenizer training or clean-neural-voltage qualification.
+Preserve the initial [metadata serialization failure](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v1/interruption.json)
+and completed inputs; the [explicit reuse record](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2/input_reuse.json)
+identifies the unchanged numerical sources. The first report export remains
+retained; the revised export embeds a complete text font, adds native EOG
+evidence and the power-fusion explanation, and displays the neural intervention
+at an injected central electrode. The experiment and all-channel scores are
+unchanged. [PDF verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2/export_v3/pdf_verification.json)
+checks bitmap objects, searchable text, source text identity and the corrected
+illustrative electrode.
+
+## All-subject drive versus Hb disagreement — 2026-11-05
+
+The [paired comparison](runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/fixed_physiology_v2/four_dataset_disagreements_v2/summary.json)
+references the retained [strict-coverage analysis](runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/fixed_physiology_v2/four_dataset_disagreements_v1/summary.json)
+and adds the original-report coverage sensitivity on the same record pairs.
+Preserve both resolved contracts, source snapshots, common-window masks,
+record/subject maps, paired effects and complete multiple-testing families,
+persistent-hotspot denominators, independent-prediction baselines and validation.
+The comparison reads only retained public scalars and registered positions;
+it adds no fit or raw/protected signal access. Coverage failures remain evidence.
+
+The [Chinese comparison report](../docs/reports/interpretability_analysis/20261105_drive_vs_hb_disagreement_v3/report/TECHNICAL_REPORT.pdf)
+and [bitmap figure atlas](../docs/reports/interpretability_analysis/20261105_drive_vs_hb_disagreement_v3/report/FIGURE_ATLAS.pdf)
+separate matched statistical repeatability from unresolved physiological attribution.
+These exports summarize the owning numerical tables rather than define new state.
+
 ## Fixed four-dataset physiological patterns — 2026-11-04
 
 The [fixed-only synthesis](runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/fixed_physiology_v2/four_dataset_patterns_fixed_v2/summary.json)
@@ -409,6 +453,26 @@ The [teacher sensitivity record](runs/physiology_semantic_tokenizer/dual_compone
 preserves the unavailable distinct-alternative comparison. Example curves are
 under each explicit `masked/<route>/seed_<seed>/trace_eeg.png` and
 `trace_hb.png`; they use the first retained validation identity for illustration.
+
+The [30-second global latent health contract](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml)
+has a separate [public development plan](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/plan.json),
+[frozen execution source](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/source_manifest.json),
+[software checks](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/software_validation.json),
+[synthetic interface replay](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/synthetic.json)
+and [durable launch](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/launch.json).
+The [input slice/scale audit](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/input_verification.json)
+and [GPU concurrency measurements](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/benchmark.json)
+retain independent preparation checks and the measured worker choice.
+This generation evaluates paired HbO/HbR and separate S/O latent vocabularies;
+EEG's proposed voltage supervision remains outside its measured training scope.
+Its [complete fixed-matrix results](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/summary.json)
+retain every seed, per-dataset/branch health failure, continuous-reference
+reconstruction and context-replacement diagnostic. The
+[independent verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/verification_v1.json)
+recomputes usage and validation metrics, audits exact training budgets and
+integer decoding, and separates subject-level mean bias from centered error.
+The CPU/CUDA float32 replay difference is retained separately from the passing
+same-backend replay; it does not change saved predictions or health thresholds.
 
 Waveform/codebook refinement retains the parent teacher and training scales.
 Read each finite round's own summary:
@@ -1297,6 +1361,22 @@ Statistical-tier continuation in this lineage is abandoned; a new flow must defi
 its own question and evidence contract.
 
 ## Comparison methods
+
+The [2026-11-05 frozen-input diagnostic](../comparative_methods/downstream_input_audit_v1.yaml)
+retains the [production failure audit](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/production_diagnostics.json),
+[fixed train/validation sample plan](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/plan.json),
+[per-arm results](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/summary.json),
+[paired controls](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/paired_controls.json),
+and [independent prediction checks](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/verification.json).
+The [dated diagnostic report](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/report_v1.html)
+explains the production candidates, convergence limits and unresolved Visual/REFED
+results; the [complete endpoint table](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/cells.csv)
+retains all selected settings and controls.
+Its [bounded follow-up](../comparative_methods/downstream_input_followup_v1.yaml)
+checks the physical HRF time grid and actual REFED temporal output. Preserve the
+original controls, frozen sources, per-phase services and negative results.
+These validation-selected diagnostics share the new cache's partitions and
+cannot replace final test scores or be subtracted from the old five-fold means.
 
 The [2026-10-29 one-page downstream result brief v2](../docs/reports/interpretability_analysis/20261029_downstream_best_available_v2/REPORT.pdf)
 and [editable table](../docs/reports/interpretability_analysis/20261029_downstream_best_available_v2/best_available.csv)

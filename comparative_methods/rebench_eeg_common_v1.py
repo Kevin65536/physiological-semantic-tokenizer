@@ -25,7 +25,18 @@ CLASSIFICATION_TASKS = frozenset(
 def encoding_duration(task: str, profile: Mapping[str, Any]) -> float:
     """Preserve v1 defaults; explicitly identify the separate MA 30 s audit."""
     schema = profile.get("input_window_schema", "downstream_rebench_v1")
-    if schema == "ma_30s_diagnostic_v1":
+    if schema == "downstream_input_v1":
+        if task not in CLASSIFICATION_TASKS | {"refed_regression"}:
+            raise ValueError("unknown frozen-input task")
+        duration = 2.0 if task == "dsr" else 30.0
+        offset = 0.0 if task in {"dsr", "refed_regression"} else -5.0
+        if profile.get("window_start_s") != offset:
+            raise ValueError("frozen downstream input has a fixed event-relative start")
+    elif schema == "downstream_input_event_v1":
+        if task not in CLASSIFICATION_TASKS or profile.get("window_start_s") != 0:
+            raise ValueError("event-window control requires classification at event time zero")
+        duration = 2.0 if task == "dsr" else 8.0
+    elif schema == "ma_30s_diagnostic_v1":
         if task != "mental_arithmetic" or profile.get("window_start_s") != -5:
             raise ValueError("MA 30s diagnostic requires mental_arithmetic and [-5,25) support")
         duration = 30.0
@@ -53,8 +64,11 @@ def validate_profile(task: str, profile: Mapping[str, Any]) -> tuple[tuple[str, 
     if isinstance(raw_names, str):
         raise ValueError("channel_names must identify 16 distinct measured EEG channels")
     names = tuple(str(name) for name in raw_names)
-    if len(names) != 16 or len(set(names)) != 16 or any(not name for name in names):
-        raise ValueError("channel_names must identify 16 distinct measured EEG channels")
+    native_profile = profile.get("input_window_schema") in {"downstream_input_v1", "downstream_input_event_v1"}
+    if (not names or (not native_profile and len(names) != 16)
+            or len(set(names)) != len(names) or any(not name for name in names)):
+        raise ValueError("channel_names must identify distinct measured EEG channels" if native_profile
+                         else "channel_names must identify 16 distinct measured EEG channels")
     expected_samples = round(200 * encoding_duration(task, profile))
     if profile.get("input_samples", expected_samples) != expected_samples:
         raise ValueError(f"{task} requires {expected_samples} EEG samples")
@@ -128,14 +142,15 @@ class EEGRebenchFeatures(nn.Module):
     ) -> torch.Tensor:
         if fnirs is not None:
             raise ValueError("this adapter accepts EEG only")
-        if eeg.ndim != 3 or eeg.shape[0] < 1 or eeg.shape[1:] != (16, self.input_samples):
-            raise ValueError(f"EEG must have shape [B,16,{self.input_samples}] with B >= 1")
+        channels = len(self.channel_names)
+        if eeg.ndim != 3 or eeg.shape[0] < 1 or eeg.shape[1:] != (channels, self.input_samples):
+            raise ValueError(f"EEG must have shape [B,{channels},{self.input_samples}] with B >= 1")
         if float(kwargs.pop("sampling_rate_hz", self.sampling_rate_hz)) != self.sampling_rate_hz:
             raise ValueError("EEG rebenchmark adapters require 200 Hz")
         if tuple(kwargs.pop("channel_names", self.channel_names)) != self.channel_names:
             raise ValueError("EEG channel order differs from the fixed profile")
         for key, shape in (
-            ("channel_valid", (eeg.shape[0], 16)),
+            ("channel_valid", (eeg.shape[0], channels)),
             ("sample_valid", (eeg.shape[0], self.input_samples)),
         ):
             valid = kwargs.pop(key, None)

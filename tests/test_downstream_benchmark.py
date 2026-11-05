@@ -18,6 +18,7 @@ from src.data.downstream_benchmark import (
     make_splits,
 )
 from src.data.event_alignment import EVENT_ALIGNMENT_SCHEMA
+from src.data.unified_physiology import VISUAL_CHANNEL_IDENTITY_SCHEMA
 
 
 def _write_json(path, payload):
@@ -67,6 +68,11 @@ def measurement_cache(tmp_path):
                            homer2_aligned_contract=dict(alignment_state=dict(schema=PROCESSING_SCHEMA,
                                parameters=dict(motion_method="none"))),
                            preprocessing_scope="offline whole fixture record", source_files=[])
+                if task_id == "visual":
+                    # Synthetic signals are created in the declared electrode
+                    # order. This is not a relabelled retained Visual artifact.
+                    row["measurement"]["eeg_preprocessing_state"]["channel_identity"] = {
+                        "schema": VISUAL_CHANNEL_IDENTITY_SCHEMA, "source": "synthetic_named_channel_fixture"}
                 records.append(row)
                 event_record = "video_1" if task_id == "refed_regression" else record_id
                 for event_index, label in enumerate(classes):

@@ -1,0 +1,25 @@
+schema: downstream_input_audit_followup_v1
+experiment_id: DOWNSTREAM-INPUT-FOLLOWUP-v1
+parent_config: downstream_input_audit_v1.yaml
+scope: same_frozen_train_validation_inputs_no_new_test_access
+reason:
+  brainfusion: code_audit_found_1s_HRF_kernel_applied_at_10Hz_compressing_peak_to_0p6s
+  refed: verify_actual_30_step_STA_temporal_adaptation_before_deciding_production_readiness
+brainfusion:
+  tasks: [motor_imagery, mental_arithmetic, wg, nback, visual]
+  arm: brainfusion_physical
+  HRF_step_s: 0.1
+  kernel_duration_s: 32
+  oversampling: 1
+  unchanged: inputs_splits_seed17_CSP_base_learners_OOF_and_stacking_hyperparameters
+  comparator: initial_brainfusion_arms_retained_sample_index_v1
+refed:
+  task: refed_regression
+  arm: sta_net
+  actual_sequence_steps: 30
+  smoke_epochs: 2
+  fitting_budget: parent_neural_max30_min15_patience10_seed17
+  input_panel: same_corrected16_EEG_and102_paired_Hb_channels
+  targets: native_1Hz_valence_arousal_coordinate_mask_no_constant_embedding_broadcast
+stopping: five_paired_BrainFusion_fits_and_one_REFED_fit_after_shape_smoke_no_further_score_driven_search
+resources: parent_budget_wait_for_initial_screen_controller_before_launch

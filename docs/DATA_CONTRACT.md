@@ -347,6 +347,35 @@ be described as having a 20 s raw-input boundary. Fixed projection directions
 are checked for consistency within each dataset; new proxy scaling fits only
 training subjects. The same O targets and independent integer decoder remain.
 
+### EEG voltage teacher feasibility — 2026-11-05
+
+[`dual_component_voltage_teacher_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_teacher_v1.yaml)
+defines a new, bounded public development target generation. It selects the
+first and last complete nonoverlapping n-back 90-second windows for the named
+six training and five validation Simultaneous subjects from the retained
+dual-component identity plan, before reading signals. Native 200 Hz microvolt
+EEG, TP9 reference, genuine HEOG/VEOG, three ROI identities and exact cached Hb
+timestamps are preserved. Test/protected arrays are excluded. The original
+voltage labels are replayed and checked against retained float32 targets.
+
+One EOG-to-EEG transfer, low-EOG spectral background covariance, power floors
+and voltage RMS scales use only those training subjects. The full-spectrum
+invertible STFT yields a full-rank multichannel Wiener voltage estimate;
+EOG evidence supplies noise covariance, with zero artifact conditional mean.
+Noise-subtracted five-band powers receive a **new training PCA and scaling**;
+the fixed Tak core is fitted in that new coordinate. Training Hb-only fits
+calibrate a conservative physical-error variance floor. A failed physical fit
+is an explicit abstention with no-physics fallback, not a successful fit.
+
+Both labels remain native voltage: S is the estimate and O is raw minus S.
+Paired added-artifact labels keep the base S fixed and add the known disturbance
+to O. Separately recomputing the voltage estimator, while keeping the physical
+prediction and all training calibration frozen, is a conditional robustness
+diagnostic. It is not a newly fitted teacher or a trained tokenizer result.
+Full 90-second EEG processing and already bandpassed Hb are offline inputs.
+Natural data have no clean-neural-voltage ground truth; real-EOG correlations
+and low-EOG distortion are diagnostics, not proof of neural purification.
+
 ### v1 patch target (historical)
 
 The implemented v1 observation screen is retained as historical evidence. Its

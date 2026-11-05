@@ -735,15 +735,16 @@ def render_framework_20261029(output: Path, *, layout: str = "detailed") -> list
     from matplotlib import colors, font_manager, patches
     from PIL import Image
 
-    if layout not in {"detailed", "flow", "token_first"}:
-        raise ValueError("Framework layout must be detailed, flow or token_first")
+    if layout not in {"detailed", "flow", "token_first", "paper"}:
+        raise ValueError("Framework layout must be detailed, flow, token_first or paper")
     if output.exists() and any(output.iterdir()):
         raise ValueError("Use a fresh versioned export directory; retained exports are immutable")
     output.mkdir(parents=True, exist_ok=True)
-    regular = Path("/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc")
-    bold = regular.with_name("NotoSerifCJK-Bold.ttc")
+    font_family = "NotoSansCJK" if layout == "paper" else "NotoSerifCJK"
+    regular = Path(f"/usr/share/fonts/opentype/noto/{font_family}-Regular.ttc")
+    bold = regular.with_name(f"{font_family}-Bold.ttc")
     if not regular.exists() or not bold.exists():
-        raise FileNotFoundError("Noto Serif CJK regular and bold fonts are required")
+        raise FileNotFoundError(f"{font_family} regular and bold fonts are required")
     matplotlib.rcParams.update({
         "mathtext.fontset": "cm", "svg.fonttype": "none", "axes.unicode_minus": False,
         "savefig.facecolor": "white", "font.family": "serif",
@@ -751,6 +752,9 @@ def render_framework_20261029(output: Path, *, layout: str = "detailed") -> list
     ink, gray, line = "#282828", "#747474", "#A1A1A1"
     blue, orange, purple = "#306FB6", "#D18431", "#9160C0"
     red, teal, fill = "#D95757", "#229B94", "#F0F0F0"
+    if layout == "paper":
+        ink, gray, line = "#19232F", "#384451", "#536171"
+        blue, orange, purple = "#155E9A", "#A74D06", "#65338D"
     sources = [
         "docs/EXPERIMENT_PLAN.md", "docs/DATA_CONTRACT.md", "docs/ARCHITECTURE.md",
         "experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml",
@@ -770,11 +774,14 @@ def render_framework_20261029(output: Path, *, layout: str = "detailed") -> list
     class Plate:
         def __init__(self, name, title, subtitle, height, width=2000):
             self.name, self.height, self.title, self.width = name, height, title, width
-            self.fig = plt.figure(figsize=(width / 100, height / 100), dpi=100)
+            unit = 72 if layout == "paper" else 100
+            self.fig = plt.figure(figsize=(width / unit, height / unit), dpi=100)
             self.ax = self.fig.add_axes((0, 0, 1, 1))
             self.ax.set(xlim=(0, width), ylim=(height, 0))
             self.ax.axis("off")
             self.texts = []
+            if layout == "paper":
+                return
             self.t(65, 53, title, 25, boldface=True)
             self.t(65, 96, subtitle, 12.5, color=gray)
             self.t(width-85, 53, "结构示意 · 2026-10-29" if layout=="token_first" else "方法快照 · 2026-10-29",
@@ -783,7 +790,8 @@ def render_framework_20261029(output: Path, *, layout: str = "detailed") -> list
         def t(self, x, y, value, size=13, *, color=ink, ha="left", boldface=False):
             text = self.ax.text(x, y, value, va="center", ha=ha, fontsize=size,
                                 color=color, fontproperties=font_manager.FontProperties(
-                                    fname=bold if boldface else regular), linespacing=1.6)
+                                    fname=bold if boldface else regular),
+                                linespacing=1.25 if layout == "paper" else 1.6)
             self.texts.append(text)
             return text
 
@@ -795,7 +803,7 @@ def render_framework_20261029(output: Path, *, layout: str = "detailed") -> list
 
         def box(self, x, y, w, h, *, face="white", edge=line, dashed=False):
             self.ax.add_patch(patches.Rectangle((x, y), w, h, facecolor=face,
-                              edgecolor=edge, linewidth=1.05,
+                              edgecolor=edge, linewidth=1.1 if layout == "paper" else 1.05,
                               linestyle=(0, (4, 3)) if dashed else "solid"))
 
         def block(self, x, y, w, h, heading, detail="", *, dashed=False, face=fill):
@@ -813,7 +821,7 @@ def render_framework_20261029(output: Path, *, layout: str = "detailed") -> list
             if len(points) > 2:
                 self.segment(points[:-1], color=color, dashed=dashed, width=width)
             self.ax.add_patch(patches.FancyArrowPatch(points[-2], points[-1],
-                              arrowstyle="-|>", mutation_scale=11, linewidth=width,
+                              arrowstyle="-|>", mutation_scale=5 if layout == "paper" else 11, linewidth=width,
                               color=color, shrinkA=0, shrinkB=0,
                               linestyle=(0, (4, 2.6)) if dashed else "solid"))
 
@@ -887,7 +895,10 @@ def render_framework_20261029(output: Path, *, layout: str = "detailed") -> list
                 raise ValueError(f"Overlapping figure labels in {self.name}: {overlapping}")
             png, svg = output/f"{self.name}.png", output/f"{self.name}.svg"
             self.fig.savefig(png, dpi=300, metadata={"Description": metadata["Description"]})
-            self.fig.savefig(svg, metadata=dict(metadata, Title=self.title))
+            # Outlined glyphs keep the editable paper artwork portable across
+            # machines without relying on an installed CJK font collection.
+            with matplotlib.rc_context({"svg.fonttype": "path" if layout == "paper" else "none"}):
+                self.fig.savefig(svg, metadata=dict(metadata, Title=self.title))
             with Image.open(png) as original:
                 preview = original.convert("RGB")
                 preview.thumbnail((2200, 1800))
@@ -931,6 +942,241 @@ def render_framework_20261029(output: Path, *, layout: str = "detailed") -> list
                 "conditional voltage target adapter retained; not a claim of a completed integrated voltage campaign")
         (output/"figure_index.json").write_text(json.dumps(index,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
         return [path for pair in figures for path in pair]+[pdf_path]
+
+    if layout == "paper":
+        # A publication-size redraw of the user's 2026-10-29 token-first
+        # schematic, not a new model generation or a measured-data report.
+        # Geometry is in physical points, so font and stroke sizes survive
+        # insertion at 180 mm in a double-column manuscript.
+        page_width = 180 / 25.4 * 72
+        p = Plate("project_framework_paper", "Tak 教师引导的双分支 Tokenizer 与掩码预训练",
+                  "", 450, width=page_width)
+
+        def panel(x, y, w, h, title, *, tint, edge=line):
+            p.box(x, y, w, h, edge=edge)
+            p.ax.add_patch(patches.Rectangle((x + .6, y + .6), w - 1.2, 21,
+                                             facecolor=tint, edgecolor="none"))
+            p.t(x + 8, y + 11, title, 9.4, boldface=True)
+
+        def cell(x, y, w, h, lines, *, edge=line, face="white", size=8):
+            p.box(x, y, w, h, edge=edge, face=face)
+            for j, label in enumerate(lines):
+                p.t(x + w / 2, y + h * (j + .5) / len(lines), label,
+                    size, ha="center")
+
+        def port(x, y, label, color):
+            p.ax.add_patch(patches.Circle((x, y), 5.5, facecolor="white",
+                                          edgecolor=color, linewidth=1.2, zorder=5))
+            label_artist = p.t(x, y - .1, label, 7.3, color=color,
+                               ha="center", boldface=True)
+            label_artist.set_zorder(6)
+
+        def trace(x, y, w, h, component, modality):
+            color = blue if component == "S" else orange
+            p.box(x, y, w, h, edge=color)
+            t = np.linspace(0, 1, 120)
+            if modality == "E":
+                q = np.sin(2*np.pi*5*t) * (.65 + .25*np.cos(2*np.pi*t))
+                if component == "O":
+                    q *= np.exp(-((t-.5)/.25)**2)
+            else:
+                q = np.exp(-((t-.38)/.2)**2) - .35*np.exp(-((t-.8)/.17)**2)
+                if component == "O":
+                    q = .5*np.sin(2*np.pi*2*t)
+            xx = x + 3 + (w - 6)*t
+            p.ax.plot(xx, y + h*.61 - q*h*.24, color=color, lw=1.1)
+            if modality == "F":
+                p.ax.plot(xx, y + h*.5 + q*h*.19, color=color,
+                          lw=1.1, linestyle=(0, (2, 1.5)))
+
+        panel(3, 3, 148, 277, "(a)  Tak 条件教师", tint="#EEE7F5", edge=purple)
+        p.t(77, 35, "离线配对支持：90 s", 7.8, ha="center")
+        cell(12, 45, 130, 25, ["EEG 电位 + HbO / HbR"], size=8)
+        p.arrow([(77, 70), (77, 79)])
+        cell(12, 79, 130, 31, ["EEG 功率 / PCA", "Hb 对齐 / 参考"], size=8)
+        p.arrow([(77, 110), (77, 118)])
+        p.box(12, 118, 130, 44, face="#F5F0FA", edge=purple)
+        p.m(77, 126, r"\mathcal{L}_T=\mathcal{L}_{\rm fit}+\lambda_rR_r", 9.1, color=purple)
+        p.m(77, 140, r"+\,\lambda_0R_0+\lambda_fR_f", 9.1, color=purple)
+        p.t(77, 154, "拟合驱动与四初态；参数固定", 7.6, ha="center")
+        p.arrow([(77, 162), (77, 168)], width=1.1)
+        p.box(12, 168, 130, 44, face="#FAF8FC", edge=purple)
+        p.t(77, 177, "Tak 动力学 · RK4 积分", 8, ha="center", boldface=True)
+        for x, w, expression in [(17, 30, r"r(t)"), (59, 31, r"s,\ f"), (102, 35, r"v,\ q")]:
+            p.box(x, 187, w, 19, edge=line)
+            p.m(x + w/2, 196.5, expression, 9.5)
+        p.arrow([(47, 196.5), (58, 196.5)])
+        p.arrow([(90, 196.5), (101, 196.5)])
+        p.arrow([(32, 206), (32, 222)])
+        p.arrow([(119, 206), (119, 222)])
+        cell(12, 222, 61, 26, ["EEG 代理读出", "条件电压修正"], size=7.4)
+        cell(81, 222, 61, 26, ["HbO/HbR 读出", "时间箱 / 参考"], size=7.4)
+        for x in (42, 112):
+            p.arrow([(x, 248), (x, 256)], color=purple)
+        p.box(12, 256, 130, 18, edge=purple, face="#F5F0FA")
+        p.m(71, 265, r"S_m^*,\quad O_m^*=X_m-S_m^*", 9, color=purple)
+        port(138, 255, "T", purple)
+
+        panel(159, 3, 348, 277, "(b)  双分支 Tokenizer", tint="#E8EDF3")
+        p.t(167, 35, "编码器、码本与解码器均按模态及分支独立", 7.5)
+        p.t(497, 35, "HbO / HbR：实线 / 虚线", 7.3, ha="right")
+        for x, label in [(184, "观测"), (237, "编码"), (287, "VQ / token"),
+                         (337, "解码"), (386, "分量时序"), (456, "分量损失")]:
+            p.t(x, 48, label, 7.5, ha="center", boldface=True)
+
+        for modality, name, sub, off in [("E", "EEG", "电位", 0), ("F", "fNIRS", "HbO/HbR", 96)]:
+            if off:
+                p.segment([(166, 144), (492, 144)], color=line, width=.8)
+            p.box(166, 65 + off, 37, 48)
+            p.t(184.5, 76 + off, name, 8.2, ha="center", boldface=True)
+            p.t(184.5, 90 + off, sub, 7.3, ha="center")
+            p.m(184.5, 103 + off, rf"X_{modality}", 9)
+            for component, y, color, face in [("S", 61 + off, blue, "#EDF4FB"),
+                                              ("O", 94 + off, orange, "#FCF2E8")]:
+                cy = y + 12
+                p.arrow([(203, 89 + off), (210, 89 + off), (210, cy), (218, cy)])
+                cell(219, y, 36, 24, [f"{component} 编码"], edge=color, face=face, size=7.9)
+                p.arrow([(255, cy), (265, cy)])
+                p.box(266, y, 42, 24, edge=color, face=face)
+                p.t(287, y + 7, "VQ", 7.5, ha="center", boldface=True)
+                for j in range(4):
+                    p.ax.add_patch(patches.Rectangle((272 + j*8, y + 14), 6, 6,
+                                                     facecolor=color, edgecolor=ink, lw=.7))
+                p.arrow([(308, cy), (318, cy)])
+                cell(319, y, 36, 24, [f"{component} 解码"], edge=color, face=face, size=7.9)
+                p.arrow([(355, cy), (365, cy)])
+                trace(366, y, 41, 24, component, modality)
+                p.arrow([(407, cy), (420, cy)])
+                p.box(421, y, 70, 24, edge=purple, face="#F7F3FB")
+                p.m(456, cy, rf"\mathcal{{L}}_{{{modality},{component}}}(\hat {component}_{modality},{component}_{modality}^*)",
+                    8.8, color=purple)
+                p.ax.plot(313, cy, "o", color=ink, markersize=2.6)
+            # K identifies only integer IDs; decoded waveforms never feed the reader.
+            p.segment([(313, 73 + off), (313, 123 + off)], width=1.05)
+            p.arrow([(313, 123 + off), (302, 123 + off)], width=1.05)
+            port(196, 129 + off, "K", ink)
+            p.m(265, 129 + off, rf"K_{modality}=(k_{{{modality},S}},k_{{{modality},O}})", 8.5)
+            p.m(438, 127 + off, rf"\hat X_{modality}=\hat S_{modality}+\hat O_{modality}", 8.4)
+            p.t(438, 137 + off, "相加仅作重建诊断", 7.2, ha="center")
+
+        port(499, 48, "T", purple)
+        p.segment([(499, 54), (499, 202)], color=purple, dashed=True, width=1.1)
+        for y in (73, 106, 169, 202):
+            p.arrow([(499, y), (492, y)], color=purple, dashed=True, width=1.1)
+        p.t(167, 238, "VQ：EMA 更新码本；梯度直通；编码—码字承诺项", 7.3)
+        p.box(167, 246, 331, 27, face="#F7F3FB", edge=purple)
+        p.m(267, 255, r"\mathcal{L}_m=\mathcal{L}_{m,S}+\lambda_O\mathcal{L}_{m,O}+\beta\mathcal{L}_{m,\rm VQ}", 9, color=purple)
+        p.m(438, 255, r"\mathcal{L}_{\rm tok}=\frac{\mathcal{L}_E+\mathcal{L}_F}{2}", 9, color=purple)
+        p.t(332, 267, "分量损失：有效点上的均方误差，按训练观测尺度归一化", 7.3, ha="center")
+
+        panel(3, 288, 504, 136, "(c)  掩码预训练", tint="#E8F0EF")
+        p.t(496, 299, "冻结 Tokenizer；输入仅为四路整数 token", 7.5, ha="right")
+        p.arrow([(18, 319), (18, 327)])
+        p.arrow([(24, 317), (485, 317), (485, 343)], color=purple, dashed=True, width=1.1)
+        port(18, 317, "K", ink)
+        p.t(442, 330, "原 token 标签", 7.6, color=purple, ha="center")
+        p.box(12, 327, 86, 73)
+        for row, (name, color) in enumerate([(r"E_S", blue), (r"E_O", orange),
+                                             (r"F_S", blue), (r"F_O", orange)]):
+            y = 338 + row*13
+            p.m(28, y, name, 8.5)
+            for j in range(5):
+                masked = j in (2, 3)
+                p.ax.add_patch(patches.Rectangle((43 + j*10, y - 4), 8, 8,
+                    facecolor="#CBD0D5" if masked else color,
+                    edgecolor=ink, linewidth=.7, hatch="//" if masked else None))
+        p.t(55, 392, "时间块 / 模态块", 7.4, ha="center")
+        p.t(55, 412, "S/O 同步遮挡", 7.5, ha="center")
+        p.arrow([(98, 365), (108, 365)])
+        cell(109, 340, 75, 51, ["Token embedding", "+ 时间位置编码", "+ 模态 / 分支编码"],
+             face="#F3F5F7", size=7.7)
+        p.arrow([(184, 365), (194, 365)])
+        p.box(195, 331, 112, 68, face="#F0F5F4")
+        p.t(251, 341, "Transformer × 2", 9, ha="center", boldface=True)
+        cell(201, 351, 100, 18, ["LN → 多头注意力 → 残差"], size=7.4)
+        p.arrow([(251, 369), (251, 376)])
+        cell(201, 376, 100, 18, ["LN → 前馈网络 → 残差"], size=7.4)
+        p.segment([(301, 385), (304, 385), (304, 365), (307, 365)], width=1.1)
+        p.arrow([(307, 365), (318, 365)])
+        cell(319, 343, 63, 42, ["四路预测头", "各自词表概率"], size=8)
+        p.arrow([(382, 365), (394, 365)])
+        p.box(395, 343, 101, 42, edge=purple, face="#F7F3FB")
+        p.m(445.5, 355, r"\mathcal{L}_{\rm mask}", 12, color=purple)
+        p.t(445.5, 373, "遮挡位置交叉熵", 7.8, ha="center")
+        p.arrow([(307, 365), (312, 365), (312, 412), (318, 412)], color=gray, dashed=True, width=1.05)
+        p.box(319, 404, 63, 16, dashed=True, edge=gray)
+        p.t(350.5, 412, "任务头 → 输出", 7.3, ha="center")
+        p.arrow([(382, 412), (394, 412)], color=gray, dashed=True, width=1.05)
+        p.box(395, 404, 101, 16, dashed=True, edge=gray)
+        p.t(445.5, 412, r"$\mathcal{L}_{\rm task}$ · 下游接口", 8, ha="center")
+
+        p.arrow([(6, 435), (22, 435)], width=1.2)
+        p.t(27, 435, "前向数据流", 7.5)
+        p.arrow([(98, 435), (114, 435)], color=purple, dashed=True, width=1.1)
+        p.t(119, 435, "冻结目标监督", 7.5, color=purple)
+        p.t(207, 435, "S：条件分量", 7.6, color=blue)
+        p.t(290, 435, "O：固定残差", 7.6, color=orange)
+        p.t(374, 435, "同字母端口相连：T 目标 / K token", 7.3)
+        p.t(6, 446, "E = EEG，F = fNIRS；波形仅作结构示意。教师目标是条件估计，保留原测量坐标。", 7.2)
+        figure = p.save()
+
+        # Keep the insertable PDF at the exact publication dimensions. Its one
+        # figure is a complete PNG image object, per the project's PDF contract.
+        figure_pdf = output / "project_framework_paper.pdf"
+        with fitz.open() as pdf:
+            page = pdf.new_page(width=page_width, height=p.height)
+            page.insert_image(page.rect, filename=str(figure[0]))
+            pdf.set_metadata({"title": p.title, "subject": metadata["Description"]})
+            pdf.save(figure_pdf, deflate=True)
+        caption = (
+            "图 1  Tak 教师引导的双分支 Tokenizer 与掩码预训练。"
+            "(a) 教师在离线 90 秒配对支持上拟合共享驱动 r(t) 与四个初态；Tak 参数固定，"
+            "s、f 为血流响应状态，v、q 为血容量与脱氧状态，RK4 为四阶 Runge–Kutta 积分。"
+            "Rr、R0、Rf 分别约束驱动平滑、初态先验和血流先验。EEG 经条件电压修正、"
+            "Hb 经时间箱及参考变换后形成冻结目标 T。S* 是条件模型估计，O*=X−S*。"
+            "(b) m∈{E,F} 分别表示 EEG 与 fNIRS；四个分支均为编码、VQ、时序解码路径，"
+            "参数各自独立。VQ 为向量量化，EMA 为指数移动平均；承诺项是编码向量与停止"
+            "梯度的选中码字之间的均方差。分量误差先在有效点上按训练观测尺度归一化，"
+            "再等权汇总两个模态；分量之和只用于重建诊断。Hb 时序图中实线与虚线分别"
+            "示意 HbO 与 HbR。(c) K 汇集四路冻结整数 token；灰色斜线格为遮挡位置，"
+            "S/O 同步遮挡。原 token 只作为遮挡交叉熵的标签，教师目标与解码波形不输入"
+            "预训练模型。LN 为层归一化，两个 Transformer 层共享跨模态上下文，四路预测头"
+            "各自进行词表分类；任务头与任务标签损失仅标为下游接口。本图沿用 2026-10-29"
+            "的先量化后解码架构表达，不声明该完整电压组合已经完成实验验证。"
+        )
+        atlas = output / "project_framework_paper_captioned.pdf"
+        with fitz.open() as pdf:
+            page = pdf.new_page(width=page_width + 36, height=p.height + 205)
+            page.insert_image(fitz.Rect(18, 12, 18 + page_width, 12 + p.height), filename=str(figure[0]))
+            page.insert_font(fontname="caption", fontfile=str(regular))
+            remaining = page.insert_textbox(fitz.Rect(18, p.height + 24, 18 + page_width, p.height + 192),
+                                            caption, fontname="caption", fontsize=8, lineheight=1.4)
+            if remaining < 0:
+                raise ValueError("Paper figure caption exceeds the searchable caption area")
+            # FontTools handles this CJK collection reliably; MuPDF's native
+            # subsetter reports a charstring error and retains the entire font.
+            pdf.subset_fonts(fallback=True)
+            pdf.save(atlas, garbage=4, deflate=True)
+        with fitz.open(figure_pdf) as check, fitz.open(atlas) as caption_check:
+            if (len(check[0].get_images()) != 1 or check[0].get_drawings()
+                    or len(caption_check[0].get_images()) != 1 or not caption_check[0].get_text().strip()):
+                raise ValueError("Paper PDFs require complete bitmap figures and a searchable companion caption")
+        index = {
+            "kind": "dated_framework_export", "snapshot_date": "2026-10-29",
+            "export_date": "2026-11-05", "layout": "paper", "sources": sources,
+            "generator": str(Path(__file__).relative_to(REPO_ROOT)),
+            "waveforms": "illustrative_not_experiment_results", "dpi": 300,
+            "figure_size_mm": [180, p.height / 72 * 25.4],
+            "minimum_font_pt": 7.2, "main_stroke_pt": 1.25, "box_stroke_pt": 1.1,
+            "figures": [{"png": figure[0].name, "svg": figure[1].name}],
+            "pdf": figure_pdf.name, "captioned_pdf": atlas.name,
+            "pdf_figures": "one_complete_png_image_object_per_page; companion_caption_selectable",
+            "architecture_basis": "Publication redraw of the 2026-10-29 user-requested token-first schematic; "
+                                  "not a claim of a completed integrated voltage campaign",
+            "caption": caption,
+        }
+        (output / "figure_index.json").write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return [*figure, figure_pdf, atlas]
 
     if layout == "token_first":
         # This view follows the user's requested architecture, not the experimental
@@ -1495,8 +1741,8 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="Fail when output differs from a fresh render")
     parser.add_argument("--framework-20261029", action="store_true",
                         help="Export the dated Tak/voltage framework PNG, SVG and bitmap PDF atlas to a fresh directory")
-    parser.add_argument("--framework-layout", choices=("detailed", "flow", "token_first"), default="detailed",
-                        help="Use flow for the compact current projection, or token_first for the requested encoder/VQ/decoder/consumer architecture")
+    parser.add_argument("--framework-layout", choices=("detailed", "flow", "token_first", "paper"), default="detailed",
+                        help="Use flow for the compact current projection, token_first for the encoder/VQ/decoder/consumer architecture, or paper for its 180 mm publication redraw")
     args = parser.parse_args()
 
     if args.framework_20261029:

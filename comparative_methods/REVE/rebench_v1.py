@@ -31,7 +31,7 @@ class REVERebenchFeatures(EEGRebenchFeatures):
             device=position_bank.embedding.device,
         )
         positions = position_bank.embedding[indices].detach().clone()
-        if positions.shape != (16, 3) or not bool(torch.isfinite(positions).all()):
+        if positions.shape != (len(self.channel_names), 3) or not bool(torch.isfinite(positions).all()):
             raise ValueError("invalid REVE official electrode coordinates")
         self.register_buffer("positions", positions)
 
@@ -45,7 +45,7 @@ class REVERebenchFeatures(EEGRebenchFeatures):
         positions = self.positions.unsqueeze(0).expand(eeg.shape[0], -1, -1).to(eeg)
         tokens = self.encoder(eeg=eeg, pos=positions)
         patches = 1 + (eeg.shape[-1] - 200) // 180
-        if tokens.shape != (eeg.shape[0], 16, patches, self.feature_dim):
+        if tokens.shape != (eeg.shape[0], len(self.channel_names), patches, self.feature_dim):
             raise RuntimeError(f"invalid REVE latent token shape: {tuple(tokens.shape)}")
         return self.encoder.attention_pooling(tokens)
 

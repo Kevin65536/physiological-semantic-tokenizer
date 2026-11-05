@@ -16,6 +16,15 @@ runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
 
 
+def test_native_array_scalars_are_json_serializable(tmp_path):
+    import json
+    path = tmp_path/'calibration.json'
+    runner.write_json(path, dict(threshold=np.asarray(1.25), frames=np.asarray(123),
+        transfer=np.eye(2), missing=np.asarray(np.nan)))
+    assert json.loads(path.read_text()) == dict(threshold=1.25, frames=123,
+        transfer=[[1., 0.], [0., 1.]], missing=None)
+
+
 @pytest.fixture
 def small_cfg():
     return dict(schema='synthetic_runner_fixture', experiment_id='non_measured_fixture',
