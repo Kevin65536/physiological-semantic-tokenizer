@@ -7,6 +7,7 @@ import pytest
 from scipy.io import savemat
 
 from src.data.channel_geometry import (
+    project_head_topview,
     records_from_mnt,
     records_from_refed_coordinates,
     records_from_refed_paper_layout,
@@ -14,6 +15,32 @@ from src.data.channel_geometry import (
     records_from_visual_fnirs_reference,
     records_from_visual_fnirs_graphical_projection,
 )
+
+
+def test_angular_topview_preserves_direction_and_unfolds_frontal_latitudes():
+    def point(degrees, scale=1):
+        theta = np.deg2rad(degrees)
+        return dict(x=0., y=scale*np.sin(theta), z=scale*np.cos(theta),
+                    coordinate_system="dataset_mnt_pos_3d")
+    upper, lower = point(70), point(80)
+    projected = [project_head_topview(row, projection="azimuthal_equidistant")
+                 for row in (upper, lower)]
+    np.testing.assert_allclose(projected, [[0., 70/90], [0., 80/90]])
+    assert projected[1][1]-projected[0][1] > lower["y"]-upper["y"]
+    np.testing.assert_allclose(project_head_topview(point(70, 100),
+        projection="azimuthal_equidistant"), projected[0])
+    np.testing.assert_allclose(project_head_topview(dict(x=1.,y=0.,z=1.,
+        coordinate_system="dataset_mnt_pos_3d"), projection="azimuthal_equidistant"), [.5,0])
+    np.testing.assert_allclose(project_head_topview(dict(x=1.,y=0.,z=1.,
+        coordinate_system="EEGLAB_CED_cartesian"), projection="azimuthal_equidistant"), [0,.5])
+    np.testing.assert_array_equal(project_head_topview(dict(x=0.,y=0.,z=1.,
+        coordinate_system="dataset_mnt_pos_3d"), projection="azimuthal_equidistant"), [0.,0.])
+    plane = dict(x=-.2,y=.7,z=0.,coordinate_system="refed_paper_layout_2d_v1")
+    np.testing.assert_array_equal(project_head_topview(plane,
+        projection="azimuthal_equidistant"), [-.2,.7])
+    with pytest.raises(ValueError, match="Undefined spherical"):
+        project_head_topview(dict(x=0.,y=0.,z=0.,coordinate_system="dataset_mnt_pos_3d"),
+                             projection="azimuthal_equidistant")
 
 
 def test_records_from_mnt_preserves_channel_coordinates_and_sd(tmp_path):

@@ -38,11 +38,13 @@ import yaml
 from src.inference.t3a_balloon_robust_ssm import BalloonFixedParameters, BalloonFreeParameters, BalloonParameters
 
 DEFAULT_CONFIG = ROOT/'experiments/configs/physiology_semantic_tokenizer/tak_mismatch_v1.yaml'
+VISUAL_CONFIG = ROOT/'experiments/configs/physiology_semantic_tokenizer/tak_mismatch_visual_corrected_v2.yaml'
 DEFAULT_PHYSIOLOGY_CONFIG = ROOT/'experiments/configs/physiology_semantic_tokenizer/tak_mismatch_fixed_physiology_v1.yaml'
+VISUAL_PHYSIOLOGY_CONFIG = ROOT/'experiments/configs/physiology_semantic_tokenizer/tak_mismatch_visual_physiology_v2.yaml'
 ARTIFACT_ROOT = 'experiments/runs/physiology_semantic_tokenizer/tak_mismatch'
 PHYSIOLOGY_STAGES = ('physiology-extract', 'physiology-analyze', 'physiology-ocular', 'physiology-counterfactual', 'physiology-shapes')
-STAGES = ('check', 'synthetic', 'plan', 'prepare', 'run', 'summarize', 'audit-status', 'plot-plan', 'plot-run',
-          'physiology-topography', *PHYSIOLOGY_STAGES)
+STAGES = ('check', 'synthetic', 'plan', 'prepare', 'run', 'fixed-run', 'summarize', 'audit-status', 'plot-plan', 'plot-run',
+          'physiology-topography', 'physiology-patterns', 'physiology-four-dataset', *PHYSIOLOGY_STAGES)
 CANDIDATES = ('nearest6', 'sixth_to_seventh', 'next6', 'random6')
 METRICS = ('D1', 'D_EH', 'D_obs', 'D_obs_ar1_sd0p05', 'D_obs_ar1_sd0p2', 'D_obs_iid_sd0p1',
            'D_drive_H', 'Delta_spatial', 'D4', 'D_J_E', 'D_J_O', 'D_J_R',
@@ -90,11 +92,15 @@ def token(identity):
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
-    expected = yaml.safe_load(DEFAULT_CONFIG.read_text())
+    contracts = {'tak_mismatch_v1': DEFAULT_CONFIG,
+                 'tak_mismatch_visual_corrected_v2': VISUAL_CONFIG}
+    if cfg.get('schema') not in contracts:
+        raise ValueError('Unknown versioned Tak mismatch contract')
+    expected = yaml.safe_load(contracts[cfg['schema']].read_text())
     for key in expected:
         if key not in ('solver', 'resources') and cfg.get(key) != expected[key]:
             raise ValueError(f'versioned Tak mismatch contract drift: {key}')
-    if cfg.get('schema') != 'tak_mismatch_v1' or cfg.get('artifact_root') != ARTIFACT_ROOT:
+    if cfg.get('artifact_root') != ARTIFACT_ROOT:
         raise ValueError('wrong versioned Tak mismatch namespace')
     flexible = {'max_iterations', 'max_evaluations_per_trial', 'gradient_tolerance'}
     for key, value in expected['solver'].items():
@@ -254,6 +260,7 @@ def _prepare_record_job(payload):
         arrays = prepare_tak_mismatch_record(Path(root), record,
             cache_root=cfg['data']['cache_root'], geometry_root=cfg['data']['geometry_root'],
             refed_geometry_root=cfg['data']['refed_geometry_root'], seed=cfg['seed'],
+            visual_eeg_channel_identity=cfg['data'].get('visual_eeg_channel_identity'),
             index=_metadata_index(str(root), cfg['data']['cache_root']))
         metadata = arrays.pop('metadata', {})
         numeric = {key: value for key, value in arrays.items()
@@ -871,7 +878,7 @@ def task_chunks(cfg, out, plan, *, max_tasks=None, selected_tasks=None):
     if active: yield cfg, str(out), records[record_id], active
 
 
-def run_stage(cfg, out, plan, workers, *, max_tasks=None):
+def run_stage(cfg, out, plan, workers, *, max_tasks=None, include_current_dof=True):
     coordinates = coordinate_stage(cfg, out, plan)
     spatial_selection_stage(cfg, out, plan, coordinates, workers)
     selected_tasks = None if max_tasks is None else pilot_task_manifest(cfg, plan, max_tasks)
@@ -893,7 +900,7 @@ def run_stage(cfg, out, plan, workers, *, max_tasks=None):
         workers=workers, numerical_threads=1,
         status_counts=dict(sum((Counter(chunk['statuses']) for chunk in results), Counter())))
     write_json(Path(out)/('run_summary.json' if max_tasks is None else 'pilot_summary.json'), result)
-    if max_tasks is None:
+    if max_tasks is None and include_current_dof:
         companion = globals().get('current_dof_stage')
         if companion is not None:
             result['current_dof'] = companion(cfg, out, plan, workers)
@@ -1872,7 +1879,11 @@ PHYSIOLOGY_WEAK_FIELDS = ('dataset', 'subject', 'record_id', 'record', 'task_lab
 
 def read_physiology_config(path=DEFAULT_PHYSIOLOGY_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
-    expected = yaml.safe_load(DEFAULT_PHYSIOLOGY_CONFIG.read_text())
+    contracts = {'tak_mismatch_fixed_physiology_v1': DEFAULT_PHYSIOLOGY_CONFIG,
+                 'tak_mismatch_visual_physiology_v2': VISUAL_PHYSIOLOGY_CONFIG}
+    if cfg.get('schema') not in contracts:
+        raise ValueError('Unknown fixed-physiology version')
+    expected = yaml.safe_load(contracts[cfg['schema']].read_text())
     for key, value in expected.items():
         if cfg.get(key) != value:
             raise ValueError(f'versioned fixed-physiology contract drift: {key}')
@@ -1884,7 +1895,7 @@ def _physiology_directory(cfg, parent, project_root):
     if parent != (Path(project_root)/cfg['parent_run']).resolve():
         raise ValueError('fixed physiology reads only its exact retained parent run')
     directory = (parent/cfg['analysis_subdir']).resolve()
-    if directory.parent != parent or directory.name != 'fixed_physiology_v1':
+    if directory.parent != parent or directory.name not in ('fixed_physiology_v1', 'fixed_physiology_v2'):
         raise ValueError('fixed physiology writes only its own analysis directory')
     return directory
 
@@ -2126,7 +2137,7 @@ def _physiology_summary(cfg, parent, directory):
         status='completed' if all(status == 'completed' for status in statuses.values()) else 'incomplete',
         parameter_mode='fixed', fixed_parameters=fixed, parent_run=cfg['parent_run'],
         interpretation=cfg['interpretation'], stages=statuses, files=files,
-        scope_description='全部473088个固定参数窗口×通道对用于标量分析；波形与EOG关联限定于预先冻结的38268个窗口×通道对三通道面板（103名被试）；不重新拟合模型。',
+        scope_description=f"全部{cfg['scope']['scalar_pair_windows']}个固定参数窗口×通道对用于标量分析；波形限定于预先冻结的{cfg['scope']['array_pair_windows']}个窗口×通道对三通道面板；EOG仅在声明的原生参照数据集计算。不重新拟合模型。",
         statistics=cfg['statistics'], examples=cfg['examples'],
         repeatability_scope=dict(same_task_native_record='同任务跨原生记录重复性；不宣称跨日',
             same_visit_cross_part='同次访问跨Part一致性；同步Probe不构成重复',
@@ -2560,16 +2571,27 @@ def physiology_topography_stage(cfg, parent, directory, output, *, examples_per_
             or source.get('status') != 'completed' or source.get('parameter_mode') != 'fixed'
             or source.get('protected_data') != 'forbidden'):
         raise ValueError('completed public fixed-parameter analysis required')
-    impact_path = directory/'visual_channel_impact_audit_v1.json'
-    impact = read_json(impact_path)
-    if impact.get('status') != 'confirmed' or Path(impact['retained_run']).resolve() != parent:
-        raise ValueError('the confirmed Visual impact audit must belong to this retained run')
+    plan = read_json(parent/'plan.json')
+    from src.data.unified_physiology import VISUAL_CHANNEL_IDENTITY_SCHEMA
+    visual = [r for r in plan['records'] if r['dataset'] == 'visual_cognitive_motivation']
+    corrected = bool(visual) and all(r.get('native_eeg_channel_identity', {}).get('schema')
+                                    == VISUAL_CHANNEL_IDENTITY_SCHEMA for r in visual)
+    if corrected:
+        impact_path = parent/'input_migration_verification.json'
+        impact = read_json(impact_path)
+        if (impact.get('status') != 'passed_metadata_before_arrays' or impact.get('records') != len(visual)
+                or any(len(r['eeg_channel_names']) != 31 or 'FCz' not in r['eeg_channel_names'] for r in visual)):
+            raise ValueError('Corrected native Visual identity evidence differs from the frozen plan')
+    else:
+        impact_path = directory/'visual_channel_impact_audit_v1.json'
+        impact = read_json(impact_path)
+        if impact.get('status') != 'confirmed' or Path(impact['retained_run']).resolve() != parent:
+            raise ValueError('the confirmed Visual impact audit must belong to this retained run')
     output.mkdir()
     sources = output/'source'; sources.mkdir()
     for path in (Path(__file__), Path(analysis.__file__), Path(channel_geometry.__file__)):
         shutil.copy2(path, sources/path.name)
     started = time.monotonic()
-    plan = read_json(parent/'plan.json')
     geometry = analysis.spatial_geometry_from_plan(plan)
     native = pd.read_csv(directory/source['files']['native_pairs'], dtype={'subject':str})
     columns = ['dataset','subject','task_label','record_id','record_unit','pair','native_support_id',
@@ -2593,6 +2615,7 @@ def physiology_topography_stage(cfg, parent, directory, output, *, examples_per_
     result = dict(schema='tak_mismatch_spatial_patterns_v1',status='completed',created_utc=datetime.now(timezone.utc).isoformat(),
         parent_run=str(parent),source_analysis=str(directory),owning_summary=str(directory/'summary.json'),
         visual_impact_audit=str(impact_path),files=files,elapsed_s=time.monotonic()-started,
+        visual_native_eeg_identity=VISUAL_CHANNEL_IDENTITY_SCHEMA if corrected else 'retained_invalid_EEG_identity',
         planned_window_pairs=len(windows),native_records=int(windows.record_id.nunique()),
         subjects=len(ranking),selected_subjects=selected[['dataset','subject','rank','score']].to_dict('records'),
         metrics=list(analysis.SPATIAL_METRICS),workers=min(workers,len(payloads)),model_fits=0,raw_signal_reads=0,protected_reads=0,
@@ -2610,13 +2633,368 @@ def physiology_topography_stage(cfg, parent, directory, output, *, examples_per_
             subject='available acquisition records equally weighted at each location; ROOT metrics squared before average; available/planned records retained',
             Hb_ratio='matched-support mean residual MSE divided by mean zero-prediction MSE, not mean window ratios',
             weak='complete native-record pair diagnostic; never count its repeated window aliases',
-            visual='simultaneous Probe1/2 form one acquisition map; EEG-dependent metrics not spatially interpreted',
+            visual=('simultaneous Probe1/2 form one acquisition map; corrected native EEG geometry and frozen-fold coordinates'
+                    if corrected else 'simultaneous Probe1/2 form one acquisition map; EEG-dependent metrics not spatially interpreted'),
             normalization='frozen location-specific and outer-training-fold SD, not a common physical concentration unit'),
         geometry='retained registry coordinates in plan; orthographic/template top view; coincident projected positions merged',
         claim_limits=['no cortical source localization','selection is exploratory','windows/channels are not independent subjects',
-            'different REFED videos are different stimuli','Visual Hb-only exemption does not repair EEG identity'])
+            'different REFED videos are different stimuli',
+            'corrected channel identity does not establish cortical localization' if corrected else 'Visual Hb-only exemption does not repair EEG identity'])
     write_json(output/'summary.json', result)
     return {key:result[key] for key in ('schema','status','subjects','selected_subjects','planned_window_pairs','elapsed_s')}
+
+
+def physiology_patterns_stage(parent, directory, spatial, panel_export, output):
+    """Version descriptive mechanism-review tables from completed scalar evidence."""
+    import shutil
+    import pandas as pd
+    from src.analysis import tak_mismatch as analysis
+    parent, directory, spatial, panel_export, output = (
+        Path(p).resolve() for p in (parent, directory, spatial, panel_export, output))
+    if output.parent != directory or not output.name.startswith('mechanism_patterns_'):
+        raise ValueError('pattern review writes a fresh mechanism_patterns_* analysis child')
+    if output.exists():
+        raise FileExistsError('pattern review requires a fresh output')
+    fixed = read_json(directory/'summary.json')
+    if (fixed.get('schema') != 'tak_mismatch_fixed_physiology_analysis_v1'
+            or fixed.get('status') != 'completed' or fixed.get('protected_data') != 'forbidden'):
+        raise ValueError('completed public fixed physiology analysis required')
+    spatial_summary = read_json(spatial/'summary.json')
+    if (spatial.parent != directory or spatial_summary.get('status') != 'completed'
+            or spatial_summary.get('schema') != 'tak_mismatch_spatial_patterns_v1'
+            or Path(spatial_summary['parent_run']).resolve() != parent):
+        raise ValueError('completed spatial analysis must belong to this retained run')
+    panel_summary = read_json(panel_export/'summary.json')
+    if (panel_export.parent != parent/'plot_priority_v1'/'exports'
+            or panel_summary.get('schema') != 'tak_mismatch_plot_snapshot_v1'
+            or panel_summary.get('terminal_groups') != panel_summary.get('planned_groups')):
+        raise ValueError('completed bounded shared-parameter export required')
+    sources = dict(spatial_summary=str(spatial/'summary.json'),
+        maps=str(spatial/spatial_summary['files']['map_values']),
+        similarities=str(spatial/spatial_summary['files']['record_similarities']),
+        ranking=str(spatial/spatial_summary['files']['subject_ranking']),
+        plan=str(parent/'plan.json'), fixed_summary=str(directory/'summary.json'),
+        shape_subjects=str(directory/fixed['files']['shape_subjects']),
+        ocular_associations=str(directory/fixed['files']['ocular_associations']),
+        visual_audit=str(spatial_summary['visual_impact_audit']),
+        shared_summary=str(panel_export/'summary.json'), shared_windows=str(panel_export/'window_metrics.csv'),
+        shared_groups=str(panel_export/'group_status.csv'))
+    audit = read_json(Path(sources['visual_audit']))
+    if audit.get('status') != 'confirmed' or Path(audit['retained_run']).resolve() != parent:
+        raise ValueError('confirmed Visual interpretation audit required')
+    maps = pd.read_csv(sources['maps'], dtype={'subject':str})
+    windows = pd.read_csv(sources['shared_windows'], dtype={'subject':str})
+    groups = pd.read_csv(sources['shared_groups'], dtype={'subject':str})
+    if len(groups) != panel_summary['planned_groups'] or not groups.terminal.all():
+        raise ValueError('shared group completion inventory changed')
+    tables = {**analysis.spatial_region_patterns(maps), **analysis.shared_parameter_patterns(windows, groups)}
+    output.mkdir()
+    files = {name:_physiology_save_frame(output, name+'.csv', frame) for name,frame in tables.items()}
+    source_dir = output/'source';source_dir.mkdir()
+    for path in (Path(__file__), Path(analysis.__file__)):
+        shutil.copy2(path,source_dir/path.name)
+    result = dict(schema='tak_mismatch_mechanism_patterns_v1',status='completed',
+        created_utc=datetime.now(timezone.utc).isoformat(),parent_run=str(parent),sources=sources,files=files,
+        selection=spatial_summary['selected_subjects'],
+        method=dict(regions='AF/Fp=frontal; C/FC=central; P/O=posterior; sensor-location groups, not cortical ROIs',
+            region_datasets=['eeg_fnirs_single_trial','simultaneous_eeg_nirs'],
+            regional_value='median of retained channel values; require all planned positions in region',
+            subject_map='original record-equal subject map, then regional median',
+            task_map='native-record regional medians, then record-equal mean within subject/task',
+            contrasts='same subject, all three regions complete; posterior-minus-central etc.; no new significance tests',
+            parameter_unit='one native-record/continuous-Hb-support/channel group; not repeated windows',
+            valid_parameter='at least one retained numerically accepted window; complete-support count also retained',
+            parameter_failed='finite terminal estimates retained as failed, never counted as valid',
+            fit_pair='identical successful fixed/free window identities within each group; RMS from mean squares',
+            parameter_boundary='tau=12s is the engineering upper bound, not a physiological reference',
+            visual='excluded from EEG-dependent parameter comparisons; retained audit unchanged'),
+        counts={name:len(frame) for name,frame in tables.items()},
+        model_fits=0,raw_signal_reads=0,protected_reads=0,new_statistical_tests=0)
+    write_json(output/'summary.json',result)
+    return dict(status=result['status'],output=str(output),counts=result['counts'])
+
+
+def physiology_four_dataset_fixed_stage(parent, directory, spatial, output, reference):
+    """Read-only fixed census synthesis; stopped shared fits are irrelevant."""
+    import shutil
+    import pandas as pd
+    from src.analysis import tak_mismatch as analysis
+    from src.data.unified_physiology import VISUAL_CHANNEL_IDENTITY_SCHEMA
+    parent,directory,spatial,output,reference=(Path(p).resolve() for p in (parent,directory,spatial,output,reference))
+    if output.parent!=directory or not output.name.startswith('four_dataset_patterns_') or output.exists():
+        raise ValueError('Fixed review requires a fresh four_dataset_patterns_* child')
+    old=reference/'fixed_physiology_v1'; old_spatial=old/'spatial_patterns_v2'
+    summaries=[read_json(p/'summary.json') for p in (old,directory,old_spatial,spatial)]
+    if any(s.get('status')!='completed' for s in summaries):raise ValueError('Completed fixed evidence required')
+    if any(s.get('parameter_mode')!='fixed' or s.get('protected_data')!='forbidden' for s in summaries[:2]):
+        raise ValueError('Public fixed-only analysis required')
+    if summaries[3].get('visual_native_eeg_identity')!=VISUAL_CHANNEL_IDENTITY_SCHEMA:
+        raise ValueError('Corrected Visual native identity required')
+    for owner,s in zip((reference,parent,reference,parent),summaries):
+        if Path(s['parent_run']).resolve()!=owner:raise ValueError('Evidence owner mismatch')
+    visual='visual_cognitive_motivation'
+    def read(p):return pd.read_csv(p,dtype={'subject':str},low_memory=False)
+    def combine(a,b,require_four=True):
+        if set(b.dataset)-{visual}:raise ValueError('Only corrected Visual can replace legacy rows')
+        result=pd.concat([a[~a.dataset.eq(visual)],b],ignore_index=True)
+        if require_four and set(result.dataset)!={'eeg_fnirs_single_trial','simultaneous_eeg_nirs',visual,'refed'}:
+            raise ValueError('Four dataset evidence required')
+        return result
+    names=['subjects','subject_descriptives','subject_tasks','repeat_summary','task_comparisons','shape_subjects']
+    tables={name:combine(read(old/summaries[0]['files'][name]),read(directory/summaries[1]['files'][name]),
+                        require_four=name!='task_comparisons') for name in names}
+    maps=combine(read(old_spatial/'map_values.csv.gz'),read(spatial/'map_values.csv.gz'))
+    tables.update(analysis.fixed_population_patterns(maps))
+    tables['ocular_associations']=read(old/'ocular_associations.csv')
+    sources=dict(reference_run=str(reference),corrected_run=str(parent),reference_fixed_summary=str(old/'summary.json'),
+        corrected_fixed_summary=str(directory/'summary.json'),reference_maps=str(old_spatial/'map_values.csv.gz'),
+        corrected_maps=str(spatial/'map_values.csv.gz'),reference_plan=str(reference/'plan.json'),corrected_plan=str(parent/'plan.json'),
+        input_repair=str(parent/'repair_pilot_verification.json'),ocular=str(old/'ocular_associations.csv'))
+    a=read(old/'subjects.csv');b=read(directory/'subjects.csv')
+    revision=a[a.dataset.eq(visual)].merge(b,on=['dataset','subject','metric'],suffixes=('_old','_corrected'),validate='one_to_one')
+    revision['difference']=revision.value_corrected-revision.value_old
+    hb=revision[revision.metric.isin(['D1',analysis.HB_RATIO,'D_bal_10s','D_bal_20s','D_bal_40s'])]
+    if not np.allclose(hb.value_old,hb.value_corrected,atol=1e-9,rtol=0,equal_nan=True):
+        raise ValueError('Pure-Hb endpoint migration check failed')
+    tables['visual_revision']=revision
+    population=[]
+    for (ds,metric,location),g in maps[maps.period.eq('subject_mean')].groupby(['dataset','metric','location_id']):
+        p=g.iloc[0];population.append(dict(dataset=ds,metric=metric,location_id=location,x=p.x,y=p.y,
+            pair_members=p.pair_members,display_value=g.display_value.median(),planned_subjects=len(g),
+            available_subjects=int(g.display_value.notna().sum())))
+    tables['all_population_maps']=pd.DataFrame(population)
+    coverage={};window_tables=[];examples=[]
+    for owner,run,s,corrected in ((old,reference,summaries[0],False),(directory,parent,summaries[1],True)):
+        view=read_json(owner/'view_coverage.json')['by_dataset'];plan=read_json(run/'plan.json')
+        for ds,v in plan['summary'].items():
+            if (ds==visual)==corrected:coverage[ds]=dict(plan=v,views=view[ds],source=str(owner))
+        columns=['dataset','subject','task_label','record_id','native_support_id','pair','window_start_s','parameter_mode',
+                 'status','D1','D_EH','D_drive_H','Delta_spatial','D4','prediction_NMSE','zero_NMSE','template_NMSE']
+        w=pd.read_csv(owner/s['files']['windows'],usecols=columns,dtype={'subject':str})
+        w=w[w.dataset.eq(visual) if corrected else ~w.dataset.eq(visual)]
+        window_tables.append(w)
+        for e in read_json(owner/'examples.json')['examples']:
+            if (e['dataset']==visual)==corrected and e['role']=='median':examples.append(dict(e,source_run=str(run)))
+    windows=pd.concat(window_tables,ignore_index=True)
+    if len(windows)!=sum(c['plan']['planned_pair_windows'] for c in coverage.values()):
+        raise ValueError('Full fixed denominator changed')
+    metric_coverage=[]
+    for ds,g in windows.groupby('dataset'):
+        for metric in ('D1','D_EH','D_drive_H','Delta_spatial','D4'):
+            metric_coverage.append(dict(dataset=ds,metric=metric,planned=len(g),available=int(np.isfinite(g[metric]).sum())))
+    tables['metric_coverage']=pd.DataFrame(metric_coverage)
+    gains=['prediction_gain_over_zero','prediction_gain_over_template']
+    for name,baseline in zip(gains,['zero_NMSE','template_NMSE']):
+        good=np.isfinite(windows.prediction_NMSE)&np.isfinite(windows[baseline])
+        windows[name]=(windows[baseline]-windows.prediction_NMSE).where(good)
+    tables['independent_prediction_subjects']=analysis.aggregate_fixed_metrics(windows,metrics=gains,include_hb_ratio=False)['subjects']
+    output.mkdir();files={k:_physiology_save_frame(output,k+'.csv',v) for k,v in tables.items()}
+    write_json(output/'examples.json',dict(examples=examples,selection='existing frozen three-pair fixed-D1 median examples; no reselection'))
+    source_dir=output/'source';source_dir.mkdir()
+    for path in (Path(__file__),Path(analysis.__file__)):shutil.copy2(path,source_dir/path.name)
+    result=dict(schema='tak_mismatch_four_dataset_fixed_patterns_v1',status='completed',created_utc=datetime.now(timezone.utc).isoformat(),
+        parent_run=str(parent),sources=sources,files=files,coverage=coverage,planned_windows=len(windows),planned_subjects=sum(c['plan']['subjects'] for c in coverage.values()),
+        model_fits=0,raw_signal_reads=0,protected_reads=0,shared_parameter_reads=0,
+        verification=dict(full_fixed_denominator=True,old_Visual_rows_replaced=True,unchanged_Hb_subject_endpoints=len(hb),
+            maximum_Hb_revision_difference=float(hb.difference.abs().max())),
+        methods=dict(region='location median within three complete regions; posterior minus frontal per subject; six exploratory tests across two montages and D1/relative residual/D_bal40; 5000 subject bootstrap means; 100000 sign flips; BH family of six',
+            spatial='all subjects; at least8 and80percent common sites; median record-pair Spearman per subject; 5000 subject-bootstrap median CI, descriptive',
+            centered='subtract other-subject location median separately for each acquisition before spatial rank correlation; same fitted/scaled coordinates retained',
+            hotspots='top ceil(25percent of common sites) per map; overlap divided by top-set size; random-reference k/common-sites is descriptive, not a p-value; each subject contributes median pair overlap',
+            persistent_sites='per-site top-quarter frequency across eligible record maps; at least2 and80percent planned records; 80percent frequency is a descriptive display threshold, not a physiological cutoff; ties retained',
+            repeats='Single-Trial all same-task record pairs; Simultaneous all cross-task pairs; Visual cross-Part; REFED all different-video pairs, not same-condition retest',
+            early_late='retained time halves; minimum2 valid windows per half; at least8 and80percent common sites; all-subject median across records',
+            inference='posthoc exploratory selection; nominal intervals and BH values do not correct the whole historical exploration; fixed fits and scales; no causal attribution'),
+        limitations=['population-template subtraction does not remove subject-specific fixed sensor or normalization effects',
+            'spatial patterns are sensor/template locations, not cortical localization','joint and shared-parameter comparisons are outside this report'])
+    write_json(output/'summary.json',result)
+    return dict(status='completed',output=str(output),planned_windows=len(windows),planned_subjects=result['planned_subjects'])
+
+
+def physiology_four_dataset_stage(parent, directory, spatial, panel_export, output, reference):
+    """Replace the invalid Visual evidence, retaining each other dataset's owner."""
+    import shutil
+    import pandas as pd
+    from src.analysis import tak_mismatch as analysis
+    from src.data.unified_physiology import VISUAL_CHANNEL_IDENTITY_SCHEMA
+    parent, directory, spatial, panel_export, output, reference = (
+        Path(p).resolve() for p in (parent, directory, spatial, panel_export, output, reference))
+    if output.parent != directory or not output.name.startswith('four_dataset_patterns_'):
+        raise ValueError('Four-dataset review belongs to a fresh child of the corrected analysis')
+    if output.exists():
+        raise FileExistsError('Four-dataset review requires a fresh export')
+    fixed = read_json(directory/'summary.json')
+    spatial_summary = read_json(spatial/'summary.json')
+    panel = read_json(panel_export/'summary.json')
+    current_plan = read_json(parent/'plan.json')
+    if (fixed.get('status') != 'completed' or fixed.get('protected_data') != 'forbidden'
+            or Path(fixed['parent_run']).name != parent.name
+            or spatial_summary.get('status') != 'completed'
+            or spatial_summary.get('visual_native_eeg_identity') != VISUAL_CHANNEL_IDENTITY_SCHEMA
+            or Path(spatial_summary['parent_run']).resolve() != parent
+            or panel.get('terminal_groups') != panel.get('planned_groups')
+            or panel_export.parent != parent/'plot_priority_v1'/'exports'):
+        raise ValueError('Completed corrected Visual scalar, spatial and common-panel evidence required')
+    if set(current_plan['datasets']) != {'visual_cognitive_motivation'}:
+        raise ValueError('Only Visual may replace the retained four-dataset evidence')
+    old_directory = reference/'fixed_physiology_v1'
+    old_fixed = read_json(old_directory/'summary.json')
+    old_review = read_json(old_directory/'mechanism_patterns_v1'/'summary.json')
+    old_plan = read_json(reference/'plan.json')
+    if (old_fixed.get('status') != 'completed' or old_fixed.get('protected_data') != 'forbidden'
+            or Path(old_review['parent_run']).resolve() != reference):
+        raise ValueError('Completed public reference analysis required')
+    old_records = {r['id']: r for r in old_plan['records']}
+    for record in current_plan['records']:
+        before = old_records[record['id']]
+        for key in ('source_identity', 'array_shapes', 'fold', 'windows', 'continuous_hb_segments', 'hb_only_admitted'):
+            if record.get(key) != before.get(key):
+                raise ValueError('Visual revision changed an undeclared source, support or subject fold')
+    sources = dict(reference_run=str(reference), corrected_run=str(parent),
+        reference_fixed_summary=str(old_directory/'summary.json'), corrected_fixed_summary=str(directory/'summary.json'),
+        reference_plan=str(reference/'plan.json'), corrected_plan=str(parent/'plan.json'),
+        reference_maps=old_review['sources']['maps'], corrected_maps=str(spatial/spatial_summary['files']['map_values']),
+        reference_shared_windows=old_review['sources']['shared_windows'], corrected_shared_windows=str(panel_export/'window_metrics.csv'),
+        reference_shared_groups=old_review['sources']['shared_groups'], corrected_shared_groups=str(panel_export/'group_status.csv'),
+        reference_spatial_summary=old_review['sources']['spatial_summary'], corrected_spatial_summary=str(spatial/'summary.json'),
+        input_repair=str(parent/'repair_pilot_verification.json'))
+    def read(path):
+        return pd.read_csv(path, dtype={'subject':str})
+    visual = 'visual_cognitive_motivation'
+    def replace_visual(old, new):
+        if set(new.dataset) != {visual}:
+            raise ValueError('Corrected source contains an undeclared dataset')
+        return pd.concat([old[~old.dataset.eq(visual)], new], ignore_index=True)
+    scalar_old = read(old_directory/old_fixed['files']['subjects'])
+    scalar_new = read(directory/fixed['files']['subjects'])
+    subjects = replace_visual(scalar_old, scalar_new)
+    shapes = replace_visual(read(old_directory/old_fixed['files']['shape_subjects']), read(directory/fixed['files']['shape_subjects']))
+    maps = replace_visual(read(sources['reference_maps']), read(sources['corrected_maps']))
+    shared_windows = replace_visual(read(sources['reference_shared_windows']), read(sources['corrected_shared_windows']))
+    shared_groups = replace_visual(read(sources['reference_shared_groups']), read(sources['corrected_shared_groups']))
+    if not shared_groups.terminal.all() or not shared_windows.current_terminal.all():
+        raise ValueError('Common shared-parameter panel has unfinished groups')
+    old_ids = set(read(sources['reference_shared_windows']).query('dataset == @visual').id)
+    if old_ids != set(shared_windows.query('dataset == @visual').id):
+        raise ValueError('Corrected Visual shared panel changed the preselected window/pair identities')
+    tables = analysis.four_dataset_pattern_tables(subjects, shapes, maps, shared_windows, shared_groups)
+    columns = ['dataset','subject','task_label','record_id','native_support_id','pair','window_start_s',
+               'parameter_mode','prediction_NMSE','zero_NMSE','template_NMSE']
+    independent = replace_visual(
+        pd.read_csv(old_directory/old_fixed['files']['windows'], usecols=columns, dtype={'subject':str}),
+        pd.read_csv(directory/fixed['files']['windows'], usecols=columns, dtype={'subject':str}))
+    gains = ('prediction_gain_over_zero', 'prediction_gain_over_template')
+    for metric, baseline in zip(gains, ('zero_NMSE','template_NMSE')):
+        common = np.isfinite(independent.prediction_NMSE) & np.isfinite(independent[baseline])
+        independent[metric] = (independent[baseline]-independent.prediction_NMSE).where(common)
+    tables['independent_prediction_subjects'] = analysis.aggregate_fixed_metrics(
+        independent, metrics=gains, include_hb_ratio=False)['subjects']
+    revision = scalar_old[scalar_old.dataset.eq(visual)].merge(scalar_new,
+        on=['dataset','subject','metric'], suffixes=('_old','_corrected'), validate='one_to_one')
+    revision['corrected_minus_old'] = revision.value_corrected - revision.value_old
+    hb_revision = revision[revision.metric.isin(['D1','D_bal_10s','D_bal_20s','D_bal_40s'])]
+    if (hb_revision.empty or not np.allclose(hb_revision.value_old, hb_revision.value_corrected,
+                                            rtol=0, atol=1e-9, equal_nan=True)):
+        raise ValueError('Unchanged Hb-only endpoints failed the full subject-level migration check')
+    tables['visual_revision_subjects'] = revision
+    population = []
+    for (dataset, metric, location), block in maps[maps.period.eq('subject_mean')].groupby(['dataset','metric','location_id']):
+        row = block.iloc[0]
+        values = block.display_value.dropna()
+        population.append(dict(dataset=dataset, metric=metric, location_id=location,
+            x=row.x, y=row.y, pair_members=row.pair_members, display_value=values.median(),
+            available_subjects=len(values), planned_subjects=len(block)))
+    tables['population_maps'] = pd.DataFrame(population)
+    full_visual = None
+    full_summary_path = parent/'summary.json'
+    if full_summary_path.exists() and read_json(full_summary_path).get('status') == 'completed':
+        full_status = read_json(parent/'current_dof'/'summary.json')
+        expected_windows = sum(len(r['windows'])*len(r['pairs']) for r in current_plan['records'])
+        if (full_status.get('status') != 'completed' or full_status.get('terminal_windows') != expected_windows
+                or full_status.get('planned_windows') != expected_windows):
+            raise ValueError('Full Visual shared-parameter denominator is incomplete')
+        needed = ['id','group_id','dataset','subject','record_id','pair','hb_only_success','joint_success',
+                  'kappa_hb','tau_hb','kappa_joint','tau_joint','D1_free','D_EH_free','D4_free']
+        full_windows = pd.read_csv(parent/'metrics_current_dof.csv',usecols=needed,dtype={'subject':str})
+        if len(full_windows) != expected_windows or set(full_windows.dataset) != {visual}:
+            raise ValueError('Full Visual shared table differs from its terminal plan')
+        full_windows = full_windows.rename(columns={'kappa_hb':'hb_only_kappa','tau_hb':'hb_only_tau',
+            'kappa_joint':'joint_kappa','tau_joint':'joint_tau'})
+        full_fixed = pd.read_csv(parent/'metrics.csv',usecols=['id','D1','D_EH','D4'])
+        full_windows = full_windows.merge(full_fixed,on='id',validate='one_to_one')
+        labels = {r['id']:_physiology_task_label(r)[0] for r in current_plan['records']}
+        full_windows['task_label'] = full_windows.record_id.map(labels)
+        full_groups = []
+        for record, group in current_dof_groups(current_plan):
+            retained = read_json(parent/'current_dof'/'tasks'/f"{group['id']}.json")
+            if len(retained['rows']) != len(group['tasks']):
+                raise ValueError('Full shared group lost planned rows')
+            full_groups.append(dict(group_id=group['id'],dataset=record['dataset'],subject=record['subject'],
+                record_id=record['id'],task_label=labels[record['id']],pair=group['pair'],
+                status=retained['status'],planned_windows=len(group['tasks'])))
+        if len(full_groups) != full_status['planned_groups'] or len(full_groups) != full_status['terminal_groups']:
+            raise ValueError('Full shared group inventory changed')
+        full_tables = analysis.shared_parameter_patterns(full_windows,pd.DataFrame(full_groups))
+        tables.update({'visual_full_'+name:table for name,table in full_tables.items()})
+        site = full_tables['parameter_site_summary']
+        parameter_maps = []
+        for _, location in maps[maps.dataset.eq(visual)&maps.period.eq('subject_mean')&maps.metric.eq('D1')].iterrows():
+            for view in ('hb_only','joint'):
+                members = site[site.subject.eq(location.subject)&site.view.eq(view)&site.pair.isin(location.pair_members.split(';'))]
+                values = members.tau_paired_view_median.dropna()
+                parameter_maps.append(dict(dataset=visual,subject=location.subject,view=view,
+                    location_id=location.location_id,x=location.x,y=location.y,pair_members=location.pair_members,
+                    record_ids=location.record_ids,display_value=values.median(),
+                    available_members=len(values),planned_members=len(members),
+                    paired_groups=int(members.paired_view_groups.sum()),planned_groups=int(members.planned_groups.sum())))
+        tables['visual_full_parameter_maps'] = pd.DataFrame(parameter_maps)
+        full_visual = dict(status='completed',groups=len(full_groups),windows=len(full_windows),
+            summary=str(parent/'current_dof'/'summary.json'),terminal_audit=str(parent/'terminal_status_audit.json'),
+            metrics=str(parent/'metrics_current_dof.csv'),
+            map_aggregation='same-group paired native-support parameter median per channel, then median across location-coincident channel medians',
+            interpretation='all native Visual Hb pairs; separate extension, not a matched-coverage comparison to other datasets')
+    examples = []
+    for owner, summary, replace in ((old_directory, old_fixed, False), (directory, fixed, True)):
+        for example in read_json(owner/summary['files']['examples'])['examples']:
+            if (example['dataset'] == visual) != replace or example['role'] not in ('median', 'p90'):
+                continue
+            examples.append(dict(example, source_run=str(parent if replace else reference)))
+    if len(examples) != 8 or len({(r['dataset'],r['role']) for r in examples}) != 8:
+        raise ValueError('Exactly median and P90 examples from every dataset are required')
+    coverage = {}
+    for plan, owner, summary, replace in ((old_plan, old_directory, old_fixed, False), (current_plan, directory, fixed, True)):
+        view = read_json(owner/summary['files']['view_coverage'])['by_dataset']
+        for dataset, value in plan['summary'].items():
+            if (dataset == visual) == replace:
+                coverage[dataset] = dict(plan=value, fixed_views=view[dataset], source_run=str(parent if replace else reference))
+    output.mkdir()
+    files = {name:_physiology_save_frame(output,name+'.csv',frame) for name,frame in tables.items()}
+    write_json(output/'examples.json',dict(examples=examples,
+        selection='frozen_three_pair_panel_fixed_D1_nearest_median_and_P90_distinct_subjects_when_possible'))
+    files['examples'] = 'examples.json'
+    source_dir = output/'source'; source_dir.mkdir()
+    for path in (Path(__file__), Path(analysis.__file__)):
+        shutil.copy2(path,source_dir/path.name)
+    result = dict(schema='tak_mismatch_four_dataset_patterns_v1', status='completed',
+        created_utc=datetime.now(timezone.utc).isoformat(), parent_run=str(parent), sources=sources, files=files,
+        coverage=coverage, planned_subjects=sum(v['plan']['subjects'] for v in coverage.values()),
+        shared_groups=len(shared_groups), shared_windows=len(shared_windows), raw_signal_reads=0, model_fits=0, protected_reads=0,
+        methods=dict(scalar='retained window-square pooling, native-record equal, subject equal; each dataset separate',
+            shapes='preselected three-pair panel; moments within record, equal records within subject before ratios',
+            maps='subject median at each registered location; interpolation is display only',
+            spatial_contrast='per acquisition (P90-P10)/median, at least8 and80percent available locations; subject median over acquisitions',
+            early_late='original temporal halves; two valid windows per half and at least8/80percent common sites; subject median across acquisitions',
+            shared_error='same successful windows per group, equal groups within record, equal records within subject, then square root',
+            shared_parameters='valid group log-estimates averaged within native record then subject; exponentiated; failures and tau12s boundary retained',
+            independent_prediction='same-window baseline NMSE minus EEG-only NMSE; require both finite before aggregation; window then record then subject',
+            visual_revision='data-integrity comparison; EEG target coordinates changed, so differences are not accuracy improvements',
+            inference='descriptive, no new significance tests; no cortical source or unique physiological truth claim'))
+    result['verification'] = dict(unchanged_Hb_subject_endpoints=True, tolerance=1e-9,
+        matched_subject_endpoints=len(hb_revision), maximum_absolute_difference=float(hb_revision.corrected_minus_old.abs().max()),
+        four_datasets_present=True, old_Visual_EEG_rows_replaced=True, shared_panel_window_identities_unchanged=True)
+    result['visual_full_shared'] = full_visual
+    write_json(output/'summary.json',result)
+    return {k:result[k] for k in ('schema','status','planned_subjects','shared_groups','shared_windows')}
 
 
 def main(argv=None):
@@ -2627,6 +3005,11 @@ def main(argv=None):
     parser.add_argument('--project-root', type=Path, default=ROOT)
     parser.add_argument('--run-dir', type=Path)
     parser.add_argument('--spatial-output', type=Path, help='Fresh spatial_patterns_* child of the completed fixed-physiology analysis')
+    parser.add_argument('--spatial-analysis', type=Path, help='Explicit completed spatial analysis for physiology-patterns')
+    parser.add_argument('--panel-export', type=Path, help='Explicit completed bounded shared-parameter snapshot for physiology-patterns')
+    parser.add_argument('--pattern-output', type=Path, help='Fresh mechanism_patterns_* child of the fixed-physiology analysis')
+    parser.add_argument('--reference-run', type=Path, help='Explicit retained four-dataset run for the corrected-Visual review')
+    parser.add_argument('--fixed-only', action='store_true', help='Four-dataset fixed census review; no shared-fit dependency')
     parser.add_argument('--spatial-examples', type=int, default=3, help='Illustrative subjects selected per dataset')
     parser.add_argument('--workers', type=int, default=1)
     parser.add_argument('--max-tasks', type=int, help='Explicit bounded throughput pilot; never marks the full campaign complete')
@@ -2645,6 +3028,28 @@ def main(argv=None):
     owner = root/ARTIFACT_ROOT
     if out.parent != owner.resolve() or out.name != cfg['run_name']:
         parser.error('this contract writes only its exact versioned owning run directory')
+    if args.stage == 'physiology-four-dataset':
+        if not all((args.spatial_analysis, args.pattern_output, args.reference_run)) or (not args.fixed_only and not args.panel_export):
+            parser.error('four-dataset review requires spatial-analysis, panel-export, pattern-output and reference-run')
+        directory = _physiology_directory(read_physiology_config(args.analysis_config), out, root)
+        if args.fixed_only:
+            if args.panel_export:parser.error('fixed-only review does not consume shared-parameter panels')
+            result=physiology_four_dataset_fixed_stage(out,directory,args.spatial_analysis,args.pattern_output,args.reference_run)
+        else:
+            result = physiology_four_dataset_stage(out,directory,args.spatial_analysis,args.panel_export,
+                args.pattern_output,args.reference_run)
+        print(json.dumps(serial(result),ensure_ascii=False,allow_nan=False));return 0
+    if args.fixed_only:parser.error('--fixed-only belongs only to physiology-four-dataset')
+    if args.reference_run:
+        parser.error('--reference-run belongs only to physiology-four-dataset')
+    if args.stage == 'physiology-patterns':
+        if not all((args.spatial_analysis,args.panel_export,args.pattern_output)) or args.spatial_output:
+            parser.error('physiology-patterns requires --spatial-analysis, --panel-export and --pattern-output')
+        directory = _physiology_directory(read_physiology_config(args.analysis_config), out, root)
+        result = physiology_patterns_stage(out,directory,args.spatial_analysis,args.panel_export,args.pattern_output)
+        print(json.dumps(serial(result),ensure_ascii=False,allow_nan=False));return 0
+    if any((args.spatial_analysis,args.panel_export,args.pattern_output)):
+        parser.error('pattern-review arguments belong to physiology-patterns only')
     if args.stage == 'physiology-topography':
         analysis_cfg = read_physiology_config(args.analysis_config)
         directory = _physiology_directory(analysis_cfg, out, root)
@@ -2693,7 +3098,9 @@ def main(argv=None):
             if args.stage == 'plot-plan': result = plot_priority_plan(cfg, out, plan)
             elif args.stage == 'plot-run': result = plot_priority_stage(cfg, out, plan, args.workers)
             elif args.stage == 'prepare': result = prepare_stage(cfg, out, root, plan, args.workers, max_records=args.max_records)
-            elif args.stage == 'run': result = run_stage(cfg, out, plan, args.workers, max_tasks=args.max_tasks)
+            elif args.stage in ('run', 'fixed-run'):
+                result = run_stage(cfg, out, plan, args.workers, max_tasks=args.max_tasks,
+                    include_current_dof=args.stage == 'run')
             else: result = summarize_stage(cfg, out, plan)
     display = result
     if args.stage == 'plot-plan':

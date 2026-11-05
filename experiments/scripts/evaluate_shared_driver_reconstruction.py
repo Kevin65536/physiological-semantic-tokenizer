@@ -45,6 +45,12 @@ from src.data.channel_geometry import project_head_topview as _tak_topography_xy
 DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml'
 LEGACY_DEFAULT = CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_reconstruction_v1.yaml'
 MODALITIES = ('EEG', 'HbO', 'HbR')
+_TAK_CACHE_STRUCTURED = False
+_TAK_CACHE_GPU_CLIENT = None
+# One outstanding request per worker: at most 900 samples, four initial
+# coordinates and two physiological columns. Shared anonymous memory avoids
+# repeatedly serializing the approximately 31 MiB residual Jacobian.
+_TAK_CACHE_GPU_SLOT = 4500*(904+3)
 
 
 def serial(v):
@@ -8862,7 +8868,8 @@ def tak_specs(cfg, plan, phase):
     return jobs
 
 
-def tak_fit_group(cfg, arm, y, operator, sd, mask, warm=None):
+def tak_fit_group(cfg, arm, y, operator, sd, mask, warm=None, *,
+                  observation_reference_steps=None, linear_solver=None):
     from src.inference.shared_driver_reconstruction import fit_nonlinear_shared_parameters
     names = arm['fit'];s=cfg['solver'];f=cfg['fitting'];batch,n,_=y.shape
     dt=cfg['tensor']['dt_s'];data_weight=dt/s.get('observation_reference_dt_s',dt)
@@ -8885,7 +8892,8 @@ def tak_fit_group(cfg, arm, y, operator, sd, mask, warm=None):
         substeps=s['substeps'],max_iterations=s['max_iterations'],
         max_evaluations_per_trial=s['max_evaluations_per_trial'],gradient_tolerance=s['gradient_tolerance'],
         numerical_backend='numba',hemodynamics=arm['hemodynamics'],viscoelastic_s=arm['tau_v'],
-        initial_state_mode=arm['initial'],data_weight=data_weight)
+        initial_state_mode=arm['initial'],data_weight=data_weight,
+        observation_reference_steps=observation_reference_steps,linear_solver=linear_solver)
     if names:
         kwargs.update(parameter_prior_log_mean=np.log(references),
                       parameter_prior_precision=1/np.square(arm['log_sd']))
@@ -10751,6 +10759,1070 @@ def tak_main(args):
         ('groups','records','coordinates','jobs','terminal','paired_contrasts','missing','prepared_ids')})),flush=True)
 
 
+def tak_cache_config(path=None):
+    default=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml'
+    cfg=yaml.safe_load(Path(path or default).read_text())
+    if cfg!=yaml.safe_load(default.read_text()):
+        raise ValueError('Use the reviewed subject-calibrated reconstruction cache contract')
+    core=deepcopy(tak_config(CODE_ROOT/cfg['base_config']))
+    core.update(schema=cfg['schema'],experiment_id=cfg['experiment_id'],seed=cfg['seed'])
+    core['model']['primary']='tak_tau_beta'
+    core['conditions']=['joint_full'];core['tensor']['lengths_s']=[90]
+    core['fitting']['reference']['neurovascular_gain']=1.
+    core['fitting']['bounds']['neurovascular_gain']=[.1,10.]
+    core['arms']=[dict(name='tak_fixed',hemodynamics='tak',initial='volume_tied',tau_v=2.,fit=[]),
+        dict(name='tak_tau_beta',hemodynamics='tak',initial='volume_tied',tau_v=2.,
+             fit=cfg['model']['parameters'],log_sd=cfg['model']['log_prior_sd'],
+             start_values=cfg['model']['starts'],warm='tak_fixed')]
+    return cfg,core
+
+
+def tak_cache_sample_join(sample, record):
+    """Choose one containing fit; retain both clocks and fractional offsets."""
+    duration=float(sample.get('supported_seconds',sample['duration_s']))
+    candidates=[]
+    for w in record['cache_windows']:
+        if all(sample[k]>=w[k]-1e-8 and sample[k]+duration<=w[k]+w['duration_s']+1e-8
+               for k in ('eeg_start_s','hb_start_s')):
+            distance=sum(abs(sample[k]+duration/2-w[k]-w['duration_s']/2)
+                         for k in ('eeg_start_s','hb_start_s'))
+            candidates.append((distance,w['hb_start_s'],w))
+    result=dict(sample_id=sample['id'],record_key=record['cache_key'],split=record['split'],
+                supported_seconds=duration,downstream_duration_s=sample['duration_s'])
+    if not candidates:
+        return dict(result,status='unavailable',reason='no_complete_containing_admitted_fit_window')
+    w=min(candidates,key=lambda v:v[:2])[2]
+    return dict(result,status='available',window_key=w['key'],fit_duration_s=w['duration_s'],
+        eeg_offset_s=sample['eeg_start_s']-w['eeg_start_s'],
+        hb_offset_s=sample['hb_start_s']-w['hb_start_s'],
+        interpretation='window_reference_retained; no_state_stitching_or_duplicate_independent_sample')
+
+
+def tak_cache_plan(cfg,root):
+    from src.data.tak_mismatch import inventory_tak_mismatch,tak_reconstruction_windows
+    data=cfg['data'];source=root/data['downstream_input']
+    previous=json.loads((source/'input_plan.json').read_text())
+    verified=json.loads((source/'verification.json').read_text())
+    if (previous.get('schema')!='physiology_downstream_input_v1' or verified.get('status')!='passed'
+            or Path(previous['source_cache']).resolve()!=(root/data['cache_root']).resolve()):
+        raise ValueError('Verified matching public downstream input identities required')
+    public=inventory_tak_mismatch(cfg,root)
+    splits={(ds,s):split for ds,parts in previous['subject_partitions'].items()
+            for split,subjects in parts.items() for s in subjects}
+    if {r['join_key'] for r in public['records']}!={r['join_key'] for r in previous['records']}:
+        raise ValueError('Central and downstream record inventories differ')
+    records=[]
+    for r in public['records']:
+        if any(not re.fullmatch(r'[A-Za-z0-9_.-]+',r[k]) for k in ('dataset','subject','record')):
+            raise ValueError('Unsafe cache record identity')
+        r.pop('fold',None)
+        r['split']=splits[(r['dataset'],r['subject'])]
+        r['cache_key']='/'.join(r[k] for k in ('dataset','subject','record'))
+        r['cache_windows'],r['cache_exclusions']=tak_reconstruction_windows(r)
+        records.append(r)
+    lookup={r['join_key']:r for r in records}
+    joins=[tak_cache_sample_join(s,lookup[s['join_key']]) for s in previous['samples']]
+    counts={}
+    for ds in data['datasets']:
+        rr=[r for r in records if r['dataset']==ds]
+        counts[ds]=dict(subjects=len({r['subject'] for r in rr}),records=len(rr),
+            windows=sum(len(r['cache_windows']) for r in rr),
+            short_windows=sum(w['short_record'] for r in rr for w in r['cache_windows']),
+            pair_windows=sum(len(r['cache_windows'])*len(r['pairs']) for r in rr),
+            excluded_records=sum(not r['cache_windows'] for r in rr),
+            metadata_exclusions=sum(len(r['cache_exclusions']) for r in rr))
+    return dict(schema=cfg['schema'],records=records,subject_partitions=previous['subject_partitions'],
+        downstream_input=str(source),downstream_joins=joins,counts=counts,
+        planned_pair_windows=sum(v['pair_windows'] for v in counts.values()),
+        measured_signal_reads=0,protected_reads=0,
+        interpretation='individual_unlabelled_adaptation_with_training_only_shared_PCA')
+
+
+def _tak_cache_npz(path, **arrays):
+    path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
+    temporary=path.with_suffix('.partial.npz')
+    np.savez_compressed(temporary,**arrays)
+    temporary.replace(path)
+
+
+@lru_cache(maxsize=1)
+def _tak_cache_source_index(cache_root):
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    return CleanPhysiologyCacheIndex(Path(cache_root))
+
+
+def _tak_cache_prepare_worker(payload):
+    from src.data.tak_mismatch import iter_tak_reconstruction_record
+    cfg,root_string,out_string,record,requested=payload
+    root,out=Path(root_string),Path(out_string);started=time.monotonic()
+    folder=out/'features'/record['cache_key'];folder.mkdir(parents=True,exist_ok=True)
+    windows=[w for w in record['cache_windows'] if requested is None or w['key'] in requested]
+    pending=[];statuses=[]
+    for w in windows:
+        meta=folder/(w['key']+'.json');array=meta.with_suffix('.npz')
+        if meta.exists():
+            old=json.loads(meta.read_text())
+            if (old.get('schema')!=cfg['schema'] or old.get('window')!=w
+                    or old.get('join_key')!=record['join_key']
+                    or (old['status']=='completed' and not array.exists())):
+                raise ValueError('Feature resume identity or array mismatch')
+            statuses.append(old['status'])
+        else:pending.append(w['key'])
+    def save(item):
+        w=item['window'];path=folder/(w['key']+'.npz')
+        if item['status']=='completed':
+            _tak_cache_npz(path,**{k:item[k] for k in
+                ('eeg','hb','eeg_valid','hb_valid','eeg_reference','hb_reference')},
+                time_s=np.arange(round(w['duration_s']*10))/10.)
+        metadata={k:v for k,v in item.items() if k not in
+                  ('eeg','hb','eeg_valid','hb_valid','eeg_reference','hb_reference')}
+        metadata.update(schema=cfg['schema'],join_key=record['join_key'],split=record['split'])
+        write_json(path.with_suffix('.json'),metadata);statuses.append(item['status'])
+    if pending:
+        try:
+            d=cfg['data']
+            for item in iter_tak_reconstruction_record(root,record,cache_root=d['cache_root'],
+                    geometry_root=d['geometry_root'],refed_geometry_root=d['refed_geometry_root'],
+                    seed=cfg['seed'],index=_tak_cache_source_index(str(root/d['cache_root'])),
+                    pending_windows=pending,visual_eeg_channel_identity=d['visual_eeg_channel_identity']):
+                save(item)
+        except Exception:
+            error=traceback.format_exc()
+            for w in windows:
+                if not (folder/(w['key']+'.json')).exists():
+                    save(dict(window=w,status='failed',error=error))
+    return dict(record_key=record['cache_key'],windows=len(windows),completed=statuses.count('completed'),
+        failed=statuses.count('failed'),seconds=time.monotonic()-started,
+        peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+
+
+class _TakCacheGPUClient:
+    def __init__(self,connection,device,storage,index):
+        self.connection=connection;self.backend=f'torch_float64_shared_cuda:{device}'
+        self.buffer=np.frombuffer(storage,dtype=np.float64)[index*_TAK_CACHE_GPU_SLOT:(index+1)*_TAK_CACHE_GPU_SLOT]
+        self.requests=0;self.wait_seconds=0.
+
+    def __call__(self,jacobian,residual,parameters,damping):
+        from src.inference.shared_driver_reconstruction import LinearSolverUnavailable
+        started=time.monotonic()
+        m,n=jacobian.shape;k=parameters.shape[1]
+        if (m>4500 or n>904 or k>2 or residual.shape!=(m,) or parameters.shape!=(m,k)
+                or jacobian.dtype!=np.float64):
+            raise ValueError('GPU staging requires the declared float64 Tak cache block')
+        self.buffer[:m*n]=jacobian.ravel()
+        right=self.buffer[m*n:m*n+m*(k+1)].reshape(m,k+1)
+        right[:,0]=residual;right[:,1:]=parameters
+        try:
+            self.connection.send((m,n,k,float(damping)))
+            if not self.connection.poll(120):
+                raise LinearSolverUnavailable('GPU linear solver response timed out')
+            response=self.connection.recv()
+            if isinstance(response,dict) and response.get('error'):
+                raise LinearSolverUnavailable(response['error'])
+        except (EOFError,BrokenPipeError,OSError) as exc:
+            raise LinearSolverUnavailable('GPU linear solver connection failed') from exc
+        self.requests+=1;self.wait_seconds+=time.monotonic()-started
+        return response
+
+
+def _tak_cache_worker_initialize(structured,clients,counter,devices,storage):
+    global _TAK_CACHE_STRUCTURED,_TAK_CACHE_GPU_CLIENT
+    _TAK_CACHE_STRUCTURED=structured;_TAK_CACHE_GPU_CLIENT=None
+    if clients:
+        with counter.get_lock():
+            index=counter.value;counter.value+=1
+        for i,connection in enumerate(clients):
+            if i!=index:connection.close()
+        if index<len(clients):
+            _TAK_CACHE_GPU_CLIENT=_TakCacheGPUClient(clients[index],devices[index%len(devices)],storage,index)
+
+
+def _tak_cache_gpu_server(device,indexed_clients,control,ready,output,batch_size,storage):
+    from multiprocessing.connection import wait as connection_wait
+    from collections import defaultdict
+    from src.inference.shared_driver_reconstruction import torch_normal_steps
+    indices={connection:index for index,connection in indexed_clients}
+    clients=list(indices);shared=np.frombuffer(storage,dtype=np.float64)
+    stats=dict(device=device,status='initializing',requests=0,batches=0,seconds=0.,
+               transport='shared_float64_buffers_and_small_pipe_headers',linear_compute_seconds=0.)
+    started=time.monotonic();last_write=0.;cursor=0
+    try:
+        import torch
+        torch.set_num_threads(1);torch.set_num_interop_threads(1)
+        torch.cuda.set_device(device);torch.cuda.set_per_process_memory_fraction(.1,device)
+        # Initialize CUDA before any CPU worker can block waiting for a response.
+        torch.ones(1,dtype=torch.float64,device=f'cuda:{device}').sum().item()
+        dampings=[.001*(i+1) for i in range(batch_size)]
+        probes=torch_normal_steps([np.eye(8,4)]*batch_size,[np.arange(8,dtype=float)]*batch_size,
+                                  [np.zeros((8,2))]*batch_size,dampings,device=f'cuda:{device}')
+        for probe,damping in zip(probes,dampings):
+            np.testing.assert_allclose(probe[3][:,0],np.arange(4)/(1+damping),rtol=1e-12,atol=1e-12)
+        stats.update(status='running',torch=torch.__version__,GPU=torch.cuda.get_device_name(device))
+        ready.send(dict(status='ready',device=device))
+        while clients:
+            ordered=clients[cursor:]+clients[:cursor]
+            available=connection_wait([control]+ordered,timeout=5.)
+            if control in available:
+                control.recv();break
+            selected=[c for c in ordered if c in available][:batch_size]
+            requests=[]
+            for connection in selected:
+                try:m,n,k,damping=connection.recv()
+                except EOFError:continue
+                if not (0<m<=4500 and 0<n<=904 and 0<=k<=2):
+                    raise ValueError('GPU request exceeds its shared buffer')
+                offset=indices[connection]*_TAK_CACHE_GPU_SLOT
+                j=shared[offset:offset+m*n].reshape(m,n)
+                right=shared[offset+m*n:offset+m*n+m*(k+1)].reshape(m,k+1)
+                request=(j,right[:,0],right[:,1:],damping)
+                requests.append((connection,request))
+                cursor=(clients.index(connection)+1)%len(clients)
+            groups=defaultdict(list)
+            for connection,request in requests:
+                j,r,p,d=request
+                groups[(j.shape,p.shape[1])].append((connection,request))
+            for group in groups.values():
+                values=[request for _,request in group]
+                compute_started=time.monotonic()
+                answers=torch_normal_steps([v[0] for v in values],[v[1] for v in values],
+                    [v[2] for v in values],[v[3] for v in values],device=f'cuda:{device}')
+                stats['linear_compute_seconds']+=time.monotonic()-compute_started
+                for (connection,_),answer in zip(group,answers):
+                    try:connection.send(answer)
+                    except (EOFError,BrokenPipeError):pass
+                stats['requests']+=len(group);stats['batches']+=1
+            if time.monotonic()-last_write>=15:
+                stats.update(seconds=time.monotonic()-started,
+                    peak_allocated_MiB=torch.cuda.max_memory_allocated(device)/2**20)
+                write_json(Path(output)/f'gpu{device}.json',stats);last_write=time.monotonic()
+        stats.update(status='completed',seconds=time.monotonic()-started)
+    except Exception:
+        stats.update(status='failed',error=traceback.format_exc(),seconds=time.monotonic()-started)
+        try:ready.send(dict(status='failed',error=stats['error']))
+        except (EOFError,BrokenPipeError):pass
+        for connection in clients:
+            try:connection.send(dict(error=stats['error']))
+            except (EOFError,BrokenPipeError):pass
+        raise
+    finally:
+        write_json(Path(output)/f'gpu{device}.json',stats)
+        for connection in clients:connection.close()
+        control.close();ready.close()
+
+
+def _tak_cache_pool(worker, payloads, *, out, phase, workers, total,
+                    structured=False, gpu_devices=(), gpu_batch_size=4, gpu_workers=None):
+    """Bound the two producer pools and retain progress through the supervisor."""
+    import multiprocessing as mp
+    iterator=iter(payloads);completed=0;started=time.monotonic();rows=[]
+    clients=[];services=[];counter=None;storage=None
+    if gpu_devices:
+        gpu_workers=workers if gpu_workers is None else gpu_workers
+        if not 1<=gpu_workers<=workers:
+            raise ValueError('GPU worker count must fit inside the CPU worker pool')
+        context=mp.get_context('spawn');counter=mp.Value('i',0)
+        storage=context.RawArray('d',gpu_workers*_TAK_CACHE_GPU_SLOT)
+        pairs=[context.Pipe() for _ in range(gpu_workers)]
+        clients=[p[0] for p in pairs]
+        try:
+            for i,device in enumerate(gpu_devices):
+                control,server_control=context.Pipe();ready,server_ready=context.Pipe()
+                servers=[(k,p[1]) for k,p in enumerate(pairs) if k%len(gpu_devices)==i]
+                process=context.Process(target=_tak_cache_gpu_server,
+                    args=(device,servers,server_control,server_ready,str(out/'gpu_runtime'),gpu_batch_size,storage))
+                process.start();server_control.close();server_ready.close()
+                services.append((process,control,ready))
+            for _,server in pairs:server.close()
+            for process,control,ready in services:
+                if not ready.poll(120):raise RuntimeError('GPU service initialization timed out')
+                result=ready.recv()
+                if result['status']!='ready':raise RuntimeError(result.get('error','GPU initialization failed'))
+        except BaseException:
+            for process,control,ready in services:
+                try:control.send('stop')
+                except (EOFError,BrokenPipeError):pass
+                process.join(timeout=10)
+                if process.is_alive():process.terminate();process.join()
+            raise
+    try:
+        with ProcessPoolExecutor(max_workers=workers,initializer=_tak_cache_worker_initialize,
+                initargs=(structured,clients,counter,gpu_devices,storage)) as pool:
+            active={}
+            def submit():
+                try:payload=next(iterator)
+                except StopIteration:return False
+                active[pool.submit(worker,payload)]=None
+                return True
+            for _ in range(2*workers):
+                if not submit():break
+            while active:
+                done,_=wait(active,timeout=15,return_when=FIRST_COMPLETED)
+                for future in done:
+                    active.pop(future);row=future.result();rows.append(row);completed+=1;submit()
+                write_json(out/'progress.json',dict(schema='tak_reconstruction_cache_progress_v1',
+                    phase=phase,planned=total,terminal=completed,in_flight=len(active),workers=workers,
+                    observation_algebra='structured' if structured else 'dense',gpu_devices=list(gpu_devices),
+                    gpu_workers=len(clients),cpu_only_workers=workers-len(clients),
+                    elapsed_s=time.monotonic()-started,supervisor=os.environ.get('SSM_SYSTEMD_UNIT'),
+                    updated_at=datetime.now(timezone.utc).isoformat()))
+    finally:
+        for process,control,ready in services:
+            try:control.send('stop')
+            except (EOFError,BrokenPipeError):pass
+            process.join(timeout=20)
+            if process.is_alive():process.terminate();process.join()
+            control.close();ready.close()
+        for connection in clients:connection.close()
+    result=dict(status='completed',phase=phase,planned=total,terminal=completed,workers=workers,
+                observation_algebra='structured' if structured else 'dense',gpu_devices=list(gpu_devices),
+                gpu_workers=len(clients),cpu_only_workers=workers-len(clients),
+                seconds=time.monotonic()-started,rows=rows)
+    write_json(out/(phase+'_execution.json'),result)
+    return result
+
+
+def _tak_cache_chunks(out, records, *, counts=None):
+    """Yield finite paired neighborhoods; support masks precede all moments."""
+    for r in records:
+        for w in r['cache_windows']:
+            path=out/'features'/r['cache_key']/(w['key']+'.npz')
+            meta=path.with_suffix('.json')
+            if not meta.exists() or json.loads(meta.read_text())['status']!='completed':
+                continue
+            with np.load(path,allow_pickle=False) as a:
+                eeg,hb,ev,hv=(a[k] for k in ('eeg','hb','eeg_valid','hb_valid'))
+            used=0
+            for pair in r['pairs']:
+                if pair['status']!='available':continue
+                indices=pair['channel_sets']['nearest6'];p=pair['native_index']
+                if not hv[p] or not ev[indices].all():continue
+                x=eeg[:,indices].reshape(len(eeg),30);y=hb[:,p]
+                if not np.isfinite(x).all() or not np.isfinite(y).all():
+                    raise ValueError('Finite flags disagree with feature arrays')
+                used+=1
+                yield x,y
+            if counts is not None and used:
+                counts.append(dict(record_key=r['cache_key'],window_key=w['key'],pairs=used,
+                                   steps=len(eeg),subject=r['subject'],split=r['split']))
+
+
+def tak_cache_calibrate(cfg,out,plan, *, records=None, destination=None):
+    from src.data.ssm_prepared import fit_feature_coordinate
+    records=plan['records'] if records is None else records
+    destination=out/'coordinates.json' if destination is None else destination
+    if destination.exists():
+        value=json.loads(destination.read_text())
+        if value['schema']!=cfg['schema'] or value['calibration']!=cfg['calibration']:
+            raise ValueError('Frozen calibration contract changed')
+        return value
+    population={};individual={}
+    for ds in cfg['data']['datasets']:
+        selected=[r for r in records if r['dataset']==ds and r['split']=='train']
+        sources=[]
+        co=fit_feature_coordinate(_tak_cache_chunks(out,selected,counts=sources))
+        co.update(subjects=sorted({s['subject'] for s in sources}),sources=sources,scope='training_only')
+        population[ds]=co
+    identities=sorted({(r['dataset'],r['subject'],r['split']) for r in records})
+    for ds,subject,split in identities:
+        sources=[]
+        try:
+            co=fit_feature_coordinate(_tak_cache_chunks(out,[r for r in records
+                if r['dataset']==ds and r['subject']==subject],counts=sources),
+                fixed_pc=population[ds]['pc'])
+            co.update(status='completed',dataset=ds,subject=subject,split=split,sources=sources,
+                scope='own_unlabelled_observations_all_prepared_records_and_sites',
+                PCA_source=ds,parameter_comparison='effective_in_individually_scaled_coordinates')
+        except ValueError as exc:
+            co=dict(status='unavailable',dataset=ds,subject=subject,split=split,error=str(exc),sources=sources)
+        individual[ds+'__'+subject]=co
+    result=dict(schema=cfg['schema'],calibration=cfg['calibration'],population=population,
+                individual=individual,labels_used=False,heldout_subject_adaptation=True)
+    write_json(destination,result)
+    return result
+
+
+@lru_cache(maxsize=2)
+def _tak_cache_operator(steps):
+    if not 50 < steps <= 900:
+        raise ValueError('A complete fit must extend beyond its five-second reference')
+    reference=np.eye(steps);reference[:,:50]-=1/50
+    return np.kron(reference,np.eye(3))
+
+
+def _tak_cache_errors(target,prediction,sd):
+    error=(np.asarray(prediction)[:-1]-np.asarray(target)[:-1])/np.asarray(sd)
+    value=np.mean(error**2,axis=0)
+    return dict(eeg_nmse=float(value[0]),hbo_nmse=float(value[1]),hbr_nmse=float(value[2]),
+                hb_nmse=float(value[1:].mean()))
+
+
+def tak_cache_fit_arrays(core,target_unscaled,coordinate,common_sd, *, structured=False,linear_solver=None):
+    """The same two-parameter fit for 90 s and actual-duration REFED supports."""
+    from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
+    target_unscaled=np.asarray(target_unscaled,float)
+    scale=np.array([coordinate['eeg_factor'],coordinate['hb_factor'],coordinate['hb_factor']],float)
+    sd=np.asarray(coordinate['sd'],float);n=len(target_unscaled)
+    if (target_unscaled.shape!=(n,3) or not np.isfinite(target_unscaled).all()
+            or not np.isfinite(scale).all() or np.any(scale<=0)
+            or sd.shape!=(3,) or np.any(sd<=0) or not np.isfinite(sd).all()
+            or np.shape(common_sd)!=(3,) or np.any(np.asarray(common_sd)<=0)):
+        raise ValueError('Finite three-component target and fixed positive scales required')
+    target=target_unscaled*scale
+    operator=None if structured else _tak_cache_operator(n)
+    mask=np.ones((1,n,3),bool);mask[:,-1]=False
+    arrays=dict(target=target_unscaled,scale=scale,sd_subject=sd/scale,
+                sd_common=np.asarray(common_sd,float),time_s=np.arange(n)/10.,
+                observation_valid=np.ones((n,3),bool),fit_mask=mask[0])
+    results={};warm=None
+    for arm in core['arms']:
+        started=time.monotonic()
+        fit=tak_fit_group(core,arm,target[None],None if operator is None else operator[None],sd[None],mask,warm,
+            observation_reference_steps=50 if structured else None,linear_solver=linear_solver)
+        details={k:v for k,v in fit.items() if k not in
+                 ('driver','initial_state','prediction','canonical_prediction','states')}
+        detail=dict(solver=details,qualified=False,seconds=time.monotonic()-started)
+        if 'prediction' in fit:
+            p=volume_drive_parameters(core,kappa=fit['kappa'],tau=fit['tau'],gamma=fit['gamma'],
+                                      neurovascular_gain=fit['neurovascular_gain'])
+            fine=nonlinear_driver_forward(fit['driver'][0],fit['initial_state'][0],p,.1,
+                substeps=8,derivative=False,numerical_backend='numba',hemodynamics='tak',
+                viscoelastic_s=fit['viscoelastic_s'])
+            canonical=fine['canonical_prediction']
+            refined=(canonical-canonical[:50].mean(0) if structured else
+                     (operator@canonical.ravel()).reshape(n,3))
+            integration=float(np.max(abs((refined-fit['prediction'][0])[:-1]/sd)))
+            states=fit['states'][0]
+            qualified=bool(fit['converged'] and integration<=core['solver']['maximum_integration_difference_training_sd']
+                           and np.array_equal(states[:,3],states[:,4]))
+            prediction=fit['prediction'][0]/scale
+            detail.update(qualified=qualified,integration_max_subject_sd=integration,
+                metrics_subject=_tak_cache_errors(target_unscaled,prediction,sd/scale),
+                metrics_common=_tak_cache_errors(target_unscaled,prediction,common_sd),
+                waveform=filter_retest_waveform_metrics(target_unscaled,prediction,sd/scale,dt=.1),
+                tau=float(fit['tau']),beta=float(fit['neurovascular_gain']))
+            prefix='fixed_' if not arm['fit'] else ''
+            arrays[prefix+'prediction']=prediction
+            if arm['fit']:
+                arrays.update(residual=target_unscaled-prediction,driver=fit['driver'][0],
+                    states=states,initial_state=fit['initial_state'][0],
+                    prediction_valid=np.full((n,3),qualified,bool))
+            if not arm['fit']:
+                warm=dict(driver=fit['driver'],initial_state=fit['initial_state'])
+        results[arm['name']]=detail
+    free=results['tak_tau_beta']
+    result=dict(status='completed' if free['qualified'] else 'failed_numerical',
+        qualified=free['qualified'],fits=results,
+        execution_backend=dict(observation_algebra='structured' if structured else 'dense',
+            linear_solver=getattr(linear_solver,'backend','scipy_cpu_float64')),
+        zero_baseline=_tak_cache_errors(target_unscaled,np.zeros_like(target_unscaled),common_sd),
+        normalization=dict(subject='individual_calibration_SD',common='training_subjects_common_projection_SD'),
+        duration_s=n/10.,scored_steps=n-1,reference_steps=50)
+    if 'prediction' in arrays:
+        result['nonpositive_correlation_components']=[w['component'] for w in free['waveform']
+            if w['pearson_r'] is not None and w['pearson_r']<=0]
+        result['Hb_not_better_than_zero']=free['metrics_common']['hb_nmse']>=result['zero_baseline']['hb_nmse']
+        if not np.allclose(arrays['target'],arrays['prediction']+arrays['residual'],rtol=1e-12,atol=1e-12):
+            raise ValueError('Stored prediction/residual decomposition does not close')
+    return result,arrays
+
+
+@lru_cache(maxsize=2)
+def _tak_cache_coordinates(path):
+    return json.loads(Path(path).read_text())
+
+
+@lru_cache(maxsize=2)
+def _tak_cache_feature_arrays(path):
+    with np.load(path,allow_pickle=False) as a:
+        return {k:a[k] for k in ('eeg','hb','eeg_valid','hb_valid','eeg_reference','hb_reference')}
+
+
+def _tak_cache_fit_worker(payload):
+    from src.inference.shared_driver_reconstruction import LinearSolverUnavailable
+    cfg,core,out_string,coordinate_string,destination_string,spec=payload
+    out,destination=Path(out_string),Path(destination_string);started=time.monotonic()
+    path=destination/'tasks'/spec['record_key']/(spec['window']['key']+f"__p{spec['pair']['native_index']:03d}.json")
+    if path.exists():
+        previous=json.loads(path.read_text())
+        if (previous.get('schema')!=cfg['schema'] or previous.get('identity')!=spec
+                or previous.get('coordinates')!=coordinate_string
+                or (previous.get('qualified') and not path.with_suffix('.npz').exists())):
+            raise ValueError('Terminal reconstruction cache identity or array changed')
+        return dict(key=str(path.relative_to(destination)),status=previous['status'],
+                    qualified=previous.get('qualified',False),seconds=0.,cached=True)
+    row=dict(schema=cfg['schema'],identity=spec,coordinates=coordinate_string,
+             status='unavailable',qualified=False)
+    arrays={}
+    try:
+        coordinates=_tak_cache_coordinates(coordinate_string)
+        co=coordinates['individual'][spec['dataset']+'__'+spec['subject']]
+        population=coordinates['population'][spec['dataset']]
+        pair=spec['pair'];feature=out/'features'/spec['record_key']/(spec['window']['key']+'.npz')
+        if pair['status']!='available':
+            raise ValueError('unavailable_geometry: '+str(pair.get('reason')))
+        if co['status']!='completed':
+            raise ValueError('unavailable_subject_calibration: '+str(co.get('error')))
+        metadata=json.loads(feature.with_suffix('.json').read_text())
+        if metadata['status']!='completed':
+            raise ValueError('feature_preparation_failed: '+str(metadata.get('error')))
+        a=_tak_cache_feature_arrays(str(feature));indices=pair['channel_sets']['nearest6'];p=pair['native_index']
+        if not a['hb_valid'][p] or not a['eeg_valid'][indices].all():
+            raise ValueError('unsupported_Hb_pair_or_required_native_EEG_channel')
+        n=len(a['eeg']);pc=np.asarray(co['pc'],float)
+        target=np.column_stack((a['eeg'][:,indices].reshape(n,30)@pc,a['hb'][:,p]))
+        common_sd=np.asarray(population['sd'])/np.array([population['eeg_factor'],population['hb_factor'],population['hb_factor']])
+        before_requests=getattr(_TAK_CACHE_GPU_CLIENT,'requests',0)
+        before_wait=getattr(_TAK_CACHE_GPU_CLIENT,'wait_seconds',0.)
+        fitted,arrays=tak_cache_fit_arrays(core,target,co,common_sd,
+            structured=_TAK_CACHE_STRUCTURED,linear_solver=_TAK_CACHE_GPU_CLIENT)
+        fitted['gpu_linear_requests']=getattr(_TAK_CACHE_GPU_CLIENT,'requests',0)-before_requests
+        fitted['gpu_linear_wait_seconds']=getattr(_TAK_CACHE_GPU_CLIENT,'wait_seconds',0.)-before_wait
+        row.update(fitted,feature_source=str(feature.relative_to(out)),provenance=metadata['provenance'])
+        arrays['reference_unscaled']=np.r_[a['eeg_reference'][indices].ravel()@pc,a['hb_reference'][p]]
+    except LinearSolverUnavailable:
+        raise
+    except Exception:
+        row.update(status='failed_preparation_or_fit',error=traceback.format_exc())
+    row.update(seconds=time.monotonic()-started,peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    if arrays:
+        _tak_cache_npz(path.with_suffix('.npz'),**arrays)
+    write_json(path,row)
+    return dict(key=str(path.relative_to(destination)),status=row['status'],qualified=row['qualified'],
+                seconds=row['seconds'],peak_rss_mib=row['peak_rss_mib'],cached=False)
+
+
+def tak_cache_specs(records, *, pilot=False):
+    for r in records:
+        pairs=r['pairs']
+        if pilot:
+            available=[p for p in pairs if p['status']=='available']
+            pairs=[available[i] for i in sorted({0,len(available)//2,len(available)-1})] if available else []
+        for w in r['cache_windows'][:1] if pilot else r['cache_windows']:
+            for pair in pairs:
+                yield dict(record_key=r['cache_key'],dataset=r['dataset'],subject=r['subject'],split=r['split'],
+                    join_key=r['join_key'],record=r['record'],window=w,pair={k:pair[k] for k in
+                        ('native_index','id','site_id','status','channel_sets','channel_set_names') if k in pair},
+                    output_coordinates='training_PC1_logpower_and_referenced_cached_Hb',
+                    visibility='joint_full_declared_window',subject_adaptation=True)
+
+
+def _tak_cache_synthetic_worker(payload):
+    cfg,core,out_string,index,case,duration=payload
+    out=Path(out_string);path=out/'synthetic'/f'case{index:02d}.json';started=time.monotonic()
+    if path.exists():return json.loads(path.read_text())
+    target,operator,sd,truth=tak_task_parameter_synthetic(core,case)
+    n=round(duration*10)
+    target=target[:n]
+    result,arrays=tak_cache_fit_arrays(core,target,dict(eeg_factor=1.,hb_factor=1.,sd=sd),sd)
+    result.update(case=case,truth_tau=truth['tau'],truth_beta=truth['beta'],
+                  seconds=time.monotonic()-started,
+                  peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    _tak_cache_npz(path.with_suffix('.npz'),**arrays,truth_clean=truth['clean'][:n])
+    write_json(path,result)
+    return result
+
+
+def tak_cache_synthetic(cfg,core,out,workers):
+    jobs=[(cfg,core,str(out),i,c,90.) for i,c in enumerate(cfg['synthetic']['cases'])]
+    jobs.append((cfg,core,str(out),len(jobs),cfg['synthetic']['cases'][0],cfg['synthetic']['short_REFED_duration_s']))
+    execution=_tak_cache_pool(_tak_cache_synthetic_worker,jobs,out=out,phase='synthetic',
+                              workers=min(workers,len(jobs)),total=len(jobs))
+    result=dict(status='completed',cases=len(jobs),qualified=sum(r['qualified'] for r in execution['rows']),
+                numerical_checks_passed=all(r['qualified'] for r in execution['rows']),rows=execution['rows'],
+                measured_signal_reads=0,protected_reads=0)
+    write_json(out/'synthetic_summary.json',result)
+    if not result['numerical_checks_passed']:
+        raise ValueError('Synthetic numerical failures must be resolved before measured cache preparation')
+    return result
+
+
+def tak_cache_check(cfg,core,out):
+    from src.data.ssm_prepared import fit_feature_coordinate
+    rng=np.random.default_rng(20261104);x=rng.normal(size=(120,30));h=rng.normal(size=(120,2))
+    population=fit_feature_coordinate([(x,h)])
+    own=fit_feature_coordinate([(x*3,h*7)],fixed_pc=population['pc'])
+    np.testing.assert_array_equal(own['pc'],population['pc'])
+    np.testing.assert_allclose(own['eeg_factor'],population['eeg_factor']/3,rtol=1e-12)
+    np.testing.assert_allclose(own['hb_factor'],population['hb_factor']/7,rtol=1e-12)
+    for n in (900,450):
+        y=rng.normal(size=(n,3))
+        np.testing.assert_allclose((_tak_cache_operator(n)@y.ravel()).reshape(n,3),
+                                   y-y[:50].mean(0),rtol=1e-12,atol=1e-12)
+    if (core['arms'][1]['fit']!=['tau','neurovascular_gain']
+            or core['arms'][1]['log_sd']!=[.125,.125] or core['tensor']['dt_s']!=.1):
+        raise ValueError('Explicit tau/beta 10Hz prior contract required')
+    result=dict(status='passed',checks=['frozen_PCA_individual_scaling','90s_and_short_reference_operator',
+        'explicit_tau_beta_prior_and_clock'],measured_signal_reads=0,protected_reads=0)
+    write_json(out/'software_checks.json',result)
+    return result
+
+
+def tak_cache_pilot_records(plan):
+    selected=[]
+    for ds in plan['subject_partitions']:
+        candidates=[r for r in plan['records'] if r['dataset']==ds and r['split']=='train'
+            and r['cache_windows'] and r['cache_windows'][0]['duration_s']==90
+            and any(p['status']=='available' for p in r['pairs'])]
+        if not candidates:raise ValueError('No complete training pilot support for '+ds)
+        selected.append(candidates[0])
+    short=[r for r in plan['records'] if r['dataset']=='refed' and r['split']=='train'
+           and r['cache_windows'] and r['cache_windows'][0]['short_record']
+           and any(p['status']=='available' for p in r['pairs'])]
+    if short:selected.append(short[0])
+    return selected
+
+
+def tak_cache_pilot(cfg,core,root,out,plan,workers):
+    pilot=out/'pilot';pilot.mkdir(exist_ok=True)
+    if (pilot/'summary.json').exists():
+        return json.loads((pilot/'summary.json').read_text())
+    records=tak_cache_pilot_records(plan)
+    prepare=_tak_cache_pool(_tak_cache_prepare_worker,
+        [(cfg,str(root),str(out),r,[r['cache_windows'][0]['key']]) for r in records],
+        out=pilot,phase='prepare_pilot',workers=min(cfg['resources']['preparation_workers'],len(records)),
+        total=len(records))
+    coordinate_path=pilot/'coordinates.json'
+    tak_cache_calibrate(cfg,out,plan,records=records,destination=coordinate_path)
+    specs=list(tak_cache_specs(records,pilot=True))
+    run=_tak_cache_pool(_tak_cache_fit_worker,
+        ((cfg,core,str(out),str(coordinate_path),str(pilot),s) for s in specs),
+        out=pilot,phase='pilot_fit',workers=min(workers,len(specs)),total=len(specs))
+    rows=[json.loads((pilot/r['key']).read_text()) for r in run['rows']]
+    successes={r['identity']['dataset'] for r in rows if r['qualified']}
+    numerically_ready=successes==set(cfg['data']['datasets'])
+    if any(s['window']['short_record'] for s in specs):
+        numerically_ready &= any(r['qualified'] and r['identity']['window']['short_record'] for r in rows)
+    times=[r['seconds'] for r in run['rows'] if not r.get('cached')]
+    peak=max((r.get('peak_rss_mib',0.) for r in run['rows']),default=0.)
+    verify_records=[]
+    for r in records:
+        item=deepcopy(r);item['cache_windows']=r['cache_windows'][:1]
+        selected={s['pair']['native_index'] for s in specs if s['record_key']==r['cache_key']}
+        item['pairs']=[p for p in r['pairs'] if p['native_index'] in selected]
+        verify_records.append(item)
+    verification=_tak_cache_pool(_tak_cache_verify_record,
+        ((cfg,core,str(pilot),r) for r in verify_records),out=pilot,phase='pilot_verification',
+        workers=min(len(records),cfg['resources']['preparation_workers']),total=len(records))
+    issues=[i for r in verification['rows'] for i in r['issues']]
+    numerically_ready &= not issues
+    result=dict(status='completed',numerical_smoke_passed=bool(numerically_ready),
+        planned=len(rows),qualified=sum(r['qualified'] for r in rows),
+        selection='first_training_record_per_dataset_and_first_short_REFED_record; first_middle_last_sites',
+        provisional_coordinates=True,production_reuse='unscaled_features_only_not_fits_or_calibration',
+        fit_seconds_mean=float(np.mean(times)) if times else None,
+        fit_seconds_median=float(np.median(times)) if times else None,
+        fit_seconds_p90=float(np.quantile(times,.9)) if times else None,peak_fit_rss_mib=peak,
+        peak_prepare_rss_mib=max(r['peak_rss_mib'] for r in prepare['rows']),
+        independent_array_verification=dict(status='passed' if not issues else 'failed',issues=issues),
+        rows=[dict(identity=r['identity'],qualified=r['qualified'],status=r['status'],
+                   metrics=r.get('fits',{}),seconds=r['seconds']) for r in rows])
+    write_json(pilot/'summary.json',result)
+    if not numerically_ready:raise ValueError('Pilot cannot fit every dataset and short REFED; inspect retained failures')
+    return result
+
+
+def _tak_cache_verify_record(payload):
+    """Independently check retained arrays; no source signals or refitting."""
+    cfg,core,out_string,record=payload;out=Path(out_string)
+    counts=dict(planned=0,terminal=0,qualified=0,failed=0,paired=0,short=0,
+                nonpositive_EEG_correlation=0,nonpositive_HbO_correlation=0,
+                nonpositive_HbR_correlation=0,Hb_not_better_than_zero=0)
+    sums={};maxima=dict(closure=0.,metric=0.,observation=0.);issues=[]
+    for spec in tak_cache_specs([record]):
+        counts['planned']+=1
+        path=out/'tasks'/spec['record_key']/(spec['window']['key']+f"__p{spec['pair']['native_index']:03d}.json")
+        if not path.exists():
+            issues.append(dict(key=str(path.relative_to(out)),reason='missing_terminal_record'));continue
+        row=json.loads(path.read_text());counts['terminal']+=1
+        if row.get('schema')!=cfg['schema'] or row.get('identity')!=spec:
+            issues.append(dict(key=str(path.relative_to(out)),reason='identity_mismatch'));continue
+        if not row.get('qualified'):
+            counts['failed']+=1;continue
+        counts['qualified']+=1;counts['short']+=int(spec['window']['short_record'])
+        for component in row.get('nonpositive_correlation_components',[]):
+            counts['nonpositive_'+component+'_correlation']+=1
+        counts['Hb_not_better_than_zero']+=int(row.get('Hb_not_better_than_zero',False))
+        try:
+            with np.load(path.with_suffix('.npz'),allow_pickle=False) as a:
+                y,p,e=a['target'],a['prediction'],a['residual'];n=round(spec['window']['duration_s']*10)
+                if (y.shape!=(n,3) or p.shape!=y.shape or e.shape!=y.shape
+                        or y.dtype!=np.float64 or not all(np.isfinite(v).all() for v in (y,p,e))
+                        or not a['prediction_valid'].all()
+                        or not a['fit_mask'][:-1].all() or a['fit_mask'][-1].any()
+                        or not a['observation_valid'].all()
+                        or not np.array_equal(a['time_s'],np.arange(n)/10.)):
+                    raise ValueError('shape, precision, mask or clock mismatch')
+                closure=float(np.max(abs(y-p-e)));maxima['closure']=max(maxima['closure'],closure)
+                if not np.allclose(y,p+e,rtol=1e-12,atol=1e-12):raise ValueError('residual closure')
+                squared=np.sum((p[:-1]-y[:-1])**2,axis=0)/(n-1)
+                for name in ('subject','common'):
+                    values=squared/a['sd_'+name]**2
+                    expected=dict(eeg_nmse=values[0],hbo_nmse=values[1],hbr_nmse=values[2],hb_nmse=values[1:].mean())
+                    actual=row['fits']['tak_tau_beta']['metrics_'+name]
+                    for key,value in expected.items():
+                        maxima['metric']=max(maxima['metric'],abs(float(value)-actual[key]))
+                        if not np.isclose(value,actual[key],rtol=1e-10,atol=1e-10):
+                            raise ValueError('retained metric disagrees with arrays')
+                        sums['free_'+name+'_'+key]=sums.get('free_'+name+'_'+key,0.)+float(value)
+                states=a['states'];parameters=volume_drive_parameters(core).fixed
+                if (states.shape!=(n,6) or not np.isfinite(states).all()
+                        or not np.array_equal(states[:,3],states[:,4])
+                        or np.any(states[:,2:]<=0) or np.any(parameters.P0*states[:,4]<parameters.Q0*states[:,5])):
+                    raise ValueError('invalid retained Tak state')
+                canonical=np.column_stack((parameters.eeg_loading*a['driver']+parameters.eeg_offset,
+                    parameters.P0*(states[:,4]-1)-parameters.Q0*(states[:,5]-1),
+                    parameters.Q0*(states[:,5]-1)))
+                expected=(canonical-canonical[:50].mean(0))/a['scale']
+                maxima['observation']=max(maxima['observation'],float(np.max(abs(expected-p))))
+                if not np.allclose(expected,p,rtol=1e-9,atol=1e-10):
+                    raise ValueError('states do not reproduce stored observation')
+                if row['fits']['tak_fixed']['qualified']:
+                    counts['paired']+=1
+                    for arm,prediction in [('free',p),('fixed',a['fixed_prediction'])]:
+                        nmse=np.mean((prediction[:-1]-y[:-1])**2,axis=0)/a['sd_common']**2
+                        for key,value in zip(('eeg','hbo','hbr','hb'),[*nmse,nmse[1:].mean()]):
+                            name='paired_'+arm+'_'+key
+                            sums[name]=sums.get(name,0.)+float(value)
+        except Exception as exc:
+            issues.append(dict(key=str(path.relative_to(out)),reason=str(exc)))
+    return dict(record_key=record['cache_key'],dataset=record['dataset'],subject=record['subject'],
+                split=record['split'],durations_s=sorted({w['duration_s'] for w in record['cache_windows']}),
+                counts=counts,sums=sums,maxima=maxima,issues=issues)
+
+
+def tak_cache_verify(cfg,core,out,plan,workers):
+    from collections import defaultdict
+    records=[r for r in plan['records'] if r['cache_windows']]
+    execution=_tak_cache_pool(_tak_cache_verify_record,
+        ((cfg,core,str(out),r) for r in records),out=out,phase='verification',
+        workers=min(workers,cfg['resources']['preparation_workers']),total=len(records))
+    rows=execution['rows'];issues=[i for r in rows for i in r['issues']]
+    counts={k:sum(r['counts'][k] for r in rows) for k in rows[0]['counts']}
+    if counts['planned']!=plan['planned_pair_windows']:
+        issues.append(dict(reason='planned_population_mismatch'))
+    def aggregate(selected):
+        subject_values=defaultdict(lambda:defaultdict(list));values=defaultdict(list)
+        for r in selected:
+            for key,value in r['sums'].items():
+                denominator=r['counts']['paired' if key.startswith('paired_') else 'qualified']
+                if denominator:subject_values[r['subject']][key].append(value/denominator)
+        for metrics in subject_values.values():
+            for key,v in metrics.items():values[key].append(float(np.mean(v)))
+        return dict(counts={k:sum(r['counts'][k] for r in selected) for k in counts},
+                    nrmse={key:float(np.sqrt(np.mean(v))) for key,v in values.items()},
+                    contributing_subjects=len(subject_values))
+    summaries={}
+    for ds in cfg['data']['datasets']:
+        rr=[r for r in rows if r['dataset']==ds]
+        summaries[ds]=aggregate(rr)
+        summaries[ds]['duration_strata']={
+            '90s':aggregate([r for r in rr if r['durations_s']==[90.]]),
+            'short_REFED':aggregate([r for r in rr if max(r['durations_s'])<90.])}
+        summaries[ds]['aggregation']='time/component_NMSE_then_window_mean_within_record_then_record_mean_within_subject_then_subject_mean_then_sqrt'
+    result=dict(schema=cfg['schema'],status='passed' if not issues else 'failed',counts=counts,
+        datasets=summaries,issues=issues,
+        maxima={k:max((r['maxima'][k] for r in rows),default=0.) for k in ('closure','metric','observation')},
+        source='frozen_plan_coordinates_and_every_terminal_task_array',raw_signal_reads=0,refits=0)
+    write_json(out/'verification.json',result)
+    summary=dict(schema=cfg['schema'],experiment_id=cfg['experiment_id'],
+        status='completed' if not issues else 'verification_failed',counts=counts,datasets=summaries,
+        plan='plan.json',coordinates='coordinates.json',verification='verification.json',
+        layout='tasks/<dataset>/<subject>/<record>/<window>__p<pair>.json_and_npz',
+        claim_limits=cfg['claim_limits'],downstream_join='plan.json:downstream_joins',
+        complete_population_includes_failures=True)
+    write_json(out/'summary.json',summary)
+    if issues:raise ValueError('Independent full-cache verification failed; evidence retained')
+    return summary
+
+
+def tak_cache_worker_capacity(*, cgroup_root=Path('/sys/fs/cgroup'), membership_path=Path('/proc/self/cgroup')):
+    """Bound an execution-only worker change by affinity and inherited CPU quota."""
+    capacity=len(os.sched_getaffinity(0))
+    if not membership_path.exists():
+        return capacity
+    membership=next((line.split('::',1)[1] for line in membership_path.read_text().splitlines()
+                     if line.startswith('0::')),None)
+    if membership is None:
+        return capacity
+    root=cgroup_root.resolve();current=(root/membership.lstrip('/')).resolve()
+    if not current.is_relative_to(root):
+        raise ValueError('Invalid process cgroup path')
+    while current.is_relative_to(root):
+        path=current/'cpu.max'
+        if path.exists():
+            quota,period=path.read_text().split()
+            if quota!='max':
+                if int(quota)<=0 or int(period)<=0:raise ValueError('Invalid CPU quota')
+                capacity=min(capacity,max(1,int(quota)//int(period)))
+        if current==root:break
+        current=current.parent
+    return capacity
+
+
+def _tak_cache_accelerator_worker(payload):
+    from src.inference.shared_driver_reconstruction import LinearSolverUnavailable
+    core,output,case,variant=payload;folder=Path(output)/variant;path=folder/(case['id']+'.json')
+    if path.exists():
+        row=json.loads(path.read_text())
+        if row['case']!=case or row['variant']!=variant or not path.with_suffix('.npz').exists():
+            raise ValueError('Accelerator comparison resume identity changed')
+        return row
+    source=Path(case['source'])
+    with np.load(source.with_suffix('.npz'),allow_pickle=False) as a:
+        target=a['target'];scale=a['scale'];sd=a['sd_subject']*scale;common=a['sd_common']
+    coordinate=dict(eeg_factor=float(scale[0]),hb_factor=float(scale[1]),sd=sd)
+    client=_TAK_CACHE_GPU_CLIENT if variant=='cuda_structured' else None
+    if variant=='cuda_structured' and client is None:
+        raise LinearSolverUnavailable('CUDA comparison has no GPU connection')
+    before=getattr(client,'requests',0);before_wait=getattr(client,'wait_seconds',0.);started=time.monotonic()
+    row,arrays=tak_cache_fit_arrays(core,target,coordinate,common,
+        structured=variant!='cpu_dense',linear_solver=client)
+    row.update(case=case,variant=variant,seconds=time.monotonic()-started,
+        gpu_requests=getattr(client,'requests',0)-before,
+        gpu_wait_seconds=getattr(client,'wait_seconds',0.)-before_wait,
+        peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    _tak_cache_npz(path.with_suffix('.npz'),**arrays);write_json(path,row)
+    return row
+
+
+def tak_cache_accelerator_check(cfg,core,root,out,args,devices):
+    """Read-only retained-case refits in a fresh validation child, not cache writes."""
+    from collections import defaultdict
+    if not os.environ.get('INVOCATION_ID') or not os.environ.get('SSM_SYSTEMD_UNIT'):
+        raise ValueError('Full-fit accelerator checks require the durable supervisor')
+    if not 1<=args.workers<=min(4,tak_cache_worker_capacity()):
+        raise ValueError('Bound accelerator validation to at most four CPU workers')
+    target=(args.cache_validation_output or out/'accelerator_validation_v1').resolve()
+    if target.parent!=out:raise ValueError('Use a fresh direct child for accelerator validation')
+    if json.loads((out/'resolved_config.json').read_text())!=serial(cfg):
+        raise ValueError('Exact parent public cache contract required')
+    target.mkdir(exist_ok=True)
+    lock=(target/'controller.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    cases=[]
+    for i in range(4):
+        source=out/'synthetic'/f'case{i:02d}.json'
+        cases.append(dict(id=f'synthetic_{i}',source=str(source),kind='synthetic',timing_reference=i==0))
+    pilot=json.loads((out/'pilot/summary.json').read_text())
+    grouped=defaultdict(list)
+    for row in pilot['rows']:
+        spec=row['identity'];grouped[(spec['dataset'],spec['window']['duration_s'])].append(spec)
+    for i,(key,specs) in enumerate(sorted(grouped.items())):
+        spec=min(specs,key=lambda s:s['pair']['native_index'])
+        source=out/'pilot/tasks'/spec['record_key']/(spec['window']['key']+f"__p{spec['pair']['native_index']:03d}.json")
+        cases.append(dict(id=f'measured_{i}',source=str(source),kind='measured',
+            dataset=spec['dataset'],duration_s=spec['window']['duration_s'],
+            timing_reference=spec['dataset']=='eeg_fnirs_single_trial' or spec['window']['short_record']))
+    checkpoint=json.loads((out/'resource_continuation_v2_cutover.json').read_text())
+    slow=None;negative=None
+    for item in sorted(checkpoint['retained_files'],key=lambda r:r['path']):
+        if not item['path'].endswith('.json'):continue
+        source=out/item['path'];row=json.loads(source.read_text())
+        if slow is None and row.get('qualified') and row.get('seconds',0)>=150:
+            slow=dict(id='slow_retained',source=str(source),kind='slow',timing_reference=False)
+        if negative is None and row.get('status')=='failed_numerical' and source.with_suffix('.npz').exists():
+            negative=dict(id='nonconverged_retained',source=str(source),kind='failed_numerical',timing_reference=False)
+        if slow and negative:break
+    cases += [v for v in (slow,negative) if v is not None]
+    thresholds=dict(prediction_max_subject_sd=1e-4,state_max_absolute=1e-4,
+        parameter_max_relative=1e-4,objective_max_relative=1e-6,metric_max_absolute=1e-6)
+    protocol=dict(schema='tak_cache_accelerator_validation_v1',source_root=str(CODE_ROOT),
+        parent=str(out),cases=cases,thresholds=thresholds,gpu_devices=devices,
+        variants=['cpu_structured','cuda_structured'],timing_reference='same-session cpu_dense on marked cases',
+        missing_or_failed='retain_every_case; failure_status_must_match; failed_trajectories_not_qualified_targets',
+        modified_scientific_configuration=False,raw_reads=0,protected_reads=0)
+    reference=None
+    if args.cache_cpu_reference is not None:
+        import ast
+        reference=args.cache_cpu_reference.resolve()
+        if reference.parent!=out or reference==target:
+            raise ValueError('CPU comparison reuse requires a distinct validation child of this run')
+        prior=json.loads((reference/'summary.json').read_text())
+        prior_protocol=json.loads((reference/'protocol.json').read_text())
+        if (prior['status']!='passed' or prior_protocol['cases']!=cases or prior_protocol['thresholds']!=thresholds):
+            raise ValueError('Complete matching-case numerical validation required for CPU reuse')
+        for relative,names in [
+            ('src/inference/shared_driver_reconstruction.py',
+             ['fit_nonlinear_shared_parameters','_nonlinear_trial_objective','nonlinear_driver_forward',
+              '_volume_tied_initial_embedding','replay_nonlinear_driver','_information_svd']),
+            ('experiments/scripts/evaluate_shared_driver_reconstruction.py',
+             ['tak_cache_fit_arrays','tak_fit_group','_tak_cache_errors','filter_retest_waveform_metrics'])]:
+            def definitions(path):
+                return {n.name:ast.dump(n,include_attributes=False) for n in ast.parse(path.read_text()).body
+                        if isinstance(n,ast.FunctionDef)}
+            previous=definitions(Path(prior['source_root'])/relative);current=definitions(CODE_ROOT/relative)
+            if any(previous[name]!=current[name] for name in names):
+                raise ValueError('CPU numerical source changed; cannot reuse its comparisons')
+        protocol.update(cpu_reference=str(reference),
+                        timing_reference='retained_identical_CPU_algebra; CUDA_transport_remeasured')
+    if (target/'protocol.json').exists():
+        if json.loads((target/'protocol.json').read_text())!=protocol:
+            raise ValueError('Immutable accelerator validation source/cases changed; use a fresh child')
+    else:write_json(target/'protocol.json',protocol)
+    if (target/'summary.json').exists():return json.loads((target/'summary.json').read_text())
+    jobs=[]
+    for case in cases:
+        for variant in (['cpu_dense'] if case['timing_reference'] else [])+protocol['variants']:
+            if reference is not None and variant.startswith('cpu_'):
+                source=reference/variant/(case['id']+'.json');destination=target/variant/source.name
+                if not destination.exists():
+                    prior_row=json.loads(source.read_text());prior_row['reused_from']=str(source)
+                    destination.parent.mkdir(parents=True,exist_ok=True)
+                    os.link(source.with_suffix('.npz'),destination.with_suffix('.npz'))
+                    write_json(destination,prior_row)
+            else:
+                jobs.append((core,str(target),case,variant))
+    execution=_tak_cache_pool(_tak_cache_accelerator_worker,jobs,out=target,phase='paired_fits',
+        workers=args.workers,total=len(jobs),structured=True,gpu_devices=devices,
+        gpu_batch_size=args.cache_gpu_batch_size)
+    comparisons=[];issues=[]
+    for case in cases:
+        baseline=json.loads(Path(case['source']).read_text())
+        with np.load(Path(case['source']).with_suffix('.npz'),allow_pickle=False) as a:
+            original={key:a[key] for key in ('target','prediction','states','sd_subject','scale') if key in a}
+        for variant in (['cpu_dense'] if case['timing_reference'] else [])+protocol['variants']:
+            row=json.loads((target/variant/(case['id']+'.json')).read_text())
+            comparison=dict(case=case['id'],kind=case['kind'],variant=variant,
+                qualified=row['qualified'],baseline_qualified=baseline['qualified'],seconds=row['seconds'],
+                gpu_requests=row['gpu_requests'])
+            comparison['gpu_wait_seconds']=row.get('gpu_wait_seconds',0.)
+            if row.get('reused_from'):comparison['reused_from']=row['reused_from']
+            if row['qualified']!=baseline['qualified']:
+                issues.append(dict(case=case['id'],variant=variant,reason='qualification_changed'))
+            with np.load(target/variant/(case['id']+'.npz'),allow_pickle=False) as a:
+                if not np.array_equal(a['target'],original['target']):
+                    issues.append(dict(case=case['id'],variant=variant,reason='input_changed'))
+                if row['qualified'] and baseline['qualified']:
+                    prediction=float(np.max(abs((a['prediction']-original['prediction'])/original['sd_subject'])))
+                    state=float(np.max(abs(a['states']-original['states'])))
+                    actual=row['fits']['tak_tau_beta'];reference_fit=baseline['fits']['tak_tau_beta']
+                    parameter=max(abs(actual[k]/reference_fit[k]-1) for k in ('tau','beta'))
+                    objective=abs(actual['solver']['objective']-reference_fit['solver']['objective'])/max(1.,abs(reference_fit['solver']['objective']))
+                    metric=max(abs(actual['metrics_common'][k]-reference_fit['metrics_common'][k]) for k in actual['metrics_common'])
+                    comparison.update(prediction_max_subject_sd=prediction,state_max_absolute=state,
+                        parameter_max_relative=parameter,objective_max_relative=objective,metric_max_absolute=metric)
+                    for name,limit in thresholds.items():
+                        if comparison[name]>limit:issues.append(dict(case=case['id'],variant=variant,reason=name,value=comparison[name],limit=limit))
+                    if not np.allclose(a['target'],a['prediction']+a['residual'],rtol=1e-12,atol=1e-12):
+                        issues.append(dict(case=case['id'],variant=variant,reason='residual_closure'))
+                    parameters=volume_drive_parameters(core).fixed;states=a['states']
+                    canonical=np.column_stack((parameters.eeg_loading*a['driver']+parameters.eeg_offset,
+                        parameters.P0*(states[:,4]-1)-parameters.Q0*(states[:,5]-1),parameters.Q0*(states[:,5]-1)))
+                    reproduced=(canonical-canonical[:50].mean(0))/a['scale']
+                    if not np.allclose(a['prediction'],reproduced,rtol=1e-9,atol=1e-10):
+                        issues.append(dict(case=case['id'],variant=variant,reason='state_observation_replay'))
+            comparisons.append(comparison)
+    timing=[]
+    for case in cases:
+        if case['timing_reference']:
+            found={r['variant']:r['seconds'] for r in comparisons if r['case']==case['id']}
+            timing.append(dict(case=case['id'],**found,cpu_structured_speedup=found['cpu_dense']/found['cpu_structured'],
+                cuda_structured_speedup=found['cpu_dense']/found['cuda_structured']))
+    result=dict(schema=protocol['schema'],status='passed' if not issues else 'failed',
+        source_root=str(CODE_ROOT),cases=len(cases),fits=len(comparisons),comparisons=comparisons,
+        issues=issues,timing=timing,gpu_devices=devices,thresholds=thresholds,
+        configuration_unchanged=True,coordinates_unchanged=True,production_writes=0,
+        cpu_reference=str(reference) if reference is not None else None,
+        planned_new_fits=len(jobs),reused_CPU_fits=len(comparisons)-len(jobs))
+    write_json(target/'summary.json',result)
+    if issues:raise ValueError('Accelerator equivalence checks failed; production remains on its existing backend')
+    return result
+
+
+def tak_cache_main(args):
+    cfg,core=tak_cache_config(args.config);root=args.project_root.resolve();out=args.run_dir.resolve()
+    if out.parent!=(root/cfg['output_root']).resolve():
+        raise ValueError('Use one fresh direct child of the shared-driver run namespace')
+    devices=[int(v) for v in args.cache_gpu_devices.split(',') if v.strip()]
+    if (not devices or len(set(devices))!=len(devices) or min(devices)<0
+            or not 1<=args.cache_gpu_batch_size<=8):
+        raise ValueError('Unique GPU indices and a bounded batch size required')
+    if args.cache_gpu_workers is not None and (args.cache_stage!='produce'
+            or args.cache_linear_backend!='cuda' or not 1<=args.cache_gpu_workers<=args.workers):
+        raise ValueError('Hybrid CUDA worker allocation applies only to production and must fit its worker pool')
+    if args.cache_stage=='accelerator-check':
+        return tak_cache_accelerator_check(cfg,core,root,out,args,devices)
+    out.mkdir(parents=True,exist_ok=True)
+    lock=(out/'controller.lock').open('a');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    for name,value in [('resolved_config.json',cfg),('resolved_model_config.json',core)]:
+        path=out/name
+        if path.exists() and json.loads(path.read_text())!=serial(value):
+            raise ValueError('Immutable reconstruction cache configuration changed')
+        if not path.exists():write_json(path,value)
+    stage=args.cache_stage
+    if stage not in ('check','plan'):
+        if not os.environ.get('INVOCATION_ID') or not os.environ.get('SSM_SYSTEMD_UNIT'):
+            raise ValueError('Substantial cache work requires its durable supervisor')
+        # The frozen resources section records the initial launch envelope.
+        # Later measured resource-only continuations use the existing --workers
+        # argument and retain their separate source/launch/resource evidence.
+        if not 1<=args.workers<=tak_cache_worker_capacity():
+            raise ValueError('Worker count exceeds process affinity or inherited CPU quota')
+    if stage=='check':
+        result=tak_cache_check(cfg,core,out)
+    elif stage=='plan':
+        result=tak_cache_plan(cfg,root);path=out/'plan.json'
+        if path.exists() and json.loads(path.read_text())!=serial(result):
+            raise ValueError('Frozen cache inventory changed')
+        if not path.exists():write_json(path,result)
+    elif stage=='synthetic':
+        if json.loads((out/'software_checks.json').read_text())['status']!='passed':
+            raise ValueError('Software checks required')
+        result=tak_cache_synthetic(cfg,core,out,args.workers)
+    else:
+        if not json.loads((out/'synthetic_summary.json').read_text()).get('numerical_checks_passed'):
+            raise ValueError('Synthetic numerical checks required before measured reads')
+        plan=json.loads((out/'plan.json').read_text())
+        if stage=='verify':
+            result=tak_cache_verify(cfg,core,out,plan,args.workers)
+        else:
+            if serial(tak_cache_plan(cfg,root))!=plan:
+                raise ValueError('Frozen public inputs or splits changed before preparation')
+            if stage=='pilot':
+                result=tak_cache_pilot(cfg,core,root,out,plan,args.workers)
+            else:
+                if (out/'summary.json').exists():
+                    raise ValueError('Completed or verified cache is read-only; use its retained results')
+                started=time.monotonic()
+                structured=args.cache_algebra=='structured'
+                gpu_devices=devices if args.cache_linear_backend=='cuda' else ()
+                if structured or gpu_devices:
+                    validation=(args.cache_validation_output or out/'accelerator_validation_v1').resolve()
+                    if validation.parent!=out:raise ValueError('Validation must belong to this cache')
+                    checked=json.loads((validation/'summary.json').read_text())
+                    if (checked['status']!='passed' or checked['source_root']!=str(CODE_ROOT)
+                            or (gpu_devices and checked['gpu_devices']!=devices)):
+                        raise ValueError('Matching-source full-fit accelerator validation required')
+                execution=dict(schema=cfg['schema'],status='running',supervisor=os.environ['SSM_SYSTEMD_UNIT'],
+                    command=sys.argv,working_directory=str(Path.cwd()),started_at=datetime.now(timezone.utc).isoformat(),
+                    observation_algebra=args.cache_algebra,linear_backend=args.cache_linear_backend,
+                    gpu_devices=list(gpu_devices),
+                    gpu_workers=(args.workers if args.cache_gpu_workers is None else args.cache_gpu_workers) if gpu_devices else 0)
+                write_json(out/'execution.json',execution)
+                try:
+                    pilot=tak_cache_pilot(cfg,core,root,out,plan,args.workers)
+                    if not pilot['numerical_smoke_passed']:raise ValueError('Pilot numerical smoke failed')
+                    records=[r for r in plan['records'] if r['cache_windows']]
+                    _tak_cache_pool(_tak_cache_prepare_worker,
+                        ((cfg,str(root),str(out),r,None) for r in records),out=out,phase='preparation',
+                        workers=min(args.workers,cfg['resources']['preparation_workers']),total=len(records))
+                    tak_cache_calibrate(cfg,out,plan)
+                    coordinate_path=out/'coordinates.json'
+                    _tak_cache_pool(_tak_cache_fit_worker,
+                        ((cfg,core,str(out),str(coordinate_path),str(out),s) for s in tak_cache_specs(records)),
+                        out=out,phase='reconstruction',workers=args.workers,total=plan['planned_pair_windows'],
+                        structured=structured,gpu_devices=gpu_devices,gpu_batch_size=args.cache_gpu_batch_size,
+                        gpu_workers=args.cache_gpu_workers)
+                    result=tak_cache_verify(cfg,core,out,plan,args.workers)
+                    execution.update(status='completed',seconds=time.monotonic()-started)
+                except Exception:
+                    execution.update(status='failed',error=traceback.format_exc(),seconds=time.monotonic()-started)
+                    write_json(out/'execution.json',execution);raise
+                write_json(out/'execution.json',execution)
+    print(json.dumps(serial({k:v for k,v in result.items() if k not in
+        ('records','downstream_joins','subject_partitions','rows')})),flush=True)
+    return result
+
+
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--config',type=Path,
@@ -10779,6 +11851,16 @@ def main():
     ap.add_argument('--tak-repeatability',action='store_true')
     ap.add_argument('--tak-task-parameters',action='store_true')
     ap.add_argument('--tak-topography',action='store_true')
+    ap.add_argument('--tak-reconstruction-cache',action='store_true')
+    ap.add_argument('--cache-stage',choices=['check','plan','synthetic','pilot','produce','verify','accelerator-check'],default='check')
+    ap.add_argument('--cache-algebra',choices=['dense','structured'],default='dense')
+    ap.add_argument('--cache-linear-backend',choices=['cpu','cuda'],default='cpu')
+    ap.add_argument('--cache-gpu-devices',default='0,1')
+    ap.add_argument('--cache-gpu-batch-size',type=int,default=4)
+    ap.add_argument('--cache-gpu-workers',type=int,
+        help='Production workers using CUDA; remaining workers use the equivalent CPU solve (default: all)')
+    ap.add_argument('--cache-validation-output',type=Path)
+    ap.add_argument('--cache-cpu-reference',type=Path)
     ap.add_argument('--topography-stage',choices=['check','plan','synthetic','screen','prepare','pilot','run','analyze'],default='check')
     ap.add_argument('--topography-analysis-output',type=Path)
     ap.add_argument('--task-parameter-stage',choices=['check','plan','synthetic','prepare','pilot','run','summarize','analyze'],default='check')
@@ -10800,6 +11882,10 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.tak_reconstruction_cache:
+        if args.run_dir is None or any(v is True for k,v in vars(args).items() if k!='tak_reconstruction_cache'):
+            ap.error('Reconstruction cache requires an exclusive mode and run-dir')
+        return tak_cache_main(args)
     if args.tak_topography:
         if args.run_dir is None or any(v is True for k,v in vars(args).items() if k!='tak_topography'):ap.error('Exclusive topography mode and run-dir required')
         return tak_topography_main(args)

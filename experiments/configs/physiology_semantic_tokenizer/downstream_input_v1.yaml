@@ -1,0 +1,55 @@
+schema: physiology_downstream_input_v1
+source_cache: data/cache/physiology_semantic_clean_v5
+output_cache: data/cache/physiology_downstream_v1
+datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, refed, visual_cognitive_motivation]
+scope: registered_public_measurements_only_no_model_fitting
+eeg:
+  signal_branch: raw_with_ocular_artifact
+  rate_hz: 200
+  band_hz: [1, 45]
+  reference: preserve_native
+  scaling: verified_units_or_separate_relative_groups_no_population_fit
+fnirs:
+  input: retained_v5_none
+  rate_hz: 10
+  band_hz: [0.01, 0.2]
+split:
+  train_fraction: 0.6
+  validation_fraction: 0.2
+  dataset_seeds:
+    eeg_fnirs_single_trial: 20261010
+    simultaneous_eeg_nirs: 20261011
+    refed: 20261012
+    visual_cognitive_motivation: 20261013
+  retained_two_dataset_inventory: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_v2/inventory.json
+  unit: dataset_and_subject_all_records_videos_probes_and_windows_together
+tasks:
+  motor_imagery: {offset_s: -5, duration_s: 30, classes: [LMI, RMI]}
+  mental_arithmetic: {offset_s: -5, duration_s: 30, classes: [MA, BL]}
+  wg: {offset_s: -5, duration_s: 30, classes: [WG, BL]}
+  nback: {offset_s: -5, duration_s: 30, classes: [0-back session, 2-back session, 3-back session]}
+  visual_cognitive_motivation: {offset_s: -5, duration_s: 30, classes: [RR, RF, FF, FR]}
+  dsr: {offset_s: 0, duration_s: 2, classes: [Go, No-go]}
+refed:
+  duration_s: 30
+  stride_s: 30
+  target_rate_hz: 1
+  include_partial: true
+  targets: [valence, arousal]
+  target_support: intersection_of_recorded_EEG_Hb_video_and_annotation
+  target_units: native_joystick_values_no_video_class_substitution
+storage:
+  record_arrays: float64_npy_mmap
+  windows: immutable_time_indices_no_duplicate_signal_storage
+  Hb_reuse: unchanged_retained_arrays
+  Visual_EEG_reuse: one_native_part_shared_by_both_probe_views
+  incomplete_classification_window: exclude_with_identity_and_reason
+  unknown_classification_label: retain_record_exclude_supervised_window
+geometry:
+  refed: paper_layout_v1
+  Visual: publisher_raw_channel_workbook_join_CED_by_name_include_A64_FCz
+interpretation:
+  task_difficulty: DSR_and_REFED_have_different_support_and_targets_and_may_differ_substantially_in_difficulty_no_cross_task_score_ranking
+  visual_label: target_picture_at_5_seconds_not_one_condition_for_the_entire_30_seconds
+  SSM: retains_its_independent_90_second_native_input_route
+  evaluation: public_development_previously_examined_subjects_not_fresh_confirmation

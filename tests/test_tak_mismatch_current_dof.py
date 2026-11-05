@@ -65,6 +65,10 @@ def test_current_views_sanitize_hidden_data_and_warm_only_from_same_view(tmp_pat
     def capture(observations, parameters, dt, **kwargs):
         calls.append((observations.copy(), deepcopy(kwargs)))
         return dict(status='failed_domain', converged=False, parameter_values=None)
+    # Initialize and patch both bindings so a lazy import cannot retain the
+    # temporary fitter after pytest restores the owning module's attribute.
+    from src.inference import tak_mismatch as diagnostics
+    monkeypatch.setattr(diagnostics, 'fit_nonlinear_shared_parameters', capture)
     monkeypatch.setattr('src.inference.shared_driver_reconstruction.fit_nonlinear_shared_parameters', capture)
     result = runner._current_group_job((cfg, str(tmp_path), record, group))
     assert result['terminal'] == 2 and len(calls) == 2

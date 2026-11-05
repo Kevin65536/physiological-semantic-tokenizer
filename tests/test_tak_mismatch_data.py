@@ -174,6 +174,52 @@ def test_inventory_is_array_free_and_includes_independent_Hb_denominator(prepara
     assert f.row['hb_only_tail_seconds']==5
 
 
+def test_corrected_visual_native_channels_do_not_relabel_retained_cache(preparation, monkeypatch):
+    f = preparation
+    old_names = list(f.record.manifest['measurement']['eeg_channel_names'])
+    ds = 'visual_cognitive_motivation'
+    f.record.dataset_id = ds
+    f.record.canonical_subject_id = f.record.subject = 'S01'
+    f.record.base_record_id = f.record.record_id = 'S01_Probe1'
+    f.record.join_key = ds+'|S01|S01_Probe1'
+    f.source = f.root / data.REGISTERED_DATASETS[ds].default_root / 'fixture.edf'
+    f.record.manifest['source_files'] = [dict(path=str(f.source))]
+    f.index.records_by_join_key = {f.record.join_key: [f.record]}
+    f.index.events_by_join_key = {f.record.join_key: events()}
+    f.index.reports_by_join_key = {f.record.join_key: reports()}
+    names = old_names.copy(); names[2], names[4] = names[4], names[2]
+    names.append('FCz')
+    mapping = {f'A{i+1}': n for i,n in enumerate(names[:-1])}; mapping['A64'] = 'FCz'
+    monkeypatch.setattr(data, '_visual_eeg_name_map', lambda _: dict(mapping))
+    f.geometry['eeg'].append(dict(f.geometry['eeg'][0], channel_name='FCz', x=.33))
+    by_name = {r['channel_name']: r for r in f.geometry['eeg']}
+    f.geometry['eeg'][:] = [by_name[n] for n in names]
+    for r in f.geometry['eeg']: r['coordinate_system'] = 'EEGLAB_CED_cartesian'
+    for r in f.geometry['fnirs']: r['coordinate_system'] = 'referenced_visual_eeg_head_coordinates'
+    cfg = dict(seed=17, data=dict(datasets=[ds], visual_eeg_channel_identity=data.VISUAL_CHANNEL_IDENTITY_SCHEMA))
+    plan = data.inventory_tak_mismatch(cfg, f.root)
+    row = plan['records'][0]
+    assert not f.reads and row['eeg_channel_names'] == names
+    assert f.record.manifest['measurement']['eeg_channel_names'] == old_names
+    assert row['array_shapes']['eeg'][1] == 16  # retained Hb-cache provenance
+    f.native.values = np.column_stack([f.voltage, f.voltage[:, 0]*.7])
+    f.native.channel_names = names
+    f.native.channel_identity = row['native_eeg_channel_identity']
+    f.native.source_path = f.source
+    result = data.prepare_tak_mismatch_record(f.root, row, index=f.index, seed=17,
+        visual_eeg_channel_identity=data.VISUAL_CHANNEL_IDENTITY_SCHEMA)
+    assert result['eeg_logpower'].shape == (6, 300, 17, 5)
+    assert not result['metadata']['failures']
+    assert result['metadata']['native_eeg_channel_identity']['included_FCz']
+    assert result['continuous_hb'] is f.hb
+    f.reads.clear()
+    mapping['A3'], mapping['A5'] = mapping['A5'], mapping['A3']
+    with pytest.raises(ValueError, match='Frozen native EEG channel identity'):
+        data.prepare_tak_mismatch_record(f.root, row, index=f.index, seed=17,
+            visual_eeg_channel_identity=data.VISUAL_CHANNEL_IDENTITY_SCHEMA)
+    assert not f.reads
+
+
 def test_prepared_record_shares_channels_and_preserves_native_feature_math(preparation):
     f=preparation
     result=data.prepare_tak_mismatch_record(f.root,f.row,index=f.index,seed=17)

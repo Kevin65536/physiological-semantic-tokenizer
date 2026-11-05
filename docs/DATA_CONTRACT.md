@@ -61,6 +61,149 @@ retained storage, checked against the native mapping. It corrects the fixed
 16-channel panel only, does not add FCz or repair every v5 consumer, and does not
 authorize a full cache rebuild or benchmark relaunch.
 
+The 2026-11-04 native-reader repair uses the publisher workbook for all 31
+amplifier channels, including A64/FCz. CED is joined by electrode name, with
+case-only Fp1/Fp2 normalization; its numeric order never supplies amplifier IDs.
+EDF physical calibration is preserved. Ambiguous/missing native Part files and
+unknown channel identities fail instead of falling back to another recording.
+`visual_raw_channel_identity_v2` records the actual amplifier-to-electrode map.
+The general EEG measurement reader rejects retained Visual caches without this
+identity; cached Hb-only reading remains independent of the old EEG defect.
+New downstream production is versioned below and does not overwrite v5 arrays.
+
+## Four-dataset downstream input cache — 2026-11-04
+
+[`downstream_input_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/downstream_input_v1.yaml)
+owns the new input, sample and split contract. Its implementation is
+[`src/data/downstream_input_cache.py`](../src/data/downstream_input_cache.py),
+launched through the existing `build_clean_eeg_fnirs_cache.py
+--downstream-config <contract> --downstream-stage <plan|pilot|build|verify>`.
+`data/cache/physiology_downstream_v1/input_plan.json` owns the exact sample
+identities, exclusions and subject assignments; `cache_manifest.json` and
+per-record `record.json` own completed arrays, while `verification.json` records
+the independent full-record/sample checks. Counts are not maintained here.
+
+This cache serves subsequent tokenizer/downstream sample access. The SSM keeps
+its independent **90-second native EEG plus retained v5/none Hb** fitting route;
+it does not fit the new short cached samples. No SSM, tokenizer or vocabulary is
+trained by this producer, and existing frozen benchmark inputs remain unchanged.
+
+EEG is decoded from registered native voltage, preserving its reference and
+verified units (or the separate REFED relative unit), then processed once per
+continuous native record with the existing 1–45 Hz bandpass and 200 Hz resampler.
+The branch is explicitly `raw_with_ocular_artifact`: it applies no EOG regression,
+muscle attenuation, population normalization or per-window centering. Thus it
+does not reuse the differently cleaned Single-Trial/Simultaneous v5 EEG arrays.
+Hb remains the byte-identical float64 v5/none 10 Hz, 0.01–0.2 Hz measurement;
+no second MBLL, motion correction or filter is applied. Missing channels remain
+unsupported even when stored placeholders are finite. Invalid/padded outputs are
+zero-filled only alongside explicit per-channel/time masks.
+
+Continuous arrays are read-only NumPy memory maps. Sample windows contain time
+indices rather than duplicated signal arrays; Visual Probe views share one
+decoded EEG record and a common event dependency identity. Their repeated EEG
+and label do not constitute independent trials. Geometry remains sensor/template
+metadata; REFED uses its registered planar paper layout, not inferred 3D depths.
+
+| Task | Input support | Target |
+| --- | --- | --- |
+| MI, MA, WG, n-back | Event `[-5,+25)` seconds | The named trial or n-back block, with event position retained |
+| Visual | Picture onset `[-5,+25)` seconds | The target picture's RR/RF/FF/FR label at second 5, not one condition covering the full context |
+| DSR | Stimulus `[0,2)` seconds | EEG-native Go/No-go; Hb is synchronized context, not an independently labelled symbol response |
+| REFED | Consecutive `[0,30)`, `[30,60)`, … video windows | Native 1 Hz valence/arousal `[2,30]` and a coordinate-wise target mask; no video-class substitution |
+
+Classification windows require complete recorded and centrally admitted clock
+support; gaps, absent pre/post support and unknown labels are retained as
+exclusions. REFED's final partial window preserves the intersection of actual
+EEG, Hb, video and annotation support, with masks rather than invented samples.
+None of these windows receives an automatic "resting baseline" interpretation.
+Full-record bidirectional preprocessing remains part of the offline information
+support; the encoded duration is not a raw-sample-isolation or real-time claim.
+
+**由于输入时长、切分规则和监督目标不同，DSR 与 REFED 的任务难度很可能与其他任务
+显著不同。这里是设计层面的可比性限制，并非已完成显著性检验的结果。** DSR judges
+a brief stimulus, while REFED predicts a changing emotional sequence and retains
+partial tails. Report each task's metric, support and denominator separately;
+cross-task score differences do not isolate tokenizer quality or task difficulty.
+
+Subjects are assigned within each dataset approximately 60/20/20 before signal
+access. Explicit per-dataset seeds preserve the original two-dataset assignments
+when adding REFED and Visual. All sessions, videos, Probes, overlapping windows
+and future derived targets from a subject stay in its partition. Any population
+PCA, scaling, tokenizer selection and codebook fitting must use the corresponding
+training partition. These are previously examined public subjects, not a new
+untouched confirmation set. The new input cache creates no protected-data unlock.
+
+## Subject-calibrated Tak reconstruction cache — 2026-11-04
+
+[`shared_driver_tak_subject_cache_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml)
+owns this new, explicitly requested public reconstruction generation. It uses
+the native EEG/retained v5 Hb route above and the corrected Visual channel
+identity. `src/data/tak_mismatch.py` owns the shared source, geometry and clock
+checks and the new window preparation; `src/data/ssm_prepared.py` owns coordinate
+fitting. The existing shared-driver evaluation entry produces the versioned
+cache; it does not modify earlier targets or the downstream measurement arrays.
+
+The downstream input plan supplies subject partitions and sample identities.
+One PCA direction per dataset is fitted from **training subjects only**, pooling
+the six geometry-nearest channels × five bands over available locations.
+The ordering of those six slots and their actual electrode names remain in the
+plan. Each subject then independently fits one positive EEG scale, one common
+positive HbO/HbR scale and the component SDs from that subject's unlabelled
+prepared observations across records and locations. The shared PCA direction is
+not refitted or flipped. These scales are frozen before reconstruction, never
+refitted per window, location, task or fitted parameter.
+
+This explicitly declared individual calibration also applies to public
+validation/test subjects. It is offline unlabelled subject adaptation and
+privileged joint teacher preparation, **not strict zero-shot preprocessing or
+hidden-modality prediction**. It does not authorize protected comparison
+material. Population PCA, tokenizer training and codebook selection retain
+their training-only boundaries. Individual amplitude normalization changes
+effective model coordinates; saved inverse scales preserve measurement-space
+readout, but do not make β an absolute physiological gain.
+
+The nominal fit is 90 seconds on a 60-second stride within each centrally
+admitted paired continuous support, plus a complete shifted final window.
+Hb starts stay on its 100 ms clock; native EEG rounding and the declared median
+marker offset are saved. **REFED supports shorter than 90 seconds are fitted at
+their actual complete 100 ms duration**, retaining the same five-second
+reference and priors; no videos are concatenated or padded. Duration is
+retained in every task and short REFED results are distinguished. Support that
+does not extend beyond the reference is unavailable. Overlap is explicit and
+does not create independent observations or continuous latent-state stitching.
+
+Each fit uses τ/β with log-prior SD 0.125, a separate driver and four initial
+coordinates. The final bin is retained in the trajectory but excluded from
+fitting/scoring. Predictions are exported in the unscaled, window-referenced
+training-PCA log-power and cached Hb coordinates, with reference values,
+inverse scales, observation/fit/prediction masks, residuals and numerical status.
+`target = prediction + residual` is verified. Quality includes individual-SD
+errors, errors in a common training-derived scale, component waveform metrics
+and the matched fixed-parameter baseline; failures never become silent baseline
+substitutions. A same-subject calibration SD is not labelled a training SD.
+
+An execution continuation may use equivalent prefix-mean/initial-coordinate
+algebra and float64 GPU normal-equation solves after retained full-fit
+comparisons. It preserves the observation support, physical dynamics, priors,
+bounds, stopping thresholds and stored coordinate. Each newly fitted task
+records its execution backend; completed task files are not rewritten to claim
+the new backend. Infrastructure failures are distinct from numerical model
+failures. The versioned validation child owns the selected comparisons,
+predeclared tolerances and independent prediction/state/metric checks.
+Changes limited to CPU/GPU worker allocation may reuse these comparisons after
+exact numerical-source and routing checks; the validation record identifies
+the retained comparison source and the absence of new fits. Each task keeps
+the backend it actually used.
+
+The run's `plan.json` owns all record/window/pair identities and downstream
+sample-to-fit joins, `coordinates.json` owns frozen calibration, per-task
+JSON/NPZ owns outcomes, and `summary.json` with `verification.json` owns the
+completed cache readout. Downstream short samples select one containing fit
+nearest their centre, retaining both modality offsets and the teacher's full
+input support. Missing joins remain explicit. Joint teacher outputs may be
+supervision, but cannot become unmasked inputs in missing-modality evaluation.
+
 ## Canonical sample identity
 
 The join key is composed from stable dataset-native identity, not array order:

@@ -20,21 +20,40 @@ from .clean_physiology_cache import base_record_id, canonical_subject_id
 CHANNEL_GEOMETRY_SCHEMA = "physiology_channel_geometry_v1"
 
 
-def project_head_topview(row: Mapping[str, Any]) -> np.ndarray:
+def project_head_topview(
+    row: Mapping[str, Any], *, projection: str = "orthographic"
+) -> np.ndarray:
     """Project registered template coordinates, with right +x and anterior +y.
 
-    This preserves the registered drawing/orthographic convention; it is not
-    an individual cortical localization or a distance calibration.
+    The default preserves the registered drawing/orthographic convention.
+    ``azimuthal_equidistant`` unfolds 3D directions from the vertex: radial
+    distance is polar angle / (pi/2), so the equator has radius one. Already
+    planar paper coordinates are retained, not treated as points on a sphere.
+    Neither display is individual cortical localization or distance calibration.
     """
+    if projection not in ("orthographic", "azimuthal_equidistant"):
+        raise ValueError("Unsupported topography projection: " + str(projection))
     value = np.asarray([row.get(k, np.nan) for k in ("x", "y", "z")], float)
     if not np.isfinite(value).all():
         raise ValueError("Known channel geometry required")
     frame = row.get("coordinate_system")
     if frame in ("EEGLAB_CED_cartesian", "referenced_visual_eeg_head_coordinates"):
-        return np.asarray([-value[1], value[0]])
-    if frame in ("dataset_mnt_pos_3d", "refed_paper_layout_2d_v1"):
+        xy = np.asarray([-value[1], value[0]])
+    elif frame == "dataset_mnt_pos_3d":
+        xy = value[:2]
+    elif frame == "refed_paper_layout_2d_v1":
         return value[:2]
-    raise ValueError("Unsupported topography frame: " + str(frame))
+    else:
+        raise ValueError("Unsupported topography frame: " + str(frame))
+    if projection == "orthographic":
+        return xy
+    horizontal = float(np.linalg.norm(xy))
+    if horizontal == 0:
+        if value[2] <= 0:
+            raise ValueError("Undefined spherical direction at origin or south pole")
+        return np.zeros(2)
+    polar_angle = np.arctan2(horizontal, value[2])
+    return xy / horizontal * (polar_angle / (np.pi / 2))
 
 
 @dataclass(frozen=True)

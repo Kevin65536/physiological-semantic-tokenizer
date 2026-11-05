@@ -20,6 +20,8 @@ It neither opens signal arrays nor recomputes numerical evidence.
 
 ``--spatial-analysis <completed-spatial-patterns>`` plots registered Hb-site
 maps and every selected subject's retained records with MNE-style topomaps.
+Add ``--spatial-style-preview`` for just two old/new display comparisons using
+vertex-centred angular projection and full-head display extrapolation.
 """
 from __future__ import annotations
 
@@ -2810,14 +2812,17 @@ def revise_fixed_visual_report(run, previous, audit_path, output):
     return checks
 
 
-def spatial_topomap(ax, frame, *, limits, title="", cmap="viridis", names=False):
-    """MNE outlines/linear topomap, masked to nearby measured-node triangles."""
+def spatial_topomap(ax, frame, *, limits, title="", cmap="viridis", names=False,
+                    coverage="local"):
+    """MNE linear map with local support, or explicit full-head display fill."""
     import mne
-    from scipy.spatial import Delaunay, QhullError
+    from scipy.spatial import ConvexHull, Delaunay, QhullError
     from scipy.spatial.distance import cdist
     from matplotlib.colors import Normalize
     from matplotlib.patches import Circle, Ellipse
     from matplotlib.cm import ScalarMappable
+    if coverage not in ("local", "head"):
+        raise ValueError("spatial coverage must be local or head")
     good = frame[np.isfinite(frame.display_value) & np.isfinite(frame.x) & np.isfinite(frame.y)]
     positions = frame[np.isfinite(frame.x) & np.isfinite(frame.y)]
     missing = positions[~np.isfinite(positions.display_value)]
@@ -2830,23 +2835,30 @@ def spatial_topomap(ax, frame, *, limits, title="", cmap="viridis", names=False)
         try:
             image, _ = mne.viz.plot_topomap(values,xy,axes=ax,show=False,sensors=False,
                 names=good.pair_members.tolist() if names else None,contours=0,
-                image_interp="linear",extrapolate="local",sphere=(0.,0.,0.,1.),
-                cmap=cmap,vlim=limits,res=160,border="mean")
+                image_interp="linear",extrapolate=coverage,sphere=(0.,0.,0.,1.),
+                cmap=cmap,vlim=limits,res=512 if coverage == "head" else 160,border="mean")
             field = np.asarray(image.get_array(),float)
             x0,x1,y0,y1 = image.get_extent()
             xx,yy = np.meshgrid(np.linspace(x0,x1,field.shape[1]),np.linspace(y0,y1,field.shape[0]))
-            triangulation = Delaunay(xy)
-            triangles = xy[triangulation.simplices]
-            edge = np.stack([np.linalg.norm(triangles[:,i]-triangles[:,j],axis=1) for i,j in ((0,1),(1,2),(2,0))],axis=1).max(axis=1)
-            all_xy = positions[["x","y"]].to_numpy(float)
-            distances = cdist(all_xy,all_xy);np.fill_diagonal(distances,np.inf)
-            spacing = float(np.median(distances.min(axis=1)))
-            simplex = triangulation.find_simplex(np.c_[xx.ravel(),yy.ravel()]).reshape(xx.shape)
-            support = (simplex >= 0) & (xx*xx+yy*yy <= 1.)
-            support &= edge[np.maximum(simplex,0)] <= 2.5*spacing
-            for point in missing[["x","y"]].to_numpy(float):
-                radius = .45*float(np.linalg.norm(xy-point,axis=1).min())
-                support &= (xx-point[0])**2+(yy-point[1])**2 > radius*radius
+            support = xx*xx+yy*yy <= 1.
+            if coverage == "local":
+                triangulation = Delaunay(xy)
+                triangles = xy[triangulation.simplices]
+                edge = np.stack([np.linalg.norm(triangles[:,i]-triangles[:,j],axis=1) for i,j in ((0,1),(1,2),(2,0))],axis=1).max(axis=1)
+                all_xy = positions[["x","y"]].to_numpy(float)
+                distances = cdist(all_xy,all_xy);np.fill_diagonal(distances,np.inf)
+                spacing = float(np.median(distances.min(axis=1)))
+                simplex = triangulation.find_simplex(np.c_[xx.ravel(),yy.ravel()]).reshape(xx.shape)
+                support &= simplex >= 0
+                support &= edge[np.maximum(simplex,0)] <= 2.5*spacing
+                for point in missing[["x","y"]].to_numpy(float):
+                    radius = .45*float(np.linalg.norm(xy-point,axis=1).min())
+                    support &= (xx-point[0])**2+(yy-point[1])**2 > radius*radius
+            else:
+                hull = xy[ConvexHull(xy).vertices]
+                hull = np.vstack([hull, hull[0]])
+                ax.plot(hull[:,0], hull[:,1], color="#344452", ls=(0,(4,3)),
+                        lw=.8, alpha=.8, zorder=6)
             field = np.ma.array(field,mask=~support | ~np.isfinite(field))
             if field.count():
                 if field.min()<values.min()-1e-8 or field.max()>values.max()+1e-8:
@@ -3008,6 +3020,165 @@ def _spatial_overview_batch(payload):
     return figures
 
 
+def _spatial_preview_coordinates(frame, plan, *, equator_radius=.9):
+    """Reproject a retained subject map without changing any scalar or grouping."""
+    from src.data.channel_geometry import project_head_topview
+    identities = frame[["dataset", "subject"]].drop_duplicates()
+    if len(identities) != 1 or not frame.period.eq("subject_mean").all():
+        raise ValueError("one retained subject-mean map required for display preview")
+    if not 0 < equator_radius <= 1:
+        raise ValueError("display equator radius must be in (0, 1]")
+    dataset, subject = identities.iloc[0]
+    recorded_ids = {identity for value in frame.record_ids for identity in str(value).split(";")}
+    points = {}
+    found_records = set()
+    for record in plan["records"]:
+        if record["id"] not in recorded_ids:
+            continue
+        if record["dataset"] != dataset or str(record["subject"]) != str(subject):
+            raise ValueError("retained map and geometry subject identity differ")
+        found_records.add(record["id"])
+        geometry = record["geometry_identity"]["fnirs"]
+        for pair in record["pairs"]:
+            oxy, deoxy = [geometry[i] for i in pair["component_indices"]]
+            if oxy.get("component") != "HbO" or deoxy.get("component") != "HbR":
+                raise ValueError("ordered HbO/HbR geometry required")
+            old = project_head_topview(oxy)
+            new = project_head_topview(oxy, projection="azimuthal_equidistant") * equator_radius
+            for component in (deoxy,):
+                if (not np.allclose(old, project_head_topview(component), atol=1e-9, rtol=0)
+                        or not np.allclose(new, project_head_topview(component,
+                            projection="azimuthal_equidistant") * equator_radius, atol=1e-9, rtol=0)):
+                    raise ValueError("paired Hb geometry differs")
+            point = np.r_[old, new]
+            if pair["id"] in points and not np.allclose(points[pair["id"]], point, atol=1e-9, rtol=0):
+                raise ValueError("record-varying geometry cannot reproject a retained subject map")
+            points[pair["id"]] = point
+    if found_records != recorded_ids:
+        raise ValueError("retained map references missing plan records")
+    projected = frame.copy()
+    projected["x_orthographic"] = projected.x
+    projected["y_orthographic"] = projected.y
+    for index, row in projected.iterrows():
+        members = np.array([points[pair] for pair in row.pair_members.split(";")])
+        if not np.allclose(members[:, :2], [row.x, row.y], atol=1e-7, rtol=0):
+            raise ValueError("retained map positions differ from the declared frozen geometry")
+        if not np.allclose(members[:, 2:], members[0, 2:], atol=1e-9, rtol=0):
+            raise ValueError("formerly coincident channels separate; reaggregation required")
+        projected.loc[index, ["x", "y"]] = members[0, 2:]
+    xy = projected[["x", "y"]].to_numpy(float)
+    if not np.isfinite(xy).all() or (np.linalg.norm(xy, axis=1) >= 1).any():
+        raise ValueError("preview requires finite registered positions inside the head")
+    if len(np.unique(np.round(xy, 9), axis=0)) != len(xy):
+        raise ValueError("display projection creates coincident locations")
+    return projected
+
+
+def render_spatial_style_preview(run, analysis, output):
+    """Two display-only tests, preserving retained values, cases and old exports."""
+    import shlex
+    from datetime import datetime, timezone
+    import pandas as pd
+    from matplotlib import patheffects
+
+    run, analysis, output = (Path(p).resolve() for p in (run, analysis, output))
+    summary = _json(analysis / "summary.json")
+    if (summary.get("schema") != "tak_mismatch_spatial_patterns_v1"
+            or summary.get("status") != "completed"
+            or Path(summary["parent_run"]).resolve() != run or not analysis.is_relative_to(run)):
+        raise ValueError("completed spatial analysis inside the declared retained run required")
+    if output.exists():
+        raise FileExistsError("spatial preview requires a fresh export")
+    cases = (("eeg_fnirs_single_trial", "subject_06", "Single-Trial · 06号"),
+             ("simultaneous_eeg_nirs", "VP022", "Simultaneous · VP022"))
+    selected = {(row["dataset"], row["subject"]) for row in summary["selected_subjects"]}
+    if not all((dataset, subject) in selected for dataset, subject, _ in cases):
+        raise ValueError("preview cases must belong to the retained illustrative selection")
+    source = _path(analysis, summary["files"]["map_values"])
+    maps = pd.read_csv(source, dtype={"subject": str})
+    plan = _json(run / "plan.json")
+    prepared = []
+    for dataset, subject, title in cases:
+        original = maps[maps.dataset.eq(dataset) & maps.subject.eq(subject)
+                        & maps.metric.eq("D1") & maps.period.eq("subject_mean")].copy()
+        if original.empty:
+            raise ValueError("retained D1 subject map is missing")
+        current = _spatial_preview_coordinates(original, plan)
+        current = current.assign(_label_y=current.y.round(4)).sort_values(
+            ["_label_y", "x"], ascending=[False, True]).drop(columns="_label_y")
+        current["display_number"] = np.arange(1, len(current) + 1)
+        if not np.array_equal(current.display_value, original.loc[current.index].display_value, equal_nan=True):
+            raise ValueError("display preview changed retained values")
+        prepared.append((dataset, subject, title, original, current))
+    maximum = max(float(item[4].display_value.max()) for item in prepared)
+    limits = (0., math.ceil(maximum * 10) / 10)
+    plt = _plotting()
+    output.mkdir(parents=True)
+    figures = []
+    for number, (dataset, subject, title, original, current) in enumerate(prepared, 1):
+        fig = plt.figure(figsize=(13.2, 9.8))
+        left = fig.add_axes([.025, .36, .415, .51])
+        right = fig.add_axes([.475, .36, .415, .51])
+        spatial_topomap(left, original, limits=limits, title="原图：x-y 正投影／局部着色")
+        im = spatial_topomap(right, current, limits=limits, coverage="head",
+                            title="测试图：球面等距展开／整头着色")
+        for _, row in current.iterrows():
+            right.annotate(str(int(row.display_number)), (row.x, row.y), xytext=(0, 6),
+                textcoords="offset points", ha="center", va="bottom", fontsize=8,
+                color="#172c3c", zorder=9,
+                path_effects=[patheffects.withStroke(linewidth=2, foreground="white")])
+        for ax in (left, right):
+            ax.text(0, 1.17, "前", ha="center", va="bottom", fontsize=10)
+            ax.text(-1.13, -.15, "左", ha="right", fontsize=10)
+            ax.text(1.13, -.15, "右", ha="left", fontsize=10)
+        bar = fig.colorbar(im, cax=fig.add_axes([.935, .405, .018, .36]))
+        bar.set_label("Hb 重建失配 D1 / 冻结训练 SD", fontsize=10)
+        bar.ax.tick_params(labelsize=9)
+        fig.suptitle(f"坐标与着色验收 {number}/2　{title}", fontsize=18, y=.976)
+        fig.text(.5, .933, "同一份被试记录等权结果；两图、两个样例共用色标。数值越高，条件重建偏离越大。",
+                 ha="center", fontsize=11, color="#42536a")
+        fig.text(.5, .265, "黑边圆点：Hb 测量位置　·　灰叉：无有效值　·　右图虚线：测点凸包，线外颜色为外推",
+                 ha="center", fontsize=10)
+        entries = [f"{int(row.display_number):2d}  {row.pair_members}" for _, row in current.iterrows()]
+        columns = 4
+        per_column = math.ceil(len(entries) / columns)
+        for column in range(columns):
+            fig.text(.065 + .235 * column, .229,
+                     "\n".join(entries[column * per_column:(column + 1) * per_column]),
+                     va="top", fontsize=9, linespacing=1.35, color="#263b4f")
+        fig.text(.5, .052, "右图按头顶到通道的球面角度展开，赤道显示半径为头部轮廓的90%；保留左右与前后方向。",
+                 ha="center", fontsize=10)
+        fig.text(.5, .025, "整头颜色用于显示插值与外推，不表示全脑均有测量；本次仅测试画法，不更新空间统计或正式报告。",
+                 ha="center", fontsize=10, color="#42536a")
+        filename = f"preview_{number:02d}_{dataset}_{subject}.png"
+        _save(fig, output / filename)
+        current.to_csv(output / (Path(filename).stem + "_coordinates.csv"), index=False)
+        front = current.y_orthographic > .8
+        old_span = float(np.ptp(current.loc[front, "y_orthographic"]))
+        new_span = float(np.ptp(current.loc[front, "y"]))
+        figures.append(dict(file=filename, dataset=dataset, subject=subject, metric="D1",
+            points=len(current), available_points=int(current.display_value.notna().sum()),
+            available_records=[int(current.available_records.min()), int(current.available_records.max())],
+            planned_records=int(current.planned_records.max()), limits=list(limits),
+            retained_values_unchanged=True, frontal_rule="retained orthographic y > 0.8",
+            frontal_points=int(front.sum()), frontal_y_span_before=old_span,
+            frontal_y_span_after=new_span, frontal_y_span_ratio=new_span / old_span))
+    command = [str(ROOT / ".venv/bin/python"), str(Path(__file__).resolve()), "--run", str(run),
+               "--spatial-analysis", str(analysis), "--spatial-style-preview", "--output", str(output)]
+    manifest = dict(schema="tak_mismatch_spatial_style_preview_v1",
+        created_utc=datetime.now(timezone.utc).isoformat(), sources=[str(source), str(run / "plan.json")],
+        command=shlex.join(command), working_directory=str(ROOT), renderer=str(Path(__file__).resolve()),
+        projection="vertex-centred azimuthal equidistant: r=0.9*atan2(hypot(x,y),z)/(pi/2)",
+        frame="right +x, anterior +y; registered template origin; display transformation only",
+        interpolation="MNE linear; extrapolate=head; border=mean; clipped to unit head circle",
+        documentation="https://mne.tools/1.12/generated/mne.viz.plot_topomap.html",
+        selection="two previously selected frontal-pattern illustrations, no new ranking",
+        figures=figures, model_fits=0, raw_signal_reads=0, spatial_statistics_recomputed=False,
+        previous_exports_preserved=True)
+    (output / "source_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
+    return manifest
+
+
 def render_fixed_topography(run, analysis, output, *, workers=2):
     """Render selected spatial cases and every retained record/endpoint map."""
     import os
@@ -3153,6 +3324,405 @@ def render_fixed_topography(run, analysis, output, *, workers=2):
             bitmap_figures=checks["bitmap_figures"],body_and_tables_selectable=checks["body_and_tables_selectable"]))
     (output/"source_manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n")
     return manifest["validation"]
+
+
+def _mechanism_pattern_figures(tables, maps, plan, similarities, shapes, ocular, output):
+    """Figures use retained/derived tables; no signal arrays or model fits."""
+    import pandas as pd
+    from matplotlib.lines import Line2D
+    from src.analysis.tak_mismatch import HB_RATIO
+    plt = _plotting()
+    output = Path(output);output.mkdir()
+    figures = {}
+    datasets = ("eeg_fnirs_single_trial", "simultaneous_eeg_nirs")
+    region_names = ("frontal", "central", "posterior")
+    region_labels = ("前额", "中央", "后部")
+    region_colors = ("#0072B2", "#009E73", "#D55E00")
+    main_cases = ((datasets[0], "subject_25", "Single-Trial 25 · 左中央"),
+                  (datasets[0], "subject_06", "Single-Trial 06 · 前额"),
+                  (datasets[1], "VP023", "Simultaneous VP023 · 后部"))
+
+    def save(key, fig, caption, source):
+        path = _save(fig, output/(key+".png"))
+        figures[key] = dict(path=path, caption=caption, source=source, preserve_bitmap=True)
+
+    coordinate_cache = {}
+    def display(frame, dataset, subject):
+        identity = (dataset, subject)
+        if identity not in coordinate_cache:
+            reference = maps[maps.dataset.eq(dataset) & maps.subject.eq(subject)
+                & maps.period.eq("subject_mean") & maps.metric.eq("D1")]
+            coordinate_cache[identity] = _spatial_preview_coordinates(reference, plan).set_index("pair_members")
+        coordinates = coordinate_cache[identity].loc[frame.pair_members]
+        if not np.allclose(frame[["x","y"]],coordinates[["x_orthographic","y_orthographic"]],atol=1e-7):
+            raise ValueError("display template differs from retained map positions")
+        result = frame.copy();result[["x","y"]] = coordinates[["x","y"]].to_numpy()
+        return result
+
+    # Paired people, rather than pooled channels/windows, show population support.
+    fig, axes = plt.subplots(2,2,figsize=(8.7,6.6),squeeze=False)
+    regional = tables['regional_values']
+    for row, metric in enumerate((HB_RATIO,"D_bal_20s")):
+        all_values = regional[regional.metric.eq(metric)&regional.period.eq('subject_mean')].value
+        for col,dataset in enumerate(datasets):
+            ax = axes[row,col]
+            part = regional[regional.dataset.eq(dataset)&regional.metric.eq(metric)&regional.period.eq('subject_mean')]
+            wide = part.pivot(index='subject',columns='region',values='value').reindex(columns=region_names)
+            complete = wide.dropna()
+            for j,(_,values) in enumerate(complete.iterrows()):
+                jitter = ((j%7)-3)*.018
+                ax.plot(np.arange(3)+jitter,values.to_numpy(),color='#abb4bd',lw=.55,alpha=.6,zorder=1)
+                for i,marker in enumerate(('o','s','^')):
+                    ax.scatter(i+jitter,values.iloc[i],s=14,marker=marker,color=region_colors[i],alpha=.65,zorder=2)
+            for i,name in enumerate(region_names):
+                q = complete[name].quantile([.25,.5,.75]).to_numpy()
+                ax.plot([i,i],[q[0],q[2]],color='black',lw=2.2,zorder=4)
+                ax.scatter(i,q[1],s=40,facecolor='white',edgecolor='black',zorder=5)
+            ax.set(xticks=range(3),xticklabels=region_labels,xlim=(-.3,2.3),
+                   ylim=(0,max(float(all_values.max())*1.08,.1)))
+            ax.set_title(f"{DATASET_LABELS[dataset]} · {len(complete)}/{len(wide)}名被试",fontsize=10)
+            ax.set_ylabel("Hb残差／零预测MSE" if row==0 else "20秒弱平衡偏离（无量纲）")
+            ax.grid(axis='y',alpha=.18)
+    fig.suptitle("全被试区域比较：每条细线连接同一名被试",fontsize=14)
+    fig.tight_layout(rect=[0,.06,1,.94])
+    fig.text(.5,.012,"白心点与黑竖线为中位数和四分位距；同一行共用纵轴。区域按测量位置粗分，不是皮层定位。",ha='center',fontsize=9)
+    save('01_subject_regions',fig,"每条线是一名被试的三个区域值。先用既有记录等权通道图，再取区域内通道中位数。只有三个区域的全部计划位置均有值者进入配对；Single-Trial保留28/29名，Simultaneous为26/26名。区域及被试等权，不把通道或记录当独立被试。",'regional_values.csv')
+
+    def map_grid(key, cases, metrics, population=False):
+        two_rows=len(metrics)==2
+        fig,axes = plt.subplots(len(metrics),len(cases),figsize=(9,7.0 if two_rows else 2.7*len(metrics)+.7),squeeze=False)
+        fig.subplots_adjust(left=.025,right=.87,bottom=.11 if two_rows else .08,
+                            top=.86 if two_rows else .91,wspace=.15,hspace=.45 if two_rows else .4)
+        anchors={(single,subject):pair for single,subject,pair in (
+            ('eeg_fnirs_single_trial','subject_25','C1FC1'),('eeg_fnirs_single_trial','subject_06','FpzFp1'),
+            ('simultaneous_eeg_nirs','VP023','P4h'),('eeg_fnirs_single_trial','subject_28','OzPOz'),
+            ('simultaneous_eeg_nirs','VP022','AF8'),('refed','30','CH27'))}
+        for row,metric in enumerate(metrics):
+            panels=[]
+            for dataset,subject,title in cases:
+                source = tables['population_maps'] if population else maps
+                take = source.dataset.eq(dataset)&source.metric.eq(metric)
+                if not population:take &= source.subject.eq(subject)&source.period.eq('subject_mean')
+                panels.append(display(source[take].copy(),dataset,subject))
+            maximum = max(float(p.display_value.max()) for p in panels)
+            maximum = math.ceil(maximum*10)/10
+            for col,(panel,(_,_,title)) in enumerate(zip(panels,cases)):
+                label = 'Hb残差比' if metric==HB_RATIO else metric
+                if population:
+                    lo,hi=int(panel.available_subjects.min()),int(panel.available_subjects.max())
+                    title=title.split(' · ')[0]+f" · 每点{lo if lo==hi else str(lo)+'–'+str(hi)}人"
+                image = spatial_topomap(axes[row,col],panel,limits=(0,maximum),coverage='head',title=title+'\n'+label)
+                for text in axes[row,col].texts:
+                    if text.get_fontsize()<9:text.set_fontsize(9)
+                if not population:
+                    dataset,subject,_=cases[col];pair=anchors[(dataset,subject)]
+                    point=panel[panel.pair_members.eq(pair)].iloc[0]
+                    axes[row,col].scatter(point.x,point.y,s=55,facecolor='none',edgecolor='white',lw=1.1,zorder=8)
+                    axes[row,col].annotate(pair,(point.x,point.y),xytext=(.03,.85 if point.y>=0 else .12),
+                        textcoords='axes fraction',fontsize=10,color='#233747',zorder=9,
+                        bbox=dict(boxstyle='round,pad=.15',fc='white',ec='none',alpha=.88),
+                        arrowprops=dict(arrowstyle='-',color='#45596b',lw=.7))
+            y = (axes[row,0].get_position().y0+axes[row,0].get_position().y1)/2
+            bar = fig.colorbar(image,cax=fig.add_axes([.915,y-.085,.018,.17]))
+            bar.set_label(FIXED_METRICS[metric][1],fontsize=8)
+        fig.suptitle("被试中位数地形图" if population else "典型个体：同一位置在不同指标中的表现",fontsize=14,y=.985)
+        fig.text(.46,.025,"行内共用色标；黑边点为通道值，灰叉为缺失。虚线外为外推，点间颜色为插值。",ha='center',fontsize=9)
+        save(key,fig,("每点先在被试内按原合同汇总，再取该位置的被试中位数；它不是某名被试的地图。" if population else
+            "每列为一名已选病例，每行一个指标；通道值为原有记录等权汇总，病例不是独立确认集。")+
+            "采用从头顶按球面角度展开的显示坐标；整头填色不增加测量覆盖。行间单位和色标不同，不能把颜色强度跨指标比较。"+
+            ("白圈与名称标出同一代表通道，便于跨指标对照；其余黑边点仍保留全部计划位置。" if not population else ""),
+            'population_maps.csv' if population else 'spatial map_values.csv.gz')
+    map_grid('02_population_maps',[(datasets[0],'subject_25','Single-Trial · 29名'),
+                                 (datasets[1],'VP023','Simultaneous · 26名')],(HB_RATIO,'D_bal_20s','D1'),True)
+
+    contrasts = tables['regional_contrasts']
+    fig,axes = plt.subplots(1,2,figsize=(8.8,4.1))
+    order = ('nback','dsr','wg')
+    for ax,metric in zip(axes,(HB_RATIO,'D_bal_20s')):
+        part = contrasts[contrasts.dataset.eq(datasets[1])&contrasts.level.eq('task')
+            &contrasts.metric.eq(metric)&contrasts.contrast.eq('posterior_minus_central')]
+        wide = part.pivot(index='subject',columns='task_label',values='value').reindex(columns=order)
+        for _,values in wide.iterrows():ax.plot(range(3),values,marker='o',ms=2.5,lw=.6,color='#9aa8b5',alpha=.6)
+        for i,task in enumerate(order):
+            values=wide[task].dropna();q=values.quantile([.25,.5,.75]).to_numpy()
+            ax.plot([i,i],[q[0],q[2]],color='#0072B2',lw=3)
+            ax.scatter(i,q[1],c='#0072B2',s=35,zorder=5)
+            ax.text(i,.96,f"后部较高 {int((values>0).sum())}/{len(wide)}",ha=('left','center','right')[i],va='top',transform=ax.get_xaxis_transform(),fontsize=8)
+        ax.axhline(0,color='black',ls='--',lw=.8)
+        ax.set(xticks=range(3),xticklabels=('n-back','DSR','词生成'),ylabel='后部 − 中央')
+        ax.set_title('Hb残差／零预测MSE比' if metric==HB_RATIO else '20秒弱平衡偏离')
+        ax.grid(axis='y',alpha=.15);ax.margins(y=.22)
+    fig.suptitle('Simultaneous：后部偏离在三个任务中保持',fontsize=14)
+    fig.tight_layout(rect=[0,.08,1,.92])
+    fig.text(.5,.015,'每条灰线连接同一被试；蓝点／竖线为中位数／四分位距。连线不代表生理时间。',ha='center',fontsize=9)
+    save('03_task_consistency',fig,'每个点是一名被试的区域差值，正值表示后部高于中央。三个任务各有26名被试。任务采用固定顺序，任务效应与时间／疲劳仍混杂；本图只描述空间方向是否保持，没有新增检验。','regional_contrasts.csv')
+    map_grid('04_case_maps',main_cases,('D1',HB_RATIO,'D_bal_20s'))
+    map_grid('05_amplitude_counterexamples',[(datasets[0],'subject_28','Single-Trial 28'),
+        (datasets[1],'VP022','Simultaneous VP022'),('refed','30','REFED 30')],('D1',HB_RATIO))
+
+    fig,axes=plt.subplots(2,3,figsize=(9.2,6.8),squeeze=False)
+    for col,(dataset,subject,title) in enumerate(main_cases):
+        for row,metric in enumerate(('D1',HB_RATIO)):
+            ax=axes[row,col];part=similarities[similarities.dataset.eq(dataset)&similarities.subject.eq(subject)&similarities.metric.eq(metric)]
+            identities=sorted(set(part.record_a)|set(part.record_b));matrix=np.eye(len(identities))
+            matrix[matrix==0]=np.nan
+            for item in part.itertuples():
+                i,j=identities.index(item.record_a),identities.index(item.record_b);matrix[i,j]=matrix[j,i]=item.spearman_rho
+            image=ax.imshow(matrix,cmap='RdBu_r',vmin=-1,vmax=1)
+            labels=[v.split('|')[-1].replace('session_','S').replace('cnt_','') for v in identities]
+            ax.set(xticks=range(len(labels)),yticks=range(len(labels)),xticklabels=labels,yticklabels=labels)
+            ax.tick_params(labelsize=9);plt.setp(ax.get_xticklabels(),rotation=45,ha='right')
+            for i in range(len(identities)):
+                for j in range(len(identities)):
+                    if np.isfinite(matrix[i,j]):ax.text(j,i,f'{matrix[i,j]:.2f}',ha='center',va='center',fontsize=9,color='white' if abs(matrix[i,j])>.6 else 'black')
+            ax.set_title(title+('\nD1' if metric=='D1' else '\nHb残差比'),fontsize=9)
+    fig.subplots_adjust(left=.07,right=.89,bottom=.12,top=.87,hspace=.6,wspace=.4)
+    fig.colorbar(image,cax=fig.add_axes([.93,.25,.015,.5])).set_label('共同通道的 Spearman ρ')
+    fig.suptitle('跨记录空间形状：绝对误差与相对误差的稳定性不同',fontsize=13)
+    fig.text(.48,.015,'S00/02/04为运动想象，S01/03/05为心算；Simultaneous三条记录对应三个不同任务。',ha='center',fontsize=8.5)
+    save('06_record_stability',fig,'每个格子是两条原生记录在共同有效通道上的空间排序相关；对角线是自身。记录对会共享记录，不能作为独立样本计数。病例按既有D1空间反差、邻近一致性和记录内早晚相关选择，当前高相关属于探索性证据。','record_similarities.csv')
+
+    parameters=tables['parameter_groups'];pair_fits=tables['fit_pair_groups']
+    parameter_cases=((datasets[1],'VP022','VP022'),(datasets[1],'VP023','VP023'),(datasets[0],'subject_06','Single-Trial 06'))
+    fig,axes=plt.subplots(3,3,figsize=(9,8.5),squeeze=False)
+    for row,(dataset,subject,title) in enumerate(parameter_cases):
+        pairs=('AFpz','C5h','POOz') if dataset==datasets[1] else ('FpzFp2','C6CP6','OzO1')
+        for col,pair in enumerate(pairs):
+            ax=axes[row,col];part=parameters[parameters.dataset.eq(dataset)&parameters.subject.eq(subject)&parameters.pair.eq(pair)]
+            ids=sorted(part.group_id.unique());counts=[]
+            for i,gid in enumerate(ids):
+                group=part[part.group_id.eq(gid)].set_index('view');jitter=(i-(len(ids)-1)/2)*.015
+                if group.valid_estimate.all():ax.plot([jitter,1+jitter],group.loc[['hb_only','joint'],'tau'],color='#a9b1b9',lw=.7,zorder=1)
+                for j,view in enumerate(('hb_only','joint')):
+                    item=group.loc[view]
+                    if np.isfinite(item.tau):ax.scatter(j+jitter,item.tau,marker=('o' if j==0 else '^') if item.valid_estimate else 'x',
+                        s=22,color=('#246eab' if j==0 else '#c77722') if item.valid_estimate else '#777777',zorder=4)
+            for view in ('hb_only','joint'):counts.append(f"{int(part[part.view.eq(view)].valid_estimate.sum())}/{len(ids)}")
+            ax.axhline(2,color='#37936b',ls='--',lw=.8);ax.axhline(12,color='#8d3c4a',ls=':',lw=1)
+            ax.set(xticks=[0,1],xticklabels=['Hb-only','联合'],ylim=(0,13.2),xlim=(-.3,1.3))
+            ax.set_title(f'{title} · {pair}\n有效组：Hb {counts[0]}，联合 {counts[1]}',fontsize=9)
+            if col==0:ax.set_ylabel('τ（秒）')
+            ax.grid(axis='y',alpha=.15)
+    fig.suptitle('时间常数取决于位置、输入条件与数值可用性',fontsize=14)
+    fig.tight_layout(rect=[0,.09,1,.94])
+    fig.text(.5,.043,'每点一个共享参数组；圆点为Hb-only，三角为联合拟合，灰叉为未通过检查的末次值。',ha='center',fontsize=9)
+    fig.text(.5,.015,'连线仅连接同组两种均通过的解；绿虚线为固定τ=2秒，紫点线为工程上界12秒。',ha='center',fontsize=9)
+    save('07_tau_and_failures',fig,'每组为一条原生记录中的一个连续Hb片段和一个通道，参数在组内窗口共享。有效表示至少一个窗口通过原有收敛与积分检查，完整窗口覆盖另存表中。两视图各用自身允许的输入窗口，同组连线不保证拟合时间支持相同；参数差异反映观察条件与支持的联合敏感性。灰叉保留失败末次参数，不能作为生理估计；达到12秒上界也不是正常生理参考。','parameter_groups.csv')
+
+    fig,axes=plt.subplots(1,3,figsize=(9.2,4.2),squeeze=False)
+    selected_fits=pair_fits[pair_fits.metric.eq('D1') & pair_fits.subject.isin([c[1] for c in parameter_cases])]
+    fit_upper=math.ceil(float(selected_fits[['fixed','free']].max().max())*11)/10
+    for ax,(dataset,subject,title) in zip(axes[0],parameter_cases):
+        pairs=('AFpz','C5h','POOz') if dataset==datasets[1] else ('FpzFp2','C6CP6','OzO1')
+        part=pair_fits[pair_fits.dataset.eq(dataset)&pair_fits.subject.eq(subject)&pair_fits.metric.eq('D1')]
+        for j,pair in enumerate(pairs):
+            group=part[part.pair.eq(pair)];good=group[group.paired_windows>0].sort_values('group_id')
+            for i,item in enumerate(good.itertuples()):
+                jitter=(i-(len(good)-1)/2)*.015
+                ax.plot([j-.12+jitter,j+.12+jitter],[item.fixed,item.free],color='#9da7b1',lw=.7)
+                ax.scatter(j-.12+jitter,item.fixed,color='#246eab',marker='o',s=18)
+                ax.scatter(j+.12+jitter,item.free,color='#c77722',marker='^',s=20)
+            ax.text(j,.98,f'{len(good)}/{len(group)}组',transform=ax.get_xaxis_transform(),ha='center',va='top',fontsize=8)
+        ax.set(xticks=range(3),xticklabels=pairs,ylim=(0,fit_upper),title=title)
+        ax.tick_params(axis='x',labelsize=8);ax.grid(axis='y',alpha=.15)
+    axes[0,0].set_ylabel('同窗配对 D1 / 冻结训练SD')
+    fig.suptitle('参数适配改变哪些位置：保留相同成功窗口再比较',fontsize=13)
+    fig.legend(handles=[Line2D([],[],color='#246eab',marker='o',ls='',label='固定参数'),Line2D([],[],color='#c77722',marker='^',ls='',label='共享κ、τ')],loc='lower center',ncol=2,frameon=False)
+    fig.tight_layout(rect=[0,.09,1,.91])
+    save('08_same_window_adaptation',fig,'每条短线是一组在完全相同窗口支持上的固定与自由参数RMS；组内先平均窗口平方误差再开方。未成功组进入上方计划分母，但不填零。点数不等于被试数。本图定位参数可以吸收的失配，不按误差最小给方法作生理资格排名。','fit_pair_groups.csv')
+
+    fig,axes=plt.subplots(1,3,figsize=(9.1,4))
+    ds_order=(*datasets,'refed','visual_cognitive_motivation');ds_labels=('Single\nTrial','Simul.','REFED','Visual\n仅Hb')
+    features=(('Hb_common_direction_fraction','标准化共同方向平方比'),('Hb_bias_fraction','偏置平方比'),('Hb_residual_OR_correlation','HbO/HbR残差相关'))
+    for ax,(feature,label) in zip(axes,features):
+        for i,dataset in enumerate(ds_order):
+            values=shapes[shapes.dataset.eq(dataset)&shapes.feature.eq(feature)].value.dropna().to_numpy()
+            jitter=((np.arange(len(values))%9)-4)*.018
+            ax.scatter(i+jitter,values,s=13,alpha=.55,c='#246eab' if i<3 else '#777777')
+            q=np.quantile(values,[.25,.5,.75]);ax.plot([i,i],[q[0],q[2]],color='black',lw=2)
+            ax.scatter(i,q[1],s=30,facecolor='white',edgecolor='black',zorder=5)
+        ax.set(xticks=range(4),xticklabels=ds_labels,title=label,ylim=(0,1.05));ax.grid(axis='y',alpha=.15)
+    fig.suptitle('残差的方向结构与静态偏置分开观察',fontsize=14)
+    fig.tight_layout(rect=[0,.07,1,.92])
+    fig.text(.5,.01,'每点一名被试；白心点／黑线为中位数／四分位距。共同方向比不是血容量或生理来源份额。',ha='center',fontsize=8.5)
+    save('09_residual_directions',fig,'这是预定三通道面板的被试汇总，人数依次29、26、32、16；计划38268个窗口通道对中37577项具有有效Hb形态。双Hb残差在各自训练SD坐标中分解，前两项为平方量比值，第三项为相关；不是三份独立证据，也不能定位到全通道热点。Visual仅保留纯Hb解释。','shape_subjects.csv')
+
+    fig,axes=plt.subplots(1,2,figsize=(8.5,3.5))
+    for ax,contrast,label,limits in zip(axes,('clean_minus_raw','clean_minus_amp'),
+            ('EOG回归 − 原代理','EOG回归 − 幅度匹配对照'),((-.55,.05),(-.025,.025))):
+        part=ocular[ocular.analysis.eq('counterfactual')&ocular.contrast.eq(contrast)]
+        if part.empty and contrast=='clean_minus_amp':part=ocular[ocular.analysis.eq('counterfactual')&ocular.contrast.eq('clean_minus_amplitude')]
+        for i,dataset in enumerate(datasets):
+            item=part[part.dataset.eq(dataset)].iloc[0]
+            ax.errorbar(item['mean'],i,xerr=[[item['mean']-item.ci_low],[item.ci_high-item['mean']]],fmt='o',color='#246eab',capsize=3)
+        ax.axvline(0,color='black',ls='--',lw=.8)
+        ax.set(xlim=limits,yticks=[0,1],yticklabels=['Single-Trial','Simultaneous'],ylim=(-.6,1.6),
+            title=label,xlabel='EEG目标对固定Hb读出的MSE差')
+        ax.grid(axis='x',alpha=.15)
+    fig.suptitle('EOG参照：未检出超出幅度对照的额外变化',fontsize=13)
+    fig.tight_layout(rect=[0,.08,1,.9]);fig.text(.5,.01,'两面板横轴独立缩放；单位为EEG训练SD平方，负值表示目标与保留读出更接近。',ha='center',fontsize=8.5)
+    save('10_eog_control',fig,'点为既有被试等权均值，横线为整被试重采样95%区间。Single-Trial为29/29名、Simultaneous为26/26名；计划23952个窗口通道对中19949项可评分。左图相对原代理下降，右图相对只匹配均值／SD的对照区间跨零。处理改变了EEG评分目标，Hb模型未重拟合；这不是眼源贡献比例，也不证明清理恢复了神经真值。','ocular_associations.csv')
+    return figures
+
+
+def render_mechanism_patterns(run, analysis, output):
+    """Mechanism-oriented synthesis, keeping its numerical owner separate."""
+    import shutil
+    import pandas as pd
+    from datetime import datetime, timezone
+    from src.analysis.tak_mismatch import HB_RATIO
+    run,analysis,output=(Path(p).resolve() for p in (run,analysis,output))
+    summary=_json(analysis/'summary.json')
+    if (summary.get('schema')!='tak_mismatch_mechanism_patterns_v1' or summary.get('status')!='completed'
+            or Path(summary['parent_run']).resolve()!=run or not analysis.is_relative_to(run)):
+        raise ValueError('completed mechanism-pattern analysis in the declared retained run required')
+    if output.exists():raise FileExistsError('mechanism report requires a fresh export')
+    tables={name:pd.read_csv(_path(analysis,path),dtype={'subject':str}) for name,path in summary['files'].items()}
+    sources=summary['sources']
+    maps=pd.read_csv(sources['maps'],dtype={'subject':str})
+    similarities=pd.read_csv(sources['similarities'],dtype={'subject':str})
+    shapes=pd.read_csv(sources['shape_subjects'],dtype={'subject':str})
+    ocular=pd.read_csv(sources['ocular_associations'])
+    output.mkdir(parents=True)
+    figures=_mechanism_pattern_figures(tables,maps,_json(Path(sources['plan'])),similarities,shapes,ocular,output/'plots')
+    def figure(key):return dict(type='figure',**figures[key])
+    reg=tables['regional_summary'];contrasts=tables['regional_contrast_summary']
+    sim='simultaneous_eeg_nirs';single='eeg_fnirs_single_trial'
+    rows=[]
+    for metric,label in ((HB_RATIO,'Hb残差／零预测MSE比'),('D_bal_20s','20秒弱动态平衡偏离'),('D1','D1（训练SD）')):
+        part=reg[reg.dataset.eq(sim)&reg.level.eq('subject')&reg.metric.eq(metric)].set_index('region')
+        c=contrasts[contrasts.dataset.eq(sim)&contrasts.level.eq('subject')&contrasts.metric.eq(metric)&contrasts.contrast.eq('posterior_minus_central')].iloc[0]
+        rows.append([label,*[f"{part.loc[r,'median']:.3f}" for r in ('frontal','central','posterior')],
+                     f'{int(c.positive_subjects)}/{int(c.planned_subjects)}',f"{c['median']:+.4f}"])
+    scale_rows=[]
+    for dataset in (single,sim):
+        for metric in (HB_RATIO,'D_bal_10s','D_bal_20s','D_bal_40s'):
+            r=contrasts[contrasts.dataset.eq(dataset)&contrasts.level.eq('subject')&contrasts.metric.eq(metric)&contrasts.contrast.eq('posterior_minus_central')].iloc[0]
+            scale_rows.append([DATASET_LABELS[dataset], 'Hb残差比' if metric==HB_RATIO else metric,
+                f'{int(r.available_subjects)}/{int(r.planned_subjects)}',f'{int(r.positive_subjects)}/{int(r.available_subjects)}',f"{r['median']:+.4f}"])
+    tau_rows=[]
+    site=tables['parameter_site_summary']
+    for dataset,subject,pair in ((sim,'VP022','AFpz'),(sim,'VP022','C5h'),(sim,'VP022','POOz'),
+                               (sim,'VP023','POOz'),(single,'subject_06','FpzFp2')):
+        r=site[site.dataset.eq(dataset)&site.subject.eq(subject)&site.pair.eq(pair)&site.view.eq('hb_only')].iloc[0]
+        tau_rows.append([subject,pair,f'{int(r.valid_groups)}/{int(r.planned_groups)}',f'{r.tau_median:.2f}',
+            f'{int(r.boundary_valid_groups)}/{int(r.valid_groups)}',f'{int(r.valid_windows)}/{int(r.planned_windows)}'])
+    same_rows=[]
+    for dataset,subject in ((single,'subject_25'),(single,'subject_06'),(sim,'VP023')):
+        for metric in ('D1',HB_RATIO):
+            s=similarities[similarities.dataset.eq(dataset)&similarities.subject.eq(subject)&similarities.metric.eq(metric)]
+            a=s[s.same_task].spearman_rho.dropna();b=s[~s.same_task].spearman_rho.dropna()
+            same_rows.append([subject,'D1' if metric=='D1' else 'Hb残差比',
+                f'{a.median():.3f}（{len(a)}对）' if len(a) else '无同任务重复',f'{b.median():.3f}（{len(b)}对）'])
+    shape_rows=[]
+    for dataset in (single,sim,'refed','visual_cognitive_motivation'):
+        p=shapes[shapes.dataset.eq(dataset)]
+        shape_rows.append([DATASET_LABELS[dataset],str(p.subject.nunique()),
+            *[f'{p[p.feature.eq(feature)].value.median():.3f}' for feature in ('Hb_common_direction_fraction','Hb_residual_OR_correlation','Hb_bias_fraction')]])
+    content=dict(schema='source_diagnostics_report_v1',title='Tak失配的空间模式与生理机制线索',
+        subtitle='统一参照、个体稳定性与参数适配：基于保留证据的机制分析',
+        date='2026-11-04；拟合证据：2026-10-28至2026-10-29；本次仅新增描述性汇总与显示',
+        provenance=['固定全通道图、预定三通道共享参数面板和EOG辅助分析各自保留原支持。',
+            '新汇总数值由机制分析目录持有；本报告只呈现这些表及其来源。未读取原始信号、未重拟合、未新增显著性检验。'],
+        summary=['最突出的人群模式是Simultaneous后部测量位置的相对Hb残差高于中央：23/26名被试同向；20秒弱动态平衡偏离为22/26。该方向在三个任务中保持，但未据此定位皮层来源。',
+            '个体空间模式比单次误差高低更有机制价值。Single-Trial 25号左中央、06号前额及Simultaneous VP023后部的模式可重复；绝对误差与相对误差仍需分开观察。',
+            '自由参数揭示不同位置对模型时间尺度的调整需求。VP022前额Hb-only τ中位数9.61秒，中央与后部约3.16、3.33秒；VP023后部7个有效组全部触及12秒工程上界。它们是条件模型线索，尚非生理时间常数测量。',
+            '双Hb残差具有强同向动态结构。EOG虽有关联，清理却未显示超出幅度匹配对照的额外收益，不能据此解释主要空间模式。'],sections=[])
+    content['sections'].append(dict(title='1. 分析问题、信息条件与证据范围',blocks=[
+        _paragraph('本报告依据空间模式能否帮助区分机制来组织证据。固定参数给所有位置一个共同动力学参照；共享参数允许局部时间响应改变。比较的重点是空间方向、重复性、输入条件依赖和失败位置，而非按平均误差给两种设置排名。'),
+        _table(['证据','范围','本报告用途'],[
+            ['固定参数全通道','103名被试、473088个计划窗口×Hb通道对','区域分布与个体图谱；失败沿用原分母。'],
+            ['区域汇总','Single-Trial 29人；Simultaneous 26人','通道名称可明确粗分为前额／中央／后部。'],
+            ['共享κ、τ面板','103人、2826组、38268窗对；每记录3个预选位置','参数适配与输入条件敏感性；不插值成自由参数全脑图。'],
+            ['残差形态／EOG','预定三通道面板；EOG仅两库有原生参照','方向分解及独立辅助证据；不扩展成全通道因果归因。'],
+            ['Visual','已有EEG通道身份错误','仅保留经审计的纯Hb形态；不解释其跨模态参数。']],
+            '组、窗口、通道和任务内重复均不增加独立被试数。完整共享参数全量计划仍未完成。',[1.3,2.4,3.7]),
+        _paragraph('固定组采用κ=0.64/秒、τ=2秒；共享组在原生记录、连续Hb支持和Hb通道内拟合κ、τ。两组均逐窗估计驱动和四初态。Hb-only只看双Hb，联合拟合同时看EEG代理与双Hb；训练尺度、观察算子和评分窗口沿用原合同。'),
+        _paragraph('区域是传感器位置的粗分：AF/Fp前缀为前额，C/FC前缀为中央，P/O前缀为后部。Single-Trial依次9、24、3个位置；Simultaneous依次16、10、10个位置。两套布局不等同于同一皮层分区；REFED另保留个体图作口径对照，不强行并入区域统计。')]))
+    content['sections'].append(dict(title='2. 指标与图表应怎样读取',blocks=[
+        _paragraph('D1是处理后双Hb对Hb-only条件重建的训练SD标准化RMS。R_H是同有效支持上的Hb残差MSE／零变化预测MSE，小于1表示优于零变化基线。它不是R²、病变程度或非神经成分百分比。各通道及外层折有自己的训练SD。'),
+        dict(type='equation',latex=r'\begin{aligned}D_1&=\sqrt{\operatorname{mean}_{t,c}\!\left[\left(\frac{H_c(t)-\widehat H_c(t)}{\sigma_c}\right)^2\right]}\\R_H&=\frac{\operatorname{mean}_{t,c}\!\left[\left(\frac{H_c(t)-\widehat H_c(t)}{\sigma_c}\right)^2\right]}{\operatorname{mean}_{t,c}\!\left[\left(\frac{H_c(t)}{\sigma_c}\right)^2\right]}\end{aligned}',
+            caption='H为参考后的处理Hb，c为HbO/HbR，σ为冻结训练SD，主要评分为各30秒窗的5.0至29.8秒。原记录／被试汇总继续分别合并平方量或比值分子分母。'),
+        _paragraph('弱动态平衡D_bal直接检验连续HbT/HbR在当前Tak小信号关系下的弱积分残差。10、20、40秒表示积分核宽度；分母使用同支持的两侧动态量平方和。它不依赖当前窗口的神经驱动拟合，但依赖模型系数、处理坐标和有效支持，没有正常生理阈值。'),
+        dict(type='equation',latex=r'm_{s,R}=\operatorname{median}_{c\in R}M_{s,c},\qquad \Delta_s=m_{s,\mathrm{posterior}}-m_{s,\mathrm{central}}',
+            caption='M为原有记录等权被试通道值，R为本报告的测量区域。区域内全部计划位置均有值、三个区域均完整才进入配对；最后以被试等权呈现中位数、四分位距和方向人数。'),
+        _paragraph('地形图从头顶按球面角度展开三维模板，赤道显示半径为头部轮廓的90%。REFED保留既有平面模板。线性插值／边缘外推填满头部，黑边点保留原通道数值，灰叉表示缺失，虚线标出测点凸包。空白区域被着色只是显示变化，不代表新增测量或更高空间分辨率。')]))
+    content['sections'].append(dict(title='3. 后部相对Hb失配在Simultaneous中具有较广覆盖',page_break=True,blocks=[
+        figure('01_subject_regions'),
+        _table(['指标','前额','中央','后部','后部较高','配对差中位数'],rows,
+            '前三个数值列为各区域被试中位数，最后一列先按同被试相减再取中位数，因此不一定等于前面两个中位数相减。方向人数比较后部与中央。',[2.2, .7,.7,.7,1,1.4]),
+        _paragraph('Simultaneous后部的相对Hb残差比在23/26名被试中高于中央，配对差中位数为+0.0823；20秒弱平衡为22/26、+0.0558。D1只有18/26同向。因此，值得研究的是归一化后和动态关系中仍保留的区域差异，不能仅用绝对误差热点替代。'),
+        _paragraph('Single-Trial的后部方向较弱且采样更少，不能把Simultaneous的模式提升为四库共同生理规律。一名Single-Trial被试未满足完整区域支持，仍在计划29人的分母中。'),
+        _table(['数据集','指标','可用／计划人','后部较高／可用人','后部−中央中位数'],scale_rows,
+            '核宽敏感性仍是同一批被试与相关指标的描述，不是多份独立确认或新增显著性检验。',[1.6,1.7,1.1,1.3,1.7])]))
+    content['sections'].append(dict(title='4. 总体空间图与跨任务保持性',page_break=True,blocks=[
+        figure('02_population_maps'),
+        _paragraph('总体图每点为该通道可用被试的中位数。它与区域图的“被试内区域中位数，再跨被试中位数”汇总次序不同，两者各自保留数值，不能互相替代。Single-Trial有个别位置缺值，各点可用人数在population_maps.csv中明确保留。'),
+        figure('03_task_consistency'),
+        _paragraph('在DSR、n-back和词生成中，后部相对残差高于中央的被试分别为24/26、23/26、23/26；20秒弱平衡分别为23/26、22/26、22/26。三个任务共享被试与测量装置，不能当作三次独立人群重复。'),
+        _paragraph('该保持性使单一任务的瞬时神经活动不足以独自解释现象。候选解释包括区域动力学、静脉／浅表成分混合及稳定的光学采样差异。当前图谱尚不能在这些机制间作唯一归因。')]))
+    content['sections'].append(dict(title='5. 个体热点稳定，但不同指标保留的模式并不相同',page_break=True,blocks=[
+        figure('04_case_maps'),
+        _paragraph('Single-Trial 25号的C1FC1、C1C3和CP3C3为左中央高D1位置；相对残差也强调左中央偏后部。06号的FpzFp1、FpzFp2及相邻前额位置在D1、相对残差和弱平衡中均值得跟踪。Simultaneous VP023的P4h、PPOz、P3h形成后部高值，D1与相对残差空间相关为0.855。'),
+        figure('06_record_stability'),
+        _table(['被试','指标','同任务记录相关中位数','跨任务记录相关中位数'],same_rows,
+            '括号内是记录对数，不是独立被试数。相关为同一指标在共同通道上的Spearman排序相关。',[1.3,1.2,2.4,2.5]),
+        _paragraph('D1稳定并不保证相对残差同样稳定。06号同任务D1相关中位数0.941，而相对残差为0.488；25号分别0.918和0.676。VP023跨任务两项均较高，分别0.958和0.874。因此，病例的机制价值应结合多个读数，而不是只看一张稳定的亮色图。')]))
+    content['sections'].append(dict(title='6. 反例帮助区分幅度热点与相对不相容',page_break=True,blocks=[
+        figure('05_amplitude_counterexamples'),
+        _paragraph('Single-Trial 28号OzPOz的D1约1.984，但相对残差更强调左中央位置。VP022的前额D1热点与相对残差地图相关仅0.028；REFED 30号只有0.108。它们说明标准化绝对误差与相对基线误差可以指向不同位置。'),
+        _paragraph('这些图适合检查局部信号幅度、观察尺度与动力学关系各自的贡献。REFED 30号D1跨视频空间相关中位数0.776，相对残差仅0.184；不同视频不是同条件重测，不能把稳定D1图直接解释为稳定生理异常。')]))
+    content['sections'].append(dict(title='7. 自由参数揭示局部适配需求，也暴露解释边界',page_break=True,blocks=[
+        figure('07_tau_and_failures'),
+        _table(['被试','位置','有效／计划组','Hb-only τ中位数／秒','有效组触上界','有效／计划窗'],tau_rows,
+            '每组参数只计一次。有效组与有效窗口分母分别保留；12秒是预设工程上界。',[1.4,1.1,1.1,1.5,1.2,1.3]),
+        _paragraph('VP022的前额AFpz在可用组中需要更长的τ：中位数9.61秒，中央C5h为3.16秒、后部POOz为3.33秒。三种任务的前额可用结果方向一致，但前额只有6/9组通过，不能忽略其余组。'),
+        _paragraph('VP023后部POOz的7/9个有效Hb-only组均达到12秒；相同7组的联合拟合τ中位数约7.38秒。两视图的允许拟合窗口可能不同，差异不能唯一归因于增加EEG信息。这更适合作为“模型需要不同时间响应、且估计受观察及支持条件影响”的线索，不能直接命名为真实血流通过时间。06号FpzFp2只有1/6组通过，六次末值触界不能作为六次成功生理重测。'),
+        _paragraph('κ与自由驱动可以在血管舒张信号方程中补偿，参数先验也会参与选择条件解。拟合参数的稳定、边界和输入条件依赖应与残差一起读，不能只看参数是否有解或图案是否清楚。'),
+        figure('08_same_window_adaptation'),
+        _paragraph('配对图只回答参数适配吸收了哪些位置的误差。每条短线保留同一组的相同窗口支持，成功子集的下降不代表失败窗口上的收益。自由面板仅三个位置，本报告没有将其外推成完整自由参数地形图。')]))
+    content['sections'].append(dict(title='8. 双Hb的共同残差方向与眼电参照',page_break=True,blocks=[
+        figure('09_residual_directions'),
+        _table(['数据集','人数','共同方向平方比','HbO/HbR残差相关','偏置平方比'],shape_rows,
+            '均为既有三通道面板的被试中位数。共同方向采用各色团训练SD坐标，不是原生HbT。',[1.8,.6,1.5,1.7,1.4]),
+        _paragraph('残差相关中位数约0.95，偏置平方比中位数约0.04至0.09，说明应保留去均值动态结构。共同血流、血容量／静脉混合是值得检查的候选，但受限模型的投影几何也可形成同向残差，不能由同向性直接确定共同生理源。'),
+        figure('10_eog_control'),
+        _paragraph('EOG活动与失配有约0.10至0.21的被试等权窗间秩相关。EOG回归相对原代理降低MSE约0.400和0.405，但相对均值／SD匹配对照的差值为+0.00627与−0.00152，95%区间均跨零。它不支持将主要空间热点直接解释为眼源贡献。'),
+        _paragraph('Kirilina等通过fNIRS、fMRI、血管成像和外周生理记录显示，前额任务相关浅表血流可以污染fNIRS。这提供候选机制依据，不能替代本实验的来源识别。https://pmc.ncbi.nlm.nih.gov/articles/PMC3348501/')]))
+    content['sections'].append(dict(title='9. 如何用图谱区分候选机制',page_break=True,blocks=[
+        _table(['候选机制','现有相关线索','仍需区分的解释','有用的后续判据'],[
+            ['局部血管动力学差异','区域方向及个体模式保持；局部τ适配不同','驱动补偿、固定其他参数、带通与观察算子','同通道未参与拟合的记录上，参数与残余形状能否共同复现。'],
+            ['共同血流／浅表或静脉混合','双Hb同向残差，部分前额模式','投影几何、尺度及模型结构','独立短间距／外周生理锚点能否解释该方向及空间分布。'],
+            ['稳定测量链差异','跨任务模式、绝对与相对误差地图分离','真实个体血管特征','重新放置传感器、独立光学质量与头部配准后，模式随位置还是随个体保持。'],
+            ['眼源或共同状态影响EEG','原生EOG关联及清理敏感性','幅度改变及与眼动相关的神经活动','超出幅度对照的局部、同支持收益；不能用额区EEG替代EOG。']],
+            '表中机制均为待区分假说，不是本报告确认的来源。后续判据是建议，本次没有启动新实验。',[1.4,2.0,1.9,2.7]),
+        _paragraph('Tak原研究把神经动力学、血流动力学和光学观测分开，并包含空间敏感度与静脉混合。当前采用其血流核心的条件拟合不等于完整的个体光学逆模型。https://pmc.ncbi.nlm.nih.gov/articles/PMC4401444/'),
+        _paragraph('当前适合以固定参数全通道图作为统一参照，以自由参数点位图作为机制区分对照。优先跟踪Simultaneous后部的总体方向，以及VP023后部、Single-Trial 25号左中央和06号前额的不同模式。选择依据是方向覆盖、重复性、指标一致性与独立参照，而非失配最小。')]))
+    source_rows=[[name,str(Path(path).relative_to(run)) if Path(path).is_relative_to(run) else path] for name,path in sources.items()]
+    content['sections'].append(dict(title='来源与可复核导出',page_break=True,blocks=[
+        _paragraph('R为保留运行 experiments/runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1。下表相对路径均从R起算。新派生表位于fixed_physiology_v1/mechanism_patterns_v1；其summary.json记录汇总顺序、范围与来源，报告不替代该数值来源。'),
+        _table(['来源键','保留路径'],source_rows,'完整可解析路径见同目录source_manifest.json。',[1.5,5.9]),
+        _paragraph('新表包括regional_values、regional_summary、regional_contrasts、population_maps、parameter_groups、fit_pair_groups及parameter_site_summary。图中涉及的失败、缺值、输入视图和工程边界均保留。')]))
+    # Keep the short coverage table together, rather than leaving its final
+    # failure row alone on the next page after the nine-panel parameter plot.
+    position=next(i for i,s in enumerate(content['sections']) if s['title'].startswith('7. '))
+    parameter_section=content['sections'][position]
+    following=parameter_section['blocks'][1:]
+    parameter_section['blocks']=parameter_section['blocks'][:1]
+    content['sections'].insert(position+1,dict(title='参数覆盖、条件解释与同窗对照',page_break=True,blocks=following))
+    content_path=output/'report_content.json';content_path.write_text(json.dumps(content,ensure_ascii=False,indent=2)+'\n')
+    checks=render_report(content_path,output/'report')
+    shutil.copy2(Path(__file__),output/'renderer_source.py')
+    manifest=dict(schema='tak_mismatch_mechanism_report_v1',created_utc=datetime.now(timezone.utc).isoformat(),
+        analysis=str(analysis),sources=sources,figures=figures,report=str(output/'report/TECHNICAL_REPORT.pdf'),
+        command=[str(ROOT/'.venv/bin/python'),str(Path(__file__).resolve()),'--run',str(run),'--mechanism-analysis',str(analysis),'--output',str(output)],
+        bitmap_figures=True,projection='azimuthal_equidistant_equator_radius_0.9; planar REFED retained',
+        full_head_display='linear interpolation/head extrapolation; measured convex hull shown',
+        source_parameters_unchanged=True,model_fits=0,raw_signal_reads=0,new_statistical_tests=0,
+        numerical_verification=str(analysis/'verification.json') if (analysis/'verification.json').exists() else None,
+        pages=checks['exports']['TECHNICAL_REPORT.pdf']['pages'],figure_count=len(figures))
+    (output/'source_manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+    return dict(output=str(output),pages=manifest['pages'],figures=len(figures))
 
 
 def priority_panel_tables(run):
@@ -3346,6 +3916,714 @@ def render_priority_panel(run, output):
     return summary
 
 
+def render_four_dataset_fixed_patterns(run, analysis, output):
+    """Physiological hypotheses from the complete fixed census, with counterchecks."""
+    import shutil
+    import pandas as pd
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from src.analysis.tak_mismatch import HB_RATIO
+    run,analysis,output=(Path(p).resolve() for p in (run,analysis,output))
+    summary=_json(analysis/'summary.json')
+    if (summary.get('schema')!='tak_mismatch_four_dataset_fixed_patterns_v1' or summary.get('status')!='completed'
+            or Path(summary['parent_run']).resolve()!=run or not analysis.is_relative_to(run)):
+        raise ValueError('Completed fixed-only four-dataset evidence required')
+    if output.exists():raise FileExistsError('Use a fresh fixed-pattern report export')
+    tables={k:pd.read_csv(analysis/v,dtype={'subject':str}) for k,v in summary['files'].items()}
+    sources=summary['sources'];visual='visual_cognitive_motivation'
+    old=pd.read_csv(sources['reference_maps'],dtype={'subject':str},low_memory=False)
+    new=pd.read_csv(sources['corrected_maps'],dtype={'subject':str},low_memory=False)
+    maps=pd.concat([old[~old.dataset.eq(visual)],new],ignore_index=True)
+    old_plan,new_plan=(_json(Path(sources[k])) for k in ('reference_plan','corrected_plan'))
+    plan=dict(records=[r for r in old_plan['records'] if r['dataset']!=visual]+new_plan['records'])
+    display_cache={}
+    def display(frame,dataset,subject=None):
+        if subject is None:
+            subject=sorted(maps[maps.dataset.eq(dataset)&maps.period.eq('subject_mean')&maps.metric.eq('D1')].subject.unique())[0]
+        key=(dataset,subject)
+        if key not in display_cache:
+            template=maps[maps.dataset.eq(dataset)&maps.subject.eq(subject)&maps.period.eq('subject_mean')&maps.metric.eq('D1')]
+            display_cache[key]=_spatial_preview_coordinates(template,plan).set_index('pair_members',drop=False)
+        positions=display_cache[key].loc[frame.pair_members]
+        if not np.allclose(frame[['x','y']],positions[['x_orthographic','y_orthographic']],atol=1e-7):
+            raise ValueError('Fixed report geometry differs from retained registered map')
+        result=frame.copy();result[['x','y']]=positions[['x','y']].to_numpy()
+        if not np.array_equal(result.display_value,frame.display_value,equal_nan=True):
+            raise ValueError('Display projection changed a retained value')
+        return result
+    datasets=('eeg_fnirs_single_trial','simultaneous_eeg_nirs',visual,'refed')
+    short=dict(zip(datasets,('Single-Trial','Simultaneous','Visual','REFED')))
+    colors=dict(zip(datasets,('#2272ac','#d17924','#27816d','#9c4b90')))
+    output.mkdir(parents=True);plots=output/'plots';plots.mkdir();plt=_plotting();figures={}
+    def save(key,fig,caption,source):
+        if key in ('03_population_maps','06_subject_examples') or key.startswith('hotspot_'):
+            note=('REFED保留登记平面布局' if key=='hotspot_refed' else
+                  '三维测点按头顶球面等距展开；REFED保留平面布局' if key=='03_population_maps' else '头顶球面等距展开')
+            fig.text(.5,.005,note+'；虚线为测点凸包，线外颜色为外推。',ha='center',fontsize=8,color='#455560')
+            if key in ('03_population_maps','hotspot_refed'):
+                if key=='hotspot_refed':
+                    caption=caption.replace('坐标采用头顶球面等距展开，','采用登记平面测点布局，')
+                caption+=' REFED只有登记平面布局，按原布局缩至头部显示范围，不虚构三维球面位置。'
+        figures[key]=dict(type='figure',path=_save(fig,plots/(key+'.png')),caption=caption.replace('−','-'),source=source,preserve_bitmap=True)
+    def dots(ax,frame,label,limits=None):
+        for i,ds in enumerate(datasets):
+            g=frame[frame.dataset.eq(ds)].sort_values('subject');v=g.value.dropna().to_numpy(float)
+            ax.scatter(i+.16*np.sin(np.arange(len(v))*2.399963),v,s=21,c=colors[ds],alpha=.7)
+            if len(v):
+                q=np.quantile(v,[.25,.5,.75]);ax.plot([i,i],q[[0,2]],c='black',lw=2)
+                ax.scatter([i],[q[1]],s=40,facecolor='white',edgecolor='black',zorder=4)
+            ax.text(i,1.02,f'{len(v)}/{len(g)}',transform=ax.get_xaxis_transform(),ha='center',fontsize=8)
+        ax.set(xticks=range(4),xticklabels=[short[d] for d in datasets],ylabel=label,xlim=(-.45,3.45))
+        ax.tick_params(axis='x',rotation=15,labelsize=8);ax.grid(axis='y',alpha=.18)
+        if limits:ax.set_ylim(*limits)
+    def value(x):return f'{x:.3f}' if np.isfinite(x) else '不可用'
+    def section(title,blocks):return dict(title=title,page_break=True,blocks=blocks)
+    subj=tables['subjects'];shapes=tables['shape_subjects'];repeat=tables['spatial_repeat_summary']
+    regional=tables['regional_contrasts'];tests=tables['regional_tests']
+    fig,axes=plt.subplots(1,3,figsize=(10,3.4))
+    for ax,m,label in zip(axes,('D1',HB_RATIO,'D_bal_20s'),('Hb残差 / 训练SD','残差 / 零预测MSE','20秒弱动态偏离')):
+        dots(ax,subj[subj.metric.eq(m)],label)
+    fig.tight_layout();save('01_census',fig,'每点一名被试；白点为被试中位数，黑线为四分位距，顶部为可用／计划人数。纵轴独立；训练SD和单位化误差不代表跨库相同物理浓度。','subjects.csv')
+    fig,axes=plt.subplots(1,3,figsize=(10,3.6))
+    for ax,m,label in zip(axes,('D1',HB_RATIO,'D_bal_40s'),('D1后部减前额 / 训练SD','相对残差后部减前额','40秒弱动态偏离后部减前额')):
+        d=regional[regional.level.eq('subject')&regional.contrast.eq('posterior_minus_frontal')&regional.metric.eq(m)]
+        for i,ds in enumerate(datasets[:2]):
+            g=d[d.dataset.eq(ds)];v=g.value.dropna().to_numpy(float)
+            ax.scatter(i+.15*np.sin(np.arange(len(v))*2.399963),v,c=colors[ds],s=26,alpha=.75)
+            if len(v):ax.plot([i-.22,i+.22],[np.median(v)]*2,c='black',lw=2)
+            ax.text(i,1.02,f'{int((v>0).sum())}/{len(v)} 正差',transform=ax.get_xaxis_transform(),ha='center',fontsize=8)
+        ax.axhline(0,c='black',ls='--',lw=.9);ax.set(xticks=[0,1],xticklabels=['Single-Trial','Simultaneous'],ylabel=label,xlim=(-.5,1.5));ax.grid(alpha=.15)
+    fig.tight_layout();save('02_regional_contrasts',fig,'每点为一人：先取该人每区域测点的中位数，再作后部减前额。三个区域全部位置可用才纳入；Single-Trial 28/29人，Simultaneous 26/26人。黑横线为配对差中位数；正值表示后部失配更高。','regional_contrasts.csv; regional_tests.csv')
+    population=tables['all_population_maps'];fig,axes=plt.subplots(2,4,figsize=(10,5.8))
+    fig.subplots_adjust(left=.02,right=.9,bottom=.06,top=.94,wspace=.10,hspace=.26)
+    for row,(metric,label) in enumerate((('D1','D1 / 训练SD'),(HB_RATIO,'残差 / 零预测MSE'))):
+        frame=population[population.metric.eq(metric)];upper=float(frame.display_value.max())
+        for j,ds in enumerate(datasets):
+            g=display(frame[frame.dataset.eq(ds)],ds)
+            im=spatial_topomap(axes[row,j],g,limits=(0,upper),title=short[ds],coverage='head')
+        cax=fig.add_axes([.93,.57 if row==0 else .12,.017,.30]);fig.colorbar(im,cax=cax).set_label(label)
+    save('03_population_maps',fig,'每个测点取被试中位数；两行分别是D1与相对残差，每行四库共用色标。坐标从头顶按球面角度等距展开，鼻尖朝上；黑边点为测点，MNE整头外推填色。虚线为测点凸包，线外颜色是显示外推。四库覆盖不同，不能解释为同一皮层脑区；填色不增加测量分辨率。','all_population_maps.csv; display_coordinates.csv')
+    fig,axes=plt.subplots(1,2,figsize=(10,3.6))
+    for ax,m,label in zip(axes,('D1',HB_RATIO),('D1空间排序：早段 vs 晚段','相对残差空间排序：早段 vs 晚段')):
+        d=tables['early_late_subjects'];dots(ax,d[d.metric.eq(m)],label,(-1.02,1.02));ax.axhline(0,c='grey',ls='--',lw=.8)
+    fig.tight_layout();save('04_early_late',fig,'全体被试均进入分母，未按稳定性选例。每个记录要求每半至少2个有效窗口、至少8且80%的共同测点；每点为一人的记录相关系数中位数。它是记录内稳定性，不是跨日重测。','early_late_subjects.csv')
+    fig,axes=plt.subplots(2,2,figsize=(10,6.4))
+    for row,m in enumerate(('D1',HB_RATIO)):
+        for col,endpoint in enumerate(('raw_rho','centered_rho')):
+            d=tables['spatial_repeat_subjects'];g=d[d.metric.eq(m)&d.endpoint.eq(endpoint)]
+            dots(axes[row,col],g,('D1' if row==0 else '相对残差')+'空间相关',(-1.02,1.02))
+            axes[row,col].set_title('原空间图' if col==0 else '减去其他被试的共同位置模式',pad=27)
+            axes[row,col].axhline(0,c='grey',ls='--',lw=.8)
+    fig.tight_layout();save('05_record_stability',fig,'每点一人，先计算记录对的空间Spearman相关，再取该人的中位数。右列逐记录减去其他被试同位置中位数。Single-Trial仅同任务记录；Simultaneous跨任务；Visual跨Part；REFED跨视频。后两种跨条件相似不能称为同条件重测。','spatial_repeat_subjects.csv; spatial_repeat_summary.csv')
+    fig,axes=plt.subplots(2,3,figsize=(9.8,6.1));fig.subplots_adjust(left=.02,right=.9,top=.93,bottom=.06,wspace=.12,hspace=.25)
+    for row,metric in enumerate(('D1',HB_RATIO)):
+        d=maps[maps.dataset.eq('simultaneous_eeg_nirs')&maps.period.eq('subject_mean')&maps.metric.eq(metric)&maps.subject.isin(['VP008','VP023','VP022'])]
+        upper=float(d.display_value.max())
+        for col,subject in enumerate(('VP008','VP023','VP022')):
+            frame=display(d[d.subject.eq(subject)],'simultaneous_eeg_nirs',subject)
+            im=spatial_topomap(axes[row,col],frame,limits=(0,upper),title=subject+(' · D1' if row==0 else ' · 相对残差'),coverage='head')
+        cax=fig.add_axes([.93,.57 if row==0 else .12,.017,.30]);fig.colorbar(im,cax=cax)
+    save('06_subject_examples',fig,'沿用旧报告VP008、VP023、VP022三个选例，不作为新增独立验证。每行共用色标；前两人偏后部，VP022可偏前额。采用头顶球面等距展开和整头外推，虚线外为显示外推。与全体被试的区域差和稳定性一起解释。','retained spatial maps; display_coordinates.csv; previous fixed spatial selection')
+    fig,axes=plt.subplots(1,3,figsize=(10,3.5))
+    for ax,f,label,limits in zip(axes,('Hb_residual_OR_correlation','Hb_common_direction_fraction','Hb_bias_fraction'),('HbO/HbR残差相关','标准化共同方向平方比','残差偏置平方比'),((0,1.03),(0,1.03),(0,.20))):
+        dots(ax,shapes[shapes.feature.eq(f)],label,limits)
+    fig.tight_layout();save('07_residual_geometry',fig,'来源是预先冻结的三位置波形面板，而非全通道波形。先合并窗口残差矩，再按记录等权，最后取比值或相关。共同方向不是HbT或某类生理来源比例。','shape_subjects.csv')
+    fig,axes=plt.subplots(1,2,figsize=(9.8,3.4));t=np.linspace(0,8,500);y=np.column_stack([np.sin(2*t),np.cos(3.1*t)]);h=np.array([1.,-1.]);fit=np.outer(y@h/(h@h),h);res=y-fit
+    axes[0].scatter(y[:,0],y[:,1],s=7,c='#8798a7',alpha=.45,label='两个不同输入分量');axes[0].plot([-1.2,1.2],[1.2,-1.2],c='#2272ac',label='允许拟合方向');axes[0].set(xlabel='输入1',ylabel='输入2',title='解析投影反例，无生理来源变量');axes[0].legend(fontsize=8)
+    axes[1].plot(t,res[:,0],c='#2272ac',lw=2,label='残差1');axes[1].plot(t,res[:,1],c='#d17924',ls='--',label='残差2');axes[1].set(xlabel='示意坐标',ylabel='任意单位',title=f'两残差相关={np.corrcoef(res.T)[0,1]:.3f}');axes[1].legend()
+    fig.tight_layout();save('08_projection_counterexample',fig,'纯数学示意：把二维输入投影到方向(1,−1)，残差自然落到(1,1)，即使输入没有同一个生理来源，两残差也完全相关。这不是Tak仿真或实测结果，只说明“同向残差⇒共同生理源”的推理不成立。','analytic orthogonal projection; no model refit')
+    fig,axes=plt.subplots(1,3,figsize=(10,3.5))
+    dots(axes[0],subj[subj.metric.eq('D_EH')],'Hb解读出EEG误差 / 训练SD')
+    dots(axes[1],shapes[shapes.feature.eq('EEG_Hb_readout_correlation')],'EEG代理与Hb解读出相关',(-.15,.2))
+    dots(axes[2],subj[subj.metric.eq('D_drive_H')],'驱动共同初态回放差 / Hb训练SD')
+    fig.tight_layout();save('09_crossmodal',fig,'两侧为全通道标量，中间为冻结三位置波形面板。低形态相关说明当前功率代理与Hb解读出不一致；不是对所有频带、时滞或真实神经血管耦合的否定。','subjects.csv; shape_subjects.csv')
+    fig,axes=plt.subplots(1,2,figsize=(10,3.5))
+    ind=tables['independent_prediction_subjects']
+    for ax,m,label in zip(axes,('prediction_gain_over_zero','prediction_gain_over_template'),('零预测MSE − EEG-only MSE','训练模板MSE − EEG-only MSE')):
+        dots(ax,ind[ind.metric.eq(m)],label);ax.axhline(0,c='black',ls='--',lw=.8)
+    fig.tight_layout();save('10_independent_prediction',fig,'每点一人；先在相同有效窗口作基线误差减EEG-only误差，再按记录和被试汇总。正值有利于EEG-only，单位为Hb训练SD平方。当前窗口Hb在拟合和初态中隐藏；该对照不同于看得到Hb的条件重建。','independent_prediction_subjects.csv')
+    result=_finish_fixed_pattern_report(run,analysis,output,summary,tables,maps,figures,save,plt,short,datasets,value,section,display)
+    coordinates=pd.concat([v.reset_index(drop=True) for v in display_cache.values()],ignore_index=True)
+    coordinates.to_csv(output/'display_coordinates.csv',index=False)
+    spans=[]
+    for (ds,sub),frame in display_cache.items():
+        front=frame[frame.y_orthographic>.8]
+        before=float(np.ptp(front.y_orthographic)) if len(front) else 0.
+        after=float(np.ptp(front.y)) if len(front) else 0.
+        if before>0:spans.append(dict(dataset=ds,subject=sub,frontal_rule='retained orthographic y >0.8',
+            frontal_positions=len(front),old_y_span=before,new_y_span=after,ratio=after/before))
+    import mne
+    (output/'display_projection.json').write_text(json.dumps(dict(projection='vertex-centered azimuthal equidistant',equator_radius=.9,
+        planar_exception='REFED preserves registered paper 2D layout, scaled by0.9 for display; no inferred depth or spherical position',
+        library='MNE',library_version=mne.__version__,extrapolate='head',image_interp='linear',convex_hull='dashed; outside colors are extrapolation',
+        scalar_changes=0,selection_changes=0,spatial_figures=6,frontal_spans=spans,reference='https://mne.tools/1.12/generated/mne.viz.plot_topomap.html'),ensure_ascii=False,indent=2)+'\n')
+    return result
+
+
+def _finish_fixed_pattern_report(run,analysis,output,summary,tables,maps,figures,save,plt,short,datasets,value,section,display):
+    import shutil
+    import pandas as pd
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from src.analysis.tak_mismatch import HB_RATIO
+    subjects=tables['subjects'];shapes=tables['shape_subjects'];tests=tables['regional_tests'];repeat=tables['spatial_repeat_summary']
+    task=tables['task_comparisons'];chosen=task[task.dataset.eq('simultaneous_eeg_nirs')&task.task_a.eq('nback')&task.task_b.eq('wg')]
+    fig,axes=plt.subplots(1,4,figsize=(10,3.3))
+    for ax,m,label in zip(axes,('D1','D_EH','D_drive_H',HB_RATIO),('Hb残差D1','Hb解的EEG读出误差','共同初态驱动回放差','相对零预测残差比')):
+        r=chosen[chosen.metric.eq(m)].iloc[0]
+        ax.errorbar([0],[r.mean_difference],yerr=[[r.mean_difference-r.ci_low],[r.ci_high-r.mean_difference]],fmt='o',capsize=5,color='#d17924')
+        ax.axhline(0,c='black',ls='--',lw=.8);ax.set(xticks=[],ylabel='WG − n-back',title=label,xlim=(-.6,.6));ax.grid(alpha=.15)
+        ax.text(.5,.98,f'n={r.paired_subjects}\nBH q={r.q_value:.4f}',transform=ax.transAxes,ha='center',va='top',fontsize=8)
+    fig.tight_layout();save('11_task_contrast',fig,'点为26人配对差均值，线为整被试重采样95%区间；纵轴独立。前三项来自原327项主检验BH家族，相对残差来自1542项诊断家族。差为词生成减n-back；没有按最小p值删减这四项。','task_comparisons.csv; retained statistical family')
+    ocular=tables['ocular_associations'];cf=ocular[ocular.analysis.eq('counterfactual')]
+    fig,axes=plt.subplots(1,2,figsize=(9.6,3.5))
+    for ax,ds in zip(axes,datasets[:2]):
+        for i,(c,label) in enumerate((('clean_minus_raw','EOG回归 − 原代理'),('amplitude_minus_raw','均值/尺度匹配 − 原代理'),('clean_minus_amplitude','EOG回归 − 匹配对照'))):
+            r=cf[cf.dataset.eq(ds)&cf.contrast.eq(c)].iloc[0]
+            ax.errorbar(r['mean'],i,xerr=[[r['mean']-r.ci_low],[r.ci_high-r['mean']]],fmt='o',capsize=4,color='#2272ac')
+        ax.axvline(0,c='black',ls='--',lw=.8);ax.set(yticks=range(3),yticklabels=['EOG回归 − 原代理','匹配对照 − 原代理','EOG回归 − 匹配对照'],xlabel='EEG读出差平方的变化 / 训练SD平方',title=short[ds]);ax.invert_yaxis();ax.grid(alpha=.15)
+    fig.tight_layout();save('12_ocular_controls',fig,'点为被试等权均值，线为95%被试自助区间；负差表示新的EEG代理更接近固定Hb-only读出。EOG回归不重新拟合SSM；匹配对照只调整代理均值和SD。清理相对原代理有收益，但相对匹配对照区间跨零，不能归为眼源移除的独有贡献。','ocular_associations.csv; retained counterfactual analysis')
+    references=[
+        ('Kirilina et al., 2012, NeuroImage','https://pmc.ncbi.nlm.nih.gov/articles/PMC3348501/','多模态及外周测量发现头皮血管信号可与任务相关，并可呈个体化、重复的空间分布；这支持候选解释的合理性，不证明本数据的后部模式同源。'),
+        ('Yücel et al., 2015, Neurophotonics','https://pmc.ncbi.nlm.nih.gov/articles/PMC4717232/','不同自主神经反应任务中，短源探距回归有助于区分浅表与脑内血流；本轮未使用此类独立分离证据。'),
+        ('Shin et al., 2018, Scientific Data','https://www.nature.com/articles/sdata20183','Simultaneous来自同次访问的三类任务，任务顺序未随机化，不能据此确认跨日特质或纯任务因果效应。'),
+        ('Tak et al., 2015, NeuroImage','https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf','血流模型将隐藏状态映射到光学观测。本项目使用约简固定模型；条件拟合参数、真实神经驱动与观测混合的识别应分别检验。')]
+    median=lambda frame,field,name,ds:float(frame[frame.dataset.eq(ds)&frame[field].eq(name)].value.median())
+    regional_rows=[]
+    for _,r in tests.iterrows():
+        regional_rows.append([short[r.dataset],{'D1':'D1',HB_RATIO:'相对残差','D_bal_40s':'40秒弱残差'}[r.endpoint],f'{r.subjects}/{r.planned_subjects}',
+            value(r['mean']),f'[{value(r.ci_low)}, {value(r.ci_high)}]',f'{r.q_value:.5f}'])
+    coverage=[];failure_rows=[]
+    for ds in datasets:
+        c=summary['coverage'][ds];p=c['plan'];coverage.append([short[ds],p['subjects'],p['Hb_admitted_records'],p['planned_pair_windows'],c['views']['hb_only']['completed']])
+        for v,label in (('hb_only','Hb-only'),('eeg_only','EEG-only'),('joint','joint')):
+            a=c['views'][v];failure_rows.append([short[ds],label,a['planned'],a['completed'],a['numerical_failure'],a['unavailable_support'],a['execution_failure']+a['missing']])
+    content=dict(schema='source_diagnostics_report_v1',title='四数据集固定参数失配：最值得追踪的生理相关模式',
+        subtitle='完整指标筛查、空间稳定性、竞争机制与证据边界',date=datetime.now(ZoneInfo('Asia/Hong_Kong')).strftime('%Y-%m-%d'),
+        provenance=['103名被试、473088个计划窗口×Hb位置；前三库保留原结果，Visual完整替换为原生通道更正版本。',
+            '本轮只读既有数值，新增全被试空间统计与可视化；未读取原始实测信号、未重拟合、未恢复停止的可变参数实验。'],
+        summary=['最值得优先解释的是稳定而具有空间结构的Hb模型失配；Simultaneous的后部模式同时得到相对残差和弱动态关系支持。',
+            'Simultaneous后部相对残差高于前额：22/26人同向，平均差0.069，95%区间0.047–0.091。它是有独立基线核对的描述性表型，不等于已定位的生理来源。',
+            '减去其他被试的共同空间模板后，相对残差跨记录相关中位数：Single-Trial 0.592、Simultaneous 0.722、Visual 0.726；REFED仅0.079。数据集差异是结论的一部分。',
+            '四库最一致的统计现象是双Hb残差高度同向、Hb解与EEG代理形状相关很低；拟合几何、代理与观测混合仍是竞争解释。'],sections=[],sources=[str(analysis/'summary.json')]+[r[1] for r in references])
+    content['sections'].append(section('1. 本轮分析了什么，以及什么没有被当成独立样本',[
+        _table(['数据集','被试','允许Hb记录','计划窗对','Hb-only成功'],coverage,'一窗对为30秒目标窗口×一个HbO/HbR测量位置。重复窗口、通道、同步Probe和视频均不增加独立被试数。'),
+        _paragraph('固定参考参数在所有位置相同：血流时间参数为2秒、信号衰减参数为0.64/秒、神经血管有效增益为1；驱动轨迹和四个初态仍然按窗口拟合。Hb-only只看双Hb，EEG-only只看功率代理，joint同时看两模态。本文比较已有固定模型的失配分布，不把自由驱动拟合称为参数完全固定的前向预测。'),
+        _paragraph('目标窗首5秒为参考，评分5.0–29.8秒，共249个10Hz时刻；EEG代理由六个近邻电极、五频带对数功率的训练折第一主成分组成，计算可使用更长的原生上下文。Hb沿用离线滤波观测。训练尺度按外层训练被试拟合，不按当前窗口重新归一化。'),
+        _paragraph('标量覆盖全量计划窗对；残差形状与眼电分析使用事先冻结的三位置面板。Visual只用更正后EEG通道身份，纯Hb端点与旧版本逐被试复现。模型真值、皮层源位置和未观测生理过程均未在本轮获得。')]))
+    content['sections'].append(section('2. 绝对失配、相对失配和稳定性分别回答什么',[
+        dict(type='equation',latex=r'D_1=\sqrt{\langle (H-\widehat H_H)^2/\sigma_H^2\rangle},\qquad R_H=\frac{\langle(H-\widehat H_H)^2/\sigma_H^2\rangle}{\langle H^2/\sigma_H^2\rangle}',caption='H为窗口参考后的处理Hb，σ为对应色团的冻结训练SD；帽号为Hb-only重建。平均先在同一有效时间和色团上进行。R_H为残差与零变化预测的MSE之比，不是R²或能量来源比例。'),
+        dict(type='equation',latex=r'\Delta_s=\operatorname{median}_{p\in P}M_{sp}-\operatorname{median}_{p\in F}M_{sp},\qquad \rho_s=\operatorname{median}_{a<b}\operatorname{Spearman}_p(M_{sap},M_{sbp})',caption='s为被试，p为测点，P/F为后部/前额，a/b为记录；M是指定失配指标。区域比较要求三个区域完整，稳定性比较要求至少8个且80%的共同位置；这两种可用性规则不同。'),
+        _paragraph('全库标量按窗口平方量、记录、被试逐级汇总；图中标明被试中位数或均值。区域统计先取各区域位置中位数，再在同被试内作差；新区域检验仅包括两库×三指标共6项，5000次整被试自助法区间、100000次符号置换与BH校正。它属于已看过结果后的探索，校正不覆盖整个历史探索过程。'),
+        _paragraph('空间稳定性的区间是5000次被试自助法对“被试记录对相关中位数”的条件区间；拟合、尺度和去群体模板均冻结，未传播模板估计不确定性。记录内早晚与跨记录、跨任务、跨视频的语义分别呈现。')]))
+    content['sections'].append(section('3. 全量分布显示Hb可拟合性不同，但不能据此给生理可信度排名',[
+        figures['01_census'],_table(['数据集','D1中位数','相对残差中位数','20秒弱偏离中位数'],[[short[ds],*[value(median(subjects,'metric',m,ds)) for m in ('D1',HB_RATIO,'D_bal_20s')]] for ds in datasets]),
+        _paragraph('REFED的Hb相对残差较小，但后续空间相对残差的跨视频稳定性也更弱。低条件重建误差不等于更稳定的个体特征，更不等于更准确的神经驱动。D1受训练尺度与信号幅度影响，应与同支持的零预测比值并看。')]))
+    content['sections'].append(section('4. 最清楚的区域模式：Simultaneous后部偏离同时出现在三种口径',[
+        figures['02_regional_contrasts'],_table(['数据集','指标','可用/计划人','平均差','95%区间','BH q'],regional_rows),
+        _paragraph('Simultaneous中，后部高于前额的有D1 19/26人、相对残差22/26人、40秒弱偏离20/26人；三项均在这个探索性6检验家族内保留。相对残差平均增加0.069是比值的绝对差，不是误差增加6.9%。Single-Trial三个区间均跨零，未发现同样清晰的后部趋势。'),
+        _paragraph('这使“Simultaneous后部测量位置与统一Tak关系更不相容”成为当前最值得优先追踪的区域假设。弱残差独立于EEG驱动拟合，但仍共享Hb观测和处理链；三指标一致不是三份独立生理验证。后部/前额是测点前缀分区，不是个体皮层分区。')]))
+    content['sections'].append(section('5. 群体空间图保留覆盖差异；个体热点并不都在后部',[
+        figures['03_population_maps'],_paragraph('群体图把每位置的被试中位数画在登记模板上。Simultaneous后部趋势与区域统计一致；不同库的光路、覆盖、归一化和观测单位不同，不把跨库色值当作相同物理量或疾病风险。')]))
+    content['sections'].append(section('6. 全被试时间稳定性成立到什么程度',[
+        figures['04_early_late'],_paragraph('本页没有使用按空间稳定性挑出的病例：每个被试先汇总所有可用记录，再进入总体分布。Simultaneous只有23/26人满足早晚地图的共同位置标准；缺少支持者仍保留在分母。'),
+        _paragraph('固定观测链能同时产生稳定的测点偏差和生理差异。因而较高的早晚相关说明“该模式可重复描述”，不能单独排除光耦合、头皮血流、头发、固定训练尺度或长程滤波的影响。')]))
+    rr=[]
+    for ds in datasets:
+        row=[]
+        for m in ('D1',HB_RATIO):
+            for ep in ('raw_rho','centered_rho'):
+                r=repeat[repeat.dataset.eq(ds)&repeat.metric.eq(m)&repeat.endpoint.eq(ep)].iloc[0];row.append(value(r['median']))
+        r=repeat[repeat.dataset.eq(ds)&repeat.metric.eq(HB_RATIO)&repeat.endpoint.eq('centered_rho')].iloc[0]
+        rr.append([short[ds],f'{r.subjects}/{r.planned_subjects}',*row,f'[{value(r.ci_low)}, {value(r.ci_high)}]'])
+    content['sections'].append(section('7. 减去群体共有图形后，前三库仍保留个体空间结构；REFED明显减弱',[
+        figures['05_record_stability'],_table(['数据集','可用/计划人','原D1ρ','去模板D1ρ','原相对ρ','去模板相对ρ','末列95%区间'],rr),
+        _paragraph('去模板时，每个人在每条记录、每个位置减去其他人的中位数，再比较自己的不同记录。Simultaneous相对残差的相关中位数仍为0.722，24/26人高于0.5；Single-Trial为0.592，Visual为0.726。说明这些模式不全由所有人共有的头部模板造成。'),
+        _paragraph('REFED原D1跨视频相关较高，但相对残差从0.158降到去模板后的0.079，没人超过0.5。这是重要反例：原D1热点可能较多反映稳定幅度/尺度或视频条件；目前不支持同样强的相对失配指纹。'),
+        _paragraph('去群体模板仍保留每人的固定测量链和尺度偏差，不能解释为已排除所有观测因素。Visual只有11/16人具有可用跨Part地图；Simultaneous与REFED均非同任务跨日重测。')]))
+    content['sections'].append(section('8. 保留原病例作为读图示例，群体统计承担主要证据',[
+        figures['06_subject_examples'],_paragraph('VP008和VP023后部热点较突出，VP022的D1更偏前额。相对残差图会改变部分热点排序，说明绝对误差与相对可解释性回答不同问题。上述病例原先经过反差和稳定性筛选，因此只是示例；第4、6、7节的全被试结果避免用这些病例代替总体证据。')]))
+    if 'hotspot_persistence' in tables:
+        import re
+        hot=tables['hotspot_subjects'];persistent=tables['hotspot_persistence'];sp=tables['spatial_repeat_subjects']
+        statements=[]
+        for ds in datasets:
+            g=hot[hot.dataset.eq(ds)&hot.metric.eq(HB_RATIO)];good=g.eligible_locations.gt(0)
+            statements.append(f"{short[ds]} {int((good&g.stable_locations.gt(0)).sum())}/{int(good.sum())}人")
+        content['summary'].insert(1,'四库都可观察到持续的个体高失配位置：相对残差口径下，'+
+            '、'.join(statements)+'。这里指至少2条、80%的计划记录可评价，且某位置在至少80%可评价记录进入本人最高四分之一；不是生理诊断阈值。')
+        fig,axes=plt.subplots(1,2,figsize=(10,3.5));hotrows=[]
+        for ax,m,label in zip(axes,('D1',HB_RATIO),('D1高失配位置重合率','相对残差高失配位置重合率')):
+            for i,ds in enumerate(datasets):
+                g=sp[sp.dataset.eq(ds)&sp.metric.eq(m)&sp.endpoint.eq('hotspot_overlap')]
+                v=g.value.dropna().to_numpy(float)
+                ax.scatter(i+.15*np.sin(np.arange(len(v))*2.399963),v,s=24,alpha=.7,
+                    color=('#2272ac','#d17924','#27816d','#9c4b90')[i])
+                if len(v):ax.plot([i-.2,i+.2],[np.median(v)]*2,c='black',lw=2)
+                hp=hot[hot.dataset.eq(ds)&hot.metric.eq(m)];eligible=hp.eligible_locations.gt(0)
+                hotrows.append([short[ds],'D1' if m=='D1' else '相对残差',f'{len(v)}/{len(g)}',value(np.median(v)) if len(v) else '不可用',
+                    f'{int((hp.stable_locations.gt(0)&eligible).sum())}/{int(eligible.sum())}'])
+            ax.axhline(.25,c='grey',ls='--',lw=.8);ax.set(xticks=range(4),xticklabels=[short[d] for d in datasets],ylim=(-.03,1.05),ylabel=label)
+            ax.tick_params(axis='x',rotation=15);ax.grid(axis='y',alpha=.15)
+        fig.tight_layout();save('13_hotspot_overlap',fig,'每点为一人的记录对重合率中位数：在共同测点上选各图最高四分之一，交集数除以所选位置数。灰线约0.25是等大小随机位置集合的期望参考，实际参考随取整略变；它不是显著性阈值，未假定相邻通道独立。','spatial_record_pairs.csv; hotspot_subjects.csv')
+        content['sections'].append(section('8A. 单个被试的持续热点本身就是发现，不要求群体热点重合',[
+            figures['13_hotspot_overlap'],_table(['数据集','指标','配对/计划人','热点重合中位数','有持续热点/可评人'],hotrows),
+            _paragraph('这里直接检查高失配位置，而不只检查整张图的相关。持续热点定义为：该位置在至少80%的可评价记录中进入本人的最高四分之一，且至少2条、80%的计划记录可评价。这是明确的描述阈值，不是正常生理阈值；完整频率和并列截点保留在表中。'),
+            _paragraph('某个被试反复出现一个或几个高失配点，即使不与其他人的热点重合，也支持可复核的个体空间结构。不同数据集中出现这种性质可形成跨数据集的研究线索，但不能说它们位于同一皮层区域或由同一种生理过程造成。'),
+            _paragraph('REFED的整体相对误差地图相关较弱，并不逻辑上排除少数持续热点；下面同时给出全体统计和数据选择的病例，避免把“全图不稳定”误写成“局部没有稳定结构”。')]))
+        selected=[]
+        for ds in datasets:
+            candidates=hot[hot.dataset.eq(ds)&hot.metric.eq(HB_RATIO)&hot.eligible_locations.gt(0)].copy()
+            overlap=sp[sp.dataset.eq(ds)&sp.metric.eq(HB_RATIO)&sp.endpoint.eq('hotspot_overlap')][['subject','value']]
+            candidates=candidates.merge(overlap,on='subject',validate='one_to_one')
+            candidates=candidates.sort_values(['stable_locations','maximum_persistence','value','subject'],ascending=[False,False,False,True])
+            if candidates.empty:continue
+            subject=candidates.iloc[0].subject
+            full=maps[maps.dataset.eq(ds)&maps.subject.eq(subject)&maps.metric.eq(HB_RATIO)&maps.period.eq('full')]
+            if ds=='eeg_fnirs_single_trial':full=full[full.task_label.eq('motor_imagery')]
+            if ds=='simultaneous_eeg_nirs':full=full[full.task_label.isin(['nback','wg'])]
+            records=sorted(full.record_unit.unique(),key=lambda x:[int(q) if q.isdigit() else q for q in re.split(r'(\d+)',x)])
+            if len(records)<2:continue
+            records=[records[0],records[-1]]
+            pp=persistent[persistent.dataset.eq(ds)&persistent.subject.eq(subject)&persistent.metric.eq(HB_RATIO)].copy()
+            fig,axes=plt.subplots(1,3,figsize=(10,3.6));fig.subplots_adjust(left=.02,right=.97,bottom=.22,top=.85,wspace=.35)
+            common=full[full.record_unit.isin(records)];upper=float(common.display_value.max())
+            for j,record in enumerate(records):
+                frame=full[full.record_unit.eq(record)]
+                frame=display(frame,ds,subject)
+                im=spatial_topomap(axes[j],frame.drop(columns=['period']),limits=(0,upper),title=record.rsplit('|',1)[-1],coverage='head')
+            cb=fig.colorbar(im,ax=list(axes[:2]),orientation='horizontal',fraction=.07,pad=.06);cb.set_label('相对零预测残差比，两记录共用色标',fontsize=8)
+            pp['display_value']=pp.fraction.where(pp.eligible)
+            pp=display(pp,ds,subject)
+            im=spatial_topomap(axes[2],pp,limits=(0,1),title='各位置进入高四分位的频率',coverage='head')
+            stable=pp[pp.eligible&pp.fraction.ge(.8)]
+            axes[2].scatter(stable.x,stable.y,s=72,facecolors='none',edgecolors='#dc3d35',lw=1.4,zorder=10)
+            for _,r in stable.sort_values(['fraction','pair_members'],ascending=[False,True]).head(3).iterrows():
+                axes[2].annotate(r.pair_members,(r.x,r.y),xytext=(3,4),textcoords='offset points',fontsize=7,zorder=11)
+            cb=fig.colorbar(im,ax=axes[2],orientation='horizontal',fraction=.07,pad=.06);cb.set_label('0至1；红圈为频率≥0.8',fontsize=8)
+            fig.suptitle(short[ds]+' · '+subject+'：不同记录中的局部高失配',fontsize=12)
+            key='hotspot_'+ds;save(key,fig,'左、中为两条原生记录的相对失配图，右为该人全部可评价记录中的逐位置高四分位频率；红圈为持续热点。坐标采用头顶球面等距展开，虚线外的整头着色为外推。此病例按持续热点数、最高频率、重合率排序选择，不能当作独立验证。','hotspot_persistence.csv; hotspot_record_locations.csv; display_coordinates.csv')
+            locations=stable.sort_values(['fraction','pair_members'],ascending=[False,True])
+            locationrows=[[r.pair_members,f'{r.hotspot_records}/{r.available_records}',r.planned_records,value(r.fraction)] for _,r in locations.iterrows()]
+            if not locationrows:locationrows=[['没有位置达到80%阈值','—','—','—']]
+            content['sections'].append(section('持续热点病例 · '+short[ds]+' / '+subject,[
+                figures[key],_table(['位置','高四分位/可评记录','计划记录','出现频率'],locationrows),
+                _paragraph('候选分母为'+str(len(candidates))+'名可评价被试。两张记录图的窗口覆盖中位数分别为'+
+                    '、'.join(f"{100*(full[full.record_unit.eq(r)].available_windows/full[full.record_unit.eq(r)].planned_windows).median():.0f}%" for r in records)+
+                    '。同一位置每条记录只计一次；Visual的同步Probe已按采集合并。图中局部热点的持续性与整体地图相关是两个互补结论，来源仍需独立观测区分。')]))
+            selected.append(dict(dataset=ds,subject=subject,candidate_subjects=len(candidates),records=records,
+                selection='stable site count, maximum persistence, median pair overlap, then subject identity',
+                stable_locations=locations[['pair_members','hotspot_records','available_records','planned_records','fraction']].to_dict('records')))
+        (output/'hotspot_examples.json').write_text(json.dumps(selected,ensure_ascii=False,indent=2)+'\n')
+    content['sections'].append(section('9. 双Hb残差高度同向，是强统计现象但不是独立的生理来源证据',[
+        figures['07_residual_geometry'],_table(['数据集','残差O/R相关中位数','共同方向平方比','偏置平方比'],[[short[ds],*[value(median(shapes,'feature',f,ds)) for f in ('Hb_residual_OR_correlation','Hb_common_direction_fraction','Hb_bias_fraction')]] for ds in datasets]),
+        _paragraph('四库的双Hb残差相关中位数约0.946–0.957；偏置平方只占较小部分，主要还有去均值动态。这个模式值得作为模型结构诊断，但不能把标准化共同方向直接叫作血容量、HbT、呼吸或系统血流成分。')]))
+    content['sections'].append(section('10. 拟合几何本身就能产生完全同向的双通道残差',[
+        figures['08_projection_counterexample'],dict(type='equation',latex=r'h=(1,-1)^\top,\quad \widehat y=h(h^\top h)^{-1}h^\top y,\quad r=y-\widehat y=\tfrac{y_1+y_2}{2}(1,1)^\top',caption='解析示意中的y为任意二维输入，h为允许方向；两个残差必然相同。该公式只提供归因反例，不声称Tak残差严格等于这个线性模型。'),
+        _paragraph('因此，最稳妥的解释是模型在某些观测方向上持续留下结构化残差。独立血流来源、共享光学变化与当前模型可表达方向都可能贡献；现有结果尚不能给出它们的比例。')]))
+    content['sections'].append(section('11. Hb重建较好时，当前EEG代理仍未提供一致的驱动解释',[
+        figures['09_crossmodal'],_paragraph('Hb-only解的EEG读出与实际功率代理的形状相关中位数，四库均接近零。Hb重建、代理一致性、隐藏Hb预测和真实驱动准确性必须分开判断；这一结果直接限制把Hb拟合驱动称为已恢复的神经活动。'),
+        _paragraph('可检验的竞争解释包括：六电极×五频带第一主成分没有保留相关神经信息；观测、时滞或血流映射过于受限；Hb包含未被此EEG代理反映的血流与测量成分。这些是推断，不是本轮完成的机制分离。')]))
+    gainrows=[]
+    for ds in datasets:
+        for m,label in (('prediction_gain_over_zero','对零预测'),('prediction_gain_over_template','对训练模板')):
+            g=tables['independent_prediction_subjects'];g=g[g.dataset.eq(ds)&g.metric.eq(m)]
+            gainrows.append([short[ds],label,value(g.value.median()),f'{int((g.value>0).sum())}/{g.value.notna().sum()}'])
+    content['sections'].append(section('12. 隐藏Hb预测提供另一条证据，不能用条件重建代替',[
+        figures['10_independent_prediction'],_table(['数据集','比较','收益中位数','正收益/可用人'],gainrows),
+        _paragraph('收益为基线误差减独立EEG-only误差。正收益只能说明在该冻结预测规则和支持下优于该基线；仍须结合错配EEG供体、事件结构及训练尺度解释，不直接证明生理驱动已识别。')]))
+    content['sections'].append(section('13. Simultaneous任务差异主要见于绝对量，相对残差没有同样变化',[
+        figures['11_task_contrast'],_paragraph('词生成相对n-back的D1、EEG读出误差和驱动回放差均增大；相对残差差值为−0.00094，95%区间−0.01080至0.00859，未检出明确差异。说明任务变化中的幅度/背景尺度值得优先核对，而不能只凭绝对误差上升宣称耦合变差。'),
+        _paragraph('原作者说明任务顺序和长时间记录可能影响状态，且数据来自同一次访问。因此任务标签、记录顺序、疲劳和测量状态不能在本分析中完全分开。[Shin等，2018]')]))
+    content['sections'].append(section('14. 眼电活动有关联，但清理收益未超出均值/尺度匹配对照',[
+        figures['12_ocular_controls'],_paragraph('两库均有EOG活动与失配的时间关联；但EOG回归相对匹配对照的差，Single-Trial为0.0063［−0.0044，0.0175］、Simultaneous为−0.0015［−0.0104，0.0073］。两个区间均跨零，不能把相对原代理的改善单独归因于去除了眼电来源。'),
+        _paragraph('Visual和REFED没有本流程声明的原生EOG参照，不用前额EEG替代眼电。现有证据支持代理幅度与观察条件敏感性，尚不支持一个统一眼电机制解释四库失配。')]))
+    content['sections'].append(section('15. 生理机制的优先级：先解释稳定的测量位置差异',[
+        _table(['候选解释','当前支持','关键反证或缺口','后续可区分的证据'],[
+            ['位置/个体相关的血流与光学观测混合','Simultaneous后部三口径一致；相对热点去模板后稳定','没有短距离或外周参照；固定光路和尺度也会稳定','短源探距、血压/呼吸/CO₂或光耦合指标与热点联合分析'],
+            ['统一动力学或观测关系过于受限','相对残差与弱平衡同时偏离；残差方向结构明显','当前仅固定模型，残差几何可制造同向性','在独立支持上比较模型扩展与隐藏目标预测'],
+            ['EEG功率代理与血流驱动不匹配','四库形状相关低，独立预测提供直接对照','不能据此否定真实神经血管耦合','预先规定频带/空间代理，在训练内选择并留出比较'],
+            ['任务引发自主神经或状态变化','两库EOG关联；任务绝对误差变化','相对误差及幅度对照削弱单一归因；顺序混杂','独立外周指标、随机任务顺序或重复访问']]),
+        _paragraph('优先报告的发现是“Simultaneous存在稳定、偏后部的固定模型失配表型”，机制假设优先考虑位置/个体相关的血流—光学观测混合与模型限制。现有数据不能在浅表血流、皮层血流、光学耦合和动力学差异之间作唯一归因。'),
+        _paragraph('Kirilina等的独立多模态研究说明头皮血管信号也可能产生个体化、跨记录稳定的图形；Yücel等说明短距离参照能帮助分离浅表贡献。这些文献支持候选机制与验证路径，不能把其因果结论移植为本数据已证实的机制。')]))
+    # Four frozen median examples, each with independently checked D1 readout.
+    diagnostics=[]
+    for example in _json(analysis/'examples.json')['examples']:
+        with np.load(example['array_path'],allow_pickle=False) as z:a={k:z[k] for k in z.files}
+        t=np.arange(len(a['target']))*.1;target=a['target']/a['sd'];pred=a['hb_only_prediction']/a['sd']
+        mask=np.asarray(a['score_mask'],bool)
+        if mask.ndim==1:mask=np.broadcast_to(mask[:,None],target.shape)
+        fig,axes=plt.subplots(2,1,figsize=(9,4.5),sharex=True);errs=[];stats=[]
+        for ax,c,name in zip(axes,(1,2),('HbO','HbR')):
+            good=mask[:,c].copy();good[:50]=False;good[-1]=False;good&=np.isfinite(target[:,c])&np.isfinite(pred[:,c])
+            error=float(np.sqrt(np.mean((target[good,c]-pred[good,c])**2)));corr=float(np.corrcoef(target[good,c],pred[good,c])[0,1]);errs.append(error)
+            ax.plot(t,target[:,c],c='#202c39',lw=1.25,label='处理实测');ax.plot(t,pred[:,c],c='#2272ac',ls='--',lw=1.2,label='Hb-only重建')
+            ax.axvspan(0,5,color='#eeeeee');ax.set(ylabel=name+' / 训练SD',title=f'RMS误差={error:.3f}；形状相关={corr:.3f}');ax.grid(alpha=.15)
+            stats.append(dict(component=name,rmse=error,correlation=corr))
+        recovered=float(np.sqrt(np.mean(np.square(errs))))
+        if not np.isclose(recovered,example['D1'],rtol=1e-8,atol=1e-10):raise ValueError('Example D1 replay failed')
+        axes[0].legend(ncol=2);axes[1].set_xlabel('目标窗口内时间 / 秒');fig.tight_layout()
+        key='example_'+example['dataset'];save(key,fig,'每行一个色团；灰区为不评分的5秒参考段。各分量和各示例纵轴独立，图上数值来自完整有效数组。重建只看Hb，因此不能据此证明跨模态驱动准确。',example['array_path'])
+        content['sections'].append(section('波形核验 · '+short[example['dataset']]+'：预定面板中位失配示例',[
+            figures[key],_paragraph(f"{example['subject']} / {example['record']} / {example['pair']}，Hb窗起点{example['hb_start_s']:.1f}秒；原面板候选{example['candidate_denominator']}／计划{example['planned_panel_denominator']}窗对，按D1接近中位数选择。图中D1独立复算为{recovered:.4f}。"),
+            _paragraph('同时看峰谷方向和RMS误差：相关高可以仍有幅度误差，误差小也可能来自目标幅度较小。这个示例帮助阅读失配形态，不用于估计总体频率或选模型。')]))
+        diagnostics.append(dict(id=example['id'],D1=recovered,source_D1=example['D1'],components=stats))
+    content['sections'].append(section('附录：失败分母、独立验证与证据来源',[
+        _table(['数据集','视图','计划窗对','完成','数值失败','支持不足','异常/缺失'],failure_rows),
+        _paragraph('同一窗对可以有Hb-only结果而没有EEG联合支持；各指标使用自己的有效分母，不把缺失填零。Visual修正后纯Hb逐被试端点差小于1e−9；分析表保留全部103人的计划分母。'),
+        _paragraph('全部派生表与方法定义：'+str(analysis/'summary.json')),
+        _paragraph('本报告的所有图与公式均嵌入PNG位图，正文与表格保持可检索；详细源码和数组路径保留在交付清单。')]))
+    content['sections'].append(section('文献与机制推断的适用范围',[
+        *[_paragraph(f'{name}。{description} {url}') for name,url,description in references],
+        _paragraph('文献提供生理上可能的解释和区分办法；本报告的数值只来自项目保留证据。没有新的生理干预、外周参照或独立参数真值，因果归因保持未定。')]))
+    (output/'example_diagnostics.json').write_text(json.dumps(diagnostics,ensure_ascii=False,indent=2)+'\n')
+    (output/'references.json').write_text(json.dumps([dict(title=a,url=b,scope=c) for a,b,c in references],ensure_ascii=False,indent=2)+'\n')
+    path=output/'report_content.json';path.write_text(json.dumps(content,ensure_ascii=False,indent=2)+'\n')
+    checks=render_report(path,output/'report');shutil.copy2(Path(__file__),output/'renderer_source.py')
+    (output/'source_manifest.json').write_text(json.dumps(dict(schema='tak_mismatch_fixed_pattern_report_v1',owning_analysis=str(analysis/'summary.json'),
+        source_runs=[summary['sources']['reference_run'],summary['sources']['corrected_run']],figures=figures,
+        bitmap_figures=True,formula_source='report_content.json',display_projection='display_projection.json',display_coordinates='display_coordinates.csv',
+        raw_signal_reads=0,model_fits=0,shared_parameter_reads=0),ensure_ascii=False,indent=2)+'\n')
+    return dict(output=str(output),pages=checks['exports']['TECHNICAL_REPORT.pdf']['pages'],figures=len(figures))
+
+
+def render_four_dataset_patterns(run, analysis, output):
+    """Four-dataset synthesis using the corrected Visual numerical owner."""
+    import shutil
+    import pandas as pd
+    from datetime import datetime, timezone
+    from src.analysis.tak_mismatch import HB_RATIO
+    run, analysis, output = (Path(p).resolve() for p in (run, analysis, output))
+    summary = _json(analysis/'summary.json')
+    if summary.get('schema')=='tak_mismatch_four_dataset_fixed_patterns_v1':
+        return render_four_dataset_fixed_patterns(run,analysis,output)
+    if (summary.get('schema') != 'tak_mismatch_four_dataset_patterns_v1'
+            or summary.get('status') != 'completed' or Path(summary['parent_run']).resolve() != run
+            or not analysis.is_relative_to(run)):
+        raise ValueError('Completed four-dataset corrected-Visual analysis required')
+    if output.exists():
+        raise FileExistsError('Four-dataset report requires a new versioned export')
+    tables = {k:pd.read_csv(analysis/v, dtype={'subject':str}) for k,v in summary['files'].items() if v.endswith('.csv')}
+    sources = summary['sources']; visual = 'visual_cognitive_motivation'
+    old = pd.read_csv(sources['reference_maps'], dtype={'subject':str})
+    new = pd.read_csv(sources['corrected_maps'], dtype={'subject':str})
+    maps = pd.concat([old[~old.dataset.eq(visual)], new], ignore_index=True)
+    old_plan, new_plan = (_json(Path(sources[k])) for k in ('reference_plan','corrected_plan'))
+    plan = dict(records=[r for r in old_plan['records'] if r['dataset'] != visual]+new_plan['records'])
+    examples = _json(analysis/summary['files']['examples'])['examples']
+    datasets = ('eeg_fnirs_single_trial','simultaneous_eeg_nirs',visual,'refed')
+    short = dict(zip(datasets, ('Single-Trial','Simultaneous','Visual','REFED')))
+    colors = dict(zip(datasets, ('#2272ac','#d17924','#27816d','#9c4b90')))
+    output.mkdir(parents=True); plots = output/'plots'; plots.mkdir()
+    plt = _plotting(); figures = {}
+    def save(key, fig, caption, source):
+        figures[key] = dict(type='figure', path=_save(fig,plots/(key+'.png')),
+                            caption=caption,source=source,preserve_bitmap=True)
+    def dotplot(ax, frame, value='value', label='', limits=None):
+        for i, dataset in enumerate(datasets):
+            data = frame[frame.dataset.eq(dataset)].sort_values('subject')
+            values = pd.to_numeric(data[value],errors='coerce').dropna().to_numpy()
+            jitter = .16*np.sin(np.arange(len(values))*2.399963)
+            ax.scatter(i+jitter,values,s=19,color=colors[dataset],alpha=.65,edgecolors='none')
+            if len(values):
+                q = np.quantile(values,[.25,.5,.75]);ax.plot([i,i],[q[0],q[2]],color='black',lw=2)
+                ax.scatter([i],[q[1]],s=36,facecolor='white',edgecolor='black',zorder=5)
+            ax.text(i,.98,f'{len(values)}/{len(data)}',transform=ax.get_xaxis_transform(),ha='center',va='top',fontsize=8)
+        ax.set(xticks=range(4),xticklabels=[short[d] for d in datasets],ylabel=label,xlim=(-.45,3.45))
+        ax.tick_params(axis='x',labelsize=8,rotation=15);ax.grid(axis='y',alpha=.16)
+        if limits is not None:ax.set_ylim(*limits)
+
+    subjects=tables['subject_values']; shapes=tables['shape_subjects']
+    fig,axes=plt.subplots(1,3,figsize=(10,3.5))
+    for ax,(metric,label) in zip(axes,(('D1','Hb残差 RMS / 训练SD'),(HB_RATIO,'Hb残差 / 零预测 MSE'),('D_bal_20s','20秒弱平衡偏离'))):
+        dotplot(ax,subjects[subjects.metric.eq(metric)],label=label)
+        if metric==HB_RATIO:ax.axhline(1,color='grey',ls='--',lw=.8)
+    fig.tight_layout();save('01_hb_compatibility',fig,
+        '每点为一名被试；白心点与竖线为被试中位数和四分位距。顶部为可用／计划人数。三个面板单位与纵轴独立，不能比较颜色深浅或直接相加。比值1为零变化预测基线。','subject_values.csv')
+    fig,axes=plt.subplots(1,3,figsize=(10,3.5))
+    for ax,(feature,label,limits) in zip(axes,(
+        ('Hb_common_direction_fraction','双Hb残差共同方向平方占比',(-.03,1.12)),
+        ('Hb_residual_OR_correlation','HbO/HbR去均值残差相关',(-1.05,1.17)),
+        ('Hb_bias_fraction','残差中偏置平方占比',(-.03,1.12)))):
+        dotplot(ax,shapes[shapes.feature.eq(feature)],label=label,limits=limits)
+    fig.tight_layout();save('02_residual_directions',fig,
+        '每点为三通道面板的被试汇总；先在记录内合并残差矩，再按记录等权，最后计算比值或相关。共同方向来自训练SD标准化的双Hb残差，不等于HbT，也不代表系统性生理成分的百分比。','shape_subjects.csv')
+    fig,axes=plt.subplots(1,3,figsize=(10,3.5))
+    dotplot(axes[0],subjects[subjects.metric.eq('D_EH')],label='Hb-only读出的EEG误差 / 训练SD')
+    dotplot(axes[1],shapes[shapes.feature.eq('EEG_Hb_readout_correlation')],label='EEG代理与Hb-only读出的相关',limits=(-1.05,1.17))
+    dotplot(axes[2],subjects[subjects.metric.eq('D_drive_H')],label='共同初态驱动回放差 / Hb训练SD')
+    fig.tight_layout();save('03_crossmodal_disagreement',fig,
+        '左、右使用固定参数全通道标量；中间使用预定三通道波形面板。有符号相关与标准化误差分别描述形状和数值差；没有把低Hb误差当作驱动恢复正确的证明。','subject_values.csv; shape_subjects.csv')
+    independent=tables['independent_prediction_subjects']
+    fig,axes=plt.subplots(1,3,figsize=(10,3.7))
+    for ax,metric,label in zip(axes[:2],('prediction_gain_over_zero','prediction_gain_over_template'),
+        ('零变化预测MSE 减 EEG-only MSE','训练模板MSE 减 EEG-only MSE')):
+        dotplot(ax,independent[independent.metric.eq(metric)],label=label)
+        ax.axhline(0,color='black',ls='--',lw=.8)
+    dotplot(axes[2],subjects[subjects.metric.eq('Delta_spatial')],label='近邻MSE 减 预选邻域MSE')
+    axes[2].axhline(0,color='black',ls='--',lw=.8);fig.tight_layout()
+    save('08_independent_prediction',fig,
+        '每点为一名被试，单位均为Hb训练SD平方；纵轴各自独立。正值分别有利于EEG-only或预先选择的替代六通道。当前窗口Hb在EEG-only拟合与初始化中隐藏；模板、PCA、尺度和空间候选选择来自训练被试。每个差值先在同有效窗口计算，再按记录及被试汇总。','independent_prediction_subjects.csv; subject_values.csv')
+
+    coordinate_cache={}
+    def display(frame,dataset,subject):
+        key=(dataset,subject)
+        if key not in coordinate_cache:
+            template=maps[maps.dataset.eq(dataset)&maps.subject.eq(subject)&maps.period.eq('subject_mean')&maps.metric.eq('D1')]
+            coordinate_cache[key]=_spatial_preview_coordinates(template,plan).set_index('pair_members')
+        positions=coordinate_cache[key].loc[frame.pair_members]
+        if not np.allclose(frame[['x','y']],positions[['x_orthographic','y_orthographic']],atol=1e-7):
+            raise ValueError('Four-dataset map does not match its retained geometry')
+        frame=frame.copy();frame[['x','y']]=positions[['x','y']].to_numpy();return frame
+    population=tables['population_maps']
+    fig,axes=plt.subplots(2,4,figsize=(10,6.1));fig.subplots_adjust(left=.02,right=.89,top=.94,bottom=.08,hspace=.25,wspace=.08)
+    for row,(metric,label) in enumerate(((HB_RATIO,'Hb残差 / 零预测MSE'),('D_EH','EEG读出误差 / 训练SD'))):
+        p=population[population.metric.eq(metric)];maximum=max(float(p.display_value.max()),1e-6)
+        for col,dataset in enumerate(datasets):
+            reference=maps[maps.dataset.eq(dataset)&maps.period.eq('subject_mean')&maps.metric.eq('D1')].subject.sort_values().iloc[0]
+            frame=display(p[p.dataset.eq(dataset)],dataset,reference).drop(columns=['period'],errors='ignore')
+            low,high=int(frame.available_subjects.min()),int(frame.available_subjects.max())
+            support=str(low) if low==high else f'{low}–{high}'
+            im=spatial_topomap(axes[row,col],frame,limits=(0,maximum),coverage='head',
+                title=short[dataset]+f' · 每点{support}人')
+        pos=axes[row,-1].get_position();bar=fig.colorbar(im,cax=fig.add_axes([.925,pos.y0+.02,.018,pos.height-.04]));bar.set_label(label,fontsize=9)
+    fig.text(.47,.02,'每个测点为该位置的被试中位数；每行同色标。虚线外着色为显示外推，未增加测量覆盖。',ha='center',fontsize=8.5)
+    save('04_population_maps',fig,'三维模板按从头顶的极角展开，REFED保持登记平面布局。黑边点为实际测量位置，虚线为测点凸包；颜色只在同一行可比较。各库空间覆盖和训练尺度不同，地图不是个体皮层定位。','population_maps.csv')
+    spatial=tables['spatial_subjects']
+    fig,axes=plt.subplots(1,2,figsize=(9,3.8))
+    for ax,(endpoint,label) in zip(axes,(('spatial_contrast','相对Hb残差的空间反差'),('early_late_rho','相对Hb残差早晚空间 Spearman ρ'))):
+        frame=spatial[spatial.metric.eq(HB_RATIO)&spatial.endpoint.eq(endpoint)]
+        dotplot(ax,frame,label=label,limits=(-1.05,1.15) if endpoint=='early_late_rho' else None)
+    fig.tight_layout();save('05_spatial_stability',fig,
+        '每点为被试的记录中位数。反差为测点P90减P10，再除以测点中位数。早晚按原记录时间等分，奇数中心窗丢弃，每半至少2个有效窗口；至少8个且80%的位置共同可用。短REFED视频可能无法进入早晚比较，顶部保留完整人数。','spatial_subjects.csv')
+    fits=tables['fit_subjects']
+    fig,axes=plt.subplots(1,3,figsize=(10,3.7))
+    for ax,metric in zip(axes,('D1','D_EH','D4')):
+        part=fits[fits.metric.eq(metric)];valid=part[['fixed','free']].notna().all(axis=1)
+        maximum=max(float(part.loc[valid,['fixed','free']].max().max()),.01)*1.05
+        for dataset,marker in zip(datasets,('o','s','^','D')):
+            block=part[part.dataset.eq(dataset)&valid]
+            ax.scatter(block.fixed,block.free,s=25,marker=marker,color=colors[dataset],label=short[dataset],alpha=.75)
+        ax.plot([0,maximum],[0,maximum],color='grey',ls='--',lw=.8)
+        ax.set(xlim=(0,maximum),ylim=(0,maximum),xlabel='固定参数 / 训练SD',ylabel='共享参数 / 训练SD',title=metric)
+        ax.grid(alpha=.13)
+    axes[0].legend(fontsize=7);fig.tight_layout();save('06_fixed_vs_shared',fig,
+        '每点为同一被试、相同成功窗口的配对结果；对每组窗口先合并平方误差，再按组、记录和被试的声明顺序汇总并开方。对角线下方表示共享参数误差较小。共享κ/τ与驱动、初态仍为条件拟合，误差下降不是生理机制恢复的证据。','fit_subjects.csv')
+    parameters=tables['parameter_subjects']
+    fig,axes=plt.subplots(1,2,figsize=(9,3.8))
+    for ax,name,reference_value in zip(axes,('tau','kappa'),(2.,.64)):
+        for i,dataset in enumerate(datasets):
+            part=parameters[parameters.dataset.eq(dataset)]
+            wide=part.pivot(index='subject',columns='view',values='paired_'+name).dropna()
+            for j,(_,r) in enumerate(wide.iterrows()):
+                jitter=.1*np.sin(j*2.399963)
+                ax.plot([i-.14+jitter,i+.14+jitter],[r.hb_only,r.joint],color='#b7bcc2',lw=.6)
+                ax.scatter(i-.14+jitter,r.hb_only,color=COLORS['hb'],s=18,marker='o')
+                ax.scatter(i+.14+jitter,r.joint,color=COLORS['joint'],s=18,marker='s')
+        ax.axhline(reference_value,color='black',ls='--',lw=.8)
+        ax.set(yscale='log',xticks=range(4),xticklabels=[short[d] for d in datasets],
+            ylabel=(r'$\tau$ / s' if name=='tau' else r'$\kappa$ / s$^{-1}$'))
+        ax.tick_params(axis='x',labelsize=8,rotation=15);ax.grid(axis='y',alpha=.15)
+    fig.tight_layout();save('07_parameter_visibility',fig,
+        '每条细线连接同被试在Hb-only（蓝圆）与joint（紫方）条件下的估计；仅使用两种视图都有效的同一组，先对组取log、记录内及记录间等权平均，再指数变换。纵轴为对数轴；虚线为固定参考τ=2秒、κ=0.64/秒。参数边界与失败另列，不把条件变化当作真实生理参数变化。','parameter_subjects.csv')
+
+    scalar=tables['subject_summary'];shape=tables['shape_summary']
+    def scalar_row(ds,metric):return scalar[scalar.dataset.eq(ds)&scalar.endpoint.eq(metric)].iloc[0]
+    def shape_row(ds,feature):return shape[shape.dataset.eq(ds)&shape.endpoint.eq(feature)].iloc[0]
+    def value_string(value):return f'{value:.3f}' if np.isfinite(value) else '不可用'
+    common_text='、'.join(f"{short[d]} {shape_row(d,'Hb_common_direction_fraction')['median']:.3f}" for d in datasets)
+    corr_text='、'.join(f"{short[d]} {shape_row(d,'EEG_Hb_readout_correlation')['median']:.3f}" for d in datasets)
+    content=dict(schema='source_diagnostics_report_v1',title='四数据集Tak失配的共同模式',
+        subtitle='Visual原生通道更正后：残差方向、跨模态不一致、空间稳定性与参数适配',
+        date=datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+        provenance=['Visual使用更正后31通道原生EEG重新拟合；其余三库沿用经核验的保留数值。',
+            '固定参数为全通道标量；波形与共享参数比较采用原有三通道面板。各图保留计划、可用和失败分母。'],
+        summary=[f'双Hb残差共同方向平方占比的被试中位数：{common_text}。它描述模型残差结构，不识别其生理来源。',
+            f'Hb-only读出与EEG代理的有符号相关中位数：{corr_text}。Hb重建和跨模态驱动一致性需要分别判断。',
+            '空间反差与同记录早晚一致性用于判断模式是否稳定；不同数据集的传感器覆盖不等同于相同皮层区域。',
+            '共享参数只在相同窗口上与固定模型比较；视图依赖、失败和工程边界共同限定参数的生理解释。'],sections=[],sources=list(sources.values()))
+    coverage_rows=[];failure_rows=[]
+    for dataset in datasets:
+        cov=summary['coverage'][dataset];p=cov['plan']
+        coverage_rows.append([short[dataset],p['subjects'],p['Hb_admitted_records'],p['planned_pair_windows'],
+            cov['fixed_views']['hb_only']['completed'],cov['fixed_views']['joint']['completed']])
+        for view,label in (('hb_only','Hb-only'),('eeg_only','EEG-only'),('joint','joint')):
+            v=cov['fixed_views'][view];failure_rows.append([short[dataset],label,v['planned'],v['fitted'],v['numerical_failure'],v['unavailable_support'],v['execution_failure']+v['missing']])
+    content['sections'].append(dict(title='1. 输入、拟合条件与四库覆盖',blocks=[
+        _paragraph('研究问题是哪些模型失配形态在四库均可检查，并帮助区分观测限制、跨模态代理限制和动力学适配。全部结果为公开数据的探索性条件重建，不是前瞻预测或真实神经驱动恢复。'),
+        _table(['数据集','计划被试','允许记录','计划窗对','Hb-only成功','joint成功'],coverage_rows,
+            '窗对为一个30秒窗口×一个HbO/HbR测量位置。Visual同步Probe合并为一次采集解释，但保留各自原生记录身份。重复窗、通道和视频不增加独立被试数。'),
+        _paragraph('固定参考κ=0.64/秒、τ=2秒；共享组在原生记录、连续Hb支持与Hb通道内估计κ/τ，各窗口仍独立估计驱动和四初态。Hb-only只看双Hb，EEG-only只看EEG代理，joint同时看三坐标。训练PCA与尺度使用外层训练被试。'),
+        _paragraph('每个目标窗30秒，首5秒为参考，评分为5.0至29.8秒；EEG功率由最多90秒原生上下文计算，短REFED视频使用真实完整支持。Hb来自既有离线带通缓存。本次不改变90秒上下文规则，不读取下游新窗口缓存。'),
+        _paragraph('Visual以Raw_EEG_channel_reference.xls连接A*到电极名称，再按名称连接Location.ced。A11/A12为CP3/CP4，A17/A18为O1/O2，A64为FCz。旧错误结果保留；更正后重新拟合训练折坐标与空间选择，未对旧数组改名。')]))
+    content['sections'].append(dict(title='2. 指标含义与汇总顺序',blocks=[
+        dict(type='equation',latex=r'D_1=\sqrt{\left\langle (H-\widehat H_H)^2/\sigma_H^2\right\rangle},\qquad R_H=\frac{\left\langle(H-\widehat H_H)^2/\sigma_H^2\right\rangle}{\left\langle H^2/\sigma_H^2\right\rangle}',caption='H为参考后的处理Hb，σ为冻结训练观察SD；H下标表示只由Hb拟合的读出。平均在相同有效时间与两个色团上进行；R_H的分子、分母分别汇总后相除。'),
+        dict(type='equation',latex=r'D_{EH}=\sqrt{\left\langle(E-\widehat E_H)^2/\sigma_E^2\right\rangle},\quad c=\frac{r_O+r_R}{\sqrt2},\quad d=\frac{r_O-r_R}{\sqrt2},\quad F_c=\frac{\langle c^2\rangle}{\langle c^2\rangle+\langle d^2\rangle}',caption='E为训练折PC1功率代理；r_O、r_R为各自训练SD标准化的Hb残差。F_c为正交统计坐标的平方占比，不能称为HbT或某类生理来源比例。'),
+        _paragraph('D_drive_H将独立EEG驱动与Hb驱动放入同一个固定模型、共同静息初态回放，再计算双Hb训练SD标准化RMS差。D_bal为连续Hb在Tak小信号关系下的弱积分偏离，10/20/40秒为核宽，分母来自同支持两侧动态量平方和；这些尺度不是正常生理阈值。'),
+        _paragraph('主标量按窗口平方量、原生记录、被试逐级汇总；每库单列，不把通道训练SD当跨库绝对浓度。残差形态来自三通道面板，先合并矩再取比例。图中被试中位数、四分位距、P90与均值各自标明，本报告不新增显著性检验。')]))
+    content['sections'].append(dict(title='3. 四库的Hb相容性及共同残差方向',page_break=True,blocks=[
+        figures['01_hb_compatibility'],
+        _table(['数据集','D1中位数','R_H中位数','D_bal20中位数'],[[short[d],*[value_string(scalar_row(d,m)['median']) for m in ('D1',HB_RATIO,'D_bal_20s')]] for d in datasets]),
+        _paragraph('D1受信号幅度及训练尺度影响，R_H加入同支持零变化基线，弱平衡直接描述双Hb动态关系。三者共同用于区分“数值小”与“相对背景容易解释”；它们不能相加成一个生理可信度分数。'),
+        figures['02_residual_directions'],
+        _table(['数据集','共同方向占比','残差O/R相关','偏置平方占比'],[[short[d],*[value_string(shape_row(d,f)['median']) for f in ('Hb_common_direction_fraction','Hb_residual_OR_correlation','Hb_bias_fraction')]] for d in datasets]),
+        _paragraph('共同方向结构是四库可以共同追踪的机制线索。可能解释包括未建模的共同血流/观测变化或当前Hb关系过于刚性；这是候选解释，现有残差分解不能区分它们。偏置与去均值动态应分开，不能把整段共同变化称为独立生理成分。')]))
+    content['sections'].append(dict(title='4. Hb重建与EEG代理一致性分开判断',page_break=True,blocks=[
+        figures['03_crossmodal_disagreement'],
+        _table(['数据集','D_EH中位数','读出相关中位数','D_drive_H中位数'],[[short[d],value_string(scalar_row(d,'D_EH')['median']),value_string(shape_row(d,'EEG_Hb_readout_correlation')['median']),value_string(scalar_row(d,'D_drive_H')['median'])] for d in datasets]),
+        _paragraph('Hb-only条件下的低残差并不要求驱动与EEG功率代理接近；驱动、初态和观测关系可共同吸收变化。误差和有符号相关提供互补信息：小数值残差不能代替波形方向、幅度与时序的检查。'),
+        _paragraph('该模式支持继续审查功率代理、跨模态时钟与观测映射，不能直接判定Hb驱动错误、EEG不是神经活动，或残差全为伪迹。Visual更正解决物理通道身份，不能单独解决这种识别问题。')]))
+    independent_rows=[]
+    for d in datasets:
+        for metric,label in (('prediction_gain_over_zero','相对零变化'),('prediction_gain_over_template','相对训练模板')):
+            part=independent[independent.dataset.eq(d)&independent.metric.eq(metric)];good=part.value.notna()
+            independent_rows.append([short[d],label,f'{good.sum()}/{len(part)}',value_string(part.value.median()),
+                int((part.value>0).sum()),int(part.available_windows.sum()),int(part.planned_windows.sum())])
+    content['sections'].append(dict(title='4.1 独立预测与空间替代对照',page_break=True,blocks=[
+        figures['08_independent_prediction'],
+        _table(['数据集','比较','可用／计划人','收益中位数','正收益人数','配对窗对','计划窗对'],independent_rows,
+            '收益为基线误差减独立EEG-only误差，单位为Hb训练SD平方；不是百分比。缺失EEG或数值失败不填零。'),
+        _paragraph('这组对照检验EEG代理能否提供超出简单Hb预测的价值，与当前Hb参与拟合的条件重建区分。空间替代始终保持六通道和相同频带容量，仅在训练被试选择，再由完整非线性模型评价；正收益不表示已定位到真实神经来源。'),
+        _paragraph('即使优于零变化或训练模板，也不能单独排除共同事件结构。错配EEG必须有同条件且真实滤波支持不重叠的供体；短视频或缺少可用供体时，该对照不可用，应保留为限制，而不以循环移位制造伪独立证据。')]))
+    content['sections'].append(dict(title='5. 空间异质性与记录内稳定性',page_break=True,blocks=[figures['04_population_maps'],figures['05_spatial_stability'],
+        _table(['数据集','相对残差空间反差','早晚ρ中位数','早晚可用／计划人'],[
+            [short[d],value_string(spatial[spatial.dataset.eq(d)&spatial.metric.eq(HB_RATIO)&spatial.endpoint.eq('spatial_contrast')].value.median()),
+             value_string(spatial[spatial.dataset.eq(d)&spatial.metric.eq(HB_RATIO)&spatial.endpoint.eq('early_late_rho')].value.median()),
+             f"{spatial[spatial.dataset.eq(d)&spatial.metric.eq(HB_RATIO)&spatial.endpoint.eq('early_late_rho')].value.notna().sum()}/{summary['coverage'][d]['plan']['subjects']}"] for d in datasets]),
+        _paragraph('稳定的空间偏离比单次误差热点更适合形成机制假设；早晚相似仍可能来自持续的观测因素，不能据此定位皮层来源。四库可共同检查空间异质性，但不能强行把不同覆盖的测点称为同一脑区。REFED不同视频是不同刺激，Visual同步Probe也不是重复测量。')]))
+    parameter_groups=tables['parameter_groups'];parameter_rows=[]
+    for d in datasets:
+        for view,label in (('hb_only','Hb-only'),('joint','joint')):
+            g=parameter_groups[parameter_groups.dataset.eq(d)&parameter_groups.view.eq(view)]
+            valid=g.valid_estimate.astype(bool)
+            p=parameters[parameters.dataset.eq(d)&parameters.view.eq(view)]
+            parameter_rows.append([short[d],label,f'{valid.sum()}/{len(g)}',int(g.full_planned_support.sum()),
+                int(g.loc[valid,'tau_at_upper_bound'].sum()),value_string(p.paired_tau.median()),value_string(p.paired_kappa.median())])
+    paired_rows=[]
+    for d in datasets:
+        for metric in ('D1','D_EH','D4'):
+            part=fits[fits.dataset.eq(d)&fits.metric.eq(metric)]
+            good=part[['fixed','free']].notna().all(axis=1);paired=part[good]
+            paired_rows.append([short[d],metric,f'{len(paired)}/{len(part)}',
+                value_string(paired.fixed.median()),value_string(paired.free.median()),
+                value_string(paired.free_minus_fixed.median()),int((paired.free_minus_fixed<0).sum())])
+    content['sections'].append(dict(title='6. 参数适配的价值取决于模式和稳定性',page_break=True,blocks=[figures['06_fixed_vs_shared'],
+        _table(['数据集','指标','配对／计划人','固定中位数','共享中位数','配对差中位数','共享较低人数'],paired_rows,
+            '差为共享值减固定值，单位为该指标的训练SD。差先在同被试内计算再取中位数，不一定等于前两列中位数相减。成功配对子集以外的失败保留在后表。'),
+        figures['07_parameter_visibility'],
+        _table(['数据集','视图','有效／计划组','全窗有效组','τ触上界组','配对τ中位数','配对κ中位数'],parameter_rows,
+            '有效组至少有一窗通过数值验证，并不等于全部窗口成功。τ上界12秒是工程约束。末两列先按同组配对、记录等权得到被试几何均值，再取被试中位数。'),
+        _paragraph('固定参数为所有位置提供同一个动力学参照，适合描述失配在哪里、是否重复。共享参数用于检验哪些位置需要不同响应，并检查这种适配是否依赖Hb-only或joint的信息条件。只有重建误差降低不足以选择更可解释的模型。'),
+        _paragraph('两视图按原生组身份配对，但Hb-only可以使用缺少EEG的窗口，joint不能。因此参数差也可能包含实际可用窗口的差异，不能将其纯粹归因于加入EEG。固定与共享误差的配对图则严格使用相同成功窗口。'),
+        _paragraph('参数触边、对输入视图敏感、同被试记录不稳定都限制生理解释；κ尤其可与自由驱动补偿。后续应针对稳定图形设计独立预测或观测对照，不能把当前条件估计当成个体血流参数测量。')]))
+    revision=tables['visual_revision_subjects'];revision_rows=[]
+    for metric in ('D1','D_EH','D_drive_H','D4','D_bal_20s'):
+        r=revision[revision.metric.eq(metric)]
+        revision_rows.append([metric,value_string(r.value_old.median()),value_string(r.value_corrected.median()),
+            value_string(r.corrected_minus_old.median()),value_string(r.corrected_minus_old.abs().max())])
+    content['sections'].append(dict(title='7. Visual修复影响与不能覆盖的机制',blocks=[
+        _table(['指标','旧值中位数','更正中位数','配对差中位数','最大绝对差'],revision_rows,
+            '按同一被试配对；差为更正值减旧值。EEG目标、PCA和空间邻域已改变，因此EEG相关指标之差是数据修复影响，不能称为预测收益。纯Hb指标应复现。'),
+        _paragraph('四库共同支持残差方向、跨模态代理差异、空间异质性和条件参数适配的描述。眼电机制只在具备原生HEOG/VEOG的两库补充；其他两库不得用前额EEG冒充EOG。不同视频或固定任务顺序也不足以提供相同条件的跨日重测。'),
+        _paragraph('建议保留固定模型作为共同参照，并把共享参数当作局部适配诊断。优先追踪在相对残差、弱动态关系及时间稳定性上同时出现的结构；再用独立传感器、明确的观测变换或隐藏测量预测检验候选机制。')]))
+    full_visual=summary.get('visual_full_shared')
+    if full_visual is not None:
+        if full_visual.get('status')!='completed':
+            raise ValueError('Full Visual parameter maps require their complete numerical source')
+        content['provenance'].append(f"Visual另外完成全部Hb位置的共享参数扩展：{full_visual['groups']}组、{full_visual['windows']}窗对。它单列于第8节，未与其他三库较窄的面板混为同覆盖比较。")
+        full_groups=tables['visual_full_parameter_groups'];full_maps=tables['visual_full_parameter_maps']
+        extension_rows=[]
+        for view,label in (('hb_only','Hb-only'),('joint','joint')):
+            block=full_groups[full_groups.view.eq(view)];valid=block[block.valid_estimate.astype(bool)]
+            equal_subject=valid.groupby('subject')[['tau','kappa']].median()
+            extension_rows.append([label,len(block),len(valid),int(block.full_planned_support.sum()),
+                int(valid.tau_at_upper_bound.sum()),len(equal_subject),value_string(equal_subject.tau.median()),value_string(equal_subject.kappa.median())])
+        content['sections'].append(dict(title='8. Visual全通道共享参数扩展',page_break=True,blocks=[
+            _paragraph('本节覆盖Visual每条允许记录的全部24个Hb位置，两侧Probe保持原生身份。前面的四库主比较继续使用每记录三个位置的共同面板；扩大位置分母后的汇总变化不被当作方法改善。'),
+            _table(['视图','计划组','有效组','全窗有效组','τ触上界组','有效被试','被试τ中位数','被试κ中位数'],extension_rows,
+                '有效组至少一窗通过收敛与积分检查；有限失败参数不进入有效估计。末两列先取每被试有效组中位数，再对被试取中位数。τ以秒、κ以每秒计，τ上界12秒为工程边界。'),
+            _paragraph('下面按被试身份展示全部被试，不按参数极值选择。每个测点先在同一位置选Hb-only与joint都有效的同一组，求该通道的参数中位数；重合模板位置再合并通道中位数。两视图按组配对，但实际可拟合窗口可不同；缺失位置以灰叉保留。')]))
+        people=sorted(full_maps.subject.unique())
+        for offset in range(0,len(people),4):
+            chosen=people[offset:offset+4]
+            fig,axes=plt.subplots(2,len(chosen),figsize=(10,6.2),squeeze=False)
+            fig.subplots_adjust(left=.025,right=.9,top=.92,bottom=.08,wspace=.12,hspace=.26)
+            for row,(view,label) in enumerate((('hb_only','Hb-only'),('joint','joint'))):
+                for col,subject in enumerate(chosen):
+                    frame=full_maps[full_maps.subject.eq(subject)&full_maps.view.eq(view)]
+                    frame=display(frame,visual,subject)
+                    im=spatial_topomap(axes[row,col],frame,limits=(.25,12.),coverage='head',title=f'{subject} · {label}')
+            cax=fig.add_axes([.93,.20,.017,.56]);fig.colorbar(im,cax=cax).set_label(r'配对组 $\tau$ 中位数 / s',fontsize=10)
+            fig.suptitle('Visual全通道：同一被试在两种可见条件下的时间尺度',fontsize=13)
+            fig.text(.48,.015,'所有页面共用0.25–12秒色标；黑边点为测点，灰叉为缺失，虚线外填色为显示外推。',ha='center',fontsize=8.5)
+            key=f'visual_full_tau_{offset//4+1:02}'
+            save(key,fig,'上下两行分别为Hb-only和joint，同一列同一被试。每点使用相同的两视图有效组；参数图是条件模型对数据的适配，不能作为真实血流时间常数、个体MRI定位或因果机制图。',str(analysis/'visual_full_parameter_maps.csv'))
+            block=full_maps[full_maps.subject.isin(chosen)&full_maps.view.eq('hb_only')]
+            entries=[[subject,int((block[block.subject.eq(subject)].available_members>0).sum()),len(block[block.subject.eq(subject)])] for subject in chosen]
+            content['sections'].append(dict(title='Visual全通道参数图：'+', '.join(chosen),page_break=True,blocks=[figures[key],
+                _table(['被试','配对参数可用位置','计划模板位置'],entries,
+                    '模板重合位置已合并，所以位置数可小于两个Probe的48个Hb通道。它没有减少原始拟合和失败分母。')]))
+    example_intro=_paragraph('以下示例从原有三通道面板按固定D1选择最接近中位数及P90的窗口，尽量来自不同被试。选择仅用于读图，不是代表性比例、调参或确认性证据。黑线为处理后的实测目标，蓝虚线为Hb-only重建，紫线为joint重建；两种拟合均使用当前窗口的声明可见输入。')
+    example_diagnostics=[]
+    for number,example in enumerate(sorted(examples,key=lambda r:(datasets.index(r['dataset']),r['role']))):
+        with np.load(example['array_path'],allow_pickle=False) as saved:
+            arrays={k:saved[k] for k in saved.files}
+        time=np.arange(len(arrays['target']))*.1;sd=np.asarray(arrays['sd'],float)
+        target=arrays['target']/sd;mask=np.asarray(arrays.get('score_mask',np.isfinite(target)),bool)
+        if mask.shape!=target.shape:
+            mask=np.broadcast_to(mask[:,None],target.shape)
+        fig,axes=plt.subplots(3,1,figsize=(9,5.7),sharex=True);stats=[]
+        for c,ax in enumerate(axes):
+            ax.plot(time,target[:,c],color=COLORS['target'],lw=1.1,label='处理实测')
+            messages=[]
+            for key,label,color,style in (('hb_only_prediction','Hb-only',COLORS['hb'],'--'),('joint_prediction','joint',COLORS['joint'],'-')):
+                if key not in arrays:continue
+                success_key='hb_only_success' if label=='Hb-only' else 'joint_success'
+                if not example.get(success_key,False):
+                    messages.append(label+'未通过数值检查')
+                    continue
+                prediction=arrays[key]/sd
+                ax.plot(time,prediction[:,c],color=color,ls=style,lw=1.,label=label)
+                good=mask[:,c]&np.isfinite(target[:,c])&np.isfinite(prediction[:,c]);good[:50]=False;good[-1]=False
+                rmse=float(np.sqrt(np.mean((prediction[good,c]-target[good,c])**2))) if good.any() else np.nan
+                corr=float(np.corrcoef(prediction[good,c],target[good,c])[0,1]) if good.sum()>1 and np.std(prediction[good,c])>0 and np.std(target[good,c])>0 else np.nan
+                messages.append(f'{label} RMS={rmse:.3f}, r={corr:.3f}')
+                stats.append(dict(component=('EEG','HbO','HbR')[c],view=label,
+                    rmse=rmse if np.isfinite(rmse) else None,correlation=corr if np.isfinite(corr) else None))
+            ax.axvspan(0,5,color='#e8e8e8',alpha=.65);ax.set_ylabel(('EEG代理','HbO','HbR')[c]+' / 训练SD')
+            ax.set_title('；'.join(messages),fontsize=8.5);ax.grid(alpha=.14)
+        axes[0].legend(ncol=3,fontsize=8);axes[-1].set_xlabel('目标窗口内时间 / 秒')
+        fig.suptitle(f"{short[example['dataset']]} · {example['subject']} · {example['pair']} · {example['role']}",fontsize=12)
+        fig.tight_layout(rect=[0,0,1,.96]);key=f'example_{number+1:02}'
+        save(key,fig,'灰区为5秒参考段，不评分；最后一个驱动箱不评分。各分量和各例使用独立纵轴，单位为对应冻结训练SD；上方给出同评分支持的RMS误差与有符号相关，不能只凭外观判断恢复。',example['array_path'])
+        hb=[r for r in stats if r['component'] in ('HbO','HbR') and r['view']=='Hb-only']
+        if len(hb)==2 and all(r['rmse'] is not None for r in hb):
+            recovered=float(np.sqrt(np.mean([r['rmse']**2 for r in hb])))
+            if not np.isclose(recovered,example['D1'],rtol=1e-8,atol=1e-10):
+                raise ValueError('Example bitmap statistics do not reproduce the owning D1 metric')
+        text='；'.join(f"{r['component']}的Hb-only误差{value_string(r['rmse'] if r['rmse'] is not None else np.nan)}训练SD、相关{value_string(r['correlation'] if r['correlation'] is not None else np.nan)}" for r in hb)
+        content['sections'].append(dict(title=(('9' if full_visual else '8')+'. 波形示例 · ' if number==0 else '')+f"{short[example['dataset']]}：{'中位' if example['role']=='median' else 'P90'}失配窗口",page_break=True,blocks=([example_intro] if number==0 else [])+[
+            figures[key],_paragraph(f"{example['subject']} / {example['record']} / {example['pair']}；Hb窗起点{example['hb_start_s']:.1f}秒，原生EEG上下文{example['actual_context_s']:.1f}秒。候选{example['candidate_denominator']}／计划{example['planned_panel_denominator']}窗对，选择排序{example['selection_rank']}。"),
+            _paragraph(text+'。这些值分别核验幅值误差与波形方向；本例不能判定潜在驱动或残差的真实生理来源。')]))
+        example_diagnostics.append(dict(id=example['id'],statistics=stats))
+    content['sections'].append(dict(title='附录：完整失败分母与来源',page_break=True,blocks=[
+        _table(['数据集','视图','计划窗对','进入拟合','数值失败','支持不足','异常／缺失'],failure_rows,
+            '支持不足、未收敛／积分未通过和执行异常分别列出；成功子集的中位数不能替代这些分母。'),
+        _paragraph('数值来源：'+str(analysis/'summary.json')),
+        _paragraph('Visual原生身份核验：'+sources['input_repair']),
+        _paragraph('其他三库保留来源：'+sources['reference_run']),
+        _paragraph('所有图为位图嵌入；正文、表格和图注保持可选择。报告只汇总已有数值，不替代各运行及派生分析的事实来源。')]))
+    (output/'example_diagnostics.json').write_text(json.dumps(example_diagnostics,ensure_ascii=False,indent=2,allow_nan=False)+'\n')
+    path=output/'report_content.json';path.write_text(json.dumps(content,ensure_ascii=False,indent=2)+'\n')
+    checks=render_report(path,output/'report')
+    shutil.copy2(Path(__file__),output/'renderer_source.py')
+    (output/'source_manifest.json').write_text(json.dumps(dict(schema='tak_mismatch_four_dataset_report_v1',
+        created_utc=datetime.now(timezone.utc).isoformat(),owning_analysis=str(analysis/'summary.json'),
+        source_runs=[sources['reference_run'],sources['corrected_run']],sources=sources,
+        bitmap_figures=True,model_fits=0,raw_signal_reads=0),ensure_ascii=False,indent=2)+'\n')
+    return dict(output=str(output),pages=checks['exports']['TECHNICAL_REPORT.pdf']['pages'],figures=len(figures))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True, type=Path)
@@ -3353,14 +4631,29 @@ def main(argv=None):
     parser.add_argument("--priority-panel", action="store_true", help="Read the frozen bounded plotting panel, including pending groups")
     parser.add_argument("--fixed-analysis", type=Path, help="Read an explicitly completed fixed-parameter physiology analysis; current_dof is not opened")
     parser.add_argument("--spatial-analysis", type=Path, help="Read the completed spatial-pattern analysis and render MNE channel maps")
+    parser.add_argument("--spatial-style-preview", action="store_true", help="Two angular-projection/full-head display tests from retained spatial maps")
+    parser.add_argument("--mechanism-analysis", type=Path, help="Completed mechanism-pattern scalar analysis for the full physiological-pattern report")
+    parser.add_argument("--four-dataset-analysis", type=Path, help="Completed four-dataset synthesis with corrected Visual evidence")
     parser.add_argument("--workers", type=int, default=2, help="Independent subject/metric plot workers in spatial mode")
     parser.add_argument("--revise-report", type=Path, help="Preserve an existing fixed report's numbers and bitmaps while applying the Visual channel impact audit")
     parser.add_argument("--visual-channel-audit", type=Path, help="The single confirmed Tak Visual interpretation-boundary audit")
     args = parser.parse_args(argv)
+    if args.four_dataset_analysis:
+        if any((args.mechanism_analysis,args.spatial_analysis,args.spatial_style_preview,args.fixed_analysis,args.priority_panel,args.revise_report,args.visual_channel_audit)):
+            parser.error('--four-dataset-analysis has its own corrected completed evidence scope')
+        print(json.dumps(render_four_dataset_patterns(args.run,args.four_dataset_analysis,args.output),ensure_ascii=False));return
+    if args.mechanism_analysis:
+        if any((args.spatial_analysis,args.spatial_style_preview,args.fixed_analysis,args.priority_panel,args.revise_report,args.visual_channel_audit)):
+            parser.error("--mechanism-analysis has its own completed scalar evidence scope")
+        print(json.dumps(render_mechanism_patterns(args.run,args.mechanism_analysis,args.output),ensure_ascii=False));return
     if args.spatial_analysis:
         if args.revise_report or args.fixed_analysis or args.priority_panel or args.visual_channel_audit:
             parser.error("--spatial-analysis has its own completed evidence scope")
+        if args.spatial_style_preview:
+            print(json.dumps(render_spatial_style_preview(args.run,args.spatial_analysis,args.output),ensure_ascii=False));return
         print(json.dumps(render_fixed_topography(args.run,args.spatial_analysis,args.output,workers=args.workers),ensure_ascii=False));return
+    if args.spatial_style_preview:
+        parser.error("--spatial-style-preview requires --spatial-analysis")
     if args.revise_report:
         if not args.visual_channel_audit or args.fixed_analysis or args.priority_panel:
             parser.error("--revise-report requires --visual-channel-audit and its own evidence scope")

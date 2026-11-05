@@ -93,6 +93,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument('--ssm-training-config',type=Path,
                         help='Build only fresh float64 native inputs and timing for the configured 72-trial SSM revision.')
+    parser.add_argument('--downstream-config', type=Path,
+                        help='Build the independent four-dataset downstream input cache from its versioned contract.')
+    parser.add_argument('--downstream-stage', choices=['plan', 'pilot', 'build', 'verify'], default='plan')
+    parser.add_argument('--project-root', type=Path, default=PROJECT_ROOT,
+                        help='Original project/data root when executing a frozen source snapshot.')
+    parser.add_argument('--pilot-groups-per-dataset', type=int, default=2)
     return parser.parse_args()
 
 
@@ -597,8 +603,120 @@ def build_records(records, output_dir, *, overwrite=False, processing_schema=MEA
                     yield future.result()
 
 
+def build_downstream_cache(args):
+    """One resumable controller for the downstream-only record/window generation."""
+    import fcntl
+    import traceback
+    from collections import Counter
+    from src.data import downstream_input_cache as downstream
+
+    root = args.project_root.resolve()
+    cfg = downstream.read_config(args.downstream_config)
+    out = root/cfg['output_cache']; out.mkdir(parents=True, exist_ok=True)
+    with (out/'controller.lock').open('a+') as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        plan = downstream.make_plan(root, cfg)
+        path = out/'input_plan.json'
+        if path.exists():
+            if json.loads(path.read_text()) != downstream._plain(plan):
+                raise ValueError('Input identities, splits or configuration changed; use a fresh version')
+        else:
+            downstream.write_json(path, plan)
+        downstream.prepare_sidecars(root, cfg, out)
+        if args.downstream_stage == 'plan':
+            return dict(stage='plan', records=len(plan['records']), samples=len(plan['samples']),
+                        exclusions=len(plan['exclusions']), measured_arrays_read=0)
+        if args.downstream_stage == 'verify':
+            result = downstream.verify_cache(out)
+            return {k:v for k,v in result.items() if k not in ('sample_counts', 'shapes')}
+        if not os.environ.get('INVOCATION_ID'):
+            raise RuntimeError('Substantial cache production must run under the durable user systemd supervisor')
+        if args.workers < 1 or args.pilot_groups_per_dataset < 1:
+            raise ValueError('Positive workers and pilot size required')
+        bykey = {r['join_key']:r for r in plan['records']}
+        groups = plan['groups']
+        if args.downstream_stage == 'pilot':
+            selected, counts = [], Counter()
+            for group in groups:
+                first = bykey[group['records'][0]]; ds = first['dataset']
+                if first['split'] == 'train' and counts[ds] < args.pilot_groups_per_dataset:
+                    selected.append(group); counts[ds] += 1
+            groups = selected
+        completed_records = {}
+        for entry in plan['records']:
+            path = out/'records'/entry['dataset']/entry['subject']/entry['record']/'record.json'
+            if path.exists():
+                completed_records[entry['join_key']] = json.loads(path.read_text())
+        pending = [g for g in groups if not all(k in completed_records for k in g['records'])]
+        manifest = dict(schema=CLEAN_CACHE_SCHEMA, storage=MEASUREMENT_CACHE_STORAGE,
+            processing_schema=MEASUREMENT_ALIGNMENT_V5_SCHEMA, motion_method='none',
+            downstream_input_schema=downstream.SCHEMA, execution='building',
+            source_cache=cfg['source_cache'], input_plan='input_plan.json',
+            records=list(completed_records.values()))
+        downstream.write_json(out/'cache_manifest.json', manifest)
+        started = time.monotonic(); outcomes = []; iterator = iter(pending)
+        with ProcessPoolExecutor(max_workers=args.workers, mp_context=get_context('spawn')) as pool:
+            active = {}
+            def submit():
+                group = next(iterator, None)
+                if group is None:
+                    return False
+                active[pool.submit(downstream.prepare_group, str(root), cfg, str(out),
+                    [bykey[k] for k in group['records']])] = group
+                return True
+            for _ in range(2*args.workers):
+                if not submit():
+                    break
+            while active:
+                ready, _ = wait(active, return_when=FIRST_COMPLETED)
+                for future in ready:
+                    group = active.pop(future)
+                    try:
+                        result = future.result()
+                        for record in result.pop('records'):
+                            completed_records[record['join_key']] = record
+                    except Exception:
+                        result = dict(status='failed', group=group['id'], records=group['records'],
+                                      error=traceback.format_exc())
+                    result.update(recorded_at=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),
+                                  invocation_id=os.environ['INVOCATION_ID'])
+                    key = hashlib.sha256(group['id'].encode()).hexdigest()[:24]
+                    task_path = out/'tasks'/f'{key}.json'
+                    task = json.loads(task_path.read_text()) if task_path.exists() else dict(group=group['id'], attempts=[])
+                    task['attempts'].append(result)
+                    downstream.write_json(task_path, task)
+                    outcomes.append(result)
+                    print(json.dumps(result,ensure_ascii=False),flush=True)
+                    submit()
+                downstream.write_json(out/'progress.json', dict(stage=args.downstream_stage,
+                    terminal_groups=len(outcomes), scheduled_groups=len(pending), in_flight=len(active),
+                    completed_records=len(completed_records), planned_records=len(plan['records']),
+                    failed_groups=sum(r['status']=='failed' for r in outcomes),
+                    elapsed_seconds=time.monotonic()-started, invocation_id=os.environ['INVOCATION_ID']))
+        manifest['records'] = sorted(completed_records.values(),key=lambda r:r['join_key'])
+        complete = len(completed_records) == len(plan['records'])
+        manifest.update(execution='completed' if complete else 'building', record_count=len(completed_records))
+        downstream.write_json(out/'cache_manifest.json',manifest)
+        summary = dict(stage=args.downstream_stage, groups=outcomes, workers=args.workers,
+                       seconds=time.monotonic()-started, source='tasks/*.json_and_record.json')
+        if args.downstream_stage == 'pilot':
+            downstream.write_json(out/'pilot_performance.json', summary)
+        if any(r['status']=='failed' for r in outcomes):
+            raise RuntimeError('Cache producer failures retained under tasks; inspect before resuming')
+        if args.downstream_stage == 'build':
+            if not complete:
+                raise RuntimeError('Complete planned record population required')
+            verification = downstream.verify_cache(out)
+            return dict(stage='build', status=verification['status'], records=verification['checked_records'],
+                        samples=verification['checked_samples'], seconds=time.monotonic()-started)
+        return {k:v for k,v in summary.items() if k!='groups'}
+
+
 def main() -> None:
     args = parse_args()
+    if getattr(args, 'downstream_config', None):
+        print(json.dumps(build_downstream_cache(args), ensure_ascii=False), flush=True)
+        return
     if getattr(args, 'ssm_training_config', None):
         print(json.dumps(build_ssm_training_inputs(args.ssm_training_config)))
         return

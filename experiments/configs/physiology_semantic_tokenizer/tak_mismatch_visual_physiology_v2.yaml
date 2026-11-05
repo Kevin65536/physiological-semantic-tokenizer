@@ -1,0 +1,70 @@
+schema: tak_mismatch_visual_physiology_v2
+experiment_id: SSM-TAK-VISUAL-PHYSIOLOGY-v2
+created: '2026-11-04'
+parent_run: experiments/runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2
+analysis_subdir: fixed_physiology_v2
+parameter_mode: fixed
+interpretation: posthoc_exploratory_frozen_model_no_refit
+scope:
+  scalar_source: complete_parent_task_manifest
+  scalar_pair_windows: 79200
+  array_source: plot_priority_v1/plan.json
+  array_pair_windows: 9900
+  ocular_datasets: []
+  ocular_native_records: 0
+  protected_data: forbidden
+  model_fitting: none
+  parent_writes: none
+  comparison_methods: none
+statistics:
+  primary_metrics: [D1, D_EH, D_drive_H]
+  diagnostic_metrics: [D_obs, Delta_spatial, D4, D_J_E, D_J_O, D_J_R, prediction_NMSE, selected_prediction_NMSE, zero_NMSE, template_NMSE, wrong_NMSE, selected_wrong_NMSE, pairing_gain, selected_pairing_gain]
+  weak_metrics: [D_bal_10s, D_bal_20s, D_bal_40s]
+  bootstrap_samples: 5000
+  permutation_samples: 100000
+  seed: 20261029
+  minimum_inferential_subjects: 6
+  task_difference: paired_subject_B_minus_A
+  permutation: two_sided_sign_flip_exact_up_to_16_else_monte_carlo_plus_one
+  multiplicity: global_primary_BH_and_separate_diagnostic_BH
+  aggregation: original_record_equal_then_subject_equal_ROOT_squared_before_averaging
+  native_support: continuous_support_only_not_independent_record
+  intervals: whole_subject_percentile_95pct_frozen_coordinates_and_selection
+  repeat: declared_earliest_latest_same_task_and_common_physical_pairs
+  within_record: fixed_early_late_halves_two_valid_distinct_windows_each_half_odd_center_dropped
+examples:
+  source: frozen_array_panel_only
+  D1_quantiles: [0.5, 0.9, 1.0]
+  D_drive_H_quantile: 0.9
+  distinct_subjects_when_possible: true
+  interpretation: descriptive_selected_examples_not_tuning_or_independent_evidence
+ocular:
+  anchor: registered_native_HEOG_VEOG_unfiltered_score_demeaned_RMS
+  scope: no_native_EOG_in_Visual_no_scalp_proxy_substitution
+  A: same_window_Hb_pairs_mean_squared_metric_then_within_record_Spearman_record_equal_subject_unit
+  A_minimum_windows: 6
+  partial_correlation: rank_residualization_on_EEG_proxy_RMS_and_Hb_zero_prediction_RMS
+  partial_minimum_windows: 10
+  B: squared_EEG_proxy_amplitude_Hb_readout_disagreement_and_DC_centered_independent_drive_difference
+  B_lags_s: [-5.0, 0.0, 5.0]
+  B_common_time_s: [10.0, 24.9]
+  B_boundary: nonwrapping_common_support_no_time_point_p_values
+  C: existing_EOG_regression_only_then_original_bandpower_frozen_PCA_and_training_scale
+  C_score: same_retained_Hb_only_EEG_readout_no_SSM_refit
+  C_regression_scope: full_native_record_offline_preprocessing_sensitivity_not_independent_prediction
+  C_amplitude_control: raw_proxy_affine_matched_to_clean_proxy_score_mean_and_population_SD_without_Hb
+  C_primary_contrasts: [clean_minus_raw_DEH_squared, clean_minus_amplitude_DEH_squared]
+  C_diagnostic_contrast: amplitude_minus_raw_DEH_squared
+  C_raw_reproduction_absolute_tolerance: 1.0e-10
+  multiplicity: separate_global_A_primary_A_partial_B_primary_C_primary_C_scale_diagnostic_BH_families
+  claim: activity_association_and_preprocessing_sensitivity_not_causal_artifact_fraction
+shape:
+  source: retained_fixed_validated_Hb_only_residuals_in_frozen_three_pair_panel
+  features: [bias_squared_fraction, centered_residual_RMS, HbO_HbR_residual_correlation, standardized_common_direction_squared_fraction, EEG_Hb_readout_correlation, independent_drive_correlation]
+  aggregation: average_window_moments_within_record_then_equal_records_within_subject_before_ratios
+  common_direction: c_equals_rO_plus_rR_over_sqrt2_standardized_coordinates_not_HbT_or_source_fraction
+  spectral_mechanism_claim: forbidden_from_25_second_windows
+resources:
+  max_workers: 52
+  numerical_threads: 1
+  in_flight_per_worker: 2

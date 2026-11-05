@@ -52,6 +52,7 @@ RAW_DATASET_IDS: tuple[str, ...] = (
 UNIFIED_PHYSIOLOGY_SCHEMA = "unified_physiology_window_v2"
 MEASUREMENT_WINDOW_SCHEMA = "unified_physiology_measurement_window_v3"
 CACHED_FNIRS_INPUT_SCHEMA = "unified_cached_fnirs_v1"
+VISUAL_CHANNEL_IDENTITY_SCHEMA = "visual_raw_channel_identity_v2"
 EEG_ARTIFACT_MASK_POLICY = "disabled_all_false_no_invalid_authority_v1"
 REFED_CONTINUOUS_SEQUENCE_SCHEMA = "refed_continuous_va_sequence_v2"
 REFED_CONTINUOUS_TARGET_NAMES = ("valence", "arousal")
@@ -162,6 +163,7 @@ class NativeEEGRecord:
     unit_evidence: str = ""
     channel_units: tuple[str, ...] = ()
     reference: str = "unreported"
+    channel_identity: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -431,6 +433,8 @@ def preprocess_eeg_record_with_quality(
         "artifact_cleaning": cleaning_state,
         "artifact_mask_policy": EEG_ARTIFACT_MASK_POLICY,
     })
+    if record.channel_identity is not None:
+        state["channel_identity"] = dict(record.channel_identity)
     return canonical, state, {
         "artifact_mask": canonical_artifact_mask,
         "bad_channel_mask": bad_channel_mask.astype(bool),
@@ -569,8 +573,10 @@ def _read_edf(path: Path) -> tuple[np.ndarray, float, list[str], list[str]]:
     samples_per_record = np.asarray([int(value) for value in fields[8]], dtype=int)
     candidates = [
         index for index, label in enumerate(labels)
-        if "ANNOTATION" not in label.upper() and label.upper() not in {"A64", "DC9", "DC09"}
+        if "ANNOTATION" not in label.upper() and label.upper() not in {"DC9", "DC09"}
     ]
+    if not candidates or len({labels[index] for index in candidates}) != len(candidates):
+        raise ValueError(f"EDF requires unique recorded EEG channels: {path}")
     sample_rate = float(max(samples_per_record[index] / duration for index in candidates))
     offsets = np.concatenate(([0], np.cumsum(samples_per_record)))
     raw = np.memmap(path, dtype="<i2", mode="r", offset=header_bytes, shape=(records, int(samples_per_record.sum())))
@@ -595,15 +601,32 @@ def _read_edf(path: Path) -> tuple[np.ndarray, float, list[str], list[str]]:
 
 
 def _visual_eeg_name_map(project_root: Path) -> dict[str, str]:
-    path = project_root / "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/Location.ced"
-    rows = path.read_text(encoding="utf-8-sig", errors="replace").splitlines()
-    header = [value.strip() for value in rows[0].split("\t")]
+    """The publisher workbook owns amplifier IDs; CED only supplies label case."""
+    import xlrd
+
+    root = project_root / "data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults"
+    path = root / "Raw_EEG_channel_reference.xls"
+    workbook = xlrd.open_workbook(str(path))
+    sheet = workbook.sheet_by_index(0)
+    if sheet.ncols != 2 or [str(v).strip() for v in sheet.row_values(0)] != ["Channel", "Name"]:
+        raise ValueError(f"Unexpected Visual native-channel workbook: {path}")
+    with (root / "Location.ced").open(encoding="utf-8-sig", newline="") as handle:
+        labels = [canonical_channel_name(row["labels"]) for row in csv.DictReader(handle, delimiter="\t")]
+    casing = {name.upper(): name for name in labels}
     mapping: dict[str, str] = {}
-    for line in rows[1:]:
-        values = line.split("\t")
-        row = {key: values[index].strip() if index < len(values) else "" for index, key in enumerate(header)}
-        if row.get("Number") and row.get("labels"):
-            mapping[f"A{int(float(row['Number']))}"] = canonical_channel_name(row["labels"])
+    for index in range(1, sheet.nrows):
+        raw, name = (str(value).strip() for value in sheet.row_values(index))
+        if not re.fullmatch(r"A\d+", raw):
+            if raw not in {"E", "DC09", "DC9", ""}:
+                raise ValueError(f"Unknown Visual workbook channel role: {raw}")
+            continue
+        if raw in mapping or name.upper() not in casing:
+            raise ValueError(f"Duplicate amplifier ID or missing named geometry: {raw}, {name}")
+        mapping[raw] = casing[name.upper()]
+    expected = {f"A{i}" for i in range(1, 31)} | {"A64"}
+    if (set(mapping) != expected or len(set(mapping.values())) != len(mapping)
+            or mapping["A64"] != "FCz"):
+        raise ValueError("Visual requires the documented 31 EEG channels, including A64/FCz")
     return mapping
 
 
@@ -615,13 +638,16 @@ def _visual_eeg(project_root: Path, record: CleanCacheRecord) -> NativeEEGRecord
         candidates = sorted(raw_dir.glob(f"*part{part.group(1)}.edf"))
     else:
         candidates = sorted(raw_dir.glob(f"{record.canonical_subject_id}.edf"))
-    if not candidates:
-        candidates = sorted(raw_dir.glob("*.edf"))
-    if not candidates:
-        raise FileNotFoundError(f"no EDF file for {record.join_key}")
-    values, sample_rate, names, units = _read_edf(candidates[0])
+    if len(candidates) != 1:
+        raise ValueError(f"Exactly one native EDF for the declared Visual record is required: {record.join_key}")
     name_map = _visual_eeg_name_map(project_root)
-    canonical_names = tuple(name_map.get(name, canonical_channel_name(name)) for name in names)
+    values, sample_rate, names, units = _read_edf(candidates[0])
+    if len(names) != len(name_map) or set(names) != set(name_map):
+        raise ValueError(f"Visual EDF channels differ from the native workbook: {record.join_key}")
+    ordered = sorted(name_map, key=lambda name: int(name[1:]))
+    indices = [names.index(name) for name in ordered]
+    values, units, names = values[:, indices], [units[i] for i in indices], ordered
+    canonical_names = tuple(name_map[name] for name in names)
     unique_units = sorted(set(units))
     return NativeEEGRecord(
         values=values,
@@ -631,6 +657,10 @@ def _visual_eeg(project_root: Path, record: CleanCacheRecord) -> NativeEEGRecord
         source_path=candidates[0],
         unit_evidence="EDF physical_dimension; per-channel physical/digital extrema",
         channel_units=tuple(units),
+        channel_identity=dict(schema=VISUAL_CHANNEL_IDENTITY_SCHEMA,
+            source_file=str(root / "Raw_EEG_channel_reference.xls"),
+            raw_channels=names, channel_names=list(canonical_names),
+            geometry_join="Location.ced_by_electrode_name_only", included_FCz=True),
     )
 
 
@@ -1190,6 +1220,10 @@ class UnifiedPhysiologyWindowDataset:
             from .clean_physiology_cache import require_measurement_producer
             require_measurement_producer(record.manifest)
             meta = record.manifest["measurement"]
+            if (record.dataset_id == "visual_cognitive_motivation"
+                    and meta["eeg_preprocessing_state"].get("channel_identity", {}).get("schema")
+                    != VISUAL_CHANNEL_IDENTITY_SCHEMA):
+                raise ValueError("Historical Visual EEG cache has an invalid channel identity; use the corrected versioned cache")
             expected_branch = (self.eeg_signal_branch if record.dataset_id == "eeg_fnirs_single_trial"
                                else SIMULTANEOUS_EEG_EOG_CLEAN_SCHEMA_V1 if record.dataset_id == "simultaneous_eeg_nirs"
                                else "raw_with_ocular_artifact")

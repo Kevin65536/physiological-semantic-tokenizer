@@ -89,12 +89,25 @@ Measurement caches, coordinate and scale audits, native Hb summaries and optical
 
 | Diagnostic / usage | Entry | Config | Targeted tests |
 | --- | --- | --- | --- |
+| Four-dataset downstream input freeze; metadata `--downstream-stage plan`, supervised `pilot`/`build`, retained-input `verify`; corrected Visual native channels, raw-voltage record preprocessing and unchanged cached Hb | [`build_clean_eeg_fnirs_cache.py`](build_clean_eeg_fnirs_cache.py) with `--downstream-config <contract>`; consumer: [`DownstreamInputDataset`](../src/data/downstream_input_cache.py) | [`downstream_input_v1.yaml`](configs/physiology_semantic_tokenizer/downstream_input_v1.yaml); [input/split/label contract](../docs/DATA_CONTRACT.md#four-dataset-downstream-input-cache--2026-11-04) | `test_visual_channel_identity.py`, `test_downstream_input_cache.py`, `test_unified_physiology.py`, `test_clean_cache_builder.py`, `test_cached_fnirs_input.py` |
 | General public measurement cache; explicit versioned output root, signal → event → geometry builders under a durable supervisor | [`build_clean_eeg_fnirs_cache.py`](build_clean_eeg_fnirs_cache.py), [`build_clean_event_index.py`](build_clean_event_index.py), [`build_clean_channel_geometry.py`](build_clean_channel_geometry.py) | [Data contract](../docs/DATA_CONTRACT.md#无运动校正的通用缓存--2026-09-28); CLI `--processing-schema physiology_measurement_alignment_v5 --motion-method none`; MNE is an explicit optical comparison in a separate root. Metadata-only REFED layout ([paper extraction](scripts/extract_refed_paper_layout.py)): `--datasets refed --refed-geometry paper_layout_v1 --output-dir <fresh_geometry_root>`, consumed via `geometry_root`; [planar geometry contract](../docs/DATA_CONTRACT.md#refed-paper-layout-registration--2026-10-13) | `test_clean_cache_builder.py`, `test_clean_physiology_cache.py`, `test_homer2_measurement_v5.py`, `test_homer2_measurement_v4.py`, `test_unified_physiology.py`, `test_event_alignment.py`, `test_channel_geometry.py`, `test_physiology_semantic_local.py` |
 | Observation coordinate stability, native EOG events, hardware donor contrasts and matched synthetic mechanisms; `--stage check`, supervised `pilot` / `all`, bounded `refinement`, retained-array `verify` | [`scripts/evaluate_observation_semantics.py`](scripts/evaluate_observation_semantics.py); [`PPT/PDF renderer`](scripts/render_observation_semantics_report.py) | [`v1`](configs/physiology_semantic_tokenizer/observation_semantics_v1.yaml), [`C/D v2`](configs/physiology_semantic_tokenizer/observation_semantics_v2.yaml); [protocol](../docs/EXPERIMENT_PLAN.md#观测物理量事件锚点与竞争机制2026-10-09) | `test_observation_semantics.py` |
 | Measurement precision and unit revision; fixed v3 stage 1/2 | [`evaluate_ssm_overnight_diagnostics.py`](evaluate_ssm_overnight_diagnostics.py) | [`ssm_measurement_alignment_v3.yaml`](configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml) | `test_ssm_overnight_diagnostics.py`, `test_step5_observation_diagnostic.py`, `test_step5.py`, `test_homer2_preprocessing.py` |
 | Four-dataset amplitude audit and alignment repair reports (`--stage alignment-report --output-dir <new versioned export>`) | [`scripts/analyze_dataset_scaling.py`](scripts/analyze_dataset_scaling.py) | [`dataset_scaling_report_v1.yaml`](configs/physiology_semantic_tokenizer/dataset_scaling_report_v1.yaml); alignment report reads the retained [measurement v3](configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml) evidence | [`test_dataset_scaling_report.py`](../tests/test_dataset_scaling_report.py) |
 | Public native Hb direction prevalence; `--prevalence --stage synthetic`, then supervised `--stage measured --workers N`; optional `--prevalence-pilot`; `--stage report` creates a versioned bitmap export | [`scripts/analyze_hbo_hbr_relationship.py`](scripts/analyze_hbo_hbr_relationship.py); native fNIRS reader in `src/data/unified_physiology.py` | [`hbo_hbr_prevalence_v1.yaml`](configs/physiology_semantic_tokenizer/hbo_hbr_prevalence_v1.yaml): four public datasets, native/released Hb versus v5 none, subject-weighted census, trend and optical-coefficient sensitivity; no model fitting | `test_hbo_hbr_relationship.py`, `test_unified_physiology.py`, `test_clean_physiology_cache.py`; paired-mask statistics, native identity/support, subject weighting, synthetic exclusion |
 | Read-only optical motion pipeline audit; metadata `--check-only`, then separate synthetic/measured phases on the exact retained public windows; no model fits | [`scripts/analyze_fnirs_motion_correction.py`](scripts/analyze_fnirs_motion_correction.py) | [`optical motion audit`](configs/physiology_semantic_tokenizer/shared_driver_optical_motion_audit_v1.yaml) | `test_fnirs_motion_correction_audit.py`, `test_homer2_preprocessing.py`, `test_homer2_measurement_v4.py` |
+
+The downstream-only cache has an explicit consumer; it does not change the SSM
+input root or the retained benchmark loaders:
+
+```python
+from src.data.downstream_input_cache import DownstreamInputDataset
+
+samples = DownstreamInputDataset(
+    "data/cache/physiology_downstream_v1", split="train", task="motor_imagery"
+)
+sample = samples[0]  # EEG/Hb, masks, clocks, channel identities and task target
+```
 
 ### Shared-driver reconstruction and reliability
 
@@ -139,6 +152,38 @@ Tests: `test_tak_mismatch.py`, `test_tak_mismatch_data.py`,
 `test_tak_mismatch_report.py`; independent replay equivalence is covered by
 `test_shared_driver_replay_equivalence.py`.
 
+The Visual channel repair uses the same entry with
+[`tak_mismatch_visual_corrected_v2.yaml`](configs/physiology_semantic_tokenizer/tak_mismatch_visual_corrected_v2.yaml).
+It freezes the publisher workbook's native EEG identity (including A64/FCz),
+joins the existing geometry by electrode name, and recomputes native EEG power,
+training-fold coordinates, spatial selection and both parameter modes for all
+admitted Visual records and Hb pairs. The retained v5 cache supplies only its
+unchanged Hb arrays, source identities and clock metadata; its EEG names/arrays
+are not relabelled or consumed. The new prepared arrays own the corrected input
+identity. Other datasets' retained results remain separate evidence sources.
+Tests: `test_visual_channel_identity.py`, `test_tak_mismatch_data.py` and
+`test_tak_mismatch_runner.py` check mapping, retained-Hb provenance and rejection
+of channel drift before signal access.
+`fixed-run` completes only the full fixed stage; `plot-plan` / `plot-run` then
+prioritize the unchanged three-pair shared-parameter panel. The corrected
+[`fixed analysis contract`](configs/physiology_semantic_tokenizer/tak_mismatch_visual_physiology_v2.yaml)
+uses the existing `physiology-*` stages. `physiology-four-dataset`, with an
+explicit retained `--reference-run`, replaces only Visual in the four-dataset
+descriptive synthesis and requires a completed common shared-parameter panel.
+`render_tak_mismatch.py --four-dataset-analysis <analysis> --run <corrected-run>
+--output <fresh-export>` produces the corresponding bitmap PDF, HTML and atlas.
+For a fixed-parameter census report, add `--fixed-only` to
+`physiology-four-dataset` and omit `--panel-export`. This reads only the completed
+fixed scalar/shape/spatial owners, replaces Visual, and examines all-subject
+regional contrasts, record-map stability and repeated high-mismatch locations.
+Top-quarter overlap and per-location persistence keep their missing-record
+denominators; they do not assume neighbouring channels are independent. The same
+renderer accepts this fixed-only summary and does not resume shared-parameter fits.
+Its scalp maps reuse the vertex-centred azimuthal-equidistant display projection,
+with MNE full-head extrapolation and a dashed measured-node convex hull. REFED
+keeps its registered planar layout. Exported display coordinates are separate
+from the unchanged statistical locations and values.
+
 The fixed-result physiological exploration uses the same evaluator's
 `physiology-extract`, `physiology-analyze`, `physiology-ocular`,
 `physiology-counterfactual`, and `physiology-shapes` stages with
@@ -165,6 +210,23 @@ and a complete per-record/metric PNG gallery. Spatial contrast, neighbouring
 agreement and early/late consistency select cases; they are not an independent
 confirmation. Partial time support stays visible, while Visual EEG-dependent
 maps remain excluded from spatial interpretation under the owning impact audit.
+Add `--spatial-style-preview` to this renderer for two display-only old/new
+comparisons: vertex-centred azimuthal equidistant coordinates (equator at 90% of
+the head radius), linear full-head fill, and a dashed measured-node convex hull.
+The preview reads the retained plan geometry and subject-map scalars, preserves
+their values and selection, and writes two PNGs plus coordinate/provenance tables
+to a fresh export. It does not update spatial statistics or existing reports;
+the normal spatial export retains its original projection and local support.
+For a mechanism-oriented review of retained scalars, the evaluator's
+`physiology-patterns --spatial-analysis <completed-spatial-analysis>
+--panel-export <completed-shared-snapshot> --pattern-output <fixed-analysis/mechanism_patterns_version>`
+keeps complete-region subject denominators and one parameter estimate per shared
+group/view, including failed terminal values. The renderer's
+`--mechanism-analysis <completed-pattern-analysis> --output <fresh-export>`
+creates population/paired regional plots, angular full-head fixed maps, record
+stability matrices, parameter/failure plots and a bitmap PDF/HTML report.
+Shared-parameter results remain three sampled positions; they are not filled
+into a full-head parameter map. These stages add no fits or significance tests.
 Tests: `test_tak_mismatch_spatial.py`, the report/runner suites and the registered
 geometry projection check in `test_tak_topography.py`.
 
@@ -260,6 +322,50 @@ It keeps all primary estimates and adds the three lowest numeric supplementary
 REFED video IDs per subject. The display inventory retains source task paths
 and conditions; this presentation subset does not redefine the original
 same-condition statistical analysis.
+
+The separately versioned full reconstruction cache uses this same entry with
+`--tak-reconstruction-cache --cache-stage
+<check|plan|synthetic|pilot|produce|verify> --run-dir <fresh_run>` and
+[`shared_driver_tak_subject_cache_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml).
+It explicitly fits τ/β at log-prior SD 0.125, retains the training-only common
+PCA direction and calibrates positive scales once per subject. Fits use 90 s,
+or the actual shorter REFED support, and the corrected Visual native identities.
+`produce` resumes matching terminal work, completes preparation/calibration,
+fits the fixed reference and τ/β, then independently verifies the saved arrays.
+Substantial stages require the recorded durable supervisor; `check` and `plan`
+read no signals. The run's plan, coordinates, per-task arrays/status, summary
+and verification provide the reusable cache interface, including failures and
+downstream sample joins. Tests: `test_tak_reconstruction_cache.py`,
+`test_tak_mismatch_data.py`, `test_eeg_proxy_10hz.py` and the Tak solver suites.
+For a measured resource-only continuation, the existing `--workers` argument
+may exceed the initial resource count retained in the frozen configuration;
+the runner checks the process affinity and inherited cgroup CPU quota. Keep a
+new execution-source snapshot and launch/resource record, drain the previous
+controller, and reuse matching terminal tasks and frozen calibration. This
+does not change the scientific configuration or restart completed fits.
+The optional accelerated implementation is checked with `--cache-stage
+accelerator-check --workers 4 --cache-gpu-devices 0,1
+--cache-validation-output <fresh_child_of_run>`. It refits only retained
+synthetic/pilot cases plus slow and nonconverged cases into that child, while
+the producer can keep running. The child's protocol owns the comparison
+thresholds and inventory. Production selects the validated implementation with
+`--cache-algebra structured --cache-linear-backend cuda --cache-gpu-devices 0,1
+--cache-validation-output <validated_child>` and requires a matching execution
+source. One GPU process per device serves bounded batches of float64 normal
+equations through per-worker shared buffers; CPU workers retain dynamics,
+constraints, line search and priors. A later transport-only validation may use
+`--cache-cpu-reference <completed-validation>` after checking the unchanged CPU
+numerical functions; GPU cases are fitted again into a fresh validation child.
+Retained CPU timings and newly measured GPU timings are labelled separately.
+`--cache-gpu-workers N` assigns only N of the production workers to CUDA; the
+remainder use the same validated structured CPU solve. Resource-only routing
+changes may reuse retained comparisons when numerical source, GPU transport and
+fitting functions are unchanged, with explicit source-equivalence and routing
+test evidence in the matching validation child. Measure aggregate throughput
+and GPU wait time to choose this split.
+GPU infrastructure failures stop execution instead of being recorded as model
+failures. Completed targets keep their original backend identity and are reused.
+[Data boundary](../docs/DATA_CONTRACT.md#subject-calibrated-tak-reconstruction-cache--2026-11-04).
 
 The spatial τ/β case study uses this evaluation entry with `--tak-topography
 --topography-stage <check|plan|synthetic|screen|prepare|pilot|run|analyze>` and

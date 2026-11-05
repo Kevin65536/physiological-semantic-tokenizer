@@ -37,6 +37,26 @@ def test_default_check_cannot_open_arrays(monkeypatch, capsys):
     assert '"measured_arrays_read": 0' in capsys.readouterr().out
 
 
+def test_visual_repair_contract_preserves_numerics_and_rejects_identity_drift(cfg, tmp_path):
+    repaired = runner.read_config(runner.VISUAL_CONFIG)
+    assert repaired['data']['datasets'] == ['visual_cognitive_motivation']
+    assert repaired['data']['visual_eeg_channel_identity'] == 'visual_raw_channel_identity_v2'
+    for key in ('seed', 'tensor', 'fixed', 'model', 'current_dof', 'coordinate', 'solver', 'endpoints'):
+        assert repaired[key] == cfg[key]
+    repaired['data']['visual_eeg_channel_identity'] = 'retained_wrong_v5'
+    path = tmp_path/'drift.yaml'; path.write_text(yaml.safe_dump(repaired))
+    with pytest.raises(ValueError, match='contract drift'):
+        runner.read_config(path)
+
+
+def test_fixed_stage_finishes_without_starting_unselected_shared_groups(cfg, tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, 'coordinate_stage', lambda *args: {})
+    monkeypatch.setattr(runner, 'spatial_selection_stage', lambda *args: None)
+    monkeypatch.setattr(runner, 'current_dof_stage', lambda *args: pytest.fail('unselected shared stage started'))
+    result = runner.run_stage(cfg, tmp_path, dict(records=[]), 1, include_current_dof=False)
+    assert result['status'] == 'fixed_parameter_stage_completed' and result['terminal'] == 0
+
+
 def _pair(name='pair'):
     return dict(id=name, native_index=0, channel_sets=dict(nearest6=list(range(6)),
         sixth_to_seventh=[0, 1, 2, 3, 4, 6], next6=list(range(6, 12)), random6=[1, 3, 5, 7, 9, 11]))

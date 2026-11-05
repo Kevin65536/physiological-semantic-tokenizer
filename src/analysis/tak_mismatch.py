@@ -745,6 +745,7 @@ def spatial_geometry_from_plan(plan: dict) -> pd.DataFrame:
             indices = pair["component_indices"]
             base = dict(dataset=record["dataset"], subject=str(record["subject"]),
                 record_id=record["id"], pair=pair["id"], native_pair_index=pair["native_index"],
+                native_eeg_identity=record.get('native_eeg_channel_identity', {}).get('schema', 'retained_original'),
                 x=np.nan, y=np.nan, location_id="unavailable:"+pair["id"],
                 geometry_status="unavailable", coordinate_system="unavailable", geometry_source="")
             if len(indices) != 2 or max(indices) >= len(geometry):
@@ -821,6 +822,8 @@ def aggregate_spatial_maps(native_pairs: pd.DataFrame, halves: pd.DataFrame,
     source["period"] = "full"
     source = pd.concat([source, halves], ignore_index=True)
     channel = source.merge(geometry, on=["dataset", "subject", "record_id", "pair"], how="left", validate="many_to_one")
+    if 'native_eeg_identity' not in channel:
+        channel['native_eeg_identity'] = 'retained_original'
     if channel.location_id.isna().any():
         raise ValueError("retained channel metrics are missing their planned geometry identity")
     channel["finite_value"] = np.isfinite(channel.value)
@@ -831,12 +834,15 @@ def aggregate_spatial_maps(native_pairs: pd.DataFrame, halves: pd.DataFrame,
     maps = channel.groupby(keys, sort=True, dropna=False).agg(
         aggregation_numerator=("aggregation_numerator", "mean"), aggregation_denominator=("aggregation_denominator", "mean"),
         x=("x", "first"), y=("y", "first"), pair_members=("pair", joined), record_ids=("record_id", joined),
+        native_eeg_identity=("native_eeg_identity", joined),
         planned_members=("pair", "size"), available_members=("finite_value", "sum"), eligible_members=("eligible_member", "sum"),
         planned_windows=("planned_windows", "sum"), available_windows=("available_windows", "sum")).reset_index()
     maps["value"] = maps.aggregation_numerator / maps.aggregation_denominator
     take = maps.metric.isin(ROOT_METRICS)
     maps.loc[take, "value"] = np.sqrt(maps.loc[take, "value"])
-    invalid_visual = maps.dataset.eq("visual_cognitive_motivation") & ~maps.metric.isin(SPATIAL_HB_METRICS)
+    from src.data.unified_physiology import VISUAL_CHANNEL_IDENTITY_SCHEMA
+    invalid_visual = (maps.dataset.eq("visual_cognitive_motivation") & ~maps.metric.isin(SPATIAL_HB_METRICS)
+                      & maps.native_eeg_identity.ne(VISUAL_CHANNEL_IDENTITY_SCHEMA))
     maps["interpretation"] = np.where(invalid_visual, "invalid_visual_EEG_identity_not_mapped", "retained_conditional_metric")
     # Display every computable retained endpoint, including partial time
     # support. The stricter coverage threshold belongs to pattern selection,
@@ -973,3 +979,382 @@ def spatial_record_similarities(maps: pd.DataFrame, ranking: pd.DataFrame) -> pd
                 common_locations=len(common),spearman_rho=rho,
                 interpretation="descriptive_selected_case_not_independent_confirmation"))
     return pd.DataFrame(rows)
+
+
+def spatial_region_patterns(maps: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Descriptive sensor-region contrasts from retained record/subject maps.
+
+    AF/Fp, C/FC and P/O prefixes define montage locations, not cortical ROIs.
+    A region is available only when all its planned positions have values;
+    a regional comparison uses subjects with all three regions. No new tests.
+    """
+    datasets = ("eeg_fnirs_single_trial", "simultaneous_eeg_nirs")
+    metrics = ("D1", HB_RATIO, "D_bal_10s", "D_bal_20s", "D_bal_40s", "D_EH")
+    source = maps[maps.dataset.isin(datasets) & maps.metric.isin(metrics)
+                  & maps.period.isin(("full", "subject_mean"))].copy()
+    keys = ["dataset", "subject", "record_unit", "period", "task_label", "metric"]
+    if source.duplicated(keys + ["location_id"]).any():
+        raise ValueError("duplicate retained spatial map position")
+
+    def region(name):
+        if ";" in name:
+            raise ValueError("regional review requires unique registered channel positions")
+        if name.startswith(("AF", "Fp")):
+            return "frontal"
+        if name.startswith(("P", "O")):
+            return "posterior"
+        if name.startswith(("C", "FC")):
+            return "central"
+        raise ValueError("unclassified registered channel: " + name)
+
+    source["region"] = source.pair_members.map(region)
+    rows = []
+    for identity, group in source.groupby(keys + ["region"], dropna=False, sort=True):
+        values = group.display_value.to_numpy(float)
+        valid = np.isfinite(values)
+        rows.append(dict(zip(keys + ["region"], identity),
+            planned_locations=len(group), available_locations=int(valid.sum()),
+            value=float(np.median(values)) if valid.all() else np.nan))
+    regional = pd.DataFrame(rows)
+    # One observation per subject for each task, with native records equally
+    # weighted after their within-region medians. Do not count records as people.
+    task_keys = ["dataset", "subject", "task_label", "metric", "region"]
+    records = regional[regional.period.eq("full")]
+    tasks = records.groupby(task_keys, dropna=False).value.agg(["mean", "count", "size"]).reset_index()
+    tasks["value"] = tasks["mean"].where(tasks["count"].eq(tasks["size"]))
+    tasks["level"] = "task"
+    subjects = regional[regional.period.eq("subject_mean")].copy()
+    subjects["level"] = "subject"
+    subjects["task_label"] = "all_records"
+    units = pd.concat([subjects, tasks], ignore_index=True)
+    summary_rows, contrast_rows = [], []
+    for identity, group in units.groupby(["dataset", "level", "task_label", "metric"], sort=True):
+        wide = group.pivot(index="subject", columns="region", values="value").reindex(
+            columns=["frontal", "central", "posterior"])
+        complete = wide.notna().all(axis=1)
+        metadata = dict(zip(["dataset", "level", "task_label", "metric"], identity))
+        for name in wide:
+            values = wide.loc[complete, name]
+            summary_rows.append(dict(metadata, region=name, planned_subjects=len(wide),
+                available_subjects=int(complete.sum()), median=values.median(),
+                q25=values.quantile(.25), q75=values.quantile(.75)))
+        for left, right in (("posterior", "central"), ("posterior", "frontal"), ("frontal", "central")):
+            for subject, value in (wide[left]-wide[right]).where(complete).items():
+                contrast_rows.append(dict(metadata, subject=subject, contrast=left+"_minus_"+right,
+                    value=value, complete_regions=bool(complete.loc[subject])))
+    contrasts = pd.DataFrame(contrast_rows)
+    contrast_summary = []
+    for identity, group in contrasts.groupby(["dataset", "level", "task_label", "metric", "contrast"]):
+        values = group.value.dropna()
+        contrast_summary.append(dict(zip(["dataset", "level", "task_label", "metric", "contrast"], identity),
+            planned_subjects=len(group), available_subjects=len(values), positive_subjects=int((values > 0).sum()),
+            median=values.median(), q25=values.quantile(.25), q75=values.quantile(.75)))
+    channels = source[["dataset", "pair_members", "region", "x", "y"]].drop_duplicates()
+    if channels.duplicated(["dataset", "pair_members"]).any():
+        raise ValueError("population map requires a common registered display template")
+    population = []
+    for identity, group in source[source.period.eq("subject_mean")].groupby(["dataset", "metric", "pair_members"]):
+        values = group.display_value.dropna()
+        population.append(dict(zip(["dataset", "metric", "pair_members"], identity),
+            x=float(group.x.iloc[0]), y=float(group.y.iloc[0]), display_value=values.median(),
+            planned_subjects=len(group), available_subjects=len(values)))
+    return dict(region_channels=channels, regional_values=regional,
+        regional_summary=pd.DataFrame(summary_rows), regional_contrasts=contrasts,
+        regional_contrast_summary=pd.DataFrame(contrast_summary), population_maps=pd.DataFrame(population))
+
+
+def shared_parameter_patterns(windows: pd.DataFrame, groups: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """One parameter estimate per group/view, preserving failed terminal values.
+
+    A group has a usable parameter estimate only if at least one of its windows
+    passed the retained convergence/integration check. This is not complete
+    planned support or physiological qualification. Error pairs use exactly
+    the same successful window identities; parameters are never window-weighted.
+    """
+    if groups.group_id.duplicated().any() or windows.id.duplicated().any():
+        raise ValueError("duplicate shared group or window identity")
+    if set(windows.group_id) != set(groups.group_id):
+        raise ValueError("shared window/group inventory differs")
+    indexed = groups.set_index("group_id")
+    parameter_rows, fit_rows = [], []
+    for group_id, block in windows.groupby("group_id", sort=True):
+        group = indexed.loc[group_id]
+        if len(block) != int(group.planned_windows):
+            raise ValueError("shared planned window denominator changed")
+        identity = dict(group_id=group_id, dataset=group.dataset, subject=str(group.subject),
+            record_id=group.record_id, task_label=group.task_label, pair=group.pair,
+            planned_windows=len(block), group_status=group.status)
+        for key in ("dataset", "subject", "record_id", "task_label", "pair"):
+            if not block[key].astype(str).eq(str(identity[key])).all():
+                raise ValueError("shared group/window identity mismatch")
+        for view in ("hb_only", "joint"):
+            row = dict(identity, view=view)
+            success = block[view+"_success"].fillna(False).astype(bool)
+            for parameter in ("kappa", "tau"):
+                values = pd.to_numeric(block[view+"_"+parameter], errors="coerce").dropna().unique()
+                if len(values) > 1:
+                    raise ValueError("shared parameter changes within a group")
+                row[parameter] = float(values[0]) if len(values) else np.nan
+            row.update(successful_windows=int(success.sum()),
+                valid_estimate=bool(success.any() and np.isfinite([row["kappa"], row["tau"]]).all()),
+                full_planned_support=bool(success.all()),
+                tau_at_upper_bound=bool(np.isclose(row["tau"], 12., atol=1e-6, rtol=0)))
+            parameter_rows.append(row)
+        for metric, view in (("D1", "hb_only"), ("D_EH", "hb_only"), ("D4", "joint")):
+            a = pd.to_numeric(block[metric], errors="coerce")
+            b = pd.to_numeric(block[metric+"_free"], errors="coerce")
+            common = np.isfinite(a) & np.isfinite(b) & block[view+"_success"].fillna(False).astype(bool)
+            before = float(np.sqrt(np.mean(np.square(a[common])))) if common.any() else np.nan
+            after = float(np.sqrt(np.mean(np.square(b[common])))) if common.any() else np.nan
+            fit_rows.append(dict(identity, metric=metric, view=view, paired_windows=int(common.sum()),
+                fixed=before, free=after, free_minus_fixed=after-before))
+    parameters = pd.DataFrame(parameter_rows)
+    site_summary = []
+    keys = ["dataset", "subject", "pair"]
+    for identity, group in parameters.groupby(keys, sort=True):
+        meta = dict(zip(keys, identity))
+        a = group[group.view.eq("hb_only")].set_index("group_id")
+        b = group[group.view.eq("joint")].set_index("group_id")
+        paired = a.index[a.valid_estimate & b.loc[a.index, "valid_estimate"]]
+        for view in ("hb_only", "joint"):
+            part = group[group.view.eq(view)]
+            valid = part[part.valid_estimate]
+            row = dict(meta, view=view, planned_groups=len(part), valid_groups=len(valid),
+                valid_windows=int(part.successful_windows.sum()), planned_windows=int(part.planned_windows.sum()),
+                boundary_valid_groups=int(valid.tau_at_upper_bound.sum()), paired_view_groups=len(paired))
+            for parameter in ("kappa", "tau"):
+                row[parameter+"_median"] = valid[parameter].median()
+                row[parameter+"_q25"] = valid[parameter].quantile(.25)
+                row[parameter+"_q75"] = valid[parameter].quantile(.75)
+                row[parameter+"_paired_view_median"] = part.set_index("group_id").loc[paired, parameter].median()
+            site_summary.append(row)
+    return dict(parameter_groups=parameters, fit_pair_groups=pd.DataFrame(fit_rows),
+                parameter_site_summary=pd.DataFrame(site_summary))
+
+
+def four_dataset_pattern_tables(subjects: pd.DataFrame, shapes: pd.DataFrame,
+                               maps: pd.DataFrame, windows: pd.DataFrame,
+                               groups: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Common descriptive endpoints; each final point represents one subject.
+
+    Inputs have already passed the source-version and complete-plan checks.
+    This function performs no I/O, fitting, label selection or significance test.
+    All failures remain in the planned subject/record/group denominators.
+    """
+    expected = {'eeg_fnirs_single_trial', 'simultaneous_eeg_nirs',
+                'visual_cognitive_motivation', 'refed'}
+    for frame in (subjects, shapes, maps, windows, groups):
+        if set(frame.dataset) != expected:
+            raise ValueError('The common-pattern review requires all four datasets')
+    if subjects.duplicated(['dataset', 'subject', 'metric']).any():
+        raise ValueError('Duplicate subject endpoint in the four-dataset review')
+
+    def describe(frame, endpoint):
+        rows = []
+        for (dataset, name), block in frame.groupby(['dataset', endpoint], sort=True):
+            values = pd.to_numeric(block.value, errors='coerce')
+            values = values[np.isfinite(values)]
+            rows.append(dict(dataset=dataset, endpoint=name, planned_subjects=len(block),
+                available_subjects=len(values), median=values.median(),
+                q25=values.quantile(.25), q75=values.quantile(.75),
+                p90=values.quantile(.90), mean=values.mean()))
+        return pd.DataFrame(rows)
+
+    full = maps[maps.period.eq('full') & maps.metric.isin(('D1', HB_RATIO, 'D_EH', 'D_drive_H'))]
+    map_keys = ['dataset', 'subject', 'record_unit', 'metric']
+    half_maps = {key: part for key, part in maps[maps.period.isin(['early', 'late'])].groupby(map_keys, sort=False)}
+    spatial_rows = []
+    for (dataset, subject, record, metric), block in full.groupby(
+            map_keys, sort=True):
+        values = pd.to_numeric(block.display_value, errors='coerce').dropna()
+        median = values.median()
+        halves = half_maps.get((dataset, subject, record, metric), maps.iloc[:0])
+        early = halves[halves.period.eq('early') & halves.selection_valid]
+        late = halves[halves.period.eq('late') & halves.selection_valid]
+        pair = early[['location_id', 'display_value']].merge(
+            late[['location_id', 'display_value']], on='location_id', suffixes=('_early', '_late'))
+        adequate = len(pair) >= max(8, .8*len(block))
+        rho = _rho(pair.display_value_early.to_numpy(), pair.display_value_late.to_numpy()) if adequate else np.nan
+        spatial_rows.append(dict(dataset=dataset, subject=subject, record_unit=record, metric=metric,
+            planned_locations=len(block), available_locations=len(values),
+            normalized_contrast=(values.quantile(.9)-values.quantile(.1))/median if median > 0 and len(values) >= 2 else np.nan,
+            adequate_spatial_coverage=len(values) >= max(8, .8*len(block)),
+            paired_half_locations=len(pair), early_late_rho=rho))
+    spatial_records = pd.DataFrame(spatial_rows)
+    spatial_subjects = []
+    for (dataset, subject, metric), block in spatial_records.groupby(['dataset', 'subject', 'metric'], sort=True):
+        for endpoint, column in (('spatial_contrast', 'normalized_contrast'), ('early_late_rho', 'early_late_rho')):
+            good = block[column].notna() & block.adequate_spatial_coverage
+            spatial_subjects.append(dict(dataset=dataset, subject=subject, metric=metric, endpoint=endpoint,
+                value=block.loc[good, column].median(), planned_records=len(block), available_records=int(good.sum())))
+    spatial_subjects = pd.DataFrame(spatial_subjects)
+    shared = shared_parameter_patterns(windows, groups)
+    fit_rows = []
+    for (dataset, subject, metric), block in shared['fit_pair_groups'].groupby(['dataset', 'subject', 'metric'], sort=True):
+        good = block.paired_windows.gt(0) & np.isfinite(block.fixed) & np.isfinite(block.free)
+        paired = block.loc[good].copy()
+        for field in ('fixed', 'free'):
+            paired[field] = paired[field]**2
+        records = paired.groupby('record_id')[['fixed', 'free']].mean()
+        fixed, free = np.sqrt(records.mean()).reindex(['fixed', 'free']).to_numpy()
+        fit_rows.append(dict(dataset=dataset, subject=subject, metric=metric, fixed=fixed, free=free,
+            free_minus_fixed=free-fixed, planned_groups=len(block), available_groups=int(good.sum()),
+            planned_windows=int(block.planned_windows.sum()), paired_windows=int(block.paired_windows.sum()),
+            planned_records=block.record_id.nunique(), available_records=len(records)))
+    parameter_subjects = []
+    parameters = shared['parameter_groups']
+    paired_group_valid = parameters.groupby('group_id').valid_estimate.all()
+    paired_group_ids = set(paired_group_valid[paired_group_valid].index)
+    for (dataset, subject, view), block in parameters.groupby(['dataset', 'subject', 'view'], sort=True):
+        good = block.valid_estimate
+        records = block.loc[good].copy()
+        for name in ('tau', 'kappa'):
+            records[name] = np.log(records[name])
+        values = records.groupby('record_id')[['tau', 'kappa']].mean().mean()
+        boundary = records.groupby('record_id').tau_at_upper_bound.mean()
+        paired_records = records[records.group_id.isin(paired_group_ids)]
+        paired_values = paired_records.groupby('record_id')[['tau', 'kappa']].mean().mean()
+        parameter_subjects.append(dict(dataset=dataset, subject=subject, view=view,
+            tau=float(np.exp(values.get('tau', np.nan))), kappa=float(np.exp(values.get('kappa', np.nan))),
+            paired_tau=float(np.exp(paired_values.get('tau', np.nan))),
+            paired_kappa=float(np.exp(paired_values.get('kappa', np.nan))), paired_view_groups=len(paired_records),
+            boundary_fraction=boundary.mean(), planned_groups=len(block), valid_groups=int(good.sum()),
+            full_support_groups=int(block.full_planned_support.sum()),
+            failed_groups=int((~good).sum()), planned_records=block.record_id.nunique(),
+            available_records=records.record_id.nunique()))
+    return dict(subject_values=subjects, subject_summary=describe(subjects, 'metric'),
+        shape_subjects=shapes, shape_summary=describe(shapes, 'feature'),
+        spatial_records=spatial_records, spatial_subjects=spatial_subjects,
+        fit_subjects=pd.DataFrame(fit_rows), parameter_subjects=pd.DataFrame(parameter_subjects), **shared)
+
+
+def fixed_population_patterns(maps: pd.DataFrame, *, seed=20261104,
+                              bootstrap_samples=5000, permutation_samples=100000):
+    """All-subject fixed-map checks, without shared-parameter dependencies.
+
+    Region tests are an exploratory six-test family (two registered montages,
+    three endpoints). Spatial rank agreement is descriptive: acquisition maps
+    are paired within subject, and each person contributes one median. Subtract
+    the other subjects' location median separately for each acquisition before
+    the centered-map comparison. This removes a common spatial template, not
+    individual optical sensitivity or a fixed channel/normalization bias.
+    """
+    keys = ['dataset', 'subject', 'record_unit', 'period', 'metric', 'location_id']
+    if maps.duplicated(keys).any():
+        raise ValueError('Duplicate spatial observation')
+    source = maps[maps.metric.isin(('D1', HB_RATIO))].copy()
+    source['subject'] = source.subject.astype(str)
+    rows = []
+    for (dataset, subject, record, metric), block in source[source.period.isin(['early','late'])].groupby(
+            ['dataset','subject','record_unit','metric'], sort=True):
+        a = block[block.period.eq('early')].set_index('location_id')
+        b = block[block.period.eq('late')].set_index('location_id')
+        planned = a.index.union(b.index)
+        common = a.index.intersection(b.index)
+        common = [k for k in common if bool(a.loc[k,'selection_valid']) and bool(b.loc[k,'selection_valid'])
+                  and np.isfinite(a.loc[k,'display_value']) and np.isfinite(b.loc[k,'display_value'])]
+        rows.append(dict(dataset=dataset, subject=subject, record_unit=record, metric=metric,
+            planned_locations=len(planned), common_locations=len(common),
+            value=_rho(a.loc[common,'display_value'].to_numpy(float), b.loc[common,'display_value'].to_numpy(float))
+                if len(common)>=max(8,.8*len(planned)) else np.nan))
+    early = pd.DataFrame(rows)
+    early_subjects = early.groupby(['dataset','subject','metric']).value.agg(['median','count','size']).reset_index()
+    early_subjects = early_subjects.rename(columns={'median':'value','count':'available_records','size':'planned_records'})
+
+    full = source[source.period.eq('full')].copy()
+    # The canonical identity's last component owns the acquisition name.
+    # Visual synchronous Probes have already been merged by the spatial owner.
+    full['acquisition'] = full.record_unit.str.rsplit('|',n=1).str[-1]
+    visual = full.dataset.eq('visual_cognitive_motivation')
+    full.loc[visual,'acquisition'] = full.loc[visual,'acquisition'].str.replace(r'^S\d+_?', '', regex=True).replace('', 'single_part')
+    full.loc[~full.display_valid.astype(bool),'display_value'] = np.nan
+    full['centered'] = np.nan
+    for _, block in full.groupby(['dataset','acquisition','metric','location_id'],sort=False):
+        for i in block.index:
+            others=block.loc[block.subject.ne(full.loc[i,'subject']),'display_value'].dropna()
+            if len(others)>=3:
+                full.loc[i,'centered']=full.loc[i,'display_value']-others.median()
+    pairs=[];hotspot_locations=[]
+    for (dataset, subject, metric), block in full.groupby(['dataset','subject','metric'],sort=True):
+        records={k:g.set_index('location_id') for k,g in block.groupby('record_unit',sort=True)}
+        for record, g in records.items():
+            available=g[np.isfinite(g.display_value)].copy()
+            adequate=len(available)>=max(8,.8*len(g)) and np.ptp(available.display_value.to_numpy(float))>1e-12
+            k=int(np.ceil(.25*len(available)))
+            # Stable key order breaks exact cutoff ties reproducibly; ties are
+            # explicit diagnostics, not additional spatial evidence.
+            ranked=available.sort_index().sort_values('display_value',ascending=False,kind='stable')
+            top=set(ranked.iloc[:k].index) if adequate else set()
+            tied=bool(adequate and k<len(ranked) and ranked.display_value.iloc[k-1]==ranked.display_value.iloc[k])
+            for location,r in g.iterrows():
+                valid=adequate and np.isfinite(r.display_value)
+                hotspot_locations.append(dict(dataset=dataset,subject=subject,metric=metric,record_unit=record,
+                    location_id=location,pair_members=r.pair_members,x=r.x,y=r.y,
+                    value=r.display_value,available=valid,hotspot=bool(valid and location in top),
+                    top_k=k if adequate else 0,available_locations=len(available),cutoff_tie=tied))
+        for first,second in combinations(records,2):
+            a,b=records[first],records[second]
+            if dataset=='eeg_fnirs_single_trial' and a.task_label.iloc[0]!=b.task_label.iloc[0]:
+                continue
+            planned=a.index.union(b.index);common=a.index.intersection(b.index)
+            good=[k for k in common if np.isfinite(a.loc[k,'display_value']) and np.isfinite(b.loc[k,'display_value'])]
+            adequate=len(good)>=max(8,.8*len(planned))
+            row=dict(dataset=dataset,subject=subject,metric=metric,record_a=first,record_b=second,
+                task_a=a.task_label.iloc[0],task_b=b.task_label.iloc[0],planned_locations=len(planned),
+                common_locations=len(good),same_task=bool(a.task_label.iloc[0]==b.task_label.iloc[0]),
+                raw_rho=_rho(a.loc[good,'display_value'].to_numpy(float),b.loc[good,'display_value'].to_numpy(float)) if adequate else np.nan)
+            centered=[k for k in good if np.isfinite(a.loc[k,'centered']) and np.isfinite(b.loc[k,'centered'])]
+            row['centered_locations']=len(centered)
+            row['centered_rho']=_rho(a.loc[centered,'centered'].to_numpy(float),b.loc[centered,'centered'].to_numpy(float)) if len(centered)>=max(8,.8*len(planned)) else np.nan
+            row.update(hotspot_overlap=np.nan,hotspot_random_reference=np.nan,hotspot_excess=np.nan,hotspot_k=0,hotspot_cutoff_tie=False)
+            if adequate:
+                av=a.loc[good,'display_value'];bv=b.loc[good,'display_value'];k=int(np.ceil(.25*len(good)))
+                if np.ptp(av)>1e-12 and np.ptp(bv)>1e-12:
+                    ar=av.sort_index().sort_values(ascending=False,kind='stable');br=bv.sort_index().sort_values(ascending=False,kind='stable')
+                    overlap=len(set(ar.iloc[:k].index)&set(br.iloc[:k].index))/k
+                    chance=k/len(good)
+                    row.update(hotspot_overlap=overlap,hotspot_random_reference=chance,
+                        hotspot_excess=overlap-chance,hotspot_k=k,
+                        hotspot_cutoff_tie=bool(ar.iloc[k-1]==ar.iloc[k] or br.iloc[k-1]==br.iloc[k]))
+            pairs.append(row)
+        if len(records)<2:
+            pairs.append(dict(dataset=dataset,subject=subject,metric=metric,record_a=None,record_b=None,
+                planned_locations=0,common_locations=0,centered_locations=0,raw_rho=np.nan,centered_rho=np.nan))
+    pairs=pd.DataFrame(pairs); person=[]
+    for (ds,sub,metric),g in pairs.groupby(['dataset','subject','metric'],sort=True):
+        for endpoint in ('raw_rho','centered_rho','hotspot_overlap','hotspot_excess'):
+            if endpoint not in g:g[endpoint]=np.nan
+            person.append(dict(dataset=ds,subject=sub,metric=metric,endpoint=endpoint,value=g[endpoint].median(),
+                planned_record_pairs=int(g.record_a.notna().sum()),available_record_pairs=int(g[endpoint].notna().sum())))
+    persons=pd.DataFrame(person);summaries=[];rng=np.random.default_rng(seed)
+    for (ds,metric,endpoint),g in persons.groupby(['dataset','metric','endpoint'],sort=True):
+        v=g.value.dropna().to_numpy(float);lo=hi=np.nan
+        if len(v)>=6:lo,hi=np.quantile(_bootstrap(v,lambda x:np.median(x,axis=1),bootstrap_samples,rng),[.025,.975])
+        summaries.append(dict(dataset=ds,metric=metric,endpoint=endpoint,planned_subjects=len(g),subjects=len(v),
+            median=np.median(v) if len(v) else np.nan,ci_low=lo,ci_high=hi,
+            positive_subjects=int((v>0).sum()),above_point5=int((v>.5).sum())))
+    locations=pd.DataFrame(hotspot_locations);persistence=[]
+    for identity,g in locations.groupby(['dataset','subject','metric','location_id'],sort=True):
+        first=g.iloc[0];n=int(g.available.sum());planned=len(g)
+        persistence.append(dict(zip(['dataset','subject','metric','location_id'],identity),
+            pair_members=first.pair_members,x=first.x,y=first.y,planned_records=planned,available_records=n,
+            hotspot_records=int(g.hotspot.sum()),fraction=float(g.hotspot.sum()/n) if n else np.nan,
+            eligible=bool(n>=2 and n>=.8*planned),cutoff_tie_records=int(g.cutoff_tie.sum())))
+    persistence=pd.DataFrame(persistence)
+    hot_subjects=[]
+    for (ds,sub,metric),g in persistence.groupby(['dataset','subject','metric'],sort=True):
+        valid=g[g.eligible];stable=valid[valid.fraction>=.8]
+        hot_subjects.append(dict(dataset=ds,subject=sub,metric=metric,planned_locations=len(g),
+            eligible_locations=len(valid),stable_locations=len(stable),
+            maximum_persistence=valid.fraction.max() if len(valid) else np.nan,
+            stable_members=';'.join(stable.sort_values(['fraction','pair_members'],ascending=[False,True]).pair_members)))
+    regions=spatial_region_patterns(maps)
+    tests=regions['regional_contrasts'].query("level == 'subject' and contrast == 'posterior_minus_frontal'")
+    tests=tests[tests.metric.isin(['D1',HB_RATIO,'D_bal_40s'])].copy()
+    tests=tests.rename(columns={'metric':'endpoint'})
+    tests['analysis']='regional';tests['fdr_family']='exploratory_2datasets_3metrics'
+    stats=_effect_summary(tests,bootstrap_samples=bootstrap_samples,permutation_samples=permutation_samples,seed=seed)
+    return dict(early_late_records=early,early_late_subjects=early_subjects,
+        spatial_record_pairs=pairs,spatial_repeat_subjects=persons,spatial_repeat_summary=pd.DataFrame(summaries),
+        hotspot_record_locations=locations,hotspot_persistence=persistence,hotspot_subjects=pd.DataFrame(hot_subjects),
+        regional_tests=stats, **regions)

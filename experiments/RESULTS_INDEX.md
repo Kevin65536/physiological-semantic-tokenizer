@@ -16,6 +16,100 @@ scientific verdicts. Its owning record is
 and access boundaries remain in the [experiment plan](../docs/EXPERIMENT_PLAN.md)
 and [data contract](../docs/DATA_CONTRACT.md).
 
+## Fixed four-dataset physiological patterns — 2026-11-04
+
+The [fixed-only synthesis](runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/fixed_physiology_v2/four_dataset_patterns_fixed_v2/summary.json)
+joins the retained first three datasets with the corrected Visual owner. Its
+[verification](runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/fixed_physiology_v2/four_dataset_patterns_fixed_v2/verification.json)
+checks full denominators, per-location persistence and independent hotspot
+intersection replay. Preserve the scalar tables, regional exploratory test
+family, all-subject record-map comparisons, per-record high-quartile flags,
+source snapshots and explicit missing support. No shared-parameter fits are
+required or resumed by this analysis.
+
+The [Chinese report](../docs/reports/interpretability_analysis/20261104_fixed_four_dataset_patterns_v6/report/TECHNICAL_REPORT.pdf),
+[bitmap figure atlas](../docs/reports/interpretability_analysis/20261104_fixed_four_dataset_patterns_v6/report/FIGURE_ATLAS.pdf)
+and [report provenance](../docs/reports/interpretability_analysis/20261104_fixed_four_dataset_patterns_v6/source_manifest.json)
+separate persistent individual hotspots, population regional trends, model
+residual geometry, prediction controls and unresolved physiological attribution.
+The [display-only redraw verification](../docs/reports/interpretability_analysis/20261104_fixed_four_dataset_patterns_v6/redraw_verification.json)
+retains the spherical angular projection, REFED planar exception, unchanged
+statistics and MNE head-extrapolation boundary. Earlier export failures and
+superseded renderings remain retained; they do not replace the owning tables.
+
+## Subject-calibrated τ/β reconstruction cache — 2026-11-04
+
+The [cache contract](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml)
+and [frozen population/window/sample plan](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/plan.json)
+define this public generation. Retain its
+[source snapshot identity](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/source_manifest.json),
+[software checks](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/validation.json),
+[long/short synthetic checks](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/synthetic_summary.json),
+[resource inspection](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/resources.json)
+and [supervised pilot launch](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/launch_pilot.json).
+The [pilot readout](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/pilot/summary.json),
+[production resource choice](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/production_resources.json)
+and [full supervised launch](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/launch_production.json)
+retain the transition from numerical/resource checks to cache production.
+The same run's [resource-only continuation source](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/execution_source_v2.json),
+[expanded resource inspection](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/parallel_resources_v2.json),
+[continuation launch](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/launch_parallel_v2.json)
+and [retained-file/input check](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/resource_continuation_v2_integrity.json)
+preserve the execution change without relabelling the original model or calibration.
+
+The [equivalent accelerated source](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/execution_source_v5.json),
+[retained CPU/full-fit comparisons](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/accelerator_validation_v1/summary.json),
+[shared-buffer GPU revalidation](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/accelerator_validation_v2/summary.json)
+and [independent two-arm and failure checks](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/accelerator_validation_v2/verification.json)
+retain numerical, execution and timing evidence. The validation protocol owns
+the CPU-reference source; the independent check documents a summary metadata
+variable correction. Preserve the earlier failed preflight and superseded
+transport results. Retained CPU timings and new GPU timings do not substitute
+for a sustained production throughput measurement.
+The [mixed-worker execution source](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/execution_source_v6.json)
+and [routing/source verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/accelerator_validation_v3/summary.json)
+reuse those numerical comparisons without additional fitting. The
+[all-GPU-dispatch timing](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/accelerated_throughput_v5.json)
+retains the measured queueing bottleneck that motivated a smaller GPU subset.
+The [mixed resource choice](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/hybrid_resources_v6.json),
+[supervised launch](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/launch_hybrid_v6.json),
+[retained-file check](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/accelerator_continuation_v6_integrity.json)
+and [first outputs from each backend](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/hybrid_sample_verification_v6.json)
+preserve the continuation and its array smoke checks. Earlier complete CPU and
+GPU tasks retain their own backend identities.
+The [sustained mixed-worker measurement](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/hybrid_throughput_v6.json)
+records throughput, CPU use, memory, backend waiting and the limits of its
+completion estimate; it is not a paired model-performance comparison.
+
+The cache interface retains frozen public splits and training PCA, individual
+calibration/support, native feature references, fixed and τ/β predictions,
+residuals, states, numerical status and waveform quality. Short REFED uses its
+actual support and remains distinguishable. Dense repeated observation
+operators are reconstructed from their declared clock/reference. Keep all
+failed/interrupted outcomes; the pilot's provisional coordinates and fits are
+separate from production. Current execution is owned by the registry; this
+retention entry does not establish successful full-cache completion.
+
+## Four-dataset downstream input cache — 2026-11-04
+
+The [input contract](configs/physiology_semantic_tokenizer/downstream_input_v1.yaml)
+and [frozen sample/split plan](../data/cache/physiology_downstream_v1/input_plan.json)
+define the independent downstream input generation. Its
+[record manifest](../data/cache/physiology_downstream_v1/cache_manifest.json),
+[complete record/sample verification](../data/cache/physiology_downstream_v1/verification.json)
+and [independent Visual EDF check](../data/cache/physiology_downstream_v1/visual_native_verification.json)
+own the numerical and identity checks. Source EEG is processed once per native
+record; retained Hb arrays and event timing keep their original identities.
+The [production source](../data/cache/physiology_downstream_v1/source_manifest.json),
+[supervised launch](../data/cache/physiology_downstream_v1/launch_build.json),
+[resource choice](../data/cache/physiology_downstream_v1/resource_choice.json)
+and [consumer timing](../data/cache/physiology_downstream_v1/consumer_performance.json)
+retain reproducibility and performance evidence. The consumer timing compares
+identical cached samples before/after record-geometry memoization; it is not a
+model-performance result. Preserve all exclusion identities and REFED tail masks.
+SSM keeps its separate 90-second input route, and the old v5/benchmark artifacts
+are not relabelled or overwritten by this cache.
+
 ## Find results by question
 
 Suite names below are relative to `runs/physiology_semantic_tokenizer/`.
@@ -151,6 +245,36 @@ Hb-only endpoints. [Numerical verification](runs/physiology_semantic_tokenizer/t
 checks the retained scalar values and record-equal aggregation. The initial
 derived analysis and the first incomplete PDF export remain at their original
 versioned paths; neither replaces the parent fixed evidence.
+
+The [2026-11-03 mismatch synthesis](../docs/report/20261103_ssm_measured_mismatch_summary_v3/REPORT.md)
+([PDF](../docs/report/20261103_ssm_measured_mismatch_summary_v3/TECHNICAL_REPORT.pdf),
+[HTML](../docs/report/20261103_ssm_measured_mismatch_summary_v3/TECHNICAL_REPORT.html))
+summarizes the fixed-model, completed bounded shared-parameter, spatial and EOG
+evidence. It distinguishes corrected task tests from descriptive associations
+and selected examples, retains failure coverage and the Visual interpretation
+boundary, and adds no fits or statistical tests.
+
+The [2026-11-04 mechanism-pattern review](../docs/report/20261104_ssm_mechanism_patterns_v6/report/TECHNICAL_REPORT.html)
+([PDF](../docs/report/20261104_ssm_mechanism_patterns_v6/report/TECHNICAL_REPORT.pdf),
+[bitmap atlas](../docs/report/20261104_ssm_mechanism_patterns_v6/report/FIGURE_ATLAS.pdf))
+uses [versioned descriptive tables](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/fixed_physiology_v1/mechanism_patterns_v1/summary.json)
+and their [independent scalar checks](runs/physiology_semantic_tokenizer/tak_mismatch/20261028_v1/fixed_physiology_v1/mechanism_patterns_v1/verification.json).
+It combines complete-region subject comparisons, angular full-head fixed maps,
+record stability, parameter/input-condition sensitivity and EOG controls.
+Shared-parameter plots retain their three-position support and failed terminal
+values; extrapolated display colour is distinguished from measured positions.
+No original fit, spatial ranking or confirmatory verdict is changed.
+
+The [Visual native-channel revision](configs/physiology_semantic_tokenizer/tak_mismatch_visual_corrected_v2.yaml)
+has a separate [input plan](runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/plan.json),
+[source migration](runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/source_execution_v2_manifest.json),
+[input/numerical checks](runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/repair_pilot_verification.json),
+and [supervised execution and report commands](runs/physiology_semantic_tokenizer/tak_mismatch/20261104_visual_corrected_v2/launch.json).
+It retains the original Hb arrays and temporal supports, recomputes the corrected
+native EEG coordinates, and keeps the old invalid-identity evidence unchanged.
+The four-dataset comparison replaces only Visual and uses the original shared
+three-pair panel for matched coverage. Execution state remains in the registry
+and the linked run's completion artifacts.
 
 ## Sensor proxy interventions under fixed Tak — 2026-10-27
 

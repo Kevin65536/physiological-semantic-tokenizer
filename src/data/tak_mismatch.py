@@ -22,6 +22,7 @@ from .ssm_prepared import EEG_PROXY_INPUT_SCHEMA
 from .unified_physiology import (
     RAW_DATASET_IDS, CACHED_FNIRS_INPUT_SCHEMA, ChannelGeometryIndex,
     canonical_channel_name, canonical_label, load_cached_fnirs_record, load_native_eeg_record,
+    VISUAL_CHANNEL_IDENTITY_SCHEMA, _visual_eeg_name_map,
 )
 from src.inference.observation_baselines import eeg_band_power
 
@@ -29,6 +30,24 @@ from src.inference.observation_baselines import eeg_band_power
 SCHEMA = 'tak_mismatch_data_v1'
 CHANNEL_CANDIDATES = ('nearest6', 'sixth_to_seventh', 'next6', 'random6')
 BANDS_HZ = ((1., 4.), (4., 8.), (8., 13.), (13., 30.), (30., 45.))
+
+
+def _eeg_input_identity(record, root, visual_identity=None):
+    """Version native EEG independently of the unchanged Hb cache metadata."""
+    if visual_identity is None:
+        return list(record.manifest['measurement']['eeg_channel_names']), None
+    if visual_identity != VISUAL_CHANNEL_IDENTITY_SCHEMA:
+        raise ValueError('Unsupported Visual native EEG identity version')
+    if record.dataset_id != 'visual_cognitive_motivation':
+        return list(record.manifest['measurement']['eeg_channel_names']), None
+    mapping = _visual_eeg_name_map(root)
+    raw = sorted(mapping, key=lambda name: int(name[1:]))
+    names = [mapping[name] for name in raw]
+    identity = dict(schema=visual_identity, raw_channels=raw, channel_names=names,
+        source_file=str(root / REGISTERED_DATASETS[record.dataset_id].default_root /
+                        'Raw_EEG_channel_reference.xls'),
+        geometry_join='Location.ced_by_electrode_name_only', included_FCz=True)
+    return names, identity
 
 
 def _settings(cfg):
@@ -399,13 +418,16 @@ def inventory_tak_mismatch(cfg, project_root):
     planned = []
     for record in sorted(records, key=lambda r: (r.dataset_id, r.canonical_subject_id, r.base_record_id)):
         meta = record.manifest['measurement']
+        eeg_names, eeg_identity = _eeg_input_identity(record, root, data.get('visual_eeg_channel_identity'))
         row = dict(id=record.join_key, join_key=record.join_key, dataset=record.dataset_id,
             subject=record.canonical_subject_id, record=record.base_record_id, cache_record_id=record.record_id,
             fold=subject_folds[record.dataset_id][record.canonical_subject_id],
             source_identity=deepcopy(record.manifest['source_files']),
-            eeg_channel_names=list(meta['eeg_channel_names']), hb_channel_names=list(meta['fnirs_channel_names']),
+            eeg_channel_names=eeg_names, hb_channel_names=list(meta['fnirs_channel_names']),
             array_shapes=deepcopy(record.manifest['array_shapes']), status='unavailable', windows=[], pairs=[],
             hb_only_admitted=True)
+        if eeg_identity is not None:
+            row['native_eeg_channel_identity'] = eeg_identity
         try:
             _registered_sources(record, root)
             row['continuous_hb_segments'] = continuous_hb_support_segments(record,index.events_by_join_key.get(record.join_key,[]))
@@ -466,15 +488,10 @@ def inventory_tak_mismatch(cfg, project_root):
         fnirs_input=CACHED_FNIRS_INPUT_SCHEMA, eeg_proxy_input=EEG_PROXY_INPUT_SCHEMA)
 
 
-def prepare_tak_mismatch_record(project_root, record_plan, *, cache_root=DEFAULT_CLEAN_CACHE_ROOT,
-                                geometry_root=None, refed_geometry_root=None, seed=20261028,
-                                record=None, index=None):
-    """Read one central record and share arrays across all Hb pairs/candidates.
-
-    Every frozen source, geometry, clock segment and window is revalidated
-    before either signal reader is called. Optional index/record arguments let
-    record-group workers reuse metadata; they do not bypass these checks.
-    """
+def _validated_tak_record(project_root, record_plan, *, cache_root=DEFAULT_CLEAN_CACHE_ROOT,
+                          geometry_root=None, refed_geometry_root=None, seed=20261028,
+                          record=None, index=None, visual_eeg_channel_identity=None):
+    """Shared metadata boundary for the 30 s diagnostic and 90 s cache."""
     root = Path(project_root)
     if index is None:
         index = CleanPhysiologyCacheIndex(root / cache_root)
@@ -490,12 +507,16 @@ def prepare_tak_mismatch_record(project_root, record_plan, *, cache_root=DEFAULT
             or record_plan['array_shapes'] != record.manifest['array_shapes']):
         raise ValueError('frozen source or canonical identity changed before signal access')
     _registered_sources(record, root)
+    eeg_names, eeg_identity = _eeg_input_identity(record, root, visual_eeg_channel_identity)
+    if (eeg_names != record_plan['eeg_channel_names']
+            or eeg_identity != record_plan.get('native_eeg_channel_identity')):
+        raise ValueError('Frozen native EEG channel identity changed before signal access')
     geo_root = refed_geometry_root if record.dataset_id == 'refed' else geometry_root
     if record.dataset_id == 'refed' and not geo_root:
         raise ValueError('explicit admitted REFED geometry required before signal access')
     gi = ChannelGeometryIndex(root / cache_root, geometry_root=root / geo_root if geo_root else None)
     meta = record.manifest['measurement']
-    geometry = dict(eeg=gi.for_channels(record=record, modality='eeg', channel_names=meta['eeg_channel_names']),
+    geometry = dict(eeg=gi.for_channels(record=record, modality='eeg', channel_names=eeg_names),
                     fnirs=gi.for_channels(record=record, modality='fnirs', channel_names=meta['fnirs_channel_names']))
     support = continuous_tak_support(record, index.events_by_join_key.get(record.join_key, []),
                                      index.reports_by_join_key.get(record.join_key, []))
@@ -506,6 +527,19 @@ def prepare_tak_mismatch_record(project_root, record_plan, *, cache_root=DEFAULT
             or continuous_hb_support_segments(record,index.events_by_join_key.get(record.join_key,[])) != record_plan.get('continuous_hb_segments')
             or windows != record_plan['windows'] or support != record_plan['coverage']):
         raise ValueError('frozen geometry or continuous support changed before signal access')
+    return record, eeg_names, eeg_identity, windows
+
+
+def prepare_tak_mismatch_record(project_root, record_plan, *, cache_root=DEFAULT_CLEAN_CACHE_ROOT,
+                                geometry_root=None, refed_geometry_root=None, seed=20261028,
+                                record=None, index=None, visual_eeg_channel_identity=None):
+    """Read one central record after revalidating sources, geometry and clocks."""
+    root = Path(project_root)
+    record, eeg_names, eeg_identity, windows = _validated_tak_record(
+        root, record_plan, cache_root=cache_root, geometry_root=geometry_root,
+        refed_geometry_root=refed_geometry_root, seed=seed, record=record, index=index,
+        visual_eeg_channel_identity=visual_eeg_channel_identity)
+    meta = record.manifest['measurement']
     hb = load_cached_fnirs_record(root, record)
     if list(hb['channel_names']) != list(meta['fnirs_channel_names']):
         raise ValueError('central cached Hb identities differ from the frozen record')
@@ -521,7 +555,7 @@ def prepare_tak_mismatch_record(project_root, record_plan, *, cache_root=DEFAULT
     for segment in record_plan['continuous_hb_segments']:
         gap_valid |= (hb_times>=segment['start_s']-1e-9)&(hb_times<segment['end_s']-1e-9)
     valid_hb = observation_valid & gap_valid[:,None,None]
-    count, channels, pairs = len(windows), len(meta['eeg_channel_names']), len(record_plan['pairs'])
+    count, channels, pairs = len(windows), len(eeg_names), len(record_plan['pairs'])
     eeg_features = np.full((count,300,channels,5), np.nan)
     target_hb = np.full((count,300,pairs,2), np.nan)
     valid_eeg = np.zeros((count,300,channels), bool)
@@ -534,7 +568,8 @@ def prepare_tak_mismatch_record(project_root, record_plan, *, cache_root=DEFAULT
     if any(w['status'] == 'available' for w in windows) and any(p['status']=='available' for p in record_plan['pairs']):
         try:
             eeg = load_native_eeg_record(root, record)
-            if (list(eeg.channel_names) != list(meta['eeg_channel_names'])
+            if (list(eeg.channel_names) != eeg_names
+                    or (eeg_identity is not None and eeg.channel_identity != eeg_identity)
                     or np.shape(eeg.values)[1] != channels
                     or not np.isfinite(eeg.sample_rate_hz) or eeg.sample_rate_hz <= 90
                     or not np.isclose(eeg.sample_rate_hz/10., round(eeg.sample_rate_hz/10.))):
@@ -615,6 +650,7 @@ def prepare_tak_mismatch_record(project_root, record_plan, *, cache_root=DEFAULT
         eeg_proxy_input=np.array(EEG_PROXY_INPUT_SCHEMA), eeg_proxy_rate_hz=np.array(10.),
         fnirs_input=np.array(CACHED_FNIRS_INPUT_SCHEMA),
         metadata=dict(schema=SCHEMA, record_id=record.join_key, source_identity=record_plan['source_identity'],
+            native_eeg_channel_identity=eeg_identity,
             hb_provenance=deepcopy(hb['provenance']), eeg_native_unit=getattr(eeg,'native_unit',None),
             eeg_unit_evidence=getattr(eeg,'unit_evidence',None),
             eeg_native_sample_rate_hz=float(eeg.sample_rate_hz) if eeg is not None else None,
@@ -626,3 +662,123 @@ def prepare_tak_mismatch_record(project_root, record_plan, *, cache_root=DEFAULT
             input_support='native_EEG_per_declared_context; full_record_offline_bandpassed_cached_Hb',
             last_bin='excluded_from_fitting_and_scoring_by_consumer',
             scale_policy='unscaled_prepared_arrays; PCA_common_positive_Hb_scale_and_SD_fit_outer_training_subjects_only'))
+
+
+def tak_reconstruction_windows(record_plan, *, stride_s=60.):
+    """Cover admitted continuous supports with complete, Hb-grid-aligned 90 s windows.
+
+    A final shifted window covers the tail; repeated support is explicit and
+    is never treated as independent data. REFED short supports use their actual
+    duration, without padding or concatenating videos.
+    """
+    if stride_s != 60.:
+        raise ValueError('The reconstruction cache uses 90 s fits with 60 s stride')
+    windows, exclusions = [], []
+    if record_plan['status'] != 'available' and record_plan['dataset'] != 'refed':
+        return windows, [dict(reason=record_plan.get('excluded_reason') or 'unavailable_paired_support')]
+    if not record_plan.get('hb_only_admitted') or not record_plan.get('coverage',{}).get('segments'):
+        return windows, [dict(reason=record_plan.get('excluded_reason') or 'unavailable_paired_support')]
+    for i, segment in enumerate(record_plan['coverage']['segments']):
+        first = int(np.ceil(segment['hb_start_s']*10-1e-8))
+        end = int(np.floor(segment['hb_end_s']*10+1e-8))
+        steps = min(900,end-first) if record_plan['dataset']=='refed' else 900
+        last = end-steps
+        if steps <= 50:
+            exclusions.append(dict(segment_index=i,reason='support_does_not_extend_beyond_5s_reference'))
+            continue
+        if last < first:
+            exclusions.append(dict(segment_index=i, reason='paired_support_shorter_than_90s',
+                eeg_support_s=[segment['eeg_start_s'],segment['eeg_end_s']],
+                hb_support_s=[segment['hb_start_s'],segment['hb_end_s']]))
+            continue
+        starts = list(range(first,last+1,600))
+        if starts[-1] != last:
+            starts.append(last)
+        for start in starts:
+            hs = start/10.
+            es = hs-segment['offset_s']
+            duration = steps/10.
+            if (es < segment['eeg_start_s']-1e-8 or es+duration > segment['eeg_end_s']+1e-8
+                    or not any(hs >= s['start_s']-1e-8 and hs+duration <= s['end_s']+1e-8
+                               for s in record_plan['continuous_hb_segments'])):
+                exclusions.append(dict(segment_index=i,hb_start_s=hs,
+                    reason='90s_window_crosses_declared_continuity_boundary'))
+                continue
+            windows.append(dict(index=len(windows),key=f'w{len(windows):05d}',segment_index=i,
+                eeg_start_s=es,hb_start_s=hs,duration_s=duration,reference_seconds=5.,
+                short_record=steps<900,
+                offset_s=segment['offset_s'],alignment_support_ms=segment['alignment_support_ms']))
+    return windows, exclusions
+
+
+def iter_tak_reconstruction_record(project_root, record_plan, *, cache_root=DEFAULT_CLEAN_CACHE_ROOT,
+                                  geometry_root=None, refed_geometry_root=None, seed=20261104,
+                                  index=None, pending_windows=None, visual_eeg_channel_identity=None):
+    """Yield unscaled log-power/Hb arrays after the shared read boundary.
+
+    Native EEG is filtered within each declared support (90 s, or short REFED). Hb comes from
+    the retained v5/none reader without a second filter. References are saved
+    so consumers can recover the released measurement coordinate.
+    """
+    root = Path(project_root)
+    record, names, identity, _ = _validated_tak_record(root,record_plan,cache_root=cache_root,
+        geometry_root=geometry_root,refed_geometry_root=refed_geometry_root,seed=seed,
+        index=index,visual_eeg_channel_identity=visual_eeg_channel_identity)
+    expected, _ = tak_reconstruction_windows(record_plan)
+    if expected != record_plan['cache_windows']:
+        raise ValueError('Frozen 90 s cache windows changed before signal access')
+    if pending_windows is not None and not set(pending_windows).issubset({w['key'] for w in expected}):
+        raise ValueError('Unknown requested 90 s window')
+    selected = [w for w in expected if pending_windows is None or w['key'] in pending_windows]
+    if not selected:
+        return
+    eeg = load_native_eeg_record(root,record)
+    if (list(eeg.channel_names) != names or (identity is not None and eeg.channel_identity != identity)
+            or str(Path(eeg.source_path).resolve()) not in _registered_sources(record,root)
+            or not np.isfinite(eeg.sample_rate_hz) or eeg.sample_rate_hz <= 90
+            or not np.isclose(eeg.sample_rate_hz/10,round(eeg.sample_rate_hz/10))):
+        raise ValueError('Native EEG identity, source or clock changed')
+    hb = load_cached_fnirs_record(root,record)
+    if (list(hb['channel_names']) != record_plan['hb_channel_names']
+            or hb['values'].shape != (record_plan['array_shapes']['fnirs'][0],len(record_plan['pairs']),2)
+            or not np.allclose(hb['time_s'],np.arange(len(hb['values']))/10,rtol=0,atol=1e-10)
+            or hb['valid_mask'].shape != hb['values'].shape):
+        raise ValueError('Cached Hb identity, shape, mask or clock changed')
+    provenance = dict(native_eeg_channel_identity=identity,eeg_source=str(eeg.source_path),
+        eeg_native_rate_hz=float(eeg.sample_rate_hz),eeg_native_unit=eeg.native_unit,
+        eeg_unit_evidence=getattr(eeg,'unit_evidence',None),eeg_reference=getattr(eeg,'reference',None),
+        hb=deepcopy(hb['provenance']),eeg_proxy_input=EEG_PROXY_INPUT_SCHEMA,
+        fnirs_input=CACHED_FNIRS_INPUT_SCHEMA,input_support='declared_native_EEG_window_and_offline_record_filtered_Hb')
+    for window in selected:
+        try:
+            start = round(window['eeg_start_s']*eeg.sample_rate_hz)
+            steps = round(window['duration_s']*10)
+            count = round(window['duration_s']*eeg.sample_rate_hz)
+            values = np.asarray(eeg.values[start:start+count],float)
+            if start < 0 or values.shape != (count,len(names)):
+                raise ValueError('Incomplete 90 s native EEG support')
+            finite = np.isfinite(values).all(0)
+            logpower = np.full((steps,len(names),5),np.nan)
+            reference = np.full((len(names),5),np.nan)
+            if finite.any():
+                power = eeg_band_power(values[:,finite],bands=BANDS_HZ,
+                    sample_rate=eeg.sample_rate_hz,target_rate=10.)
+                if np.any(power <= 0) or not np.isfinite(power).all():
+                    raise ValueError('Nonpositive or nonfinite native band power')
+                logpower[:,finite] = np.log(power)
+                reference[finite] = logpower[:50,finite].mean(0)
+                logpower[:,finite] -= reference[finite]
+            hi = round(window['hb_start_s']*10)
+            raw = np.asarray(hb['values'][hi:hi+steps],float)
+            mask = np.asarray(hb['valid_mask'][hi:hi+steps],bool) & np.isfinite(raw)
+            if raw.shape != (steps,len(record_plan['pairs']),2):
+                raise ValueError('Incomplete 90 s cached Hb support')
+            good = mask.all(axis=(0,2))
+            h_reference = raw[:50].mean(0)
+            features = np.where(good[None,:,None],raw-h_reference,np.nan)
+            yield dict(window=window,status='completed',eeg=logpower,hb=features,
+                eeg_valid=finite,hb_valid=good,eeg_reference=reference,hb_reference=h_reference,
+                provenance=dict(provenance,eeg_start_sample=start,
+                    eeg_start_rounding_s=start/eeg.sample_rate_hz-window['eeg_start_s']))
+        except (ValueError,IndexError,FloatingPointError) as exc:
+            yield dict(window=window,status='failed',error=str(exc),provenance=provenance)

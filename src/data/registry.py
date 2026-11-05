@@ -206,7 +206,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         supported_modalities=('eeg', 'fnirs', 'both'),
         eeg_sample_rate_hz=500.0,
         fnirs_sample_rate_hz=10.0,
-        eeg_channels=30,
+        eeg_channels=31,
         fnirs_channels=24,
         default_task='memory_motivation',
         sync_strategy='cross_device_event_reconstruction',
@@ -225,6 +225,7 @@ REGISTERED_DATASETS: Dict[str, DatasetRegistration] = {
         ),
         notes=(
             'EEG is available both as raw EDF and preprocessed epoched MAT files.',
+            'Raw_EEG_channel_reference.xls owns amplifier identities; native EEG includes A64/FCz (31 channels), while retained v5 EEG has the historical 30-channel mapping defect.',
             'fNIRS is stored as per-part/per-probe Oxy/Deoxy CSV files and must be aligned with reconstructed events.',
             'The checked CSV exports do not include direct optical-domain channels, but preserve ETG-7100 695/830 nm metadata in their headers.',
         ),

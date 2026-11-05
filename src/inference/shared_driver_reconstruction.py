@@ -1188,11 +1188,17 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
                                numerical_backend='python', observation_component=None,
                                observation_whitener=None, hemodynamics='inlet_balance',
                                viscoelastic_s=0., initial_coordinate_weights=None,
-                               data_weight=1.):
+                               data_weight=1., observation_reference_steps=None,
+                               structured_initial_mode=None):
     """Actual common residual contract for individual and shared-parameter fitting."""
     steps, count = len(y), len(y)+5
     if initial_embedding is not None:
-        x = initial_embedding@x
+        if structured_initial_mode == 'volume_tied':
+            x = np.insert(x,steps+3,x[steps+2])
+        elif structured_initial_mode == 'rest':
+            x = np.r_[x,np.zeros(5)]
+        else:
+            x = initial_embedding@x
     coordinate_chain = None
     if initial_coordinates == 'positive_hb':
         x, coordinate_chain = _positive_hb_to_legacy(x, steps, parameters)
@@ -1204,7 +1210,12 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
                                        numerical_backend=numerical_backend,
                                        hemodynamics=hemodynamics, viscoelastic_s=viscoelastic_s)
     clean = forward['canonical_prediction'].ravel()
-    prediction = (operator@clean if operator is not None else clean).reshape(y.shape)
+    def observed(value):
+        if observation_reference_steps is not None:
+            shaped=value.reshape((steps,3)+value.shape[1:])
+            return (shaped-shaped[:observation_reference_steps].mean(axis=0,keepdims=True)).reshape(value.shape)
+        return operator@value if operator is not None else value
+    prediction = observed(clean).reshape(y.shape)
     residual_data = (prediction[mask]-y[mask])/scale[mask]
     if observation_whitener is not None:
         residual_data = observation_whitener@residual_data
@@ -1222,7 +1233,7 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
     jacobian, parameter_jacobian = None, None
     if derivative:
         jf = forward['jacobian']
-        jdata = ((operator@jf) if operator is not None else jf)[mask.ravel()]/scale[mask, None]
+        jdata = observed(jf)[mask.ravel()]/scale[mask, None]
         if observation_whitener is not None:
             jdata = observation_whitener@jdata
         jdata = np.sqrt(data_weight)*jdata
@@ -1233,7 +1244,7 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
         parameter_columns = []
         for name in names:
             jt = forward[name+'_jacobian'].ravel()
-            jt = (operator@jt if operator is not None else jt)[mask.ravel()]/scale[mask]
+            jt = observed(jt)[mask.ravel()]/scale[mask]
             if observation_whitener is not None:
                 jt = observation_whitener@jt
             jt = np.sqrt(data_weight)*jt
@@ -1271,7 +1282,14 @@ def _nonlinear_trial_objective(x, parameters, dt, operator, y, mask, scale,
             parameter_jacobian = np.concatenate((parameter_jacobian,
                 dp/coefficient_sd if dp.ndim == 1 else dp/coefficient_sd[:, None]), axis=0)
     if derivative and initial_embedding is not None:
-        jacobian = jacobian@initial_embedding
+        if structured_initial_mode == 'volume_tied':
+            reduced=np.delete(jacobian,steps+3,axis=1)
+            reduced[:,steps+2]+=jacobian[:,steps+3]
+            jacobian=reduced
+        elif structured_initial_mode == 'rest':
+            jacobian=jacobian[:,:steps]
+        else:
+            jacobian = jacobian@initial_embedding
     stationarity_jacobian = jacobian
     if derivative and coordinate_chain is not None:
         jacobian = jacobian@coordinate_chain
@@ -2080,7 +2098,8 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
         observation_whiteners=None, parameter_prior_log_mean=None,
         parameter_prior_precision=None, return_jacobian=False,
         hemodynamics='tak', viscoelastic_s=2., initial_state_mode='volume_tied',
-        initial_coordinate_weights=None, data_weight=1.):
+        initial_coordinate_weights=None, data_weight=1.,
+        observation_reference_steps=None, linear_solver=None):
     """Small joint-parameter diagnostic with exact block Gauss--Newton steps.
 
     Uses the same trial residual and physical domain as the scalar solver.
@@ -2105,6 +2124,11 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
     data_weight multiplies only the standardized observation SSE and tangents.
     A denser sampling grid can use dt/reference_dt to preserve the same
     per-second observation weight without changing the reported training SD.
+    observation_reference_steps explicitly replaces a dense common prefix-mean
+    operator by its equivalent subtraction. A supplied dense operator must
+    match exactly. linear_solver optionally computes the normal diagonal,
+    gradient, cross block and damped eliminated step in float64; all nonlinear
+    control, priors, constraints and stopping rules remain here.
     """
     parameters.validate()
     if not np.isfinite(data_weight) or data_weight <= 0:
@@ -2166,6 +2190,19 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
     operator = None if mean_operator is None else np.asarray(mean_operator,dtype=float)
     if operator is not None and (operator.shape not in ((3*n,3*n), (batch,3*n,3*n)) or not np.isfinite(operator).all()):
         raise ValueError('finite common or per-record observation operator required')
+    if observation_reference_steps is not None:
+        k=observation_reference_steps
+        if isinstance(k,bool) or not isinstance(k,(int,np.integer)) or not 1<=k<n:
+            raise ValueError('valid integer reference support required')
+        if operator is not None:
+            reference=np.eye(n);reference[:,:k]-=1/k
+            expected=np.kron(reference,np.eye(3))
+            if not all(np.array_equal(op,expected) for op in
+                       (operator if operator.ndim==3 else operator[None])):
+                raise ValueError('structured reference does not match the supplied observation operator')
+        operator=None
+    if linear_solver is not None and not callable(linear_solver):
+        raise ValueError('linear_solver must be a float64 block-solver callable')
     for v,minimum in ((substeps,1),(max_iterations,0),(max_evaluations_per_trial,3)):
         if isinstance(v,bool) or not isinstance(v,(int,np.integer)) or v<minimum:
             raise ValueError('positive integer numerical budgets required')
@@ -2224,29 +2261,39 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
                     regularizer,initial_weights[i],substeps,derivative,names,flow_prior_weight,
                     flow_prior_log_sd,numerical_backend=numerical_backend,observation_whitener=whiteners[i],
                     initial_embedding=embedding, hemodynamics=hemodynamics, viscoelastic_s=tv,
-                    initial_coordinate_weights=initial_coordinate_weights,data_weight=data_weight))
+                    initial_coordinate_weights=initial_coordinate_weights,data_weight=data_weight,
+                    observation_reference_steps=observation_reference_steps,
+                    structured_initial_mode=initial_state_mode if observation_reference_steps is not None else None))
             return result,float(sum(t['objective'] for t in result)+np.sum(prior_precision*(zz-prior_mean)**2))
         try:current,cost=evaluate(x,logp,True)
         except (FloatingPointError,ValueError,OverflowError) as exc:
             attempts.append(dict(start=start_index,converged=False,status='failed_domain',error=repr(exc),evaluations=evaluations));continue
         reason='iteration_budget';scaled=float('inf')
         for iteration in range(max_iterations+1):
-            values=np.exp(logp);pg=np.zeros(len(names));ph=np.zeros((len(names),len(names)));blocks=[]
+            values=np.exp(logp);pg=np.zeros(len(names));ph=np.zeros((len(names),len(names)));blocks=[];external_steps=[]
             for t in current:
                 j,r=t['jacobian'],t['residual'];jp=t['parameter_jacobian']*values[None,:]
-                h,g,c=j.T@j,j.T@r,j.T@jp
+                if linear_solver is None:
+                    h,g,c=j.T@j,j.T@r,j.T@jp
+                else:
+                    h,g,c,inverse=linear_solver(j,r,jp,damping)
+                    external_steps.append(inverse)
                 blocks.append((h,g,c));pg+=jp.T@r;ph+=jp.T@jp
             pg += prior_precision*(logp-prior_mean)
             ph += np.diag(prior_precision)
             active=((logp<=lower+1e-12)&(pg>=0))|((logp>=upper-1e-12)&(pg<=0))
             projected=pg.copy();projected[active]=0
             scaled=max([float(np.max(abs(projected)/np.sqrt(np.maximum(np.diag(ph),1.)))) if names else 0.]+
-                [float(np.max(abs(g)/np.sqrt(np.maximum(np.diag(h),1.)))) for h,g,c in blocks])
+                [float(np.max(abs(g)/np.sqrt(np.maximum(h if h.ndim==1 else np.diag(h),1.)))) for h,g,c in blocks])
             if scaled<=gradient_tolerance:converged=True;reason='projected_scaled_gradient';break
             if iteration==max_iterations:break
             if evaluations+2*batch>max_evaluations_per_trial*batch:reason='evaluation_budget';break
             try:
-                eliminated=[cho_solve(cho_factor(h+damping*np.diag(np.maximum(np.diag(h),1.)),lower=True),np.column_stack((g,c))) for h,g,c in blocks]
+                if linear_solver is None:
+                    eliminated=[cho_solve(cho_factor(h+damping*np.diag(np.maximum(np.diag(h),1.)),lower=True),np.column_stack((g,c))) for h,g,c in blocks]
+                else:
+                    if any(v is None for v in external_steps):raise np.linalg.LinAlgError('nonpositive damped normal matrix')
+                    eliminated=external_steps
                 schur=ph+damping*np.diag(np.maximum(np.diag(ph),1.))
                 rhs=pg.copy()
                 for (_,_,c),inv in zip(blocks,eliminated):schur-=c.T@inv[:,1:];rhs-=c.T@inv[:,0]
@@ -2344,4 +2391,47 @@ def fit_nonlinear_shared_parameters(observations, parameters, dt, *, parameter_n
         result.update(residual_jacobians=[t['jacobian'] for t in current],
             residual_parameter_jacobians=[t['parameter_jacobian'] for t in current],
             residuals=[t['residual'] for t in current])
+    if observation_reference_steps is not None:
+        result['observation_algebra']='float64_prefix_reference_and_exact_initial_embedding'
+    if linear_solver is not None:
+        result['linear_solver_backend']=getattr(linear_solver,'backend','external_float64')
     return result
+
+
+class LinearSolverUnavailable(RuntimeError):
+    """Execution infrastructure failed; do not turn it into a scientific fit failure."""
+
+
+def torch_normal_steps(jacobians, residuals, parameter_jacobians, dampings, *, device):
+    """Batched float64 normal/Cholesky blocks; PyTorch is imported only on demand.
+
+    One batch shares its matrix shapes. Return CPU arrays; a nonpositive
+    factorization returns no step and follows the existing damping rule.
+    """
+    import torch
+    if not jacobians or not (len(jacobians)==len(residuals)==len(parameter_jacobians)==len(dampings)):
+        raise ValueError('one residual, parameter block and damping per Jacobian required')
+    shape=np.shape(jacobians[0]);columns=np.shape(parameter_jacobians[0])[1]
+    for j,r,p,d in zip(jacobians,residuals,parameter_jacobians,dampings):
+        if (np.shape(j)!=shape or np.shape(r)!=(shape[0],) or np.shape(p)!=(shape[0],columns)
+                or not all(np.isfinite(a).all() for a in (j,r,p)) or not np.isfinite(d) or d<=0):
+            raise ValueError('finite equal-shape float64 normal blocks and positive damping required')
+    stacked=np.asarray(jacobians[0])[None] if len(jacobians)==1 else np.stack(jacobians)
+    j=torch.as_tensor(stacked,dtype=torch.float64,device=device)
+    b=torch.as_tensor(np.stack([np.column_stack((r,p)) for r,p in zip(residuals,parameter_jacobians)]),
+                      dtype=torch.float64,device=device)
+    normal=j.transpose(1,2)@j;rhs=j.transpose(1,2)@b
+    diagonal=torch.diagonal(normal,dim1=1,dim2=2)
+    damping=torch.as_tensor(dampings,dtype=torch.float64,device=device)
+    matrix=normal+torch.diag_embed(damping[:,None]*torch.clamp(diagonal,min=1.))
+    chol,info=torch.linalg.cholesky_ex(matrix,check_errors=False)
+    codes=info.cpu().numpy()
+    inverse=torch.full_like(rhs,float('nan'))
+    good=np.flatnonzero(codes==0)
+    if len(good):
+        take=torch.as_tensor(good,dtype=torch.long,device=device)
+        inverse[take]=torch.cholesky_solve(rhs[take],chol[take])
+    packed=torch.cat((diagonal[:,:,None],rhs,inverse),dim=2).cpu().numpy()
+    width=1+columns
+    return [(a[:,0].copy(),a[:,1].copy(),a[:,2:1+width].copy(),
+             a[:,1+width:].copy() if code==0 else None) for a,code in zip(packed,codes)]

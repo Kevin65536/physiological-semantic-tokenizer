@@ -115,12 +115,16 @@ def ring_band_features(features, inner_indices, outer_indices, *, alpha, eeg_fac
     return (1 - alpha) * a + alpha * b
 
 
-def fit_feature_coordinate(chunks, *, eeg_training_sd_target=.025, common_hb_training_sd_target=.025):
+def fit_feature_coordinate(chunks, *, eeg_training_sd_target=.025, common_hb_training_sd_target=.025,
+                           fixed_pc=None):
     """Fit PCA and the common Hb scale from caller-declared training chunks.
 
     The covariance center determines the PCA only; target reference subtraction
     belongs to the window-local operator. HbO/HbR retain their relative scale.
     Each chunk is (EEG [...,30], Hb [...,2]) on exactly the same support.
+    A provided unit-norm fixed_pc retains a training-only projection while
+    estimating positive scales on explicitly declared individual calibration
+    support. This is individual adaptation, not a population training fit.
     """
     sx=np.zeros(30);xx=np.zeros((30,30));sh=np.zeros(2);hh=np.zeros(2);count=0
     for eeg,hb in chunks:
@@ -130,14 +134,21 @@ def fit_feature_coordinate(chunks, *, eeg_training_sd_target=.025, common_hb_tra
         sx+=x.sum(axis=0);xx+=x.T@x;sh+=v.sum(axis=0);hh+=(v*v).sum(axis=0);count+=len(x)
     if not count:raise ValueError('empty coordinate training partition')
     covariance=xx/count-np.outer(sx/count,sx/count)
-    eigenvalues,eigenvectors=np.linalg.eigh(covariance);pc=eigenvectors[:,-1]
-    if pc[np.argmax(abs(pc))]<0:pc=-pc
+    if fixed_pc is None:
+        eigenvalues,eigenvectors=np.linalg.eigh(covariance);pc=eigenvectors[:,-1]
+        if pc[np.argmax(abs(pc))]<0:pc=-pc
+        variance_e=float(eigenvalues[-1])
+    else:
+        pc=np.asarray(fixed_pc,float)
+        if pc.shape!=(30,) or not np.isfinite(pc).all() or not np.isclose(pc@pc,1.,rtol=0,atol=1e-10):
+            raise ValueError('fixed training PCA must be a finite unit vector of length 30')
+        variance_e=float(pc@covariance@pc)
     variance_h=np.maximum(hh/count-(sh/count)**2,0.)
-    if eigenvalues[-1]<=1e-16 or min(variance_h)<=1e-24:raise ValueError('degenerate training coordinate')
-    eeg_factor=eeg_training_sd_target/np.sqrt(eigenvalues[-1])
+    if variance_e<=1e-16 or min(variance_h)<=1e-24:raise ValueError('degenerate training coordinate')
+    eeg_factor=eeg_training_sd_target/np.sqrt(variance_e)
     hb_factor=common_hb_training_sd_target/np.sqrt(np.mean(variance_h))
     return dict(pc=pc,eeg_factor=eeg_factor,hb_factor=hb_factor,
-        sd=np.r_[np.sqrt(eigenvalues[-1])*eeg_factor,np.sqrt(variance_h)*hb_factor],
+        sd=np.r_[np.sqrt(variance_e)*eeg_factor,np.sqrt(variance_h)*hb_factor],
         training_samples=count,
         centering='first_5s_reference_only; covariance_center_used_for_PCA_not_subtracted_from_target',
         gain_interpretation='effective_in_frozen_dataset_site_gauge_not_absolute_physiology')
