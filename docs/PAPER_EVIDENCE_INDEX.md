@@ -123,8 +123,9 @@ figures are abandoned pre-freeze snapshots and are not current Methods evidence.
   boundary.
   Their optional-grammar wording is superseded by `METHOD_RATIONALE.md`. The
   schematic contains **no measured values** and is not a Methods target.
-- [`project_workflow_progress.svg`](project_workflow_progress.svg) is the optional
-  historical four-lane snapshot dated 2026-08-16. Its completed nodes are now
+- [Retained Git version of `project_workflow_progress.svg`](https://github.com/Kevin65536/PID-MCM/blob/00ddce2fc8c4fa00e4475ffd5a91263ccda123a4/docs/project_workflow_progress.svg)
+  is the historical four-lane snapshot dated 2026-08-16, removed from the working
+  tree. Its completed nodes are now
   **stopped**, and its planned/blocked nodes are **abandoned**; labels such as
   `Current`, `NEXT`, or `blocked` are snapshot-local, not current instructions.
 

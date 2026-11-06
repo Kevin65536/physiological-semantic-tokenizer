@@ -100,5 +100,11 @@ component.
 - Preregistrations, manifests, and result reports are dated snapshots; if a
   narrative needs correction, point to a newer dated note rather than rewriting
   the history.
+- Dated snapshots retain their original relative paths, including references
+  to material later archived or removed. The [architecture index](architecture_changelog/INDEX.md)
+  links the retained Git revisions of the old design and implementation plans;
+  the [paper evidence index](PAPER_EVIDENCE_INDEX.md#figures) links the removed
+  workflow figure. Use the [retention history](../experiments/RESULTS_INDEX.md#retention-and-migration-history)
+  for archived run payloads.
 - Archived code, configs, tests, and results require an explicit path and do not
   participate in default discovery.

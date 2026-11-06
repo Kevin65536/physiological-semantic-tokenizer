@@ -60,7 +60,6 @@ def test_current_registry_is_lightweight_and_views_are_readable(registry_repo):
     assert all(re.search(r"\| — \| \d{4}-\d{2}-\d{2} \|$", line) for line in terminal_rows)
 
     readme = render_readme_block(registry)
-    assert "### Next steps" in readme
     current = _current_by_entity(registry)
     for track in registry["tracks"]:
         headline = current[track["headline_entity"]]
@@ -74,6 +73,29 @@ def test_current_registry_is_lightweight_and_views_are_readable(registry_repo):
         for record in snapshot["records"]
         for evidence_id in record["evidence_ids"]
     }
+
+
+@pytest.mark.parametrize('execution,next_step,visible', [
+    ('running', 'Synthetic next action.', True),
+    ('planned', 'Synthetic next action.', True),
+    ('blocked', 'Synthetic next action.', True),
+    ('running', None, False),
+    ('completed', 'Synthetic next action.', False),
+    ('stopped', None, False),
+    ('abandoned', None, False),
+])
+def test_readme_next_steps_follow_the_fixture_lifecycle(execution, next_step, visible):
+    registry = _registry()
+    current = _current_by_entity(registry)
+    for track in registry['tracks']:
+        current[track['headline_entity']]['next_step'] = None
+    headline = current[registry['tracks'][0]['headline_entity']]
+    headline.update(execution=execution, next_step=next_step)
+
+    readme = render_readme_block(registry)
+    assert ('### Next steps' in readme) is visible
+    if next_step:
+        assert (next_step in readme) is visible
 
 
 def test_execution_and_scientific_verdict_remain_independent():

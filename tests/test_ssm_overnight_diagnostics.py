@@ -177,6 +177,87 @@ def test_retained_residual_fields_read_without_changing_evidence(tmp_path):
     assert path.read_bytes() == before
 
 
+def test_report_and_atlas_embed_png_with_searchable_text(tmp_path):
+    import unicodedata
+    import fitz
+    from PIL import Image
+    from experiments.scripts import render_ssm_overnight_report as renderer
+
+    (tmp_path/'figures').mkdir()
+    figures = {}
+    core = 'reader_n2_comparison'
+    names = [core, 'fixture_appendix']
+    description = dict(content='Synthetic signals only.',
+                       reading='Time in seconds; amplitude is dimensionless.',
+                       conclusion='Rendering fixture, not measured evidence.')
+
+    def draw(fig):
+        ax = fig.subplots()
+        t = np.linspace(0, 2, 81)
+        ax.plot(t, np.sin(t), label='Synthetic reference')
+        ax.plot(t, np.sin(t)+.1, '--', label='Offset control')
+        ax.set(xlabel='Time (s)', ylabel='Amplitude (dimensionless)')
+        ax.legend()
+
+    with renderer.plt.rc_context():
+        renderer.setup_style()
+        for i, name in enumerate(names, 1):
+            renderer.figure(tmp_path, figures, name, f'合成图 {i}', '', draw,
+                            description=dict(title=f'合成图 {i}', **description))
+            figures[name]['label'] = f'Figure {i}'
+            # PDF composition must work from the PNG alone, without vector sources.
+            (tmp_path/'figures'/f'{name}.svg').unlink()
+
+    narrative = ('# Searchable report\n\nVisible body text.\n\n'
+                 '| Metric | Value |\n| --- | --- |\n| Fixture | 73.25 |\n\n'
+                 f'<!-- figure:{core} -->placeholder<!-- /figure -->\n')
+    audit = {}
+    renderer.compose_report_pdf(tmp_path, narrative, figures, audit, core_figures=[core])
+    renderer.write_captioned_atlas(tmp_path, figures, audit, core_figures=[core])
+    for filename, expected in [('REPORT.pdf', [core]), ('FIGURES.pdf', names)]:
+        with fitz.open(tmp_path/filename) as pdf:
+            assert len(pdf) == len(expected)
+            for page, name in zip(pdf, expected):
+                images = page.get_images(full=True)
+                assert len(images) == 1
+                image = images[0]
+                rect = page.get_image_rects(image[0])[0]
+                assert page.rect.contains(rect)
+                with Image.open(tmp_path/'figures'/f'{name}.png') as png:
+                    assert image[2:4] == png.size
+                    assert rect.width/rect.height == pytest.approx(png.width/png.height)
+                    assert 200 <= png.width/(rect.width/72) <= 600
+                text = unicodedata.normalize('NFKC', page.get_text())
+                assert figures[name]['label'] in text
+                assert description['content'] in text
+                assert description['conclusion'] in text
+            if filename == 'REPORT.pdf':
+                text = ''.join(page.get_text() for page in pdf)
+                assert 'Searchable report' in text and 'Visible body text.' in text
+                assert 'Metric' in text and '73.25' in text
+                assert tuple(rect) == pytest.approx(audit['report_figure_pages'][0]['image_rect'])
+
+
+@pytest.mark.parametrize('destination', ['run', 'previous', 'report', 'file'])
+def test_report_refuses_overwrite_before_reading_evidence(tmp_path, monkeypatch, destination):
+    import sys
+    from experiments.scripts import render_ssm_overnight_report as renderer
+
+    for name in ['run', 'previous', 'report']:
+        (tmp_path/name).mkdir()
+        (tmp_path/name/'retained.txt').write_bytes(b'Retained evidence and report bytes.')
+    (tmp_path/'file').write_bytes(b'Retained file.')
+    before = {p: p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()}
+    monkeypatch.setattr(sys, 'argv', ['render_ssm_overnight_report.py',
+        '--run-dir', str(tmp_path/'run'), '--previous-run-dir', str(tmp_path/'previous'),
+        '--output-dir', str(tmp_path/destination)])
+    monkeypatch.setattr(renderer, 'read_json',
+                        lambda path: pytest.fail('Output rejection must precede evidence reads'))
+    with pytest.raises(ValueError, match='fresh directory'):
+        renderer.main()
+    assert {p: p.read_bytes() for p in tmp_path.rglob('*') if p.is_file()} == before
+
+
 def test_predictive_residual_schema_preserves_values_and_rejects_ambiguous_fields():
     saved = dict(rows=[dict(standardized_innovations={'EEG': {'rms': 2.5}})])
     expected = dict(rows=[dict(standardized_predictive_residuals={'EEG': {'rms': 2.5}})])

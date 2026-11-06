@@ -2,9 +2,9 @@
 
 > **Scope requirement**: use this template only when model components, scientific data/tensor flow, supervision, losses, quantization, inference boundaries, or gate-relevant representation interfaces change. Operational repository changes belong in `docs/project_changelog/`.
 
-> **Date**: YYYY-MM-DD | **Phase**: [Phase 1 / 2 / 2A / 3 / A / C] | **Git**: `<start_commit>..<end_commit>`
+> **Date**: YYYY-MM-DD | **Subsystem / experiment**: [owning contract ID] | **Git**: `<start_commit>..<end_commit>`
 > **Status**: [Planned / In Progress / Merged]
-> **Links**: [Target implementation plan](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md) | [Current runtime architecture](../ARCHITECTURE.md)
+> **Links**: [Experiment contract map](../EXPERIMENT_PLAN.md#reading-guide) | [Current runtime architecture](../ARCHITECTURE.md)
 
 ## Motivation
 
@@ -63,22 +63,18 @@ graph TB
 
 ## Linked Artifacts
 
-- **Config**: `experiments/configs/source_observation/<phase>/<config>.yaml`
+- **Config**: exact versioned configuration path from the owning experiment entry
 - **Experiment**: `experiments/runs/physiology_semantic_tokenizer/<suite>/<run_name>/`
-- **Scorecard**: Gate 1-4 results summary
+- **Evidence**: owning run summary and declared endpoints
 - **Related changelog entries**: `YYYY-MM-DD_title.md`
 
-## Gate Impact
+## Contract and Claim Impact
 
-<!-- Check which gates are affected by this change -->
+<!-- Name the existing protocol and affected contract or endpoint. Include a gate only when the owning protocol defines it. -->
 
-| Gate | Impact | Notes |
+| Contract / endpoint | Impact | Evidence or validation |
 |------|--------|-------|
-| Gate 1 (Health) | None / Expected change | |
-| Gate 2 (Semantics) | None / Expected change | |
-| Gate 2A (Q-C Consistency) | None / Expected change | |
-| Gate 3 (Structure) | None / Expected change | |
-| Gate 4 (Utility) | None / Expected change | |
+| [Affected contract or endpoint] | [Expected change or unchanged invariant] | [Owning source] |
 
 ## Design Decisions
 

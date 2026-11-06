@@ -786,6 +786,15 @@ Explicit run/bundle exports and labeled synthetic illustrations; each entry reta
 | Offline physiology parameter animation; `--parameter-explorer --run <completed_conditional_optical_gain_run> --output <fresh_export>`; optional `--boundary-run <completed_fixed_roi_optical_run>` | Existing [`renderer`](scripts/render_shared_driver_reconstruction.py) and [HTML template](scripts/shared_driver_parameter_explorer.html); ManimGL environment: `manimgl`, `imageio-ffmpeg`, LaTeX/dvisvgm and EGL | Retained public fold-3 AF7Fp1 targets; deterministic low/middle/high-error selection across distinct subjects; forward-only τ/κ/effective-gain sweeps with fixed fitted driver and initial states; optional MNE TDDR shared-τ lower-bound example with retained optimizer trace, separate scales and excluded out-of-bound nodes; no refitting or new raw reads; the exported `data.json` can also supply separately authored ManimGL animations | `test_shared_driver_fitting_explainer.py`, `test_shared_driver_compiled.py` |
 | [Overnight report](#overnight-observation-diagnostics) | [`scripts/render_ssm_overnight_report.py`](scripts/render_ssm_overnight_report.py) | explicit completed run and fresh report directory | [`test_ssm_overnight_diagnostics.py`](../tests/test_ssm_overnight_diagnostics.py) |
 
+The E0-v2 [visual audit renderer](https://github.com/Kevin65536/PID-MCM/blob/bb38ed236604be7c891fcd617723411852057c55/experiments/scripts/visualize_e0_v2_audit.py),
+[review registrar](https://github.com/Kevin65536/PID-MCM/blob/bb38ed236604be7c891fcd617723411852057c55/experiments/scripts/finalize_e0_v2_visual_review.py),
+and formal-v3 [best-variance plotter](https://github.com/Kevin65536/PID-MCM/blob/bb38ed236604be7c891fcd617723411852057c55/experiments/scripts/plot_best_variance_full_trajectories.py)
+are retired from the working tree. These fixed Git revisions preserve their
+historical source: the E0-v2 tools write back audit records, and the plotter
+reloads measurements and fits a model before writing into its dated run.
+They are not current report-export entrypoints. Retained reports and regression
+tests remain in place; current exporters use fresh versioned output directories.
+
 ### T3, Step5 and overnight diagnostic replay
 
 Recorded diagnostic generations with detailed usage below; each retains its original split, gate and evidence identity.
@@ -864,6 +873,9 @@ HTML, Markdown, a PDF report, PNG/SVG figures and a PDF figure atlas using
 --output-dir <completed_N1-N7_run>/<report_version>`.
 This reads retained result tables and checks fixed identities; it does not rerun
 models or replace either run's frozen evidence or automatic report.
+The output directory must be new or empty. Both PDFs embed PNG figures exported
+at 300 dpi, with searchable body text, tables and captions; SVG files are retained
+only as editable figure sources.
 The [retained visual report and publication scope](RESULTS_INDEX.md#overnight-evidence-snapshot--2026-09-10)
 provide the reader-facing evidence entry. Rebuilding figures requires the local
 per-task evidence, which is excluded from the published package.

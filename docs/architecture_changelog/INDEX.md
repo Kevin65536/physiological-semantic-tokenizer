@@ -2,9 +2,14 @@
 
 > The authoritative chronological record of every architectural change to the neuro-tokenization mainline.
 > Current architecture state: [ARCHITECTURE.md](../ARCHITECTURE.md)
-> Historical proposed architecture: [physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md](../physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
-> Historical implementation plan: [physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md](../physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md)
-> Current observation–source exploration (not an architecture contract): [design note](../physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json) · [framework SVG](../physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg)
+> Historical proposed architecture: [retained Git version of 02_TARGET_ARCHITECTURE.md](https://github.com/Kevin65536/PID-MCM/blob/b3de378ab94a03ae8aeef9f8168e09a91afc22c1/docs/physiology_semantic_tokenizer/02_TARGET_ARCHITECTURE.md)
+> Historical implementation plan: [retained Git version of 04_IMPLEMENTATION_VALIDATION_PLAN.md](https://github.com/Kevin65536/PID-MCM/blob/b3de378ab94a03ae8aeef9f8168e09a91afc22c1/docs/physiology_semantic_tokenizer/04_IMPLEMENTATION_VALIDATION_PLAN.md)
+> Abandoned pre-freeze observation–source snapshot: [design note](../physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json) · [framework SVG](../physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg)
+
+The two historical plans above were removed from the working tree during archival.
+Their links identify the last retained revision before that move. Dates, statuses
+and relative paths inside individual change records describe their original
+generation; current contracts are indexed in [EXPERIMENT_PLAN.md](../EXPERIMENT_PLAN.md#reading-guide).
 
 ---
 

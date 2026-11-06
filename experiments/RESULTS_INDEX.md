@@ -1297,7 +1297,7 @@ The frozen reports and their scientific conclusions are unchanged.
 Per-task/per-trial tables, their compressed copies, task/status ledgers,
 selection records, native inputs and prepared arrays remain local. They are not
 required to read the published results. Rebuilding figures with the
-[read-only renderer](README.md#active-ssm-entries) requires the retained local
+[read-only renderer](README.md#overnight-observation-diagnostics) requires the retained local
 run evidence; a cloud checkout is a result-reading package, not a per-output
 audit or native-data replay package. Frozen manifests can name these local
 artifacts without making them part of the published surface.

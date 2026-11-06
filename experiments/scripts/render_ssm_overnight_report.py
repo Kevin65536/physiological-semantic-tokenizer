@@ -3,6 +3,7 @@
 
 No inference, native-data loading, or modification of run evidence occurs here.
 The fixed task table, terminal ledger and family result tables remain the owners.
+Both PDFs embed PNG figures; body text, tables and captions remain searchable.
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ import fitz
 import numpy as np
 import pandas as pd
 import markdown
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -36,6 +38,7 @@ if str(ROOT) not in sys.path:
 from src.metrics.trajectory_reliability import canonical_residual_fields
 
 FAMILIES = [f'N{i}' for i in range(1, 8)]
+FIGURE_DPI = 300
 MODS = ['EEG', 'HbO', 'HbR']
 TARGETS = ['r', 'clean_EEG', 'clean_HbO', 'clean_HbR']
 SUBJECTS = ['subject_01', 'subject_09', 'subject_18']
@@ -192,7 +195,7 @@ def setup_style():
         family = 'DejaVu Sans'
     plt.rcParams.update({'font.family': family, 'font.size': 10, 'axes.titlesize': 11,
                          'figure.titlesize': 15, 'axes.spines.top': False, 'axes.spines.right': False,
-                         'axes.unicode_minus': False, 'savefig.dpi': 170,
+                         'axes.unicode_minus': False, 'savefig.dpi': FIGURE_DPI,
                          'svg.fonttype': 'path', 'figure.facecolor': 'white', 'axes.facecolor': 'white'})
 
 
@@ -327,9 +330,9 @@ def figure(out, figures, name, title, caption, draw, figsize=(13, 8), *, descrip
     fig.get_layout_engine().set(rect=(0, 0, 1, 1))
     description = description or describe_figure(name, title, caption, fig)
     for extension in ('png', 'svg'):
-        fig.savefig(out/'figures'/f'{name}.{extension}', bbox_inches='tight')
-    # The document compositor uses the SVG glyph outlines to avoid CFF/Type42
-    # embedding corruption and adds searchable captions outside each image.
+        fig.savefig(out/'figures'/f'{name}.{extension}', dpi=FIGURE_DPI, bbox_inches='tight')
+    # PDFs embed the PNG itself; SVG remains an editable figure source.
+    # Captions are searchable document text outside the bitmap.
     plt.close(fig)
     figures[name] = description
     print('figure', name, flush=True)
@@ -1172,8 +1175,8 @@ def compose_report_pdf(out, narrative, figs, audit, *, core_figures=None, label=
     for match in re.finditer(pattern,narrative,re.S):
         flow(narrative[cursor:match.start()]);cursor=match.end()
         name=match.group(1);info=figs[name]
-        with fitz.open(out/'figures'/f'{name}.svg') as svg:
-            aspect=svg[0].rect.height/svg[0].rect.width
+        with Image.open(out/'figures'/f'{name}.png') as bitmap:
+            aspect=bitmap.height/bitmap.width
         height=min(285,(right-left)*aspect)
         width=height/aspect
         cap=caption_html(info)
@@ -1197,9 +1200,7 @@ def compose_report_pdf(out, narrative, figs, audit, *, core_figures=None, label=
     atlas_order=core_figures+[n for n in figs if n not in core_figures]
     for pos in positions:
         name=pos['figure'];p=pdf[pos['report_page']-1]
-        with fitz.open(out/'figures'/f'{name}.svg') as svg:
-            with fitz.open('pdf',svg.convert_to_pdf()) as source:
-                p.show_pdf_page(fitz.Rect(pos['image_rect']),source,0)
+        p.insert_image(fitz.Rect(pos['image_rect']),filename=str(out/'figures'/f'{name}.png'))
         p.insert_link({'kind':fitz.LINK_GOTOR,'from':fitz.Rect(pos['image_rect']),'file':'FIGURES.pdf','page':atlas_order.index(name)})
     footer = 'SSM N1-N7 | 2026-09-10' if label == 'SSM N1-N7' else label
     title_label = 'SSM N1–N7' if label == 'SSM N1-N7' else label
@@ -1222,10 +1223,10 @@ def write_captioned_atlas(out, figs, audit, *, core_figures=None, label='SSM N1-
     positions=[]
     for name in order:
         info=figs[name]
-        with fitz.open(out/'figures'/f'{name}.svg') as svg:
-            raw=fitz.open('pdf',svg.convert_to_pdf())
-        width=max(700,raw[0].rect.width)
-        height=raw[0].rect.height*width/raw[0].rect.width
+        png=out/'figures'/f'{name}.png'
+        with Image.open(png) as bitmap:
+            width=max(700,bitmap.width*72/FIGURE_DPI)
+            height=bitmap.height*width/bitmap.width
         cap=caption_html(info)
         css=PDF_CSS+'figcaption{font-size:11pt;line-height:1.45}.figure-title{font-size:13pt}'
         probe=fitz.Story(cap,user_css=css)
@@ -1233,7 +1234,7 @@ def write_captioned_atlas(out, figs, audit, *, core_figures=None, label='SSM N1-
         assert not more
         caption_height=filled[3]+14
         page=book.new_page(width=width,height=height+caption_height+48)
-        page.show_pdf_page(fitz.Rect(0,0,width,height),raw,0);raw.close()
+        page.insert_image(fitz.Rect(0,0,width,height),filename=str(png))
         # Story's own PDF retains searchable Chinese caption text.
         def rectfn(number,filled):
             area=fitz.Rect(0,0,width-48,caption_height)
@@ -1854,13 +1855,14 @@ def main():
     parser.add_argument('--previous-run-dir',type=Path)
     parser.add_argument('--output-dir',type=Path,required=True)
     args=parser.parse_args();run=args.run_dir.resolve();out=args.output_dir.resolve()
+    previous=args.previous_run_dir.resolve() if args.previous_run_dir else None
+    if out in (run,previous) or (out.exists() and (not out.is_dir() or any(out.iterdir()))):
+        raise ValueError('Report requires a fresh directory; retained exports must not be overwritten')
     if read_json(run/'manifest.json').get('schema') == 'ssm_overnight_v3':
-        render_v3(run, out, args.previous_run_dir.resolve() if args.previous_run_dir else None)
+        render_v3(run, out, previous)
         return
     if args.previous_run_dir is None:
         parser.error('--previous-run-dir is required for the retained N1-N7 report')
-    previous=args.previous_run_dir.resolve()
-    assert out != run and out != previous, 'Report must not replace retained evidence'
     out.mkdir(parents=True,exist_ok=True);(out/'figures').mkdir(exist_ok=True)
     setup_style()
     tasks,by_id,ledger,summaries,data,selections,traces,audit=load_evidence(run,previous)
