@@ -1,0 +1,69 @@
+schema: dual_component_voltage_power_cap_v1
+experiment_id: TK-EEG-POWER-CAP-ONE-WINDOW-v1
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_separation_v1.yaml
+power_cap:
+  parent_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1
+  case_id: simultaneous_eeg_nirs__VP002__cnt_nback__0026
+  paired_input: ocular_single_channel_check_v1
+  joint_fit: ocular_single_channel_check_v1/state_proxy_joint_check_v1
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  training: same_six_first_training_windows_only
+  score_seconds: [30, 50]
+  sample_rate_hz: 200
+  seconds: 90
+  channels: 16
+  projection: frozen_three_ROI_training_PC1_scaled_channel_major_80_log_powers
+  reference:
+    feature_support_seconds: [15, 75]
+    mean: arithmetic_mean_of_training_referenced_log_powers
+    covariance: empirical_log_power_covariance_with_0p1_diagonal_shrinkage
+    baseline: coordinatewise_median_of_training_first_5s_mean_log_power
+    correlation: mean_training_local_uncentered_correlation_with_0p1_identity_shrinkage
+    complement_power: median_training_local_uncentered_power
+    shrinkage: 0.1
+    cap_primary: 1.0
+    cap_sensitivity: [2.0, 4.0]
+    selection: none_all_declared_caps_reported_no_validation_tuning
+    meaning: statistical_reference_not_clean_neural_covariance
+  local:
+    window_samples: 200
+    hop_samples: 20
+    endpoints: reflection_of_current_90s_window_only
+    moment: uncentered_no_raw_mean_addback
+    carriers: original_five_Butterworth_bands_plus_exact_voltage_complement
+    synthesis: nonnegative_Hann_overlap_add_then_sum_all_processed_carriers
+    final_check: reextract_all_carriers_and_measure_bound_violations_after_synthesis
+  physical:
+    condition: joint_full
+    arm: tak_fixed
+    fit: independent_driver_and_four_initial_states_per_window_ROI
+    calibration: retained_training_coordinate_no_current_subject_rescaling
+    initial_start: zero_driver_rest_vascular_state
+    reuse: exact_completed_prefrontal_pair_only_other_ROIs_refit_once
+    failures: retain_no_Hb_only_or_zero_fallback
+  conditions: [current_target, fixed_statistics, physical_frozen_reference, physical_refitted_reference]
+  interventions:
+    ocular: exact_retained_Fp1_only_addition
+    neural: [neural10, neural35, neural55]
+    neural_rms: same_all_channel_RMS_as_retained_ocular_addition_on_score_support
+    neural_seed: 20261106
+    neural_reference: independently_joint_refit_for_each_neural_input
+    truth: known_added_change_only_baseline_not_clean_neural_voltage
+  primary: ocular_delta_S_norm_over_injected_norm_same_error_as_delta_O_minus_injection
+  secondary: neural_delta_S_minus_injection_norm_over_injected_norm
+  diagnostic: [proxy_nullspace_change, reference_change, final_power_bound, baseline_distortion, local_gain, fit_failures]
+  aggregation: one_retained_window_report_Fp1_and_all_16_channels_separately_no_population_inference
+  stopping: finite_declared_fits_and_target_matrix_then_array_replay_no_tokenizer_training
+resources:
+  cpu_workers: 4
+  numerical_threads: 1
+  max_in_flight_per_worker: 1
+claim_limits:
+  - projection_bound_is_not_invariance_or_neural_source_identification
+  - below_threshold_artifacts_can_pass_unchanged
+  - joint_SSM_reference_can_inherit_EEG_artifacts
+  - complete_bank_is_exact_but_not_orthogonal_and_final_synthesis_requires_reanalysis
+  - natural_training_statistics_are_not_certified_clean
+  - no_test_protected_data_or_four_dataset_campaign_change

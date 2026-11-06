@@ -40,6 +40,8 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all', 'refine', 'refine-one',
           'voltage', 'voltage-one', 'voltage-token-atlas', 'eeg-o', 'eeg-o-one',
           'voltage-teacher-plan', 'voltage-teacher-pilot', 'voltage-teacher', 'voltage-teacher-report',
+          'separation-plan', 'separation-pilot', 'separation', 'separation-report',
+          'power-cap-plan', 'power-cap', 'power-cap-report',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -82,6 +84,70 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg,dict) and cfg.get('schema')=='dual_component_voltage_power_cap_posterior_v1':
+        extra=cfg;cfg=read_config(SOURCE/extra['base_contract'])
+        cfg.update(schema=extra['schema'],experiment_id=extra['experiment_id'],posterior=extra['posterior'])
+        cfg['resources'].update(extra['resources']);s=cfg['posterior']
+        expected=[dict(case_id='simultaneous_eeg_nirs__VP002__cnt_nback__0026',injection_channel='O1'),
+                  dict(case_id='simultaneous_eeg_nirs__VP005__cnt_nback__0000',injection_channel='O2')]
+        if (s['cases']!=expected or s['allowed_splits']!=['train','validation']
+                or s['test_access']!='forbidden' or s['protected_data']!='forbidden'
+                or s['regions']!=['left_motor','prefrontal','occipital'] or s['channels']!=17
+                or s['occipital_direction']!=[0,-1,0] or s['occipital_hb_channel']!='POOz'
+                or s['occipital_eeg_channels']!=['POz','O1','O2','Pz','P3','P4']
+                or s['training']!='original_six_first_training_windows_only'
+                or s['injection']!='identical_retained_waveform_and_absolute_amplitude_at_named_posterior_electrode'
+                or s['affected_roi']!=2 or s['cap']!=1. or s['score_seconds']!=[30,50]
+                or s['initial_solver_budget']!=cfg['examples']['initial_solver_budget']
+                or s['continuation_solver_budget']!=cfg['examples']['continuation_solver_budget']):
+            raise ValueError('fixed two-case posterior scope, geometry and training-only reference required')
+    if isinstance(cfg,dict) and cfg.get('schema')=='dual_component_voltage_power_cap_examples_v1':
+        extra=cfg;cfg=read_config(SOURCE/extra['base_contract'])
+        cfg.update(schema=extra['schema'],experiment_id=extra['experiment_id'],examples=extra['examples'])
+        cfg['resources'].update(extra['resources']);s=cfg['examples']
+        if (s['subjects']!=['VP005','VP014','VP017','VP019'] or s['allowed_split']!='validation'
+                or s['test_access']!='forbidden' or s['protected_data']!='forbidden'
+                or s['selection']!='first_retained_validation_slot_per_other_subject_before_array_reads'
+                or s['injection']!='identical_retained_Fp1_waveform_and_absolute_amplitude'
+                or s['training']!='reuse_frozen_reference_and_coordinates_no_refit'
+                or s['variants']!=['baseline','ocular'] or s['cap']!=1. or s['score_seconds']!=[30,50]
+                or cfg['power_cap']['physical']['observation_weights']!=[.1,10.,10.]
+                or s['initial_solver_budget']!={'max_iterations':600,'max_evaluations_per_trial':1600}
+                or s['continuation_solver_budget']!={'max_iterations':1500,'max_evaluations_per_trial':4000}):
+            raise ValueError('fixed four-subject Hb-weighted examples contract required')
+    if isinstance(cfg,dict) and cfg.get('schema')=='dual_component_voltage_power_cap_v1':
+        extra=cfg;cfg=read_config(SOURCE/extra['base_contract'])
+        cfg.update(schema=extra['schema'],experiment_id=extra['experiment_id'],
+            power_cap=extra['power_cap'],claim_limits=extra['claim_limits'])
+        cfg['resources'].update(extra['resources']);s=cfg['power_cap']
+        if (s['allowed_splits']!=['train','validation'] or s['test_access']!='forbidden'
+                or s['protected_data']!='forbidden' or s['channels']!=16
+                or s['sample_rate_hz']!=200 or s['seconds']!=90
+                or s['case_id']!='simultaneous_eeg_nirs__VP002__cnt_nback__0026'
+                or s['reference']['cap_primary']!=1. or s['reference']['cap_sensitivity']!=[2.,4.]
+                or s['reference']['shrinkage']!=.1
+                or s['local']['window_samples']!=200 or s['local']['hop_samples']!=20
+                or s['physical']['arm']!='tak_fixed' or s['physical']['condition']!='joint_full'
+                or s['interventions']['neural']!=['neural10','neural35','neural55']):
+            raise ValueError('fixed one-window power-cap diagnostic and training-only reference required')
+        weights=np.asarray(s['physical'].get('observation_weights',[1.,1.,1.]),float)
+        if weights.shape!=(3,) or not np.isfinite(weights).all() or np.any(weights<=0):
+            raise ValueError('positive named EEG/HbO/HbR objective weights required')
+        budget=s['physical'].get('solver_budget',{})
+        if set(budget)-{'max_iterations','max_evaluations_per_trial'} or any(
+                not isinstance(v,int) or v<1 for v in budget.values()):
+            raise ValueError('only positive iteration/evaluation budget overrides are supported')
+    if isinstance(cfg,dict) and cfg.get('schema')=='dual_component_voltage_separation_v1':
+        extra=cfg;cfg=read_config(SOURCE/extra['base_contract'])
+        cfg.update(schema=extra['schema'],experiment_id=extra['experiment_id'],
+            separation=extra['separation'],claim_limits=extra['claim_limits'])
+        cfg['resources'].update(extra['resources']);s=cfg['separation']
+        if (s['allowed_splits']!=['train','validation'] or s['test_access']!='forbidden'
+                or s['protected_data']!='forbidden' or s['channels']!=16 or s['sample_rate_hz']!=200
+                or s['ranks']!=[4,8,12] or s['innovation_fractions']!=[0.,.25,.5,.75,1.]
+                or s['predictor_lags_samples']!=[1,2,3,4] or s['codebook']['size']!=128
+                or s['codebook']['S_levels']!=4 or s['codebook']['O_levels']!=4):
+            raise ValueError('finite native-voltage two-scale separation contract required')
     if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_latent_health_v1':
         extra = cfg
         cfg = read_config(SOURCE / extra['base_contract'])
@@ -980,6 +1046,66 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema']=='dual_component_voltage_power_cap_posterior_v1':
+        if args.stage not in ('check','synthetic','power-cap-plan','power-cap','power-cap-report'):
+            raise ValueError('use the bounded posterior power-cap stages')
+        if args.stage=='check':
+            print(json.dumps(dict(status='posterior_contract_valid',measured_arrays_read=0)));return
+        if args.output is None:raise ValueError('--output required')
+        if args.stage=='power-cap-report':
+            from src.analysis.dual_component_tokenizer import render_voltage_power_cap_examples
+            if args.report_output is None:raise ValueError('--report-output must be fresh')
+            result=render_voltage_power_cap_examples(args.output,args.report_output)
+        else:
+            with owner_lock(args.output):
+                freeze_contract(args.output,cfg,args.project_root)
+                result=run_voltage_power_cap_posterior(cfg,args.output,args.project_root,
+                    args.workers or cfg['resources']['cpu_workers'],args.stage)
+        print(json.dumps(serial(result)));return
+    if cfg['schema']=='dual_component_voltage_power_cap_examples_v1':
+        if args.stage not in ('check','synthetic','power-cap-plan','power-cap','power-cap-report'):
+            raise ValueError('use the bounded examples power-cap stages')
+        if args.stage=='check':
+            print(json.dumps(dict(status='examples_contract_valid',measured_arrays_read=0)));return
+        if args.output is None:raise ValueError('--output required')
+        if args.stage=='power-cap-report':
+            from src.analysis.dual_component_tokenizer import render_voltage_power_cap_examples
+            if args.report_output is None:raise ValueError('--report-output must be fresh')
+            result=render_voltage_power_cap_examples(args.output,args.report_output)
+        else:
+            with owner_lock(args.output):
+                freeze_contract(args.output,cfg,args.project_root)
+                result=run_voltage_power_cap_examples(cfg,args.output,args.project_root,
+                    args.workers or cfg['resources']['cpu_workers'],args.stage)
+        print(json.dumps(serial(result)));return
+    if cfg['schema']=='dual_component_voltage_power_cap_v1':
+        if args.stage not in ('check','synthetic','power-cap-plan','power-cap'):
+            raise ValueError('use the finite power-cap diagnostic stages')
+        if args.stage=='check':
+            print(json.dumps(dict(status='power_cap_contract_valid',measured_arrays_read=0,
+                experiment_id=cfg['experiment_id'],test_access='forbidden')));return
+        if args.output is None:raise ValueError('--output required')
+        with owner_lock(args.output):
+            freeze_contract(args.output,cfg,args.project_root)
+            result=run_voltage_power_cap_probe(cfg,args.output,args.project_root,
+                args.workers or cfg['resources']['cpu_workers'],args.stage)
+        print(json.dumps(serial(result)));return
+    if cfg['schema']=='dual_component_voltage_separation_v1':
+        if args.stage not in ('check','synthetic','separation-plan','separation-pilot','separation','separation-report'):
+            raise ValueError('use the versioned separation stages')
+        if args.stage=='check':
+            print(json.dumps(dict(status='separation_contract_valid',measured_arrays_read=0,
+                experiment_id=cfg['experiment_id'],test_access='forbidden')));return
+        if args.output is None:raise ValueError('--output required')
+        if args.stage=='separation-report':
+            from src.analysis.dual_component_tokenizer import render_voltage_separation_report
+            result=render_voltage_separation_report(args.output,args.analysis_output)
+        else:
+            with owner_lock(args.output):
+                freeze_contract(args.output,cfg,args.project_root)
+                result=run_voltage_separation(cfg,args.output,args.project_root,
+                    args.workers or cfg['resources']['cpu_workers'],args.stage)
+        print(json.dumps(serial(result)));return
     if cfg['schema'] == 'dual_component_latent_health_v1':
         result = latent_health_dispatch(args, cfg)
         print(json.dumps(serial(result)))
@@ -3728,6 +3854,930 @@ def latent_health_dispatch(args, cfg):
             write_json(out / 'controller.json', dict(status='failed', stage=args.stage, pid=os.getpid(),
                 updated=now(), error=traceback.format_exc()))
             raise
+
+
+def _separation_prepare(payload):
+    from src.data.dual_component_tokenizer import read_voltage_separation_input,separation_covariances
+    cfg,out,plan,entry=payload;out=Path(out);path=out/'features'/f"{entry['id']}.npz"
+    if path.exists():return dict(id=entry['id'],status='reused')
+    started=time.monotonic()
+    try:
+        arrays,metadata=read_voltage_separation_input(plan,entry)
+        cov=separation_covariances(arrays['x'],cfg['separation'])
+        write_npz(path,**cov,hb=arrays['hb'],native_time=arrays['hb_native_time'],roi_indices=arrays['roi_indices'],
+            channels=arrays['channels'],voltage_rms=np.sqrt(np.mean(arrays['x']**2,axis=0)))
+        result=dict(id=entry['id'],status='completed',metadata=metadata,elapsed_seconds=time.monotonic()-started)
+    except Exception:result=dict(id=entry['id'],status='failed',error=traceback.format_exc())
+    write_json(out/'features'/f"{entry['id']}.json",result);return result
+
+
+def _separation_state_fit(payload):
+    from src.data.dual_component_tokenizer import produce_teacher,read_voltage_separation_input
+    from src.data.ssm_prepared import EEG_PROXY_INPUT_SCHEMA
+    from src.data.unified_physiology import CACHED_FNIRS_INPUT_SCHEMA
+    cfg,out,plan,entry,roi=payload;out=Path(out);key=entry['id']+f'__{roi}';path=out/'physical'/key
+    if path.with_suffix('.json').exists():return read_json(path.with_suffix('.json'))
+    started=time.monotonic()
+    try:
+        base,_=read_voltage_separation_input(plan,entry);features=_voltage_teacher_read(out/'features'/f"{entry['id']}.npz")
+        indices=base['roi_indices'][roi];co=read_json(out/'coordinates.json')[entry['rows'][roi]['coordinate']]
+        arrays=dict(features=features['features'][:,indices].reshape(900,30),hb=base['hb'][:,roi],
+            eeg=base['x'][6000:10000,indices].astype('float32'),native_time=base['hb_native_time'][:,roi],
+            time_s=np.arange(900)*.1,identity=np.array(entry['rows'][roi]['id']),
+            eeg_proxy_input=np.array(EEG_PROXY_INPUT_SCHEMA),eeg_proxy_rate_hz=np.array(10.),fnirs_input=np.array(CACHED_FNIRS_INPUT_SCHEMA))
+        result,status=produce_teacher(arrays,co,read_json(out/'teacher_config.json'),eeg_visible=False)
+        if result is not None:
+            if result['visible'][:,0].any():raise AssertionError('EEG entered the Hb-only state fit')
+            write_npz(path.with_suffix('.npz'),**result)
+        report=dict(id=key,entry_id=entry['id'],roi=roi,phase=entry['phase'],subject=entry['subject'],
+            status='completed' if status.get('accepted') else 'failed',fit=status,
+            EEG_observation_rows_used=0,elapsed_seconds=time.monotonic()-started,
+            peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:report=dict(id=key,entry_id=entry['id'],roi=roi,phase=entry['phase'],status='failed',error=traceback.format_exc())
+    write_json(path.with_suffix('.json'),report);return report
+
+
+def _separation_fir_features(hb,lags):
+    n=len(hb);t=np.arange(n)
+    return np.concatenate([hb[np.clip(t+round(lag*10),0,n-1)] for lag in lags],axis=1)
+
+
+def _separation_guidance(cfg,out,plan):
+    from src.data.dual_component_tokenizer import separation_state_epochs,phase_shuffled_states
+    spec=cfg['separation'];out=Path(out);co=read_json(out/'coordinates.json')
+    entries=plan['rows'];prepared={e['id']:_voltage_teacher_read(out/'features'/f"{e['id']}.npz") for e in entries}
+    raw={};design={};physical={}
+    for entry in entries:
+        a=prepared[entry['id']];u=[];x=[];p=[]
+        for roi,row in enumerate(entry['rows']):
+            cc=co[row['coordinate']]
+            u.append(a['features'][:,a['roi_indices'][roi]].reshape(900,30)@np.asarray(cc['pc'])*cc['eeg_factor'])
+            x.append(_separation_fir_features(a['hb'][:,roi]*cc['hb_factor'],spec['empirical_lags_s']))
+            path=out/'physical'/f"{entry['id']}__{roi}"
+            status=read_json(path.with_suffix('.json'))
+            p.append(_voltage_teacher_read(path.with_suffix('.npz'))['physical'][:,0] if status['status']=='completed' else np.full(900,np.nan))
+        raw[entry['id']]=np.stack(u,axis=1);design[entry['id']]=x;physical[entry['id']]=np.stack(p,axis=1)
+    fit=[e for e in entries if e['phase']=='fit'];models={};predictions={e['id']:np.zeros((900,3)) for e in entries};records=[]
+    def train(group,roi,alpha):
+        x=np.concatenate([design[e['id']][roi][150:750] for e in group]);y=np.concatenate([raw[e['id']][150:750,roi] for e in group])
+        mean=x.mean(0);scale=np.maximum(x.std(0),1e-8);x=(x-mean)/scale;ym=y.mean()
+        beta=np.linalg.solve(x.T@x/len(x)+alpha*np.eye(x.shape[1]),x.T@(y-ym)/len(x))
+        return dict(mean=mean,scale=scale,beta=beta,intercept=ym)
+    def predict(model,x):return (x-model['mean'])/model['scale']@model['beta']+model['intercept']
+    for roi in range(3):
+        scores=[]
+        for alpha in spec['empirical_ridges']:
+            errors=[]
+            for held in fit:
+                model=train([e for e in fit if e['subject']!=held['subject']],roi,alpha)
+                y=predict(model,design[held['id']][roi]);errors.append(np.mean((y[150:750]-raw[held['id']][150:750,roi])**2))
+            scores.append(dict(ridge=alpha,mean_subject_MSE=float(np.mean(errors))))
+        alpha=min(scores,key=lambda r:r['mean_subject_MSE'])['ridge'];full=train(fit,roi,alpha)
+        models[str(roi)]=dict(full,ridge=alpha,selection=scores)
+        for entry in entries:
+            model=train([e for e in fit if e['subject']!=entry['subject']],roi,alpha) if entry['phase']=='fit' else full
+            predictions[entry['id']][:,roi]=predict(model,design[entry['id']][roi])
+    write_json(out/'empirical_guidance.json',dict(models=models,fit_ids=[e['id'] for e in fit],
+        first_window_predictions='leave_subject_out',selection='training_fit_subject_cross_validation',eeg_eval_inputs=False))
+    for index,entry in enumerate(entries):
+        key=entry['id'];sham=phase_shuffled_states(physical[key],spec['seed']+index)
+        arrays={name:separation_state_epochs(value,spec) for name,value in
+            [('physical',physical[key]),('empirical',predictions[key]),('eeg',raw[key]),('sham',sham)]}
+        write_npz(out/'guidance'/f'{key}.npz',**arrays,raw_proxy=raw[key],physical_proxy=physical[key],empirical_proxy=predictions[key])
+
+
+def _separation_model_fit(payload):
+    from src.data.dual_component_tokenizer import (read_voltage_separation_input,fit_state_guided_subspace,
+        fit_neighbor_predictor,apply_voltage_separation,separation_probe)
+    cfg,out,plan,method=payload;out=Path(out);spec=cfg['separation'];path=out/'models'/f'{method}.json'
+    if path.exists():return read_json(path)
+    started=time.monotonic();fit=[];select=[];voltages=[];channels=None
+    for entry in plan['rows']:
+        if entry['phase']=='validation':continue
+        cov=_voltage_teacher_read(out/'features'/f"{entry['id']}.npz")
+        states=_voltage_teacher_read(out/'guidance'/f"{entry['id']}.npz")
+        item=dict(phase=entry['phase'],cov=cov,states=states)
+        (fit if entry['phase']=='fit' else select).append(item)
+        if entry['phase']=='fit':
+            base,_=read_voltage_separation_input(plan,entry);voltages.append(base['x']);channels=list(base['channels'])
+    grid=[];failures=[]
+    for rank in spec['ranks']:
+        try:
+            model=fit_state_guided_subspace(fit,select,rank,method,spec)
+            model['predictor']=fit_neighbor_predictor(voltages,model,spec)
+            write_npz(out/'models'/f'{method}_r{rank}.npz',**{k:v for k,v in model.items() if k not in ('selection','condition_number','idempotence_error','operator_norm')})
+            write_json(out/'models'/f'{method}_r{rank}.json',{k:model[k] for k in ('selection','condition_number','idempotence_error','operator_norm')})
+            coefficients=[]
+            for seed in spec['probe_calibration_seeds']:
+                for kind in ('ocular','fine','neural10','neural35','neural55'):
+                    n=separation_probe(channels,seed,kind,spec);result=apply_voltage_separation(n,model,spec,innovation_fraction=1.)
+                    target=n if kind.startswith('neural') else 0.
+                    intercept=(result['s']+result['o_temporal']-target)[6000:10000]
+                    slope=result['o_temporal'][6000:10000];denom=float(np.mean(n[6000:10000]**2))
+                    coefficients.append((kind,float(np.mean(intercept**2)/denom),float(np.mean(intercept*slope)/denom),float(np.mean(slope**2)/denom)))
+            for eta in spec['innovation_fractions']:
+                scores={kind:float(np.mean([a-2*eta*b+eta*eta*c for k,a,b,c in coefficients if k==kind]))
+                    for kind in ('ocular','fine','neural10','neural35','neural55')}
+                score=(scores['ocular']+scores['fine']+2*sum(scores[k] for k in scores if k.startswith('neural')))/8
+                grid.append(dict(method=method,rank=rank,innovation_fraction=eta,selection_score=score,**scores))
+        except Exception:failures.append(dict(rank=rank,error=traceback.format_exc()))
+    if grid:
+        selected=min(grid,key=lambda r:(r['selection_score'],r['rank'],r['innovation_fraction']))
+        report=dict(method=method,status='completed',selected=selected,grid=grid,failures=failures,elapsed_seconds=time.monotonic()-started)
+    else:report=dict(method=method,status='failed',grid=[],failures=failures)
+    write_json(path,report);return report
+
+
+def _separation_load_models(out,cfg):
+    spec=cfg['separation'];out=Path(out);models={};metadata={}
+    for method in spec['guidance']:
+        record=read_json(out/'models'/f'{method}.json')
+        if record['status']!='completed':continue
+        for name,choice in [(method,record['selected']),(method+'_matched',spec['fixed_comparison'])]:
+            rank=choice['rank'];path=out/'models'/f'{method}_r{rank}.npz'
+            if not path.exists():continue
+            model=_voltage_teacher_read(path);model['innovation_fraction']=choice['innovation_fraction']
+            models[name]=model;metadata[name]=dict(method=method,rank=rank,innovation_fraction=choice['innovation_fraction'])
+    if 'physical' in models:
+        models['physical_spatial']=dict(models['physical'],innovation_fraction=0.)
+        metadata['physical_spatial']=dict(metadata['physical'],innovation_fraction=0.)
+    return models,metadata
+
+
+def _separation_synthetic(payload):
+    from src.data.dual_component_tokenizer import (separation_synthetic_record,separation_covariances,
+        separation_state_epochs,phase_shuffled_states,fit_state_guided_subspace,
+        fit_neighbor_predictor,apply_voltage_separation)
+    cfg,out,scenario=payload;out=Path(out);spec=cfg['separation'];folder=out/'synthetic'/scenario
+    if (folder/'summary.json').exists():return read_json(folder/'summary.json')
+    started=time.monotonic();fit=[];select=[];voltages=[];records=[];models={};failures=[]
+    for slot,phase,items in [(0,'fit',fit),(1,'select',select)]:
+        for seed in spec['synthetic_fit_seeds']:
+            a=separation_synthetic_record(seed,slot,scenario)
+            states=dict(physical=separation_state_epochs(a['state'],spec),
+                sham=separation_state_epochs(phase_shuffled_states(a['state'],seed+slot*1000),spec))
+            items.append(dict(phase=phase,cov=separation_covariances(a['x'],spec),states=states))
+            if slot==0:voltages.append(a['x'])
+    for method in ('physical','pca','sham'):
+        try:
+            model=fit_state_guided_subspace(fit,select,8,method,spec)
+            model['predictor']=fit_neighbor_predictor(voltages,model,spec)
+            for eta,suffix in [(0.,'_spatial'),(.5,'_temporal')]:
+                models[method+suffix]=dict(model,innovation_fraction=eta)
+        except Exception:failures.append(dict(method=method,error=traceback.format_exc()))
+    for seed in spec['synthetic_eval_seeds']:
+        a=separation_synthetic_record(seed,2,scenario);sl=slice(6000,10000)
+        outputs={'raw':a['x'],'known_subspace':a['x']@a['true_neural_basis']@a['true_neural_basis'].T}
+        outputs.update({name:apply_voltage_separation(a['x'],model,spec)['s'] for name,model in models.items()})
+        for name,s in outputs.items():
+            if name=='raw':parts={k:a[k] for k in ('clean','major','fine')}
+            elif name=='known_subspace':parts={k:a[k]@a['true_neural_basis']@a['true_neural_basis'].T for k in ('clean','major','fine')}
+            else:parts={k:apply_voltage_separation(a[k],models[name],spec)['s'] for k in ('clean','major','fine')}
+            records.append(dict(scenario=scenario,seed=seed,method=name,
+                clean_NMSE=float(np.mean((s[sl]-a['clean'][sl])**2)/np.mean(a['clean'][sl]**2)),
+                major_S_NMSE=float(np.mean(parts['major'][sl]**2)/np.mean(a['major'][sl]**2)),
+                fine_S_NMSE=float(np.mean(parts['fine'][sl]**2)/np.mean(a['fine'][sl]**2)),
+                neural_loss_NMSE=float(np.mean((parts['clean'][sl]-a['clean'][sl])**2)/np.mean(a['clean'][sl]**2))))
+        if seed==spec['synthetic_eval_seeds'][0]:
+            write_npz(folder/'example.npz',**{k:a[k][sl] for k in ('x','clean','major','fine')},
+                channels=a['channels'],**{k:v[sl] for k,v in outputs.items() if k!='raw'})
+    report=dict(status='completed' if not failures else 'completed_with_failures',scenario=scenario,metrics=records,
+        failures=failures,fit_seeds=spec['synthetic_fit_seeds'],evaluation_seeds=spec['synthetic_eval_seeds'],
+        guidance='known_generator_state_not_estimated_Tak_state',rank=8,innovation_fraction=.5,
+        elapsed_seconds=time.monotonic()-started)
+    write_json(folder/'summary.json',report);return report
+
+
+def _separation_words(value,scale):
+    value=np.asarray(value,float)/np.asarray(scale,float)
+    return value.reshape(-1,20,value.shape[1]).transpose(0,2,1).reshape(-1,20)
+
+
+def _separation_hard(value,scale,book,levels):
+    ids=book.encode(_separation_words(value,scale),levels=levels)
+    decoded=book.decode(ids).reshape(-1,value.shape[1],20).transpose(0,2,1).reshape(value.shape)
+    return decoded*np.asarray(scale)[None],ids.reshape(-1,value.shape[1],levels)
+
+
+def _separation_book_fit(payload):
+    from src.data.dual_component_tokenizer import read_voltage_separation_input,apply_voltage_separation
+    from src.tokenizers.dual_component_tokenizer import WaveformDictionary
+    cfg,out,plan,method,branch=payload;out=Path(out);spec=cfg['separation'];settings=spec['codebook']
+    key=method+'_'+branch;path=out/'codebooks'/key
+    if path.with_suffix('.json').exists():return read_json(path.with_suffix('.json'))
+    started=time.monotonic()
+    try:
+        models,_=_separation_load_models(out,cfg);scale=np.asarray(read_json(out/'scales.json')['voltage_scale'])
+        samples=[];fit_ids=[]
+        for entry in plan['rows']:
+            if entry['phase']!='fit':continue
+            a,_=read_voltage_separation_input(plan,entry)
+            value=a['x'] if method=='raw' else apply_voltage_separation(a['x'],models[method],spec)[branch.lower()]
+            samples.append(_separation_words(value,scale));fit_ids.append(entry['id'])
+        levels=(8 if method=='raw' or (method=='physical' and branch=='O') else 4)
+        book=WaveformDictionary(settings['size'],levels,1,settings['derivative_weight'],
+            settings['seed'],settings['fit_patches'],settings['iterations']).fit(np.concatenate(samples))
+        write_npz(path.with_suffix('.npz'),**book.state())
+        report=dict(status='completed',method=method,branch=branch,levels=levels,fit_ids=fit_ids,
+            input_patches=sum(len(v) for v in samples),fit_patches=settings['fit_patches'],
+            bits_per_second_per_electrode=70*levels,elapsed_seconds=time.monotonic()-started,
+            peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:report=dict(status='failed',method=method,branch=branch,error=traceback.format_exc())
+    write_json(path.with_suffix('.json'),report);return report
+
+
+def _separation_evaluate(payload):
+    from src.data.dual_component_tokenizer import read_voltage_separation_input,apply_voltage_separation,separation_probe
+    from src.tokenizers.dual_component_tokenizer import WaveformDictionary
+    from src.analysis.dual_component_tokenizer import separation_wave_metrics,separation_change_metrics,separation_decode_metrics
+    cfg,out,plan,entry,donor_entry=payload;out=Path(out);spec=cfg['separation'];folder=out/'evaluation'/entry['id']
+    if (folder/'metrics.json').exists():return read_json(folder/'metrics.json')
+    started=time.monotonic()
+    try:
+        a,_=read_voltage_separation_input(plan,entry,include_eog=True)
+        donor,_=read_voltage_separation_input(plan,donor_entry,include_eog=True)
+        scale=np.asarray(read_json(out/'scales.json')['voltage_scale']);rms=float(np.sqrt(np.mean(scale**2)))
+        models,metadata=_separation_load_models(out,cfg);x=a['x'];sl=slice(6000,10000)
+        base={name:apply_voltage_separation(x,model,spec) for name,model in models.items()}
+        base['raw']=dict(s=x,o=np.zeros_like(x));natural=[];changes=[];decoded=[];hard_changes=[]
+        books={};hard_base={};stored={k:a[k] for k in ('x','eog','channels','legacy_s')}
+        for name,result in base.items():
+            natural.append(dict(subject=entry['subject'],id=entry['id'],method=name,
+                **separation_wave_metrics(x,result['s'],result['o'],scale,a['eog'])))
+            if name!='raw':stored[name]=result['s'].astype('float32')
+        if 'physical' in base:
+            stored.update(physical_o_spatial=base['physical']['o_spatial'].astype('float32'),
+                physical_o_temporal=base['physical']['o_temporal'].astype('float32'))
+        for name in spec['codebook']['candidates']:
+            if name not in base:continue
+            for branch in (['raw'] if name=='raw' else ['S','O']):
+                key=name+'_'+branch;path=out/'codebooks'/key
+                if not path.with_suffix('.json').exists() or read_json(path.with_suffix('.json'))['status']!='completed':continue
+                book=WaveformDictionary.from_state(_voltage_teacher_read(path.with_suffix('.npz')));books[key]=book
+                value=x if name=='raw' else base[name][branch.lower()]
+                for levels in ([8] if name=='raw' else [4,8] if name=='physical' and branch=='O' else [4]):
+                    pred,ids=_separation_hard(value[sl],scale,book,levels);hard_base[key+str(levels)]=pred
+                    decoded.append(dict(subject=entry['subject'],id=entry['id'],method=name,branch=branch,levels=levels,
+                        **separation_decode_metrics(value[sl],pred,scale)))
+                    stored[f'hard_{name}_{branch}{levels}']=pred.astype('float32');stored[f'ids_{name}_{branch}{levels}']=ids
+        write_npz(folder/'base.npz',**stored)
+        # The encoder is frozen and linear before quantization. Every changed input is nevertheless re-evaluated.
+        for kind in spec['measured_perturbations']:
+            seed=spec['probe_evaluation_seed']+int(entry['subject'].removeprefix('VP'))*100+entry['slot']
+            if kind=='combined':
+                n0=separation_probe(a['channels'],seed,'ocular',spec,rms=1.,donor_eog=donor['eog'])
+                n0+=separation_probe(a['channels'],seed+7,'fine',spec,rms=1.)
+                n0/=np.sqrt(np.mean(n0[sl]**2))
+            else:n0=separation_probe(a['channels'],seed,kind,spec,donor_eog=donor['eog'] if kind=='ocular' else None)
+            for amplitude in spec['probe_amplitudes_training_rms']:
+                n=n0*amplitude*rms;altered={name:apply_voltage_separation(x+n,model,spec) for name,model in models.items()}
+                altered['raw']=dict(s=x+n,o=np.zeros_like(x));arrays=dict(x=(x+n)[sl].astype('float32'),n=n[sl].astype('float32'))
+                for name,result in altered.items():
+                    changes.append(dict(subject=entry['subject'],id=entry['id'],method=name,kind=kind,amplitude=amplitude,
+                        **separation_change_metrics(base[name]['s'],result['s'],n,kind)))
+                    if name!='raw':arrays[name]=result['s'][sl].astype('float32')
+                for name in spec['codebook']['candidates']:
+                    if name=='raw' or name not in altered or name+'_S' not in books or name+'_O' not in books:continue
+                    hs,ids_s=_separation_hard(altered[name]['s'][sl],scale,books[name+'_S'],4)
+                    for levels in ([4,8] if name=='physical' else [4]):
+                        ho,ids_o=_separation_hard(altered[name]['o'][sl],scale,books[name+'_O'],levels)
+                        label=name if levels==4 else name+'_O8'
+                        # Pad only the scoring interface; padding never enters an encoder or filter.
+                        pad=lambda v:np.pad(v,((6000,8000),(0,0)))
+                        hard_changes.append(dict(subject=entry['subject'],id=entry['id'],method=label,kind=kind,amplitude=amplitude,
+                            **separation_change_metrics(pad(hard_base[name+'_S4']),pad(hs),n,kind,
+                                base_o=pad(hard_base[name+'_O'+str(levels)]),changed_o=pad(ho))))
+                        arrays[f'hard_{label}_s']=hs.astype('float32');arrays[f'hard_{label}_o']=ho.astype('float32')
+                        arrays[f'ids_{label}_s']=ids_s;arrays[f'ids_{label}_o']=ids_o
+                if amplitude==.25:write_npz(folder/f'{kind}.npz',**arrays)
+        report=dict(status='completed',entry=entry,donor_id=donor_entry['id'],natural=natural,changes=changes,
+            decoded=decoded,hard_changes=hard_changes,elapsed_seconds=time.monotonic()-started,
+            peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:report=dict(status='failed',entry=entry,error=traceback.format_exc(),elapsed_seconds=time.monotonic()-started)
+    write_json(folder/'metrics.json',report);return report
+
+
+def run_voltage_separation(cfg,out,root,workers,stage):
+    from src.data.dual_component_tokenizer import voltage_separation_plan
+    from src.data.ssm_prepared import fit_feature_coordinate,EEG_PROXY_INPUT_SCHEMA
+    from src.data.unified_physiology import CACHED_FNIRS_INPUT_SCHEMA
+    from src.analysis.dual_component_tokenizer import summarize_voltage_separation
+    out,root=Path(out),Path(root);spec=cfg['separation']
+    def progress(stage,total):
+        def update(result,count):
+            write_json(out/'controller.json',dict(status='running',stage=stage,pid=os.getpid(),updated=now(),
+                workers=workers,planned=total,terminal=count,last_status=result.get('status')))
+        update({},0);return update
+    if stage!='separation-plan':
+        jobs=[(cfg,str(out),s) for s in spec['synthetic_scenarios']]
+        synthetic=_bounded_jobs(_separation_synthetic,jobs,min(workers,len(jobs)),inflight=1,
+            progress=progress('synthetic',len(jobs)))
+        write_json(out/'synthetic.json',synthetic)
+        if any(not r.get('metrics') for r in synthetic):raise RuntimeError('synthetic execution failed; measured arrays remain unread')
+        if stage=='synthetic':
+            write_json(out/'controller.json',dict(status='completed',stage='synthetic',updated=now()))
+            return dict(status='completed',scenarios=len(synthetic),measured_arrays_read=0)
+    plan=voltage_separation_plan(root,cfg)
+    if (out/'plan.json').exists() and read_json(out/'plan.json')!=plan:raise ValueError('immutable panel drift')
+    write_json(out/'plan.json',plan)
+    if stage=='separation-plan':return dict(status='planned',windows=len(plan['rows']),measured_arrays_read=0)
+    prepared=_bounded_jobs(_separation_prepare,[(cfg,str(out),plan,e) for e in plan['rows']],workers,
+        inflight=1,progress=progress('prepare',len(plan['rows'])))
+    write_json(out/'preparation.json',prepared)
+    if any(r['status']=='failed' for r in prepared):raise RuntimeError('incomplete fixed panel preparation; failures retained')
+    if not (out/'coordinates.json').exists():
+        chunks=defaultdict(list);ids=defaultdict(list);scales=[]
+        for entry in plan['rows']:
+            if entry['phase']!='fit':continue
+            a=_voltage_teacher_read(out/'features'/f"{entry['id']}.npz");scales.append(a['voltage_rms']**2)
+            for roi,row in enumerate(entry['rows']):
+                chunks[row['coordinate']].append((a['features'][:,a['roi_indices'][roi]].reshape(900,30),a['hb'][:,roi]))
+                ids[row['coordinate']].append(row['id'])
+        coordinates={k:dict(fit_feature_coordinate(v),training_ids=ids[k],eeg_proxy_input=EEG_PROXY_INPUT_SCHEMA,
+            fnirs_input=CACHED_FNIRS_INPUT_SCHEMA,feature_generation='unmodified_native_EEG_bandpower_new_training_coordinate') for k,v in chunks.items()}
+        write_json(out/'coordinates.json',coordinates)
+        write_json(out/'scales.json',dict(voltage_scale=np.sqrt(np.mean(scales,axis=0)),fit_ids=plan['fit_ids'],
+            type='whole_90second_original_voltage_RMS_per_channel_no_centering'))
+    teacher=yaml.safe_load((SOURCE/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml').read_text())
+    write_json(out/'teacher_config.json',teacher)
+    jobs=[(cfg,str(out),plan,e,roi) for e in plan['rows'] for roi in range(3)]
+    if stage=='separation-pilot':jobs=jobs[:2]
+    physical=_bounded_jobs(_separation_state_fit,jobs,min(workers,len(jobs)),inflight=1,progress=progress('physical',len(jobs)))
+    write_json(out/('pilot.json' if stage=='separation-pilot' else 'physical_fits.json'),physical)
+    if stage=='separation-pilot':
+        write_json(out/'controller.json',dict(status='pilot_completed',updated=now()))
+        return dict(status='pilot_completed',fits=physical)
+    progress('guidance',1);_separation_guidance(cfg,out,plan)
+    jobs=[(cfg,str(out),plan,m) for m in spec['guidance']]
+    models=_bounded_jobs(_separation_model_fit,jobs,min(workers,len(jobs)),inflight=1,progress=progress('subspaces',len(jobs)))
+    loaded,metadata=_separation_load_models(out,cfg);write_json(out/'model_selection.json',models)
+    write_json(out/'selected_models.json',metadata)
+    jobs=[(cfg,str(out),plan,m,b) for m in spec['codebook']['candidates'] if m=='raw' or m in loaded
+        for b in (['raw'] if m=='raw' else ['S','O'])]
+    books=_bounded_jobs(_separation_book_fit,jobs,min(workers,len(jobs)),inflight=1,progress=progress('codebooks',len(jobs)))
+    write_json(out/'codebook_fits.json',books)
+    donors=sorted([e for e in plan['rows'] if e['phase']=='validation' and e['slot']==1],key=lambda e:e['subject'])
+    donor={e['subject']:donors[(i+1)%len(donors)] for i,e in enumerate(donors)}
+    validation=[e for e in plan['rows'] if e['phase']=='validation']
+    jobs=[(cfg,str(out),plan,e,donor[e['subject']]) for e in validation]
+    evaluations=_bounded_jobs(_separation_evaluate,jobs,min(workers,len(jobs)),inflight=1,progress=progress('evaluation',len(jobs)))
+    write_json(out/'evaluation_outcomes.json',[{k:v for k,v in r.items() if k not in ('natural','changes','decoded','hard_changes')} for r in evaluations])
+    if not any(r['status']=='completed' for r in evaluations):raise RuntimeError('all validation windows failed; full outcomes retained')
+    report=summarize_voltage_separation(out,plan,evaluations,physical,models,books,cfg)
+    write_json(out/'summary.json',report)
+    write_json(out/'controller.json',dict(status='completed',updated=now(),summary='summary.json'))
+    return report
+
+
+def voltage_power_cap_plan(cfg, root):
+    from src.data.dual_component_tokenizer import voltage_separation_plan
+    spec=cfg['power_cap'];root=Path(root);parent=root/spec['parent_run']
+    original=read_json(parent/'resolved_config.json')['config']
+    if (original['schema']!='dual_component_voltage_separation_v1'
+            or original['separation']!=cfg['separation']
+            or read_json(parent/'summary.json')['status']!='completed'):
+        raise ValueError('the exact completed public separation parent is required')
+    panel=voltage_separation_plan(root,cfg)
+    if panel!=read_json(parent/'plan.json'):raise ValueError('parent panel identity drift')
+    cases=[e for e in panel['rows'] if e['id']==spec['case_id'] and e['phase']=='validation']
+    if len(cases)!=1:raise ValueError('one named validation case required before signal reads')
+    pair=read_json(parent/spec['paired_input']/'result.json')
+    joint=read_json(parent/spec['joint_fit']/'resolved_config.json')
+    if (pair['case']['id']!=spec['case_id'] or joint['case_id']!=spec['case_id']
+            or read_json(parent/spec['joint_fit']/'verification.json')['status']!='passed'
+            or joint['visible_components']!=['EEG_log_bandpower_PCA_proxy','HbO','HbR']):
+        raise ValueError('exact paired ocular input and verified joint fits required')
+    training=[e for e in panel['rows'] if e['phase']=='fit']
+    if len(training)!=6:raise ValueError('six frozen first training windows required')
+    continuation=None
+    if spec['physical'].get('same_objective_continuation'):
+        continuation=root/spec['physical']['same_objective_continuation']
+        prior=read_json(continuation/'resolved_config.json')['config']['power_cap']
+        current=deepcopy(spec);prior=deepcopy(prior)
+        for value in (current,prior):
+            value['physical'].pop('solver_budget',None)
+            value['physical'].pop('same_objective_continuation',None)
+        if current!=prior or read_json(continuation/'controller.json')['status']!='completed':
+            raise ValueError('same-objective continuation requires a terminal identical scientific contract')
+    return dict(schema='voltage_power_cap_one_window_plan_v1',parent=str(parent.resolve()),
+        panel=panel,case=cases[0],training=training,paired_input=str((parent/spec['paired_input']).resolve()),
+        joint_fit=str((parent/spec['joint_fit']).resolve()),test_access='forbidden',protected_data='forbidden',
+        observation_weights=spec['physical'].get('observation_weights',[1.,1.,1.]),
+        solver_budget=spec['physical'].get('solver_budget',{}),
+        continuation_source=str(continuation.resolve()) if continuation else None)
+
+
+def _power_cap_fit(payload):
+    from src.data.dual_component_tokenizer import produce_teacher
+    from src.data.ssm_prepared import EEG_PROXY_INPUT_SCHEMA
+    from src.data.unified_physiology import CACHED_FNIRS_INPUT_SCHEMA
+    out_string,variant,roi=payload;out=Path(out_string);key=f'{variant}__{roi}'
+    path=out/'physical'/key
+    if path.with_suffix('.json').exists():return read_json(path.with_suffix('.json'))
+    start=time.monotonic();plan=read_json(out/'plan.json');parent=Path(plan['parent'])
+    weights=plan.get('observation_weights',[1.,1.,1.])
+    reuse=roi==1 and variant in ('baseline','ocular') and weights==[1.,1.,1.]
+    try:
+        previous=None
+        if plan.get('continuation_source'):
+            previous_path=Path(plan['continuation_source'])/'physical'/(key+'.json')
+            previous=read_json(previous_path)
+            if previous['key']!=key or previous['observation_weights']!=weights:
+                raise ValueError('continuation task identity or objective weight changed')
+            if previous['status']=='completed':
+                report=dict(previous,reused=True,continuation_source=str(previous_path))
+                write_json(path.with_suffix('.json'),report);return report
+        if reuse:
+            arm='without_added_ocular' if variant=='baseline' else 'with_added_ocular'
+            source=Path(plan['joint_fit'])/(arm+'.npz');status=read_json(source.with_suffix('.json'))
+            if status['status']!='completed' or status['visible_observation_counts']!=[899,899,899]:
+                raise ValueError('retained joint prefrontal fit is incomplete')
+            fit=status['fit'];array_path=str(source)
+        else:
+            a=_voltage_teacher_read(out/'inputs.npz');indices=a['roi_indices'][roi]
+            row=plan['case']['rows'][roi];co=read_json(out/'coordinates.json')[row['coordinate']]
+            x=a['x'] if variant=='baseline' else a['x']+a['n_'+variant]
+            prepared=dict(features=a['features_'+variant][:,indices].reshape(900,30),
+                hb=a['hb'][:,roi],eeg=x[6000:10000,indices].astype('float32'),
+                native_time=a['hb_native_time'][:,roi],time_s=np.arange(900)*.1,
+                identity=np.array(row['id']),eeg_proxy_input=np.array(EEG_PROXY_INPUT_SCHEMA),
+                eeg_proxy_rate_hz=np.array(10.),fnirs_input=np.array(CACHED_FNIRS_INPUT_SCHEMA))
+            options=dict(eeg_visible=True)
+            if weights!=[1.,1.,1.]:options['observation_weights']=weights
+            if previous and previous.get('array_path') and Path(previous['array_path']).exists():
+                saved=_voltage_teacher_read(previous['array_path'])
+                expected=np.column_stack((prepared['features']@np.asarray(co['pc'])*co['eeg_factor'],prepared['hb']*co['hb_factor']))
+                if not np.array_equal(expected,saved['u']):raise ValueError('continuation observations changed')
+                options['warm_start']=dict(driver=saved['driver'],initial_state=saved['initial_state'])
+            teacher=read_json(parent/'teacher_config.json')
+            if plan.get('solver_budget'):teacher['solver'].update(plan['solver_budget'])
+            result,fit=produce_teacher(prepared,co,teacher,**options)
+            array_path=str(path.with_suffix('.npz'))
+            if result is not None:
+                if result['visible'].sum(0).tolist()!=[899,899,899]:raise AssertionError('joint visibility changed')
+                write_npz(array_path,**result)
+        report=dict(key=key,variant=variant,roi=roi,status='completed' if fit['accepted'] else 'failed',
+            fit=fit,array_path=array_path,reused=reuse,observation_weights=weights,
+            solver_budget=plan.get('solver_budget',{}),continuation_source=plan.get('continuation_source'),
+            elapsed_seconds=time.monotonic()-start,peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:report=dict(key=key,variant=variant,roi=roi,status='failed',error=traceback.format_exc(),elapsed_seconds=time.monotonic()-start)
+    write_json(path.with_suffix('.json'),report);return report
+
+
+def _power_cap_target(payload):
+    from src.data.dual_component_tokenizer import voltage_power_cap_target,BANDS
+    out_string,method,variant,cap=payload;out=Path(out_string)
+    key=f'{method}__{variant}__cap{cap:g}';path=out/'targets'/key
+    if path.with_suffix('.json').exists():return read_json(path.with_suffix('.json'))
+    start=time.monotonic()
+    try:
+        a=_voltage_teacher_read(out/'inputs.npz');model=_voltage_teacher_read(out/'reference.npz')
+        x=a['x'] if variant=='baseline' else a['x']+a['n_'+variant]
+        proxy=None
+        if method!='fixed_statistics':
+            source='baseline' if method=='physical_frozen_reference' else variant
+            states=read_json(out/'proxy_status.json')
+            if states[source]['status']!='completed':raise ValueError('joint reference failed: '+source)
+            with np.load(out/'proxies.npz',allow_pickle=False) as z:proxy=z[source]
+        result=voltage_power_cap_target(x,model,proxy,cap=cap)
+        final=result['final_reanalysis_ratio'];support=(result['frame_time_s']>=30)&(result['frame_time_s']<50)
+        from src.inference.observation_baselines import eeg_band_power
+        power=eeg_band_power(result['s'],bands=BANDS,sample_rate=200,target_rate=10)
+        log=np.log(np.maximum(power,1e-20));log-=log[:50].mean(axis=0)
+        measured_proxy=log.reshape(900,-1)@model['projection'].T
+        save={k:v for k,v in result.items() if k not in ('s','o')}
+        save.update(s_score=result['s'][6000:10000],o_score=result['o'][6000:10000],final_proxy=measured_proxy)
+        write_npz(path.with_suffix('.npz'),**save)
+        original=x[6000:10000];ss=result['s'][6000:10000]
+        centred=original-original.mean(0);diff=(ss-original)-(ss-original).mean(0)
+        report=dict(key=key,status='completed',method=method,variant=variant,cap=cap,
+            local_max_ratio=float(result['local_output_ratio'].max()),
+            final_score_max_ratio_by_band=final[support].max(0),
+            final_score_violation_fraction_by_band=np.mean(final[support]>1+1e-6,axis=0),
+            local_clipped_direction_fraction=np.mean(result['clipped_directions'][support]/x.shape[1],axis=0),
+            baseline_or_input_AC_distortion=float(np.linalg.norm(diff)/np.linalg.norm(centred)),
+            baseline_or_input_offset_change_RMS_uV=float(np.sqrt(np.mean((ss-original).mean(0)**2))),
+            closure_max_abs=float(result['closure_max_abs']),elapsed_seconds=time.monotonic()-start,
+            peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:report=dict(key=key,status='failed',method=method,variant=variant,cap=cap,
+        error=traceback.format_exc(),elapsed_seconds=time.monotonic()-start)
+    write_json(path.with_suffix('.json'),report);return report
+
+
+def run_voltage_power_cap_probe(cfg,out,root,workers,stage):
+    from src.data.dual_component_tokenizer import (
+        project_voltage_second_moment,read_voltage_separation_input,separation_covariances,
+        fit_voltage_power_cap_reference,apply_voltage_separation,separation_probe,voltage_power_cap_target,
+    )
+    out,root=Path(out),Path(root);spec=cfg['power_cap']
+    x=np.array([[.1,-.1,.1,-.1]]);n=np.array([[.05,.05,-.05,-.05]])
+    low,_=project_voltage_second_moment(x,np.eye(1),1.)
+    altered,_=project_voltage_second_moment(x+n,np.eye(1),1.)
+    high,check=project_voltage_second_moment(x*100,np.eye(1),1.)
+    synthetic=dict(status='passed',local_bound=float(check['max_output_eigenvalue']),
+        inactive_cap_artifact_leakage=float(np.linalg.norm(altered-low)/np.linalg.norm(n)),
+        saturated_RMS=float(np.sqrt(np.mean(high*high))),measured_arrays_read=0)
+    if abs(synthetic['inactive_cap_artifact_leakage']-1)>1e-12 or synthetic['local_bound']>1+1e-12:
+        raise AssertionError('analytic counterexample or bounded projection failed')
+    if not (out/'synthetic.json').exists():
+        started=time.monotonic();rng=np.random.default_rng(39)
+        channels=cfg.get('posterior',{}).get('channels',16)
+        demo=rng.normal(size=(18000,channels))*.2
+        demo[:,0]+=8*np.exp(-.5*((np.arange(18000)/200-40)/.3)**2)
+        a=np.eye(3,channels*5)
+        model=dict(projection=a,mean=np.zeros(channels*5),lift=a.T,baseline_log_power=np.zeros(channels*5),
+            correlation=np.tile(np.eye(channels),(6,1,1)),complement_power=np.ones(channels))
+        target=voltage_power_cap_target(demo,model,np.zeros((900,3)),cap=1.)
+        synthetic.update(channels=channels,full_channel_target_seconds=time.monotonic()-started,
+            full_channel_peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            closure_max_abs=float(target['closure_max_abs']),
+            full_local_bound_ratio=float(target['local_output_ratio'].max()),
+            final_reanalysis_measured=True)
+        del demo,target
+    else:
+        synthetic=read_json(out/'synthetic.json')
+    write_json(out/'synthetic.json',synthetic)
+    weights=spec['physical'].get('observation_weights',[1.,1.,1.])
+    if weights!=[1.,1.,1.] and not (out/'weighted_synthetic.json').exists():
+        from src.data.dual_component_tokenizer import synthetic_teacher_check
+        teacher=yaml.safe_load((SOURCE/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml').read_text())
+        write_json(out/'controller.json',dict(status='running',stage='weighted_synthetic',pid=os.getpid(),updated=now()))
+        weighted=synthetic_teacher_check(teacher,observation_weights=weights)
+        write_json(out/'weighted_synthetic.json',weighted)
+    elif weights!=[1.,1.,1.] and read_json(out/'weighted_synthetic.json')['status']!='completed':
+        raise ValueError('weighted synthetic numerical verification is incomplete')
+    if stage=='synthetic':return synthetic
+    plan=voltage_power_cap_plan(cfg,root);parent=Path(plan['parent'])
+    if (out/'plan.json').exists() and read_json(out/'plan.json')!=plan:raise ValueError('one-window plan drift')
+    write_json(out/'plan.json',plan)
+    if stage=='power-cap-plan':return dict(status='planned',training_windows=6,validation_windows=1,measured_arrays_read=0)
+    def progress(label,total):
+        def update(result,count):
+            write_json(out/'controller.json',dict(status='running',stage=label,planned=total,terminal=count,
+                workers=workers,pid=os.getpid(),updated=now(),last_status=result.get('status')))
+        update({},0);return update
+    if not (out/'reference.npz').exists():
+        progress('prepare_and_train_statistics',1)
+        base,_=read_voltage_separation_input(plan['panel'],plan['case'])
+        case=plan['case'];coordinates=read_json(parent/'coordinates.json')
+        a=np.zeros((3,80))
+        for roi,row in enumerate(case['rows']):
+            co=coordinates[row['coordinate']];load=np.asarray(co['pc']).reshape(6,5)*co['eeg_factor']
+            for j,c in enumerate(base['roi_indices'][roi]):a[roi,c*5:(c+1)*5]=load[j]
+        training=[]
+        for entry in plan['training']:
+            v,_=read_voltage_separation_input(plan['panel'],entry)
+            if not np.array_equal(v['channels'],base['channels']):raise ValueError('native channel identities differ')
+            training.append(dict(split=entry['split'],x=v['x']))
+        model=fit_voltage_power_cap_reference(training,a,shrinkage=spec['reference']['shrinkage'])
+        with np.load(Path(plan['paired_input'])/'state_proxy_check_v1/diagnostic_inputs.npz',allow_pickle=False) as z:
+            if not np.array_equal(z['Fp1_before'],base['x'][:,list(base['channels']).index('Fp1')]):
+                raise ValueError('retained single-channel input changed')
+            known=z['added_ocular'].copy()
+        injection=np.zeros_like(base['x']);injection[:,list(base['channels']).index('Fp1')]=known
+        inputs={k:base[k] for k in ('x','hb','hb_native_time','roi_indices','channels')};inputs['n_ocular']=injection
+        amplitude=float(np.sqrt(np.mean(injection[6000:10000]**2)))
+        for kind in spec['interventions']['neural']:
+            inputs['n_'+kind]=separation_probe(list(base['channels']),spec['interventions']['neural_seed'],kind,
+                cfg['separation'],rms=amplitude)
+        for variant in ['baseline','ocular',*spec['interventions']['neural']]:
+            value=base['x'] if variant=='baseline' else base['x']+inputs['n_'+variant]
+            inputs['features_'+variant]=separation_covariances(value,cfg['separation'])['features']
+        original=_voltage_teacher_read(parent/'features'/f"{case['id']}.npz")
+        if not np.array_equal(inputs['features_baseline'],original['features']):raise ValueError('original proxy features changed')
+        delta=(inputs['features_ocular']-inputs['features_baseline']).reshape(900,80)
+        parallel=delta@np.linalg.pinv(a)@a;perpendicular=delta-parallel;sl=slice(300,500)
+        norm=float(np.sum(delta[sl]**2))
+        write_json(out/'proxy_nullspace.json',dict(projection_rank=int(np.linalg.matrix_rank(a)),feature_dimensions=80,
+            parallel_squared_norm_fraction=float(np.sum(parallel[sl]**2)/norm),
+            null_squared_norm_fraction=float(np.sum(perpendicular[sl]**2)/norm),
+            orthogonality_error=float(abs(np.sum(parallel[sl]*perpendicular[sl]))),
+            scope='Euclidean squared norm of referenced log-power changes, not voltage energy'))
+        write_json(out/'coordinates.json',coordinates);write_npz(out/'inputs.npz',**inputs)
+        write_npz(out/'reference.npz',**model)
+    variants=['baseline','ocular',*spec['interventions']['neural']]
+    jobs=[(str(out),v,r) for v in variants for r in range(3) if v!='ocular' or r==1]
+    fits=_bounded_jobs(_power_cap_fit,jobs,min(workers,len(jobs)),inflight=1,progress=progress('joint_fits',len(jobs)))
+    indexed={(r['variant'],r['roi']):r for r in fits};proxy={};statuses={}
+    for variant in variants:
+        records=[indexed[('baseline' if variant=='ocular' and roi!=1 else variant,roi)] for roi in range(3)]
+        status='completed' if all(r['status']=='completed' for r in records) else 'failed'
+        statuses[variant]=dict(status=status,records=[r['key'] for r in records])
+        if status=='completed':proxy[variant]=np.stack([_voltage_teacher_read(r['array_path'])['physical'][:,0] for r in records],axis=1)
+    write_json(out/'physical_fits.json',fits);write_json(out/'proxy_status.json',statuses);write_npz(out/'proxies.npz',**proxy)
+    inputs=_voltage_teacher_read(out/'inputs.npz')
+    previous=read_json(Path(plan['paired_input'])/'result.json')['model']
+    weights=Path(previous['weights'])
+    if weights.resolve().parent!=parent.resolve()/'models':raise ValueError('old target weights outside the declared parent')
+    old=_voltage_teacher_read(weights);old['innovation_fraction']=previous['innovation_fraction']
+    for variant in variants:
+        value=inputs['x'] if variant=='baseline' else inputs['x']+inputs['n_'+variant]
+        target=apply_voltage_separation(value,old,cfg['separation'])
+        write_npz(out/'targets'/f'current_target__{variant}.npz',s_score=target['s'][6000:10000],o_score=target['o'][6000:10000])
+    caps=[spec['reference']['cap_primary'],*spec['reference']['cap_sensitivity']]
+    jobs=[]
+    for cap in caps:
+        for variant in variants:
+            methods=['fixed_statistics','physical_refitted_reference'] if variant=='baseline' else spec['conditions'][1:]
+            jobs.extend((str(out),m,variant,cap) for m in methods)
+    results=_bounded_jobs(_power_cap_target,jobs,min(workers,len(jobs)),inflight=1,progress=progress('voltage_targets',len(jobs)))
+    write_json(out/'target_outcomes.json',results)
+    from src.analysis.dual_component_tokenizer import summarize_voltage_power_cap
+    summary=summarize_voltage_power_cap(out,cfg,plan,results,fits)
+    write_json(out/'summary.json',summary)
+    write_json(out/'controller.json',dict(status='completed',stage='complete',updated=now(),summary='summary.json'))
+    return dict(status='completed',summary=str(out/'summary.json'),target_tasks=len(results))
+
+
+
+def run_voltage_power_cap_examples(cfg,out,root,workers,stage):
+    """Four fixed public examples; retain both first and continuation outcomes."""
+    from src.data.dual_component_tokenizer import (
+        voltage_separation_plan,voltage_power_cap_example_cases,
+        read_voltage_separation_input,separation_covariances,
+    )
+    out,root=Path(out),Path(root);spec=cfg['examples']
+    # Full-size synthetic uses the identical numerical owner, with no measured read.
+    if stage=='synthetic':
+        return run_voltage_power_cap_probe(cfg,out,root,workers,'synthetic')
+    panel=voltage_separation_plan(root,cfg)
+    source=root/spec['reference_run']
+    source_plan=read_json(source/'plan.json');source_cfg=read_json(source/'resolved_config.json')['config']
+    source_summary=read_json(source/'summary.json')
+    if (source_plan['panel']!=panel or source_cfg['power_cap']!=cfg['power_cap']
+            or source_summary['status']!='completed'
+            or source_summary['counts']['fit_failures'] or source_summary['counts']['target_failures']
+            or read_json(source/'verification.json')['status']!='passed'
+            or read_json(source/'controller.json')['status']!='completed'):
+        raise ValueError('exact verified completed reference setting required before arrays')
+    cases=voltage_power_cap_example_cases(panel,source_plan['case']['id'],spec['subjects'])
+    parent=Path(source_plan['parent'])
+    plan=dict(schema='voltage_power_cap_examples_plan_v1',reference_run=str(source.resolve()),
+        parent=str(parent),panel=panel,cases=cases,original_case=source_plan['case'],
+        selection=spec['selection'],independent_subjects=5,new_subjects=4,
+        test_access='forbidden',protected_data='forbidden',measured_arrays_read=0,
+        injection='identical retained waveform in Fp1; donor VP005 second retained window',
+        donor_overlap='VP005 example uses a different window from the same subject as the fixed donor',
+        stopping=spec['stopping'],selection_use=spec['selection_use'])
+    if (out/'plan.json').exists() and read_json(out/'plan.json')!=plan:
+        raise ValueError('examples plan changed')
+    write_json(out/'plan.json',plan)
+    if stage=='power-cap-plan':
+        return dict(status='planned',new_windows=4,original_windows=1,measured_arrays_read=0)
+    if not (out/'synthetic.json').exists() or not (out/'weighted_synthetic.json').exists():
+        run_voltage_power_cap_probe(cfg,out,root,workers,'synthetic')
+    if (read_json(out/'synthetic.json')['status']!='passed'
+            or read_json(out/'weighted_synthetic.json')['status']!='completed'):
+        raise ValueError('synthetic verification required before measured arrays')
+    def progress(label,total):
+        def update(result,count):
+            write_json(out/'controller.json',dict(status='running',stage=label,planned=total,terminal=count,
+                workers=workers,pid=os.getpid(),updated=now(),last_status=result.get('status')))
+        update({},0);return update
+    reference=_voltage_teacher_read(source/'reference.npz')
+    source_inputs=_voltage_teacher_read(source/'inputs.npz')
+    coordinates=read_json(source/'coordinates.json');prepared=[]
+    for case in cases:
+        folder=out/'cases'/case['subject'];status=folder/'prepare.json'
+        if status.exists():
+            prepared.append(read_json(status));continue
+        start=time.monotonic()
+        try:
+            base,metadata=read_voltage_separation_input(panel,case)
+            for key in ('channels','roi_indices'):
+                if not np.array_equal(base[key],source_inputs[key]):
+                    raise ValueError('example channel/ROI mapping differs from frozen reference')
+            inputs={k:base[k] for k in ('x','hb','hb_native_time','roi_indices','channels')}
+            inputs['n_ocular']=source_inputs['n_ocular'].copy()
+            fp=list(base['channels']).index('Fp1')
+            if np.any(inputs['n_ocular'][:,np.arange(16)!=fp]):
+                raise ValueError('retained perturbation must be Fp1 only')
+            for variant in spec['variants']:
+                x=base['x'] if variant=='baseline' else base['x']+inputs['n_ocular']
+                inputs['features_'+variant]=separation_covariances(x,cfg['separation'])['features']
+            retained=_voltage_teacher_read(parent/'features'/f"{case['id']}.npz")
+            if not np.array_equal(inputs['features_baseline'],retained['features']):
+                raise ValueError('retained baseline feature replay differs')
+            case_plan=dict(parent=str(parent),case=case,observation_weights=[.1,10.,10.],
+                solver_budget=spec['initial_solver_budget'],continuation_source=None,
+                test_access='forbidden',protected_data='forbidden')
+            write_json(folder/'plan.json',case_plan);write_json(folder/'coordinates.json',coordinates)
+            write_npz(folder/'inputs.npz',**inputs);write_npz(folder/'reference.npz',**reference)
+            record=dict(subject=case['subject'],case_id=case['id'],status='completed',
+                case_root=str(folder.resolve()),metadata=metadata,seconds=time.monotonic()-start)
+        except Exception:
+            record=dict(subject=case['subject'],case_id=case['id'],status='failed',
+                error=traceback.format_exc(),seconds=time.monotonic()-start)
+        write_json(status,record);prepared.append(record)
+    write_json(out/'preparation.json',prepared)
+    valid=[r for r in prepared if r['status']=='completed']
+    jobs=[(r['case_root'],variant,roi) for r in valid
+        for variant,roi in [('baseline',0),('baseline',1),('baseline',2),('ocular',1)]]
+    first=_bounded_jobs(_power_cap_fit,jobs,min(workers,max(1,len(jobs))),inflight=1,
+        progress=progress('initial_joint_fits',len(jobs))) if jobs else []
+    # Task records are read by identity because completed jobs return asynchronously.
+    continuation=[]
+    for record in valid:
+        folder=Path(record['case_root']);retry=folder/'continuation_v1'
+        failed=[]
+        for variant,roi in [('baseline',0),('baseline',1),('baseline',2),('ocular',1)]:
+            fit=read_json(folder/'physical'/f'{variant}__{roi}.json')
+            if fit['status']!='completed':failed.append((variant,roi))
+        if failed:
+            new_plan=dict(read_json(folder/'plan.json'),continuation_source=str(folder),
+                solver_budget=spec['continuation_solver_budget'])
+            write_json(retry/'plan.json',new_plan);write_json(retry/'coordinates.json',coordinates)
+            # A local continuation shares the immutable inputs through a hard link.
+            destination=retry/'inputs.npz'
+            if not destination.exists():os.link(folder/'inputs.npz',destination)
+            continuation.extend((str(retry),variant,roi) for variant,roi in failed)
+    second=_bounded_jobs(_power_cap_fit,continuation,min(workers,max(1,len(continuation))),inflight=1,
+        progress=progress('same_objective_continuation',len(continuation))) if continuation else []
+    fit_records=[]
+    for record in valid:
+        folder=Path(record['case_root']);indexed={};attempts=[]
+        for variant,roi in [('baseline',0),('baseline',1),('baseline',2),('ocular',1)]:
+            name=f'{variant}__{roi}.json'
+            first_path=folder/'physical'/name;fit=read_json(first_path)
+            attempts.append(dict(fit,attempt=1,record_path=str(first_path)))
+            second_path=folder/'continuation_v1/physical'/name
+            if second_path.exists():
+                fit=read_json(second_path);attempts.append(dict(fit,attempt=2,record_path=str(second_path)))
+            indexed[(variant,roi)]=fit
+            fit_records.append(dict(fit,subject=record['subject'],case_id=record['case_id']))
+        write_json(folder/'fit_attempts.json',attempts)
+        write_json(folder/'physical_fits.json',list(indexed.values()))
+        proxies={};states={}
+        for variant in spec['variants']:
+            fits=[indexed[('baseline' if variant=='ocular' and roi!=1 else variant,roi)] for roi in range(3)]
+            accepted=all(fit['status']=='completed' for fit in fits)
+            states[variant]=dict(status='completed' if accepted else 'failed',records=[f['key'] for f in fits])
+            if accepted:
+                proxies[variant]=np.stack([_voltage_teacher_read(fit['array_path'])['physical'][:,0] for fit in fits],axis=1)
+        write_json(folder/'proxy_status.json',states);write_npz(folder/'proxies.npz',**proxies)
+    write_json(out/'physical_fits.json',fit_records)
+    jobs=[(r['case_root'],'physical_refitted_reference',variant,1.) for r in valid for variant in spec['variants']]
+    targets=_bounded_jobs(_power_cap_target,jobs,min(workers,max(1,len(jobs))),inflight=1,
+        progress=progress('voltage_targets',len(jobs))) if jobs else []
+    # Include the exact original example, without refitting or replacing its evidence.
+    entries=[dict(case=source_plan['case'],run=str(source),reused=True)]
+    entries.extend(dict(case=case,run=str(out/'cases'/case['subject']),reused=False) for case in cases)
+    from src.analysis.dual_component_tokenizer import summarize_voltage_power_cap_examples
+    summary=summarize_voltage_power_cap_examples(entries,fit_records)
+    summary.update(experiment_id=cfg['experiment_id'],plan='plan.json',
+        preparation=prepared,initial_fit_outcomes=first,continuation_fit_outcomes=second,
+        new_target_outcomes=targets,observation_weights=[.1,10.,10.],primary_cap=1.)
+    write_json(out/'summary.json',summary)
+    write_json(out/'controller.json',dict(status='completed',stage='complete',updated=now(),summary='summary.json'))
+    return dict(status='completed',summary=str(out/'summary.json'),counts=summary['counts'])
+
+
+
+def _power_cap_posterior_prepare(payload):
+    from src.data.dual_component_tokenizer import prepare_voltage_power_cap_posterior
+    cfg,root,out,entry=payload;out=Path(out);folder=out/'prepared'/entry['id']
+    status=folder.with_suffix('.json')
+    if status.exists():return read_json(status)
+    started=time.monotonic()
+    try:
+        plan=read_json(out/'plan.json')
+        arrays,metadata=prepare_voltage_power_cap_posterior(root,cfg,plan,entry)
+        write_npz(folder.with_suffix('.npz'),**arrays)
+        result=dict(status='completed',case_id=entry['id'],phase=entry['phase'],metadata=metadata,
+            array_path=str(folder.with_suffix('.npz')),elapsed_seconds=time.monotonic()-started,
+            peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:
+        result=dict(status='failed',case_id=entry['id'],phase=entry['phase'],error=traceback.format_exc())
+    write_json(status,result);return result
+
+
+def run_voltage_power_cap_posterior(cfg,out,root,workers,stage):
+    from src.data.dual_component_tokenizer import (
+        voltage_power_cap_posterior_plan,fit_voltage_power_cap_reference,separation_covariances,
+    )
+    from src.data.ssm_prepared import fit_feature_coordinate,EEG_PROXY_INPUT_SCHEMA
+    from src.data.unified_physiology import CACHED_FNIRS_INPUT_SCHEMA
+    out,root=Path(out),Path(root);spec=cfg['posterior']
+    if stage=='synthetic':return run_voltage_power_cap_probe(cfg,out,root,workers,'synthetic')
+    plan=voltage_power_cap_posterior_plan(root,cfg)
+    if (out/'plan.json').exists() and read_json(out/'plan.json')!=plan:raise ValueError('posterior plan drift')
+    write_json(out/'plan.json',plan)
+    if stage=='power-cap-plan':
+        return dict(status='planned',training_windows=6,validation_windows=2,channels=17,measured_arrays_read=0)
+    if not (out/'synthetic.json').exists() or not (out/'weighted_synthetic.json').exists():
+        run_voltage_power_cap_probe(cfg,out,root,workers,'synthetic')
+    if (read_json(out/'synthetic.json')['status']!='passed'
+            or read_json(out/'weighted_synthetic.json')['status']!='completed'):
+        raise ValueError('posterior numerical synthetic checks required before signals')
+    def progress(label,total):
+        def update(result,count):
+            write_json(out/'controller.json',dict(status='running',stage=label,planned=total,terminal=count,
+                workers=workers,pid=os.getpid(),updated=now(),last_status=result.get('status')))
+        update({},0);return update
+    prepared=_bounded_jobs(_power_cap_posterior_prepare,
+        [(cfg,str(root),str(out),entry) for entry in plan['rows']],workers,inflight=1,
+        progress=progress('prepare_posterior_inputs',8))
+    write_json(out/'preparation.json',prepared)
+    if any(r['status']!='completed' for r in prepared):
+        raise RuntimeError('posterior preparation failure retained; no changed panel or imputation')
+    source=Path(plan['reference_run']);source_inputs=_voltage_teacher_read(source/'inputs.npz')
+    known=source_inputs['n_ocular'][:,list(source_inputs['channels']).index('Fp1')]
+    original_coordinates=read_json(source/'coordinates.json')
+    coordinates={row['coordinate']:original_coordinates[row['coordinate']]
+        for row in plan['training'][0]['rows'][:2]}
+    training=[];chunks=[];ids=[]
+    for entry in plan['training']:
+        a=_voltage_teacher_read(out/'prepared'/(entry['id']+'.npz'))
+        training.append(dict(split='train',x=a['x']))
+        chunks.append((a['features_baseline'][:,a['roi_indices'][2]].reshape(900,30),a['hb'][:,2]))
+        ids.append(entry['rows'][2]['id'])
+    key='simultaneous_eeg_nirs__occipital'
+    coordinates[key]=dict(fit_feature_coordinate(chunks),training_ids=ids,eeg_proxy_input=EEG_PROXY_INPUT_SCHEMA,
+        fnirs_input=CACHED_FNIRS_INPUT_SCHEMA,feature_generation='unmodified_native_EEG_bandpower_new_training_coordinate')
+    write_json(out/'coordinates.json',coordinates)
+    first=_voltage_teacher_read(out/'prepared'/(plan['training'][0]['id']+'.npz'))
+    projection=np.zeros((3,85))
+    for roi,row in enumerate(plan['training'][0]['rows']):
+        co=coordinates[row['coordinate']];loading=np.asarray(co['pc']).reshape(6,5)*co['eeg_factor']
+        for j,c in enumerate(first['roi_indices'][roi]):projection[roi,c*5:(c+1)*5]=loading[j]
+    reference=fit_voltage_power_cap_reference(training,projection)
+    write_npz(out/'reference.npz',**reference)
+    jobs=[];entries=[]
+    for case in plan['cases']:
+        folder=out/'cases'/case['subject'];a=_voltage_teacher_read(out/'prepared'/(case['id']+'.npz'))
+        if not np.array_equal(a['channels'],first['channels']):raise ValueError('posterior channel order changed')
+        n=np.zeros_like(a['x']);n[:,list(a['channels']).index(case['injection_channel'])]=known
+        a['n_ocular']=n;a['features_ocular']=separation_covariances(a['x']+n,cfg['separation'])['features']
+        write_npz(folder/'inputs.npz',**a);write_npz(folder/'reference.npz',**reference)
+        write_json(folder/'coordinates.json',coordinates)
+        case_plan=dict(parent=plan['parent'],case=case,observation_weights=[.1,10.,10.],
+            solver_budget=spec['initial_solver_budget'],continuation_source=None,
+            test_access='forbidden',protected_data='forbidden')
+        write_json(folder/'plan.json',case_plan)
+        prior=Path(case['original_physical_run'])
+        old_fits=read_json(prior/'physical_fits.json')
+        old_co=read_json(prior/'coordinates.json')
+        for roi in (0,1):
+            indices=a['roi_indices'][roi];row=case['rows'][roi];co=coordinates[row['coordinate']]
+            if co!=old_co[row['coordinate']]:raise ValueError('unchanged ROI coordinate changed')
+            if not np.array_equal(a['features_baseline'][:,indices],a['features_ocular'][:,indices]):
+                raise ValueError('posterior injection reached an allegedly unaffected ROI')
+            fit=next(r for r in old_fits if r['variant']=='baseline' and r['roi']==roi)
+            expected=np.column_stack((a['features_baseline'][:,indices].reshape(900,30)@np.asarray(co['pc'])*co['eeg_factor'],
+                a['hb'][:,roi]*co['hb_factor']))
+            old=_voltage_teacher_read(fit['array_path'])
+            if (fit['status']!='completed' or fit['observation_weights']!=[.1,10.,10.]
+                    or not np.array_equal(old['u'],expected)):
+                raise ValueError('baseline reuse requires accepted same-weight exact observations')
+            write_json(folder/'physical'/f'baseline__{roi}.json',dict(fit,reused=True,
+                reuse_source=str(prior/'physical_fits.json'),same_observations_exact=True))
+        jobs.extend((str(folder),variant,2) for variant in ('baseline','ocular'))
+        entries.append(dict(case=case,run=str(folder),reused=False,display_channel=case['injection_channel'],metric_roi=2))
+    initial=_bounded_jobs(_power_cap_fit,jobs,min(workers,4),inflight=1,
+        progress=progress('posterior_joint_fits',4))
+    retry_jobs=[]
+    for entry in entries:
+        folder=Path(entry['run']);retry=folder/'continuation_v1'
+        failed=[v for v in ('baseline','ocular') if read_json(folder/'physical'/f'{v}__2.json')['status']!='completed']
+        if failed:
+            write_json(retry/'plan.json',dict(read_json(folder/'plan.json'),continuation_source=str(folder),
+                solver_budget=spec['continuation_solver_budget']))
+            write_json(retry/'coordinates.json',coordinates)
+            if not (retry/'inputs.npz').exists():os.link(folder/'inputs.npz',retry/'inputs.npz')
+            retry_jobs.extend((str(retry),v,2) for v in failed)
+    continued=_bounded_jobs(_power_cap_fit,retry_jobs,min(workers,max(1,len(retry_jobs))),inflight=1,
+        progress=progress('same_objective_continuation',len(retry_jobs))) if retry_jobs else []
+    new_fits=[];target_jobs=[]
+    for entry in entries:
+        folder=Path(entry['run']);physical=[read_json(folder/'physical'/f'baseline__{roi}.json') for roi in (0,1)]
+        attempts=[]
+        for variant in ('baseline','ocular'):
+            path=folder/'physical'/f'{variant}__2.json';fit=read_json(path)
+            attempts.append(dict(fit,attempt=1))
+            alternative=folder/'continuation_v1/physical'/path.name
+            if alternative.exists():fit=read_json(alternative);attempts.append(dict(fit,attempt=2))
+            physical.append(fit);new_fits.append(dict(fit,subject=entry['case']['subject']))
+        write_json(folder/'fit_attempts.json',attempts);write_json(folder/'physical_fits.json',physical)
+        proxies={};states={}
+        for variant in ('baseline','ocular'):
+            records=[physical[0],physical[1],next(r for r in physical if r['roi']==2 and r['variant']==variant)]
+            accepted=all(r['status']=='completed' for r in records)
+            states[variant]=dict(status='completed' if accepted else 'failed',records=[r['key'] for r in records])
+            if accepted:proxies[variant]=np.stack([_voltage_teacher_read(r['array_path'])['physical'][:,0] for r in records],axis=1)
+        write_json(folder/'proxy_status.json',states);write_npz(folder/'proxies.npz',**proxies)
+        target_jobs.extend((str(folder),'physical_refitted_reference',v,1.) for v in ('baseline','ocular'))
+    targets=_bounded_jobs(_power_cap_target,target_jobs,min(workers,4),inflight=1,
+        progress=progress('posterior_voltage_targets',4))
+    from src.analysis.dual_component_tokenizer import summarize_voltage_power_cap_examples
+    summary=summarize_voltage_power_cap_examples(entries,new_fits,planned_new_fits=4)
+    summary.update(schema='voltage_power_cap_posterior_results_v1',experiment_id=cfg['experiment_id'],
+        preparation=prepared,initial_fit_outcomes=initial,continuation_fit_outcomes=continued,
+        new_target_outcomes=targets,observation_weights=[.1,10.,10.],primary_cap=1.,
+        reused_unchanged_ROI_fits=4,regions=spec['regions'],channels=17,label_start='F',
+        interpretation=spec['claim'],posterior_training_ids=ids)
+    write_json(out/'physical_fits.json',new_fits);write_json(out/'summary.json',summary)
+    write_json(out/'controller.json',dict(status='completed',stage='complete',updated=now(),summary='summary.json'))
+    return dict(status='completed',counts=summary['counts'],summary=str(out/'summary.json'))
 
 
 if __name__ == '__main__':

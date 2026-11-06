@@ -1,0 +1,93 @@
+schema: dual_component_voltage_separation_v1
+experiment_id: TK-EEG-TWO-SCALE-SEPARATION-v1
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml
+separation:
+  parent_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2
+  parent_schema: dual_component_voltage_teacher_v1
+  dataset: simultaneous_eeg_nirs
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  fit: train_subjects_first_window
+  select: train_subjects_second_window
+  evaluate: all_retained_validation_windows
+  sample_rate_hz: 200
+  seconds: 90
+  channels: 16
+  score_seconds: [30, 50]
+  covariance_seconds: 2
+  covariance_support_seconds: [15, 75]
+  covariance_shrinkage: 0.1
+  covariance_center: within_each_epoch_for_statistics_only_no_voltage_rereferencing
+  physical_state: newly_fitted_Hb_only_Tak_in_raw_EEG_training_coordinate
+  physical_fit_failure: retain_and_mask_failed_ROI_guidance_no_joint_EEG_substitution
+  guidance_lowpass_hz: 0.2
+  guidance: [physical, empirical, eeg, sham, pca, random]
+  empirical_lags_s: [-15, -10, -5, 0, 5, 10, 15]
+  empirical_ridges: [0.01, 0.1, 1.0]
+  empirical_selection: leave_one_fit_subject_out_prediction_error
+  spoc: five_band_state_weighted_covariance_generalized_by_shared_full_band_covariance
+  direction_selection: sign_consistent_fit_selection_covariance_then_whitened_rank_revealing_orthogonalization
+  sham: common_ROI_Fourier_phase_randomization_preserving_cross_spectral_structure
+  ranks: [4, 8, 12]
+  innovation_fractions: [0.0, 0.25, 0.5, 0.75, 1.0]
+  predictor_lags_samples: [1, 2, 3, 4]
+  predictor_ridge: 0.05
+  predictor: symmetric_neighbor_ridge_per_component_with_unit_DC_gain_and_no_current_sample
+  fixed_comparison: {rank: 8, innovation_fraction: 0.5}
+  selection: minimum_equal_probe_error_with_double_weight_on_neural_preservation_on_training_only
+  model_inputs: original_EEG_only_after_training_global_parameters_freeze
+  eog: evaluation_only_never_in_projection_prediction_or_selection
+  labels: S_B_times_blended_projected_prediction_O_original_minus_S
+  residual_parts: spatial_complement_and_temporal_prediction_residual_not_presumed_pure_noise
+  probe_amplitudes_training_rms: [0.1, 0.25, 0.5]
+  neural_frequencies_hz: [10, 35, 55]
+  fine_noise_band_hz: [25, 70]
+  fine_noise: generated_colored_broadband_with_unseen_spatial_mixing
+  measured_perturbations: [ocular, fine, combined, neural10, neural35, neural55]
+  measured_ocular: validation_donor_EOG_with_prespecified_anterior_topography_not_fitted_transfer
+  probe_calibration_seeds: [101, 103, 107, 109]
+  probe_evaluation_seed: 20261105
+  examples: same_retained_low_middle_high_EOG_subjects_for_comparability_no_method_score_selection
+  synthetic_fit_seeds: [300, 301, 302, 303, 304, 305]
+  synthetic_eval_seeds: [400, 401, 402, 403, 404, 405, 406, 407]
+  synthetic_scenarios: [separable, overlapping_fine_noise, state_correlated_artifact]
+  synthetic_state: known_generator_state_mechanism_control_not_estimated_neural_truth
+  codebook:
+    size: 128
+    S_levels: 4
+    O_levels: 4
+    physical_O_capacity_levels: 8
+    hop_samples: 20
+    span_samples: 20
+    channels_per_word: 1
+    fit_patches: 16384
+    iterations: 50
+    derivative_weight: 0.25
+    seed: 17
+    decoder: own_integer_ids_and_fixed_training_channel_scale_only
+    candidates: [physical, physical_spatial, empirical, pca, sham, raw]
+  primary: joint_major_and_fine_transfer_to_O_with_neural_change_preservation
+  secondary: independent_hard_decode_fidelity_and_fine_detail_retention_at_declared_bitrate
+  diagnostic: [natural_EOG_association, residual_spectrum, roughness, projection_rank, subspace_null_distance, predictor_response, block_boundary_error, physical_failures]
+  aggregation: equal_window_within_subject_then_equal_validation_subjects
+  stopping: finite_panel_state_fits_rank_fraction_grid_and_declared_codebooks_no_validation_retuning
+  engineering_reference:
+    major_S_leakage_NRMSE_max: 0.5
+    fine_S_leakage_NRMSE_max: 0.75
+    neural_loss_NRMSE_max: 0.25
+    meaning: descriptive_joint_screen_not_a_physiological_qualification_gate
+  seed: 20261105
+resources:
+  cpu_workers: 8
+  numerical_threads: 1
+  max_in_flight_per_worker: 1
+claim_limits:
+- no_forced_visual_texture_no_noise_added_to_O_except_known_input_perturbation
+- natural_residual_contains_unmodeled_neural_signal_as_well_as_artifacts
+- prediction_residual_is_not_noise_truth_temporally_correlated_noise_may_be_predictable
+- rank_reduction_and_temporal_smoothing_require_matched_nonphysical_controls
+- physical_state_guidance_is_not_anatomical_source_localization
+- full_window_Hb_preprocessing_and_training_covariance_are_offline
+- direct_quantization_is_deployable_only_because_frozen_frontend_reads_EEG_not_teacher_Hb_or_EOG
+- no_test_or_protected_data_and_no_downstream_benchmark_launch

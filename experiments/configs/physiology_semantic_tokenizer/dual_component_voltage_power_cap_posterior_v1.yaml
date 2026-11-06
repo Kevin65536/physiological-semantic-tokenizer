@@ -1,0 +1,32 @@
+schema: dual_component_voltage_power_cap_posterior_v1
+experiment_id: TK-EEG-HB-WEIGHTED-POSTERIOR-v1
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_examples_v1.yaml
+posterior:
+  reference_examples: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_examples_v1
+  cases:
+  - {case_id: simultaneous_eeg_nirs__VP002__cnt_nback__0026, injection_channel: O1}
+  - {case_id: simultaneous_eeg_nirs__VP005__cnt_nback__0000, injection_channel: O2}
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  regions: [left_motor, prefrontal, occipital]
+  occipital_direction: [0, -1, 0]
+  occipital_hb_channel: POOz
+  occipital_eeg_channels: [POz, O1, O2, Pz, P3, P4]
+  channels: 17
+  training: original_six_first_training_windows_only
+  original_coordinates: reuse_left_motor_and_prefrontal_after_exact_input_checks
+  posterior_coordinate: train_only_raw_power_PC1_and_Hb_scale
+  reference: new_17_channel_training_reference_same_projection_algorithm
+  injection: identical_retained_waveform_and_absolute_amplitude_at_named_posterior_electrode
+  affected_roi: 2
+  cap: 1.0
+  score_seconds: [30, 50]
+  initial_solver_budget: {max_iterations: 600, max_evaluations_per_trial: 1600}
+  continuation_solver_budget: {max_iterations: 1500, max_evaluations_per_trial: 4000}
+  stopping: two_fixed_posterior_pairs_all_outcomes_terminal_no_replacement_or_weight_search
+  claim: illustrative_known_addition_not_natural_occipital_artifact_distribution_or_clean_truth
+resources:
+  cpu_workers: 4
+  numerical_threads: 1
+  max_in_flight_per_worker: 1

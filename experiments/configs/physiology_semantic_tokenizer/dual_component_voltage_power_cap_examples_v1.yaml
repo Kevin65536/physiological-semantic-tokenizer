@@ -1,0 +1,25 @@
+schema: dual_component_voltage_power_cap_examples_v1
+experiment_id: TK-EEG-HB-WEIGHTED-EXAMPLES-v1
+base_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_hb_weighted_v4.yaml
+examples:
+  reference_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4
+  subjects: [VP005, VP014, VP017, VP019]
+  selection: first_retained_validation_slot_per_other_subject_before_array_reads
+  allowed_split: validation
+  test_access: forbidden
+  protected_data: forbidden
+  injection: identical_retained_Fp1_waveform_and_absolute_amplitude
+  training: reuse_frozen_reference_and_coordinates_no_refit
+  variants: [baseline, ocular]
+  cap: 1.0
+  score_seconds: [30, 50]
+  initial_solver_budget: {max_iterations: 600, max_evaluations_per_trial: 1600}
+  continuation_solver_budget: {max_iterations: 1500, max_evaluations_per_trial: 4000}
+  continuation: once_per_failed_fit_same_objective_and_original_acceptance
+  comparison: paired_window_not_population_inference
+  selection_use: figure_selection_only_not_hyperparameter_selection_or_confirmatory_evidence
+  stopping: four_named_windows_all_outcomes_terminal_no_replacement_or_extra_search
+resources:
+  cpu_workers: 8
+  numerical_threads: 1
+  max_in_flight_per_worker: 1

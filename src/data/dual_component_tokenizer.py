@@ -138,6 +138,388 @@ def voltage_teacher_plan(cfg, retained):
         selection=spec['selection'], protected_data='forbidden', measured_arrays_read=0)
 
 
+def voltage_separation_plan(project_root, cfg):
+    """Validate the exact completed public panel before opening any arrays."""
+    spec=cfg['separation'];root=Path(project_root).resolve()
+    expected='experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_teacher_v2'
+    if (spec['parent_run']!=expected or spec['allowed_splits']!=['train','validation']
+            or spec['test_access']!='forbidden' or spec['protected_data']!='forbidden'
+            or spec['dataset']!='simultaneous_eeg_nirs' or spec['channels']!=16
+            or spec['sample_rate_hz']!=200 or spec['seconds']!=90):
+        raise ValueError('exact completed native-voltage public development panel required')
+    parent=root/expected
+    resolved=json.loads((parent/'resolved_config.json').read_text())
+    original=json.loads((parent/'plan.json').read_text())
+    summary=json.loads((parent/'summary.json').read_text())
+    verified=json.loads((parent/'verification.json').read_text())
+    if (resolved['config']['schema']!=spec['parent_schema'] or summary['status']!='completed'
+            or verified['status']!='passed' or original['protected_data']!='forbidden'):
+        raise ValueError('completed and verified public parent required')
+    inventory_parent=root/resolved['config']['voltage_teacher']['parent_run']
+    canonical=voltage_teacher_plan(resolved['config'],json.loads((inventory_parent/'inventory.json').read_text()))
+    if original!=canonical:raise ValueError('retained development identities changed')
+    rows=[]
+    for row in original['rows']:
+        if row['split'] not in spec['allowed_splits']:raise ValueError('test row cannot enter separation')
+        phase=('fit' if row['slot']==0 else 'select') if row['split']=='train' else 'validation'
+        rows.append(dict(row,phase=phase))
+    return dict(schema='voltage_separation_panel_v1',parent=str(parent),rows=rows,
+        protected_data='forbidden',test_access='forbidden',
+        fit_ids=[r['id'] for r in rows if r['phase']=='fit'],
+        selection_ids=[r['id'] for r in rows if r['phase']=='select'],
+        validation_ids=[r['id'] for r in rows if r['phase']=='validation'],
+        parent_summary=str(parent/'summary.json'),measured_arrays_read=0)
+
+
+def voltage_power_cap_example_cases(panel, original_case, subjects):
+    """Select one existing validation slot per other subject, without arrays."""
+    if (panel.get('schema')!='voltage_separation_panel_v1'
+            or panel.get('protected_data')!='forbidden' or panel.get('test_access')!='forbidden'
+            or len(subjects)!=4 or len(set(subjects))!=4):
+        raise ValueError('four distinct subjects in the verified public panel required')
+    originals=[r for r in panel['rows'] if r['id']==original_case]
+    if len(originals)!=1 or originals[0]['split']!='validation':
+        raise ValueError('original validation case required')
+    if originals[0]['subject'] in subjects:
+        raise ValueError('examples must be the other validation subjects')
+    result=[]
+    for subject in subjects:
+        candidates=[r for r in panel['rows'] if r['subject']==subject and r['slot']==0]
+        if (len(candidates)!=1 or candidates[0]['split']!='validation'
+                or candidates[0]['phase']!='validation'
+                or candidates[0]['dataset']!='simultaneous_eeg_nirs'
+                or candidates[0]['record']!='cnt_nback'):
+            raise ValueError('one retained first validation n-back slot per named subject required')
+        result.append(candidates[0])
+    return result
+
+
+
+def voltage_power_cap_posterior_plan(project_root,cfg):
+    """Extend two admitted windows to one metadata-defined occipital ROI."""
+    from .functional_tokenizer import regional_anchors
+    from .unified_physiology import ChannelGeometryIndex
+    from copy import deepcopy
+    root=Path(project_root);spec=cfg['posterior'];panel=voltage_separation_plan(root,cfg)
+    examples=root/spec['reference_examples']
+    previous=json.loads((examples/'summary.json').read_text())
+    previous_plan=json.loads((examples/'plan.json').read_text())
+    if (previous['counts']['completed_pairs']!=5 or previous['counts']['failed_pairs']
+            or json.loads((examples/'verification.json').read_text())['status']!='passed'
+            or previous_plan['panel']!=panel
+            or previous['observation_weights']!=[.1,10.,10.]):
+        raise ValueError('verified five-example reference and unchanged original public panel required')
+    selected={r['case_id']:r['injection_channel'] for r in spec['cases']}
+    if len(selected)!=2:raise ValueError('two distinct predeclared posterior examples required')
+    originals=[e for e in panel['rows'] if e['phase']=='fit' or e['id'] in selected]
+    if (len(originals)!=8 or sum(e['phase']=='fit' for e in originals)!=6
+            or any(e['split']!='validation' for e in originals if e['id'] in selected)):
+        raise ValueError('six train-only calibration windows and two validation windows required')
+    geometry=ChannelGeometryIndex(root/cfg['data']['cache_root']);entries=[]
+    references={r['case_id']:r['run'] for r in previous['rows']}
+    for source_case in originals:
+        _,record=_registered_record(root,cfg,source_case['rows'])
+        anchor=regional_anchors(record,geometry,dict(regions=['occipital'],
+            region_vectors=[spec['occipital_direction']]))[0]
+        if (anchor['hb_channel']!=spec['occipital_hb_channel']
+                or anchor['eeg_channels']!=spec['occipital_eeg_channels']):
+            raise ValueError('registered posterior geometry differs from the fixed anatomical contract')
+        rows=deepcopy(source_case['rows'][:2])
+        if [r['anchor']['region'] for r in rows]!=['left_motor','prefrontal']:
+            raise ValueError('unchanged left motor and frontal anchors required')
+        row=deepcopy(source_case['rows'][2]);row.update(id=source_case['id']+'__occipital',
+            coordinate='simultaneous_eeg_nirs__occipital',anchor=anchor)
+        rows.append(row)
+        names={n for r in rows for n in r['anchor']['eeg_channels']}
+        if len(names)!=17 or not {'O1','O2'}<=names:
+            raise ValueError('registered 17-electrode posterior view required before arrays')
+        entries.append(dict(source_case,rows=rows,source_case=source_case,
+            injection_channel=selected.get(source_case['id']),
+            original_physical_run=references.get(source_case['id'])))
+    return dict(schema='voltage_power_cap_posterior_plan_v1',panel=panel,rows=entries,
+        cases=[e for e in entries if e['injection_channel']],
+        training=[e for e in entries if e['phase']=='fit'],
+        reference_examples=str(examples.resolve()),reference_run=previous_plan['reference_run'],
+        parent=previous_plan['parent'],test_access='forbidden',protected_data='forbidden',
+        channels=17,regions=spec['regions'],measured_arrays_read=0,
+        selection='original VP002/O1 and first additional VP005/O2, fixed before posterior arrays')
+
+
+def prepare_voltage_power_cap_posterior(project_root,cfg,plan,entry):
+    """Native posterior voltage and registered cached Hb; no new parser."""
+    if (plan.get('schema')!='voltage_power_cap_posterior_plan_v1'
+            or plan.get('protected_data')!='forbidden' or plan.get('test_access')!='forbidden'
+            or entry not in plan['rows'] or entry['split'] not in ('train','validation')
+            or entry['source_case'] not in plan['panel']['rows']):
+        raise ValueError('declared posterior development identity required before array access')
+    source=entry['source_case']
+    root,record=_registered_record(project_root,cfg,source['rows'])
+    # Cached reader validates v5/none, native units and bandpass before arrays.
+    cached=load_cached_fnirs_record(root,record)
+    native=load_native_eeg_record(root,record)
+    if (native.sample_rate_hz!=200 or native.native_unit not in ('uV','µV','μV')
+            or not native.unit_evidence):
+        raise ValueError('native 200 Hz microvolt EEG required')
+    old,old_meta=read_voltage_separation_input(plan['panel'],source)
+    lookup={n:i for i,n in enumerate(native.channel_names)}
+    names=sorted({n for r in entry['rows'] for n in r['anchor']['eeg_channels']},key=lookup.get)
+    start=round(source['rows'][0]['eeg_start_s']*200)
+    x=np.asarray(native.values[start:start+18000,[lookup[n] for n in names]],float)
+    if x.shape!=(18000,17) or not np.isfinite(x).all():
+        raise ValueError('complete 17-channel 90-second posterior voltage required')
+    old_names=list(old['channels']);common=[n for n in names if n in old_names]
+    if not np.array_equal(x[:,[names.index(n) for n in common]],old['x'][:,[old_names.index(n) for n in common]]):
+        raise ValueError('native posterior reader does not reproduce retained overlapping channels')
+    row=entry['rows'][2];pair=row['anchor']['hb_pair']
+    if cached['channel_names'][2*pair]!=row['anchor']['hb_channel']+'_HbO':
+        raise ValueError('posterior Hb channel does not match registered geometry')
+    first,last=row['hb_start_s'],row['hb_start_s']+90
+    tolerance=8*np.spacing(max(abs(first),abs(last),1.))
+    take=(cached['time_s']>=first-tolerance)&(cached['time_s']<last-tolerance)
+    times=cached['time_s'][take]-first;times[abs(times)<=tolerance]=0.
+    h=cached['values'][take,pair]
+    if not np.isfinite(h).all():raise ValueError('posterior Hb support is missing')
+    ops=disjoint_native_bin_operator(times)
+    hb=ops['bins']@h;hb-=hb[:50].mean(0)
+    if not np.array_equal(times,old['hb_native_time'][:,0]):
+        raise ValueError('new posterior and retained Hb clocks differ')
+    values=dict(x=x,hb=np.stack([old['hb'][:,0],old['hb'][:,1],hb],axis=1),
+        hb_native_time=np.stack([old['hb_native_time'][:,0],old['hb_native_time'][:,1],times],axis=1),
+        roi_indices=np.array([[names.index(n) for n in r['anchor']['eeg_channels']] for r in entry['rows']]),
+        channels=np.array(names))
+    values['features_baseline']=separation_covariances(x,cfg['separation'])['features']
+    metadata=dict(case_id=entry['id'],split=entry['split'],source_case_id=source['id'],
+        native_source=str(native.source_path),native_start_sample=start,eeg_unit=native.native_unit,
+        eeg_reference=native.reference,sample_rate_hz=200,channels=names,
+        posterior_anchor=row['anchor'],posterior_hb_provenance=cached['provenance'],
+        original_overlapping_voltage_exact=True,hb_clock_exact=True,calibration_eligible=entry['phase']=='fit')
+    return values,metadata
+
+
+def read_voltage_separation_input(plan, entry, *, include_eog=False):
+    """One retained read boundary; EOG is available only for validation scoring."""
+    if (plan.get('schema')!='voltage_separation_panel_v1' or plan.get('protected_data')!='forbidden'
+            or entry not in plan['rows'] or entry['split'] not in ('train','validation')
+            or (include_eog and entry['split']!='validation')):
+        raise ValueError('declared development identity; EOG is validation-only')
+    parent=Path(plan['parent'])
+    original=json.loads((parent/'plan.json').read_text())
+    matches=[r for r in original['rows'] if r['id']==entry['id']]
+    if len(matches)!=1 or any(entry[k]!=v for k,v in matches[0].items()):
+        raise ValueError('exact parent identity required before array access')
+    metadata=json.loads((parent/'prepared'/f"{entry['id']}.json").read_text())
+    if metadata.get('status')!='completed' or not metadata.get('legacy_supervision_float32_exact'):
+        raise ValueError('completed verified native-voltage window required')
+    keys=['x','hb','hb_native_time','roi_indices','channels','legacy_s']
+    if include_eog:keys.append('eog')
+    with np.load(parent/'prepared'/f"{entry['id']}.npz",allow_pickle=False) as archive:
+        arrays={k:archive[k] for k in keys}
+    if (arrays['x'].shape!=(18000,16) or arrays['hb'].shape!=(900,3,2)
+            or arrays['roi_indices'].shape!=(3,6) or metadata['eeg_unit'] not in ('uV','µV','μV')
+            or not np.isfinite(arrays['x']).all() or not np.isfinite(arrays['hb']).all()):
+        raise ValueError('complete native 200 Hz microvolt EEG and cached 10 Hz Hb required')
+    return arrays,metadata
+
+
+def separation_covariances(x, spec):
+    """Centred 2-second statistics; original voltage itself is not centred."""
+    from scipy.signal import butter,sosfiltfilt
+    x=np.asarray(x,float);length=int(spec['covariance_seconds']*200)
+    if x.ndim!=2 or x.shape[0]%length or not np.isfinite(x).all():
+        raise ValueError('finite complete native-voltage epochs required')
+    def covariance(v):
+        blocks=v.reshape(-1,length,x.shape[1]);blocks=blocks-blocks.mean(axis=1,keepdims=True)
+        return np.einsum('ntc,ntd->ncd',blocks,blocks)/length
+    carriers=[sosfiltfilt(butter(4,band,fs=200,btype='bandpass',output='sos'),x,axis=0) for band in BANDS]
+    power=np.stack([np.mean(v.reshape(-1,20,x.shape[1])**2,axis=1) for v in carriers],axis=-1)
+    log=np.log(np.maximum(power,1e-20));log-=log[:50].mean(axis=0)
+    return dict(full=covariance(x),band=np.stack([covariance(v) for v in carriers],axis=1),
+        features=log,time_s=(np.arange(len(x)//length)+.5)*length/200)
+
+
+def separation_state_epochs(z, spec):
+    """Shared slow guidance transform, never a transform of the voltage target."""
+    from scipy.signal import butter,sosfiltfilt
+    value=np.asarray(z,float)
+    if value.shape!=(900,3):raise ValueError('three 10 Hz whole-window guidance trajectories required')
+    out=np.full((45,3),np.nan)
+    for roi in range(3):
+        if np.isfinite(value[:,roi]).all():
+            slow=sosfiltfilt(butter(2,spec['guidance_lowpass_hz'],fs=10,output='sos'),value[:,roi])
+            out[:,roi]=slow.reshape(45,20).mean(axis=1)
+    return out
+
+
+def phase_shuffled_states(z, seed):
+    """Common phase preserves cross-ROI spectra while breaking EEG alignment."""
+    rng=np.random.default_rng(seed);value=np.asarray(z,float);out=value.copy()
+    good=np.isfinite(value).all(axis=0)
+    if good.any():
+        spectrum=np.fft.rfft(value[:,good],axis=0)
+        phases=np.exp(1j*rng.uniform(-np.pi,np.pi,len(spectrum)));phases[0]=1
+        if len(value)%2==0:phases[-1]=1
+        out[:,good]=np.fft.irfft(spectrum*phases[:,None],n=len(value),axis=0)
+    return out
+
+
+def fit_state_guided_subspace(fit_items, select_items, rank, method, spec):
+    """Shared full-band covariance and training-only SPoC direction selection."""
+    if (not fit_items or not select_items or any(i['phase']!='fit' for i in fit_items)
+            or any(i['phase']!='select' for i in select_items)):
+        raise ValueError('separate training fit and selection windows required')
+    c=fit_items[0]['cov']['full'].shape[-1]
+    if not 0<rank<c:raise ValueError('strictly reduced native-channel rank required')
+    def support(item):
+        lo,hi=spec['covariance_support_seconds'];t=item['cov']['time_s']
+        return (t>=lo)&(t<hi)
+    raw=np.mean(np.concatenate([i['cov']['full'][support(i)] for i in fit_items]),axis=0)
+    shrink=spec['covariance_shrinkage']
+    c0=(1-shrink)*raw+shrink*np.diag(np.diag(raw))
+    values,vectors=np.linalg.eigh(c0);floor=max(values.max()*1e-10,1e-12)
+    values=np.maximum(values,floor)
+    square=(vectors*np.sqrt(values))@vectors.T
+    inverse=(vectors/np.sqrt(values))@vectors.T
+    candidates=[]
+    if method=='pca':
+        q=vectors[:,::-1][:,:rank];selection=[]
+    elif method=='random':
+        q=np.linalg.qr(np.random.default_rng(spec['seed']).normal(size=(c,c)))[0][:,:rank];selection=[]
+    else:
+        for roi in range(3):
+            for band in range(5):
+                matrices=[]
+                for items in (fit_items,select_items):
+                    chunks=[];zs=[]
+                    for item in items:
+                        z=item['states'][method][:,roi];use=support(item)&np.isfinite(z)
+                        if use.sum()<4:continue
+                        y=z[use]-np.mean(z[use]);sd=float(np.std(y))
+                        if sd<1e-12:continue
+                        chunks.append(item['cov']['band'][use,band]);zs.append(y/sd)
+                    if not chunks:matrices.append(None);continue
+                    cov=np.concatenate(chunks);z=np.concatenate(zs)
+                    matrices.append(np.einsum('n,ncd->cd',z,cov-cov.mean(axis=0))/len(z))
+                if any(m is None for m in matrices):continue
+                eigen,dirs=np.linalg.eigh(inverse@matrices[0]@inverse)
+                hold=np.einsum('ci,cd,di->i',dirs,inverse@matrices[1]@inverse,dirs)
+                for k in range(c):
+                    score=min(abs(float(eigen[k])),abs(float(hold[k]))) if eigen[k]*hold[k]>0 else 0.
+                    candidates.append(dict(vector=dirs[:,k],score=score,roi=roi,band=band,
+                        fit_covariance=float(eigen[k]),selection_covariance=float(hold[k])))
+        basis=[];selection=[]
+        for candidate in sorted(candidates,key=lambda r:-r['score']):
+            if candidate['score']<=0:continue
+            v=candidate['vector'].copy()
+            for previous in basis:v-=previous*(previous@v)
+            norm=np.linalg.norm(v)
+            if norm<.15:continue
+            basis.append(v/norm);selection.append({k:v for k,v in candidate.items() if k!='vector'})
+            if len(basis)==rank:break
+        if len(basis)!=rank:raise ValueError(f'only {len(basis)} stable independent directions for requested rank {rank}')
+        q=np.stack(basis,axis=1)
+    w=inverse@q;b=square@q;p=b@w.T
+    if np.max(abs(p@p-p))>1e-9 or np.max(abs(w.T@b-np.eye(rank)))>1e-9:
+        raise AssertionError('native-space projection identities failed')
+    return dict(W=w,B=b,P=p,C0=c0,rank=np.asarray(rank),
+        selection=selection,condition_number=float(values.max()/values.min()),
+        idempotence_error=float(np.max(abs(p@p-p))),operator_norm=float(np.linalg.norm(p,2)))
+
+
+def fit_neighbor_predictor(fit_voltages, subspace, spec):
+    """Small symmetric blind-spot predictor, unit DC gain, frozen after fit."""
+    lags=tuple(spec['predictor_lags_samples']);margin=max(lags);rank=subspace['W'].shape[1]
+    gram=np.zeros((rank,len(lags),len(lags)));rhs=np.zeros((rank,len(lags)));count=0
+    for x in fit_voltages:
+        y=np.asarray(x,float)@subspace['W']
+        y=y-y.mean(axis=0)  # Statistics only; unit DC gain preserves voltage offsets at application.
+        centre=y[margin:-margin]
+        pairs=np.stack([.5*(y[margin-l:len(y)-margin-l]+y[margin+l:len(y)-margin+l]) for l in lags],axis=-1)
+        gram+=np.einsum('nrl,nrk->rlk',pairs,pairs);rhs+=np.einsum('nrl,nr->rl',pairs,centre);count+=len(centre)
+    weights=[]
+    for g,b in zip(gram/count,rhs/count):
+        regularizer=spec['predictor_ridge']*max(float(np.trace(g))/len(lags),1e-12)
+        kkt=np.zeros((len(lags)+1,len(lags)+1));kkt[:-1,:-1]=g+regularizer*np.eye(len(lags))
+        kkt[-1,:-1]=1;kkt[:-1,-1]=1
+        weights.append(np.linalg.solve(kkt,np.r_[b,1.])[:-1])
+    return np.asarray(weights)
+
+
+def apply_voltage_separation(x, model, spec, *, innovation_fraction=None):
+    """EEG-only frozen frontend; both outputs retain native samples and units."""
+    x=np.asarray(x,float)
+    if x.ndim!=2 or x.shape[1]!=model['W'].shape[0] or not np.isfinite(x).all():
+        raise ValueError('finite same-montage EEG required')
+    eta=float(model.get('innovation_fraction',0.) if innovation_fraction is None else innovation_fraction)
+    if not 0<=eta<=1:raise ValueError('innovation fraction outside the declared range')
+    y=x@model['W'];prediction=y.copy();lags=spec['predictor_lags_samples'];margin=max(lags)
+    prediction[margin:-margin]=sum(.5*(y[margin-l:len(y)-margin-l]+y[margin+l:len(y)-margin+l])*model['predictor'][:,j]
+        for j,l in enumerate(lags))
+    spatial=y@model['B'].T
+    temporal=eta*(y-prediction)@model['B'].T
+    s=spatial-temporal;o=x-s
+    return dict(s=s,o=o,o_spatial=x-spatial,o_temporal=temporal,
+        closure_max_abs=float(np.max(abs(s+o-x))))
+
+
+def separation_probe(channels, seed, kind, spec, *, rms=1., donor_eog=None):
+    """Independent known perturbations; no learned-subspace alignment."""
+    from scipy.signal import butter,sosfiltfilt
+    rng=np.random.default_rng(seed);t=np.arange(18000)/200;c=len(channels)
+    anterior=np.array([1. if n.startswith('Fp') else .65 if n.startswith(('AF','F1','F2')) else .22 if n.startswith('FC') else .08 for n in channels])
+    anterior*=rng.uniform(.8,1.2,c)
+    if kind=='ocular':
+        if donor_eog is None:
+            carrier=sum(rng.choice([-1.,1.])*np.exp(-.5*((t-onset)/rng.uniform(.1,.3))**2)
+                for onset in (33.,37.,42.,46.))
+        else:
+            e=np.asarray(donor_eog,float)
+            carrier=np.roll(sosfiltfilt(butter(4,[.5,15],fs=200,btype='bandpass',output='sos'),e[:,1]),1400)
+            carrier*=np.exp(-.5*((t-40)/4)**2)
+        value=carrier[:,None]*anterior
+    elif kind=='fine':
+        value=sosfiltfilt(butter(4,spec['fine_noise_band_hz'],fs=200,btype='bandpass',output='sos'),rng.normal(size=(len(t),c)),axis=0)
+        value*=np.exp(-.5*((t-40)/3)**2)[:,None]
+    elif kind.startswith('neural'):
+        hz=float(kind.removeprefix('neural'))
+        topology=np.array([1. if n in ('C3','Cz','C4','CP1','CP2') else .3 for n in channels])
+        # Calibration and evaluation vary the field before any method is fitted.
+        topology*=rng.uniform(.7,1.3,c)
+        value=(np.sin(2*np.pi*hz*t+rng.uniform(0,2*np.pi))*np.exp(-.5*((t-40)/2)**2))[:,None]*topology
+    else:raise ValueError('unknown prespecified separation probe')
+    scale=float(np.sqrt(np.mean(value[6000:10000]**2)))
+    if scale<=1e-15:raise ValueError('degenerate intervention')
+    return value*(float(rms)/scale)
+
+
+def separation_synthetic_record(seed, slot, scenario):
+    """Known-voltage mechanism controls, including confounding and overlap."""
+    from scipy.signal import butter,sosfiltfilt
+    if scenario not in ('separable','overlapping_fine_noise','state_correlated_artifact'):
+        raise ValueError('unknown frozen synthetic scenario')
+    rng=np.random.default_rng(int(seed)+10000*int(slot));n=18000;t=np.arange(n)/200
+    # One stable sensor montage; seeds vary signals, not the hidden ground-truth basis.
+    mixing=np.random.default_rng(71).normal(size=(16,16))
+    mixing[:,0]=np.r_[1.,.7,.5,.35,.2,.15,.1,.1,.1,.1,1.,.2,.15,.1,.1,.1]
+    basis=np.linalg.qr(mixing)[0];neural=basis[:,2:8]
+    state=np.column_stack([np.sin(2*np.pi*f*t+rng.uniform(0,6))+.25*np.sin(2*np.pi*.11*t+rng.uniform(0,6)) for f in (.035,.055,.075)])
+    carriers=[]
+    for j,(hz,amp) in enumerate(zip((3.,6.,10.,18.,35.,55.),(10.,15.,30.,18.,10.,8.))):
+        carrier=amp*np.exp(.4*state[:,j%3])*np.sin(2*np.pi*hz*t+rng.uniform(0,6))
+        carriers.append(carrier)
+    clean=np.stack(carriers,axis=1)@neural.T
+    slow=sum(rng.uniform(70,130)*np.exp(-.5*((t-onset)/rng.uniform(.12,.3))**2) for onset in rng.uniform(5,85,18))
+    if scenario=='state_correlated_artifact':
+        slow=70*np.exp(.85*state[:,0])*np.sin(2*np.pi*2*t)
+    major=slow[:,None]*basis[:,0]
+    dimension=6 if scenario=='overlapping_fine_noise' else 8
+    fine_source=sosfiltfilt(butter(3,[25,70],fs=200,btype='bandpass',output='sos'),rng.normal(size=(n,dimension)),axis=0)
+    fine_source*=5./np.sqrt(np.mean(fine_source**2))
+    fine=fine_source@(neural if scenario=='overlapping_fine_noise' else basis[:,8:]).T
+    return dict(x=clean+major+fine,clean=clean,major=major,fine=fine,
+        state=state.reshape(900,20,3).mean(axis=1),true_neural_basis=neural,
+        channels=np.array(['Fp1','AFF5h','AFz','F1','FC5','FC1','C3','Cz','CP5','CP1','Fp2','FC2','FC6','C4','CP2','CP6']))
+
+
 def prepare_voltage_teacher_record(root, cfg, entries, coordinates, read_parent):
     """Reuse the registered native reader and exact retained physical baselines."""
     rows = [r for entry in entries for r in entry['rows']]
@@ -195,6 +577,189 @@ def prepare_voltage_teacher_record(root, cfg, entries, coordinates, read_parent)
             native_proxy_replay_max_abs=replay, legacy_diagnostic=legacy['diagnostic'])
         metadata['legacy_supervision_float32_exact'] = True
         yield entry, payload, metadata
+
+
+def voltage_power_cap_bank(x):
+    """Original five Butterworth carriers plus their exact voltage complement.
+
+    The complement includes DC and frequencies outside the proxy bands. It is
+    constrained too; neither a local mean nor an unmodelled band bypasses S.
+    These overlapping carriers are not an orthogonal energy decomposition.
+    """
+    from scipy.signal import butter, sosfiltfilt
+    x = np.asarray(x, float)
+    if x.ndim != 2 or len(x) < 200 or not np.isfinite(x).all():
+        raise ValueError('finite native 200 Hz multichannel voltage required')
+    bands = [sosfiltfilt(butter(4, band, fs=200, btype='bandpass', output='sos'), x, axis=0)
+             for band in BANDS]
+    return np.stack([*bands, x - np.sum(bands, axis=0)], axis=1)
+
+
+def voltage_power_cap_frames(bank, *, window=200, hop=20):
+    """One-second second-moment frames, 100 ms hop, reflected endpoints.
+
+    No frame mean is removed. Reflection is solely a declared finite-window
+    edge convention; reported interventions are in the interior [30,50) s.
+    """
+    bank = np.asarray(bank, float)
+    if (bank.ndim != 3 or window != 200 or hop != 20 or len(bank) % hop
+            or not np.isfinite(bank).all()):
+        raise ValueError('finite bank and declared one-second/100 ms frame clock required')
+    padded = np.pad(bank, ((window//2, window//2), (0, 0), (0, 0)), mode='reflect')
+    frames = np.lib.stride_tricks.sliding_window_view(padded, window, axis=0)[::hop]
+    # [frame, band, channel, local sample], read-only view; time is the centre.
+    return frames, np.arange(len(frames)) * hop / 200.
+
+
+def fit_voltage_power_cap_reference(training, projection, *, shrinkage=.1):
+    """Frozen train-only log-power completion and six second-moment references.
+
+    This is a signal-statistics reference, not estimated clean covariance.
+    Each item is one already-admitted training window with native voltage x.
+    """
+    if (not training or any(item.get('split') != 'train' for item in training)
+            or not 0 < shrinkage <= 1):
+        raise ValueError('training windows only and positive covariance shrinkage required')
+    a = np.asarray(projection, float); c = np.shape(training[0]['x'])[1]
+    if (a.shape != (3, c*5) or not np.isfinite(a).all()
+            or np.linalg.matrix_rank(a) != 3):
+        raise ValueError('full-row-rank three-ROI channel-major projection required')
+    features, baselines, correlations, complements = [], [], [], []
+    for item in training:
+        x = np.asarray(item['x'], float)
+        if x.shape != (18000, c):
+            raise ValueError('each reference window must retain complete 90 s support')
+        bank = voltage_power_cap_bank(x)
+        power = np.mean(bank[:, :5].reshape(900, 20, 5, c)**2, axis=1).transpose(0, 2, 1)
+        log = np.log(np.maximum(power, 1e-20)); baseline = log[:50].mean(axis=0)
+        features.append((log - baseline)[150:750].reshape(600, -1))
+        baselines.append(baseline.reshape(-1))
+        frames, time_s = voltage_power_cap_frames(bank)
+        frames = frames[(time_s >= 15) & (time_s < 75)]
+        second = np.einsum('nbcl,nbdl->nbcd', frames, frames) / 200
+        diagonal = np.diagonal(second, axis1=-2, axis2=-1)
+        if np.any(diagonal <= 0):
+            raise ValueError('zero training channel/band power cannot define a reference')
+        correlations.append(np.mean(second / np.sqrt(diagonal[..., :, None] * diagonal[..., None, :]), axis=0))
+        complements.append(diagonal[:, -1])
+    ell = np.concatenate(features); mu = ell.mean(axis=0)
+    raw = np.cov(ell, rowvar=False, bias=True)
+    floor = max(float(np.diag(raw).max()) * 1e-8, 1e-12)
+    covariance = (1-shrinkage)*raw + shrinkage*np.diag(np.maximum(np.diag(raw), floor))
+    av = a @ covariance
+    lift = np.linalg.solve(av @ a.T, av).T
+    if not np.allclose(a @ lift, np.eye(3), atol=1e-10, rtol=0):
+        raise ValueError('log-power conditional completion lost its equality constraint')
+    correlation = (1-shrinkage)*np.mean(correlations, axis=0) + shrinkage*np.eye(c)[None]
+    return dict(projection=a, mean=mu, covariance=covariance, lift=lift,
+        baseline_log_power=np.median(baselines, axis=0), correlation=correlation,
+        complement_power=np.median(np.concatenate(complements), axis=0),
+        shrinkage=np.array(shrinkage), training_windows=np.array(len(training)),
+        training_feature_rows=np.array(len(ell)))
+
+
+def voltage_power_cap_reference(model, proxy, time_s):
+    """Complete the reference from frozen statistics; never from current EEG.
+
+    proxy=None is the matched constant-statistics control. Input proxies keep
+    their existing 10 Hz, first-five-second-reference coordinates.
+    """
+    a, mu, lift = (np.asarray(model[k], float) for k in ('projection', 'mean', 'lift'))
+    time_s = np.asarray(time_s, float); c = a.shape[1]//5
+    if proxy is None:
+        ell = np.broadcast_to(mu, (len(time_s), len(mu)))
+    else:
+        p = np.asarray(proxy, float)
+        if p.shape != (900, 3) or not np.isfinite(p).all():
+            raise ValueError('three complete finite 10 Hz reconstructed proxy trajectories required')
+        aligned = np.stack([np.interp(time_s, np.arange(900)/10, p[:, j]) for j in range(3)], axis=1)
+        ell = mu + (aligned - a @ mu) @ lift.T
+        if not np.allclose(ell @ a.T, aligned, rtol=1e-10, atol=1e-11):
+            raise ValueError('completed reference does not reproduce the proxy coordinate')
+    with np.errstate(over='raise', invalid='raise'):
+        power = np.exp(ell + model['baseline_log_power']).reshape(-1, c, 5).transpose(0, 2, 1)
+    power = np.concatenate((power, np.broadcast_to(model['complement_power'], (len(time_s), 1, c))), axis=1)
+    if not np.isfinite(power).all() or np.any(power <= 0):
+        raise ValueError('invalid reference power; no clipping of extrapolated physical references')
+    return power
+
+
+def project_voltage_second_moment(x, reference, cap):
+    """Exact weighted projection onto S S' / L <= cap * reference.
+
+    x is [...,channel,sample]. The formula is singular-value clipping in
+    reference-whitened coordinates, not an artifact/source classifier.
+    """
+    x, reference = np.asarray(x, float), np.asarray(reference, float)
+    if (reference.shape != x.shape[:-1] + (x.shape[-2],) or not np.isfinite(x).all()
+            or not np.isfinite(reference).all() or not np.isfinite(cap) or cap <= 0
+            or not np.allclose(reference, np.swapaxes(reference, -1, -2), rtol=1e-11, atol=1e-12)):
+        raise ValueError('finite matched symmetric reference and positive power cap required')
+    diagonal = np.diagonal(reference, axis1=-2, axis2=-1)
+    if np.any(diagonal <= 0):
+        raise ValueError('strictly positive reference covariance required')
+    # Separate channel units before factoring C=D R D. Any exact whitening
+    # gives the same weighted projection; symmetric square roots are not needed.
+    # SVD of the whitened voltage avoids squaring its condition number in XX'.
+    scale = np.sqrt(diagonal)
+    correlation = reference / scale[..., :, None] / scale[..., None, :]
+    try:
+        root = np.linalg.cholesky(correlation)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError('strictly positive reference covariance required') from exc
+    whitened = np.linalg.solve(root, x / scale[..., :, None])
+    left, singular, right = np.linalg.svd(whitened, full_matrices=False)
+    limit = np.sqrt(cap*x.shape[-1])
+    clipped = np.minimum(singular, limit)
+    transformed = (left * clipped[..., None, :]) @ right
+    result = scale[..., :, None] * (root @ transformed)
+    # The unmodified feasible branch is exactly identity, including its mean.
+    feasible = singular[..., 0] <= limit
+    result = np.where(feasible[..., None, None], x, result)
+    bounded = transformed @ np.swapaxes(transformed, -1, -2) / x.shape[-1]
+    after = np.linalg.eigvalsh(bounded)[..., -1]
+    gain = np.ones_like(singular)
+    np.divide(limit, singular, out=gain, where=singular > limit)
+    return result, dict(max_input_eigenvalue=singular[..., 0]**2/x.shape[-1],
+        max_output_eigenvalue=after, clipped_directions=np.sum(singular > limit, axis=-1),
+        minimum_gain=gain.min(axis=-1))
+
+
+def voltage_power_cap_target(x, model, proxy, *, cap=1., audit_final=True):
+    """Cap every local carrier and overlap-add; exact residual voltage O=x-S.
+
+    The proven cap applies to individual local carrier blocks. Refiltering the
+    final sum can change those blocks; its violations are measured, never hidden
+    or promoted to a global bound. No mean or out-of-band voltage is added back.
+    """
+    x = np.asarray(x, float); bank = voltage_power_cap_bank(x)
+    frames, time_s = voltage_power_cap_frames(bank)
+    power = voltage_power_cap_reference(model, proxy, time_s)
+    d = np.sqrt(power)
+    covariance = d[..., :, None] * model['correlation'][None] * d[..., None, :]
+    estimated, diagnostic = project_voltage_second_moment(frames, covariance, cap)
+    if np.max(diagnostic['max_output_eigenvalue']) > cap*(1+1e-8):
+        raise AssertionError('local spectral cap was not satisfied')
+    window = np.hanning(201)[:-1]
+    accumulated = np.zeros((len(x)+200, x.shape[1])); weight = np.zeros(len(x)+200)
+    for k, block in enumerate(estimated):
+        start = k*20
+        accumulated[start:start+200] += block.sum(axis=0).T * window[:, None]
+        weight[start:start+200] += window
+    section = slice(100, 100+len(x))
+    s = accumulated[section]/weight[section, None]
+    o = x-s
+    post = np.empty((0, 6))
+    if audit_final:
+        final_frames, _ = voltage_power_cap_frames(voltage_power_cap_bank(s))
+        _, check = project_voltage_second_moment(final_frames, covariance, cap)
+        post = check['max_input_eigenvalue']/cap
+    return dict(s=s, o=o, reference_power=power, frame_time_s=time_s,
+        local_input_ratio=diagnostic['max_input_eigenvalue']/cap,
+        local_output_ratio=diagnostic['max_output_eigenvalue']/cap,
+        clipped_directions=diagnostic['clipped_directions'],
+        minimum_gain=diagnostic['minimum_gain'], final_reanalysis_ratio=post,
+        closure_max_abs=np.array(np.max(abs(s+o-x))))
 
 
 def voltage_stft(x, spec):
@@ -769,12 +1334,14 @@ def fit_training_coordinates(rows, read_arrays):
 
 
 def produce_teacher(arrays, coordinate, tak_cfg, *, arm_name='tak_fixed', warm_start=None,
-                    eeg_visible=True):
+                    eeg_visible=True, observation_weights=None):
     """Fit the declared Tak arm; return observation-space u, S and full residual.
 
     Fixed-reference Tak is the default engineering teacher. ``tak_fit`` may be
     requested explicitly in the versioned run, retaining per-window privileged
     kappa/tau inference. Neither variant is physiological ground truth.
+    Explicit observation weights multiply the standardized EEG/HbO/HbR SSE;
+    saved observations and integration/quality scales retain the original gauge.
     """
     from src.inference.shared_driver_reconstruction import (
         fit_nonlinear_shared_parameters, nonlinear_driver_forward,
@@ -804,6 +1371,11 @@ def produce_teacher(arrays, coordinate, tak_cfg, *, arm_name='tak_fixed', warm_s
     mask = np.ones_like(u, bool); mask[-1] = False
     if not eeg_visible:
         mask[:, 0] = False
+    weights = np.ones(3) if observation_weights is None else np.asarray(observation_weights, float)
+    if weights.shape != (3,) or not np.isfinite(weights).all() or np.any(weights <= 0):
+        raise ValueError('three finite positive EEG/HbO/HbR objective weights required')
+    original_sd = np.asarray(coordinate['sd'])
+    objective_sd = original_sd if observation_weights is None else original_sd / np.sqrt(weights)
     names = arm['fit']
     values = [fitting['reference'][name] for name in names]
     starts = [dict(parameter_values=np.asarray(values))]
@@ -817,7 +1389,7 @@ def produce_teacher(arrays, coordinate, tak_cfg, *, arm_name='tak_fixed', warm_s
             start.update(driver=np.asarray(warm_start['driver'])[None],
                 initial_state=np.asarray(warm_start['initial_state'])[None])
     kwargs = dict(parameter_names=names, parameter_bounds=[fitting['bounds'][n] for n in names],
-        sd=np.asarray(coordinate['sd']), mean_operator=operator, visible=mask[None], starts=starts,
+        sd=objective_sd, mean_operator=operator, visible=mask[None], starts=starts,
         penalty=solver['penalty'], initial_penalty=solver['initial_penalty'],
         flow_prior_weight=solver['flow_prior_weight'], flow_prior_log_sd=solver['flow_prior_log_sd'],
         substeps=solver['substeps'], max_iterations=solver['max_iterations'],
@@ -832,8 +1404,9 @@ def produce_teacher(arrays, coordinate, tak_cfg, *, arm_name='tak_fixed', warm_s
     fit = fit_nonlinear_shared_parameters(u[None], parameters, DT, **kwargs)
     status = {k: fit.get(k) for k in ('status', 'converged', 'objective', 'evaluations',
         'projected_scaled_gradient_inf_norm', 'objective_components', 'parameter_names',
-        'parameter_values', 'kappa', 'tau', 'gamma', 'viscoelastic_s')}
-    status.update(teacher_arm=arm_name, interpretation='privileged_conditional_model_output_not_physiological_truth')
+        'parameter_values', 'kappa', 'tau', 'gamma', 'viscoelastic_s', 'starts', 'selected_start')}
+    status.update(teacher_arm=arm_name, observation_weights=weights,
+        interpretation='privileged_conditional_model_output_not_physiological_truth')
     if 'prediction' not in fit:
         status['accepted'] = False
         return None, status
@@ -907,7 +1480,7 @@ def produce_alternative_teacher(arrays, coordinate, tak_cfg, reference, settings
     return chosen, status
 
 
-def synthetic_teacher_check(tak_cfg, seed=20261010):
+def synthetic_teacher_check(tak_cfg, seed=20261010, *, observation_weights=None):
     """One actual 90 s fixed-Tak fit, without measured files or model mocks."""
     from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
     from src.inference.t3a_balloon_robust_ssm import BalloonParameters
@@ -926,7 +1499,7 @@ def synthetic_teacher_check(tak_cfg, seed=20261010):
         identity=np.array('synthetic_fixed_Tak_90s'))
     co = dict(pc=np.r_[1., np.zeros(29)], eeg_factor=1., hb_factor=1.,
         sd=np.array([.025, .025, .025]), eeg_proxy_input=EEG_PROXY_INPUT_SCHEMA)
-    targets, status = produce_teacher(arrays, co, tak_cfg)
+    targets, status = produce_teacher(arrays, co, tak_cfg, observation_weights=observation_weights)
     if targets is None or not status['accepted']:
         raise AssertionError('actual synthetic fixed-Tak teacher did not pass numerical acceptance')
     closure = float(np.max(np.abs(targets['u'] - targets['physical'] - targets['remaining'])))

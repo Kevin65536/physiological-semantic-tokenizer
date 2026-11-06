@@ -28,6 +28,973 @@ MODALITIES = ('eeg', 'hb')
 BRANCHES = ('S', 'O')
 
 
+def separation_wave_metrics(x,s,o,scale,eog=None):
+    """Natural waveform diagnostics; no clean truth is assumed."""
+    from scipy.signal import butter,sosfiltfilt
+    x,s,o=(np.asarray(v,float) for v in (x,s,o));a=np.asarray(scale,float);sl=slice(6000,10000)
+    def high(v):return sosfiltfilt(butter(4,[25,70],fs=200,btype='bandpass',output='sos'),v,axis=0)[sl]
+    xf,of,sf=high(x),high(o),high(s)
+    result=dict(change_NMSE=float(np.mean(((s[sl]-x[sl])/a)**2)),
+        S_RMS_ratio=float(np.sqrt(np.mean(s[sl]**2)/np.mean(x[sl]**2))),
+        O_RMS_uV=float(np.sqrt(np.mean(o[sl]**2))),O_fine_RMS_uV=float(np.sqrt(np.mean(of**2))),
+        O_fine_RMS_ratio=float(np.sqrt(np.mean(of**2)/max(np.mean(xf**2),1e-20))),
+        S_fine_RMS_ratio=float(np.sqrt(np.mean(sf**2)/max(np.mean(xf**2),1e-20))),
+        O_roughness=float(np.sqrt(np.mean((np.diff(o[sl],axis=0)/a)**2))),
+        closure_max_abs=float(np.max(abs(s+o-x))))
+    if eog is not None:
+        reference=sosfiltfilt(butter(4,[.5,15],fs=200,btype='bandpass',output='sos'),eog,axis=0)[sl]
+        b=reference-reference.mean(0)
+        for key,value in [('raw',x),('S',s),('O',o)]:
+            v=value[sl]-value[sl].mean(0);den=np.sqrt(np.sum(v*v,axis=0)[:,None]*np.sum(b*b,axis=0)[None])
+            corr=np.divide(v.T@b,den,out=np.zeros_like(den),where=den>1e-20)
+            result[key+'_EOG_correlation']=float(np.median(np.max(abs(corr),axis=1)))
+    return result
+
+
+def separation_change_metrics(base,changed,n,kind,*,base_o=None,changed_o=None,
+                              score_slice=slice(6000,10000)):
+    """NRMSE is relative to the known change, not natural EEG purity."""
+    sl=score_slice;n=np.asarray(n,float)[sl]
+    delta=np.asarray(changed,float)[sl]-np.asarray(base,float)[sl]
+    expected=n if kind.startswith('neural') else 0.
+    energy=float(np.mean(n*n))
+    error=float(np.mean((delta-expected)**2)/energy)
+    projection=float(np.mean(delta*n)/energy)
+    delta_o=n-delta if base_o is None else np.asarray(changed_o,float)[sl]-np.asarray(base_o,float)[sl]
+    expected_o=0. if kind.startswith('neural') else n
+    return dict(change_NMSE=error,S_signed_gain=projection,
+        O_change_NMSE=float(np.mean((delta_o-expected_o)**2)/energy),
+        O_signed_gain=float(np.mean(delta_o*n)/energy),
+        delta_O_correlation=float(np.corrcoef(delta_o.ravel(),n.ravel())[0,1]) if np.std(delta_o)>1e-12 else 0.,
+        injection_RMS_uV=float(np.sqrt(energy)))
+
+
+def separation_decode_metrics(target,decoded,scale):
+    """Separate actual fine texture from reconstruction/boundary errors."""
+    from scipy.signal import butter,sosfiltfilt
+    target,decoded=np.asarray(target,float),np.asarray(decoded,float);scale=np.asarray(scale,float)
+    error=decoded-target
+    high=lambda v:sosfiltfilt(butter(4,[25,70],fs=200,btype='bandpass',output='sos'),v,axis=0)
+    a,b=high(target),high(decoded);den=max(float(np.mean(a*a)),1e-20)
+    boundaries=np.arange(20,len(target),20)
+    difference=np.diff(error,axis=0)
+    return dict(NMSE=float(np.mean((error/scale)**2)),
+        fine_error_NMSE=float(np.mean((a-b)**2)/den),fine_RMS_ratio=float(np.sqrt(np.mean(b*b)/den)),
+        fine_correlation=float(np.corrcoef(a.ravel(),b.ravel())[0,1]) if np.std(a)>1e-10 and np.std(b)>1e-10 else 0.,
+        boundary_error_RMS=float(np.sqrt(np.mean((difference[boundaries-1]/scale)**2))),
+        waveform_correlation=float(np.corrcoef(target.ravel(),decoded.ravel())[0,1]) if np.std(target)>1e-10 else None)
+
+
+
+def summarize_voltage_power_cap_examples(entries,fits,*,planned_new_fits=16):
+    """Five displayed pairs, with failed cases retained in the denominator."""
+    rows=[]
+    def read(path):
+        with np.load(path,allow_pickle=False) as archive:return dict(archive)
+    for entry in entries:
+        folder=Path(entry['run']);case=entry['case']
+        row=dict(subject=case['subject'],case_id=case['id'],run=str(folder),
+            case=case,reused=entry['reused'],status='failed',display_channel=entry.get('display_channel','Fp1'))
+        try:
+            target_paths=[folder/'targets'/f'physical_refitted_reference__{v}__cap1.npz'
+                for v in ('baseline','ocular')]
+            diagnostics=[json.loads(p.with_suffix('.json').read_text()) for p in target_paths]
+            if any(d['status']!='completed' for d in diagnostics):
+                raise ValueError('at least one paired voltage target failed; see target diagnostics')
+            inputs=read(folder/'inputs.npz');base,changed=map(read,target_paths)
+            n=inputs['n_ocular'][6000:10000];display=entry.get('display_channel','Fp1')
+            fp=list(inputs['channels']).index(display);channels=len(inputs['channels'])
+            metrics={}
+            for view,idx in [(display,[fp]),(f'all{channels}',list(range(channels)))]:
+                m=separation_change_metrics(base['s_score'][:,idx],changed['s_score'][:,idx],n[:,idx],
+                    'ocular',base_o=base['o_score'][:,idx],changed_o=changed['o_score'][:,idx],
+                    score_slice=slice(None))
+                m.update(S_error_NRMSE=float(np.sqrt(m['change_NMSE'])),
+                    S_change_RMS_uV=float(np.sqrt(np.mean((changed['s_score'][:,idx]-base['s_score'][:,idx])**2))))
+                metrics[view]=m
+            reference=inputs['x'][6000:10000]
+            closure=max(float(np.max(abs(base['s_score']+base['o_score']-reference))),
+                float(np.max(abs(changed['s_score']+changed['o_score']-reference-n))))
+            physical=json.loads((folder/'physical_fits.json').read_text())
+            coordinates=json.loads((folder/'coordinates.json').read_text())
+            metric_roi=entry.get('metric_roi',1)
+            sd=np.array(coordinates[case['rows'][metric_roi]['coordinate']]['sd'])
+            quality={}
+            for variant in ('baseline','ocular'):
+                fit=next(f for f in physical if f['variant']==variant and f['roi']==metric_roi)
+                if fit['status']!='completed':raise ValueError('display-region fit is not accepted')
+                a=read(fit['array_path']);err=(a['physical']-a['u'])/sd
+                quality[variant]={label:np.sqrt(np.mean(err[sl]**2,axis=0)).tolist()
+                    for label,sl in [('score30_50',slice(300,500)),('full899',slice(0,899))]}
+            ac=reference-reference.mean(0);s=base['s_score'];ds=(s-reference)-(s-reference).mean(0)
+            row.update(status='completed',metrics=metrics,model_NRMSE_order=['EEG_proxy','HbO','HbR'],
+                model_NRMSE=quality,display_channel=display,channel_count=channels,metric_roi=metric_roi,
+                closure_max_abs_uV=closure,
+                baseline_AC_distortion=float(np.linalg.norm(ds)/np.linalg.norm(ac)),
+                baseline_AC_RMS_ratio=float(np.linalg.norm(s-s.mean(0))/np.linalg.norm(ac)),
+                target_diagnostics=diagnostics,
+                O_total_injection_correlation=float(np.corrcoef(changed['o_score'][:,fp],n[:,fp])[0,1]),
+                target_paths=list(map(str,target_paths)))
+            if metric_roi==1:
+                row.update(frontal_NRMSE=quality,frontal_NRMSE_order=['EEG_proxy','HbO','HbR'])
+        except Exception as exc:row['error']=str(exc)
+        rows.append(row)
+    return dict(schema='voltage_power_cap_examples_results_v1',status='completed',
+        counts=dict(planned_pairs=len(entries),completed_pairs=sum(r['status']=='completed' for r in rows),
+            failed_pairs=sum(r['status']!='completed' for r in rows),independent_subjects=len(entries),
+            new_planned_fits=planned_new_fits,new_terminal_fits=len(fits),
+            new_accepted_fits=sum(f['status']=='completed' for f in fits),
+            new_failed_fits=sum(f['status']!='completed' for f in fits)),
+        rows=rows,score_seconds=[30,50],
+        metric_definitions=dict(S_error='norm(S_after-S_before)/norm(known addition), lower is better',
+            O_error='norm(O_after-O_before-known addition)/norm(known addition), equals S_error by closure',
+            O_total='O_after contains the original residual as well as its response to the injection',
+            NRMSE='RMSE divided by the original frozen training SD, never the optimizer-weighted SD',
+            units='native EEG microvolts; cached Hb converted with its retained coordinate, no extra scaling'),
+        interpretation='illustrative paired examples, not independent confirmation after choosing this setting')
+
+
+
+def render_voltage_power_cap_examples(out,export):
+    """Bitmap gallery; fourth row compares paired O change with the injection."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from matplotlib.font_manager import FontProperties,fontManager
+    from experiments.scripts.render_source_diagnostics_report import render_report
+    out,export=Path(out),Path(export)
+    if export.exists():raise FileExistsError('use a fresh examples export')
+    export.mkdir(parents=True)
+    summary=json.loads((out/'summary.json').read_text());plan=json.loads((out/'plan.json').read_text())
+    posterior=summary['schema']=='voltage_power_cap_posterior_results_v1'
+    number_of_cases=len(summary['rows']);label_start=ord(summary.get('label_start','A'))
+    channel_count=summary.get('channels',16)
+    display=lambda row:row.get('display_channel','Fp1')
+    source=Path(plan['reference_run'])
+    original=json.loads((source.parent/'result.json').read_text())
+    zoom=original['display']['zoom_seconds'];time_s=np.arange(6000,10000)/200
+    font=Path('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    fontManager.addfont(str(font))
+    plt.rcParams.update({'font.family':FontProperties(fname=str(font)).get_name(),'font.size':13,
+        'axes.labelsize':14,'axes.titlesize':15,'xtick.labelsize':11,'ytick.labelsize':11,
+        'axes.spines.top':False,'axes.spines.right':False,'axes.unicode_minus':False,
+        'figure.facecolor':'white','savefig.facecolor':'white','text.color':'#18324d','axes.labelcolor':'#18324d'})
+    blue,red,gray,green='#3268b2','#c04c51','#657586','#168374'
+    def read(path):
+        with np.load(path,allow_pickle=False) as archive:return dict(archive)
+    prepared={}
+    for row in summary['rows']:
+        if row['status']!='completed':continue
+        inputs=read(Path(row['run'])/'inputs.npz');fp=list(inputs['channels']).index(display(row))
+        before,after=[read(p) for p in row['target_paths']]
+        prepared[row['subject']]=dict(x=inputs['x'][6000:10000,fp],n=inputs['n_ocular'][6000:10000,fp],
+            s0=before['s_score'][:,fp],s1=after['s_score'][:,fp],
+            o0=before['o_score'][:,fp],o1=after['o_score'][:,fp])
+    values=[v for a in prepared.values() for v in [a['x'],a['x']+a['n'],a['s0'],a['s1'],a['o0'],a['o1'],a['o1']-a['o0'],a['n']]]
+    lo=min((float(v.min()) for v in values),default=-1);hi=max((float(v.max()) for v in values),default=1)
+    pad=.08*max(hi-lo,1);limits=(lo-pad,hi+pad)
+    provenance=[];figures={}
+    for number,row in enumerate(summary['rows']):
+        subject=row['subject'];label=chr(label_start+number);electrode=display(row)
+        if row['status']!='completed':continue
+        a=prepared[subject];m=row['metrics'][electrode]
+        fig,axes=plt.subplots(4,2,figsize=(11.2,11.2),sharex='col',sharey=True)
+        fig.subplots_adjust(left=.11,right=.975,top=.86,bottom=.075,hspace=.24,wspace=.14)
+        fig.text(.055,.97,f'{label} · {subject} · {electrode}：S/O 与新增眼电',fontsize=22,weight='bold',va='top')
+        fig.text(.055,.923,f'HbO/HbR ×10，EEG ×0.1；功率容差 1；本组 {number_of_cases} 个样例统一电压刻度。',fontsize=13,color=gray)
+        fig.text(.055,.887,f"{electrode} 的 S 变化 RMS {m['S_change_RMS_uV']:.2f} µV；ΔO 误差 {m['S_error_NRMSE']:.4f}；ΔO–注入相关 {m['delta_O_correlation']:.4f}",fontsize=12,color=gray)
+        panels=[(a['x'],a['x']+a['n'],'输入 EEG'),(a['s0'],a['s1'],'S 目标'),(a['o0'],a['o1'],'O 残差目标')]
+        for r in range(4):
+            for c,xlim in enumerate([(30,50),zoom]):
+                ax=axes[r,c]
+                if r<3:
+                    u,v,name=panels[r]
+                    ax.plot(time_s,u,color=blue,lw=1.1,label='未额外加眼电')
+                    ax.plot(time_s,v,color=red,lw=1.1,ls='--',label='加入眼电')
+                else:
+                    name='O 变化 / 新增眼电'
+                    ax.plot(time_s,a['o1']-a['o0'],color=green,lw=1.5,label='O 的变化 ΔO')
+                    ax.plot(time_s,a['n'],color=gray,lw=1.2,ls=':',label='额外加入的眼电')
+                ax.set_xlim(*xlim);ax.set_ylim(*limits);ax.grid(alpha=.14)
+                ax.axhline(0,color='#bac5ce',lw=.6,zorder=0)
+                ax.legend(fontsize=9.5,frameon=False,ncol=2 if r<3 else 1,loc='upper right')
+                if c==0:ax.set_ylabel(name+'\n（µV）')
+                if r==0:ax.set_title('完整评分段 [30,50) 秒' if c==0 else '相同注入峰附近放大',loc='left',fontsize=14)
+                if r==3:ax.set_xlabel('窗口相对时间（秒）')
+        suffix='_'+electrode if posterior else ''
+        path=export/f'{label}_{subject}{suffix}_voltage.png';fig.savefig(path,dpi=250);plt.close(fig)
+        figures[subject]=path.name
+        peak=int(np.argmax(abs(a['n'])))
+        provenance.append(dict(figure=path.name,case_id=row['case_id'],input=str(Path(row['run'])/'inputs.npz'),
+            targets=row['target_paths'],y_limits_uV=list(limits),score_seconds=[30,50],zoom_seconds=zoom,
+            fourth_row=['O_after-O_before','known_added_ocular'],no_frame_or_window_renormalization=True,
+            known_peak=dict(time_s=float(time_s[peak]),injection_uV=float(a['n'][peak]),
+                delta_S_uV=float(a['s1'][peak]-a['s0'][peak]),delta_O_uV=float(a['o1'][peak]-a['o0'][peak]))))
+    # Compact comparison uses paired changes, whose desired responses are known.
+    fig,axes=plt.subplots(number_of_cases,2,figsize=(11.2,max(6.5,number_of_cases*2.24)),sharex=True,sharey=True,squeeze=False)
+    fig.subplots_adjust(left=.12,right=.975,top=.78 if posterior else .88,bottom=.10 if posterior else .07,hspace=.35,wspace=.15)
+    fig.text(.055,.97,f'{number_of_cases} 个固定样例：比较 S 的泄漏与 O 的吸收',fontsize=22,weight='bold',va='top')
+    fig.text(.055,.87 if posterior else .924,'灰点线：同一已知眼电；左列蓝线：ΔS；右列绿线：ΔO。编号与逐例图一致。',fontsize=13,color=gray)
+    delta_values=[v for a in prepared.values() for v in (a['n'],a['s1']-a['s0'],a['o1']-a['o0'])]
+    bound=1.13*max((float(np.max(abs(v))) for v in delta_values),default=1.)
+    for i,row in enumerate(summary['rows']):
+        subject=row['subject'];label=chr(label_start+i)
+        for c in range(2):
+            ax=axes[i,c];ax.set_xlim(*zoom);ax.set_ylim(-bound,bound);ax.grid(alpha=.14)
+            ax.axhline(0,color='#bac5ce',lw=.6)
+            if row['status']=='completed':
+                a=prepared[subject];delta=a['s1']-a['s0'] if c==0 else a['o1']-a['o0']
+                ax.plot(time_s,a['n'],color=gray,lw=1.1,ls=':')
+                ax.plot(time_s,delta,color=blue if c==0 else green,lw=1.6)
+                metric=row['metrics'][display(row)]['S_error_NRMSE']
+                ax.text(.98,.92,f'误差 {metric:.4f}',ha='right',va='top',transform=ax.transAxes,fontsize=11)
+            else:ax.text(.5,.5,'拟合/目标失败；保留该样例',ha='center',va='center',transform=ax.transAxes)
+            if c==0:ax.set_ylabel(f'{label} · {subject}\n{display(row)}（µV）',fontsize=12)
+            if i==0:ax.set_title('S 变化：期望为 0' if c==0 else 'O 变化：期望等于注入',loc='left')
+            if i==number_of_cases-1:ax.set_xlabel('窗口相对时间（秒）')
+    overview=export/'00_examples_overview.png';fig.savefig(overview,dpi=250);plt.close(fig)
+    provenance.append(dict(figure=overview.name,source=str(out/'summary.json'),y_limits_uV=[-bound,bound],
+        zoom_seconds=zoom,failed_pairs_visible=True))
+    table=[];quality=[]
+    for i,row in enumerate(summary['rows']):
+        label=f"{chr(label_start+i)} · {row['subject']}"+(' · '+display(row) if posterior else '')
+        if row['status']=='completed':
+            fp=row['metrics'][display(row)];all16=row['metrics'][f'all{channel_count}']
+            table.append([label,f"{all16['S_error_NRMSE']:.4f}",f"{fp['S_change_RMS_uV']:.2f}",
+                f"{fp['delta_O_correlation']:.4f}"])
+            for key,support in [('score30_50','30–50秒'),('full899','完整窗口')]:
+                quality_source=row.get('model_NRMSE',row.get('frontal_NRMSE'))
+                e,hbo,hbr=quality_source['ocular'][key]
+                quality.append([label,support,f'{hbo:.4f}',f'{hbr:.4f}',f'{e:.4f}'])
+        else:
+            table.append([label,'失败','—','—']);quality.append([label,'全部','失败','—','—'])
+    def paragraph(text):return dict(type='paragraph',text=text)
+    def figure(path,caption):return dict(type='figure',path=path,caption=caption,preserve_bitmap=True)
+    counts=summary['counts']
+    content=dict(title='Hb 优先联合拟合：五个眼电配对样例',subtitle='原样例增加 O 对比；另外四名验证被试各一段',date='2026-11-06',
+        summary=[f"计划展示 5 个独立被试的 5 对窗口，其中 {counts['completed_pairs']} 对完成、{counts['failed_pairs']} 对失败；原 VP002 复用已验收结果，其余四例各取原验证面板首窗。全部预定例子均列出，供展示选图，不按结果替换窗口。"],
+        provenance=[f'数值事实源：{out}/summary.json；逐例 inputs.npz、physical_fits.json、fit_attempts.json 与 targets/。'],
+        sections=[
+        dict(title='设置、比较量与读图方式',blocks=[
+            paragraph('EEG/HbO/HbR 标准化平方误差权重为 0.1/10/10；固定 Tak 参数、训练坐标、功率参考和容差 1。每次可见完整 90 秒 EEG 与 Hb，重新估计驱动和四初态；这是一项离线条件重建。评分段为 [30,50) 秒。'),
+            paragraph('只向 Fp1 加入同一条已知眼电，评分段 RMS 为 36.13 微伏；其他 EEG 通道和 Hb 不变。波形来自 VP005 的另一保留窗口；因此 VP005 样例与供体属于同一被试。图中未加注入的自然背景并非干净 EEG 真值。'),
+            paragraph('前 3 行分别比较输入、S、O 的注入前后波形；新增第 4 行只比较 O 的前后差值 ΔO 与已知眼电。完整 O 含原基底残差，在第 3 行保留；ΔO 与注入的差才是新增干扰的吸收误差。'),
+            paragraph('S 泄漏误差为 S 配对变化的范数除以已知注入范数；O 变化误差与它相同，因为 O 等于输入减去 S。范数先汇总所列全部时间点/通道，再取比值，不逐窗重新定标。相关系数只反映形状，不代表幅度正确。'),
+            dict(type='table',columns=['样例','全16通道S泄漏↓','Fp1的S变化RMS/微伏','Fp1的ΔO相关↑'],widths=[1.25,1.3,1.55,1.25],rows=table)]),
+        dict(title='模型误差：局部展示段与完整拟合支持',page_break=True,blocks=[
+            paragraph('下表为前额 ROI 眼电注入后的 HbO/HbR/EEG代理 NRMSE。均先计算各模态观测与完整预测之间的 RMSE，再除以原冻结训练 SD；不使用优化权重改变展示分母。'),
+            paragraph('30–50 秒对应图中的展示段，含 200 个 10 Hz 代理/Hb 点；完整窗口使用原拟合掩码的 899 个有效点。原始电压图则为 200 Hz、4000 点。EEG 代理误差与 S/O 电压的眼电泄漏是不同指标。'),
+            dict(type='table',columns=['样例','评分支持','HbO','HbR','EEG代理'],widths=[1.25,1.25,1,1,1.25],rows=quality),
+            paragraph('选择展示图时同时考虑 S 对眼电的响应、ΔO 对已知增量的误差、基底波形和模型拟合状态。较低的局部 NRMSE 不代表完整窗口同样准确，也不证明自然 S 是干净神经真值。'),
+            paragraph('可复用设置由 docs/METHOD_RATIONALE.md 的 Hb-prioritized joint fitting 章节说明；具体合同、完整来源与本次选样见本运行 resolved_config.json、source_manifest.json、plan.json。')]),
+        dict(title='固定放大区间下的配对变化',page_break=True,blocks=[
+            figure(overview.name,'每行是一名被试的一对窗口；左列检查新增眼电进入 S 的程度，右列检查 ΔO 是否复现已知注入。全图统一坐标，曲线颜色与逐例图一致。'),
+            paragraph('这组结果用于挑选展示样例。既有神经样变化损失及最终合成后的功率越界仍需保留；当前样例只改变眼电，没有新增神经保留资格证据。')])],
+        sources=[])
+    for i,row in enumerate(summary['rows']):
+        subject=row['subject'];case=row['case'];timing=case['rows'][0]
+        blocks=[]
+        if row['status']=='completed':
+            blocks.append(figure(figures[subject],'前 3 行蓝实线/红虚线为注入前/后；末行绿实线为 ΔO，灰点线为已知眼电。左右显示完整评分段与同一预定峰附近区间。所有逐例图统一电压刻度。'))
+            fp=row['metrics'][display(row)];full=row['metrics'][f'all{channel_count}']
+            a=prepared[subject];k=int(np.argmax(abs(a['n'])))
+            blocks.append(paragraph(f"全 {channel_count} 通道 S 泄漏误差 {full['S_error_NRMSE']:.4f}；{display(row)} 的 ΔO 误差 {fp['S_error_NRMSE']:.4f}，相关 {fp['delta_O_correlation']:.4f}。在已知注入绝对峰 {time_s[k]:.3f} 秒处，新增眼电为 {a['n'][k]:.2f} 微伏，S 变化为 {a['s1'][k]-a['s0'][k]:.2f} 微伏，ΔO 为 {a['o1'][k]-a['o0'][k]:.2f} 微伏。两路变化共同组成该注入；峰值只是读图定位，误差仍按完整评分段计算。"))
+        else:blocks.append(paragraph('该计划样例未形成完整合格输出，未补换窗口。原因：'+row.get('error','未知；见逐项记录')))
+        blocks.append(paragraph(f"身份：{case['id']}；EEG 起点 {timing['eeg_start_s']:.3f} 秒，Hb 起点 {timing['hb_start_s']:.3f} 秒；各自连续记录坐标，模型窗口均长 90 秒。"))
+        content['sections'].append(dict(title=f"{chr(label_start+i)} · {subject} · {display(row)}"+('（原样例重绘）' if row['reused'] else '（新增样例）'),page_break=True,blocks=blocks))
+    if posterior:
+        content.update(title='Hb 优先联合拟合：枕区 O1/O2 眼电注入',subtitle='相同眼电波形直接加入枕部电极；末行比较 ΔO 与已知注入',
+            summary=[f"两个预定枕区样例：VP002 的 O1、VP005 的 O2；{counts['completed_pairs']} 对完成，{counts['failed_pairs']} 对失败。沿用原窗口与眼电波形，位置改变为枕区。这里只用于说明性选图，不按结果换窗。"])
+        blocks=content['sections'][0]['blocks']
+        blocks[0]=paragraph('EEG/HbO/HbR 标准化平方误差权重仍为 0.1/10/10。17 电极面板包含左运动区、前额和枕区；枕区采用 POOz 的 Hb 与 POz、O1、O2、Pz、P3、P4 的 EEG。原六名训练被试首窗拟合枕区 PCA/尺度及新的 17 通道功率参考，随后全部冻结；容差仍为 1。')
+        blocks[1]=paragraph('同一条来自 VP005 另一窗口的眼电分别只加入 O1 或 O2，评分段 RMS 为 36.13 微伏；因此 VP005 组与供体同被试。其他 EEG 与 Hb 不变。这是受控等幅注入，不代表自然眼电在枕区的幅度或空间分布。完整 90 秒均可见，枕区原始和污染输入各自联合拟合驱动与四初态；其余两个 ROI 在逐点核验输入一致后复用已接受解。')
+        blocks[-1]['columns']=['样例','全17通道S泄漏↓','注入电极S变化RMS/微伏','注入电极ΔO相关↑']
+        content['sections'][1]['blocks'][0]['text']=content['sections'][1]['blocks'][0]['text'].replace('前额 ROI','枕区 ROI')
+        remarks=[]
+        for i,row in enumerate(summary['rows']):
+            if row['status']!='completed':continue
+            eeg,hbo,hbr=row['model_NRMSE']['ocular']['full899']
+            remarks.append(f"{chr(label_start+i)} 的完整窗口 EEG代理/HbO/HbR NRMSE 为 {eeg:.4f}/{hbo:.4f}/{hbr:.4f}")
+        content['sections'][1]['blocks'].append(paragraph('；'.join(remarks)+'。数值收敛与观测重建准确是两件事；F 的模型误差明显较高，应作为高误差样例解释。局部眼电泄漏还须结合全 17 通道指标，以检查未注入电极的响应。'))
+        content['sections'][2]['blocks'][-1]=paragraph('本组更换了 ROI 和训练参考的通道集合；与前额图的差异不能只归因于脑区位置。眼电稳定性和神经信息保留仍是不同问题，本次没有新增神经保留对照。')
+    path=export/'report_content.json';path.write_text(json.dumps(content,ensure_ascii=False,indent=2)+'\n')
+    (export/'figure_provenance.json').write_text(json.dumps(provenance,ensure_ascii=False,indent=2)+'\n')
+    checks=render_report(path,export/'report')
+    return dict(status='completed',export=str(export),report_pages=checks['exports']['TECHNICAL_REPORT.pdf']['pages'],
+        completed_figures=len(figures),planned_examples=len(summary['rows']))
+
+
+def summarize_voltage_power_cap(out,cfg,plan,outcomes,fits):
+    """One-window paired changes; known injections are the only true changes."""
+    out=Path(out)
+    def read(path):
+        with np.load(path,allow_pickle=False) as z:return dict(z)
+    inputs=read(out/'inputs.npz');variants=['ocular',*cfg['power_cap']['interventions']['neural']]
+    caps=[cfg['power_cap']['reference']['cap_primary'],*cfg['power_cap']['reference']['cap_sensitivity']]
+    lookup={r['key']:r for r in outcomes};rows=[];natural=[];decomposition=[]
+    fp1=list(inputs['channels']).index('Fp1');x=inputs['x'][6000:10000]
+    for cap in [None,*caps]:
+        methods=['current_target'] if cap is None else cfg['power_cap']['conditions'][1:]
+        for method in methods:
+            baseline_method='physical_refitted_reference' if method=='physical_frozen_reference' else method
+            baseline_key=f'{baseline_method}__baseline'+('' if cap is None else f'__cap{cap:g}')
+            path=out/'targets'/(baseline_key+'.npz')
+            if not path.exists():continue
+            base=read(path)
+            for view,indices in [('Fp1',[fp1]),('all16',list(range(16)))]:
+                raw=x[:,indices];s=base['s_score'][:,indices];ac=raw-raw.mean(0)
+                diff=(s-raw)-(s-raw).mean(0)
+                natural.append(dict(method=method,cap=cap,view=view,
+                    baseline_AC_distortion=float(np.linalg.norm(diff)/np.linalg.norm(ac)),
+                    baseline_AC_RMS_ratio=float(np.linalg.norm(s-s.mean(0))/np.linalg.norm(ac)),
+                    baseline_offset_change_RMS_uV=float(np.sqrt(np.mean((s-raw).mean(0)**2)))))
+            for variant in variants:
+                key=f'{method}__{variant}'+('' if cap is None else f'__cap{cap:g}')
+                path=out/'targets'/(key+'.npz')
+                if not path.exists():continue
+                changed=read(path);n=inputs['n_'+variant][6000:10000]
+                for view,indices in [('Fp1',[fp1]),('all16',list(range(16)))]:
+                    result=separation_change_metrics(base['s_score'][:,indices],changed['s_score'][:,indices],
+                        n[:,indices],variant,base_o=base['o_score'][:,indices],changed_o=changed['o_score'][:,indices],
+                        score_slice=slice(None))
+                    result.update(S_error_NRMSE=float(np.sqrt(result['change_NMSE'])),
+                        O_error_NRMSE=float(np.sqrt(result['O_change_NMSE'])),
+                        S_change_RMS_uV=float(np.sqrt(np.mean((changed['s_score'][:,indices]-base['s_score'][:,indices])**2))))
+                    if abs(result['change_NMSE']-result['O_change_NMSE'])>1e-9:
+                        raise ValueError('paired S/O closure does not match the known-change error identity')
+                    rows.append(dict(method=method,cap=cap,variant=variant,view=view,**result))
+    for cap in caps:
+        keys=[f'physical_refitted_reference__baseline__cap{cap:g}',
+              f'physical_frozen_reference__ocular__cap{cap:g}',f'physical_refitted_reference__ocular__cap{cap:g}']
+        if not all((out/'targets'/(k+'.npz')).exists() for k in keys):continue
+        base,frozen,refitted=[read(out/'targets'/(k+'.npz')) for k in keys]
+        first=frozen['s_score']-base['s_score'];second=refitted['s_score']-frozen['s_score']
+        total=refitted['s_score']-base['s_score'];n=inputs['n_ocular'][6000:10000]
+        rel=refitted['reference_power']/base['reference_power']
+        use=(refitted['frame_time_s']>=30)&(refitted['frame_time_s']<50)
+        for view,indices in [('Fp1',[fp1]),('all16',list(range(16)))]:
+            denominator=float(np.linalg.norm(n[:,indices]))
+            decomposition.append(dict(cap=cap,view=view,
+                frozen_reference_response_NRMSE=float(np.linalg.norm(first[:,indices])/denominator),
+                changed_reference_additional_response_NRMSE=float(np.linalg.norm(second[:,indices])/denominator),
+                total_response_NRMSE=float(np.linalg.norm(total[:,indices])/denominator),
+                addition_identity_max_abs=float(np.max(abs(total-first-second))),
+                reference_power_ratio_quantiles=np.quantile(rel[use,:5][:,:,indices],[0,.5,.9,1]).tolist()))
+    for name,values in [('paired_metrics',rows),('baseline_diagnostics',natural),('response_decomposition',decomposition)]:
+        with (out/(name+'.csv')).open('w') as handle:
+            writer=csv.DictWriter(handle,fieldnames=list(values[0]) if values else ['status'])
+            writer.writeheader();writer.writerows(values)
+    return dict(schema='voltage_power_cap_one_window_results_v1',status='completed',
+        experiment_id=cfg['experiment_id'],case_id=plan['case']['id'],
+        counts=dict(independent_subjects=1,paired_windows=1,training_windows=6,
+            planned_fits=len(fits),fit_successes=sum(r['status']=='completed' for r in fits),
+            fit_failures=sum(r['status']!='completed' for r in fits),
+            planned_target_tasks=len(outcomes),target_successes=sum(r['status']=='completed' for r in outcomes),
+            target_failures=sum(r['status']!='completed' for r in outcomes)),
+        primary_cap=1.,sensitivity_caps=caps[1:],paired_metrics=rows,baseline_diagnostics=natural,
+        observation_weights=cfg['power_cap']['physical'].get('observation_weights',[1.,1.,1.]),
+        response_decomposition=decomposition,proxy_nullspace=json.loads((out/'proxy_nullspace.json').read_text()),
+        target_diagnostics=outcomes,physical_fits=fits,
+        metric_definitions=dict(ocular='norm(delta S)/norm(known ocular addition)',
+            neural='norm(delta S-known neural-like addition)/norm(known neural-like addition)',
+            O_error='same norm error as S because O=x-S; not independent evidence',
+            projection_gain='dot(delta branch,known addition)/dot(known addition,known addition); not energy fraction',
+            primary_support='[30,50) s at native 200 Hz, 4000 samples; separate Fp1 and all16 norms',
+            baseline_distortion='relative centred AC waveform change; natural baseline is not clean truth',
+            final_power='local carrier cap is exact; bound violations after overlap-add/refiltering are retained'),
+        claim_limits=cfg['claim_limits'],threshold_selection='none')
+
+
+def summarize_voltage_separation(out,plan,evaluations,physical,models,books,cfg):
+    import pandas as pd
+    out=Path(out);good=[r for r in evaluations if r['status']=='completed']
+    natural=[r for e in good for r in e['natural']];changes=[r for e in good for r in e['changes']]
+    decoded=[r for e in good for r in e['decoded']];hard_changes=[r for e in good for r in e['hard_changes']]
+    frames={'natural_windows':natural,'intervention_windows':changes,'decode_windows':decoded,'hard_intervention_windows':hard_changes}
+    for name,rows in frames.items():pd.DataFrame(rows).to_csv(out/(name+'.csv'),index=False)
+    summaries={}
+    for name,keys,metrics in [
+        ('intervention',['method','kind','amplitude'],['change_NMSE','S_signed_gain','O_signed_gain','delta_O_correlation']),
+        ('natural',['method'],['change_NMSE','O_fine_RMS_ratio','S_fine_RMS_ratio','O_roughness','raw_EOG_correlation','S_EOG_correlation','O_EOG_correlation']),
+        ('decode',['method','branch','levels'],['NMSE','fine_error_NMSE','fine_RMS_ratio','fine_correlation','boundary_error_RMS']),
+        ('hard_intervention',['method','kind','amplitude'],['change_NMSE','O_change_NMSE','S_signed_gain','O_signed_gain','delta_O_correlation'])]:
+        frame=pd.DataFrame(frames[name+'_windows'])
+        if frame.empty:summaries[name]=[];continue
+        subject=frame.groupby(['subject']+keys,as_index=False)[metrics].mean()
+        subject.to_csv(out/(name+'_subjects.csv'),index=False)
+        population=subject.groupby(keys,as_index=False)[metrics].mean()
+        for metric in metrics:
+            if metric.endswith('NMSE'):population[metric.removesuffix('NMSE')+'NRMSE']=np.sqrt(np.maximum(population[metric],0))
+        population['subjects']=subject.groupby(keys).size().to_numpy()
+        population.to_csv(out/(name+'_summary.csv'),index=False);summaries[name]=population.to_dict('records')
+    # Paired, capacity-matched physical-versus-empirical contrasts at the middle amplitude.
+    frame=pd.DataFrame(changes);sub=frame[frame.amplitude==.25].groupby(['subject','method','kind']).change_NMSE.mean().reset_index()
+    paired=[];rng=np.random.default_rng(cfg['separation']['seed'])
+    for kind,g in sub.groupby('kind'):
+        table=g.pivot(index='subject',columns='method',values='change_NMSE')
+        if {'physical_matched','empirical_matched'}<=set(table):
+            d=np.sqrt(table.empirical_matched.to_numpy())-np.sqrt(table.physical_matched.to_numpy())
+            boot=d[rng.integers(0,len(d),(2000,len(d)))].mean(1)
+            paired.append(dict(kind=kind,subjects=len(d),mean_subject_improvement=float(d.mean()),
+                percentile_95=list(np.quantile(boot,[.025,.975])),contrast='empirical_minus_physical_same_rank8_eta0.5'))
+    pd.DataFrame(paired).to_csv(out/'paired_physical.csv',index=False)
+    return dict(schema='voltage_separation_results_v1',status='completed',experiment_id=cfg['experiment_id'],
+        counts=dict(planned_windows=len(plan['rows']),validation_windows=len(evaluations),completed_validation_windows=len(good),
+            validation_subjects=len({e['entry']['subject'] for e in good}),physical_fits=len(physical),
+            physical_successes=sum(r['status']=='completed' for r in physical),physical_failures=sum(r['status']!='completed' for r in physical),
+            model_successes=sum(r['status']=='completed' for r in models),model_failures=sum(r['status']!='completed' for r in models),
+            codebook_successes=sum(r['status']=='completed' for r in books),codebook_failures=sum(r['status']!='completed' for r in books)),
+        selection=[r.get('selected',dict(method=r['method'],status='failed')) for r in models],
+        **summaries,paired_physical=paired,claim_limits=cfg['claim_limits'],
+        normalization='time/channel ratios within windows, equal windows within subject, equal subjects; RMS roots after squared-error aggregation',
+        raw_signal_branch='native_200Hz_16_channels_unchanged_reference',model_deployment_inputs='EEG_only_140ms_multichannel_support_per_100ms_code_cell',
+        EOG_usage='validation_donor_and_independent_diagnostic_only',decoder='own_integer_ids_only_no_raw_residual_shortcut')
+
+
+def verify_voltage_separation_evidence(out):
+    """Replay retained arrays, actual hard O changes and the frozen read boundary."""
+    from src.data.dual_component_tokenizer import voltage_separation_plan,read_voltage_separation_input
+    from src.tokenizers.dual_component_tokenizer import WaveformDictionary
+    out=Path(out);resolved=json.loads((out/'resolved_config.json').read_text());cfg=resolved['config']
+    plan=voltage_separation_plan(resolved['project_root'],cfg)
+    if plan!=json.loads((out/'plan.json').read_text()):raise ValueError('panel identity changed')
+    scale=np.asarray(json.loads((out/'scales.json').read_text())['voltage_scale'])
+    methods=json.loads((out/'selected_models.json').read_text());records=[];sums=[];max_error=0.;replays=0
+    for entry in plan['rows']:
+        if entry['phase']!='validation':continue
+        folder=out/'evaluation'/entry['id'];report=json.loads((folder/'metrics.json').read_text())
+        if report['status']!='completed':continue
+        original,_=read_voltage_separation_input(plan,entry,include_eog=True)
+        with np.load(folder/'base.npz',allow_pickle=False) as z:base=dict(z)
+        for key in ('x','eog','channels','legacy_s'):
+            if not np.array_equal(original[key],base[key]):raise AssertionError('raw/reference identity mismatch: '+key)
+        for key,ids in base.items():
+            if not key.startswith('ids_'):continue
+            name=key.removeprefix('ids_');prefix,levels=name[:-1],int(name[-1])
+            with np.load(out/'codebooks'/(prefix+'.npz'),allow_pickle=False) as z:book=WaveformDictionary.from_state(dict(z))
+            decoded=book.decode(ids).transpose(0,2,1).reshape(4000,16)*scale
+            error=float(np.max(abs(decoded-base['hard_'+name])));max_error=max(max_error,error)
+            if not np.allclose(decoded,base['hard_'+name],rtol=2e-6,atol=2e-5):raise AssertionError('independent integer decoder mismatch')
+            replays+=1
+        for name,pred,rate in [('physical_4plus4',base['hard_physical_S4']+base['hard_physical_O4'],560),
+                ('physical_4plus8',base['hard_physical_S4']+base['hard_physical_O8'],840),
+                ('raw_8',base['hard_raw_raw8'],560)]:
+            sums.append(dict(id=entry['id'],subject=entry['subject'],method=name,bits_per_second_per_electrode=rate,
+                NMSE=float(np.mean(((np.asarray(pred,float)-base['x'][6000:10000])/scale)**2))))
+        for kind in cfg['separation']['measured_perturbations']:
+            with np.load(folder/(kind+'.npz'),allow_pickle=False) as z:changed=dict(z)
+            n=np.asarray(changed['n'],float);den=float(np.mean(n*n));expected=n if kind.startswith('neural') else 0.
+            for row in report['changes']:
+                if row['kind']!=kind or row['amplitude']!=.25:continue
+                method=row['method'];before=base['x'][6000:10000] if method=='raw' else base[method][6000:10000]
+                after=changed['x'] if method=='raw' else changed[method]
+                delta=np.asarray(after,float)-np.asarray(before,float)
+                computed=float(np.mean((delta-expected)**2)/den)
+                if not np.isclose(computed,row['change_NMSE'],rtol=3e-5,atol=3e-6):raise AssertionError('continuous change metric mismatch')
+                records.append(dict(id=entry['id'],kind=kind,method=method,error=abs(computed-row['change_NMSE'])))
+            for row in report['hard_changes']:
+                if row['kind']!=kind or row['amplitude']!=.25:continue
+                name=row['method'];method=name.removesuffix('_O8');levels=8 if name.endswith('_O8') else 4
+                for branch,key in [('s','change_NMSE'),('o','O_change_NMSE')]:
+                    before=base[f'hard_{method}_{branch.upper()}{4 if branch=="s" else levels}']
+                    delta=np.asarray(changed[f'hard_{name}_{branch}'],float)-np.asarray(before,float)
+                    truth=expected if branch=='s' else n-expected
+                    computed=float(np.mean((delta-truth)**2)/den)
+                    if not np.isclose(computed,row[key],rtol=4e-5,atol=4e-6):raise AssertionError('actual hard branch change mismatch')
+                for branch in ('s','o'):
+                    ids=changed[f'ids_{name}_{branch}']
+                    with np.load(out/'codebooks'/f'{method}_{branch.upper()}.npz',allow_pickle=False) as z:book=WaveformDictionary.from_state(dict(z))
+                    replay=book.decode(ids).transpose(0,2,1).reshape(4000,16)*scale
+                    if not np.allclose(replay,changed[f'hard_{name}_{branch}'],rtol=2e-6,atol=2e-5):raise AssertionError('changed integer decode mismatch')
+                    replays+=1
+    for file in (out/'physical').glob('*.json'):
+        status=json.loads(file.read_text())
+        if status['status']!='completed':continue
+        with np.load(file.with_suffix('.npz'),allow_pickle=False) as z:
+            if z['visible'][:,0].any():raise AssertionError('EEG was visible to Hb-only fitting')
+    report=dict(status='passed',continuous_metric_recomputations=len(records),integer_decoder_replays=replays,
+        max_retained_float32_decode_abs_error_uV=max_error,
+        max_continuous_metric_roundoff=max((r['error'] for r in records),default=0.),
+        raw_voltage_reference_identity_exact=True,physical_EEG_rows_used=0,
+        scope='declared_public_training_and_validation_only',records=records,sum_reconstructions=sums)
+    _json(out/'verification.json',report);return report
+
+
+def render_voltage_separation_report(out,export=None):
+    """Auditable static Chinese report and atlas with bitmap figure objects."""
+    import html
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from matplotlib import font_manager
+    from scipy.signal import welch
+    import pandas as pd
+    import fitz
+    from fontTools import ttLib,subset
+    out=Path(out).resolve();export=Path(export).resolve() if export else out/'export_v1'
+    if export.exists():raise ValueError('fresh versioned export required')
+    summary=json.loads((out/'summary.json').read_text())
+    if summary['status']!='completed':raise ValueError('completed numerical evidence required')
+    verification=verify_voltage_separation_evidence(out)
+    resolved=json.loads((out/'resolved_config.json').read_text());cfg=resolved['config'];spec=cfg['separation']
+    plan=json.loads((out/'plan.json').read_text());models=json.loads((out/'selected_models.json').read_text())
+    if 'physical' not in models:raise ValueError('physical candidate unavailable; inspect retained failures before reporting')
+    export.mkdir(parents=True);(export/'figures').mkdir();pages=[];gallery=[];formulas={}
+    font='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc';font_manager.fontManager.addfont(font)
+    plt.rcParams.update({'font.family':font_manager.FontProperties(fname=font).get_name(),'font.size':12,
+        'axes.titlesize':13,'axes.labelsize':12,'legend.fontsize':9,'axes.unicode_minus':False,
+        'axes.spines.top':False,'axes.spines.right':False,'figure.facecolor':'white'})
+    names=dict(raw='原始直通',physical='物理引导＋预测',physical_spatial='物理引导仅空间',empirical='经验 Hb 引导',
+        eeg='EEG 慢功率引导',sham='失配状态引导',pca='PCA',random='随机空间',physical_matched='物理（固定容量）',
+        empirical_matched='经验（固定容量）',pca_matched='PCA（固定容量）',sham_matched='失配（固定容量）')
+    kinds=dict(ocular='眼电形态',fine='细噪声',combined='两类组合',neural10='10 Hz 神经样',neural35='35 Hz 神经样',neural55='55 Hz 神经样')
+    colors=dict(raw='#7a8491',physical='#13866f',physical_spatial='#236ab0',empirical='#bc7d16',eeg='#9863b0',sham='#b24d72',pca='#6b6534',random='#666666')
+    col_s='#13866f';col_o='#db6b29';col_x='#657080';col_truth='#111111'
+    def read(path):
+        with np.load(path,allow_pickle=False) as z:return dict(z)
+    def save(fig,key):
+        name='figures/'+key+'.png';fig.savefig(export/name,dpi=220,bbox_inches='tight',facecolor='white');plt.close(fig);return name
+    def add(title,intro,fig,key,caption,evidence,*,atlas=False):
+        implementation='source/experiments/scripts/run_dual_component_tokenizer.py'
+        (gallery if atlas else pages).append(dict(title=title,intro=intro,figure=save(fig,key),caption=caption,
+            evidence=list(evidence)+[implementation]))
+    def grid(ax):ax.grid(alpha=.18);ax.axhline(0,color='#aaaaaa',lw=.6,zorder=0)
+    def value(method,kind,key='change_NRMSE',family='intervention'):
+        return next(r[key] for r in summary[family] if r['method']==method and r['kind']==kind and r['amplitude']==.25)
+    def formula_page(title,intro,lines,key,caption,evidence):
+        fig,ax=plt.subplots(figsize=(13.5,5.7));ax.axis('off')
+        positions=np.linspace(.84,.16,len(lines))
+        for y,(formula,description) in zip(positions,lines):
+            ax.text(.5,y,formula,ha='center',va='center',fontsize=23)
+            ax.text(.5,y-.105,description,ha='center',va='center',fontsize=12)
+            formulas[key+str(y)]=formula
+        add(title,intro,fig,key,caption,evidence)
+    scale=np.asarray(json.loads((out/'scales.json').read_text())['voltage_scale']);rms=float(np.sqrt(np.mean(scale**2)))
+    selected=models['physical'];counts=summary['counts']
+    main=[m for m in ['raw','physical_spatial','physical','empirical','pca','sham'] if m=='raw' or m in models]
+    fig,axes=plt.subplots(1,3,figsize=(13.5,5.3),constrained_layout=True)
+    for ax,kind,title in zip(axes,['ocular','fine','neural55'],['主要伪迹应进入 O','细噪声应进入 O','快速神经样变化应留在 S']):
+        vals=[value(m,kind) for m in main];ax.bar(np.arange(len(main)),vals,color=[colors[m] for m in main])
+        ax.set_xticks(np.arange(len(main)),[names[m] for m in main],rotation=35,ha='right',fontsize=9)
+        for i,v in enumerate(vals):ax.text(i,v,f'{v:.3f}',ha='center',va='bottom',fontsize=9)
+        ax.set_ylabel('变化误差 / 已知干预 RMS，越低越好');ax.set_title(title);ax.grid(axis='y',alpha=.2);ax.margins(y=.17)
+    add('O 获得嘈杂细节，但主要眼电仍留在新版 S 中',
+        f"完成 {counts['completed_validation_windows']}/{counts['validation_windows']} 个验证窗口，来自 {counts['validation_subjects']} 名被试。"
+        f"训练选择的物理方案秩为 {selected['rank']}，预测残差移出比例为 {selected['innovation_fraction']:g}。"
+        f"中档干预均方根（RMS）为 {rms*.25:.2f} µV，眼电、细噪声和 55 Hz 保留误差分别为 {value('physical','ocular'):.3f}、{value('physical','fine'):.3f}、{value('physical','neural55'):.3f}。",
+        fig,'01_overview','前两图测量污染漏入 S，第三图测量神经样变化漏入 O。三图均越低越好。每种方法可有不同训练选择；相同秩与预测比例的物理增量另页比较。',
+        ['summary.json','intervention_summary.csv','selected_models.json'])
+    fig,ax=plt.subplots(figsize=(13.5,5.7));ax.axis('off');ax.set_xlim(0,13.5);ax.set_ylim(0,5.7)
+    boxes=[(.1,3.9,3.2,1.1,'训练 EEG 的空间协方差\nHb-only 状态引导方向选择'),
+        (4.2,3.9,3.5,1.1,'固定空间投影\n提取实际 EEG 电压载波'),(8.8,3.9,4.5,1.1,'固定对称邻域预测\n将部分不可预测变化分配给 O'),
+        (1.,1.6,4.7,1.2,'S：投影波形与邻域预测的混合\nO：原始 EEG 减去 S'),
+        (7.,1.6,5.7,1.2,'两路各自的 128 项残差波形词表\n各自硬 ID → 各自解码波形')]
+    for x,y,w,h,text in boxes:
+        ax.add_patch(plt.Rectangle((x,y),w,h,facecolor='#edf3f8',edgecolor='#7a8c9b'));ax.text(x+w/2,y+h/2,text,ha='center',va='center',fontsize=12)
+    for a,b in [((3.3,4.45),(4.2,4.45)),((7.7,4.45),(8.8,4.45)),((10.8,3.9),(4.3,2.8)),((5.7,2.2),(7.,2.2))]:
+        ax.annotate('',xy=b,xytext=a,arrowprops=dict(arrowstyle='->',lw=1.8,color='#56738a'))
+    ax.text(6.75,.55,'推断输入：16 电极原生 EEG；200 Hz；µV；TP9 参考；最多 20 ms 未来支持',ha='center',fontsize=13)
+    add('设计动机：空间选择处理混合，时间预测检验细节分配',
+        '目标是让 O 同时承载大尺度污染和输入中已有的细密扰动。空间前端由血红蛋白（Hb）提供的慢状态选择方向，快速电压仍来自脑电（EEG）；邻域预测补充时间结构依据。没有向 O 人工添加纹理，解码器只读本支硬 token。',
+        fig,'02_path','连续前端输出本身就是 S/O 监督目标。硬重建还包含有限码率的失真，必须单独评分。时间预测残差可能含正常快速神经活动，其含义由干预与真值对照检验。',
+        ['resolved_config.json','selected_models.json','codebook_fits.json'])
+    fig,ax=plt.subplots(figsize=(13.5,5.6));ax.axis('off')
+    table=[['训练首窗','6 名被试 / 6 窗','空间总协方差、PCA 坐标、预测器、尺度、词表'],
+        ['训练末窗','同 6 名被试 / 6 窗','选择同符号、稳定且线性独立的空间方向'],
+        ['预定合成扰动','4 个校准种子','选择秩和预测比例；神经保留双倍权重'],
+        ['验证窗口','5 名新被试 / 10 窗','天然波形、已知干预、硬重建；不再选择'],
+        ['合成真值','6 个拟合种子 / 8 个评价种子','每种场景独立拟合；已知神经与污染分量'],
+        ['独立辅助证据','真实 HEOG / VEOG','仅验证诊断与注入供体；不进入模型输入']]
+    tb=ax.table(cellText=table,colLabels=['分区 / 对象','观测单元','用途'],cellLoc='left',loc='center',colWidths=[.20,.28,.52]);tb.auto_set_font_size(False);tb.set_fontsize(12);tb.scale(1,2.6)
+    add('训练、选择与评价分别使用哪些信息',
+        '沿用上一轮已验证的 Simultaneous n-back 原生电压面板：每窗 90 秒，评分为 [30,50) 秒。三个感兴趣区域（ROI）合并为 16 个唯一电极；Hb 保留原缓存与真实采样时刻。所有窗口均为公开训练或验证划分。',
+        fig,'03_design','同一被试的两个窗口有关联，不算两个独立被试。PCA 指主成分分析；经验 Hb 引导在训练首窗内留一被试选择 ridge。验证 Hb-only 拟合只供诊断，不参与冻结投影或编码。',
+        ['plan.json','coordinates.json','empirical_guidance.json'])
+    formula_page('Hb-only 状态提供训练引导，物理模型不合成高频电压',
+        '每个 ROI 由六电极、五频带的 log-power 形成一个训练 PCA 代理。代理频率为 10 Hz；Hb-only 拟合隐藏全部 EEG 观测行，仅重估整窗驱动与初态。固定 Tak 参数为 κ=0.64、τ=2 秒、τv=2 秒。',
+        [(r'$u_r(k)=a_r\,v_r^{\mathsf{T}}\ell_r(k),\qquad z_r=\widehat{u}_r^{\,\mathrm{Hb\ only}}$',
+          'ℓ：30 维、减去首 5 秒参考的自然对数频带功率；v：训练 PCA；a：训练 EEG 尺度'),
+         (r'$z_{r,j}=\operatorname{mean}_{k\in j}\{\operatorname{LP}_{0.2\,\mathrm{Hz}}[z_r(k)]\}$',
+          '慢引导先作 0.2 Hz 二阶零相位低通，再汇总到 2 秒协方差单元；全窗离线支持')],
+        '04_state','HbO/HbR 使用同一个正训练尺度以保留两色相对幅度。物理失败 ROI 用缺失标记屏蔽，不以联合 EEG/Hb 输出补齐。z 是模型条件估计，既非原生 EEG 电压，也非神经真值。',
+        ['teacher_config.json','coordinates.json','physical_fits.json'])
+    formula_page('固定空间投影：选方向，再回到原电极电压',
+        '五个频带为 1–4、4–8、8–13、13–30、30–45 Hz。每 2 秒计算中心化协方差；方向拟合只使用 [15,75) 秒。全带协方差作 10% 对角收缩，电压输出本身不重参考或中心化。',
+        [(r'$C_{z,b,r}=\operatorname{mean}_j[z_{r,j}(C_{b,j}-\overline{C}_b)],\quad C_{z,b,r}w=\lambda C_0w$',
+          'z 在各窗支持内标准化；正、负关联都允许；选择训练首末窗同符号的方向'),
+         (r'$B=C_0W(W^{\mathsf{T}}C_0W)^{-1},\quad P=BW^{\mathsf{T}},\quad s_{\rm spatial}=Px$',
+          'W：16×r 滤波权重；B：16×r 回投模式；P：16×16，满足 P²=P')],
+        '05_projection','方向先按训练稳定协变强度排序，再在白化坐标中去除线性依赖。总秩限定 4/8/12。空间投影通常不是原电极欧氏正交投影，单电极幅值可能放大；滤波权重也不是脑区活动图。',
+        ['resolved_config.json','model_selection.json'])
+    formula_page('时间预测：哪些细节从 S 转入 O',
+        '每个空间成分用前后各四个采样点预测当前值，间隔 5 ms。预测系数仅由六个训练首窗拟合，ridge 为 0.05；系数之和约束为一，以保留常量成分。两端各四点沿用空间结果。',
+        [(r'$y_t=W^{\mathsf{T}}x_t,\quad\widetilde{y}_t=\sum_{l=1}^{4}h_l(y_{t-l}+y_{t+l})/2,\quad\sum_l h_l=1$',
+          '每个空间成分具有各自的四个 h；中心采样点不进入预测；参数冻结后作用于验证 EEG'),
+         (r'$s_t=B[(1-\eta)y_t+\eta\widetilde{y}_t],\quad o_t=(I-P)x_t+\eta B(y_t-\widetilde{y}_t)$',
+          'η：0–1 的预测残差移出比例；O 的两项分别为空间补充和时间预测残差')],
+        '06_prediction','η=0 为附件中的纯空间方案，η=1 为完全采用邻域预测。更大的 η 可以压低部分细噪声，也可能损伤快速神经活动；这一取舍用同频段正负干预直接评价。',
+        ['resolved_config.json','selected_models.json'])
+    model=read(out/'models'/f"physical_r{selected['rank']}.npz");f=np.linspace(0,100,501)
+    response=(1-selected['innovation_fraction'])+selected['innovation_fraction']*(model['predictor']@np.cos(2*np.pi*np.arange(1,5)[:,None]*f/200))
+    fig,axes=plt.subplots(1,2,figsize=(13.5,5.5),constrained_layout=True)
+    im=axes[0].imshow(model['predictor'],aspect='auto',cmap='RdBu_r',vmin=-max(abs(model['predictor']).max(),.1),vmax=max(abs(model['predictor']).max(),.1))
+    axes[0].set_xticks(range(4),['±5','±10','±15','±20']);axes[0].set_xlabel('成对邻点时间间隔（ms）');axes[0].set_ylabel('空间成分编号');axes[0].set_title('冻结的四个预测系数');fig.colorbar(im,ax=axes[0],label='无量纲系数')
+    for i,row in enumerate(response):axes[1].plot(f,row,lw=1,alpha=.8,label=str(i+1))
+    for hz in (10,35,55):axes[1].axvline(hz,color='#555555',ls=':',lw=.8)
+    axes[1].axhline(1,color='#111111',ls='--',lw=1);axes[1].set_xlabel('时间频率（Hz）');axes[1].set_ylabel('所选成分的有符号电压增益');axes[1].set_title('实际混合后的频率响应');axes[1].grid(alpha=.2)
+    add('实际预测器的频率响应决定了细节损失风险',
+        f"物理方案采用秩 {selected['rank']}、η={selected['innovation_fraction']:g}。右图每条曲线对应一个空间成分，只表示时间环节的作用；完整电极响应还包含空间投影。水平虚线是幅度不变，竖虚线为 10、35、55 Hz 对照。",
+        fig,'07_response','系数由训练电压的可预测性确定，不是生理频段标签。响应接近零表示该成分在该频率被移入 O；负增益表示符号反转，不能把它当作能量比例。',
+        [f"models/physical_r{selected['rank']}.npz",'selected_models.json'])
+    formula_page('指标同时惩罚伪迹泄漏和神经样变化损失',
+        f"天然背景与 Hb 保持不变，冻结整个前端，重新输入 x+n。三档干预 RMS 为 {rms*.1:.2f}、{rms*.25:.2f}、{rms*.5:.2f} µV；它们是工程扰动范围，并非正常生理范围。",
+        [(r'$E_A^2=\operatorname{mean}(\Delta s^2)/\operatorname{mean}(n^2),\quad E_N^2=\operatorname{mean}[(\Delta s-n)^2]/\operatorname{mean}(n^2)$',
+          'EA：污染应进入 O 时的 S 泄漏；EN：神经样变化应留在 S 时的损失；均越低越好'),
+         (r'$g_O=\langle\Delta o,n\rangle/\langle n,n\rangle,\quad E=\sqrt{\operatorname{mean}_{\rm subject}\operatorname{mean}_{\rm window}(E^2)}$',
+          'gO 是有符号投影增益，不是能量占比；先平均平方误差、最后开方')],
+        '08_metrics','所有比值先在 [30,50) 秒的完整时间×16 电极数组上计算。天然 EOG 相关与细频段 RMS 只是诊断，不能识别残差中的神经成分。硬解码两支不严格闭合，O 的变化必须直接计算。',
+        ['intervention_windows.csv','intervention_subjects.csv','hard_intervention_windows.csv'])
+    synthetic=json.loads((out/'synthetic.json').read_text());syntable=pd.DataFrame([r for s in synthetic for r in s['metrics']])
+    scene_names=dict(separable='空间可分',overlapping_fine_noise='细噪声共享神经方向',state_correlated_artifact='主要伪迹与状态同步')
+    syn_methods=['raw','pca_spatial','physical_spatial','physical_temporal','sham_temporal','known_subspace']
+    syn_names=['原始输入','PCA 仅空间','状态引导仅空间','状态引导＋预测','失配引导＋预测','已知神经子空间']
+    fig,axes=plt.subplots(1,3,figsize=(13.5,5.5),constrained_layout=True)
+    for ax,scenario in zip(axes,spec['synthetic_scenarios']):
+        frame=syntable[syntable.scenario==scenario].groupby('method').clean_NMSE.mean()
+        v=[np.sqrt(frame[m]) for m in syn_methods];ax.bar(range(len(v)),v,color=['#8a929d','#7b754d','#236ab0',col_s,'#b24d72','#343b44'])
+        ax.set_xticks(range(len(v)),syn_names,rotation=35,ha='right',fontsize=9);ax.set_title(scene_names[scenario])
+        ax.set_ylabel('误差 / 干净真值 RMS，越低越好');ax.grid(axis='y',alpha=.2);ax.margins(y=.17)
+        for i,number in enumerate(v):ax.text(i,number,f'{number:.3f}',ha='center',va='bottom',fontsize=9)
+    add('合成真值：结构可分时有效，重叠与混淆仍会失败',
+        '每个场景各有 6 个拟合种子、6 个相应选择窗口和 8 个独立评价种子。方法统一秩 8，时间方案 η=0.5。神经、主要伪迹及细噪声的真实电压分别已知；“状态引导”使用生成器状态，并非估计的 Tak 输出。',
+        fig,'09_synthetic_summary','柱高是先平均八个种子的归一化平方误差再开方。已知神经子空间具有额外真值信息，仅用于定位结构限制；它不是算法上界。空间重叠场景的实际信号维度不足所选秩时，也会削弱排除污染的能力。',
+        ['synthetic.json','resolved_config.json'])
+    for scenario in spec['synthetic_scenarios']:
+        a=read(out/'synthetic'/scenario/'example.npz');t=np.arange(4000)/200+30;c=0
+        centre=t[np.argmax(abs(a['major'][:,c]))];zoom=(t>=max(30.,centre-.35))&(t<=min(50.,centre+.35))
+        s=a['physical_temporal'];o=a['x']-s;true_o=a['major']+a['fine']
+        fig,axes=plt.subplots(3,2,figsize=(13.5,6.1),constrained_layout=True)
+        curves=[[(a['x'][:,c],col_x,'观测'),(a['clean'][:,c],col_truth,'干净真值')],
+            [(s[:,c],col_s,'估计 S'),(a['clean'][:,c],col_truth,'干净真值')],
+            [(o[:,c],col_o,'估计 O'),(true_o[:,c],col_truth,'真实污染和')]]
+        for row,lines in enumerate(curves):
+            for col,mask in enumerate([np.ones(len(t),bool),zoom]):
+                ax=axes[row,col]
+                for wave,color,label in lines:ax.plot(t[mask],wave[mask],color=color,lw=1,ls='--' if color==col_truth else '-',label=label)
+                ax.set_ylabel('µV');ax.legend(loc='upper right',fontsize=8);grid(ax)
+        axes[0,0].set_title('完整评分窗口');axes[0,1].set_title('真实主要伪迹峰附近放大，独立纵轴')
+        for ax in axes[-1]:ax.set_xlabel('窗口内时间（秒）')
+        f=syntable[(syntable.scenario==scenario)&(syntable.method=='physical_temporal')]
+        numbers={k:np.sqrt(f[k].mean()) for k in ['clean_NMSE','major_S_NMSE','fine_S_NMSE','neural_loss_NMSE']}
+        add(scene_names[scenario]+'：已知真值与估计电压直接对照',
+            f"固定首个评价种子 {spec['synthetic_eval_seeds'][0]}、电极 {str(a['channels'][c])}，放大位置按真实主要伪迹峰选择。八种子汇总：主要伪迹泄漏 {numbers['major_S_NMSE']:.3f}，细噪声泄漏 {numbers['fine_S_NMSE']:.3f}，神经损失 {numbers['neural_loss_NMSE']:.3f}。",
+            fig,'10_synthetic_'+scenario,'灰色观测为真实干净电压、主要伪迹和细噪声之和。黑虚线是生成器真值；绿为 S、橙为 O。右列逐行独立纵轴，用于检查峰形及细节，跨行幅度必须读坐标；定量统计使用全部电极。',
+            [f'synthetic/{scenario}/example.npz',f'synthetic/{scenario}/summary.json'])
+    fig,axes=plt.subplots(1,2,figsize=(13.5,5.5),constrained_layout=True)
+    selections=json.loads((out/'model_selection.json').read_text())
+    for ax,method in zip(axes,['physical','empirical']):
+        record=next(r for r in selections if r['method']==method);frame=pd.DataFrame(record['grid'])
+        table=frame.pivot(index='rank',columns='innovation_fraction',values='selection_score').reindex(index=[4,8,12],columns=[0,.25,.5,.75,1])
+        im=ax.imshow(table,aspect='auto',cmap='viridis_r',vmin=0,vmax=max(r['selection_score'] for rec in selections if rec['status']=='completed' for r in rec['grid']))
+        for row in range(3):
+            for col in range(5):ax.text(col,row,f'{table.iloc[row,col]:.3f}',ha='center',va='center',color='#18212b',fontsize=10)
+        chosen=record['selected'];ax.scatter(spec['innovation_fractions'].index(chosen['innovation_fraction']),spec['ranks'].index(chosen['rank']),marker='s',s=650,facecolors='none',edgecolors='red',lw=2)
+        ax.set_xticks(range(5),['0','.25','.5','.75','1']);ax.set_yticks(range(3),[4,8,12]);ax.set_xlabel('预测残差移出比例 η');ax.set_ylabel('空间总秩');ax.set_title(names[method]);fig.colorbar(im,ax=ax,label='训练选择目标，越低越好')
+    add('参数由训练信息选择，验证图形不参与调参',
+        '热图使用四个预定校准种子的眼电、细噪声、10/35/55 Hz 神经样变化。每格为（眼电 NMSE＋细噪声 NMSE＋2×三项神经 NMSE 之和）/8。红框为该方法的最小训练选择目标。',
+        fig,'11_selection','图中数值是平方误差目标，不是开方后的 NRMSE。空间方向的稳定性另由训练末窗决定。主方案与各对照按同一规则选参；固定秩 8、η=0.5 的比较用于隔离容量差别。',
+        ['model_selection.json','resolved_config.json'])
+    fig,axes=plt.subplots(2,3,figsize=(13.5,6.2),constrained_layout=True)
+    compare=[m for m in ['raw','physical_spatial','physical','empirical','eeg','pca','sham','random'] if m=='raw' or m in models]
+    for ax,kind in zip(axes.flat,spec['measured_perturbations']):
+        values=[value(m,kind) for m in compare];ax.bar(range(len(compare)),values,color=[colors[m] for m in compare])
+        ax.set_xticks(range(len(compare)),[names[m] for m in compare],rotation=38,ha='right',fontsize=7.8)
+        ax.set_title(kinds[kind]);ax.set_ylabel('变化 NRMSE ↓');ax.grid(axis='y',alpha=.2);ax.margins(y=.15)
+        for i,v in enumerate(values):ax.text(i,v,f'{v:.2f}',ha='center',va='bottom',fontsize=8)
+    add('六类已知变化：污染移出与神经保留必须一起评价',
+        f"中档扰动 RMS 为 {rms*.25:.2f} µV；组合扰动中两类成分各自等 RMS 后相加，再统一定标。每柱汇总五名验证被试的两个窗口。前三类期望 ΔS=0，后三类期望 ΔS=已知神经样变化。",
+        fig,'12_measured_interventions','细噪声来自独立 25–70 Hz 随机波形；35/55 Hz 神经样正对照落在相同频段，空间表达在预先定义的中央区域。扰动不按已学习的投影方向构造。原始直通对污染误差为 1、对神经变化为 0。',
+        ['intervention_summary.csv','intervention_subjects.csv','resolved_config.json'])
+    fig,axes=plt.subplots(1,2,figsize=(13.5,5.5),constrained_layout=True)
+    matched=['physical_matched','empirical_matched','pca_matched','sham_matched']
+    xx=np.arange(6);width=.19
+    for j,m in enumerate(matched):
+        axes[0].bar(xx+(j-1.5)*width,[value(m,k) for k in spec['measured_perturbations']],width,label=names[m],color=colors[m.removesuffix('_matched')])
+    axes[0].set_xticks(xx,[kinds[k] for k in spec['measured_perturbations']],rotation=25,ha='right');axes[0].set_ylabel('变化 NRMSE ↓');axes[0].legend(fontsize=8);axes[0].grid(axis='y',alpha=.2)
+    paired=summary['paired_physical'];positions=np.arange(len(paired));means=np.array([r['mean_subject_improvement'] for r in paired]);low=np.array([r['percentile_95'][0] for r in paired]);high=np.array([r['percentile_95'][1] for r in paired])
+    axes[1].errorbar(means,positions,xerr=np.stack([means-low,high-means]),fmt='o',color=col_s,capsize=4);axes[1].axvline(0,color='black',ls='--')
+    axes[1].set_yticks(positions,[kinds[r['kind']] for r in paired]);axes[1].set_xlabel('经验 NRMSE − 物理 NRMSE；正值有利于物理');axes[1].set_title('被试配对差：均值和 95% 百分位区间');axes[1].grid(alpha=.2)
+    add('相同容量下，检查物理引导是否提供额外收益',
+        '四个版本固定相同秩 8、η=0.5、协方差与输入时间支持。右图先对每名被试的两个窗口汇总平方误差并开方，再计算经验减物理的配对差，按被试重采样 2,000 次。',
+        fig,'13_matched_physics','区间仅描述五名验证被试、冻结训练配置下的不确定性；没有重训，也未作多重比较校正。区间跨零时，不能将均值方向解释为可靠物理优势。不同方法的独立选参结果不替代本页容量匹配证据。',
+        ['paired_physical.csv','intervention_subjects.csv'])
+    natural=pd.read_csv(out/'natural_subjects.csv');fig,axes=plt.subplots(1,2,figsize=(13.5,5.4),constrained_layout=True)
+    for ax,metric,title in zip(axes,['S_EOG_correlation','O_fine_RMS_ratio'],['S 与独立眼电参考的关联','O 保留的细频段幅度']):
+        for j,m in enumerate(main):
+            rows=natural[natural.method==m];ax.scatter(np.full(len(rows),j),rows[metric],color=colors[m],s=40,alpha=.8)
+            ax.plot([j-.25,j+.25],[rows[metric].mean()]*2,color='black',lw=2)
+        ax.set_xticks(range(len(main)),[names[m] for m in main],rotation=30,ha='right');ax.set_title(title);ax.grid(axis='y',alpha=.2)
+    axes[0].set_ylabel('电极中位最大 |相关系数|');axes[1].set_ylabel('O 的 25–70 Hz RMS / 原始 EEG 同频段 RMS')
+    add('天然数据：眼电关联和细频段幅度提供不同证据',
+        '每点是一名被试，横线为五名被试等权均值。左图对每电极计算与 HEOG/VEOG 的最大绝对相关，再取电极中位数和窗均值；参考 EOG 先作 0.5–15 Hz 带通。右图在完整电压上作 25–70 Hz 诊断带通后计算 RMS 比。',
+        fig,'14_natural_diagnostics','左图下降说明所定义眼电关联减弱，右图较大说明 O 有更多快速变化；两者都不能证明天然神经活动完整保留。右图是 RMS 比而非能量占比，两支不正交，比例也不保证在 0–1 内。',
+        ['natural_windows.csv','natural_subjects.csv'])
+    # The following pages retain the previous report's examples, independent of the new outputs.
+    examples=json.loads((Path(plan['parent'])/'summary.json').read_text())['examples']
+    display=[]
+    for example_index,example in enumerate(examples):
+        key=example['id'];entry=next(e for e in plan['rows'] if e['id']==key);a=read(out/'evaluation'/key/'base.npz')
+        channels=list(a['channels']);t=np.arange(4000)/200+30;x=a['x'][6000:10000];s=a['physical'][6000:10000];o=x-s
+        eog=a['eog'][6000:10000];centre=float(t[np.argmax(abs(eog[:,1]-np.mean(eog[:,1])))])
+        centre=float(np.clip(centre,30.5,49.5));zoom=(t>=centre-.4)&(t<=centre+.4)
+        sites=[channels.index('Fp1'),channels.index('Cz')];display.append(dict(id=key,subject=entry['subject'],zoom_centre_s=centre,
+            selection='same_low_middle_high_raw_EOG_examples_from_parent',channels=['Fp1','Cz']))
+        local=json.loads((out/'evaluation'/key/'metrics.json').read_text())
+        current=next(r for r in local['natural'] if r['method']=='physical')
+        for detail in (False,True):
+            mask=zoom if detail else np.ones(len(t),bool);fig,axes=plt.subplots(4,2,figsize=(13.5,6.5),constrained_layout=True)
+            for col,c in enumerate(sites):
+                legacy=a['legacy_s'][6000:10000,c]
+                curves=[[(x[:,c],col_x,'原始 EEG','-')],
+                    [(legacy,'#735ba6','保留旧 S','-'),(x[:,c]-legacy,'#a88fc1','保留旧 O','--')],
+                    [(s[:,c],col_s,'新版 S 目标','-'),(o[:,c],col_o,'新版 O 目标','--')],
+                    [(eog[:,0],'#4a69ad','真实 HEOG','-'),(eog[:,1],'#b54e70','真实 VEOG','--')]]
+                bound=max(np.max(abs(wave[mask])) for lines in curves[:3] for wave,_,_,_ in lines)*1.06
+                for row,lines in enumerate(curves):
+                    ax=axes[row,col]
+                    for wave,color,label,ls in lines:ax.plot(t[mask],wave[mask],color=color,label=label,ls=ls,lw=.9)
+                    if row<3:ax.set_ylim(-bound,bound)
+                    ax.set_ylabel('µV');grid(ax);ax.legend(loc='upper right',fontsize=8,ncol=2)
+                axes[0,col].set_title(channels[c]+'；本列前三行统一纵轴');axes[-1,col].set_xlabel('窗口内时间（秒）')
+            title=entry['subject']+'：'+('放大细节并对照真实眼电' if detail else '原始电压、保留旧目标与新版 S/O')
+            add(title,
+                f"{entry['record']}，保留第 {entry['slot']+1} 窗；EEG 记录起点 {entry['rows'][0]['eeg_start_s']:.1f} 秒。"
+                f"当前窗新版 S 的 EOG 相关诊断为 {current['S_EOG_correlation']:.3f}，O 的细频段 RMS 比为 {current['O_fine_RMS_ratio']:.3f}。"
+                +('放大中心由原始 VEOG 峰确定，与模型输出无关。' if detail else '该样例沿用旧报告的原始 EOG 关联分层，不按新版效果挑选。'),
+                fig,f'15_example_{example_index}_{"detail" if detail else "full"}',
+                '各列前三行相同 µV 刻度，眼电独立刻度。旧目标来自保留的联合物理拟合增益方案，其训练信息与新版不同，仅用于波形参照。天然 EEG 缺少干净真值，不能把移出的全部波形都命名为伪迹。',
+                [f'evaluation/{key}/base.npz',f'evaluation/{key}/metrics.json','plan.json'])
+        changed=read(out/'evaluation'/key/'combined.npz');c=channels.index('Fp1');sc=changed['physical'];oc=changed['x']-sc
+        masks=[np.ones(len(t),bool),(t>=39.6)&(t<40.4)];fig,axes=plt.subplots(4,2,figsize=(13.5,6.4),constrained_layout=True)
+        curves=[[(x[:,c],col_x,'原始背景','--'),(changed['x'][:,c],'#282f37','背景＋两类污染','-')],
+            [(s[:,c],'#78b5a7','基准 S','--'),(sc[:,c],col_s,'加扰后 S','-')],
+            [(o[:,c],'#e6aa7a','基准 O','--'),(oc[:,c],col_o,'加扰后 O','-')],
+            [(changed['n'][:,c],col_truth,'已知新增污染','--'),((oc-o)[:,c],col_o,'实际 ΔO','-')]]
+        for row,lines in enumerate(curves):
+            for col,mask in enumerate(masks):
+                ax=axes[row,col]
+                for wave,color,label,ls in lines:ax.plot(t[mask],wave[mask],color=color,label=label,ls=ls,lw=1.)
+                ax.set_ylabel('µV');grid(ax);ax.legend(fontsize=8,loc='upper right',ncol=2)
+        axes[0,0].set_title('Fp1：完整评分窗口');axes[0,1].set_title('固定 39.6–40.4 秒；逐行独立纵轴')
+        for ax in axes[-1]:ax.set_xlabel('窗口内时间（秒）')
+        result=next(r for r in local['changes'] if r['method']=='physical' and r['kind']=='combined' and r['amplitude']==.25)
+        add(entry['subject']+'：加入两类污染后，O 是否同时响应主结构和细节',
+            f"已知污染为跨验证被试的眼电形态与独立 25–70 Hz 细噪声之和，RMS={result['injection_RMS_uV']:.2f} µV。"
+            f"全 16 电极 S 泄漏 NRMSE={np.sqrt(result['change_NMSE']):.3f}，O 有符号投影增益={result['O_signed_gain']:.3f}，ΔO 与污染相关={result['delta_O_correlation']:.3f}。",
+            fig,f'16_combined_{example_index}','下排直接比较已知新增污染和实际 O 增量：主峰、细密振荡、符号与时间应同时对应。上下行和左右列可能独立纵轴，以读数比较幅度；完整误差使用全电极全评分窗口，不使用图形缩放后的数据。',
+            [f'evaluation/{key}/combined.npz',f'evaluation/{key}/metrics.json'])
+        fig,axes=plt.subplots(3,2,figsize=(13.5,6.1),constrained_layout=True);c=channels.index('Fp1')
+        hard_s=a['hard_physical_S4'];hard_o=a['hard_physical_O4'];hard_o8=a['hard_physical_O8']
+        lines=[[(s[:,c],col_s,'S 目标','--'),(hard_s[:,c],'#236ab0','S 四级硬重建','-')],
+            [(o[:,c],col_o,'O 目标','--'),(hard_o[:,c],'#236ab0','O 四级硬重建','-'),(hard_o8[:,c],'#9b4f9d','O 八级硬重建',':')],
+            [((hard_o-o)[:,c],'#236ab0','O 四级误差','-'),((hard_o8-o)[:,c],'#9b4f9d','O 八级误差',':')]]
+        for row,curves in enumerate(lines):
+            for col,mask in enumerate([np.ones(len(t),bool),zoom]):
+                ax=axes[row,col]
+                for wave,color,label,ls in curves:ax.plot(t[mask],wave[mask],color=color,label=label,ls=ls,lw=.9)
+                ax.set_ylabel('µV');grid(ax);ax.legend(fontsize=8,ncol=2,loc='upper right')
+        axes[0,0].set_title('Fp1：完整评分窗口');axes[0,1].set_title('同一原始 VEOG 峰附近，独立纵轴')
+        for ax in axes[-1]:ax.set_xlabel('窗口内时间（秒）')
+        d4=next(r for r in local['decoded'] if r['method']=='physical' and r['branch']=='O' and r['levels']==4)
+        d8=next(r for r in local['decoded'] if r['method']=='physical' and r['branch']=='O' and r['levels']==8)
+        add(entry['subject']+'：监督细节经过硬 token 后保留了多少',
+            f"O 四级/八级的细频段相关为 {d4['fine_correlation']:.3f}/{d8['fine_correlation']:.3f}，"
+            f"细频段误差 NRMSE 为 {np.sqrt(d4['fine_error_NMSE']):.3f}/{np.sqrt(d8['fine_error_NMSE']):.3f}。"
+            '这些指标衡量重建是否忠实于 O 目标，不判断目标本身是否纯净。',
+            fig,f'17_hard_{example_index}','四级为每支 280 bits/s/电极；八级 O 为 560 bits/s/电极，总码率更高。误差曲线单独一行，避免把量化产生的高频毛刺当成分离出来的噪声；所有硬波形可仅凭本支整数 ID 重放。',
+            [f'evaluation/{key}/base.npz','decode_summary.csv','verification.json'])
+        if example_index==1:
+            from src.data.dual_component_tokenizer import _registered_record
+            _,registered=_registered_record(resolved['project_root'],cfg,entry['rows'])
+            unit_state=registered.manifest['measurement']['fnirs_preprocessing_state']
+            if unit_state['canonical_unit']!='uM':raise ValueError('verified cached micromolar Hb required for this report')
+            _json(out/'report_unit_check.json',dict(entry_id=entry['id'],source_identity_verified=True,
+                cache_path=str(registered.npz_path),native_unit=registered.manifest['native_contract']['native_unit'],
+                preprocessing=unit_state,measured_arrays_read=0))
+            co=json.loads((out/'coordinates.json').read_text());features=read(out/'features'/f'{key}.npz');guidance=read(out/'guidance'/f'{key}.npz')
+            fig,axes=plt.subplots(3,3,figsize=(13.5,6.2),constrained_layout=True);tt=np.arange(900)*.1
+            for roi,row in enumerate(entry['rows']):
+                cc=co[row['coordinate']];path=out/'physical'/f'{key}__{roi}';status=json.loads(path.with_suffix('.json').read_text())
+                axes[roi,0].plot(tt,guidance['raw_proxy'][:,roi]/cc['sd'][0],color=col_x,lw=1,label='EEG 实测代理')
+                if status['status']=='completed':
+                    physical=read(path.with_suffix('.npz'))['physical']
+                    axes[roi,0].plot(tt,physical[:,0]/cc['sd'][0],color=col_s,lw=1,label='Hb-only 预测代理')
+                else:
+                    for ax in axes[roi]:ax.text(.5,.87,'Hb-only 未收敛：预测缺失',transform=ax.transAxes,ha='center',fontsize=9,color='#b13e46')
+                for j in range(2):
+                    axes[roi,j+1].plot(tt,features['hb'][:,roi,j],color=col_x,lw=1,label='保留实测 Hb')
+                    if status['status']=='completed':axes[roi,j+1].plot(tt,physical[:,j+1]/cc['hb_factor'],color=col_s,lw=1,label='Hb-only 重建')
+                    axes[roi,j+1].set_ylabel('µmol/L')
+                roi_name={'left_motor':'左运动区','right_motor':'右运动区','prefrontal':'前额区'}[row['anchor']['region']]
+                axes[roi,0].set_ylabel(roi_name+'\n训练代理 SD',fontsize=9)
+                for ax in axes[roi]:
+                    ax.axvspan(30,50,color='#7895b1',alpha=.12);grid(ax);ax.legend(fontsize=7)
+            for ax,title in zip(axes[0],['EEG 慢功率代理','HbO','HbR']):ax.set_title(title)
+            for ax in axes[-1]:ax.set_xlabel('窗口内时间（秒）')
+            add(entry['subject']+'：物理重建处在慢代理与血红蛋白空间',
+                '展示中间 EOG 样例的三个 ROI。灰线为原始 EEG 转换的慢代理或保留 Hb，绿线为同窗 Hb-only 条件估计。蓝灰背景是电压评分支持 [30,50) 秒；物理模型拟合使用完整 Hb 窗口。',
+                fig,'18_physical_prediction','Hb 缓存已由原 mmol/L 转为 µmol/L，此处直接显示缓存单位。EEG 代理除以训练标准差（SD），无量纲；电压重建误差另用训练均方根尺度。该页模型曲线不是 200 Hz 电压；验证状态只作解释，不改变冻结编码。',
+                [f'features/{key}.npz',f'guidance/{key}.npz','physical_fits.json','coordinates.json','report_unit_check.json'])
+    fig,axes=plt.subplots(1,3,figsize=(13.5,5.3),sharey=True,constrained_layout=True);peaks=[]
+    for ax,example in zip(axes,examples):
+        a=read(out/'evaluation'/example['id']/'base.npz');x=a['x'][6000:10000];s=a['physical'][6000:10000]
+        for label,wave,color,ls in [('原始 EEG',x,col_x,'-'),('S 目标',s,col_s,'-'),('O 目标',x-s,col_o,'--')]:
+            frequency,power=welch(wave,fs=200,nperseg=400,noverlap=200,detrend='constant',axis=0)
+            mean=power.mean(axis=1);ax.semilogy(frequency,mean,color=color,ls=ls,lw=1.2,label=label)
+            if label=='O 目标':
+                support=(frequency>=25)&(frequency<=70);peaks.append(float(frequency[support][np.argmax(mean[support])]))
+        ax.axvspan(25,70,color='#eeeeee',alpha=.6,zorder=0);ax.axvline(50,color='#444444',ls=':',label='50 Hz 参考')
+        ax.set_xlim(0,90);ax.set_title(example['subject']+'：全部 16 电极均值');ax.set_xlabel('频率（Hz）');ax.legend(fontsize=9);ax.grid(alpha=.2)
+    axes[0].set_ylabel('功率谱密度（µV²/Hz，对数轴）')
+    add('三个样例的 O 细频段谱峰均位于 50 Hz',
+        '预选样例的 O 在 25–70 Hz 内的谱峰分别为 '+ '、'.join(f'{v:g} Hz' for v in peaks)+'。'
+        '灰色背景标出细噪声探测频段；50 Hz 是频率参考线。频谱反映实际分配的波动，不能将整个高频区都解释成噪声。',
+        fig,'18b_spectra','Welch 谱使用 2 秒 Hann 分段、50% 重叠，分段去均值只用于谱估计。先求每电极功率谱，再取 16 电极算术平均；三图共用纵轴。高而窄的谱峰不等于宽频段能量占比，也不能证明其余 O 成分的来源。',
+        [f'evaluation/{e["id"]}/base.npz' for e in examples])
+    example=examples[1];a=read(out/'evaluation'/example['id']/'base.npz');channels=list(a['channels']);t=np.arange(4000)/200+30
+    parts=[a[k][6000:10000] for k in ['physical_o_spatial','physical_o_temporal']];total=a['x'][6000:10000]-a['physical'][6000:10000]
+    centre=display[1]['zoom_centre_s'];zoom=(t>=centre-.4)&(t<=centre+.4)
+    fig,axes=plt.subplots(2,2,figsize=(13.5,5.6),constrained_layout=True)
+    for row,name in enumerate(['Fp1','Cz']):
+        c=channels.index(name)
+        for col,mask in enumerate([np.ones(len(t),bool),zoom]):
+            ax=axes[row,col]
+            for wave,color,label,ls in [(total,'#111111','完整 O','-'),(parts[0],col_o,'空间补充','--'),(parts[1],'#236ab0','时间预测残差',':')]:
+                ax.plot(t[mask],wave[mask,c],color=color,ls=ls,lw=1.,label=label)
+            ax.set_ylabel(name+' · µV');ax.legend(fontsize=9,ncol=3);grid(ax);ax.set_xlabel('窗口内时间（秒）')
+    axes[0,0].set_title('完整评分窗口');axes[0,1].set_title('同一 VEOG 峰附近，独立纵轴')
+    add('O 由空间补充和时间预测残差共同组成',
+        f"中间 EOG 样例 {example['subject']}。全部 16 电极评分窗内，空间项 RMS 为 {np.sqrt(np.mean(parts[0]**2)):.2f} µV，时间项为 {np.sqrt(np.mean(parts[1]**2)):.2f} µV；两项逐点相加得到黑色完整 O。",
+        fig,'18c_residual_parts','空间项为原始电压减固定投影，时间项为被移出的邻域预测残差。两项可能相关，各自 RMS 不是总 O 的能量百分比。曲线中既有偏移、主要结构，也有快速细节；其物理归属仍需独立证据。',
+        [f'evaluation/{example["id"]}/base.npz','selected_models.json'])
+    formula_page('硬 tokenizer 的计算路径与码率',
+        '冻结前端先从多电极 EEG 生成 S/O，再按每电极 100 ms、20 个采样点切分。各支词表只用训练首窗拟合；残差向量量化依次选择波形原型，最终解码是本支整数查表求和。没有逐窗连续幅值或均值旁路。',
+        [(r'$q_{b,j}^{(l)}=\operatorname{nearest}(r_{b,j}^{(l-1)},\mathcal{C}_b^{(l)}),\quad\widehat{x}_{b,j}=a_c\sum_l \mathcal{C}_b^{(l)}[q_{b,j}^{(l)}]$',
+          'b 为 S 或 O；每级词表 128 项、每项 20 维波形；ac 是固定训练电极 RMS'),
+         (r'$R_b=10L\log_2(128)=70L\quad\mathrm{bits/s/electrode}$',
+          '四级 S＋四级 O：560；原始电压八级：560；四级 S＋八级 O：840')],
+        '19_codec','词表最近邻距离包含波形误差和权重 0.25 的差分误差；两个尺度均在训练数据确定。前端对每个 100 ms 编码单元最多需要 140 ms EEG 支持。码率为未作熵编码的名义 ID 码率，不含一次性词表存储。',
+        ['resolved_config.json','codebook_fits.json','verification.json'])
+    fig,axes=plt.subplots(1,3,figsize=(13.5,5.2),constrained_layout=True)
+    dec=[next(r for r in summary['decode'] if r['method']=='physical' and r['branch']==b and r['levels']==l) for b,l in [('S',4),('O',4),('O',8)]]
+    labels=['S 四级','O 四级','O 八级']
+    for ax,metric,title in zip(axes[:2],['fine_error_NRMSE','fine_correlation'],['细频段相对重建误差','细频段波形相关']):
+        values=[r[metric] for r in dec];ax.bar(range(3),values,color=[col_s,col_o,'#9b4f9d']);ax.set_xticks(range(3),labels)
+        ax.set_title(title);ax.grid(axis='y',alpha=.2)
+        for j,v in enumerate(values):ax.text(j,v,f'{v:.3f}',ha='center',va='bottom')
+    axes[0].set_ylabel('误差 / 目标 25–70 Hz RMS ↓');axes[1].set_ylabel('相关系数 ↑');axes[1].set_ylim(0,1.12)
+    sums=pd.DataFrame(verification['sum_reconstructions']);sum_subject=sums.groupby(['subject','method']).NMSE.mean();sum_mean=np.sqrt(sum_subject.groupby('method').mean())
+    order=['raw_8','physical_4plus4','physical_4plus8'];values=[sum_mean[m] for m in order]
+    axes[2].bar(range(3),values,color=[col_x,col_s,'#9b4f9d']);axes[2].set_xticks(range(3),['原始八级\n560 bits/s','S4＋O4\n560 bits/s','S4＋O8\n840 bits/s']);axes[2].set_title('总电压重建：相同训练尺度');axes[2].set_ylabel('NRMSE / 每电极训练 RMS ↓');axes[2].grid(axis='y',alpha=.2)
+    for j,v in enumerate(values):axes[2].text(j,v,f'{v:.3f}',ha='center',va='bottom')
+    add('O 的真实细节能够硬编码，但需要承担有限码率误差',
+        f"O 四级/八级细频段相关为 {dec[1]['fine_correlation']:.3f}/{dec[2]['fine_correlation']:.3f}，NRMSE 为 {dec[1]['fine_error_NRMSE']:.3f}/{dec[2]['fine_error_NRMSE']:.3f}。块边界误差为 {dec[1]['boundary_error_RMS']:.3f}/{dec[2]['boundary_error_RMS']:.3f} 个训练电极 RMS。右图只有前两柱码率相同。",
+        fig,'20_decode_quality','细频段误差相对目标 25–70 Hz RMS，按窗、被试平均平方误差后开方。边界误差是每 100 ms 边界两侧重建误差之差，除训练电极 RMS 后在窗内求 RMS、再等权平均。相关较高证明压缩忠实度，不证明目标纯净。',
+        ['decode_summary.csv','decode_subjects.csv','verification.json'])
+    fig,axes=plt.subplots(1,2,figsize=(13.5,5.5),constrained_layout=True)
+    for ax,key,title in zip(axes,['change_NRMSE','O_change_NRMSE'],['S 的实际变化误差','O 的实际变化误差']):
+        comparison=[('physical','连续目标',col_s),('physical','硬 S4/O4','#236ab0'),('physical_O8','硬 S4/O8','#9b4f9d')]
+        for j,(method,label,color) in enumerate(comparison):
+            vals=[value('physical',k) if j==0 else value(method,k,key=key,family='hard_intervention') for k in spec['measured_perturbations']]
+            ax.bar(xx+(j-1)*.25,vals,.25,label=label,color=color)
+        ax.set_xticks(xx,[kinds[k] for k in spec['measured_perturbations']],rotation=28,ha='right');ax.set_ylabel('变化 NRMSE ↓');ax.set_title(title);ax.legend(fontsize=9);ax.grid(axis='y',alpha=.2)
+    add('硬解码层必须直接检验 O，不能借用标签的闭合恒等式',
+        '连续目标逐点满足 S+O=原始 EEG，因此两支相对期望变化的误差相等。硬解码分别量化两支，通常不再严格闭合。本页在原始背景和加扰背景上重新编码，再直接相减各自解码结果。',
+        fig,'21_hard_interventions','污染条件期望 ΔS=0、ΔO=已知污染；神经样条件期望 ΔS=已知变化、ΔO=0。八级 O 不改变 S 的 ID，因此两种硬 S 的柱应完全一致。若 O 只是量化毛刺，细频段相关与实际变化误差会揭示它。',
+        ['hard_intervention_summary.csv','hard_intervention_subjects.csv','verification.json'])
+    fig,axes=plt.subplots(1,2,figsize=(13.5,5.3),constrained_layout=True)
+    used=['physical','empirical','eeg','pca','sham','random'];fine=np.array([value(m,'fine') for m in used]);maxfine=max(fine.max(),1.)
+    markers=['o','s','^','D','P','X']
+    for method,marker,number in zip(used,markers,fine):
+        xval=value(method,'ocular');yval=max(value(method,k) for k in ['neural10','neural35','neural55'])
+        point=axes[0].scatter(xval,yval,c=[number],vmin=0,vmax=maxfine,cmap='viridis',marker=marker,s=100,edgecolors='black')
+        axes[0].annotate(names[method],(xval,yval),xytext=(5,5),textcoords='offset points',fontsize=9)
+    axes[0].axvline(.5,color='#777777',ls='--');axes[0].axhline(.25,color='#777777',ls='--');axes[0].set_xlabel('主要眼电 S 泄漏 NRMSE ↓');axes[0].set_ylabel('三类神经样变化最差损失 NRMSE ↓');axes[0].grid(alpha=.2);fig.colorbar(point,ax=axes[0],label='细噪声 S 泄漏 NRMSE ↓')
+    fixedP=read(out/'models'/'physical_r8.npz')['P'];distances=[]
+    for method in ['empirical','eeg','pca','sham','random']:
+        p=read(out/'models'/f'{method}_r8.npz')['P'];distances.append(np.linalg.norm(p-fixedP)/np.linalg.norm(fixedP))
+    axes[1].bar(range(5),distances,color=[colors[m] for m in ['empirical','eeg','pca','sham','random']]);axes[1].set_xticks(range(5),[names[m] for m in ['empirical','eeg','pca','sham','random']],rotation=25,ha='right');axes[1].set_ylabel('与物理 P 的 Frobenius 差 / 物理 P 范数');axes[1].set_title('固定秩 8：对照确实改变了投影');axes[1].grid(axis='y',alpha=.2)
+    add('当前取舍尚未同时满足主要伪迹、细噪声和神经保留',
+        '左图每点是一种训练选定的方法，不是独立被试；横轴为眼电泄漏，纵轴为三个神经频率中的最差损失，颜色为细噪声泄漏。虚线是预先写入合同的工程参照 0.5/0.25，细噪声参照为 0.75。',
+        fig,'22_tradeoff','工程参照只帮助描述联合目标，不是生理资格或授权门槛。右图用相同秩的矩阵差检查控制是否改变真实方向；相位失配不同于简单翻转状态符号。降低细噪声误差不足以抵消主要伪迹泄漏或神经损伤。',
+        ['intervention_summary.csv','selected_models.json','models/physical_r8.npz','resolved_config.json'])
+    failures=[r for r in json.loads((out/'physical_fits.json').read_text()) if r['status']!='completed']
+    fig,axes=plt.subplots(1,2,figsize=(13.5,5.4),constrained_layout=True)
+    axes[0].bar([0,1,2],[counts['physical_successes'],counts['model_successes'],counts['codebook_successes']],color=col_s,label='完成')
+    axes[0].bar([0,1,2],[counts['physical_failures'],counts['model_failures'],counts['codebook_failures']],bottom=[counts['physical_successes'],counts['model_successes'],counts['codebook_successes']],color='#b84d55',label='失败保留')
+    axes[0].set_xticks([0,1,2],['Hb-only 拟合','空间模型族','分支词表']);axes[0].set_ylabel('任务数，不是独立被试');axes[0].legend();axes[0].grid(axis='y',alpha=.2)
+    axes[1].axis('off');text='物理失败明细：\n'+'\n'.join(f"{r.get('subject',r.get('entry_id'))} · 窗 {next(e['slot'] for e in plan['rows'] if e['id']==r['entry_id'])+1} · ROI {r['roi']+1}：{r.get('fit',{}).get('status','异常')}" for r in failures)
+    text+=f"\n\n验证窗口：{counts['completed_validation_windows']} / {counts['validation_windows']}\n连续指标重算：{verification['continuous_metric_recomputations']} 组\n整数解码重放：{verification['integer_decoder_replays']} 次\n原始电压与参考身份：精确一致\nHb-only 读取 EEG 观测行：0"
+    axes[1].text(0,.96,text,va='top',fontsize=12,linespacing=1.65)
+    add('保留失败和完整分母，区分计算完成与科学目标实现',
+        f"计划 22 个公开窗口，物理拟合 {counts['physical_fits']} 项，完成 {counts['physical_successes']} 项、失败 {counts['physical_failures']} 项。失败发生于验证诊断，冻结训练投影仍可对全部 10 个验证窗口编码。未用失败窗口的联合拟合代替 Hb-only 结果。",
+        fig,'23_integrity','840 组连续指标从保存数组重算；840 次解码只读取对应词表、整数 ID 与固定训练尺度。浮点存储误差单独核对。失败、低质量结果和困难场景均纳入交付；本轮未读取测试或受保护数组。',
+        ['physical_fits.json','evaluation_outcomes.json','verification.json','summary.json'])
+    fig,ax=plt.subplots(figsize=(13.5,5.5));ax.axis('off')
+    rows=[['O 的细密波动','可以编码与重建',f"四级相关 {dec[1]['fine_correlation']:.3f}；八级 {dec[2]['fine_correlation']:.3f}"],
+        ['主要眼电移入 O','本版未达到',f"S 泄漏 {value('physical','ocular'):.3f}；原始直通 1.000"],
+        ['快速神经活动保留','有明显损伤风险',f"35/55 Hz 损失 {value('physical','neural35'):.3f}/{value('physical','neural55'):.3f}"],
+        ['物理引导增量','依端点而异',f"同容量：细噪声、10 Hz 有利；眼电、35/55 Hz 不利"],
+        ['当前可支持的结论','细节分配可实现，去噪叙事未成立','先修正空间成分选择与独立神经保留依据']]
+    tb=ax.table(cellText=rows,colLabels=['检验目标','结论','证据与用途'],loc='center',cellLoc='left',colWidths=[.20,.28,.52]);tb.auto_set_font_size(False);tb.set_fontsize(12);tb.scale(1,2.7)
+    add('结论：细节可重建，当前目标仍不足以支持“干净 S / 噪声 O”',
+        '这次实验将“能生成嘈杂 O”与“能正确分离噪声”分开验证。两阶段前端改善细噪声分配，硬码本也能保存相应纹理；但主要眼电仍被 S 保留，并且快速神经样波形发生损失，不能据此直接替换正式监督。',
+        fig,'24_conclusion','下一步应优先修正空间选择为何保留眼电，并使用独立天然事件检验神经保留。增加 O 码率可改善压缩忠实度，却无法纠正目标归属。当前合成和公开开发面板均为有限探索，不能外推为全面生理分离结论。',
+        ['summary.json','paired_physical.csv','decode_summary.csv','synthetic.json'])
+    for entry in plan['rows']:
+        if entry['phase']!='validation':continue
+        key=entry['id'];a=read(out/'evaluation'/key/'base.npz');channels=list(a['channels']);t=np.arange(4000)/200+30
+        for kind in ('base','combined'):
+            b=a if kind=='base' else read(out/'evaluation'/key/'combined.npz')
+            x=b['x'][6000:10000] if kind=='base' else b['x'];s=b['physical'][6000:10000] if kind=='base' else b['physical']
+            fig,axes=plt.subplots(4,4,figsize=(14,8),sharex=True,constrained_layout=True)
+            for c,ax in enumerate(axes.flat):
+                ax.plot(t,x[:,c],color=col_x,lw=.6,label='观测');ax.plot(t,s[:,c],color=col_s,lw=.65,label='S');ax.plot(t,x[:,c]-s[:,c],color=col_o,lw=.65,ls='--',label='O')
+                ax.set_title(channels[c],fontsize=10);ax.set_xlabel('秒',fontsize=9);ax.set_ylabel('µV',fontsize=9);ax.tick_params(labelsize=8);grid(ax)
+            axes.flat[0].legend(fontsize=8,ncol=3)
+            add(f"{entry['subject']} · 第 {entry['slot']+1} 窗 · {'天然输入' if kind=='base' else '已加入两类已知污染'}",
+                f"{entry['record']}；EEG 记录起点 {entry['rows'][0]['eeg_start_s']:.1f} 秒；当前显示窗口内 [30,50) 秒。完整 16 电极，所有预定验证窗口均收录；未按 S/O 效果筛选。",
+                fig,'atlas_'+key+'_'+kind,'灰实线：当前观测；绿实线：新版 S 目标；橙虚线：O=观测−S。各电极独立 µV 刻度，跨图幅度必须读取坐标。组合扰动与天然输入背景相同；图集展示监督目标，硬解码见主报告。',
+                [f'evaluation/{key}/{kind}.npz','plan.json'],atlas=True)
+    _json(export/'example_selection.json',display);_json(export/'figure_formulas.json',formulas)
+    report_font=ttLib.TTFont(font,fontNumber=2);options=subset.Options();options.retain_gids=True
+    subsetter=subset.Subsetter(options=options);subsetter.populate(text=''.join(p[k] for p in pages+gallery for k in ('title','intro','caption')));subsetter.subset(report_font)
+    fontpath=export/'report_font.otf';report_font.save(fontpath)
+    def pdf(destination,records):
+        doc=fitz.open()
+        for i,p in enumerate(records):
+            page=doc.new_page(width=1000,height=700);page.insert_font(fontname='ReportNoto',fontfile=str(fontpath))
+            for rect,text,size in [(fitz.Rect(34,20,966,73),p['title'],21),
+                    (fitz.Rect(34,80,966,156),p['intro'],12),(fitz.Rect(34,615,966,675),p['caption'],11)]:
+                remaining=page.insert_textbox(rect,text,fontname='ReportNoto',fontsize=size,lineheight=1.45)
+                if remaining<0:raise ValueError(f'PDF text overflow on page {i+1}: {remaining}')
+            page.insert_image(fitz.Rect(34,162,966,607),filename=str(export/p['figure']),keep_proportion=True)
+            page.insert_text((35,683),'Evidence: '+', '.join(Path(s).name for s in p['evidence']),fontsize=7,color=(.35,.35,.35))
+            page.insert_text((35,694),f'{i+1} / {len(records)}  |  TK-EEG-TWO-SCALE-SEPARATION-v1  |  2026-11-05',fontsize=7,color=(.4,.4,.4))
+        doc.save(destination,deflate=True,garbage=4);doc.close()
+    pdf(export/'EEG_SO_双尺度分离实验报告.pdf',pages);pdf(export/'全部验证窗口与组合干扰图集.pdf',gallery)
+    style='body{font:16px/1.7 system-ui,sans-serif;background:#edf1f5;color:#172739;margin:0}main{max-width:1280px;margin:auto}section{background:white;margin:24px 0;padding:28px;border-radius:10px}img{width:100%;height:auto}h1,h2{line-height:1.35}small{color:#536879}a{color:#1769a4}'
+    blocks=[]
+    for i,p in enumerate(pages+gallery):
+        sources=' · '.join(f'<a href="../{html.escape(s)}">{html.escape(s)}</a>' for s in p['evidence'])
+        blocks.append(f'<section id="p{i+1}"><h2>{i+1}. {html.escape(p["title"])}</h2><p>{html.escape(p["intro"])}</p><img src="{p["figure"]}" alt="{html.escape(p["title"])}"><p>{html.escape(p["caption"])}</p><small>数值来源：{sources}</small></section>')
+    toc=' · '.join(f'<a href="#p{i+1}">{i+1}. {html.escape(p["title"])}</a>' for i,p in enumerate(pages))
+    (export/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EEG S/O 双尺度分离实验</title><style>'+style+'</style><main><section><h1>EEG S/O 双尺度分离实验</h1><p>报告汇总保留数值，不替代运行内 summary 与逐窗证据。图中曲线均来自真实计算数组。</p><p><a href="EEG_SO_双尺度分离实验报告.pdf">主报告 PDF</a> · <a href="全部验证窗口与组合干扰图集.pdf">全部验证窗口图集 PDF</a></p><nav>'+toc+'</nav></section>'+''.join(blocks)+'</main></html>',encoding='utf-8')
+    _json(export/'pages.json',dict(pages=pages,gallery=gallery))
+    report=dict(status='completed',pages=len(pages),atlas_pages=len(gallery),figures='PNG_220dpi',body='searchable_embedded_font',source_summary=str(out/'summary.json'))
+    _json(export/'export.json',report);return report
+
+
 def voltage_teacher_natural_metrics(x, s, eog, training_scale, low_eog):
     """Natural-data diagnostics; raw EEG is a reference, not clean truth."""
     sl = slice(6000, 10000)
