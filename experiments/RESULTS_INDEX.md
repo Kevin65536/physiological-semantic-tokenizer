@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-10-27; payload-pruning record retained from
+_Evidence surface updated 2026-11-06; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -15,6 +15,22 @@ scientific verdicts. Its owning record is
 [`research_state/registry.json`](../research_state/registry.json); experiment designs
 and access boundaries remain in the [experiment plan](../docs/EXPERIMENT_PLAN.md)
 and [data contract](../docs/DATA_CONTRACT.md).
+
+## Git reading package and local archive
+
+Git keeps the linked conclusions, endpoint/comparison tables, compact run and
+source identities, selected reports, and the images and provenance needed to
+read those reports. Use [Find results by question](#find-results-by-question)
+for the scientific reading route.
+
+Full task records, fitted/prepared arrays, frozen replay-source copies, logs and
+superseded report exports are archived **locally at their original dated paths**.
+They are excluded from Git tracking, so a fresh checkout supports result reading
+while detailed replay uses the local archive. The
+[2026-11-06 retention record](#git-retention-update--2026-11-06) identifies the
+scope, preserved evidence and pre-archive Git revision. The directory-level rules
+in `.gitignore` cover generated runs and both existing report roots; new selected
+reading artifacts are admitted with explicit `git add -f -- <file>`.
 
 ## EEG spatial/temporal voltage separation — 2026-11-05
 
@@ -439,11 +455,11 @@ registered execution and scientific interpretation. These are development data,
 and the Hb-only reference is a regularized conditional fit rather than a proof of
 global physical unreachability.
 
-Git retains the synthetic pilot, the failed preparation attempt and the completed
-run, including prepared feature/operator arrays, task predictions and residuals,
-FIR predictions, metadata, summaries and audits. These inputs preserve training
+Git retains the pilot/failure conclusions, metadata, summaries and audits of the
+completed run. Prepared feature/operator arrays, task predictions and residuals,
+and FIR predictions remain in the local archive. These inputs preserve training
 coordinate and wrong-pair checks without rereading native datasets. Each frozen
-source tree is retained byte-for-byte in its adjacent `source_snapshot.tar.gz`;
+source tree is retained locally byte-for-byte in its adjacent `source_snapshot.tar.gz`;
 extract the archive in that run or analysis directory to restore the recorded
 `source_snapshot/` paths. Runtime caches, Python bytecode and controller locks
 remain local. No original measurement files or unrelated running campaigns are
@@ -466,10 +482,11 @@ are bitmap-figure communication exports; numerical task records remain the sourc
 Retain the resolved contract, exact public identities, new development-only
 coordinates, prepared targets/operators, per-task fits and failures, summaries,
 supervisor/resource records and frozen fitting source. The later array-audit and
-report sources are retained separately. Git carries the compact prepared inputs,
-complete task JSON records, summaries/endpoint rows, fitting source and final
-PDF/HTML report with its referenced bitmaps; the atlas PDF retains every plotted
-record. Frozen fitting source is stored byte-for-byte in `source_snapshot.tar.gz`;
+report sources are retained separately. Git carries the summaries/endpoint rows,
+run/source identities and final PDF report with its referenced bitmaps; the atlas
+PDF retains every plotted record. Prepared inputs, complete task JSON records,
+and the HTML export remain local. Frozen fitting source is stored locally
+byte-for-byte in `source_snapshot.tar.gz`;
 extract it in the run directory to restore the recorded `source_snapshot/` paths.
 Dense task trajectory/operator NPZ files, numerical caches, superseded
 exports and page previews remain local and can be regenerated from the saved
@@ -620,8 +637,9 @@ probes use only the shared retained subset and frozen public subject split.
 | Correct temporal and regional pairing vs condition-matched donors, using frozen shape exports | [Pairing contract](configs/physiology_semantic_tokenizer/functional_shape_relations_v1.yaml) | [Per-subject summary](runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_relations_v1/summary.json), [paired analysis](runs/physiology_semantic_tokenizer/functional_tokenizer/20261025_shape_relations_v1/analysis.json) |
 
 Retain each run's resolved configuration, source archive, launch/resource record,
-atomic tasks and summary. Git retains these records, paired analyses, reports,
-figures and the small numeric shape encoders with their dictionaries. The public
+atomic tasks and summary. Git retains the compact run records, paired analyses,
+reports and figures. Atomic task payloads and numeric shape encoders with their
+dictionaries remain local. The public
 parent's coordinate/identity manifest, resolved contract, terminal summaries and
 the cited QT mechanism records preserve the split, failure and interpretation
 provenance. Dense hard-ID/scale exports, continuous references, parent signal
@@ -661,11 +679,13 @@ Nonlinear values are legal conditional reconstruction witnesses under a finite
 optimization budget, not converged optima. Wide common-parameter sets do not
 identify physiology, and unscorable windows remain in the denominator record.
 
-Git retains the census rows/profiles, panel task records and arrays, selected
-examples, correction overlays, source snapshots, verification and launch logs,
-and the final v4 PDF/HTML, bitmap figures and formula sources. The earlier
+Git retains the census summaries, linked endpoint tables, correction/verification
+records, and final v4 PDF, bitmap figures and formula sources. Panel task records,
+arrays, source snapshots, launch logs and the duplicate HTML export remain local.
+The earlier
 [synthetic visual guide](runs/physiology_semantic_tokenizer/model_compatibility_guide/20261023_v7/report/TECHNICAL_REPORT.pdf)
-is retained with its arrays and provenance as a separate educational example.
+keeps its PDF and provenance in Git, with its arrays archived locally as a
+separate educational example.
 Superseded report exports, rendered page previews and duplicate ZIP bundles
 remain local; no retained experiment evidence is deleted by this selection.
 
@@ -713,7 +733,7 @@ source snapshots, verification source, reports, and supervised
 and [resource](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/resources.json)
 records together. Earlier report exports and historical fits remain retained;
 this selected-example diagnostic does not replace earlier population results.
-Git retains the runtime source snapshot and patch, verification source and both
+The local archive retains the runtime source snapshot and patch, verification source and both
 export renderers in `source_snapshot.tar.gz`; extract it in this run directory to restore
 their recorded paths. Compiled caches and regenerable page previews stay local.
 
@@ -739,7 +759,7 @@ fits. It preserves the original task records and fitted arrays, with no refits.
 Keep both source snapshots, all original task JSON/NPZ and replay overlays,
 resolved configuration, launch records, and
 [resource measurements](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/resources.json).
-Git retains both source snapshots and the per-export renderer sources in
+The local archive retains both source snapshots and the per-export renderer sources in
 `source_snapshot.tar.gz`; extract it in this run directory to restore their
 recorded paths. The archive preserves source bytes and excludes compiled caches.
 Fit failures, counterfactual failures, state recovery and observation errors have
@@ -758,7 +778,7 @@ Retain the [owning summary](runs/physiology_semantic_tokenizer/shared_driver_rec
 and [independent score/observation checks](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/report_v2/verification.json).
 The original run's resolved configuration, source snapshot, launch records,
 resource choices, complete synthetic/linear/measured task JSON and trajectory NPZ
-remain the audit package. Git retains the byte-preserving `source_snapshot.tar.gz`;
+remain the local audit package, including the byte-preserving `source_snapshot.tar.gz`;
 extract it in this run directory to restore the recorded source paths and patch.
 Report v1 is the retained first export; v2 corrects one
 unsupported superscript glyph without changing numerical evidence.
@@ -787,13 +807,14 @@ and interpretation remain in the project registry.
 The reports retain portable content JSON, searchable body text and tables, PNG
 figures/formulas, LaTeX source, figure atlases and delivery checks. Retained measured
 parents keep their original identity; no historical evidence is rewritten. Compact
-plans, task/endpoint tables, summaries, verification scripts/results and source
-snapshots are retained in Git. Each run's `terminal_records.zip` losslessly retains
+plans, linked endpoint tables, summaries, verification results and source
+identities are retained in Git. Full task tables and source snapshots remain
+local. Each run's local `terminal_records.zip` losslessly retains
 the original terminal JSON (and mechanism task CSV) files with their relative paths;
 the archive was checked byte-for-byte against the local records. The spatial suite's
 large `plan.json`, `information_results.json` and `profile_results.json` are retained
-as lossless `.json.gz` copies; their working originals remain unchanged. A checkout
-can decompress these copies beside the archives before an explicit evidence replay.
+locally as lossless `.json.gz` copies; their working originals remain unchanged.
+An evidence replay uses these local copies beside the archives.
 Large per-task arrays and intermediate previews stay
 local at the named run/export paths. Source-level replays require the explicit parent
 arrays recorded by each contract; default tests use synthetic fixtures instead.
@@ -827,11 +848,12 @@ Single-Trial panel, following the separate learned-calibration synthetic control
   and [numeric/layout/bitmap checks](../docs/report/20261020_local_spatial_v5/delivery_checks.json).
   Earlier report-export attempts remain local with their original identities.
 
-Git retains the final plans, calibration/selection records, summaries, source snapshots,
+Git retains the linked final plan, calibration/selection summaries, source identities,
 execution and verification records, complete measured-cell CSV, report files and source
 assets, plus the resource pilot's failure records. Prepared signal arrays, per-cell
 JSON/NPZ payloads, preview images and the duplicate delivery ZIP remain in their existing
-local directories; array-level verification requires those retained local payloads.
+local directories together with full source snapshots and the duplicate measured-run
+plan; array-level verification requires those retained local payloads.
 
 ## Local spatial software and metadata — 2026-10-16
 
@@ -839,7 +861,8 @@ The [versioned contract](configs/physiology_semantic_tokenizer/shared_driver_spa
 and [design](../docs/EXPERIMENT_PLAN.md#局部多通道观测与空间动态维数2026-10-16)
 define the local multi-channel suite. Retain these bounded implementation checks:
 
-Git retains the final v3 JSON evidence and source snapshots listed below. Rebuildable
+Git retains the final v3 JSON evidence and source identities listed below. Source
+snapshot copies, rebuildable
 synthetic NPZ arrays, runtime locks and superseded v1/v2 directories remain local.
 
 - [Synthetic smoke v3](runs/physiology_semantic_tokenizer/shared_driver_spatial/20261016_implementation_smoke_v3/summary.json):
@@ -907,9 +930,8 @@ the summary records the qualification exclusions without changing that evidence.
 
 The versioned [Chinese PPT](../docs/report/20261010_parameter_stability_v2/PARAMETER_STABILITY.pptx)
 and [PDF](../docs/report/20261010_parameter_stability_v2/PARAMETER_STABILITY.pdf)
-retain PNG figures, slide provenance, renderer source and export checks. These
-communication assets and the selected evidence are explicitly tracked at their
-original paths despite the default artifact ignore rules. Retain terminal task
+retain PNG figures, slide provenance and export checks in Git. Renderer source
+and numerical replay payloads remain at their original local paths. Retain terminal task
 JSON, full profile nodes, original fitted trajectories for numerical replay,
 cross-fit residuals, calibration inputs, source snapshots, supervisor logs and
 software recovery records. The three report examples also retain prepared
@@ -933,7 +955,7 @@ and alternative solutions. The initial power calibration remains intact; its
 separately versioned [background refinement](runs/physiology_semantic_tokenizer/ssm_output_support/20261010_v1/power_calibration_v2/summary.json)
 retains the empirical training bank, moment checks, terminal tasks and paired
 results. `report_analysis_v1/` holds the report's derived tables and PNG figures.
-This package is explicitly retained in Git at its original paths. The tracked
+The summaries, comparison tables and report assets remain in Git. The local
 arrays include every standard full-observation measured fit for report/state
 audits, the prespecified records across all fitted conditions, the numerical
 failure, all output-profile vectors, and seed-zero synthetic examples. The
@@ -942,8 +964,8 @@ and the prespecified profile records are also retained. Other fitted arrays,
 evaluation preparation caches, pilot
 arrays and power-example arrays remain local; repeating the full numerical
 array audit requires those local payloads or regenerating them from the frozen
-sources and declared native datasets. All terminal task records and complete
-metric/profile/comparison tables are tracked, including unsuccessful outcomes.
+sources and declared native datasets. Full terminal task records remain local;
+retained metric/profile/comparison tables include unsuccessful outcomes.
 No previous evidence package is replaced or deleted.
 
 ## EEG proxy sampling-rate comparison — 2026-10-10
@@ -956,10 +978,10 @@ The Git-retained package is
 `metrics.csv` and `paired_comparisons.csv` hold the per-fit and subject-block
 comparisons; `preparation_summary.json` audits native 4 Hz replay;
 `verification.json` checks arrays, metrics and the original baseline replay.
-It includes the resolved contract, exact window/coordinate plan, source snapshot,
-supervisor/resource records, synthetic checks, all terminal fit JSON/NPZ files,
-the compact prepared proxy/target arrays needed to audit their scores, and the
-final PNG overview/examples in `figures_v2/`. The runtime lock and superseded
+It includes the resolved contract, exact window/coordinate plan, source identity,
+supervisor/resource summaries, synthetic checks, and the final PNG overview/examples
+in `figures_v2/`. Full source snapshots, terminal fit JSON/NPZ files and prepared
+proxy/target arrays remain local. The runtime lock and superseded
 run-root PNG export remain local. Native-record regeneration and historical
 baseline replay still require the explicitly referenced datasets and parent
 evidence. No old parent evidence is changed. The common
@@ -972,10 +994,10 @@ The observation-semantics evidence is retained in Git at
 [`observation_semantics/20261009_v2`](runs/physiology_semantic_tokenizer/observation_semantics/20261009_v2/summary.json)
 and its bounded
 [`C/D refinement`](runs/physiology_semantic_tokenizer/observation_semantics/20261009_refinement_v1/summary.json).
-Each keeps the resolved contract, frozen source (excluding compiled caches),
-supervisor launch, per-unit result/provenance JSON, complete metric and comparison
-tables, fitted readouts and verification. Semantic-stability range/mask arrays
-and the saved mechanism and event/hardware example arrays are also retained. The
+Git keeps the resolved contracts, supervisor/source identities, metric and
+comparison tables, and verification. Frozen source copies, per-unit result JSON,
+fitted readouts, semantic-stability range/mask arrays and saved mechanism and
+event/hardware example arrays remain local. The
 [`Chinese PPT/PDF export`](../docs/report/20261009_observation_semantics_v3/observation_semantics_20261009.pptx)
 and its adjacent `slide_sources.json`, validation and 23 source PNG figures trace
 the report back to those owners. The superseded
@@ -1231,7 +1253,7 @@ physiology. The optical observation contrast retains separate targets and scales
 | Conditional optical observation map and shared gain | [Manifest](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_v1/manifest.json), [pilot](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_pilot_v1/manifest.json), [synthetic bitmap report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_v1/report_synthetic_v3/REPORT.pdf), [full report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_v1/report_v1/REPORT.pdf), [all-curve atlas](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_v1/report_v1/FULL_CURVE_ATLAS.pdf), [independent audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_conditional_optical_gain_v1/preparation_audit/final_verification.json), [contract](configs/physiology_semantic_tokenizer/shared_driver_conditional_optical_gain_v1.yaml) | Preserve exact within-pipeline parent targets and training SD, inherited baseline failures, new paired synthetic truth, engineering gain-recovery screen, actual beta/reference/relative gain, state/driver errors and conditional calibration assumptions. Low reconstruction error alone does not validate latent trajectory recovery. |
 | Paired same-objective solver step control | [Manifest](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/manifest.json), [pilot](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_pilot_v2/manifest.json), [contract](configs/physiology_semantic_tokenizer/shared_driver_conditional_step_control_v2.yaml), [audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/report_v1/audit.json), [bitmap report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/report_v1/REPORT.pdf), [PPT](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_conditional_step_control_panel_v2/report_v1/SOLVER_RESULTS.pptx) | Retain both fresh arms, historical failures, exact prepared/training target and SD identities, all start traces and convergence reasons, CPU/wall timing, forward budgets, integration checks, source snapshot and supervisor/resource records. Training numerics only; no validation or physiology qualification. |
 | Hb waveform mechanism and extra volume loading diagnostics | [Mechanism run](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_diagnostic_v1/manifest.json), [volume loading run](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_volume_fraction_v1/manifest.json), [bitmap report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_diagnostic_v1/report_v2/REPORT.pdf), [waveform figure](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_diagnostic_v1/report_v2/figures/waveform_mechanisms.png), [numerical failure recheck](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260928_waveform_diagnostic_v1/integration_failure_recheck_v1/summary.json) | Preserve the named difficult identity, exact parent targets and training SD, training-only parameter/loading selection, equal-dimension mechanism contrasts, original failed outcomes and versioned failure detail. Added-component reconstruction does not establish independent prediction or a unique physiological source. |
-| Lower-bound tau versus driver-curvature diagnostic | [Run](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/manifest.json), [owning summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/summary.json), [paired metrics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/metrics.csv), [waveforms](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/figures_v4/focus_waveforms.png), [all controls](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/figures_v4/constraint_comparison.png), [contract](configs/physiology_semantic_tokenizer/shared_driver_tau_curvature_v1.yaml) | Exact public MNE TDDR subject_01 fold-3 validation evidence; preserve fixed-target tau/curvature contrasts, EEG/flow/initial-prior controls, synthetic checks, failed iterations and linear out-of-domain screens. Git retains all terminal JSON/NPZ, source snapshots, logs, resource/audit records and `figures_v4`, plus the six original parent files required by this reader (manifest, config, named preparation metadata, training selection, cell result and trajectories). Earlier figure exports and the runtime lock remain local. Full-window conditional reconstruction in one subject does not establish physiological truth or population generalization. |
+| Lower-bound tau versus driver-curvature diagnostic | [Run](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/manifest.json), [owning summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/summary.json), [paired metrics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/metrics.csv), [waveforms](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/figures_v4/focus_waveforms.png), [all controls](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261010_tau_curvature_v1/figures_v4/constraint_comparison.png), [contract](configs/physiology_semantic_tokenizer/shared_driver_tau_curvature_v1.yaml) | Exact public MNE TDDR subject_01 fold-3 validation evidence; preserve fixed-target tau/curvature contrasts, EEG/flow/initial-prior controls, synthetic checks, failed iterations and linear out-of-domain screens. Git retains the linked conclusions, compact resource/audit records and reading figures. Full terminal JSON/NPZ, source snapshots, logs and the six original parent files required by this reader (manifest, config, named preparation metadata, training selection, cell result and trajectories) remain in the local replay archive, together with earlier figure exports and the runtime lock. Full-window conditional reconstruction in one subject does not establish physiological truth or population generalization. |
 | Optical observation reconstruction contrast | [Manifest](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_optical_v1/manifest.json), [bitmap report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_optical_v1/report_v1/REPORT.pdf), [all curves](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_optical_v1/report_v1/FULL_CURVE_ATLAS.pdf), [synthetic optical controls](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_optical_v1/optical_controls/results.json), [contract](configs/physiology_semantic_tokenizer/shared_driver_fixed_roi_optical_v1.yaml) | Preserve both pipelines and all identities, training-only Hb scales, unchanged EEG, complete new measured failures, exact nonindependent synthetic inheritance, parameter/state diagnostics, and known-response loss controls. Different targets and SDs do not support a same-task NRMSE ranking. |
 | Initial total-Hb / volume constraint | [Manifest](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_initial_v1/manifest.json), [synthetic bitmap PDF](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_initial_v1/synthetic_report_v1/REPORT.pdf), [pilot](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_initial_pilot_v1/manifest.json), [contract](configs/physiology_semantic_tokenizer/shared_driver_fixed_roi_initial_v1.yaml) | Preserve frozen source, all fresh paired synthetic initial-ratio conditions, reduced-coordinate initialization, parameter/state recovery, and resource evidence. The planned old-target measured phase was not executed after the optical artifact finding. The equality is a model restriction, not an observed baseline or physiological normal-range assertion. |
 | Fixed ROI log-flow sensitivity | [Manifest](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_flow_v1/manifest.json), [full report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_flow_v1/report_v2/REPORT.md), [bitmap PDF](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_flow_v1/report_v2/REPORT.pdf), [all 72 curves](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20260926_fixed_roi_flow_v1/report_v2/FULL_CURVE_ATLAS.pdf), [contract](configs/physiology_semantic_tokenizer/shared_driver_fixed_roi_flow_v1.yaml) | Preserve immutable pilot/formal source snapshots, exact parent prepared and baseline inheritance including failures, distinct new/inherited denominators, all weight arms, tau/driver/flow recovery, and the stationary baseline null check. Flow weights are engineering anchors, not empirical physiological ranges; inherited evidence is not an independent replication. |
@@ -1686,6 +1708,52 @@ new owner, protocol, and evidence identity.
 These dated records explain which payloads are tracked, local, rebuildable or
 historically removed. They preserve the scope and identities of the original
 storage actions; they do not authorize another cleanup or define a new run queue.
+
+### Git retention update — 2026-11-06
+
+This user-requested archive keeps a compact remote reading package and the full
+local evidence at its original paths. It supersedes the Git/local classifications
+in earlier storage records; experiment results and frozen artifact bytes are unchanged.
+
+| Tracked working-tree surface | Files | Uncompressed size |
+| --- | ---: | ---: |
+| Before this archive | 36,125 | 2,435.2 MiB |
+| Archived locally and removed from the Git index | 33,153 | 1,635.1 MiB |
+| Remaining reading/source package | 2,972 | approximately 800.1 MiB |
+
+The removed reading/search load includes 21,977 detailed JSON files, 8,546 NPZ
+arrays, 1,339 frozen Python source copies, 808 compressed detail files, and
+secondary report exports and logs. All formerly tracked registry evidence and
+direct documentation-link targets remain tracked. Selected reports retain their
+image assets, formula sources and provenance; the presentation PDFs remain with
+their editable slides. Complete local records retain the unsuccessful cases and
+the original planned denominators.
+
+The superseded report generations archived as complete local exports are:
+
+| Run below `shared_driver_reconstruction/` | Local earlier exports | Git reading report |
+| --- | --- | --- |
+| `20261022_volume_drive_v1` | `report_v1/` | [`report_v2/REPORT.pdf`](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261022_volume_drive_v1/report_v2/REPORT.pdf) |
+| `20261023_decay_v1` | `report_v1/`, `report_v2/`, `report_v3/` | [`report_v4/REPORT.pdf`](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261023_decay_v1/report_v4/REPORT.pdf) |
+| `20261027_filtered_noextra_retest_v1` | `report_v1/` | [`report_v2/REPORT.pdf`](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261027_filtered_noextra_retest_v1/report_v2/REPORT.pdf) |
+
+The duplicate full plans in `shared_driver_sensor_proxy_v1/20261027_measured_v1/`
+and `shared_driver_spatial/20261020_measured_v2/` remain local; their identical,
+already-linked counterparts remain in Git. The running subject-cache and EEG-O
+run roots, protected comparison packages and sealed R-series material were
+excluded from this archive.
+
+The local maintenance record is
+`runs/physiology_semantic_tokenizer/data_quality_audit/20261106_git_retention_v1/`.
+Its `inventory.json` lists every removed path, size and original Git blob,
+retained-file reasons, excluded live runs and controller identity;
+`verification.json` records the preservation and checkout checks. These files
+are local audit material rather than another tracked result tree. Index removal
+preserved every file's size, inode and modification time without moving files.
+
+The [pre-archive Git revision](https://github.com/Kevin65536/PID-MCM/tree/529c5c3b03ae24dcb1f05bbf0fac3a7ddc8ee9b9)
+retains the earlier tracked tree. This archive reduces the current checkout and
+remote search surface; existing Git history is unchanged.
 
 ### Git retention update — 2026-10-08
 

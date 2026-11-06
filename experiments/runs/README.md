@@ -28,7 +28,9 @@ Read results in this order:
    unsuccessful fits and paired-comparison rules.
 3. Use the linked reports for explanation and figures, tracing numerical claims
    back to those run records. Detailed arrays and replay inputs may remain local;
-   the index distinguishes them from the tracked result-reading package.
+   the index distinguishes them from the tracked result-reading package. Its
+   [Git/local retention policy](../RESULTS_INDEX.md#git-reading-package-and-local-archive)
+   identifies the reading package and the full local replay archive.
 
 Retain negative results, failed or interrupted attempts, lightweight conclusions
 and provenance at their original versioned paths. A continuation must preserve
@@ -39,6 +41,8 @@ formal and protected evidence using the owning contract.
 Current execution and verdicts belong to the
 [research-state registry](../../research_state/registry.json) and its generated
 [project status](../../docs/PROJECT_STATUS.md). Superseded generations have an
-explicit local archive path; do not recursively mix `experiments/archive/` with
+explicit local archive path. Payloads untracked in place retain their dated run
+paths; older physically moved generations remain in `experiments/archive/`.
+Do not recursively mix `experiments/archive/` with
 this root. [Comparison-method results](../../comparative_methods/) keep their
 own package directories outside this tree.
