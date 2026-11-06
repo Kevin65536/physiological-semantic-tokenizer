@@ -1,0 +1,28 @@
+schema: comparative_method_manifest_v1
+method_id: mtrenirs_frozen_matched_input_v1
+display_name: MtReNIRS frozen fNIRS-only input adaptation
+upstream:
+  url: https://github.com/microsoft/MtReNIRS
+  revision: 16c3082747b689233f123519d2590b88631afb2d
+  local_path: upstream
+  license: MIT
+checkpoint:
+  path: upstream/models/weights/mtrenirs_10s.pt
+  provenance: official_repository_bundled_pretrained_encoder
+  bytes: 4938110
+paper:
+  title: "MtReNIRS: A Self-Supervised Foundation Model for Transferable Neurovascular Representations"
+  url: https://arxiv.org/abs/2610.36159
+target_corpus_overlap:
+  simultaneous_eeg_nirs: declared_pretraining_source_Shin2017_cognitive_sdata20183
+  eeg_fnirs_single_trial: not_named_in_declared_pretraining_sources
+  visual_cognitive_motivation: not_named_in_declared_pretraining_sources
+  refed: not_named_in_declared_pretraining_sources
+adaptation:
+  encoder: unmodified_official_network_and_weights
+  sampling: 10Hz_HbO_HbR
+  preprocessing: shared_retained_Hb_band_and_sample_local_normalization
+  missingness: explicit_recorded_token_masks_no_sample_deletion
+  geometry: existing_registered_template_only_no_participant_digitization_claim
+  task_boundary: frozen_classification_readouts_only
+  dsr: named_2second_zero_padding_adaptation

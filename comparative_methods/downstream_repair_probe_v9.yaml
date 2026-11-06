@@ -1,0 +1,94 @@
+schema: downstream_repair_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-PROBE-r9
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v9
+tasks:
+- visual
+- refed_regression
+source_partitions:
+- train
+- validation
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: corrected_matched16_EEG_and_all_real_Hb_same30s_parent_arrays
+metadata_only: retained_parent_canonical_ids_for_record_and_window_times
+test: no_signal_target_or_prediction_access_outside_retained_parent_population
+metrics: v2_subject_equal_ACC_F1_dynamic_CCC_and_all_target_native_errors
+features:
+  source: retained_input_only_r1_CBraMod_event_tokens_and_r3_HbT_features
+  individual_calibration: mean_SD_per_feature_from_all_retained_unlabelled_windows_of_the_same_person;independent_for_each_training_or_held_person
+  population_fit: training_people_only_after_individual_calibration
+  forbidden: held_labels,class_prior,target_mean,video_identity_or_other_peoples_statistics_are_not_used_for_individual_calibration
+models:
+  visual:
+    cbramod_event_linear:
+      features: encoder_event
+      estimator: logistic
+      C: 1.0
+      input_adaptation: unlabelled_subject
+      interpretation: additional_unlabelled_person_context_not_strict_single_window_repair
+    cbramod_event_mlp:
+      features: encoder_event
+      estimator: mlp
+      auxiliary_weight: 0.5
+      input_adaptation: unlabelled_subject
+      interpretation: additional_unlabelled_person_context_not_strict_single_window_repair
+  refed_regression:
+    cached_subject_ridge:
+      features: native_cached
+      estimator: ridge
+      alpha: 1.0
+      feature_source_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v3
+      input_adaptation: unlabelled_subject
+      interpretation: additional_unlabelled_person_context_and_native_Hb_not_strict_single_window_repair
+    lowpass_subject_ridge:
+      features: native_lowpass
+      estimator: ridge
+      alpha: 1.0
+      feature_source_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v3
+      input_adaptation: unlabelled_subject
+      interpretation: additional_unlabelled_person_context_and_native_Hb_not_strict_single_window_repair
+    lowpass_subject_rbf:
+      features: native_lowpass
+      estimator: nystroem_ridge
+      alpha: 0.01
+      gamma: 0.1
+      landmarks: 512
+      feature_source_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v3
+      input_adaptation: unlabelled_subject
+      interpretation: additional_unlabelled_person_context_and_native_Hb_not_strict_single_window_repair
+fit:
+  logistic_max_iter: 10000
+  logistic_tol: 1.0e-07
+  classification_weight: equal_subject_then_inverse_training_class_prior
+  regression_weight: equal_subject_record_coordinate_then_valid_time
+  neural_epochs: 40
+  neural_batch_size: 64
+  neural_width: 128
+  neural_dropout: 0.5
+  neural_learning_rate: 0.001
+  neural_weight_decay: 0.01
+  neural_selection: fixed_final_epoch_no_held_fold_checkpoint_selection
+  regression_output: declared_sigmoid_1_to255_for_temporal_conv_other_outputs_unclipped
+  all_candidates: retained_no_best_fold_or_subject_selection
+stopping: fixed_round_matrix_then_independent_aggregate_and_evidence_guided_next_version
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 6
+  ram_budget_gib: 72
+  gpus:
+  - 0
+  - 1
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib:
+    0: 3072
+    1: 3072
+  supervisor: existing_user_systemd_rebenchmark_scheduler
+feature_version: 2
+retained_feature_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1
+information_budget: explicit_additional_unlabelled_person_context;diagnostic_only_not_replacement_for_strict30s_main_protocol
+hypothesis: distinguish removable individual input offsets/scales from lack of transferable
+  label signal; this changes available unlabelled context and cannot silently qualify
+  the original single-window target

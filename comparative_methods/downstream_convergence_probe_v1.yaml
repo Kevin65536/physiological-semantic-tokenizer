@@ -1,0 +1,28 @@
+schema: downstream_convergence_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-CONVERGENCE-r1
+scope: retained_public_train_validation_fixed_objective_replay
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_convergence_probe_v1
+source_partitions:
+- train
+- validation
+methods:
+- biot_lp
+- reve_lp
+- efrm_lp
+selection: all18_method_task_selected_heads_in_retained_final_plan_gap_cases;fixed_old_C_and_class_weight_no_reselection
+inputs: same_frozen_features_original_training_StandardScaler_float32_transform_then_float64_solver
+solvers:
+- newton_cholesky_tol1e-10_max200
+- lbfgs_tol1e-9_max20000_warmstarted_at_Newton
+gradient_tolerance: 1.0e-07
+objective_tolerance: 1.0e-08
+probability_tolerance: 0.0001
+metrics: subject_equal_ACC_F1_and_subject_SD_same_original_validation_people
+stopping: all18heads_terminal;analytic_gradient_and_objective_agreement_required_for_numerical_closure
+resources:
+  cpu_threads: 6
+  threads_per_job: 2
+  ram_gib: 24
+  gpu: false
+test: no_test_signals_targets_or_predictions

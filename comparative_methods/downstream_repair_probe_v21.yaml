@@ -1,0 +1,76 @@
+schema: downstream_repair_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-PROBE-r21
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v21
+tasks:
+- refed_regression
+source_partitions:
+- train
+- validation
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: corrected_matched16_EEG_and_all_real_Hb_same30s_parent_arrays
+metadata_only: retained_parent_canonical_ids_for_record_and_window_times
+test: no_signal_target_or_prediction_access_outside_retained_parent_population
+metrics: v2_subject_equal_ACC_F1_dynamic_CCC_and_all_target_native_errors
+features:
+  source: retained_r1_separate_EEG_logpower_or_Hb_mean_slope;same_current_training_fold_scaling
+  scaling: current_training_people_only_imputation_mean_SD_and_modality_block_norm
+  record_support: all_windows_and_supported_target_points_of_each_subject_video;no_crossvideo_CCC
+  constant_targets: excluded_only_from_dynamic_CCC_term; retained_in_MSE_and_all_error_scoring
+models:
+  refed_regression:
+    eeg_record_ccc_0p05:
+      features: eeg
+      estimator: temporal_conv
+      dropout: 0.5
+      epochs: 15
+      record_ccc_weight: 0.05
+      record_batch_size: 16
+      feature_source_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1
+      interpretation: single_modality_signal_temporal_readout_with_same_record_objective_as_r18_joint_input;no_new_context
+    fnirs_record_ccc_0p05:
+      features: fnirs
+      estimator: temporal_conv
+      dropout: 0.5
+      epochs: 15
+      record_ccc_weight: 0.05
+      record_batch_size: 16
+      feature_source_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1
+      interpretation: single_modality_signal_temporal_readout_with_same_record_objective_as_r18_joint_input;no_new_context
+fit:
+  logistic_max_iter: 10000
+  logistic_tol: 1.0e-07
+  classification_weight: equal_subject_then_inverse_training_class_prior
+  regression_weight: equal_subject_record_coordinate_then_valid_time
+  neural_epochs: 40
+  neural_batch_size: 64
+  neural_width: 128
+  neural_dropout: 0.5
+  neural_learning_rate: 0.001
+  neural_weight_decay: 0.01
+  neural_selection: fixed_final_epoch_no_held_fold_checkpoint_selection
+  regression_output: declared_sigmoid_1_to255_for_temporal_conv_other_outputs_unclipped
+  all_candidates: retained_no_best_fold_or_subject_selection
+stopping: fixed_round_matrix_then_independent_aggregate_and_evidence_guided_next_version
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 6
+  ram_budget_gib: 72
+  gpus:
+  - 0
+  - 1
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib:
+    0: 4096
+    1: 4096
+  supervisor: existing_user_systemd_rebenchmark_scheduler
+feature_version: 2
+retained_feature_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1
+hypothesis: R18 joint-signal temporal training improves training fit but generalizes
+  poorly. Hold all record-objective and 15-epoch settings fixed, and compare individual
+  EEG or Hb input with the retained R18 joint input to test detrimental modality fusion.
+  No new inputs, targets, people, fold selection or waveform calibration.
+record_objective_probe: true

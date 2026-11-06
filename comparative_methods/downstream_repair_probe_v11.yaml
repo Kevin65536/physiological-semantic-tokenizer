@@ -1,0 +1,74 @@
+schema: downstream_repair_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-PROBE-r11
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v11
+tasks:
+- refed_regression
+source_partitions:
+- train
+- validation
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: corrected_matched16_EEG_and_all_real_Hb_same30s_parent_arrays
+metadata_only: retained_parent_canonical_ids_for_record_and_window_times
+test: no_signal_target_or_prediction_access_outside_retained_parent_population
+metrics: v2_subject_equal_ACC_F1_dynamic_CCC_and_all_target_native_errors
+features:
+  source: retained_whole_REFED_excluded_measurement_v5_pretraining_checkpoint_seed17
+  input_scale: separately_fit_only_training_people_in_each_development_fold
+  sequence: 30_actual_time_tokens_EEG_four_quartersecond_patches_mean_plus_Hb_twosecond_token_repeat
+  mask: source_channel_time_masks_to_sequence_support;target_masks_unchanged
+  readout_scale: fit_only_current_training_people
+  interpretation: old_input_domain_transfer_control_not_new_input_pretraining_or_encoder_finetuning
+models:
+  refed_regression:
+    efrm_ridge:
+      features: efrm_sequence
+      estimator: ridge
+      alpha: 100.0
+    efrm_tcn_5:
+      features: efrm_sequence
+      estimator: temporal_conv
+      epochs: 5
+      dropout: 0.5
+    efrm_tcn_15:
+      features: efrm_sequence
+      estimator: temporal_conv
+      epochs: 15
+      dropout: 0.5
+fit:
+  logistic_max_iter: 10000
+  logistic_tol: 1.0e-07
+  classification_weight: equal_subject_then_inverse_training_class_prior
+  regression_weight: equal_subject_record_coordinate_then_valid_time
+  neural_epochs: 40
+  neural_batch_size: 64
+  neural_width: 128
+  neural_dropout: 0.5
+  neural_learning_rate: 0.001
+  neural_weight_decay: 0.01
+  neural_selection: fixed_final_epoch_no_held_fold_checkpoint_selection
+  regression_output: declared_sigmoid_1_to255_for_temporal_conv_other_outputs_unclipped
+  all_candidates: retained_no_best_fold_or_subject_selection
+stopping: fixed_round_matrix_then_independent_aggregate_and_evidence_guided_next_version
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 8
+  ram_budget_gib: 72
+  gpus:
+  - 0
+  - 1
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib:
+    0: 3072
+    1: 3072
+  supervisor: existing_user_systemd_rebenchmark_scheduler
+feature_version: 2
+hypothesis: Frozen EFRM temporal representations may carry cross-person information
+  absent from handcrafted bandpower and Hb statistics; compare a linear readout and
+  two fixed-duration temporal heads without held-fold model selection.
+frozen_sequence_encoder: efrm
+encoder_precision: fp32
+production_manifest: comparative_methods/runs/downstream_rebench_v1/20261016_v2/jobs_20261027_without_normwear.json

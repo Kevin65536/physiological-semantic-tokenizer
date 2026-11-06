@@ -18,7 +18,7 @@ from torch import nn
 
 
 CLASSIFICATION_TASKS = frozenset(
-    {"motor_imagery", "mental_arithmetic", "wg", "nback", "dsr", "visual"}
+    {"motor_imagery", "mental_arithmetic", "wg", "nback", "dsr", "visual", "refed_arousal_binary"}
 )
 
 
@@ -29,7 +29,7 @@ def encoding_duration(task: str, profile: Mapping[str, Any]) -> float:
         if task not in CLASSIFICATION_TASKS | {"refed_regression"}:
             raise ValueError("unknown frozen-input task")
         duration = 2.0 if task == "dsr" else 30.0
-        offset = 0.0 if task in {"dsr", "refed_regression"} else -5.0
+        offset = 0.0 if task in {"dsr", "refed_regression", "refed_arousal_binary"} else -5.0
         if profile.get("window_start_s") != offset:
             raise ValueError("frozen downstream input has a fixed event-relative start")
     elif schema == "downstream_input_event_v1":
@@ -58,6 +58,9 @@ def validate_profile(task: str, profile: Mapping[str, Any]) -> tuple[tuple[str, 
         raise NotImplementedError("REFED requires a validated temporal output and target-mask interface")
     if task not in CLASSIFICATION_TASKS:
         raise ValueError(f"unknown rebenchmark classification task: {task!r}")
+    if task == "refed_arousal_binary" and (profile.get("input_window_schema") != "downstream_input_v1"
+            or profile.get("classification_adaptation") != "refed_arousal_window_mean_midpoint_v1"):
+        raise ValueError("REFED classification requires the explicit window-mean binary contract")
     if float(profile.get("sampling_rate_hz", 0)) != 200.0:
         raise ValueError("EEG rebenchmark adapters require 200 Hz")
     raw_names = profile.get("channel_names", ())

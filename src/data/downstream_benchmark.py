@@ -40,6 +40,26 @@ INVENTORY_SCHEMA = "downstream_rebench_inventory_v1"
 SPLIT_SCHEMA = "downstream_rebench_subject_folds_v1"
 PROCESSING_SCHEMA = "physiology_measurement_alignment_v5"
 SPLIT_SEED = 20261016
+
+
+def refed_arousal_binary_targets(target, mask):
+    """New task view: valid 30 s arousal mean > 128; midpoint belongs to low.
+
+    The retained continuous targets are never modified. Unsupported windows
+    remain explicitly masked; no validation-fitted threshold or neutral removal.
+    """
+    target, mask = np.asarray(target), np.asarray(mask)
+    if target.ndim != 3 or target.shape[1:] != (2, 30) or mask.shape != target.shape or mask.dtype != np.bool_:
+        raise ValueError("REFED binary labels require [window,2,30] and a boolean coordinate mask")
+    values, support = target[:, 1], mask[:, 1]
+    if not np.isfinite(values[support]).all() or np.any((values[support] < 1) | (values[support] > 255)):
+        raise ValueError("recorded arousal must retain the native 1..255 range")
+    count = support.sum(1)
+    mean = np.divide(np.where(support, values, 0.).sum(1), count,
+                     out=np.full(len(target), np.nan), where=count > 0)
+    return (mean > 128).astype(np.int64), count > 0, mean
+
+
 TASKS: dict[str, dict[str, Any]] = {
     "motor_imagery": dict(dataset_id="eeg_fnirs_single_trial", classes=["LMI", "RMI"], duration_s=8.0),
     "mental_arithmetic": dict(dataset_id="eeg_fnirs_single_trial", classes=["MA", "BL"], duration_s=8.0),

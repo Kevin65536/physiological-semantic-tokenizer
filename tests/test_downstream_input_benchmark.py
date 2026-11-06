@@ -11,6 +11,41 @@ from comparative_methods.rebench_baselines_v1 import SignalFeatures
 from comparative_methods.rebench_eeg_common_v1 import encoding_duration, validate_profile
 
 
+def test_refed_binary_view_uses_only_valid_arousal_and_keeps_midpoint_low():
+    target = np.full((6, 2, 30), 128., dtype=float)
+    mask = np.ones(target.shape, bool)
+    target[0, 1] = 127
+    target[2, 1] = 129
+    target[3, 1, :2] = [1, 255]
+    mask[3, 1, 2:] = False
+    target[3, 1, 2:] = np.nan
+    mask[4, 1] = False
+    target[5, 1, :2] = [128, 130]
+    mask[5, 1, 2:] = False
+    original = target.copy()
+    labels, valid, means = data.refed_arousal_binary_targets(target, mask)
+    np.testing.assert_array_equal(labels, [0, 0, 1, 0, 0, 1])
+    np.testing.assert_array_equal(valid, [True, True, True, True, False, True])
+    np.testing.assert_allclose(means, [127, 128, 129, 128, np.nan, 129])
+    np.testing.assert_array_equal(target, original)
+    target[:, 0] = np.nan  # Valence is not part of this target.
+    np.testing.assert_array_equal(data.refed_arousal_binary_targets(target, mask)[0], labels)
+    target[0, 1, 0] = 0
+    with pytest.raises(ValueError, match="1..255"):
+        data.refed_arousal_binary_targets(target, mask)
+
+
+def test_refed_classification_requires_new_explicit_contract():
+    p = dict(input_window_schema="downstream_input_v1", duration_s=30, window_start_s=0,
+             sampling_rate_hz=200, channel_names=["C3", "C4"])
+    with pytest.raises(ValueError, match="binary contract"):
+        validate_profile("refed_arousal_binary", p)
+    p["classification_adaptation"] = "refed_arousal_window_mean_midpoint_v1"
+    assert validate_profile("refed_arousal_binary", p)[1] == 6000
+    with pytest.raises(NotImplementedError):
+        validate_profile("refed_regression", p)
+
+
 def visual_row(probe, *, subject="S01", split="train", label=0, event=0):
     return dict(id=f"{subject}_Probe{probe}:{event}", dependency_id=f"{subject}:event{event}",
                 dataset="visual_cognitive_motivation", task="visual_cognitive_motivation", subject=subject,

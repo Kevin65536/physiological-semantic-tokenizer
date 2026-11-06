@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import torch
 from torch import nn
 from comparative_methods.rebench_eeg_common_v1 import encoding_duration
@@ -20,6 +21,55 @@ CLASSIFICATION_TASKS = frozenset({"motor_imagery", "mental_arithmetic", "wg", "n
 OUTPUT_KIND = "features"
 DETERMINISTIC = True
 SEARCH_SOURCE = "DOWNSTREAM-REBENCH-v1 fixed signal features and six-value linear penalty grid"
+
+
+def fnirs_block_covariances(values, mask, components):
+    """HbO/HbR Ledoit-Wolf covariance blocks with sample-local scalar scaling.
+
+    Real channels keep their identities. Missing values have zero weight; the
+    shrinkage and a small diagonal floor make missing-channel blocks positive
+    definite without inventing measurements. No targets or population fit enter
+    this transform. The Riemannian reference must subsequently fit training only.
+    """
+    from sklearn.covariance import ledoit_wolf
+    x, support = np.asarray(values, np.float64), np.asarray(mask)
+    if x.ndim != 3 or support.shape != x.shape or support.dtype != bool:
+        raise ValueError("Hb covariance requires [N,C,T] and a matching bool mask")
+    if len(components) != x.shape[1] or not np.isfinite(x[support]).all():
+        raise ValueError("Hb covariance channel identity or finite support mismatch")
+    groups = [np.flatnonzero(np.asarray(components) == kind) for kind in ("hbo", "hbr")]
+    if not len(groups[0]) or len(groups[0]) != len(groups[1]) or sum(map(len, groups)) != x.shape[1]:
+        raise ValueError("paired HbO/HbR blocks must cover the same number of real locations")
+    output = np.empty((len(x), 2, len(groups[0]), len(groups[0])), np.float64)
+    coverage = np.empty((len(x), x.shape[1]), np.float64)
+    for row in range(len(x)):
+        for block, channels in enumerate(groups):
+            valid = support[row, channels]
+            count = valid.sum(-1, keepdims=True)
+            clean = np.where(valid, x[row, channels], 0.)
+            mean = clean.sum(-1, keepdims=True) / count.clip(1)
+            centered = np.where(valid, clean - mean, 0.)
+            rms = np.sqrt(np.square(centered).sum() / max(int(valid.sum()), 1))
+            normalized = centered / rms if rms > 0 else centered
+            covariance, _ = ledoit_wolf(normalized.T, assume_centered=True)
+            floor = 1e-6 * max(float(np.trace(covariance) / len(channels)), 1.)
+            output[row, block] = covariance + np.eye(len(channels)) * floor
+            coverage[row, channels] = valid.mean(-1)
+    return output, coverage
+
+
+def fnirs_tangent_features(covariances, train):
+    """Fit two Riemannian references only on the training covariance blocks."""
+    from pyriemann.tangentspace import TangentSpace
+    covariances = np.asarray(covariances, np.float64)
+    if covariances.ndim != 4 or covariances.shape[1] != 2:
+        raise ValueError("expected two Hb covariance blocks")
+    columns, references = [], []
+    for block in range(2):
+        mapper = TangentSpace(metric="riemann", tsupdate=False).fit(covariances[train, block])
+        columns.append(mapper.transform(covariances[:, block]))
+        references.append(mapper.reference_)
+    return np.concatenate(columns, axis=1), np.stack(references)
 
 
 def _masked_segments(values: torch.Tensor, mask: torch.Tensor | None, *, channels: int,
@@ -217,3 +267,244 @@ def create_model(task: str, profile: dict, device: str, trainable: bool = False)
     # A smoke worker may request trainable=True to exercise its downstream head;
     # these fixed features themselves always have zero trainable parameters.
     return SignalFeatures(task, profile).to(device)
+
+
+def repair_probe_features(eeg, fnirs, eeg_mask, fnirs_mask, *, task, version=1):
+    """Label-free, fixed physical-time features for the versioned repair probe.
+
+    The caller chooses the actual channel panel. Arrays are [batch,channel,time]
+    at 200/10 Hz over 30 seconds. Unsupported values never enter an FFT, moment,
+    covariance or baseline. Population scaling belongs to each training fold.
+    """
+    from scipy.signal import butter, sosfiltfilt
+
+    if task not in {"visual", "refed_regression"} or version not in (1, 2):
+        raise ValueError("repair features require the declared Visual/REFED task")
+    eeg, fnirs = np.asarray(eeg, float), np.asarray(fnirs, float)
+    eeg_mask, fnirs_mask = np.asarray(eeg_mask, bool), np.asarray(fnirs_mask, bool)
+    for x, mask, count in ((eeg, eeg_mask, 6000), (fnirs, fnirs_mask, 300)):
+        if x.ndim != 3 or x.shape != mask.shape or x.shape[-1] != count or not np.isfinite(x[mask]).all():
+            raise ValueError("finite recorded 30-second input and identical masks required")
+    eeg, fnirs = np.where(eeg_mask, eeg, 0.), np.where(fnirs_mask, fnirs, 0.)
+    batch, channels, _ = eeg.shape
+    if version == 2:
+        # A declared reference change on the same measured electrode panel.
+        # Partial tails cannot introduce padded channels into the reference.
+        mean = eeg.sum(1, keepdims=True) / np.maximum(eeg_mask.sum(1, keepdims=True), 1)
+        eeg = np.where(eeg_mask, eeg - mean, 0.)
+
+    def moments(x, mask, bins, rate):
+        length = x.shape[-1] // bins
+        x = x.reshape(len(x), x.shape[1], bins, length).transpose(0, 2, 1, 3)
+        mask = mask.reshape(x.shape[0], x.shape[2], bins, length).transpose(0, 2, 1, 3)
+        count = mask.sum(-1); mean = x.sum(-1) / np.maximum(count, 1)
+        time = np.arange(length) / rate
+        center = np.where(mask, time - (mask * time).sum(-1)[..., None] / np.maximum(count, 1)[..., None], 0.)
+        denominator = (center * center).sum(-1)
+        slope = (center * (x - mean[..., None])).sum(-1) / np.maximum(denominator, np.finfo(float).tiny)
+        return mean, slope, count, denominator
+
+    segments = eeg.reshape(batch, channels, 30, 200).transpose(0, 2, 1, 3)
+    valid = eeg_mask.reshape(batch, channels, 30, 200).transpose(0, 2, 1, 3)
+    count = valid.sum(-1)
+    centered = np.where(valid, segments - (segments.sum(-1) / np.maximum(count, 1))[..., None], 0.)
+    taper = np.hanning(200) * valid
+    spectrum = np.abs(np.fft.rfft(centered * taper, axis=-1)) ** 2
+    weights = np.full(101, 2.); weights[[0, -1]] = 1.
+    power = spectrum * weights / np.maximum(200 * (taper * taper).sum(-1)[..., None], np.finfo(float).tiny)
+    total = power.sum(-1)
+    floor = np.maximum(total * 1e-12, np.finfo(float).tiny)
+    frequencies = np.fft.rfftfreq(200, 1 / 200)
+    bands = []
+    for index, (lo, hi) in enumerate(BANDS):
+        chosen = (frequencies >= lo) & ((frequencies <= hi) if index == len(BANDS) - 1 else (frequencies < hi))
+        value = np.log(np.maximum(power[..., chosen].sum(-1), floor))
+        bands.append(np.where((count >= 2) & (total > 0), value, 0.))
+    spectral = np.stack(bands, -1).reshape(batch, 30, -1)
+    spectral_mask = np.repeat(count >= 2, len(BANDS), axis=-1)
+    hb_mean, hb_slope, hb_count, hb_denominator = moments(fnirs, fnirs_mask, 30, 10.)
+    hb = np.concatenate((hb_mean, hb_slope), -1)
+    hb_mask = np.concatenate((hb_count >= 1, (hb_count >= 2) & (hb_denominator > 0)), -1)
+    output = {}
+
+    def add(name, blocks):
+        values = np.concatenate([np.where(mask, value, 0.) for value, mask in blocks], -1)
+        masks = np.concatenate([mask for _, mask in blocks], -1)
+        if not np.isfinite(values).all():
+            raise ValueError("nonfinite repair feature")
+        output[name] = (values.astype(np.float32), masks, [value.shape[-1] for value, _ in blocks])
+
+    if task == "refed_regression":
+        add("eeg", [(spectral, spectral_mask)])
+        add("fnirs", [(hb, hb_mask)])
+        add("multimodal", [(spectral, spectral_mask), (hb, hb_mask)])
+        context = []
+        for values, masks, offsets in ((spectral, spectral_mask, (-2, 0, 2)), (hb, hb_mask, (0, 2, 4, 6))):
+            for offset in offsets:
+                x = np.zeros_like(values); m = np.zeros_like(masks)
+                destination = slice(max(0, -offset), min(30, 30 - offset))
+                source = slice(max(0, offset), min(30, 30 + offset))
+                x[:, destination], m[:, destination] = values[:, source], masks[:, source]
+                context.append((x, m))
+        add("context", context)
+    else:
+        if not eeg_mask.all():
+            raise ValueError("Visual covariance/ERP requires the common complete EEG support")
+        baseline = eeg[..., :1000].mean(-1, keepdims=True)
+        early = (eeg[..., 1000:1600] - baseline).reshape(batch, channels, 30, 20).mean(-1)
+        decision = (eeg[..., 1600:3400] - baseline).reshape(batch, channels, 30, 60).mean(-1)
+        erp = np.concatenate((early, decision), -1).reshape(batch, -1)
+        add("event", [(erp, np.ones_like(erp, bool))])
+        absolute = spectral[:, 5:17].reshape(batch, 4, 3, -1).mean(2)
+        relative = absolute - spectral[:, :5].mean(1)[:, None]
+        band = np.concatenate((absolute.reshape(batch, -1), relative.reshape(batch, -1)), -1)
+        add("band", [(band, np.ones_like(band, bool))])
+        mean, slope, observed, denominator = moments(fnirs, fnirs_mask, 6, 10.)
+        base_support = observed[:, :1] > 0
+        relative_hb = mean - mean[:, :1]
+        hf = np.concatenate((relative_hb.reshape(batch, -1), slope.reshape(batch, -1)), -1)
+        hm = np.concatenate((((observed > 0) & base_support).reshape(batch, -1),
+                             ((observed >= 2) & (denominator > 0)).reshape(batch, -1)), -1)
+        add("fnirs", [(hf, hm)])
+        add("multimodal", [(band, np.ones_like(band, bool)), (hf, hm)])
+        covariance = []
+        upper = np.triu_indices(channels)
+        for low, high in ((4, 8), (8, 13), (13, 30)):
+            filtered = sosfiltfilt(butter(4, (low, high), btype="bandpass", fs=200, output="sos"), eeg, axis=-1)
+            for start, stop in ((1000, 1600), (1600, 3400)):
+                segment = filtered[..., start:stop]
+                segment = segment - segment.mean(-1, keepdims=True)
+                cov = segment @ segment.swapaxes(-1, -2) / segment.shape[-1]
+                scale = np.trace(cov, axis1=-2, axis2=-1) / channels
+                normalized = cov / np.maximum(scale, np.finfo(float).tiny)[:, None, None]
+                normalized = .9 * normalized + .1 * np.eye(channels)
+                normalized[scale == 0] = np.eye(channels)
+                eigenvalues, vectors = np.linalg.eigh(normalized)
+                logarithm = (vectors * np.log(eigenvalues)[:, None, :]) @ vectors.swapaxes(-1, -2)
+                features = logarithm[:, upper[0], upper[1]]
+                features[:, upper[0] != upper[1]] *= np.sqrt(2.)
+                covariance.append(features)
+        cf = np.concatenate(covariance, -1)
+        add("covariance", [(cf, np.ones_like(cf, bool))])
+    if version == 2:
+        count = spectral_mask.sum(1, keepdims=True)
+        center = (spectral * spectral_mask).sum(1, keepdims=True) / np.maximum(count, 1)
+        relative = np.where(spectral_mask, spectral - center, 0.)
+        # Hb level and slope share a per-window channel amplitude scale. This
+        # uses no target or other subject, and preserves chromophore identities.
+        hc = fnirs_mask.sum(-1, keepdims=True)
+        hm = fnirs.sum(-1, keepdims=True) / np.maximum(hc, 1)
+        hs = np.sqrt(np.where(fnirs_mask, (fnirs - hm) ** 2, 0.).sum(-1, keepdims=True) / np.maximum(hc, 1))
+        hs = np.where(hs > 0, hs, 1.)
+        local_hb = np.concatenate(((hb_mean - hm.transpose(0, 2, 1)) / hs.transpose(0, 2, 1),
+                                   hb_slope / hs.transpose(0, 2, 1)), -1)
+        if task == "refed_regression":
+            add("relative", [(relative, spectral_mask), (local_hb, hb_mask)])
+            for name in ("multimodal", "relative"):
+                values, masks, lengths = output[name]
+                # Ten ordered three-second bins retain the full input window.
+                values = values.reshape(batch, 10, 3, -1)
+                masks = masks.reshape(batch, 10, 3, -1)
+                counts = masks.sum(2)
+                pooled = (values * masks).sum(2) / np.maximum(counts, 1)
+                pieces = []; offset = 0
+                for length in lengths:
+                    pieces.append((pooled[..., offset:offset + length].reshape(batch, -1),
+                                   (counts[..., offset:offset + length] > 0).reshape(batch, -1)))
+                    offset += length
+                add(name + "_trajectory", pieces)
+        else:
+            channel_sd = np.sqrt(np.mean(eeg ** 2, axis=-1, keepdims=True))
+            normalized = eeg / np.maximum(channel_sd, np.finfo(float).tiny)
+            baseline = normalized[..., :1000].mean(-1, keepdims=True)
+            early = (normalized[..., 1000:1600] - baseline).reshape(batch, channels, 30, 20).mean(-1)
+            decision = (normalized[..., 1600:3400] - baseline).reshape(batch, channels, 30, 60).mean(-1)
+            erp = np.concatenate((early, decision), -1).reshape(batch, -1)
+            add("normalized_event", [(erp, np.ones_like(erp, bool))])
+            encoding = early.reshape(batch, -1)
+            add("normalized_encoding", [(encoding, np.ones_like(encoding, bool))])
+            relative = relative[:, 5:17].reshape(batch, 4, 3, -1).mean(2).reshape(batch, -1)
+            add("relative_band", [(relative, np.ones_like(relative, bool))])
+            whitened = []
+            for low, high in ((4, 8), (8, 13), (13, 30)):
+                filtered = sosfiltfilt(butter(4, (low, high), btype="bandpass", fs=200, output="sos"), eeg, axis=-1)
+                def covariance_at(left, right):
+                    segment = filtered[..., left:right]
+                    segment = segment - segment.mean(-1, keepdims=True)
+                    covariance = segment @ segment.swapaxes(-1, -2) / segment.shape[-1]
+                    scale = np.trace(covariance, axis1=-2, axis2=-1) / channels
+                    return .9 * covariance + .1 * np.maximum(scale, np.finfo(float).tiny)[:, None, None] * np.eye(channels)
+                baseline_covariance = covariance_at(0, 1000)
+                eigenvalues, vectors = np.linalg.eigh(baseline_covariance)
+                inverse_root = (vectors * (1 / np.sqrt(eigenvalues))[:, None, :]) @ vectors.swapaxes(-1, -2)
+                for left, right in ((1000, 1600), (1600, 3400)):
+                    covariance = inverse_root @ covariance_at(left, right) @ inverse_root
+                    eigenvalues, vectors = np.linalg.eigh(covariance)
+                    logarithm = (vectors * np.log(np.maximum(eigenvalues, np.finfo(float).tiny))[:, None, :]) @ vectors.swapaxes(-1, -2)
+                    values = logarithm[:, upper[0], upper[1]]
+                    values[:, upper[0] != upper[1]] *= np.sqrt(2.)
+                    whitened.append(values)
+            values = np.concatenate(whitened, -1)
+            add("baseline_covariance", [(values, np.ones_like(values, bool))])
+    return output
+
+
+def repair_hb_probe_features(fnirs, mask, *, task):
+    """Fixed HbT features for the versioned native/processed input audit.
+
+    The caller validates real HbO-then-HbR pairs, clock and source support.
+    Native and retained-cache views use this identical feature calculation.
+    """
+    fnirs, mask = np.asarray(fnirs, float), np.asarray(mask, bool)
+    if (fnirs.ndim != 3 or fnirs.shape != mask.shape or fnirs.shape[-1] != 300
+            or fnirs.shape[1] % 2 or not np.isfinite(fnirs[mask]).all()
+            or task not in {"visual", "refed_regression"}):
+        raise ValueError("paired finite 30-second Hb observations and masks required")
+    channels = fnirs.shape[1] // 2
+    support = mask[:, :channels] & mask[:, channels:]
+    values = np.where(support, fnirs[:, :channels] + fnirs[:, channels:], 0.)
+    bins = 30 if task == "refed_regression" else 6
+    x = values.reshape(len(values), channels, bins, 300 // bins).transpose(0, 2, 1, 3)
+    m = support.reshape(len(values), channels, bins, 300 // bins).transpose(0, 2, 1, 3)
+    count = m.sum(-1); mean = x.sum(-1) / np.maximum(count, 1)
+    sd = np.sqrt(np.where(m, (x - mean[..., None]) ** 2, 0.).sum(-1) / np.maximum(count, 1))
+    time = np.arange(x.shape[-1]) / 10.
+    centered_time = np.where(m, time - (time * m).sum(-1)[..., None] / np.maximum(count, 1)[..., None], 0.)
+    denominator = (centered_time ** 2).sum(-1)
+    slope = (centered_time * x).sum(-1) / np.maximum(denominator, np.finfo(float).tiny)
+    maximum = np.where(m, x, -np.inf).max(-1); minimum = np.where(m, x, np.inf).min(-1)
+    entropy = .5 * np.log(2 * np.pi * np.e * np.maximum(sd ** 2, np.finfo(float).tiny))
+    features = np.stack((mean, maximum, minimum, sd, slope, entropy), -1)
+    masks = np.stack((count > 0, count > 0, count > 0, count > 1, denominator > 0, (count > 1) & (sd > 0)), -1)
+    if task == "visual":
+        # The first five seconds are the declared input reference, not rest.
+        features[..., :3] -= mean[:, :1, :, None]
+        masks[..., :3] &= (count[:, :1, :, None] > 0)
+        features, masks = features.reshape(len(values), -1), masks.reshape(len(values), -1)
+    else:
+        features, masks = features.reshape(len(values), 30, -1), masks.reshape(len(values), 30, -1)
+    return np.where(masks, features, 0.).astype(np.float32), masks, [features.shape[-1]]
+
+
+def repair_voltage_probe_features(eeg, mask, *, task):
+    """Same voltage features for cached EEG and two native high-pass controls."""
+    eeg, mask = np.asarray(eeg, float), np.asarray(mask, bool)
+    if eeg.ndim != 3 or eeg.shape != mask.shape or eeg.shape[-1] != 6000 or not np.isfinite(eeg[mask]).all():
+        raise ValueError("finite masked 30-second EEG at200Hz required")
+    if task == "visual":
+        if not mask.all():
+            raise ValueError("Visual ERP requires the retained complete EEG support")
+        centered = eeg - eeg[..., :1000].mean(-1,keepdims=True)
+        first = centered[...,1000:1600].reshape(len(eeg),eeg.shape[1],30,20).mean(-1)
+        second = centered[...,1600:3400].reshape(len(eeg),eeg.shape[1],30,60).mean(-1)
+        features = np.concatenate((first,second),-1).reshape(len(eeg),-1); valid = np.ones(features.shape,bool)
+    elif task == "refed_regression":
+        values = np.where(mask,eeg,0.).reshape(len(eeg),eeg.shape[1],30,200).transpose(0,2,1,3)
+        mask = mask.reshape(len(eeg),eeg.shape[1],30,200).transpose(0,2,1,3)
+        count = mask.sum(-1);mean = values.sum(-1)/np.maximum(count,1);time=np.arange(200)/200.
+        centered = np.where(mask,time-(time*mask).sum(-1)[...,None]/np.maximum(count,1)[...,None],0.)
+        denominator=(centered**2).sum(-1);slope=(centered*values).sum(-1)/np.maximum(denominator,np.finfo(float).tiny)
+        features=np.concatenate((mean,slope),-1);valid=np.concatenate((count>0,denominator>0),-1)
+    else:
+        raise ValueError("unknown native voltage probe task")
+    return np.where(valid,features,0.).astype(np.float32),valid,[features.shape[-1]]

@@ -20,7 +20,7 @@ directory, or signed campaign artifact.
 
 | Reading task | Owning entry |
 | --- | --- |
-| Design the next downstream benchmark | [`DOWNSTREAM-REBENCH-v1`](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1): data version, input support, fitting budget, tracks and evaluation design |
+| Design the next downstream benchmark | [`DOWNSTREAM-REBENCH-v2`](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v2): complete metrics, subject folds and Visual/REFED repair; [v1 design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1) retains its execution identity |
 | Run the versioned downstream benchmark | [Execution entry](#downstream-rebenchmark-v1), [reviewed contract](downstream_rebench_v1.yaml) |
 | Find implementation and local tests | [Directory map](#directory-map), then the selected method's README and source manifest |
 | Read retained formal performance | [Dated joint result table](../docs/comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md); [retained result locations](../experiments/RESULTS_INDEX.md#comparison-methods) |
@@ -46,6 +46,36 @@ and job statuses are optional historical evidence. They are never prerequisites 
 understanding the repository or starting public-surface code work.
 
 ## Downstream rebenchmark v1
+
+The [frozen classification revision](downstream_frozen_classification_v1.yaml)
+uses the existing `performance_analysis/audit_downstream_inputs_v1.py` with
+`--stage plan|fit|aggregate`. It reuses original fixed-validation evidence for
+CBraMod, STA-Net, EFRM and BrainFusion, adds MtReNIRS readouts, and derives the
+explicit REFED arousal binary task without changing retained regression labels.
+The [current design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v2) owns its
+scope; these are development results, with no encoder fine-tuning or original
+test access. Tests: `test_downstream_input_benchmark.py`,
+`test_downstream_input_audit.py`, `test_downstream_rebench_eeg_models.py`, and
+BrainFusion's method-local `tests/test_rebench_v1.py`.
+
+The [STA-Net optimization contract](downstream_sta_optimization_v1.yaml) uses
+the same analysis entry with `--stage sta-plan|sta-fit|sta-screen-aggregate|sta-aggregate`.
+Its opt-in `sta_net_pytorch/source_aligned_v2.py` corrects the pinned source
+semantics while retaining `model.py` and historical checkpoints. It uses the
+original public development population, explicit source-duration/short-window
+adaptations and supervised classification from random initialization. Targeted
+checks are STA-Net's `tests/test_source_aligned_v2.py`, `tests/test_rebench_v1.py`,
+and the common `tests/test_downstream_input_audit.py`.
+
+The [REFED source-aligned revision](downstream_sta_refed_source_v3.yaml) uses
+`source_aligned_v3.py` to distinguish TF2.10 fused EEG and unfused Hb BatchNorm
+moving variances. Its method-local `tests/test_source_aligned_v3.py` covers those
+conventions and inference-preserving parameter conversion. The separate
+[normalization diagnostic](downstream_sta_normalization_v1.yaml) and
+[REFED normalization diagnostic](downstream_sta_refed_normalization_v1.yaml)
+use `--stage sta-normalization-plan|sta-normalize|sta-normalization-aggregate`
+to reestimate inference statistics from training inputs with frozen parameters.
+They retain the parent candidate and seed choices and do not perform gradient updates.
 
 The [design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1) and
 [executable contract](downstream_rebench_v1.yaml) define the new public v5 comparison.
@@ -95,6 +125,60 @@ BrainFusion HRF time-grid mismatch with paired refits, and the actual 30-step
 STA-Net REFED head. The explicit `physical_common_grid_v1` profile samples the
 kernel at the common Hb period; `retained_sample_index_v1` preserves the old
 control. Old snapshots and protected method packages are unchanged.
+The [STA-Net completion contract](downstream_sta_completion_v1.yaml) adds WG,
+n-back and DSR using the same frozen diagnostic source, retained training and
+validation inputs, and short-training selection rule. Its explicit job manifest
+contains only three task smokes and their corresponding fits; input references
+point to the original prepared owner without copying or changing those arrays.
+
+The same entry executes the [iterative repair design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v2)
+through versioned contracts indexed in that design. `--stage probe-plan` resolves each
+version's retained development population and jobs; pass the original
+`--project-root` and frozen `--source-root` explicitly. The existing scheduler
+runs those jobs. `probe-verify` independently checks saved fold predictions,
+ACC/F1, dynamic CCC, native errors, subject SD and null baselines. Independent
+record controls and stimulus templates retain separate interpretations; they
+cannot qualify cross-subject signal performance. The targeted suite remains
+[`test_downstream_input_audit.py`](../tests/test_downstream_input_audit.py).
+Native Hb/EEG replay, encoder train/evaluation mode, stimulus-student and
+individual-calibration diagnostics keep their own information conditions.
+The [EFRM temporal transfer probe](downstream_repair_probe_v11.yaml) fits input
+scales separately within each development fold. The
+[encoder learning-rate comparison](downstream_repair_probe_v15.yaml),
+[BIOT physical montage subset comparison](downstream_repair_probe_v16.yaml), and
+[Visual kernel regularization grid](downstream_repair_probe_v17.yaml) use the same
+entry and preserve their fixed input and development-fold identities. The
+[REFED record-objective probe](downstream_repair_probe_v18.yaml) compares a
+within-record CCC term with the same record-batched MSE control, retaining
+constant target coordinates in the error objective. The
+[paired encoder continuation](downstream_repair_probe_v19.yaml) starts from the
+same record-objective head and contrasts trainable with frozen encoders after a
+longest-record gradient/memory smoke. The
+[Visual class-weight comparison](downstream_repair_probe_v20.yaml) removes
+inverse training-class weights while preserving equal participant mass, features,
+kernels, folds and all four-class endpoints. The
+[REFED modality comparison](downstream_repair_probe_v21.yaml) retains the record
+objective and training budget while testing EEG and Hb separately against the
+retained joint-input control. The
+[fixed-objective solver replay](downstream_convergence_probe_v1.yaml) retains
+the earlier split and cannot be compared directly with these folds.
+`--stage probe-report --evidence-runs <explicit completed run paths>` exports
+the retained summaries as HTML/CSV; original summaries remain the numeric owners.
+
+The [pure fNIRS probe](downstream_fnirs_probe_v1.yaml) reuses these probe stages
+for six classification tasks on the same retained development population.
+[`MtReNIRS/rebench_v1.py`](MtReNIRS/rebench_v1.py) owns the frozen official
+encoder adaptation; the existing signal-baseline owner supplies Hb statistics
+and block covariance/tangent features. It reads no EEG signals. Its scope,
+short-window adaptation and accepted pretraining overlap are recorded in the
+[design](../docs/EXPERIMENT_PLAN.md#纯-fnirs-方法开发测试2026-11-05).
+[`test_downstream_fnirs_probe.py`](../tests/test_downstream_fnirs_probe.py)
+covers masks, geometry, training-only fitting and independent binary/multiclass
+aggregation without local evidence dependencies.
+The block-Riemannian arm is a bounded tangent-space/logistic variant of the
+[fNIRS Riemannian comparison](https://doi.org/10.1117/1.NPh.12.4.045002), using
+pyRiemann training-fold references; it does not reproduce that paper's complete
+kernel search or replace its original evaluation protocol.
 
 Build a new run only after its inventory, splits, multimodal input audit and resource
 smoke are retained. Use the same controller's `--build-config`, `--run-root`,

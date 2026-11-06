@@ -1,0 +1,130 @@
+schema: downstream_repair_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-PROBE-r10
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v10
+tasks:
+- visual
+- refed_regression
+source_partitions:
+- train
+- validation
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: same_original_development_people_windows_and_correct16_EEG_electrodes;native_filter_audit
+metadata_only: retained_parent_canonical_ids_for_record_and_window_times
+test: no_signal_target_or_prediction_access_outside_retained_parent_population
+metrics: v2_subject_equal_ACC_F1_dynamic_CCC_and_all_target_native_errors
+features:
+  visual: same pre5second-referenced0to3s100ms and3to12s300ms voltage bins
+  refed: signed1second_mean_and_slope_of_each_real_EEG_channel
+  comparability: identical_features_models_and_population_for_all3highpass_conditions
+  interpretation: processed_signal_task_not_real_time;lower_highpass_changes_full_record_filter_support;retained_artifact_content_not_pure_cortical_claim
+models:
+  visual:
+    cached_linear:
+      features: voltage_cached
+      estimator: logistic
+      C: 1.0
+    cached_rbf:
+      features: voltage_cached
+      estimator: svc
+      C: 10.0
+      gamma: 0.5
+    hp_0p1_linear:
+      features: voltage_hp_0p1
+      estimator: logistic
+      C: 1.0
+    hp_0p1_rbf:
+      features: voltage_hp_0p1
+      estimator: svc
+      C: 10.0
+      gamma: 0.5
+    hp_0p01_linear:
+      features: voltage_hp_0p01
+      estimator: logistic
+      C: 1.0
+    hp_0p01_rbf:
+      features: voltage_hp_0p01
+      estimator: svc
+      C: 10.0
+      gamma: 0.5
+  refed_regression:
+    cached_ridge:
+      features: voltage_cached
+      estimator: ridge
+      alpha: 100.0
+    cached_rbf:
+      features: voltage_cached
+      estimator: nystroem_ridge
+      alpha: 1.0
+      gamma: 0.5
+      landmarks: 256
+    hp_0p1_ridge:
+      features: voltage_hp_0p1
+      estimator: ridge
+      alpha: 100.0
+    hp_0p1_rbf:
+      features: voltage_hp_0p1
+      estimator: nystroem_ridge
+      alpha: 1.0
+      gamma: 0.5
+      landmarks: 256
+    hp_0p01_ridge:
+      features: voltage_hp_0p01
+      estimator: ridge
+      alpha: 100.0
+    hp_0p01_rbf:
+      features: voltage_hp_0p01
+      estimator: nystroem_ridge
+      alpha: 1.0
+      gamma: 0.5
+      landmarks: 256
+fit:
+  logistic_max_iter: 10000
+  logistic_tol: 1.0e-07
+  classification_weight: equal_subject_then_inverse_training_class_prior
+  regression_weight: equal_subject_record_coordinate_then_valid_time
+  neural_epochs: 40
+  neural_batch_size: 64
+  neural_width: 128
+  neural_dropout: 0.5
+  neural_learning_rate: 0.001
+  neural_weight_decay: 0.01
+  neural_selection: fixed_final_epoch_no_held_fold_checkpoint_selection
+  regression_output: declared_sigmoid_1_to255_for_temporal_conv_other_outputs_unclipped
+  all_candidates: retained_no_best_fold_or_subject_selection
+stopping: fixed_round_matrix_then_independent_aggregate_and_evidence_guided_next_version
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 8
+  ram_budget_gib: 72
+  gpus: []
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib: {}
+  supervisor: existing_user_systemd_rebenchmark_scheduler
+feature_version: 2
+smoke_device: cpu
+native_eeg_audit:
+  scope: same_retained_development_subjects_and_windows_native_EEG_only
+  input_cache: data/cache/physiology_downstream_v1
+  views:
+  - cached
+  - hp_0p1
+  - hp_0p01
+  workers: 2
+  replay_relative_rms_tolerance: 1.0e-06
+  high_hz: 45.0
+  low_hz:
+  - 1.0
+  - 0.1
+  - 0.01
+  order: 4
+  reader: src.data.unified_physiology.load_native_eeg_record
+  processing: same measured-unit conversion, full-record Butterworth/filtfilt and
+    polyphase200Hz;ocular artifacts retained
+  boundary: original trainvalidation identities checked before native reads;unchanged
+    target masks;no original test signals
+hypothesis: original1Hz highpass may attenuate slow voltage information;test .1 and.01Hz
+  with matched original-band replay instead of another model-capacity sweep

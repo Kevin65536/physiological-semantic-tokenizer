@@ -139,11 +139,15 @@ def _masked_input(value: Tensor, mask: Tensor | None, name: str) -> Tensor:
 class SameWindowSTANet(nn.Module):
     def __init__(self, task: str, profile: Mapping[str, Any]):
         super().__init__()
-        if task not in TASKS:
+        binary = task == "refed_arousal_binary"
+        if binary and (profile.get("input_window_schema") != "downstream_input_v1"
+                or profile.get("classification_adaptation") != "refed_arousal_window_mean_midpoint_v1"):
+            raise ValueError("REFED classification requires its explicit native-window target contract")
+        if task not in TASKS and not binary:
             raise ValueError(f"unsupported STA-Net task: {task}")
         self.task = task
         self.profile = dict(profile)
-        task_type, output_dim, _ = TASKS[task]
+        task_type, output_dim, _ = ("classification", 2, 30) if binary else TASKS[task]
         duration = encoding_duration(task, profile)
         if task_type == "classification" and int(profile.get("num_classes", output_dim)) != output_dim:
             raise ValueError("STA-Net class count differs from the fixed task vocabulary")
@@ -155,6 +159,19 @@ class SameWindowSTANet(nn.Module):
             raise ValueError("sample rates must be positive")
         self.eeg_samples = round(duration * self.eeg_rate)
         self.fnirs_samples = round(duration * self.fnirs_rate)
+        self.eeg_slice = slice(0, self.eeg_samples)
+        self.fnirs_start, self.fnirs_stop = 0, self.fnirs_samples
+        support = profile.get("sta_input_support", "full_admitted_window")
+        if support == "event_3s_eeg_13s_hb":
+            if profile.get("input_window_schema") != "downstream_input_v1" or task in {"dsr", "refed_regression", "refed_arousal_binary"}:
+                raise ValueError("source event support requires a retained 30-second event task")
+            offset = -float(profile["window_start_s"])
+            if offset < 0 or offset + 13 > duration:
+                raise ValueError("source event support leaves the admitted input window")
+            self.eeg_slice = slice(round(offset * self.eeg_rate), round((offset + 3) * self.eeg_rate))
+            self.fnirs_start, self.fnirs_stop = round(offset * self.fnirs_rate), round((offset + 13) * self.fnirs_rate)
+        elif support != "full_admitted_window":
+            raise ValueError("unknown STA-Net input support")
         eeg_coordinates = _coordinates(profile.get("eeg_geometry"), "EEG")
         hb_coordinates = _coordinates(_paired_fnirs_geometry(profile), "fNIRS location")
         if "channel_names" in profile and len(profile["channel_names"]) != len(eeg_coordinates):
@@ -179,7 +196,7 @@ class SameWindowSTANet(nn.Module):
         step_samples = round(step_s * self.fnirs_rate)
         if not 1 <= self.segment_samples <= self.fnirs_samples or step_samples < 1:
             raise ValueError("fNIRS segments must lie inside the common window")
-        self.segment_starts = tuple(range(0, self.fnirs_samples - self.segment_samples + 1, step_samples))
+        self.segment_starts = tuple(range(self.fnirs_start, self.fnirs_stop - self.segment_samples + 1, step_samples))
         config = STANetConfig(
             task_type=task_type,
             output_dim=output_dim,
@@ -190,12 +207,25 @@ class SameWindowSTANet(nn.Module):
             attention_key_dim=int(profile.get("attention_key_dim", 256)),
             max_lags=len(self.segment_starts),
         )
-        self.backbone = STANet(config)
+        version = profile.get("sta_implementation_version", "retained_v1")
+        if version in {"source_aligned_v2", "source_aligned_v3"}:
+            if version == "source_aligned_v3":
+                from sta_net_pytorch.source_aligned_v3 import SourceAlignedSTANetV3 as SourceAlignedSTANet
+            else:
+                from sta_net_pytorch.source_aligned_v2 import SourceAlignedSTANet
+            if task_type != "classification":
+                raise ValueError("source-aligned v2 supports classification only")
+            self.backbone = SourceAlignedSTANet(config)
+        elif version == "retained_v1":
+            self.backbone = STANet(config)
+        else:
+            raise ValueError("unknown STA-Net implementation version")
         self.objective = STANetObjective(
             task_type,
             eeg_aux_weight=float(profile.get("eeg_aux_weight", 1)),
             alignment_weight=float(profile.get("alignment_weight", 1)),
             regression_loss=str(profile.get("regression_loss", "smooth_l1")),
+            class_weights=torch.as_tensor(profile["sta_class_weights"], dtype=torch.float32) if "sta_class_weights" in profile else None,
         )
         self.output_dim = output_dim
         self.output_kind = "log_probabilities" if task_type == "classification" else "sequence_regression"
@@ -203,6 +233,10 @@ class SameWindowSTANet(nn.Module):
             "schema": "sta_net_downstream_rebench_v1",
             "method_identity": "independent_pytorch_sta_net_same_window_supervised",
             "task": task,
+            "implementation_version": version,
+            "input_support": support,
+            "encoded_eeg_seconds": (self.eeg_slice.stop - self.eeg_slice.start) / self.eeg_rate,
+            "encoded_fnirs_seconds": (self.fnirs_stop - self.fnirs_start) / self.fnirs_rate,
             "duration_s": duration,
             "eeg_channel_count": len(eeg_coordinates),
             "fnirs_location_count": count,
@@ -239,6 +273,7 @@ class SameWindowSTANet(nn.Module):
             raise ValueError("EEG and fNIRS batch sizes differ")
         eeg = _masked_input(eeg, eeg_mask, "EEG")
         fnirs = _masked_input(fnirs, fnirs_mask, "fNIRS")
+        eeg = eeg[..., self.eeg_slice]
         eeg_grid = torch.einsum("gc,bct->bgt", self.eeg_projection, eeg).reshape(eeg.shape[0], 1, 16, 16, -1)
         paired = torch.stack((fnirs.index_select(1, self.hbo_indices), fnirs.index_select(1, self.hbr_indices)), dim=1)
         hb_grid = torch.einsum("gc,bkct->bkgt", self.fnirs_projection, paired).reshape(eeg.shape[0], 2, 16, 16, -1)

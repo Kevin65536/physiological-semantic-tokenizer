@@ -1,0 +1,86 @@
+schema: downstream_repair_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-PROBE-r16
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v16
+tasks:
+- visual
+source_partitions:
+- train
+- validation
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: corrected_matched16_EEG_and_all_real_Hb_same30s_parent_arrays
+metadata_only: retained_parent_canonical_ids_for_record_and_window_times
+test: no_signal_target_or_prediction_access_outside_retained_parent_population
+metrics: v2_subject_equal_ACC_F1_dynamic_CCC_and_all_target_native_errors
+features:
+  source: same30second_Visual_development_arrays_and_correctmatched16physicalelectrodes
+  native: sixteen_single_electrodes_into_BIOTslots0to15;retained_transfer_control
+  prest8: Fp1-F3,F3-C3,C3-P3,P3-O1,Fp2-F4,F4-C4,C4-P4,P4-O2;officialn_channel_offset8
+  scaling: derivephysicalvoltagedifferences_first;thenfit_perchannel_mean_SD_on_current_training_people;never_difference_separately_normalized_electrodes
+  source_definition: comparative_methods/BIOT/upstream/README.md section2;model/biot.py
+    supportsn_channel_offset
+  information_budget: noadditionalnativeelectrodes;nochannelapproximation;nooriginaltest
+  interpretation: exact8of16PRESTsubset_not_complete_originalmontage_reproduction
+models:
+  visual:
+    biot_native_C1:
+      features: biot_native
+      estimator: logistic
+      C: 256.0
+      solver: newton-cholesky
+      interpretation: same_matched16_budget_source_montage_subset_diagnostic
+    biot_native_C100:
+      features: biot_native
+      estimator: logistic
+      C: 25600.0
+      solver: newton-cholesky
+      interpretation: same_matched16_budget_source_montage_subset_diagnostic
+    biot_prest8_C1:
+      features: biot_prest8
+      estimator: logistic
+      C: 256.0
+      solver: newton-cholesky
+      interpretation: same_matched16_budget_source_montage_subset_diagnostic
+    biot_prest8_C100:
+      features: biot_prest8
+      estimator: logistic
+      C: 25600.0
+      solver: newton-cholesky
+      interpretation: same_matched16_budget_source_montage_subset_diagnostic
+fit:
+  logistic_max_iter: 200
+  logistic_tol: 1.0e-08
+  classification_weight: equal_subject_then_inverse_training_class_prior
+  regression_weight: equal_subject_record_coordinate_then_valid_time
+  neural_epochs: 40
+  neural_batch_size: 64
+  neural_width: 128
+  neural_dropout: 0.5
+  neural_learning_rate: 0.001
+  neural_weight_decay: 0.01
+  neural_selection: fixed_final_epoch_no_held_fold_checkpoint_selection
+  regression_output: declared_sigmoid_1_to255_for_temporal_conv_other_outputs_unclipped
+  all_candidates: retained_no_best_fold_or_subject_selection
+  C_convention: features_divided_by_sqrt256;C256_and25600_match_C1_and100_without_this_blocknormalizer
+stopping: fixed_round_matrix_then_independent_aggregate_and_evidence_guided_next_version
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 8
+  ram_budget_gib: 72
+  gpus:
+  - 0
+  - 1
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib:
+    0: 4096
+    1: 4096
+  supervisor: existing_user_systemd_rebenchmark_scheduler
+feature_version: 2
+hypothesis: Official PREST channel tokens encode bipolar derivations while current
+  transfer feeds single-electrode signals in fixed slots. Visual matched16 can exactly
+  form PRESTslots8to15 without extra electrodes; compare these physical differences
+  before training-only scaling against retained native16 transfer.
+frozen_sequence_encoder: biot

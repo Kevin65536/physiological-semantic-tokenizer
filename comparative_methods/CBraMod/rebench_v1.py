@@ -114,3 +114,38 @@ class CBraModAuditModel(nn.Module):
 
 def create_audit_model(task: str, profile: dict, device: str, trainable: bool = False):
     return CBraModAuditModel(task, profile, device, trainable)
+
+
+class CBraModEventProbe(nn.Module):
+    """Visual four-class FT with explicit event phases and optional auxiliaries."""
+
+    def __init__(self, task: str, profile: dict, device: str):
+        super().__init__()
+        if (task != "visual" or profile.get("input_samples") != 6000
+                or profile.get("window_start_s") != -5 or profile.get("num_classes") != 4):
+            raise ValueError("Visual event FT requires the original four labels and -5..25s input")
+        self.base = create_model(task, profile, device, trainable=True)
+        self.channels = len(profile["channel_names"])
+        width = self.channels * 4 * 200
+        self.register_buffer("feature_mean", torch.zeros(width, device=device))
+        self.register_buffer("feature_scale", torch.ones(width, device=device))
+        self.head = nn.Sequential(nn.LayerNorm(width), nn.Linear(width, 128), nn.GELU(),
+                                  nn.Dropout(.5), nn.Linear(128, 8)).to(device)
+        self.metadata = dict(self.base.metadata,
+            method_identity="official_cbramod_Visual_event4_FT_v1",
+            pooling="within_-5to0_0to3_3to12_12to25s_then_preserve_electrode_and_phase_order",
+            input_preprocessing="same_window_channel_mean_and_RMS_only_no_held_labels",
+            output="four_joint_logits_then_two_binary_attribute_logits;primary_remains_four_class")
+
+    def event_features(self, eeg, *, eeg_mask=None):
+        if eeg.shape[1:] != (self.channels, 6000) or (eeg_mask is not None and not bool(eeg_mask.all())):
+            raise ValueError("event FT requires complete shared 30-second EEG")
+        x = eeg - eeg.mean(-1, keepdim=True)
+        x = x / x.square().mean(-1, keepdim=True).sqrt().clamp_min(1e-6)
+        tokens = self.base.encoder(x.reshape(len(x), self.channels, 30, 200))
+        phases = torch.stack([tokens[:, :, left:right].mean(2) for left, right in ((0, 5), (5, 8), (8, 17), (17, 30))], 2)
+        return phases.flatten(1)
+
+    def forward(self, eeg, *, eeg_mask=None):
+        features = self.event_features(eeg, eeg_mask=eeg_mask)
+        return self.head((features - self.feature_mean) / self.feature_scale)

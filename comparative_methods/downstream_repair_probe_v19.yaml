@@ -1,0 +1,84 @@
+schema: downstream_repair_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-PROBE-r19
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v19
+tasks:
+- refed_regression
+source_partitions:
+- train
+- validation
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: corrected_matched16_EEG_and_all_real_Hb_same30s_parent_arrays
+metadata_only: retained_parent_canonical_ids_for_record_and_window_times
+test: no_signal_target_or_prediction_access_outside_retained_parent_population
+metrics: v2_subject_equal_ACC_F1_dynamic_CCC_and_all_target_native_errors
+features:
+  source: samefold_r11_input_scales_and_r18_EFRM_recordCCC0.05_15epoch_head
+  encoder: whole_REFED_excluded_old_v5_pretraining;two_versions_differ_only_in_encoder_trainability
+  loss: MSE+0.05_complete_subject_video_record_CCC;constant_coordinates_retained_in_MSE
+  memory: retain_autograd_for_one_complete_record_then_backward_before_next_record;accumulate_four_records_per_step
+models:
+  refed_regression:
+    efrm_record_encoder_ft:
+      features: efrm_sequence
+      estimator: efrm_ft
+      initial_head: efrm_record_ccc_0p05
+      epochs: 2
+      effective_batch_size: 16
+      effective_record_batch_size: 4
+      record_ccc_weight: 0.05
+      freeze_encoder: false
+      encoder_learning_rate: 1.0e-06
+      head_learning_rate: 0.0001
+      interpretation: old_domain_target_excluded_pretraining_then_new_input_complete_record_encoder_FT
+    efrm_record_frozen_control:
+      features: efrm_sequence
+      estimator: efrm_ft
+      initial_head: efrm_record_ccc_0p05
+      epochs: 2
+      effective_batch_size: 16
+      effective_record_batch_size: 4
+      record_ccc_weight: 0.05
+      freeze_encoder: true
+      encoder_learning_rate: 0.0
+      head_learning_rate: 0.0001
+      interpretation: frozen_encoder_continued_temporal_head_control
+fit:
+  logistic_max_iter: 10000
+  logistic_tol: 1.0e-07
+  classification_weight: equal_subject_then_inverse_training_class_prior
+  regression_weight: equal_subject_record_coordinate_then_valid_time
+  neural_epochs: 40
+  neural_batch_size: 64
+  neural_width: 128
+  neural_dropout: 0.5
+  neural_learning_rate: 0.001
+  neural_weight_decay: 0.01
+  neural_selection: fixed_final_epoch_no_held_fold_checkpoint_selection
+  regression_output: declared_sigmoid_1_to255_for_temporal_conv_other_outputs_unclipped
+  all_candidates: retained_no_best_fold_or_subject_selection
+stopping: fixed_round_matrix_then_independent_aggregate_and_evidence_guided_next_version
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 8
+  ram_budget_gib: 72
+  gpus:
+  - 0
+  - 1
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib:
+    0: 3072
+    1: 3072
+  supervisor: existing_user_systemd_rebenchmark_scheduler
+feature_version: 2
+hypothesis: R18 recordCCC0.05 improved frozen EFRM dynamic CCC to .0529/.0625 but
+  worsened errors. Compare two further epochs updating both encoders versus same-initialization
+  frozen encoder control, with identical complete-record loss, batches, headLR, input
+  scales and masks; no held checkpoint selection.
+production_manifest: comparative_methods/runs/downstream_rebench_v1/20261016_v2/jobs_20261027_without_normwear.json
+retained_feature_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v11
+efrm_ft: true
+initial_head_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v18

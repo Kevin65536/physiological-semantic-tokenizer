@@ -1,0 +1,64 @@
+schema: downstream_repair_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-PROBE-r1
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1
+tasks: [visual, refed_regression]
+source_partitions: [train, validation]
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: corrected_matched16_EEG_and_all_real_Hb_same30s_parent_arrays
+metadata_only: retained_parent_canonical_ids_for_record_and_window_times
+test: no_signal_target_or_prediction_access_outside_retained_parent_population
+metrics: v2_subject_equal_ACC_F1_dynamic_CCC_and_all_target_native_errors
+features:
+  eeg: one_second_Hann_log_band_power_and_Visual_event_voltage_and_shrunk_log_covariance
+  fnirs: masked_level_slope_with_original_HbO_HbR_identity
+  visual_reference: input_minus5_to0s_not_claimed_rest
+  visual_event_bins: encoding0to3s_100ms_and_decision3to12s_300ms
+  regression_context_offsets_s: {eeg: [-2, 0, 2], fnirs: [0, 2, 4, 6]}
+  cbramod: official_frozen_encoder_unlabelled_per_window_EEG_standardization
+  fold_transform: masked_training_feature_mean_sd_then_equal_block_norm
+models:
+  visual:
+    event_linear: {features: event, estimator: logistic, C: 1.0}
+    event_rbf: {features: event, estimator: svc, C: 10.0, gamma: 0.5}
+    band_linear: {features: band, estimator: logistic, C: 1.0}
+    band_rbf: {features: band, estimator: svc, C: 10.0, gamma: 0.5}
+    covariance_rbf: {features: covariance, estimator: svc, C: 10.0, gamma: 0.5}
+    fnirs_rbf: {features: fnirs, estimator: svc, C: 10.0, gamma: 0.5}
+    multimodal_rbf: {features: multimodal, estimator: svc, C: 10.0, gamma: 0.5}
+    cbramod_event_linear: {features: encoder_event, estimator: logistic, C: 1.0}
+    cbramod_event_mlp: {features: encoder_event, estimator: mlp, auxiliary_weight: 0.5}
+  refed_regression:
+    eeg_ridge: {features: eeg, estimator: ridge, alpha: 100.0}
+    multimodal_ridge: {features: multimodal, estimator: ridge, alpha: 100.0}
+    context_ridge: {features: context, estimator: ridge, alpha: 100.0}
+    context_rbf: {features: context, estimator: nystroem_ridge, alpha: 1.0, gamma: 0.5, landmarks: 256}
+    context_trees: {features: context, estimator: extra_trees, trees: 160, min_leaf: 32, max_depth: 16}
+    temporal_conv: {features: multimodal, estimator: temporal_conv, dropout: 0.1}
+    video_time_template: {features: metadata, estimator: template, interpretation: stimulus_only_diagnostic_not_repair_evidence}
+fit:
+  logistic_max_iter: 10000
+  logistic_tol: 0.0000001
+  classification_weight: equal_subject_then_inverse_training_class_prior
+  regression_weight: equal_subject_record_coordinate_then_valid_time
+  neural_epochs: 40
+  neural_batch_size: 64
+  neural_width: 128
+  neural_dropout: 0.5
+  neural_learning_rate: 0.001
+  neural_weight_decay: 0.01
+  neural_selection: fixed_final_epoch_no_held_fold_checkpoint_selection
+  regression_output: declared_sigmoid_1_to255_for_temporal_conv_other_outputs_unclipped
+  all_candidates: retained_no_best_fold_or_subject_selection
+stopping: fixed_round_matrix_then_independent_aggregate_and_evidence_guided_next_version
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 12
+  ram_budget_gib: 72
+  gpus: [0, 1]
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib: {0: 3072, 1: 3072}
+  supervisor: existing_user_systemd_rebenchmark_scheduler

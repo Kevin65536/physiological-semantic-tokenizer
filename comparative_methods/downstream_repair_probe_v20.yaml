@@ -1,0 +1,77 @@
+schema: downstream_repair_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-PROBE-r20
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v20
+tasks:
+- visual
+source_partitions:
+- train
+- validation
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: corrected_matched16_EEG_and_all_real_Hb_same30s_parent_arrays
+metadata_only: retained_parent_canonical_ids_for_record_and_window_times
+test: no_signal_target_or_prediction_access_outside_retained_parent_population
+metrics: v2_subject_equal_ACC_F1_dynamic_CCC_and_all_target_native_errors
+features:
+  source: retained_input_only_r1_event_and_covariance_and_r2_relative_band
+  scaling: same_current_training_people_only_imputation_mean_SD_and_block_norm
+  information_budget: same_matched16_and30second_window;no_individual_extra_context
+models:
+  visual:
+    event_subject_equal_rbf:
+      features: event
+      estimator: svc
+      C: 10.0
+      gamma: 0.5
+      class_balance: none
+      feature_source_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1
+      interpretation: original_single_window_signal_and_subject_equal_training_without_inverse_class_prior;paired_to_r1_or_r2_balanced_arm
+    covariance_subject_equal_rbf:
+      features: covariance
+      estimator: svc
+      C: 10.0
+      gamma: 0.5
+      class_balance: none
+      feature_source_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1
+      interpretation: original_single_window_signal_and_subject_equal_training_without_inverse_class_prior;paired_to_r1_or_r2_balanced_arm
+    relative_band_subject_equal_rbf:
+      features: relative_band
+      estimator: svc
+      C: 10.0
+      gamma: 0.5
+      class_balance: none
+      feature_source_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v2
+      interpretation: original_single_window_signal_and_subject_equal_training_without_inverse_class_prior;paired_to_r1_or_r2_balanced_arm
+fit:
+  logistic_max_iter: 10000
+  logistic_tol: 1.0e-07
+  classification_weight: equal_subject_without_class_reweighting;all_four_training_classes_required
+  regression_weight: equal_subject_record_coordinate_then_valid_time
+  neural_epochs: 40
+  neural_batch_size: 64
+  neural_width: 128
+  neural_dropout: 0.5
+  neural_learning_rate: 0.001
+  neural_weight_decay: 0.01
+  neural_selection: fixed_final_epoch_no_held_fold_checkpoint_selection
+  regression_output: declared_sigmoid_1_to255_for_temporal_conv_other_outputs_unclipped
+  all_candidates: retained_no_best_fold_or_subject_selection
+stopping: fixed_round_matrix_then_independent_aggregate_and_evidence_guided_next_version
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 8
+  ram_budget_gib: 72
+  gpus: []
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib: {}
+  supervisor: existing_user_systemd_rebenchmark_scheduler
+feature_version: 2
+retained_feature_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1
+hypothesis: Complete the planned original-versus-class-balanced loss contrast. Preserve
+  each participant total training mass and all folds, features, C=10 and gamma=.5
+  from R1/R2; remove only inverse training class prior. F1, ACC and all class recalls
+  remain unchanged endpoints. This is a development diagnostic, not independent confirmation.
+smoke_device: cpu

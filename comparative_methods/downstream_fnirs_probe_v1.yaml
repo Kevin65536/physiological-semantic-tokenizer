@@ -1,0 +1,63 @@
+schema: downstream_fnirs_probe_v1
+experiment_id: DOWNSTREAM-FNIRS-PROBE-v1
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1
+tasks: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual]
+source_partitions: [train, validation]
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: same_retained_corrected_HbO_HbR_arrays_masks_and_events_no_EEG_signals
+test: no_test_partition_signal_target_or_prediction_access
+unsupported_tasks:
+  refed_regression: official_10second_tokens_have_no_validated_1Hz_sequence_regression_adapter
+fnirs_probe:
+  batch_size: 16
+  encoder: MtReNIRS_official_frozen_10second_128dim
+  upstream_revision: 16c3082747b689233f123519d2590b88631afb2d
+  pretraining_overlap: allowed_and_reported_on_Simultaneous_per_explicit_user_request
+  input_scale: same_window_valid_channel_mean_SD_clip6_no_full_record_calibration
+  input_band: retained_0.01_0.2Hz_not_source_0.01_0.5Hz
+  montage: exact_registered_1005_names_or_registered_template_anchor_similarity
+  encoder_readout: ordered_three_10second_tokens_or_temporal_mean
+  dsr: only_actual_2seconds_normalized_then_zero_padded_to_10seconds_no_extra_context
+  missing_channels: zero_weight_in_normalization_and_official_attention_mask
+  traditional: two_LedoitWolf_blocks_per_window_chromophore_RMS_scale_training_only_Riemannian_references
+models:
+  motor_imagery: &models
+    hb_statistics_linear:
+      {features: fnirs_statistics, estimator: ridge_classifier, alpha: 1.0}
+    hb_statistics_rbf:
+      {features: fnirs_statistics, estimator: svc, C: 1.0, gamma: scale}
+    hb_riemann_c01:
+      {features: fnirs_covariance, estimator: riemann_logistic, C: 0.1}
+    hb_riemann_c1:
+      {features: fnirs_covariance, estimator: riemann_logistic, C: 1.0}
+    mtrenirs_ordered_a1:
+      {features: encoder_ordered, estimator: ridge_classifier, alpha: 1.0}
+    mtrenirs_ordered_a10:
+      {features: encoder_ordered, estimator: ridge_classifier, alpha: 10.0}
+    mtrenirs_mean_a10:
+      {features: encoder_mean, estimator: ridge_classifier, alpha: 10.0}
+  mental_arithmetic: *models
+  wg: *models
+  nback: *models
+  dsr: *models
+  visual: *models
+fit:
+  logistic_max_iter: 10000
+  logistic_tol: 1.0e-7
+  classification_weight: equal_subject_then_inverse_training_class_prior
+  all_candidates: retained_no_best_fold_or_subject_selection
+metrics: subject_equal_ACC_macroF1_sample_SD_and_same_fold_train_majority_prior_B0
+stopping: fixed_seven_candidates_six_tasks_three_development_folds_then_independent_verification
+feature_version: 2
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 12
+  ram_budget_gib: 64
+  gpus: [0]
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib: {0: 5120}
+  supervisor: existing_user_systemd_rebenchmark_scheduler

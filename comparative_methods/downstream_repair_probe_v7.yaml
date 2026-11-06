@@ -1,0 +1,84 @@
+schema: downstream_repair_probe_v1
+experiment_id: DOWNSTREAM-REBENCH-v2-PROBE-r7
+scope: retained_public_train_validation_development_only
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+artifact_root: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v7
+tasks:
+- visual
+source_partitions:
+- train
+- validation
+evaluation: three_subject_folds_on_original_development_pool
+fold_seed: 20261105
+model_seed: 17
+input: corrected_matched16_EEG_and_all_real_Hb_same30s_parent_arrays
+metadata_only: retained_parent_canonical_ids_for_record_and_window_times
+test: no_signal_target_or_prediction_access_outside_retained_parent_population
+metrics: v2_subject_equal_ACC_F1_dynamic_CCC_and_all_target_native_errors
+features:
+  visual: official_CBraMod_event4;same_window_input_RMS;frozen_encoder_latent_column_mean_SD_fitted_only_current_training_subjects;FP32_training
+  selection: fixed_final_epoch;held_development_fold_targets_only_score;all_candidates_retained
+models:
+  visual:
+    calibrated_event_ft:
+      features: raw_eeg
+      estimator: cbramod_ft
+      epochs: 12
+      batch_size: 16
+      encoder_lr: 1.0e-05
+      head_lr: 0.001
+      weight_decay: 0.01
+      auxiliary_weight: 0.0
+      feature_scaling: training_latent_columns
+      precision: fp32
+      encoder_training_mode: deterministic
+    calibrated_warm_aux_ft:
+      features: raw_eeg
+      estimator: cbramod_ft
+      epochs: 12
+      batch_size: 16
+      encoder_lr: 1.0e-06
+      head_lr: 0.001
+      weight_decay: 0.01
+      auxiliary_weight: 0.5
+      feature_scaling: training_latent_columns
+      precision: fp32
+      head_warmup_epochs: 3
+      encoder_training_mode: deterministic
+fit:
+  logistic_max_iter: 10000
+  logistic_tol: 1.0e-07
+  classification_weight: equal_subject_then_inverse_training_class_prior
+  regression_weight: equal_subject_record_coordinate_then_valid_time
+  neural_epochs: 40
+  neural_batch_size: 64
+  neural_width: 128
+  neural_dropout: 0.5
+  neural_learning_rate: 0.001
+  neural_weight_decay: 0.01
+  neural_selection: fixed_final_epoch_no_held_fold_checkpoint_selection
+  regression_output: declared_sigmoid_1_to255_for_temporal_conv_other_outputs_unclipped
+  all_candidates: retained_no_best_fold_or_subject_selection
+stopping: fixed_short_FT_and_regularization_matrix;no_held_fold_checkpoint_or_candidate_selection
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 12
+  ram_budget_gib: 72
+  gpus:
+  - 0
+  - 1
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib:
+    0: 3072
+    1: 3072
+  supervisor: existing_user_systemd_rebenchmark_scheduler
+feature_version: 1
+encoder_ft: true
+retained_feature_run: comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1
+encoder_smoke_epochs: 32
+encoder_smoke_min_train_accuracy: 0.95
+hypothesis: r6 same12samples train-mode accuracy1.0 but eval-mode1/6; isolate encoder
+  stochastic mode while keeping encoder weights trainable and retaining32-step optimization-control
+  budget and0.95criterion
+source_deviation: disable encoder dropout in optimization; retain GroupNorm/LayerNorm,
+  learned parameters, real event tokens, head dropout, complete input and output labels

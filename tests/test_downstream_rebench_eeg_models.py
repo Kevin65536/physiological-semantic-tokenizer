@@ -101,6 +101,46 @@ def profile(task="dsr"):
     return {"channel_names": CHANNELS, "sampling_rate_hz": 200, "input_samples": 400 if task == "dsr" else 1600}
 
 
+def test_biot_prest_subset_uses_exact_source_slots_without_inventing_electrodes(monkeypatch):
+    module = importlib.import_module('comparative_methods.BIOT.rebench_v1')
+    from src.data.downstream_benchmark import EEG_ONLY_CHANNELS
+    class Encoder(BIOTFixture):
+        def forward(self, eeg, n_channel_offset=0):
+            self.observed = (eeg.shape, n_channel_offset)
+            return super().forward(eeg)
+    monkeypatch.setattr(module, 'load_verified_biot_encoder', lambda *args, **kwargs: (Encoder(), Identity()))
+    native = dict(channel_names=EEG_ONLY_CHANNELS['visual_cognitive_motivation'], sampling_rate_hz=200,
+                  input_window_schema='downstream_input_v1', duration_s=30., window_start_s=-5., input_samples=6000)
+    derived = module.prest_bipolar_profile(native)
+    assert derived['channel_names'] == ['Fp1-F3', 'F3-C3', 'C3-P3', 'P3-O1', 'Fp2-F4', 'F4-C4', 'C4-P4', 'P4-O2']
+    model = module.create_model('visual', derived, 'cpu')
+    assert model(torch.randn(2, 8, 6000)).shape == (2, 256)
+    assert model.encoder.observed == (torch.Size([2, 8, 6000]), 8)
+    assert not any(p.requires_grad for p in model.parameters())
+    wrong = dict(derived, channel_names=list(reversed(derived['channel_names'])))
+    with pytest.raises(ValueError, match='exact ordered'):
+        module.create_model('visual', wrong, 'cpu')
+    with pytest.raises(ValueError, match='no nearest-channel'):
+        module.prest_bipolar_profile(dict(native, channel_names=EEG_ONLY_CHANNELS['eeg_fnirs_single_trial']))
+
+
+def test_visual_event_ft_updates_encoder_preserves_mask_parameter_and_input_scale(monkeypatch):
+    module = importlib.import_module("comparative_methods.CBraMod.rebench_v1")
+    monkeypatch.setattr(module, "load_verified_cbramod_encoder", lambda *args, **kwargs:(CBraModFixture(), Identity()))
+    p = dict(profile("visual"), input_window_schema="downstream_input_v1", input_samples=6000,
+             duration_s=30., window_start_s=-5., num_classes=4)
+    model = module.CBraModEventProbe("visual", p, "cpu").eval()
+    x = torch.randn(2, 16, 6000)
+    with torch.no_grad():
+        first = model(x); second = model(x * 2 + 3)
+    torch.testing.assert_close(first, second, atol=2e-6, rtol=2e-6)
+    assert first.shape == (2, 8) and not model.base.encoder.patch_embedding.mask_encoding.requires_grad
+    before = model.base.encoder.projection.weight.detach().clone()
+    optimizer = torch.optim.SGD(model.parameters(), lr=.1)
+    optimizer.zero_grad(); model(x)[:, :4].square().mean().backward(); optimizer.step()
+    assert not torch.equal(before, model.base.encoder.projection.weight)
+
+
 def test_lp_matches_retained_pooling_and_stays_deterministic_in_train_mode(adapter):
     name, dimension, module, _ = adapter
     model = module.create_model("dsr", profile(), "cpu")

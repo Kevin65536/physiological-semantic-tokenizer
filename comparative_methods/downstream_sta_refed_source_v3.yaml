@@ -1,0 +1,69 @@
+schema: downstream_sta_optimization_v1
+experiment_id: DOWNSTREAM-STA-REFED-SOURCE-v3
+scope: retained_public_fixed_validation_development_only
+artifact_root: comparative_methods/runs/performance_analysis/20261106_sta_refed_source_v3
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+baseline_run: comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1
+source_partitions:
+- train
+- validation
+tasks:
+- refed_regression
+refed_label: valid_30second_arousal_mean_le128_low_gt128_high
+evaluation: original_fixed_validation_people_and_sample_ids
+initialization: random_supervised_STA_only_no_pretrained_model_finetuning
+upstream_revision: b6db8bb5eb2f6491a13f0938880ee70e32162ee7
+implementation: source_aligned_v3_actual_TF210_fused_and_unfused_variance
+seeds:
+  screen: 17
+  confirmation:
+  - 42
+  - 73
+confirmation_tasks:
+- refed_regression
+arms:
+  source_recipe:
+    tasks:
+    - refed_regression
+    implementation: source_aligned_v3
+    input_support: event_3s_eeg_13s_hb_except_actual_2s_DSR_and_full30s_REFED
+    alignment_weight: 1.0
+    class_weight: none
+training:
+  max_epochs: 40
+  min_epochs: 20
+  patience: 12
+  batch_size: 32
+  microbatch_size: 32
+  precision: fp32
+  optimizer: adam
+  learning_rate: 0.001
+  weight_decay: 0.0
+  eps: 1.0e-07
+  lr_schedule: constant
+  gradient_clip_norm: 5.0
+  selection: fixed_validation_subject_equal_macroF1_best_epoch_development_only
+  normalization: training_only_channel_mean_SD_on_retained_canonical_windows
+  dropout: 0.5
+  eeg_aux_weight: 1.0
+selection: single_source_aligned_recipe_three_seeds;retained_implementation_control_not_eligible
+metrics: per_seed_per_subject_ACC_macroF1_then_seed_mean_then_subject_mean_and_sample_SD
+baseline: paired_prior_STA_predictions_and_same_training_majority_ACC_prior_macroF1
+stopping: one_source_aligned_candidate_three_fixed_seeds_then_independent_aggregate
+test: no_original_test_signal_target_or_prediction_access
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 8
+  ram_budget_gib: 48
+  gpus:
+  - 0
+  - 1
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib:
+    0: 4096
+    1: 4096
+  supervisor: existing_user_systemd_rebenchmark_scheduler
+rationale: Original screening included the retained architecture as a diagnostic control;
+  it must not be presented as the source-corrected model. Confirm the source-aligned
+  REFED classifier with the same fixed recipe and seeds after the actual TF2.10 variance
+  check. No new hyperparameter search.

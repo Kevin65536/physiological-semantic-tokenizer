@@ -1,0 +1,32 @@
+schema: downstream_frozen_classification_v1
+experiment_id: DOWNSTREAM-FROZEN-CLASSIFICATION-v1
+scope: retained_public_fixed_validation_development_only
+artifact_root: comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+sta_completion_run: comparative_methods/runs/performance_analysis/20261105_sta_completion_v1
+convergence_run: comparative_methods/runs/performance_analysis/20261105_downstream_convergence_probe_v1
+fnirs_feature_run: comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1
+source_partitions: [train, validation]
+tasks: [motor_imagery, mental_arithmetic, wg, nback, dsr, visual, refed_regression]
+methods: [cbramod, sta_net, efrm, brainfusion, mtrenirs]
+encoder_fitting: none
+refed_label: valid_30second_arousal_mean_le128_low_gt128_high
+refed_output_task: refed_arousal_binary
+evaluation: original_fixed_subject_validation_shared_by_every_method
+reuse: completed_matched16_LP_predictions_without_unresolved_convergence_warnings_and_supervised_STA_BrainFusion
+selection: highest_retained_validation_macroF1_for_reused_LP;fixed_alpha1_for_new_readouts;no_new_grid
+linear: {estimator: ridge_classifier, alpha: 1.0, sample_weight: equal_subject_then_inverse_training_class_prior}
+fnirs_probe: {batch_size: 16}
+metrics: subject_equal_ACC_macroF1_and_sample_SD_ddof1
+baseline: same_training_majority_ACC_and_max_majority_prior_expectation_macroF1
+seed: 17
+test: no_original_test_signal_target_or_prediction_access
+stopping: fixed_35_method_task_cells_then_independent_verification_no_score_driven_retries
+resources:
+  threads_per_job: 2
+  cpu_thread_budget: 12
+  ram_budget_gib: 48
+  gpus: [0, 1]
+  max_gpu_jobs_per_device: 1
+  gpu_reserve_mib: {0: 6144, 1: 6144}
+  supervisor: existing_user_systemd_rebenchmark_scheduler

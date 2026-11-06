@@ -1,0 +1,129 @@
+schema: downstream_input_audit_v1
+experiment_id: DOWNSTREAM-STA-COMPLETION-v1
+scope: public_train_validation_diagnostic_not_final_paper_ranking
+artifact_root: comparative_methods/runs/performance_analysis/20261105_sta_completion_v1
+input_cache: data/cache/physiology_downstream_v1
+input_contract: experiments/configs/physiology_semantic_tokenizer/downstream_input_v1.yaml
+production_manifest: comparative_methods/runs/downstream_rebench_v1/20261016_v2/jobs_20261027_without_normwear.json
+legacy_splits: comparative_methods/runs/downstream_rebench_v1/20261016_v2/splits.json
+tasks:
+- motor_imagery
+- mental_arithmetic
+- wg
+- nback
+- dsr
+- visual
+- refed_regression
+partitions:
+- train
+- validation
+test_partition: metadata_counts_only_no_signal_loading_prediction_or_selection
+input:
+  primary_eeg_panel: corrected_matched16_for_all_methods_and_modalities
+  capacity_control: all_real_native_channels_separate_profile
+  visual_channel_control: same_new_arrays_events_labels_split_six_legacy_physical_electrode_substitutions
+  visual_probes: one_prediction_per_dependency_concatenate_real_Hb_channels_missing_probe_masked
+  windows: full_frozen_input_and_event_0_8s_control_DSR_0_2s_REFED_0_30s
+  mask: recorded_channel_time_and_coordinate_target_masks_no_method_specific_deletions
+  transforms: train_fitted_channel_and_feature_scales_or_declared_sample_local_unlabelled_scale
+  original_evidence: retained_inputs_predictions_and_running_producer_unchanged
+linear:
+  C:
+  - 0.01
+  - 1.0
+  - 100.0
+  class_weight:
+  - none
+  - balanced
+  ridge_alpha:
+  - 0.01
+  - 1.0
+  - 100.0
+  selection: subject_equal_validation_primary_fixed_grid_all_candidates_retained
+  max_iter: 1000
+  feature_modes:
+  - whole_window
+  - event_window
+  - six_5s_bins
+  - native_six_5s_bins
+  - event_ERP
+  ERP: mean_voltage_in_ten_100ms_bins_at_0_1s_subtract_recorded_pre_event_mean_when_available
+  null: seed17_within_training_subject_label_permutation_fixed_C1_temporal_eeg
+  coverage_control: input_masks_only
+  split_sensitivity: fixed_C1_whole_window_legacy_outer0_inner0_intersect_new_train_validation_pool
+  split_interpretation: different_subject_denominators_descriptive_not_paired_gain_or_split_selection
+encoders:
+  methods: []
+  tasks: classification_except_efrm_includes_refed
+  seed: 17
+  scales:
+  - train_sd
+  - window_sd
+  cbramod_readouts:
+  - mean
+  - channel_mean
+  - ordered_flatten
+  cbramod_additional_controls:
+  - visual_legacy16
+  - visual_native31
+  - MI_MA_Visual_physical_100uv
+  other_readouts: retained_native_pooling
+  efrm: completed_seed17_whole_target_dataset_excluded_v5_checkpoint_explicit_old_input_domain_transfer
+  unsupported: no_relabelled_pretraining_or_fabricated_temporal_heads
+neural:
+  tasks:
+  - wg
+  - nback
+  - dsr
+  methods:
+  - sta_net
+  seed: 17
+  max_epochs: 30
+  min_epochs: 15
+  patience: 10
+  batch_size: 32
+  microbatch_size: 8
+  cbramod:
+    optimizer: adamw
+    learning_rate: 0.0001
+    weight_decay: 0.05
+    lr_schedule: cosine
+    gradient_clip_norm: 1
+  sta_net:
+    optimizer: adamw
+    learning_rate: 0.0001
+    weight_decay: 0.0001
+    lr_schedule: constant
+    gradient_clip_norm: 1
+  selection: development_validation_best_epoch_all_curves_retained_no_claim_of_full_convergence
+brainfusion:
+  tasks: []
+  candidate: retained_default_fixed_no_outer_search
+  diagnostics: full_subject_OOF_stacking_and_fitted_component_predictions_meta_coefficients
+metrics:
+  classification: subject_equal_macro_f1_fixed_class_vocabulary
+  secondary: balanced_accuracy_accuracy_confusion_per_class_recall_prediction_collapse
+  B0: exact_finite_sample_train_prior_random_or_majority_maximum
+  REFED: coordinate_record_subject_equal_masked_CCC_and_native_MAE_RMSE_vs_training_mean
+  failures: planned_arms_retained_no_best_subject_or_test_label_flip
+  selection_label: development_selected_not_table_ready
+stopping: declared_arms_terminal_no_score_driven_extra_search_or_full_production_launch
+resources:
+  supervisor: user_systemd_verified_linger_existing_rebenchmark_scheduler
+  threads_per_job: 2
+  cpu_thread_budget: 6
+  ram_budget_gib: 48
+  gpus:
+  - 0
+  - 1
+  max_gpu_jobs_per_device: 2
+  gpu_reserve_mib:
+    0: 3072
+    1: 3072
+  launch: synthetic_contract_tests_then_measured_throughput_smoke_then_bounded_parallel_jobs
+parent_run: comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1
+completion_note: 'Only neural.tasks are launched: three shape/gradient/throughput
+  smokes then the corresponding three STA-Net fits. Reuse immutable parent prepare
+  arrays through explicit read-only memmap input links. Keep original model, seed17,
+  input scaling, 30max/15min epochs, patience10 and validation selection. Do not launch
+  baselines, other tasks, other methods or original test.'

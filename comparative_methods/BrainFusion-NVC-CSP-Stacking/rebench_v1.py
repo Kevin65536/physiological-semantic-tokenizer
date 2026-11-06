@@ -299,11 +299,17 @@ class RebenchBrainFusionEstimator:
     def __init__(self, profile: Mapping[str, Any], seed: int = 17, device: torch.device | str = "cpu"):
         self.profile = dict(profile)
         self.task = str(profile.get("task", "motor_imagery"))
-        if self.task in UNSUPPORTED_TASKS:
+        binary_adaptation = self.task == "refed_arousal_binary" and profile.get("classification_adaptation") == "refed_arousal_window_mean_midpoint_v1"
+        short_adaptation = self.task == "dsr" and profile.get("classification_adaptation") == "dsr_same_two_second_classification_v1"
+        explicit_adaptation = binary_adaptation or short_adaptation
+        if explicit_adaptation and (profile.get("input_window_schema") != "downstream_input_v1"
+                or profile.get("nvc_hrf_grid") != "physical_common_grid_v1"):
+            raise ValueError("new classification adapters require native support and the physical HRF grid")
+        if self.task in UNSUPPORTED_TASKS and not explicit_adaptation:
             raise NotImplementedError(f"BrainFusion {self.task}: {UNSUPPORTED_TASKS[self.task]}")
-        if self.task not in SUPPORTED_TASKS:
+        if self.task not in SUPPORTED_TASKS and not explicit_adaptation:
             raise ValueError(f"unknown BrainFusion task: {self.task}")
-        self.n_classes = TASK_CLASS_COUNTS[self.task]
+        self.n_classes = 2 if explicit_adaptation else TASK_CLASS_COUNTS[self.task]
         if int(profile.get("num_classes", self.n_classes)) != self.n_classes:
             raise ValueError("BrainFusion class count differs from the fixed task vocabulary")
         self.seed = int(seed)
@@ -346,6 +352,7 @@ class RebenchBrainFusionEstimator:
             "schema": "brainfusion_downstream_rebench_v1",
             "method_identity": "brainfusion_nvc_csp_stacking_reimplementation",
             "task": self.task, "duration_s": self.duration_s,
+            "classification_adaptation": profile.get("classification_adaptation"),
             "fit_scope": "all_supplied_outer_training_samples",
             "oof_unit": "subject",
             "oof_feature_fit": "oof_training_subjects_only",

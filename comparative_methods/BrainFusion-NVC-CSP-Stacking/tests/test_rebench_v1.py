@@ -129,6 +129,31 @@ def test_unsupported_tasks_do_not_emit_a_numeric_score(task):
         module.create_estimator({**_profile(), "task": task})
 
 
+@pytest.mark.parametrize("task,duration,adaptation", [
+    ("dsr", 2., "dsr_same_two_second_classification_v1"),
+    ("refed_arousal_binary", 30., "refed_arousal_window_mean_midpoint_v1"),
+])
+def test_explicit_binary_adaptations_fit_actual_support_and_preserve_subject_oof(task, duration, adaptation):
+    profile = {**_profile(), "task": task, "duration_s": duration, "window_start_s": 0.,
+               "input_window_schema": "downstream_input_v1", "classification_adaptation": adaptation,
+               "nvc_hrf_grid": "physical_common_grid_v1", "num_classes": 2}
+    generator = torch.Generator().manual_seed(91)
+    eeg = torch.randn(24, 4, int(20 * duration), generator=generator, dtype=torch.float64)
+    hb = torch.randn(24, 6, int(5 * duration), generator=generator, dtype=torch.float64)
+    labels = torch.arange(24) % 2
+    subjects = [f"s{i // 4}" for i in range(24)]
+    identities = [f"sample{i}" for i in range(24)]
+    mask = torch.ones_like(hb, dtype=torch.bool); mask[0, :, -3:] = False
+    hb[~mask] = float("nan")
+    model = module.create_estimator(profile).fit(eeg, hb, labels, subjects=subjects, sample_ids=identities, fnirs_mask=mask)
+    assert model.predict(eeg[:3], hb[:3], fnirs_mask=mask[:3]).shape == (3,)
+    assert model.duration_s == duration and model.nvc_config.hrf_tr == .2
+    for fold in model.audit_state()["pipeline"]["stacking_state"]["inner_folds"]:
+        assert not set(fold["train_subjects"]) & set(fold["validation_subjects"])
+    with pytest.raises(ValueError, match="physical HRF"):
+        module.create_estimator({**profile, "nvc_hrf_grid": "retained_sample_index_v1"})
+
+
 def test_partial_windows_use_only_each_oof_training_mean_and_retain_all_samples(tmp_path):
     eeg, hb, labels, subjects, identities = _signals()
     for index in range(len(hb)):
