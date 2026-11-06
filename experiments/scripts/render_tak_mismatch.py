@@ -2813,7 +2813,7 @@ def revise_fixed_visual_report(run, previous, audit_path, output):
 
 
 def spatial_topomap(ax, frame, *, limits, title="", cmap="viridis", names=False,
-                    coverage="local"):
+                    coverage="local", annotate_support=True):
     """MNE linear map with local support, or explicit full-head display fill."""
     import mne
     from scipy.spatial import ConvexHull, Delaunay, QhullError
@@ -2881,8 +2881,9 @@ def spatial_topomap(ax, frame, *, limits, title="", cmap="viridis", names=False,
     if len(missing):ax.scatter(missing.x,missing.y,marker="x",c="#737d86",s=22,lw=1,zorder=8)
     ax.set(xlim=(-1.16,1.16),ylim=(-1.08,1.2),aspect="equal");ax.axis("off")
     ax.set_title(title,fontsize=10,pad=5)
-    ax.text(.5,-.035,f"可用位置 {len(good)}/{len(positions)}",transform=ax.transAxes,ha="center",fontsize=7.5,color="#455560")
-    if len(good) and "period" in good:
+    if annotate_support:
+        ax.text(.5,-.035,f"可用位置 {len(good)}/{len(positions)}",transform=ax.transAxes,ha="center",fontsize=7.5,color="#455560")
+    if annotate_support and len(good) and "period" in good:
         if good.period.eq("subject_mean").all():
             low,high=good.available_records.min(),good.available_records.max()
             count=str(int(high)) if low==high else f"{int(low)}–{int(high)}"
@@ -4859,6 +4860,228 @@ def render_four_dataset_patterns(run, analysis, output):
     return dict(output=str(output),pages=checks['exports']['TECHNICAL_REPORT.pdf']['pages'],figures=len(figures))
 
 
+def _hb_atlas_subject_selection(maps, ranking):
+    """Choose explanatory D1 maps using the retained display ranking.
+
+    Each candidate must have all planned acquisition maps, at least two
+    acquisitions, >=8 and 80% shared locations for every pair, and every pair's
+    rank correlation >=.5. The peak of the retained subject map must exceed
+    the spatial mean in every acquisition. These are display selection rules,
+    not calibrated physiological cutoffs or a new inferential endpoint.
+    """
+    import pandas as pd
+    from itertools import combinations
+    from scipy.stats import spearmanr
+    selected=[];candidates=[];record_checks=[]
+    for dataset, ranks in ranking.groupby('dataset',sort=True):
+        chosen=False
+        for row in ranks.sort_values(['rank','subject']).itertuples():
+            group=maps[maps.dataset.eq(dataset)&maps.subject.eq(str(row.subject))&maps.metric.eq('D1')]
+            full=group[group.period.eq('full')].copy()
+            full['display_value']=full.display_value.where(full.display_valid)
+            records=full.pivot(index='record_unit',columns='location_id',values='display_value')
+            mean=group[group.period.eq('subject_mean')].set_index('location_id')
+            n=len(records);minimum=max(8,.8*records.shape[1]);correlations=[]
+            sufficient=n>=2 and records.notna().sum(axis=1).ge(minimum).all()
+            for a,b in combinations(range(n),2):
+                pair=records.iloc[[a,b]].dropna(axis=1).to_numpy(float)
+                if pair.shape[1]<minimum or np.ptp(pair[0])<=1e-12 or np.ptp(pair[1])<=1e-12:
+                    sufficient=False;continue
+                correlations.append(float(spearmanr(pair[0],pair[1]).statistic))
+            peak=mean.display_value.idxmax() if mean.display_value.notna().any() else None
+            margins=records[peak]-records.mean(axis=1) if peak in records else pd.Series(np.nan,index=records.index)
+            eligible=bool(sufficient and len(correlations)==n*(n-1)//2 and min(correlations)>=.5
+                          and margins.notna().all() and margins.gt(0).all())
+            record=dict(dataset=dataset,subject=str(row.subject),retained_rank=int(row.rank),
+                planned_records=n,record_pairs=len(correlations),
+                median_record_correlation=float(np.median(correlations)) if correlations else np.nan,
+                minimum_record_correlation=float(min(correlations)) if correlations else np.nan,
+                peak_location=peak,peak_pair=mean.loc[peak,'pair_members'] if peak is not None else '',
+                peak_D1=float(mean.loc[peak,'display_value']) if peak is not None else np.nan,
+                minimum_peak_above_record_mean=float(margins.min()),eligible=eligible,selected=eligible and not chosen)
+            candidates.append(record)
+            if record['selected']:
+                chosen=True;selected.append(record)
+                for record_id,values in records.iterrows():
+                    record_checks.append(dict(dataset=dataset,subject=str(row.subject),record_unit=record_id,
+                        peak_pair=record['peak_pair'],peak_D1=float(values[peak]),
+                        spatial_mean_D1=float(values.mean()),peak_above_spatial_mean=float(margins.loc[record_id])))
+        if not chosen:raise ValueError(f'No fully supported persistent D1 example for {dataset}')
+    return pd.DataFrame(selected),pd.DataFrame(candidates),pd.DataFrame(record_checks)
+
+
+def render_hb_atlas_design(run, analysis, output):
+    """Three clean Hb-only figure sets from completed public scalar evidence."""
+    import html
+    import shutil
+    import pandas as pd
+    from matplotlib.colors import Normalize
+    from matplotlib.cm import ScalarMappable
+    run,analysis,output=(Path(p).resolve() for p in (run,analysis,output))
+    summary=_json(analysis/'summary.json')
+    if (summary.get('schema')!='tak_mismatch_four_dataset_fixed_patterns_v1'
+            or summary.get('status')!='completed' or Path(summary['parent_run']).resolve()!=run):
+        raise ValueError('Completed fixed-only four-dataset scalar evidence required')
+    if output.exists():raise FileExistsError('Use a fresh versioned atlas directory')
+    sources=summary['sources'];visual='visual_cognitive_motivation'
+    columns=['dataset','subject','task_label','record_unit','period','location_id','metric','x','y','pair_members',
+        'record_ids','display_valid','selection_valid','display_value','planned_records','available_records',
+        'planned_windows','available_windows']
+    maps=[];ranks=[];records=[]
+    for map_key,plan_key,corrected in [('reference_maps','reference_plan',False),('corrected_maps','corrected_plan',True)]:
+        path=Path(sources[map_key]);frame=pd.read_csv(path,usecols=columns,dtype={'subject':str})
+        take=frame.dataset.eq(visual);maps.append(frame[(take if corrected else ~take)&frame.metric.eq('D1')])
+        rank=pd.read_csv(path.parent/'subject_ranking.csv',dtype={'subject':str});take=rank.dataset.eq(visual)
+        ranks.append(rank[take if corrected else ~take])
+        plan=_json(Path(sources[plan_key]))
+        records.extend(r for r in plan['records'] if (r['dataset']==visual)==corrected)
+    maps=pd.concat(maps,ignore_index=True);ranking=pd.concat(ranks,ignore_index=True);plan=dict(records=records)
+    selected,candidates,record_checks=_hb_atlas_subject_selection(maps,ranking)
+    population=pd.read_csv(analysis/summary['files']['all_population_maps'])
+    population=population[population.metric.eq('D1')].copy()
+    subjects=pd.read_csv(analysis/summary['files']['subjects'],dtype={'subject':str})
+    subjects=subjects[subjects.metric.eq('D1')].copy()
+    persistence=pd.read_csv(analysis/summary['files']['hotspot_persistence'],dtype={'subject':str})
+    persistence=persistence[persistence.metric.eq('D1')].copy()
+    datasets=['eeg_fnirs_single_trial','simultaneous_eeg_nirs',visual,'refed']
+    labels=dict(zip(datasets,['Single-Trial','Simultaneous','Visual','REFED']))
+    if set(selected.dataset)!=set(datasets) or len(subjects)!=summary['planned_subjects']:
+        raise ValueError('Planned dataset/subject denominator drift')
+    def project(frame,dataset,subject):
+        template=maps[maps.dataset.eq(dataset)&maps.subject.eq(subject)&maps.period.eq('subject_mean')]
+        coords=_spatial_preview_coordinates(template,plan).set_index('pair_members')
+        xy=coords.loc[frame.pair_members]
+        if not np.allclose(frame[['x','y']],xy[['x_orthographic','y_orthographic']],atol=1e-7):
+            raise ValueError('Frozen geometry identity mismatch')
+        result=frame.copy();result[['x','y']]=xy[['x','y']].to_numpy()
+        assert np.array_equal(frame.display_value,result.display_value,equal_nan=True)
+        return result
+    group_maps=[];person_maps=[]
+    for ds in datasets:
+        first=sorted(maps[maps.dataset.eq(ds)].subject.unique())[0]
+        group_maps.append(project(population[population.dataset.eq(ds)],ds,first))
+        subject=selected[selected.dataset.eq(ds)].subject.iloc[0]
+        frame=persistence[persistence.dataset.eq(ds)&persistence.subject.eq(subject)].copy()
+        frame['display_value']=frame.fraction.where(frame.eligible)
+        person_maps.append(project(frame,ds,subject))
+    limits=(0.,1.);cmap='viridis';label='信号的模型偏离度'
+    output.mkdir(parents=True);images=output/'images';images.mkdir();plt=_plotting()
+    plt.rcParams.update({'font.size':13,'axes.labelsize':15,'xtick.labelsize':12,'ytick.labelsize':12})
+    figures=[];checks=[]
+    def topography(frames,filename,individual):
+        fig,axes=plt.subplots(1,4,figsize=(14.4,4.35))
+        fig.subplots_adjust(left=.025,right=.975,top=.89,bottom=.25 if not individual else .22,wspace=.13)
+        for ax,ds,frame in zip(axes,datasets,frames):
+            title=labels[ds]+(' · '+selected[selected.dataset.eq(ds)].subject.iloc[0] if individual else '')
+            panel_limits=limits if individual else (float(np.floor(frame.display_value.min()*100)/100),
+                float(np.ceil(frame.display_value.max()*100)/100))
+            if panel_limits[1]<=panel_limits[0]:panel_limits=(panel_limits[0],panel_limits[0]+.01)
+            image=spatial_topomap(ax,frame,limits=panel_limits,title=title,cmap=cmap,coverage='head',annotate_support=False)
+            ax.set_title(title,fontsize=15,pad=12)
+            assert image.get_clim()==panel_limits
+            for text_item in ax.texts:
+                if any(word in text_item.get_text() for word in ('可用位置','窗口覆盖','可用记录','四分位','零预测')):
+                    raise ValueError('Unrequested annotation on clean atlas')
+            checks.append(dict(figure=filename,dataset=ds,clim=list(image.get_clim()),
+                xlim=list(ax.get_xlim()),ylim=list(ax.get_ylim()),annotations=[t.get_text() for t in ax.texts]))
+            if not individual:
+                pos=ax.get_position();cax=fig.add_axes([pos.x0+.025,.15,pos.width-.05,.025])
+                bar=fig.colorbar(image,cax=cax,orientation='horizontal',ticks=np.linspace(*panel_limits,3),format='%.2f')
+                bar.ax.tick_params(labelsize=11)
+        if individual:
+            cax=fig.add_axes([.27,.13,.46,.035])
+            colorbar=fig.colorbar(ScalarMappable(norm=Normalize(*limits),cmap=cmap),cax=cax,
+                orientation='horizontal',ticks=np.linspace(0,1,6))
+            colorbar.set_label(label,fontsize=14,labelpad=6);colorbar.ax.tick_params(labelsize=11)
+        else:fig.text(.5,.035,label,ha='center',fontsize=14)
+        path=images/filename;fig.savefig(path,dpi=300,facecolor='white');plt.close(fig)
+        figures.append(dict(file='images/'+filename,kind='individual_topography' if individual else 'population_topography',label=label))
+    topography(group_maps,'01_population_topography.png',False)
+    fig,ax=plt.subplots(figsize=(8.2,5.3));colors=['#2272ac','#d17924','#27816d','#9c4b90'];distribution_summary=[]
+    for i,ds in enumerate(datasets):
+        frame=subjects[subjects.dataset.eq(ds)].sort_values('subject');values=frame.value.to_numpy(float)
+        jitter=.055*np.sin(np.arange(len(values))*2.399963)
+        ax.scatter(i+jitter,values,s=44,c=colors[i],alpha=.65,edgecolors='white',linewidths=.45,zorder=2)
+        q1,median,q3=np.quantile(values[np.isfinite(values)],[.25,.5,.75])
+        ax.plot([i,i],[q1,q3],c='#243442',lw=4,zorder=3)
+        ax.hlines([q1,q3],i-.065,i+.065,colors='#243442',linewidth=1.5,zorder=3)
+        ax.scatter([i],[median],s=82,facecolor='white',edgecolor='#243442',linewidth=1.7,zorder=4)
+        distribution_summary.append(dict(dataset=ds,subjects=int(np.isfinite(values).sum()),q25=q1,median=median,q75=q3))
+    from matplotlib.lines import Line2D
+    ax.legend(handles=[Line2D([],[],marker='o',markersize=7,markerfacecolor='white',markeredgecolor='#243442',
+        linestyle='none',label='中位数'),Line2D([],[],color='#243442',lw=4,label='四分位区间')],frameon=False,loc='upper right',fontsize=11)
+    ax.set(xticks=range(4),xticklabels=[labels[ds] for ds in datasets],ylabel=label,xlim=(-.55,3.55))
+    ax.set_ylim(0,float(np.ceil(subjects.value.max()*10)/10));ax.grid(axis='y',alpha=.15);ax.set_axisbelow(True)
+    fig.tight_layout();fig.savefig(images/'02_subject_distribution.png',dpi=300,facecolor='white');plt.close(fig)
+    figures.append(dict(file='images/02_subject_distribution.png',kind='subject_scatter',label=label))
+    topography(person_maps,'03_individual_topography.png',True)
+    pd.concat(group_maps,ignore_index=True).to_csv(output/'population_plot_values.csv',index=False)
+    pd.concat(person_maps,ignore_index=True).to_csv(output/'individual_plot_values.csv',index=False)
+    subjects.to_csv(output/'subject_plot_values.csv',index=False)
+    pd.DataFrame(distribution_summary).to_csv(output/'subject_distribution_summary.csv',index=False)
+    selected.to_csv(output/'example_selection.csv',index=False);candidates.to_csv(output/'example_candidates.csv',index=False)
+    record_checks.to_csv(output/'example_record_checks.csv',index=False)
+    def mdtable(columns,rows):
+        return '\n'.join(['| '+' | '.join(columns)+' |','| '+' | '.join(['---']*len(columns))+' |',
+            *['| '+' | '.join(str(x) for x in row)+' |' for row in rows]])
+    rows=[[labels[r.dataset],r.subject,r.planned_records,r.record_pairs,f'{r.median_record_correlation:.3f}',
+        f'{r.minimum_record_correlation:.3f}',r.peak_pair,f'{r.minimum_peak_above_record_mean:.3f}'] for r in selected.itertuples()]
+    guide=f'''# Hb观测图像修订版
+
+## 本版三套图
+
+所有图统一使用“信号的模型偏离度”。图中只保留数据集、必要的被试标识、坐标与色条，不添加位置数量、热点圈选或说明性图注。
+
+1. [数据集总体空间分布](images/01_population_topography.png)：在每个测点取被试级D₁的中位数。它描述该数据集的典型偏离分布。
+2. [被试分布散点图](images/02_subject_distribution.png)：每个彩色点是一名被试的整体D₁，保留原失配值，不减去群体模板。横向扰动缩窄，纵坐标完全保留；白色中心点是中位数，深色竖线和两端短线为第25—75百分位区间。纵轴是偏离大小，数值越高表示当前模型对该观测的贴合程度越低。
+3. [四名被试的空间示例](images/03_individual_topography.png)：每个数据集一名被试，每点颜色表示该位置在可评价记录中进入本人D₁最高四分之一的经验概率。沿用原四名被试及“信号的模型偏离度”caption，不圈出单独的热点。
+
+## 数值定义与显示范围
+
+D₁沿用已有固定参数Hb-only拟合的标准化残差RMS：在相同评分时刻将观测与重建之差除以各色团冻结训练SD，平方后对时间和两色团平均，再开根。总体地图沿用原记录等权的平方量聚合后取被试中位数；散点图使用保留的整体被试值。
+
+个体概率图直接使用已有hotspot_persistence.csv中的D₁频率：每条记录在本人有效测点中按D₁从高到低选取向上取整的25%位置，再将某点入选记录数除以该点可评价记录数，各记录等权。记录须有至少8个且80%的计划测点有效，并有非零空间反差；位置须有至少2条且80%的计划记录可评价。缺失和失败不计为未入选，分母与并列截点记录保留在individual_plot_values.csv。截点并列时按location_id稳定排序选满指定数量。该量是跨记录的经验频率，不是未来失配的校准概率；数值1表示每条可评价记录均入选，0表示从未入选。具体记录入选标记由来源表hotspot_record_locations.csv持有。
+
+目标窗为30秒，前5秒均值作为参考，评分5.0—29.8秒。模型看到当前窗口Hb，因此该量是条件重建的观测—模型偏离；不是独立预测误差、数据质量诊断或对偏离来源的唯一判断。未重新拟合模型，未读取原始信号。
+
+总体脑地形图每个数据集采用独立颜色范围，按该库保留测点值的最小、最大值向外取整至0.01，并在各图下方显示独立色条，用于观察库内空间差异；颜色深浅不可跨库直接比较。数值没有截断。个体概率图共用 **0—1** 色标，其颜色量与总体图的D₁幅值不同。全部脑地形图保持蓝—黄配色和相同头部坐标范围。独立色标只改变显示对比度，不能据此断言每个数据集均后部高于前部；既有区域配对检验在Simultaneous中支持该方向，Single-Trial未检出同样明确的差异。
+
+坐标为保留的头顶球面等距显示投影；REFED沿用登记平面布局，不推断三维位置。测点覆盖在各库间不同，统一显示坐标不表示同一皮层区域。黑边小点是测点，虚线为测点凸包，边界外颜色属于显示外推；填色不增加测量分辨率。
+
+## 例图的跨记录支持
+
+示例沿用原D₁空间示例排序，优先考虑空间差异、邻近位置连贯性和早晚一致性；再核对全部计划记录地图可评价、每个记录对至少8个且80%共同测点、所有记录对空间相关不低于0.5，以及汇总图峰值位置在每条记录中均高于该记录的测点平均偏离。每库选满足条件的最高原排序者。0.5仅是本次展示选择规则，不是生理或显著性阈值。
+
+{mdtable(['数据集','被试','记录数','记录对','相关中位数','最小相关','汇总峰值测点','该点高于记录均值的最小差'],rows)}
+
+该选择用于展示突出且重复的空间模式，不构成独立验证。Single-Trial的示例核对包括不同任务记录；Simultaneous跨任务，Visual跨Part，REFED跨视频。Visual仅两条采集，跨记录证据更有限。每条记录的连续偏离值核对见example_record_checks.csv，完整候选及排除保留在example_candidates.csv。
+
+## 样本覆盖与溯源
+
+总体图与散点图沿用全量Hb有效支持，共{summary['planned_subjects']}名计划被试；失败和缺失不填零。不同位置的被试覆盖及各被试记录覆盖保留在CSV中，不标在图像上。各库原生单位和处理链不同，颜色或数值不直接给原生生理质量排序。
+
+数值来源：{analysis/'summary.json'}。逐图绘图值、示例选择、色标与坐标检查记录在本目录CSV和selection_manifest.json。图像均为300 dpi PNG。此前各版图集保留在原目录。
+'''
+    (output/'FIGURE_GUIDE.md').write_text(guide,encoding='utf-8')
+    headings=['各数据集总体空间分布','各数据集被试分布','四个数据集的被试示例']
+    ordered=[figures[0],figures[1],figures[2]]
+    sections=''.join(f'<section><h2>{i+1}　{title}</h2><a href="{f["file"]}"><img src="{f["file"]}" alt="{html.escape(title)}"></a></section>' for i,(title,f) in enumerate(zip(headings,ordered)))
+    page='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hb观测图像</title><style>body{margin:0;background:#f4f6f8;color:#1b3040;font:16px/1.7 system-ui,"Noto Sans CJK SC",sans-serif}main{max-width:1400px;margin:24px auto;padding:30px;background:white}h1{font-size:26px}h2{font-size:20px;margin-top:36px}img{width:100%;height:auto}section:nth-of-type(2) img{max-width:900px;display:block;margin:auto}a{color:#21668e}nav{font-size:14px}@media(max-width:700px){main{padding:16px;margin:0}}</style><main><h1>Hb观测图像</h1><nav><a href="FIGURE_GUIDE.md">制作说明</a> · <a href="selection_manifest.json">来源记录</a></nav>'+sections+'</main></html>'
+    (output/'index.html').write_text(page,encoding='utf-8')
+    manifest=dict(schema='hb_atlas_design_v3',owning_analysis=str(analysis/'summary.json'),sources=sources,
+        metric='D1',display_label=label,individual_color_limits=list(limits),population_color_limits='per_dataset_full_range',colormap=cmap,figures=figures,
+        individual_metric='D1_top_quarter_record_fraction',
+        individual_source=str(analysis/summary['files']['hotspot_persistence']),
+        individual_record_source=str(analysis/summary['files']['hotspot_record_locations']),
+        individual_probability='hotspot_records / available_records; eligible sites only; records equally weighted',
+        topography_checks=checks,selection_method='retained_D1_ranking_then_all_record_consistency_and_continuous_peak_margin',
+        selected_subjects=selected[['dataset','subject']].to_dict('records'),raw_signal_reads=0,model_fits=0,
+        numerical_values_changed=False,bitmap_dpi=300,source_renderer=str(Path(__file__).resolve()))
+    (output/'selection_manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+    shutil.copy2(Path(__file__),output/'renderer_source.py')
+    return dict(output=str(output),figures=3,color_limits=list(limits),selected_subjects=manifest['selected_subjects'])
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True, type=Path)
@@ -4869,6 +5092,7 @@ def main(argv=None):
     parser.add_argument("--spatial-style-preview", action="store_true", help="Two angular-projection/full-head display tests from retained spatial maps")
     parser.add_argument("--mechanism-analysis", type=Path, help="Completed mechanism-pattern scalar analysis for the full physiological-pattern report")
     parser.add_argument("--four-dataset-analysis", type=Path, help="Completed four-dataset synthesis with corrected Visual evidence")
+    parser.add_argument('--hb-atlas-design',action='store_true',help='D1 population/distribution figures and individual top-quarter probabilities from the full fixed Hb analysis')
     parser.add_argument("--workers", type=int, default=2, help="Independent subject/metric plot workers in spatial mode")
     parser.add_argument("--revise-report", type=Path, help="Preserve an existing fixed report's numbers and bitmaps while applying the Visual channel impact audit")
     parser.add_argument("--visual-channel-audit", type=Path, help="The single confirmed Tak Visual interpretation-boundary audit")
@@ -4876,7 +5100,9 @@ def main(argv=None):
     if args.four_dataset_analysis:
         if any((args.mechanism_analysis,args.spatial_analysis,args.spatial_style_preview,args.fixed_analysis,args.priority_panel,args.revise_report,args.visual_channel_audit)):
             parser.error('--four-dataset-analysis has its own corrected completed evidence scope')
-        print(json.dumps(render_four_dataset_patterns(args.run,args.four_dataset_analysis,args.output),ensure_ascii=False));return
+        render=render_hb_atlas_design if args.hb_atlas_design else render_four_dataset_patterns
+        print(json.dumps(render(args.run,args.four_dataset_analysis,args.output),ensure_ascii=False));return
+    if args.hb_atlas_design:parser.error('--hb-atlas-design requires --four-dataset-analysis')
     if args.mechanism_analysis:
         if any((args.spatial_analysis,args.spatial_style_preview,args.fixed_analysis,args.priority_panel,args.revise_report,args.visual_channel_audit)):
             parser.error("--mechanism-analysis has its own completed scalar evidence scope")

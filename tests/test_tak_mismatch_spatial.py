@@ -331,3 +331,32 @@ def test_fixed_population_patterns_remove_common_template_and_keep_missing_peopl
     np.testing.assert_allclose(fixed[fixed.endpoint.eq('raw_rho')].value,1.)
     np.testing.assert_allclose(fixed[fixed.endpoint.eq('hotspot_overlap')].value,1.)
     assert fixed[fixed.endpoint.eq('centered_rho')].value.isna().all()
+
+
+@pytest.mark.parametrize('failure', ['reversed_map', 'missing_record'])
+def test_clean_hb_atlas_requires_every_record_to_support_selected_example(failure):
+    from experiments.scripts import render_tak_mismatch as renderer
+    rows=[]
+    base=np.arange(1.,13.)
+    for subject in ('unsupported','supported'):
+        second=base*1.1
+        if subject=='unsupported':
+            second=base[::-1] if failure=='reversed_map' else np.full(12,np.nan)
+        for record,values in [('a',base),('b',second)]:
+            for i,value in enumerate(values):
+                rows.append(dict(dataset='d',subject=subject,period='full',metric='D1',
+                    record_unit=record,location_id=str(i),pair_members=f'p{i}',
+                    display_value=value,display_valid=np.isfinite(value)))
+        average=np.sqrt(np.nanmean(np.array([base,second])**2,axis=0))
+        for i,value in enumerate(average):
+            rows.append(dict(dataset='d',subject=subject,period='subject_mean',metric='D1',
+                record_unit='subject_mean',location_id=str(i),pair_members=f'p{i}',
+                display_value=value,display_valid=True))
+    frame=pd.DataFrame(rows);before=frame.copy(deep=True)
+    ranks=pd.DataFrame(dict(dataset=['d','d'],subject=['unsupported','supported'],rank=[1,2]))
+    selected,candidates,checks=renderer._hb_atlas_subject_selection(frame,ranks)
+    assert selected.subject.tolist()==['supported']
+    assert not candidates[candidates.subject.eq('unsupported')].eligible.any()
+    assert selected.minimum_record_correlation.iloc[0]==pytest.approx(1.)
+    assert len(checks)==2 and checks.peak_above_spatial_mean.gt(0).all()
+    pd.testing.assert_frame_equal(frame,before)

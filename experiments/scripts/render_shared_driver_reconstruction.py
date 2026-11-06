@@ -10509,10 +10509,137 @@ def render_tak_topography_examples(run,out):
     print(json.dumps(dict(selected=selected,figures=figures,color_scales=ranges),ensure_ascii=False))
 
 
+def _plot_subject_cache_reconstruction(arrays, out):
+    """Show both retained curves on the declared fitting/scoring support."""
+    y, p = arrays['target'], arrays['prediction']
+    font = font_manager.FontProperties(fname='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    with plt.rc_context({'font.family': 'DejaVu Sans', 'font.size': 15,
+                         'axes.linewidth': 1.3, 'xtick.major.width': 1.2, 'ytick.major.width': 1.2}):
+        fig, axes = plt.subplots(3, 1, figsize=(10, 9.6), sharex=True)
+        # Frozen subject SD is for display only; selection uses each window's target SD.
+        for j, ax in enumerate(axes):
+            use = arrays['fit_mask'][:, j]
+            ax.plot(arrays['time_s'], np.where(use, y[:, j] / arrays['sd_subject'][j], np.nan),
+                    color='#171717', lw=1.7, label='实测')
+            ax.plot(arrays['time_s'], np.where(use, p[:, j] / arrays['sd_subject'][j], np.nan),
+                    color='#1976B9', lw=1.7, linestyle='--', dashes=(5, 2), label='重建')
+            ax.set_ylabel(COMPONENTS[j], fontsize=20, labelpad=16)
+            ax.spines[['top', 'right']].set_visible(False)
+            ax.tick_params(direction='out', length=5)
+            ax.margins(y=.12)
+            ax.set_xlim(0, 90)
+            ax.set_xticks(np.arange(0, 91, 10))
+        axes[-1].set_xlabel('时间 (s)', fontproperties=font, fontsize=17, labelpad=8)
+        fig.legend(*axes[0].get_legend_handles_labels(), loc='upper center', ncol=2,
+                   frameon=False, prop=font.copy(), handlelength=3.2, fontsize=16,
+                   bbox_to_anchor=(.55, .995))
+        fig.subplots_adjust(left=.13, right=.97, bottom=.09, top=.94, hspace=.13)
+        fig.align_ylabels(axes)
+        fig.savefig(out / 'best_reconstruction.png', dpi=300, facecolor='white')
+        plt.close(fig)
+    with fitz.open() as pdf:
+        page = pdf.new_page(width=720, height=691.2)
+        page.insert_image(page.rect, filename=str(out / 'best_reconstruction.png'))
+        pdf.save(out / 'best_reconstruction.pdf', deflate=True)
+
+
+def render_best_subject_cache_reconstruction(run, out):
+    """Rank retained public 90 s fits and export one minimal three-row figure."""
+    import csv
+    from collections import Counter
+    from datetime import datetime, timezone
+    import shutil
+    import time
+
+    cfg = json.loads((run / 'resolved_config.json').read_text())
+    if (cfg.get('schema') != 'shared_driver_tak_subject_cache_v1'
+            or cfg['data'].get('protected_data') != 'forbidden'):
+        raise ValueError('Expected the public subject-calibrated Tak cache contract')
+    out.mkdir(parents=True, exist_ok=False)
+    cutoff = time.time_ns()
+    progress = json.loads((run / 'progress.json').read_text())
+    paths = sorted(p for p in (run / 'tasks').glob('*/*/*/*.json')
+                   if p.stat().st_mtime_ns <= cutoff)
+    counts = Counter()
+    best = None
+    fields = ['source', 'status', 'eligible', 'dataset', 'subject', 'split',
+              'duration_s', 'mean_local_nrmse', 'EEG', 'HbO', 'HbR']
+    with (out / 'selection_candidates.csv').open('w', newline='') as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields)
+        writer.writeheader()
+        for number, path in enumerate(paths, 1):
+            row = json.loads(path.read_text())
+            identity = row['identity']
+            counts[row['status']] += 1
+            item = dict(source=str(path.relative_to(run)), status=row['status'],
+                        eligible=False, dataset=identity['dataset'], subject=identity['subject'],
+                        split=identity['split'], duration_s=identity['window']['duration_s'])
+            fit = row.get('fits', {}).get('tak_tau_beta', {})
+            if (row.get('qualified') and fit.get('qualified')
+                    and identity['window']['duration_s'] == 90):
+                waves = {w['component']: w for w in fit['waveform']}
+                values = [waves[c]['local_centered_nrmse'] for c in COMPONENTS]
+                if not np.isfinite(values).all():
+                    raise ValueError(f'Nonfinite qualified waveform metrics: {path}')
+                score = float(np.mean(values))
+                item.update(eligible=True, mean_local_nrmse=score, **dict(zip(COMPONENTS, values)))
+                counts['eligible_90s'] += 1
+                if best is None or (score, str(path)) < (best[0], str(best[1])):
+                    best = (score, path, row)
+            writer.writerow(item)
+            if number % 25000 == 0:
+                print(f'Ranked {number}/{len(paths)} terminal records', flush=True)
+    if best is None:
+        raise ValueError('No qualified complete 90 s reconstruction in this snapshot')
+    score, source, row = best
+    with np.load(source.with_suffix('.npz'), allow_pickle=False) as archive:
+        arrays = {key: archive[key] for key in archive.files}
+    y, p = arrays['target'], arrays['prediction']
+    if (y.shape != (900, 3) or p.shape != y.shape
+            or not np.isfinite(y).all() or not np.isfinite(p).all()
+            or not arrays['observation_valid'].all() or not arrays['prediction_valid'].all()
+            or not arrays['fit_mask'][:-1].all() or arrays['fit_mask'][-1].any()
+            or not np.array_equal(arrays['time_s'], np.arange(900) / 10.)):
+        raise ValueError('Selected arrays fail shape, support or clock checks')
+    np.testing.assert_allclose(y, p + arrays['residual'], rtol=1e-12, atol=1e-12)
+    metrics = {}
+    for arm, prediction in [('tak_tau_beta', p), ('tak_fixed', arrays['fixed_prediction'])]:
+        fit = row['fits'][arm]
+        local = np.sqrt(np.mean((prediction[:-1] - y[:-1]) ** 2, axis=0)) / y[:-1].std(axis=0)
+        correlation = [float(np.corrcoef(y[:-1, j], prediction[:-1, j])[0, 1]) for j in range(3)]
+        waves = {w['component']: w for w in fit['waveform']}
+        np.testing.assert_allclose(local, [waves[c]['local_centered_nrmse'] for c in COMPONENTS], rtol=1e-10)
+        np.testing.assert_allclose(correlation, [waves[c]['pearson_r'] for c in COMPONENTS], rtol=1e-10)
+        for normalization in ['subject', 'common']:
+            nmse = np.mean(((prediction[:-1] - y[:-1]) / arrays['sd_' + normalization]) ** 2, axis=0)
+            np.testing.assert_allclose(nmse, [fit['metrics_' + normalization][c + '_nmse']
+                                            for c in ['eeg', 'hbo', 'hbr']], rtol=1e-10)
+        metrics[arm] = dict(qualified=fit['qualified'], local_nrmse=local.tolist(), pearson_r=correlation)
+
+    _plot_subject_cache_reconstruction(arrays, out)
+    manifest = dict(schema='tak_best_reconstruction_export_v1', source_run=str(run),
+        snapshot_at=datetime.fromtimestamp(cutoff / 1e9, timezone.utc).isoformat(),
+        producer_progress=progress, terminal_records=len(paths), counts=dict(counts),
+        selection='Minimum unweighted mean of EEG/HbO/HbR local NRMSE among qualified 90-second fits; ties use source path',
+        local_nrmse_definition='RMSE(prediction-target) / SD(target, ddof=0), bins 0..898; raw residual includes bias',
+        source=str(source), identity=row['identity'], score=score, metrics=metrics,
+        display='Scored bins 0..898; final fit-excluded bin omitted from both curves; same frozen subject SD; left labels only EEG, HbO, HbR',
+        target='Measured-derived 10 Hz EEG log-power PC1 and bandpassed cached Hb; first 5-second reference removed',
+        visibility='Full-window offline joint conditional fit; example selected after fitting, not population or prediction performance',
+        verification='Retained mask, clock, residual closure, local/subject/common metrics and correlations reproduced',
+        raw_signal_reads=0, refits=0)
+    (out / 'source_manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
+    shutil.copy2(source, out / 'selected_task.json')
+    shutil.copy2(Path(__file__), out / 'renderer_source.py')
+    print(json.dumps(manifest, ensure_ascii=False, indent=2), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument('--best-subject-reconstruction', action='store_true',
+                        help='Export the best retained public 90 s EEG/HbO/HbR joint reconstruction')
     parser.add_argument('--refed-comparison', action='store_true', help='Render the versioned ten-family four-dataset evidence report')
     parser.add_argument('--comparison-config', type=Path)
     parser.add_argument("--replay", action="store_true", help="Render nonlinear fixed-driver replay against its parent")
@@ -10551,6 +10678,11 @@ def main():
     parser.add_argument("--presentation-name", default="SSM_SEMANTIC_RESPONSE_REPORT.pptx", help="Fresh semantic-response PPT filename; existing exports are preserved")
     parser.add_argument("--volume-fraction-run", type=Path)
     args = parser.parse_args()
+    if args.best_subject_reconstruction:
+        if args.run is None or any(v is True for k, v in vars(args).items() if k != 'best_subject_reconstruction'):
+            parser.error('Choose exclusive best-subject-reconstruction mode and --run')
+        render_best_subject_cache_reconstruction(args.run.resolve(), args.output.resolve())
+        return
     if args.tak_topography_style_preview:
         if args.run is None or any(v is True for k,v in vars(args).items() if k!='tak_topography_style_preview'):parser.error('Choose exclusive topography preview mode and --run')
         render_tak_topography_style_preview(args.run.resolve(),args.output.resolve(),examples=args.topography_examples)
