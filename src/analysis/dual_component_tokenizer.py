@@ -324,6 +324,530 @@ def render_voltage_power_cap_examples(out,export):
         completed_figures=len(figures),planned_examples=len(summary['rows']))
 
 
+
+def voltage_power_cap_intermediate_replay(x,model,proxy,display_index,*,frame_index=417,band_index=0,cap=1.):
+    """Replay the frozen voltage computation and retain compact explanatory traces.
+
+    No fitting occurs. The returned per-band overlap-add is independently
+    accumulated and checked against the producer's sum-before-overlap-add order.
+    """
+    from src.data.dual_component_tokenizer import (
+        voltage_power_cap_bank,voltage_power_cap_frames,voltage_power_cap_reference,
+        project_voltage_second_moment,
+    )
+    x=np.asarray(x,float);channels=x.shape[1]
+    if x.shape!=(18000,channels) or not 0<=display_index<channels:
+        raise ValueError('one 90-second native voltage window and a displayed channel required')
+    a=np.asarray(model['projection']);bank=voltage_power_cap_bank(x)
+    p=np.mean(bank[:,:5].reshape(900,20,5,channels)**2,axis=1).transpose(0,2,1)
+    log=np.log(np.maximum(p,1e-20));current_baseline=log[:50].mean(0)
+    ell=log-current_baseline
+    frames,t=voltage_power_cap_frames(bank)
+    reference=voltage_power_cap_reference(model,proxy,t)
+    aligned=np.stack([np.interp(t,np.arange(900)/10,proxy[:,j]) for j in range(3)],axis=1)
+    completed=model['mean']+(aligned-a@model['mean'])@model['lift'].T
+    scale=np.sqrt(reference)
+    covariance=scale[..., :,None]*model['correlation'][None]*scale[...,None,:]
+    projected,diag=project_voltage_second_moment(frames,covariance,cap)
+    h=np.hanning(201)[:-1];acc=np.zeros((18200,6,channels));direct=np.zeros((18200,channels));den=np.zeros(18200)
+    for k,block in enumerate(projected):
+        start=k*20
+        acc[start:start+200]+=block.transpose(2,0,1)*h[:,None,None]
+        direct[start:start+200]+=block.sum(0).T*h[:,None]
+        den[start:start+200]+=h
+    section=slice(100,18100);contribution=acc[section]/den[section,None,None]
+    s=contribution.sum(1);o=x-s
+    direct=direct[section]/den[section,None]
+    selected=frames[frame_index,band_index];cov=covariance[frame_index,band_index]
+    d=np.sqrt(np.diag(cov));r=cov/d[:,None]/d[None,:];root=np.linalg.cholesky(r)
+    whitened=np.linalg.solve(root,selected/d[:,None])
+    left,singular,right=np.linalg.svd(whitened,full_matrices=False)
+    limit=np.sqrt(cap*200);clipped=np.minimum(singular,limit)
+    gains=np.minimum(1.,limit/np.maximum(singular,np.finfo(float).tiny))
+    transform=(d[:,None]*root)@(left*gains[None,:])@left.T@np.linalg.solve(root,np.diag(1/d))
+    selected_output=projected[frame_index,band_index]
+    final_bank=voltage_power_cap_bank(s);final_frames,_=voltage_power_cap_frames(final_bank)
+    # Independent largest-eigenvalue audit, without applying another projection.
+    white_final=np.linalg.solve(np.linalg.cholesky(model['correlation'])[None],
+        final_frames/scale[..., :,None])
+    final_ratio=np.linalg.eigvalsh(white_final@white_final.swapaxes(-1,-2)/200)[...,-1]/cap
+    final_power=np.mean(final_bank[:,:5].reshape(900,20,5,channels)**2,axis=1).transpose(0,2,1)
+    final_log=np.log(np.maximum(final_power,1e-20));final_log-=final_log[:50].mean(0)
+    return dict(time_native=np.arange(18000)/200,time_proxy=np.arange(900)/10,time_frame=t,
+        raw_voltage=x[:,display_index],carrier_voltage=bank[:,:,display_index],
+        power100ms=p,current_baseline_log_power=current_baseline,log_features=ell,
+        observed_proxy=ell.reshape(900,-1)@a.T,aligned_proxy=aligned,
+        completed_log_power=completed,reference_power=reference,
+        input_frame_RMS=np.sqrt(np.mean(frames[:,:,display_index]**2,axis=-1)),
+        projected_frame_RMS=np.sqrt(np.mean(projected[:,:,display_index]**2,axis=-1)),
+        local_input_ratio=diag['max_input_eigenvalue']/cap,local_output_ratio=diag['max_output_eigenvalue']/cap,
+        minimum_gain=diag['minimum_gain'],clipped_directions=diag['clipped_directions'],
+        band_contributions=contribution[:,:,display_index],S=s[:,display_index],O=o[:,display_index],
+        S_score_all=s[6000:10000],O_score_all=o[6000:10000],ola_denominator=den[section],
+        final_reanalysis_ratio=final_ratio,final_proxy=final_log.reshape(900,-1)@a.T,
+        frame_input=selected,frame_projected=selected_output,
+        frame_time=(frame_index*20-100+np.arange(200))/200,
+        svd_input=singular,svd_output=clipped,svd_gain=gains,
+        raw_space_matrix=transform,frame_reference_covariance=cov,
+        display_index=np.array(display_index),frame_index=np.array(frame_index),band_index=np.array(band_index),
+        max_closure=np.array(np.max(abs(s+o-x))),max_overlap_order_difference=np.array(np.max(abs(s-direct))),
+        max_selected_matrix_difference=np.array(np.max(abs(transform@selected-selected_output))),
+        max_lift_equality_error=np.array(np.max(abs(completed@a.T-aligned))))
+
+
+def _voltage_method_replay_case(payload):
+    """Read only a named accepted example and validate its deterministic replay."""
+    import ast
+    from src.data import dual_component_tokenizer as data
+    run,variant,display,destination,source_snapshot=payload
+    run,destination=Path(run),Path(destination)
+    def read(p):
+        with np.load(p,allow_pickle=False) as z:return dict(z)
+    names=['voltage_power_cap_bank','voltage_power_cap_frames','voltage_power_cap_reference',
+        'project_voltage_second_moment','voltage_power_cap_target']
+    def definitions(path):
+        tree=ast.parse(Path(path).read_text())
+        return {n.name:ast.dump(n,include_attributes=False) for n in tree.body if isinstance(n,ast.FunctionDef)}
+    current=definitions(data.__file__);frozen=definitions(Path(source_snapshot)/'src/data/dual_component_tokenizer.py')
+    if any(current[n]!=frozen[n] for n in names):
+        raise ValueError('numerical owner differs from the retained run; a separate replay migration is required')
+    started=time.monotonic();inputs=read(run/'inputs.npz');model=read(run/'reference.npz')
+    index=list(inputs['channels']).index(display);n=inputs['n_ocular']
+    x=inputs['x'] if variant=='baseline' else inputs['x']+n
+    proxies=read(run/'proxies.npz')[variant]
+    peak=int(np.argmax(abs(n[6000:10000,index])))+6000
+    frame_index=int(round(peak/200/.1))
+    traces=voltage_power_cap_intermediate_replay(x,model,proxies,index,frame_index=frame_index,band_index=0)
+    retained=read(run/'targets'/f'physical_refitted_reference__{variant}__cap1.npz')
+    errors={key:float(np.max(abs(traces[new]-retained[key])))
+        for new,key in [('S_score_all','s_score'),('O_score_all','o_score'),
+            ('reference_power','reference_power'),('final_proxy','final_proxy'),
+            ('local_input_ratio','local_input_ratio'),('local_output_ratio','local_output_ratio')]}
+    relative_final=float(np.max(abs(traces['final_reanalysis_ratio']-retained['final_reanalysis_ratio'])/
+        (1+abs(retained['final_reanalysis_ratio']))))
+    if (max(errors[k] for k in ['s_score','o_score','final_proxy'])>1e-8
+            or errors['reference_power']>1e-8
+            or relative_final>1e-8 or float(traces['max_lift_equality_error'])>1e-9
+            or float(traces['max_selected_matrix_difference'])>1e-8):
+        raise AssertionError(dict(replay_errors=errors,final_ratio_relative=relative_final))
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    np.savez_compressed(destination,**traces)
+    record=dict(status='passed',run=str(run),variant=variant,display_channel=display,
+        array_path=str(destination),source_snapshot=str(source_snapshot),
+        numerical_function_AST_equal=True,retained_array_max_differences=errors,
+        independent_final_ratio_relative_difference=relative_final,
+        frame_selection='nearest 100 ms centre to fixed known-injection absolute peak; band 1–4 Hz',
+        frame_index=frame_index,frame_centre_s=frame_index/10,
+        selected_frame_clipped_modes=int(np.sum(traces['svd_gain']<1)),
+        selected_frame_singular_max=float(traces['svd_input'].max()),
+        selected_frame_minimum_gain=float(traces['svd_gain'].min()),
+        overlap_order_error=float(traces['max_overlap_order_difference']),
+        closure_error=float(traces['max_closure']),seconds=time.monotonic()-started)
+    destination.with_suffix('.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n')
+    return record
+
+
+def render_voltage_power_cap_method_report(front,posterior,export,*,workers=2):
+    """Explain retained development targets; replay voltage only, never refit SSM."""
+    import concurrent.futures
+    import multiprocessing
+    import shutil
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from matplotlib.font_manager import FontProperties,fontManager
+    from experiments.scripts.render_source_diagnostics_report import render_report
+    front,posterior,export=map(lambda p:Path(p).resolve(),(front,posterior,export))
+    if export.exists():raise FileExistsError('method export must be fresh')
+    if shutil.which('pdflatex') is None:
+        raise RuntimeError('include the installed pdflatex directory in PATH before exporting')
+    def read(p):return json.loads(Path(p).read_text())
+    def arrays(p):
+        with np.load(p,allow_pickle=False) as z:return dict(z)
+    summaries=[read(p/'summary.json') for p in (front,posterior)]
+    for root,summary,schema in zip((front,posterior),summaries,
+            ('voltage_power_cap_examples_results_v1','voltage_power_cap_posterior_results_v1')):
+        if summary['schema']!=schema or summary['status']!='completed' or read(root/'verification.json')['status']!='passed':
+            raise ValueError('accepted retained examples required')
+        for row in summary['rows']:
+            case=row['case']
+            if case['split']!='validation' or case['dataset']!='simultaneous_eeg_nirs' or row['status']!='completed':
+                raise ValueError('only named completed development examples are supported')
+    chosen={label:(root,dict(next(r for r in s['rows'] if r['subject']==subject)))
+        for label,root,s,subject in [('B',front,summaries[0],'VP005'),('G',posterior,summaries[1],'VP005'),
+                                    ('F',posterior,summaries[1],'VP002')]}
+    for _,row in chosen.values():
+        row.setdefault('display_channel','Fp1')
+        row.setdefault('channel_count',16)
+        plan=read(Path(row['run'])/'plan.json')
+        if plan.get('test_access')!='forbidden' or plan.get('protected_data')!='forbidden':
+            raise ValueError('retained development boundary not established')
+    export.mkdir(parents=True);(export/'intermediates').mkdir();(export/'figures').mkdir()
+    jobs=[(row['run'],variant,row['display_channel'],str(export/'intermediates'/f'{label}_{variant}.npz'),str(root/'source'))
+        for label,(root,row) in chosen.items() if label!='F' for variant in ('baseline','ocular')]
+    with concurrent.futures.ProcessPoolExecutor(max_workers=min(max(1,workers),2),
+            mp_context=multiprocessing.get_context('spawn')) as pool:
+        replay=list(pool.map(_voltage_method_replay_case,jobs))
+    (export/'replay_verification.json').write_text(json.dumps(replay,ensure_ascii=False,indent=2)+'\n')
+    cases={}
+    for label,(root,row) in chosen.items():
+        run=Path(row['run']);inputs=arrays(run/'inputs.npz');co=read(run/'coordinates.json')
+        fits=read(run/'physical_fits.json');roi=row.get('metric_roi',1)
+        physical={v:arrays(next(f['array_path'] for f in fits if f['variant']==v and f['roi']==roi))
+            for v in ('baseline','ocular')}
+        cases[label]=dict(row=row,inputs=inputs,model=arrays(run/'reference.npz'),physical=physical,
+            coordinate=co[row['case']['rows'][roi]['coordinate']],roi=roi,
+            traces={v:arrays(export/'intermediates'/f'{label}_{v}.npz') for v in ('baseline','ocular')} if label!='F' else {})
+    font=FontProperties(fname='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')
+    fontManager.addfont(font.get_file());plt.rcParams.update({'font.family':font.get_name(),'font.size':10,'axes.unicode_minus':False})
+    blue,red,green,grey='#2469a0','#c24e40','#24826c','#68727e'
+    bands=['1–4 Hz','4–8 Hz','8–13 Hz','13–30 Hz','30–45 Hz','互补载波']
+    figures={};provenance={};statistics={}
+    def save(name,fig,source):
+        fig.tight_layout();path=export/'figures'/f'{name}.png';fig.savefig(path,dpi=250,facecolor='white');plt.close(fig)
+        figures[name]=path;provenance[name]=source
+    def style(ax,xlabel='窗口内时间 / s',ylabel=None):
+        ax.grid(alpha=.18);ax.set_xlabel(xlabel)
+        if ylabel:ax.set_ylabel(ylabel)
+    def pair(ax,t,y0,y1):
+        ax.plot(t,y0,color=blue,lw=1.1,label='注入前');ax.plot(t,y1,color=red,lw=1.05,ls='--',label='注入后')
+    # Shapes are deliberately visible; this schematic does not claim source localization.
+    fig,axs=plt.subplots(3,1,figsize=(10,5.4))
+    texts=[('原始 EEG：18000 × C，200 Hz','5 带功率 → log → 当前前 5 秒参考','3 条 ROI 代理：900 × 3，10 Hz'),
+           ('每个 ROI 的 EEG代理 + HbO/HbR','独立 Tak 状态空间条件拟合','3 条重建代理 → 训练统计补全：901 × 5C'),
+           ('原始 EEG → 6 载波 → 1 秒电压块','参考白化 → 奇异值截断 → 重叠合成','S：18000 × C；O = 原始电压 - S')]
+    for ax,row in zip(axs,texts):
+        ax.axis('off')
+        for k,text in enumerate(row):
+            ax.text(.17+.33*k,.5,text,ha='center',va='center',fontsize=10,
+                bbox=dict(boxstyle='round,pad=.7',facecolor='#edf3f7',edgecolor=blue))
+            if k<2:ax.annotate('',xy=(.34+.33*k,.5),xytext=(.30+.33*k,.5),arrowprops=dict(arrowstyle='->',color=grey))
+    save('01_flow',fig,'Data owner functions voltage_power_cap_*; C=16 frontal or17 posterior; training statistics frozen.')
+    b=cases['B'];bt=b['traces'];idx=int(bt['baseline']['display_index']);t=bt['baseline']['time_native'];tp=bt['baseline']['time_proxy'];tf=bt['baseline']['time_frame']
+    zoom=(t>=40.195)&(t<=43.195)
+    fig,axs=plt.subplots(7,1,figsize=(9.5,9),sharex=True)
+    for j,ax in enumerate(axs):
+        key='raw_voltage' if j==0 else 'carrier_voltage'
+        pair(ax,t[zoom],bt['baseline'][key][zoom] if j==0 else bt['baseline'][key][zoom,j-1],
+             bt['ocular'][key][zoom] if j==0 else bt['ocular'][key][zoom,j-1])
+        ax.set_ylabel(('原始' if j==0 else bands[j-1])+'\nµV');ax.grid(alpha=.18)
+    axs[0].legend(ncol=2);axs[-1].set_xlabel('窗口内时间 / s；各行电压刻度独立')
+    save('02_carriers',fig,'B traces raw_voltage,carrier_voltage; fixed known-injection peak ±1.5s.')
+    fig,axs=plt.subplots(3,2,figsize=(9.5,7.6),sharex=True)
+    for col,band in enumerate((0,2)):
+        for row,key in enumerate(('power100ms','log_features','log_features')):
+            for v,color,ls in [('baseline',blue,'-'),('ocular',red,'--')]:
+                y=bt[v][key][:,idx,band]
+                if row==1:y=y+bt[v]['current_baseline_log_power'][idx,band]
+                axs[row,col].plot(tp,y,color=color,ls=ls,label='注入前' if v=='baseline' else '注入后')
+            style(axs[row,col],ylabel=['100 ms 二阶矩 / µV²','自然对数功率','前 5 秒参考后 log-power'][row])
+        axs[0,col].set_title('B · Fp1 · '+bands[band]);axs[0,col].legend()
+    save('03_power_log',fig,'B traces power100ms, current_baseline_log_power,log_features; no per-plot normalization.')
+    fig,axs=plt.subplots(1,2,figsize=(9.5,4.2))
+    for ax,label in zip(axs,('B','G')):
+        c=cases[label];anchor=c['row']['case']['rows'][c['roi']]['anchor'];pc=np.array(c['coordinate']['pc']).reshape(6,5)
+        im=ax.imshow(pc,cmap='coolwarm',vmin=-.4,vmax=.4,aspect='auto');ax.set_yticks(range(6),anchor['eeg_channels'])
+        ax.set_xticks(range(5),bands[:5],rotation=40,ha='right');ax.set_title(label+' · '+anchor['hb_channel']+' 邻域 PCA 载荷')
+        fig.colorbar(im,ax=ax,label='单位范数载荷，无量纲')
+    save('04_pca',fig,'B/G coordinates.json pc (6 channels ×5 bands), frozen six training windows; shared color limits.')
+    for label,c in cases.items():
+        physical=c['physical'];factor=c['coordinate']['hb_factor'];sd=np.array(c['coordinate']['sd'])
+        fig,axs=plt.subplots(3,2,figsize=(9.5,7.5),sharex=True,sharey='row')
+        for col,v in enumerate(('baseline','ocular')):
+            a=physical[v]
+            for j in range(3):
+                scale=1. if j==0 else factor
+                axs[j,col].plot(a['time_s'][:899],a['u'][:899,j]/scale,color=grey,lw=1,label='观测')
+                axs[j,col].plot(a['time_s'][:899],a['physical'][:899,j]/scale,color=blue if col==0 else red,lw=1.1,label='SSM 完整预测')
+                err=np.sqrt(np.mean(((a['physical'][:899,j]-a['u'][:899,j])/sd[j])**2))
+                axs[j,col].set_title(('注入前' if col==0 else '注入后')+f' · NRMSE={err:.4f}')
+                style(axs[j,col],ylabel=['EEG 代理 / 模型尺度','HbO / µM','HbR / µM'][j]);axs[j,col].legend(fontsize=9)
+        save(label+'_ssm',fig,f"{c['row']['run']}/physical_fits.json: selected ROI {c['roi']}; physical/u, first899 valid points; Hb divided by frozen hb_factor.")
+    fig,axs=plt.subplots(3,1,figsize=(9.5,6.6),sharex=True)
+    for j,ax in enumerate(axs):
+        pair(ax,tp,bt['baseline']['observed_proxy'][:,j],bt['ocular']['observed_proxy'][:,j])
+        ax.plot(tf,bt['baseline']['aligned_proxy'][:,j],color=green,label='SSM 注入前')
+        ax.plot(tf,bt['ocular']['aligned_proxy'][:,j],color='#8e62ad',ls=':',label='SSM 注入后')
+        style(ax,ylabel=['左运动区','前额','右运动区'][j]+'\n模型尺度')
+    axs[0].legend(ncol=4,fontsize=9)
+    save('05_three_proxies',fig,'B replay observed_proxy vs aligned_proxy; full90s offline; independent regional fits.')
+    fig,axs=plt.subplots(5,1,figsize=(9.5,7.4),sharex=True)
+    for ax,j,name in zip(axs,[0,1,2,3,5],['驱动 r','血管信号 a','相对流量 f','相对体积 v','相对脱氧量 q']):
+        pair(ax,tp,b['physical']['baseline']['states'][:,j],b['physical']['ocular']['states'][:,j]);style(ax,ylabel=name)
+        if j>=2:ax.axhline(1,color=grey,ls=':',lw=.7)
+    axs[0].legend(ncol=2)
+    save('06_states',fig,'B physical states[:,0,1,2,3,5]; stored pressure column4 equals volume, not a sixth free state.')
+    fig,axs=plt.subplots(1,3,figsize=(10,6))
+    model=b['model'];lift=model['lift']*.025;lim=np.max(abs(lift))
+    for j,ax in enumerate(axs):
+        im=ax.imshow(lift[:,j].reshape(-1,5),cmap='coolwarm',vmin=-lim,vmax=lim,aspect='auto')
+        ax.set_yticks(range(len(b['inputs']['channels'])),b['inputs']['channels']);ax.set_xticks(range(5),bands[:5],rotation=65,ha='right')
+        ax.set_title(['左运动区 +1 SD','前额 +1 SD','右运动区 +1 SD'][j]);fig.colorbar(im,ax=ax,label='补全 log-power 变化')
+    save('07_lift',fig,'B reference.npz lift × original EEG proxy trainingSD0.025; common color limits; no spatial interpolation.')
+    fig,axs=plt.subplots(5,1,figsize=(9.5,7.5),sharex=True)
+    for j,ax in enumerate(axs):
+        ax.plot(tp,bt['ocular']['log_features'][:,idx,j],color=grey,label='注入后 EEG 实测特征')
+        pair(ax,tf,bt['baseline']['completed_log_power'][:,idx*5+j],bt['ocular']['completed_log_power'][:,idx*5+j])
+        style(ax,ylabel=bands[j]+'\nlog-power')
+    axs[0].legend(ncol=3,fontsize=9)
+    save('08_completed_log',fig,'B Fp1 five features; completed_log_power reference versus observed log_features; reference not a fitted per-electrode waveform.')
+    for label in ('B','G'):
+        c=cases[label];tr=c['traces'];di=int(tr['baseline']['display_index'])
+        fig,axs=plt.subplots(3,2,figsize=(9.5,8),sharex=True)
+        for j,ax in enumerate(axs.flat):
+            for v,color,ls in [('baseline',blue,'-'),('ocular',red,'--')]:
+                ax.plot(tf,np.sqrt(tr[v]['reference_power'][:,j,di]),color=color,ls=ls,label='参考 RMS '+('前' if v=='baseline' else '后'))
+            ax.plot(tf,tr['ocular']['input_frame_RMS'][:,j],color=grey,lw=.9,label='注入后输入块 RMS')
+            ax.plot(tf,tr['ocular']['projected_frame_RMS'][:,j],color=green,lw=.9,label='投影后块 RMS')
+            ax.set_title(label+' · '+c['row']['display_channel']+' · '+bands[j]);style(ax,ylabel='µV（各图独立刻度）')
+        axs[0,0].legend(fontsize=8)
+        save(label+'_reference_rms',fig,f'{label} traces reference_power, input_frame_RMS, projected_frame_RMS; sqrt(diagΓ) is uncentered RMS scale, not SD.')
+    fig,axs=plt.subplots(1,2,figsize=(10,5))
+    for ax,mat,title in [(axs[0],model['correlation'][0],'冻结 1–4 Hz 二阶矩相关'),
+                          (axs[1],bt['ocular']['raw_space_matrix'],'41.7 秒块的电压线性作用矩阵')]:
+        lim=max(1.,float(np.max(abs(mat))));im=ax.imshow(mat,cmap='coolwarm',vmin=-lim,vmax=lim)
+        ax.set_xticks(range(16),b['inputs']['channels'],rotation=90,fontsize=7);ax.set_yticks(range(16),b['inputs']['channels'],fontsize=7)
+        ax.set_title(title);fig.colorbar(im,ax=ax,label='无量纲；各图独立色标')
+    save('09_matrices',fig,'B correlation[0] and ocular raw_space_matrix; rows output channel, columns input channel; not a fixed cross-window denoising filter.')
+    fig,axs=plt.subplots(2,2,figsize=(9.5,6.7));z=bt['ocular'];nmode=len(z['svd_input'])
+    axs[0,0].plot(np.arange(nmode)+1,z['svd_input'],'o-',color=grey,label='白化输入');axs[0,0].plot(np.arange(nmode)+1,z['svd_output'],'x--',color=green,label='截断后')
+    axs[0,0].axhline(np.sqrt(200),color=red,ls=':',label='上限 sqrt(200)');axs[0,0].set_yscale('log');axs[0,0].legend(fontsize=8);style(axs[0,0],'奇异方向编号','奇异值 / 无量纲')
+    axs[0,1].bar(np.arange(nmode)+1,z['svd_gain'],color=green);style(axs[0,1],'奇异方向编号','乘法增益');axs[0,1].set_ylim(0,1.1)
+    for ax,ch in zip(axs[1],[idx,list(b['inputs']['channels']).index('C3')]):
+        ax.plot(z['frame_time'],z['frame_input'][ch],color=grey,label='局部输入');ax.plot(z['frame_time'],z['frame_projected'][ch],color=green,label='局部输出')
+        ax.set_title(str(b['inputs']['channels'][ch])+' · 1–4 Hz');style(ax,ylabel='µV');ax.legend()
+    save('10_svd',fig,'B ocular frame nearest known-injection absolute peak (417), band0; no best-output selection. Local block before overlap-add.')
+    fig,axs=plt.subplots(3,1,figsize=(9.5,6.5),sharex=True)
+    for j,ax in enumerate(axs):
+        for v,color,ls in [('baseline',blue,'-'),('ocular',red,'--')]:
+            key=['minimum_gain','clipped_directions','local_input_ratio'][j];y=bt[v][key][:,0]
+            if j==1:y=y/16
+            ax.plot(tf,y,color=color,ls=ls,label='注入前' if v=='baseline' else '注入后')
+        style(ax,ylabel=['最小奇异增益','被截断方向比例','输入最大广义二阶矩比'][j])
+    axs[2].set_yscale('log');axs[0].legend(ncol=2)
+    save('11_gains',fig,'B lowband local diagnostics; perframe independent SVD, direction indices need not track identical modes across time.')
+    fig,axs=plt.subplots(6,1,figsize=(9.5,8),sharex=True)
+    for j,ax in enumerate(axs):
+        pair(ax,t[zoom],bt['baseline']['band_contributions'][zoom,j],bt['ocular']['band_contributions'][zoom,j]);style(ax,ylabel=bands[j]+'\nµV')
+    axs[0].legend(ncol=2);axs[-1].set_xlabel('窗口内时间 / s；各行独立刻度；六行相加得到 S')
+    save('12_ola',fig,'B independently accumulated perband overlap-add contributions; verified vs producer sum-before-OLA order.')
+    for label in ('B','G'):
+        c=cases[label];tr=c['traces'];roi=c['roi'];fig,axs=plt.subplots(2,1,figsize=(9.5,5.5),sharex=True)
+        for ax,v in zip(axs,('baseline','ocular')):
+            ax.plot(tp,tr[v]['final_proxy'][:,roi],color=green,label='最终 S 再提取代理')
+            ax.plot(tf,tr[v]['aligned_proxy'][:,roi],color=blue if v=='baseline' else red,ls='--',label='SSM 重建代理')
+            ax.set_title(label+' · '+('注入前' if v=='baseline' else '注入后'));style(ax,ylabel='模型尺度');ax.legend()
+        save(label+'_proxy_consistency',fig,f'{label} final_proxy vs aligned_proxy; final S log powers re-referenced to its own first5s; equality is not imposed.')
+    fig,axs=plt.subplots(2,2,figsize=(9.5,6.5),sharex=True,sharey='row')
+    for col,label in enumerate(('B','G')):
+        tr=cases[label]['traces']
+        for row,key in enumerate(('local_output_ratio','final_reanalysis_ratio')):
+            for v,color,ls in [('baseline',blue,'-'),('ocular',red,'--')]:
+                y=tr[v][key].max(1);axs[row,col].plot(tf,y,color=color,ls=ls,label='注入前' if v=='baseline' else '注入后')
+            axs[row,col].axhline(1,color=grey,ls=':',label='约束上限 1');axs[row,col].set_yscale('log')
+            axs[row,col].set_ylim((.5,2) if row==0 else (.5,200))
+            axs[row,col].set_title(label+' · '+['局部投影后','最终 S 重新滤波后'][row]);style(axs[row,col],ylabel='六载波最大比值 / 对数轴');axs[row,col].legend(fontsize=8)
+        statistics[label]={v:dict(max_local=float(tr[v]['local_output_ratio'].max()),max_final=float(tr[v]['final_reanalysis_ratio'].max()),
+            proxy_RMSE=float(np.sqrt(np.mean((tr[v]['final_proxy'][:899, cases[label]['roi']]-tr[v]['aligned_proxy'][:899,cases[label]['roi']])**2)))) for v in tr}
+    save('13_final_bound',fig,'Perframe maximum over6bands of max eigenvalue of whitened uncentered second moment / cap. Not voltage amplification or confidence interval.')
+    for label,filename in [('B','B_VP005_voltage.png'),('G','G_VP005_O2_voltage.png'),('F','F_VP002_O1_voltage.png')]:
+        src=chosen[label][0]/'export_v3'/filename;dest=export/'figures'/filename;shutil.copyfile(src,dest)
+        figures[label+'_final']=dest;provenance[label+'_final']=str(src)
+    content=_voltage_method_report_content(cases,summaries,figures,statistics,replay,front,posterior)
+    path=export/'report_content.json';path.write_text(json.dumps(content,ensure_ascii=False,indent=2)+'\n')
+    (export/'figure_provenance.json').write_text(json.dumps(provenance,ensure_ascii=False,indent=2)+'\n')
+    (export/'derived_statistics.json').write_text(json.dumps(statistics,indent=2)+'\n')
+    checks=render_report(path,export/'report')
+    result=dict(status='completed',export=str(export),figures=len(figures),replays=len(replay),checks=checks)
+    (export/'completion.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+    return dict(status='completed',export=str(export),figures=len(figures),replays=len(replay))
+
+
+def _voltage_method_report_content(cases,summaries,figures,statistics,replay,front,posterior):
+    """Visible Chinese explanation, tied to retained arrays and actual operators."""
+    def p(text):return dict(type='paragraph',text=text)
+    def eq(latex,explanation):return dict(type='equation',latex=latex,explanation=explanation)
+    def fig(key,caption):return dict(type='figure',path=str(figures[key]),caption=caption,preserve_bitmap=True)
+    def table(columns,rows,widths=None):return dict(type='table',columns=columns,rows=rows,widths=widths or [1]*len(columns))
+    sections=[]
+    def section(title,*blocks):sections.append(dict(title=title,page_break=True,blocks=list(blocks)))
+    b=cases['B'];z=b['traces']['ocular'];co=b['coordinate']
+    section('1. 监督对象：由原始电压和条件代理共同定义',
+        p('目标是给原始 EEG 构造同采样率、同通道的两路连续监督信号。S 是满足局部参考二阶矩上限的电压分量，O 是剩余电压。这里的 S/O 是工程分解标签，尚不能命名为纯神经信号与纯伪迹。'),
+        eq(r'S=\mathcal F(x,\widehat{\boldsymbol p};\Theta_{\rm train}),\qquad O=x-S',
+           'x 为当前窗口原始 EEG 电压，单位微伏；重建代理为三个 ROI 的低维时间轨迹；训练统计包括 PCA、尺度、log-power 协方差及通道二阶矩相关。'),
+        p('仅有 SSM 输出不能唯一还原 200 Hz EEG。平方功率丢失符号和相位：一段电压及其整体反号具有相同功率代理；三个数也不能唯一指定 80 或 85 个通道×频带特征。当前设计用原始 EEG 提供快速波形，用 SSM 输出形成幅度约束，再按训练统计选择一种条件分解。投影仍会改变幅度、混合通道并可能改变局部波形，不能声称严格保持相位。'),
+        fig('01_flow','三个计算层次：观测压缩、条件模型、原始电压约束。C 为面板中不重复的 EEG 电极数；前额面板 C=16，枕区面板 C=17。'))
+    anchors=[]
+    for label in ('B','G'):
+        c=cases[label]
+        for r in c['row']['case']['rows']:
+            a=r['anchor'];anchors.append([label,a['region'],a['hb_channel'],', '.join(a['eeg_channels'])])
+    section('2. fNIRS 通道是空间锚点，不是电压源定位',
+        p('每个感兴趣区域（ROI）选定一个 Hb 通道，并在归一化头部坐标中选其最近的六个 EEG 电极。六通道×五频带经一个训练 PCA 方向压成一条 EEG 代理，与该 Hb 通道的 HbO/HbR 联合拟合。由此得到的是“以 Hb 通道为锚点的局部 EEG 功率统计”，不是该点的皮层电势，也不是 EEG 逆源定位结果。'),
+        table(['面板','ROI','Hb 锚点','六个 EEG 电极'],anchors,[.5,1.2,.7,2.8]),
+        p('前额面板有三个 ROI、共 16 个不重复电极；枕区面板保留左运动区与前额，替换右运动区为枕区，共 17 个电极。共享电极在联合电压向量中只出现一次，三个 PCA 投影行可以重叠。没有导联场、皮层源网格或体积传导逆算，因而不能把统计补全解释为从 fNIRS 点向头皮插值电压。'))
+    section('3. 数据支持、冻结对象与样例选择',
+        table(['阶段','可见数据与用途','本版本处理'],[
+            ['训练统计','VP001/003/006/007/008/009 各一段 90 秒','PCA 用 5400 个 100 ms 点；参考统计用各窗 [15,75) 秒，共 3600 点'],
+            ['当前条件拟合','验证窗口全部 90 秒 EEG 代理与 Hb','每 ROI 重估 900 点驱动及四初态；Tak 参数、PCA、统计参考冻结'],
+            ['电压目标生成','同窗原始 EEG 与三个重建代理','901 个 1 秒块；100 ms 步长；每块六载波联合通道投影'],
+            ['眼电评分','注入前后各一套条件解','只在 [30,50) 秒计算已知变化误差；4000 电压点或 200 代理点'],
+            ['完整模型评分','模型输出与观测','每模态 899 个有效点；除以原训练 SD，不使用加权优化尺度']],[1,2,2.8]),
+        p('主线 B 为 VP005/Fp1，扩展 G 为同一 VP005 窗口的 O2；两者并非独立被试。B/G 用于解释较清楚的计算链，F=VP002/O1 展示高模型误差。全部七组、五名被试都在汇总表中保留。原 A 为 VP002 的事件 26，其余新例使用既定事件 0；各被试原候选分母为 23 窗，本报告没有按中间量重新挑窗。RMS 指均方根，SD 指标准差，NRMSE 指归一化均方根误差；二阶矩开方的 RMS 不等于去均值后的 SD。'),
+        p('EEG 原始参考为 TP9、采样率 200 Hz、单位微伏。Hb 来自保留的统一 10 Hz 缓存，单位微摩尔，已按原合同完成转换与 0.01–0.2 Hz 处理，不再次乘 1000 或新增滤波。EEG 与 Hb 使用各自记录时间起点对齐事件；B/G 的 EEG 起点为 0 秒、Hb 为 14.352 秒，报告横轴均为对齐后的窗口时间。'),
+        p('这是一项完整窗口可见的离线条件重建。零相位 EEG 滤波、离线 Hb 处理和整窗求解均使用未来信息。七组不是七个独立被试，数千时间点或重叠块也不是独立样本；本报告不做显著性检验或总体置信区间。'))
+    section('4. 从原始电压形成五频带相对功率特征',
+        eq(r'\begin{aligned}z_b&=\mathcal B_bx\quad(b=1,\ldots,5),&z_6&=x-\sum_{b=1}^{5}z_b,\\P_{kcb}&=\frac1{20}\sum_{n=20k}^{20k+19}z_b[n,c]^2,&\ell_{kcb}&=\log\max(P_{kcb},10^{-20})-\frac1{50}\sum_{j=0}^{49}\log\max(P_{jcb},10^{-20}).\end{aligned}',
+           '五个四阶 Butterworth 双向带通为 1–4、4–8、8–13、13–30、30–45 Hz；c 是电极，b 是频带，k 是 100 ms 时间箱。P 是不减均值的二阶矩，单位平方微伏；log-power 差无量纲。'),
+        p('先滤波，再逐 20 点平方平均，最后取自然对数。当前窗口前 5 秒的 50 个 log-power 点只定义相对变化零点，并不是训练均值。第六载波是精确电压互补项，包含直流、频带外成分和带通重叠补偿；它不是单独的高频噪声带。五个 Butterworth 载波也不是正交能量分解，不能将六项平方和当作原始总功率。'),
+        p('100 ms 功率箱时间戳取左边界 0、0.1、…、89.9 秒。之后的 1 秒电压块使用中心时间 0、0.1、…、90 秒。两个统计的时间支持不同，900 点功率与 901 个局部块不可直接视作同一算子。'))
+    section('5. 实际电压：同一眼电如何进入不同载波',
+        fig('02_carriers','B：VP005/Fp1。蓝实线为原始自然背景，红虚线为加入同一眼电后；首行为原始电压，其余六行为滤波载波。放大区间固定为已知注入绝对峰附近 ±1.5 秒；各行刻度独立。'),
+        p('低频载波呈现慢峰及其滤波延伸，快速载波仍包含背景起伏；互补项并非零。滤波会把有限时段注入影响延伸到邻近时间。图示用于解释信号路径，眼电评分仍使用完整 [30,50) 秒，不能只按峰附近的视觉差异判断性能。'))
+    section('6. 中间量：功率、对数与参考零点',
+        fig('03_power_log','B/Fp1 的 1–4 Hz 与 8–13 Hz。每列从上到下为 100 ms 二阶矩、自然对数功率、当前前 5 秒参考后的特征。蓝实线/红虚线为注入前/后；每幅纵轴独立。'),
+        p('平方平均消除了电压正负号；对数压缩幅度跨度；减去首段均值使每个特征表达相对变化。三步作用不同。代理约束依赖这种相对功率特征，而不是 200 Hz 电压的瞬时极性。参考零点和后面恢复绝对功率所用的训练基线也不同。'))
+    section('7. PCA 将六电极、五频带压成一个代理',
+        eq(r'p^{\rm obs}_{kj}=g_{Ej}\,\boldsymbol v_j^\top\boldsymbol\ell_{k,\mathcal N_j},\qquad g_{Ej}=\frac{0.025}{\sqrt{\lambda_{1j}}},\qquad \boldsymbol p^{\rm obs}_k=A\boldsymbol\ell_k',
+           'j 为 ROI，邻域特征维数为 30；v 为单位范数第一主成分，最大绝对载荷取正号；特征值来自六个训练窗口的中心化协方差。PCA 训练时中心化，但代理投影不再减训练均值；输入已按当前窗口前 5 秒参考。A 的形状为 3×80 或 3×85。'),
+        p(f'B 前额的 EEG 系数为 {co["eeg_factor"]:.9f}，Hb 共用系数为 {co["hb_factor"]:.9f}；EEG 原训练 SD 固定为 0.025。HbO/HbR 共用缩放系数按两者训练方差均值确定，但各自原训练 SD 仍不同。模型尺度是数据集/位置冻结坐标，不是绝对生理标定。'),
+        fig('04_pca','前额 B 与枕区 G 的训练载荷。行是六个 EEG 电极，列是五个频带，颜色为有符号 PCA 权重；两图共用 -0.4 至 0.4 色标。权重是统计方向，不是解剖贡献或脑源强度。'))
+    section('8. SSM：每个 ROI 用一个驱动解释三条观测',
+        eq(r'\begin{aligned}\dot a&=r-0.64a-0.32(f-1),&\dot f&=a,\\\dot v&=\frac{f-v^{1/0.32}}{2+2},&F_{\rm out}&=v^{1/0.32}+2\dot v,\\\dot q&=\frac{fE(f)/0.32-F_{\rm out}q/v}{2},&E(f)&=1-(1-0.32)^{1/f},\\h_O&=(v-1)-0.35(q-1),&h_R&=0.35(q-1).\end{aligned}',
+           'r 为有效驱动，a 为血管信号；f、v、q 分别为相对流量、体积和脱氧量，静息参考为 1。固定 kappa=0.64、gamma=0.32、alpha=0.32、tau=2 秒、黏弹时间=2 秒、E0=0.32、P0=1、Q0=0.35、神经血管增益=1。四初态为 a/f/v/q；存储压力列与 v 绑定。'),
+        p('驱动 r 经过 EEG 参考观测算子后给出重建代理，即减去其前 50 点均值；Hb 状态先生成模型 HbO/HbR，再经原生时间插值、100 ms 聚合及首段参考算子与观测比较。图中的 Hb 曲线除以冻结 Hb 系数后回到缓存单位。三个 ROI 分别拟合，不存在本版本中一个共享的全脑驱动。'),
+        p('这些输出是给定参数、观测、正则化和完整时间窗后的条件估计。它们不是隐藏生理状态真值。该固定参数实现借鉴 Tak 血流动力学，但本项目的代理构造与电压功率约束是额外工程设计，不能由生理模型文献直接担保正确性。'))
+    section('9. Hb 优先权重改变目标函数，不改变报告尺度',
+        eq(r'\begin{aligned}J={}&0.4\!\sum_{k,m\ {\rm valid}}w_m\left(\frac{\widehat u_{km}-u_{km}}{s_m}\right)^2+0.01\left\|\frac{D_2r}{(0.1)^{3/2}}\right\|_2^2\\&+100\{a_0^2+(f_0-1)^2+(v_0-1)^2+(q_0-1)^2\}+\frac{0.1}{(\log2)^2}\sum_k(\log f_k)^2,\\&(w_E,w_O,w_R)=(0.1,10,10).\end{aligned}',
+           'u/预测u 为模型尺度的 EEG代理、HbO、HbR；s 为各自原训练 SD，D2 为不除步长的二阶差分。0.4 是 dt=0.1 秒与原观测参考步长 0.25 秒之比。先对每模态标准化平方误差加权，再跨有效时间点求和。'),
+        p('等价实现是仅在优化器中使用 s 除以权重平方根。积分误差检查和所有报告 NRMSE 仍使用原 s，不会因为将 EEG 权重降低而人为缩小 EEG 报告误差。逐 ROI 可见三条完整观测的前 899 点，最后一点按原掩码排除。'),
+        p('当前求解自由度是 900 个驱动采样和四个血管初态；没有重新估计 PCA、功率协方差或 Tak 参数。RK4 每 0.1 秒四子步，八子步复核；接受条件包括投影缩放梯度不超过 1e-5、积分差不超过 0.005 原训练 SD。数值接受不等于观测准确，更不等于生理状态可识别。'))
+    section('10. 前额实测：Hb 拟合与 EEG 代理各自检查',
+        fig('B_ssm','B/VP005 前额 ROI：左列注入前、右列注入后。灰线为实际观测，彩线为 SSM 完整预测；各行左右共用纵轴。标题 NRMSE 使用完整 899 点与原训练 SD，向下为好。'),
+        p('加入眼电只改变 EEG，Hb 数据逐点不变，但联合拟合的驱动和初态可以随之改变。Hb 权重较大使解更偏向 Hb 重建；这是一种折中，不能推断偏离模型的 EEG 就都是伪迹。图中 EEG 代理的快变与模型轨迹的差异，正是随后功率参考可能压低真实变化的原因之一；这一机制解释仍需结合保留的神经注入对照。'))
+    section('11. 三条重建代理共同约束整个电极面板',
+        fig('05_three_proxies','B 的三个 ROI。蓝实线/红虚线为实际 EEG 代理注入前/后；绿实线/紫点线为对应 SSM 重建。曲线是 10 Hz 功率统计或其条件估计，不是电压。'),
+        p('本次眼电只进入前额邻域；未受影响的左右运动区在输入逐点一致后复用原解。目标生成仍使用三个 ROI 的重建代理，并通过 A 与训练协方差共同决定全 16 通道参考。不能只把 Fp1 所属 ROI 单独逆变换后忽略其他约束。'))
+    section('12. 条件状态随时间变化，但不是独立测量',
+        fig('06_states','B 前额的 r、a、f、v、q 轨迹。蓝实线/红虚线为注入前/后；f/v/q 的灰点线为参考值 1。各行独立刻度，均为模型内部尺度。'),
+        p('r 提供驱动，a/f 传递至血管体积 v 和脱氧量 q，后两者再产生 HbO/HbR。图中轨迹由同一组观测联合估计，不能把它们当作额外独立证据。S/O 构造直接使用经观测算子得到的重建 EEG 代理，而不把所有血管状态拼接成电压。'))
+    section('13. 三个代理如何补全 80/85 维 log-power',
+        eq(r'\begin{aligned}\widehat{\ell}&=\arg\min_{\ell:\,A\ell=\widehat p}(\ell-\mu)^\top\Sigma^{-1}(\ell-\mu)\\&=\mu+K(\widehat p-A\mu),\qquad K=\Sigma A^\top(A\Sigma A^\top)^{-1},\quad AK=I_3.\end{aligned}',
+           'mu 为训练相对 log-power 均值，Sigma 为其收缩协方差；K 为条件补全矩阵，形状 80×3 或 85×3。公式逐时间点应用；代理先线性插值至 901 个块中心，90 秒端点沿用末值。'),
+        eq(r'\Sigma=0.9\,\Sigma_{\rm emp}+0.1\,\operatorname{diag}\{\max(\operatorname{diag}\Sigma_{\rm emp},\epsilon)\},\quad\epsilon=\max(10^{-8}\max\operatorname{diag}\Sigma_{\rm emp},10^{-12})',
+           '训练均值和总体协方差采用各训练窗 [15,75) 秒相对 log-power，共 3600 点；收缩提高可逆性。这些训练信号未被宣称为干净 EEG。'),
+        p('可由拉格朗日乘子直接求得该解：最小化训练 Mahalanobis 距离，并令三个代理投影严格一致。80 维空间剩余 77 维、85 维剩余 82 维由训练统计选择；因此这是一个带先验的补全，不是信息无损逆变换。代理超出训练范围时，补全与指数功率会外推；实现不裁剪这些外推值。'))
+    section('14. 补全矩阵展示训练统计如何传递代理变化',
+        fig('07_lift','B：K 的三列各乘原 EEG 代理训练 SD=0.025。每图表示仅相应代理增加一个 SD、其余代理固定时，各电极五频带 log-power 的线性变化；行列及共同色标均明确标出。'),
+        p('同一代理可影响面板中的多个电极和频带，这是训练协方差关系的结果。正色表示参考 log-power 增加，负色表示减少；既不是能量占比，也不是实际刺激引起的因果效应。该图是固定矩阵的解析作用，不是重新拟合实验。'))
+    section('15. 补全波形不要求逐电极贴合实测特征',
+        fig('08_completed_log','B/Fp1 五频带：灰线为注入后实际相对 log-power；蓝实线/红虚线为由注入前/后 SSM 代理补全的参考。每行独立纵轴。'),
+        p('严格成立的是补全向量经 A 投影等于 SSM 代理，而不是每个电极频带的补全值等于观测。灰线与参考的偏离会传递到局部功率约束，但偏离本身无法辨别眼电、正常神经活动、训练分布变化或 SSM 失配。'))
+    section('16. 从相对 log-power 到绝对二阶矩参考',
+        eq(r'Q_{kcb}=\exp(\widehat\ell_{kcb}+b^{\rm train}_{cb}),\quad\Gamma_{kb}=D_{kb}R_bD_{kb},\quad D_{kb}=\operatorname{diag}\sqrt{Q_{kb}}',
+           'b_train 是六个训练窗口前 5 秒平均 log-power 的逐特征中位数；不是当前窗口的基线。Q 单位平方微伏。第六载波没有 PCA 代理，其 Q 是训练局部二阶矩的逐通道中位数，并随时间固定。'),
+        eq(r'R_b=0.9\,\operatorname{mean}_{\rm train}\!\left[\frac{M_{b,cd}}{\sqrt{M_{b,cc}M_{b,dd}}}\right]+0.1I,\qquad M_b=\frac{V_bV_b^\top}{200}',
+           'V 是 C×200 的 1 秒载波块；M 不减块均值。相关先按每个训练块标准化再平均，并收缩至单位阵；因此 R 不是通常去均值后的 Pearson 相关。Gamma 是通道间非中心二阶矩参考。'),
+        p('使用训练基线意在避免把当前污染抬高的基线直接写回参考；代价是当前幅度若与训练分布不同，也会被限制。每通道根号 Q 是 RMS 尺度而非标准差；约束还包含非对角相关，因此不是逐电极独立的幅度裁剪。'))
+    section('17. 前额参考与局部 RMS 的实际关系',
+        fig('B_reference_rms','B/Fp1。蓝实线/红虚线为参考 RMS 注入前/后；灰线为注入后 1 秒输入块 RMS；绿线为局部投影后 RMS。六幅纵轴独立；第六载波参考不随代理变化。'),
+        p('输入 RMS 超过参考时，对应协方差方向可能被收缩；即使单个通道低于其参考，多通道相关也可能导致某个广义方向越界。绿色是局部块输出，尚未做 Hann 重叠合成，不能直接当作最终 S 的重新提取功率。'))
+    section('18. 电压投影：白化、奇异值截断、逆变换',
+        eq(r'\begin{aligned}Z^*&=\arg\min_Z\|H^{-1}(Z-V)\|_F^2\quad\mathrm{s.t.}\quad ZZ^\top/L\preceq\lambda\Gamma,\\H&=D\operatorname{chol}(R),\quad W=H^{-1}V=U\operatorname{diag}(\sigma_i)B^\top,\\Z^*&=HU\operatorname{diag}\{\min(\sigma_i,\sqrt{\lambda L})\}B^\top,\quad L=200,\ \lambda=1.\end{aligned}',
+           'V/Z 均为 C×200 电压块；H 将模型参考变为单位二阶矩尺度。矩阵半序要求所有空间方向的非中心二阶矩均不超过参考，而不仅是对角线。B 为右奇异向量矩阵，与样例标签 B 无关。'),
+        p('白化后约束等价于最大奇异值不超过根号 200；在白化 Frobenius 距离下，逐奇异值截断给出最小改动。小于上限的方向保持，越界方向乘以阈值/奇异值。所有方向已可行时原块逐点保留，包括其均值。增益属于当前奇异方向，不是固定电极增益；不同时间块的方向也未做追踪匹配。'),
+        p('这是加权最小改动，不能称为原始电压欧氏空间的最小二乘投影；逆白化可混合通道。局部计算用稳定 SVD，避免先平方形成病态矩阵。此处的 lambda=1 是既定参考上限，未为本报告按样例调优。'))
+    section('19. 通道相关和一次实际投影的作用矩阵',
+        fig('09_matrices','B 左图为冻结 1–4 Hz 二阶矩相关；右图为注入后 41.7 秒中心块的电压作用矩阵 T，使局部输出= T×输入。行是输出电极，列是输入电极；两幅独立色标。'),
+        p('右图非对角项说明一个电极的输出可能包含其他电极的线性组合。T 由当前块的奇异向量和增益决定，不是跨所有窗口固定的滤波器。因此必须同时检查注入电极与全通道误差，不能只看到 Fp1/O2 眼电减小便认定没有空间串扰。'))
+    section('20. 眼电峰附近：哪些奇异方向被收缩',
+        fig('10_svd','B：中心 41.7 秒、1–4 Hz 的 1 秒块。上左为白化奇异值与阈值，上右为对应增益；下方为 Fp1 和 C3 的局部输入/输出。编号只表示该块的奇异值排序。'),
+        p(f'该注入后块的 {len(z["svd_gain"])} 个方向中有 {int(np.sum(z["svd_gain"]<1))} 个被截断，最小增益为 {float(z["svd_gain"].min()):.5g}，最大输入奇异值为 {float(z["svd_input"].max()):.5g}。块中心按已知注入绝对峰的最近 100 ms 节点选定，不依据 S 输出挑选。下方局部波形尚未叠加其他载波或邻块。'))
+    section('21. 全窗口收缩强度是随块变化的',
+        fig('11_gains','B 的 1–4 Hz 载波：最小奇异增益、被截断方向数/16、输入最大广义二阶矩比。蓝实线/红虚线为注入前/后；底图使用对数轴。'),
+        p('较小增益表示某个白化空间方向收缩较强，不等价于该时刻某个电极丢失同样比例的能量。自然背景也可触发收缩，眼电以外的活动并没有自动豁免。图中 901 个高度重叠的块用于描述时间行为，不能作为 901 次独立验证。'))
+    section('22. 重叠合成恢复原采样率，残差保证闭合',
+        eq(r'S[n,c]=\frac{\sum_{k,b}h[n-s_k]Z^*_{kb}[c,n-s_k]}{\sum_kh[n-s_k]},\qquad O[n,c]=x[n,c]-S[n,c]',
+           'h 是长 200 点的周期 Hann 窗，即 np.hanning(201) 去掉末点；步长 20 点。输入两端各反射 100 点，完成后裁回原 18000 点。s_k 是反射扩展序列中的块起点；超出块支持的项为零。'),
+        p('投影本身使用未加窗的二阶矩；Hann 只在合成时作用。先把六载波的局部输出求和，再做重叠平均，避免逐块边界跳变。独立按载波累加后相加与生产顺序一致，报告保留数值核验。分母在保留区间始终为正，不逐帧重定标。'),
+        p('S/O 与原始 EEG 均为 C 通道、200 Hz、90 秒。S+O=x 是定义保证的代数闭合，不代表两者正交，也不证明一个只含神经、另一个只含噪声。平方能量还存在交叉项，不能把 S/O RMS 比简单相加解释为成分百分比。'))
+    section('23. 六载波对最终 S 的可加电压贡献',
+        fig('12_ola','B/Fp1：各载波在独立 Hann 重叠合成后的电压贡献；六行相加为 S。蓝实线/红虚线为注入前/后，放大支持与原始载波图相同；各行独立刻度。'),
+        p('这些曲线保留正负号，是电压贡献而非功率份额。与输入载波相比，可观察局部投影及邻块平均共同改变了哪些峰谷；不能将合成前后两幅图的独立纵轴高度直接当作增益，增益和误差须使用数组计算。'))
+    for label,title in [('B','24. 前额最终 S/O：检查完整分量和配对变化'),('G','28. 枕区最终 S/O：相同注入的另一空间条件')]:
+        if label=='G':
+            section('26. 枕区 SSM：改变空间面板后的条件拟合',
+                fig('G_ssm','G=VP005/O2，对应 POOz Hb 与枕区六电极代理。左右为注入前/后；灰线观测、彩线完整预测；每模态左右共用纵轴。'),
+                p('枕区权重仍为 0.1/10/10。只向 O2 加入与 Fp1 相同的眼电；Hb 和其他 EEG 不变。枕区代理及 17 电极参考来自原六名训练被试并冻结。面板、PCA 与参考同时变化，因此与 B 的差异不能只归因于电极位置。'))
+            section('27. 枕区中间量：参考和投影后局部 RMS',
+                fig('G_reference_rms','G/O2：蓝/红为注入前/后参考 RMS，灰为注入后局部输入 RMS，绿为投影输出 RMS。各图纵轴独立。'),
+                p('同样的计算步骤可以作用于新增枕区面板，但并未因此获得原面板外的真实脑源电压。参考是否合理仍依赖训练范围和条件模型误差；局部输出受到的限制也包括原有背景信号。'))
+        row=cases[label]['row'];m=row['metrics'][row['display_channel']];allm=row['metrics'][f'all{row["channel_count"]}']
+        section(title,fig(label+'_final','前 3 行为原始输入、S、O 的注入前后波形，蓝实线/红虚线；第 4 行仅显示绿实线 ΔO 与灰点线已知注入。左列为完整评分段，右列为固定峰附近放大。'),
+            p(f'{label}/{row["display_channel"]} 的 S 变化 RMS 为 {m["S_change_RMS_uV"]:.4f} 微伏，相对于已知注入 RMS {m["injection_RMS_uV"]:.4f} 微伏，局部泄漏误差为 {m["S_error_NRMSE"]:.4f}；全 {row["channel_count"]} 通道误差为 {allm["S_error_NRMSE"]:.4f}。ΔO 形状相关为 {m["delta_O_correlation"]:.4f}，它不是幅度保留率。完整 O 包含原有残差，故末行用配对增量检验新增眼电。'))
+        if label=='B':
+            section('25. 最终 S 的代理不必等于 SSM 重建代理',
+                fig('B_proxy_consistency','B 前额：绿线为最终 S 重新滤波、聚合、按其自身首 5 秒参考后提取的代理；蓝/红虚线为 SSM 重建代理。上下为注入前/后。'),
+                p('补全时满足的是线性条件 A×补全 log-power=重建代理。其后指数变换、局部上限投影、载波合成和重新滤波都是额外步骤；上限允许功率低于参考。最终重新提取还使用 S 自己的首段参考，因此不具备代理严格一致性保证。不能把 SSM 代理拟合好直接等同于最终 S 的功率轨迹拟合好。'))
+    section('29. 枕区也存在最终代理与模型代理的偏离',
+        fig('G_proxy_consistency','G 枕区的同一一致性检查，单位与该区域训练坐标一致。绿线为最终 S 再提取代理；虚线为 SSM 目标代理。'),
+        p('该偏离是当前构造流程需要显式报告的性质。若下游监督要求最终 S 重现指定代理，本版本仅有局部上限约束还不充分；本报告没有修改目标定义或反复投影来隐藏偏差。'))
+    rows=[]
+    for label,row in zip('ABCDEFG',summaries[0]['rows']+summaries[1]['rows']):
+        display=row.get('display_channel','Fp1');quality=row.get('model_NRMSE',row.get('frontal_NRMSE'))['ocular']['full899'];m=row['metrics'][display]
+        rows.append([label+' '+row['subject']+'/'+display,f'{m["S_change_RMS_uV"]:.2f}',f'{m["S_error_NRMSE"]:.4f}',*[f'{q:.4f}' for q in quality]])
+    section('30. 七组完整结果：眼电稳定性与模型误差分开看',
+        table(['样例','ΔS RMS /微伏','局部泄漏↓','EEG代理↓','HbO↓','HbR↓'],rows,[1.7,1.1,1,1,1,1]),
+        eq(r'e_{\rm eye}=\frac{\|S^{+}-S^0\|_F}{\|n\|_F}=\frac{\|(O^{+}-O^0)-n\|_F}{\|n\|_F},\quad {\rm NRMSE}_m=\frac{\sqrt{\operatorname{mean}_{k\ {\rm valid}}(\widehat u_{km}-u_{km})^2}}{s_m}',
+           '眼电分母为同一已知添加 n 的 Frobenius 范数；按所列通道和完整评分段先汇总再取比。三个模型误差用原训练 SD，支持为 899 个点。所有误差向下为好。'),
+        p('七组配对全部保留，五名独立被试；新增前额 16 次、枕区 4 次拟合均接受，无失败。原 A 复用既有结果。眼电来自 VP005 另一窗口，B/G 与供体同被试；自然背景没有干净真值。枕区等幅直接注入是工程敏感性检查，不代表自然眼电在枕部的典型幅度。'),
+        p('B 与 G 的局部眼电响应较小，适于说明计算路径；F 的 EEG代理和 Hb 误差明显较高，说明数值收敛无法替代模型适配检验。此表没有对重复样例作独立样本检验，也不把展示选择解释为确认性优越结论。'))
+    section('31. 反例 F：S 对眼电较稳定，模型仍明显失配',
+        fig('F_ssm','F=VP002/O1，枕区 POOz。左右为注入前/后，灰线观测、彩线完整预测；每模态左右同刻度。高 NRMSE 来自完整窗口，不能由局部电压图替代。'),
+        p('F 的眼电局部泄漏约 0.2863，但注入后 EEG代理/HbO/HbR NRMSE 为 5.0765/1.2789/1.3909。较小的眼电响应可以与不准确的模型共存；因此不能仅依据眼电被移入 O，证明所保留的 S 具有正确生理含义。'))
+    # Read only the previously admitted single-window comparison, not a new campaign.
+    original=Path(summaries[0]['rows'][0]['run']);weighted=json.loads((original/'summary.json').read_text())
+    equal=json.loads((original.parent/'power_cap_check_v2/summary.json').read_text())
+    comparison=[]
+    for title,data,method,cap in [('既有空间目标',weighted,'current_target',None),('等权功率目标',equal,'physical_refitted_reference',1.),('Hb优先功率目标',weighted,'physical_refitted_reference',1.)]:
+        matches=[next(r for r in data['paired_metrics'] if r['method']==method and r['cap']==cap and r['variant']==v and r['view']=='all16') for v in ('ocular','neural10','neural35')]
+        comparison.append([title,*[f'{r["S_error_NRMSE"]:.4f}' for r in matches]])
+    section('32. 既有对照揭示眼电抑制与神经保留的代价',
+        table(['同一 A 窗口 / 全16通道','眼电泄漏↓','10 Hz 变化保留误差↓','35 Hz 变化保留误差↓'],comparison,[1.7,1,1.25,1.25]),
+        p('既有空间目标采用冻结的 12 维空间投影/回投影，并减去一半的双侧邻域预测创新；原始与污染输入经过同一组冻结参数，不重新拟合。等权功率目标与本版使用同一局部二阶矩投影及上限 1，但 SSM 三模态误差权重均为 1；Hb 优先版改为 0.1/10/10，按每个条件重新求驱动与初态。三者在同一 A 窗口、同一注入和评分支持下比较。'),
+        eq(r'e_{\rm neural}=\frac{\|(S^+-S^0)-n\|_F}{\|n\|_F},\qquad g_S=\frac{\langle S^+-S^0,n\rangle}{\|n\|_F^2}',
+           '眼电希望 S 不变；神经样注入希望 S 的变化等于已知 n。因此两个误差的期望响应不同。gS 是有符号投影增益，不是能量占比。'),
+        p('Hb 优先设置把 A 的眼电泄漏从既有空间目标的 0.8375 降至 0.3520，也低于等权功率版本的 0.5047；但 10/35 Hz 已知神经样变化的保留误差约为 0.9782/0.9903，而既有空间目标为 0.4358/0.6206。眼电抑制改善伴随较大的神经样变化损失，不能将新 S/O 认定为已验证的语义分离。'),
+        p('这项对照来自原 A 的保留实验，未在本报告追加拟合或扩大数据。10/35 Hz 是受控合成变化，不是实测神经真值；但它提供了比单看眼电图更直接的保留反证。下一步若改进目标，应联合检查干扰移除与已知神经变化保留，而不是继续仅压低眼电响应。'))
+    section('33. 局部上限通过，不保证最终合成仍满足上限',
+        fig('13_final_bound','每个时间块跨六载波取最大广义二阶矩比；上行为局部投影输出，下行为最终 S 重新滤波后的块。蓝实线/红虚线为注入前/后；点线 1 为上限，纵轴为对数尺度。两列共用刻度：局部行 0.5–2，最终行 0.5–200。'),
+        p('局部块各自投影后，重叠平均、载波相加及再次滤波改变了被测算子，特别是不同块参考随时间变化时，约束不自动闭合。此比值衡量相对参考的最不利方向，不是电压被放大多少倍；参考极小时可以产生很大比值。'),
+        table(['样例/条件','局部最大比','最终重新分析最大比'],[[label+'/'+v,f'{statistics[label][v]["max_local"]:.6g}',f'{statistics[label][v]["max_final"]:.6g}'] for label in ('B','G') for v in ('baseline','ocular')]))
+    section('34. 监督接口、适用范围与结论',
+        p('交付的连续目标与输入具有相同原生电极顺序、微伏单位和 200 Hz 时间轴；前额为 18000×16，枕区为 18000×17。S 是条件参考约束下的电压，O 是逐点剩余。原实验保留评分数组、参考功率、局部诊断、最终重新分析及代理；本报告额外保留 B/G 的完整显示通道轨迹和紧凑中间量，不训练新的神经网络或词表。'),
+        p('固定对象包括训练 PCA/尺度、补全统计、六载波相关、频带、窗口/步长、Tak 参数与权重；当前窗口重新估计的是驱动与初态，且原始/污染输入分别拟合。学生若仅看 EEG，这种完整 EEG+Hb 条件目标属于额外信息监督，应与学生部署可见输入严格区分。'),
+        p('当前证据支持“可复现地产生原电压尺度的两路条件监督”，并在已知眼电注入下较既有空间目标减小 S 的变化。证据不支持“从 fNIRS 位置代理唯一重建原始 EEG”、纯神经/纯噪声解释、实时推断或最终功率一致性。神经样变化损失和高失配样例使其目前更适合作为受限工程候选，而非已经合格的生理语义标签。'),
+        p('后续改进应围绕已知失败设计：把神经保留与眼电移除同时列为目标；检查训练基线和代理外推；若需求确实是最终波形满足约束，则在最终分析算子上定义并验证该要求。以上是由本组结果提出的方向，本次只完成保留证据回放与报告，没有新实验结论。'))
+    maxerr=max(max(r['retained_array_max_differences'][k] for k in ('s_score','o_score','reference_power','final_proxy')) for r in replay)
+    section('35. 回放核验与复现入口',
+        p(f'B/G 各自原始与污染两条件共四次确定性回放均通过。与保留 S/O 评分数组、功率参考和最终代理的最大绝对差为 {maxerr:.3g}；各变量单位不同，该数值仅表示逐变量重现误差上界。按载波与先求和两种合成顺序、选定块作用矩阵及独立最终广义特征值检查均在记录容差内。'),
+        p('数值 owner 的五个函数与原运行 source 快照按抽象语法树核对一致。没有重新求解 SSM、重新估计训练统计、访问原始数据或测试分区。图的数值来自明确的保留窗口；所有公式保留 LaTeX 源码，图与公式以 PNG 嵌入 PDF，正文和表格可检索。'),
+        p('同目录 report_content.json 为可编辑报告内容，figure_provenance.json 逐图说明来源；intermediates/ 包含四组紧凑 NPZ 及核验 JSON，derived_statistics.json 记录本报告计算的诊断量。它们是保留证据的展示导出，不替代项目状态登记或原 summary.json。'))
+    return dict(schema='source_diagnostics_report_v1',title='从区域 EEG 功率代理到原始电压 S/O 监督',
+        subtitle='Hb 优先固定 Tak 条件模型与多通道二阶矩约束：设计、计算链、实测中间量和失败边界',date='2026-11-06',
+        summary=['本报告解释当前脑电（EEG）连续监督目标的实际实现。功能性近红外光谱（fNIRS）提供氧合/脱氧血红蛋白（HbO/HbR）浓度变化。核心路径是：训练主成分分析（PCA）将局部 EEG 相对功率压缩为三个区域代理；联合 EEG/Hb 状态空间模型（SSM）给出条件代理；训练统计补全电极频带参考；原始电压块经白化奇异值上限投影与 Hann 合成得到 S，剩余量定义 O。',
+                 'SSM 代理不能独立恢复电压符号、相位和空间自由度。当前方法必须读取原始 EEG；最终 S 也不保证重新提取出的代理或二阶矩严格等于中间参考。报告用 VP005 前额与枕区实测窗口逐步展开，并保留七组完整结果、VP002 高失配反例及原神经注入负结果。'],
+        provenance=['证据范围：既有 validation 保留窗口及既有训练统计；本次仅确定性电压回放与展示，未启动新拟合或训练。'],sections=sections,
+        sources=[str(front/'summary.json'),str(posterior/'summary.json'),str(original/'summary.json'),str(original.parent/'power_cap_check_v2/summary.json'),
+            '实现：src/data/dual_component_tokenizer.py 中 produce_teacher、voltage_power_cap_bank/frames/reference、project_voltage_second_moment、voltage_power_cap_target；src/inference/shared_driver_reconstruction.py 的 Tak 条件求解。',
+            '导出：src/analysis/dual_component_tokenizer.py 的 voltage_power_cap_intermediate_replay 与 render_voltage_power_cap_method_report；experiments/scripts/run_dual_component_tokenizer.py 的 power-cap-method-report 阶段。',
+            '数据与范围：docs/DATA_CONTRACT.md；可复用权重说明：docs/METHOD_RATIONALE.md；证据索引：experiments/RESULTS_INDEX.md。',
+            '数据背景：Shin 等，2018，Simultaneous acquisition of EEG and NIRS during cognitive tasks for an open access dataset. Scientific Data 5:180003. https://www.nature.com/articles/sdata20183',
+            '模型背景：Tak 等，2015，Dynamic causal modelling for functional near-infrared spectroscopy. NeuroImage 111:338–349. doi:10.1016/j.neuroimage.2015.02.035. https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf',
+            '原 SPM fNIRS 状态方程实现参考：https://github.com/spm/spm12/blob/main/toolbox/dcm_fnirs/spm_fx_fnirs.m 。本报告具体目标定义与数值以项目保留代码及数组为准。'])
+
+
 def summarize_voltage_power_cap(out,cfg,plan,outcomes,fits):
     """One-window paired changes; known injections are the only true changes."""
     out=Path(out)

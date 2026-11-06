@@ -90,6 +90,13 @@ registered geometry, eight preparation records, training calibration, four new
 fits, four unchanged fit references, all target diagnostics and export history.
 These two plots reuse subjects/windows from the five-example panel; they do not
 add independent participants or establish an isolated anatomical effect.
+The [detailed EEG voltage-supervision method report](../docs/reports/interpretability_analysis/20261106_eeg_voltage_supervision_method_v2/report_v3/TECHNICAL_REPORT.pdf)
+and its [editable HTML companion](../docs/reports/interpretability_analysis/20261106_eeg_voltage_supervision_method_v2/report_v3/TECHNICAL_REPORT.html)
+explain the retained PCA/SSM/log-power completion/local projection/overlap-add
+chain using actual intermediate waveforms. The accompanying
+[deterministic replay checks](../docs/reports/interpretability_analysis/20261106_eeg_voltage_supervision_method_v2/replay_verification.json)
+compare against retained targets; this communication export adds no model fits,
+participant evidence, or scientific qualification.
 
 ## EEG voltage S/O target feasibility — 2026-11-05
 

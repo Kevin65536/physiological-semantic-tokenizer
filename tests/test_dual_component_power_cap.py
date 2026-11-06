@@ -345,3 +345,30 @@ def test_posterior_summary_uses_actual_display_channel_and_roi(tmp_path):
     assert set(row['metrics'])=={'O1','all17'}
     assert row['metrics']['O1']['S_error_NRMSE']==pytest.approx(.25)
     np.testing.assert_allclose(row['model_NRMSE']['ocular']['full899'],[.1,.05,.025])
+
+
+@pytest.mark.parametrize('power',[100.,1e-10])
+def test_method_report_replay_matches_target_and_band_synthesis(power):
+    from src.analysis.dual_component_tokenizer import voltage_power_cap_intermediate_replay
+    from src.data.dual_component_tokenizer import voltage_power_cap_target
+    rng=np.random.default_rng(92)
+    x=rng.normal(size=(18000,4))*.001+np.array([.1,.2,.3,.4])
+    a=np.eye(3,20)
+    model=dict(projection=a,mean=np.zeros(20),lift=a.T,baseline_log_power=np.full(20,np.log(power)),
+        correlation=np.tile(.7*np.eye(4)+.3,(6,1,1)),complement_power=np.full(4,power))
+    result=voltage_power_cap_intermediate_replay(x,model,np.zeros((900,3)),1)
+    target=voltage_power_cap_target(x,model,np.zeros((900,3)),cap=1.)
+    np.testing.assert_allclose(result['S'],target['s'][:,1],atol=1e-12)
+    np.testing.assert_allclose(result['final_reanalysis_ratio'],target['final_reanalysis_ratio'],atol=1e-8)
+    if power==100.:
+        np.testing.assert_allclose(result['S'],x[:,1],atol=1e-12)
+        np.testing.assert_allclose(result['O'],0,atol=1e-12)
+        np.testing.assert_allclose(result['final_proxy'],result['observed_proxy'],atol=1e-8)
+    else:
+        assert result['minimum_gain'].min()<.01
+        assert result['local_output_ratio'].max()<1+1e-8
+    np.testing.assert_allclose(result['band_contributions'].sum(1),result['S'],atol=1e-12)
+    assert result['ola_denominator'].min()>0
+    assert result['max_overlap_order_difference']<1e-12
+    assert result['max_lift_equality_error']<1e-12
+    assert result['max_selected_matrix_difference']<1e-12

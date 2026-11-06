@@ -41,7 +41,7 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'voltage', 'voltage-one', 'voltage-token-atlas', 'eeg-o', 'eeg-o-one',
           'voltage-teacher-plan', 'voltage-teacher-pilot', 'voltage-teacher', 'voltage-teacher-report',
           'separation-plan', 'separation-pilot', 'separation', 'separation-report',
-          'power-cap-plan', 'power-cap', 'power-cap-report',
+          'power-cap-plan', 'power-cap', 'power-cap-report', 'power-cap-method-report',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -1040,6 +1040,7 @@ def parse_args(argv=None):
     parser.add_argument('--evaluation-split', choices=('development','test'),default='development',help=argparse.SUPPRESS)
     parser.add_argument('--analysis-output', type=Path, help='Fresh direct-child retained-token analysis export')
     parser.add_argument('--report-output', type=Path, help='Fresh figure collection for the retained-token atlas')
+    parser.add_argument('--posterior-run', type=Path, help='Completed posterior evidence for the voltage-method report')
     parser.add_argument('--token-source-analysis', type=Path, help='Reuse complete token assignments for shape-diverse display examples, without inference')
     return parser.parse_args(argv)
 
@@ -1063,12 +1064,18 @@ def main(argv=None):
                     args.workers or cfg['resources']['cpu_workers'],args.stage)
         print(json.dumps(serial(result)));return
     if cfg['schema']=='dual_component_voltage_power_cap_examples_v1':
-        if args.stage not in ('check','synthetic','power-cap-plan','power-cap','power-cap-report'):
+        if args.stage not in ('check','synthetic','power-cap-plan','power-cap','power-cap-report','power-cap-method-report'):
             raise ValueError('use the bounded examples power-cap stages')
         if args.stage=='check':
             print(json.dumps(dict(status='examples_contract_valid',measured_arrays_read=0)));return
         if args.output is None:raise ValueError('--output required')
-        if args.stage=='power-cap-report':
+        if args.stage=='power-cap-method-report':
+            from src.analysis.dual_component_tokenizer import render_voltage_power_cap_method_report
+            if args.report_output is None or args.posterior_run is None:
+                raise ValueError('--report-output and --posterior-run required')
+            result=render_voltage_power_cap_method_report(args.output,args.posterior_run,args.report_output,
+                workers=args.workers or 2)
+        elif args.stage=='power-cap-report':
             from src.analysis.dual_component_tokenizer import render_voltage_power_cap_examples
             if args.report_output is None:raise ValueError('--report-output must be fresh')
             result=render_voltage_power_cap_examples(args.output,args.report_output)

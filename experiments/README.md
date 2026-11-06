@@ -672,6 +672,16 @@ POOz/occipital ROI to a separate 17-electrode view, calibrates only from the sam
 six training windows, verifies unchanged regional-fit reuse, and includes the
 direct O1/O2 perturbation in the occipital joint fit. It preserves the previous
 front-facing examples and uses the same waveform, weights and voltage cap.
+The read-only `--stage power-cap-method-report` uses the examples contract,
+`--output <completed_examples>`, `--posterior-run <completed_posterior>`, and
+`--report-output <fresh_export>` to explain the retained voltage computation.
+It replays the named B/G pairs against retained arrays, exports intermediate
+waveforms and a Chinese PDF/HTML report, and does not refit SSMs or read raw/test
+signals. Run with at most two single-thread workers under the usual supervisor;
+include the installed `pdflatex` directory in that service's `PATH`. Report-only
+revisions can reuse the authored content and bitmap figures through
+`render_source_diagnostics_report.py`, with a fresh output directory. Numerical
+replay checks are covered by `test_dual_component_power_cap.py`.
 
 The independent Tak-component/residual generation uses
 [`scripts/run_dual_component_tokenizer.py`](scripts/run_dual_component_tokenizer.py)
