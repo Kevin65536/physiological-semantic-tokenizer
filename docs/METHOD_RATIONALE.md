@@ -28,6 +28,26 @@ tokenizer 和保护评价的结果保持原模型身份，不因基线变更而�
 迁移决定与研究方向只在[项目登记表](../research_state/registry.json)维护；
 完整实测证据从[结果索引](../experiments/RESULTS_INDEX.md#tak-hemodynamic-migration--2026-10-27)进入。
 
+## Hb-prioritized joint fitting for voltage targets — 2026-11-06
+
+用户选定 Hb 优先的联合拟合作为后续 EEG 电压 S/O 目标开发的可复用工作设置。
+[可执行参考合同](../experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_hb_weighted_v4.yaml)
+持有具体数值：EEG/HbO/HbR 的标准化平方误差乘数为 **0.1/10/10**，即每条
+Hb 相对 EEG 的权重比为 100。EEG 仍进入联合求解；共享驱动和四个血管初态
+每窗重估，固定 Tak 参数、原驱动/初态/血流正则及验收阈值保持该合同定义。
+
+各模态残差先除以冻结训练 SD，再施加权重。展示 NRMSE 和积分核验始终使用
+原训练尺度；不得把优化器的等效加权 SD 用作报告分母。当前 EEG 是五频带
+log-power 的 10 Hz PCA 代理，不是原生 EEG 电压。最终电压目标另由冻结训练
+统计完成参考功率，以局部二阶矩容差 1、稳定白化/SVD 投影和重叠合成生成
+S，并按 O=x−S 闭合。后续应分别评价代理拟合与最终 S/O 电压。
+
+采用该设置的依据是已观察到的眼电响应下降及用户对展示结果的判断；这是
+工作设置选择，不构成干净神经真值、来源可识别或跨被试泛化的确认。已有
+神经样响应损失和合成后功率越界继续保留。之后复用时引用版本合同，并明确
+数据/训练坐标、拟合支持和输出目标；历史运行保留原权重身份。完整证据和
+后续说明性样例由[结果索引](../experiments/RESULTS_INDEX.md#eeg-spatialtemporal-voltage-separation--2026-11-05)链接。
+
 ## EEG proxy output convention — 2026-10-27
 
 后续统一采用 10 Hz EEG 功率代理，使 EEG 代理、已有 10 Hz Hb 缓存和共享驱动

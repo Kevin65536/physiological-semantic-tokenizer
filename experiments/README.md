@@ -198,6 +198,18 @@ with MNE full-head extrapolation and a dashed measured-node convex hull. REFED
 keeps its registered planar layout. Exported display coordinates are separate
 from the unchanged statistical locations and values.
 
+For the concise Hb-only atlas, the same renderer accepts
+`--four-dataset-analysis <completed_fixed_analysis> --hb-atlas-design --output <fresh_export>`.
+It plots the original D1 population maps, one overall D1 point per subject,
+and each selected subject's per-location probability of entering the highest
+D1 quarter across eligible records, from the retained `hotspot_persistence.csv`.
+Both topography sets share the same head coordinates; population maps use
+individual dataset color bars, while subject examples share a 0–1 probability
+scale and retain the existing caption. The subject scatter shows
+compact horizontal jitter, a median marker and the interquartile range. Support
+counts and hotspot rings are omitted. The export retains per-record consistency checks,
+all selection candidates, retained values and probability denominators alongside the figures.
+
 The fixed-result physiological exploration uses the same evaluator's
 `physiology-extract`, `physiology-analyze`, `physiology-ocular`,
 `physiology-counterfactual`, and `physiology-shapes` stages with
@@ -380,6 +392,14 @@ and GPU wait time to choose this split.
 GPU infrastructure failures stop execution instead of being recorded as model
 failures. Completed targets keep their original backend identity and are reused.
 [Data boundary](../docs/DATA_CONTRACT.md#subject-calibrated-tak-reconstruction-cache--2026-11-04).
+
+For a minimal retained-curve export, use
+`render_shared_driver_reconstruction.py --best-subject-reconstruction --run <cache_run>
+--output <fresh_export>`. It selects the qualified 90-second fit with the lowest
+mean EEG/HbO/HbR local NRMSE in a timestamped terminal-record snapshot, checks
+the selected arrays, and exports a three-row PNG and bitmap PDF. The candidate
+table preserves failures and short-record exclusions. This is a descriptive
+best-case joint reconstruction, not a population estimate or a new fit.
 
 The spatial τ/β case study uses this evaluation entry with `--tak-topography
 --topography-stage <check|plan|synthetic|screen|prepare|pilot|run|analyze>` and
@@ -602,6 +622,56 @@ responses to added artifacts/neural bursts are distinct endpoints. No tokenizer
 is trained. The [design](../docs/EXPERIMENT_PLAN.md#eeg-电压监督目标的有限可行性试验2026-11-05)
 owns the interpretation; `test_dual_component_voltage_teacher.py` covers the
 native transform, covariance, pairing and pre-read partition boundaries.
+
+The next voltage separation experiment uses the same runner with
+[`dual_component_voltage_separation_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_voltage_separation_v1.yaml):
+`--stage check`, supervised `--stage synthetic`, metadata-only
+`--stage separation-plan`, supervised `--stage separation-pilot` / `--stage separation`,
+and `--stage separation-report --analysis-output <fresh-export>`.
+Its frozen EEG-only frontend compares state-guided spatial projection and
+neighbor prediction against empirical Hb guidance, EEG guidance, phase-shuffled
+guidance, PCA and random directions. Independent waveform dictionaries test hard
+decoding at declared rates. The [data contract](../docs/DATA_CONTRACT.md#eeg-spatialtemporal-voltage-separation--2026-11-05)
+owns its retained public boundary; `test_dual_component_voltage_separation.py`
+covers projection, temporal support, perturbation scaling and actual O decoding.
+
+The bounded follow-up uses the same runner with
+[`dual_component_voltage_power_cap_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_v1.yaml):
+`--stage check`, `--stage synthetic`, metadata-only `--stage power-cap-plan`,
+then supervised `--stage power-cap`. It reuses one named ocular-perturbation
+window and six training windows to compare frozen statistical, frozen physical
+and refitted physical power references, including neural-like controls. Every
+carrier, including the exact voltage complement, receives the local constraint;
+post-synthesis violations remain diagnostics. `test_dual_component_power_cap.py`
+covers the exact projection, its non-invariance counterexample, training-only
+calibration, full-carrier reconstruction and the bounded input contract.
+The separately frozen
+[`Hb-weighted contract`](configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_hb_weighted_v1.yaml)
+uses the same stages with explicit EEG/HbO/HbR objective multipliers. It changes
+neither reporting scales nor final voltage-target rules, and performs a weighted
+90-second synthetic fit before the measured paired fits.
+The [second weight setting](configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_hb_weighted_v3.yaml)
+and its [stable-projection continuation](configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_hb_weighted_v4.yaml)
+retain the same bounded panel. A continuation checks the scientific contract and
+weights before reusing accepted fits or initializing an unfinished fit from its
+retained trajectory. Direct SVD in channel-normalized, whitened coordinates
+avoids squaring the condition number; it does not alter the reference or cap.
+The [result index](RESULTS_INDEX.md#eeg-spatialtemporal-voltage-separation--2026-11-05)
+links the paired comparisons and preserves unsuccessful weight/solver attempts.
+The [fixed four-subject examples contract](configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_examples_v1.yaml)
+uses `--stage power-cap-plan`, then supervised `--stage power-cap`; it reuses
+the accepted reference and known Fp1 addition, and fits one preselected window
+per other validation subject. `--stage power-cap-report --report-output <fresh>`
+exports the original and new examples with total O and paired ΔO comparisons.
+Tests cover metadata-only selection, the fixed scope/weights and failed-pair
+denominators. The reusable setting rationale is owned by
+[METHOD_RATIONALE](../docs/METHOD_RATIONALE.md#hb-prioritized-joint-fitting-for-voltage-targets--2026-11-06).
+The [two-case posterior contract](configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_posterior_v1.yaml)
+uses the same stages and report entry. Its data owner adds the geometry-selected
+POOz/occipital ROI to a separate 17-electrode view, calibrates only from the same
+six training windows, verifies unchanged regional-fit reuse, and includes the
+direct O1/O2 perturbation in the occipital joint fit. It preserves the previous
+front-facing examples and uses the same waveform, weights and voltage cap.
 
 The independent Tak-component/residual generation uses
 [`scripts/run_dual_component_tokenizer.py`](scripts/run_dual_component_tokenizer.py)

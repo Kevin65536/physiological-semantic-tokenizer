@@ -16,6 +16,81 @@ scientific verdicts. Its owning record is
 and access boundaries remain in the [experiment plan](../docs/EXPERIMENT_PLAN.md)
 and [data contract](../docs/DATA_CONTRACT.md).
 
+## EEG spatial/temporal voltage separation — 2026-11-05
+
+The [versioned contract](configs/physiology_semantic_tokenizer/dual_component_voltage_separation_v1.yaml)
+tests state-guided spatial projection, neighbor prediction and independent hard
+waveform decoding on the preceding verified public panel. The retained
+[summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/summary.json)
+and [subject-level interventions](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/intervention_subjects.csv)
+own the numerical results; the [matched contrasts](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/paired_physical.csv)
+separate physical guidance from capacity changes. Preserve the source snapshots,
+training coordinates, selected projections, dictionaries, hard IDs, synthetic
+controls and [complete fitting outcomes](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/physical_fits.json).
+
+The [illustrated report and full validation atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/export_v4/index.html)
+distinguish major artifacts, fine texture, neural-like losses and coding errors.
+[Array/decoder verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/verification.json)
+and [PDF verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/export_v4/pdf_verification.json)
+cover numerical replay, bitmap embedding and searchable body text. Export v4
+corrects the Hb figure's redundant conversion using the
+[owning cache-unit check](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/report_unit_check.json);
+the underlying fits, voltage targets and metrics are unchanged. Earlier exports
+and the initial formula-rendering failure remain retained for provenance, not
+as the final delivery. Natural O is not assumed to be pure noise.
+
+The subsequent [single-window conditional power-reference diagnostic](configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_v1.yaml)
+retains its [paired results and complete outcomes](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_check_v2/summary.json),
+[independent replay and final-bound checks](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_check_v2/verification.json)
+and [illustrated PDF](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_check_v2/report_v3/TECHNICAL_REPORT.pdf).
+Its eye-perturbation response, neural-like positive controls, fixed-statistics
+comparison and post-synthesis violations are separate evidence. Preserve the
+[initial clock-adapter failure](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_check_v1/physical_fits.json)
+and the [explicit unchanged-input/result reuse](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_check_v2/input_reuse.json).
+This diagnostic neither replaces the parent labels nor trains a tokenizer.
+
+The subsequent Hb-weighted paired comparison retains its
+[cross-setting numerical comparison](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4/weight_comparison.json),
+[full outcome summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4/summary.json),
+[independent numerical replay](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4/verification.json)
+and [illustrated report](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4/report_v2/TECHNICAL_REPORT.pdf).
+Preserve the [first high-weight failures](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v1/summary.json),
+[interrupted same-objective extension](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v2/interruption.json),
+and [accepted second-setting fits plus original projection failures](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v3/summary.json).
+The [reuse record](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4/input_reuse.json)
+and source snapshots distinguish the equivalent stable SVD implementation from
+a change to the scientific target. Neural-like retention and post-synthesis
+power violations remain part of the comparison. Earlier report exports are
+retained; the revised export keeps the comparison table together and states the
+neural-change error and baseline AC normalization explicitly.
+
+The [five-example extension](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_examples_v1/summary.json)
+retains the original pair and four additional preselected validation subjects.
+Its [numerical replay](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_examples_v1/verification.json)
+checks identical injections, frozen references, unchanged regional inputs,
+weighted objectives, paired metrics and S/O closure. The
+[illustrated gallery report](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_examples_v1/export_v3/report/TECHNICAL_REPORT.pdf)
+use common voltage axes and show only paired ΔO and the known addition in the
+fourth row. Each case retains full-window and display-window model errors;
+figure selection does not redefine the fixed panel. Preserve numerical source
+snapshots, individual fitting records and the initial PDF font failure/export
+history. The [original-case overlay revision](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4/ocular_overlay_v2/VP002_O_overlay.png)
+is a display-only revision of the same original arrays.
+
+The [two posterior examples](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_posterior_v1/summary.json)
+retain direct O1/O2 additions in the same VP002/VP005 windows, with the new
+geometry-selected occipital coordinate and train-only 17-electrode reference.
+The [verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_posterior_v1/verification.json)
+checks that the perturbed posterior EEG enters the joint fit, that reused
+regional inputs are exact, and that metrics/weighted objectives replay. The
+[illustrated posterior report](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_posterior_v1/export_v3/report/TECHNICAL_REPORT.pdf)
+keeps numerical convergence separate from the high model error of one example,
+and separates local electrode response from full-panel response. Preserve the
+registered geometry, eight preparation records, training calibration, four new
+fits, four unchanged fit references, all target diagnostics and export history.
+These two plots reuse subjects/windows from the five-example panel; they do not
+add independent participants or establish an isolated anatomical effect.
+
 ## EEG voltage S/O target feasibility — 2026-11-05
 
 The [fixed public development contract](configs/physiology_semantic_tokenizer/dual_component_voltage_teacher_v1.yaml)
@@ -80,6 +155,16 @@ The [display-only redraw verification](../docs/reports/interpretability_analysis
 retains the spherical angular projection, REFED planar exception, unchanged
 statistics and MNE head-extrapolation boundary. Earlier export failures and
 superseded renderings remain retained; they do not replace the owning tables.
+
+The [complete Hb observation atlas](../docs/reports/interpretability_analysis/20261106_hb_reconstruction_mismatch_atlas_v1/index.html)
+consolidates all seven retained images, plotting tables, selection records and
+renderer snapshot from the former research-status atlas directory. The
+[figure guide](../docs/reports/interpretability_analysis/20261106_hb_reconstruction_mismatch_atlas_v1/FIGURE_GUIDE.md)
+distinguishes population maps, individual amplitudes, hotspot frequencies and
+the original, revised and random-window displays. This is a versioned relocation
+and navigation update; images and numerical tables are unchanged. Internal
+references resolve within the new export, and the owning run evidence remains
+at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
 
@@ -1362,6 +1447,38 @@ its own question and evidence contract.
 
 ## Comparison methods
 
+The [five-method frozen classification contract](../comparative_methods/downstream_frozen_classification_v1.yaml)
+retains its [fixed population and binary-label plan](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/plan.json),
+[source revision](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/source_manifest_v2.json),
+[versioned job matrix](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/jobs_v2.json),
+[smoke/resource evidence](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/throughput.json),
+and [persistent launch](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/launch.json).
+The [owning summary](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/summary.json),
+[independent prediction checks](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/verification.json),
+[binary-label checks](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/label_verification.json),
+[complete numeric table](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/metrics.csv),
+[Excel export](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/tables_v2.xlsx)
+and [workbook readback](../comparative_methods/runs/performance_analysis/20261105_frozen_classification_v1/table_export_verification_v2.json)
+preserve the common validation population, both subject SDs, baseline deficits
+and method-specific provenance. Workbook exports are communication views only.
+Original smoke failures remain in `smoke/`; successful revised REFED geometry
+and CBraMod packaging checks remain in `smoke_revision_v2/`. This task derives
+window-level arousal classes and does not overwrite continuous-regression evidence.
+
+The [pure fNIRS development probe](../comparative_methods/downstream_fnirs_probe_v1.yaml)
+retains its [subject/sample plan](../comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1/plan.json),
+[frozen source](../comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1/source_manifest.json),
+[official-encoder and software checks](../comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1/software_checks.json),
+[CPU/GPU resource measurements](../comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1/resource_summary.json),
+and [persistent launch](../comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1/launch.json).
+It compares MtReNIRS with Hb statistics and block-Riemannian readouts using only
+the retained original train/validation population. Pretraining overlap is
+explicitly accepted for this probe and does not change its information labels.
+The [owning result summary](../comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1/summary.json)
+and [independent verification](../comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1/verification.json)
+retain all candidates; the [CSV export](../comparative_methods/runs/performance_analysis/20261105_fnirs_probe_v1/comparison_v1.csv)
+is a communication view of that summary, including subject SD and null baselines.
+
 The [2026-11-05 frozen-input diagnostic](../comparative_methods/downstream_input_audit_v1.yaml)
 retains the [production failure audit](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/production_diagnostics.json),
 [fixed train/validation sample plan](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/plan.json),
@@ -1372,11 +1489,113 @@ The [dated diagnostic report](../comparative_methods/runs/performance_analysis/2
 explains the production candidates, convergence limits and unresolved Visual/REFED
 results; the [complete endpoint table](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/cells.csv)
 retains all selected settings and controls.
+The [best classification table export](../comparative_methods/runs/performance_analysis/20261105_best_classification_tables_v2/best_classification_tables.pptx)
+and [editable workbook](../comparative_methods/runs/performance_analysis/20261105_best_classification_tables_v2/tables.xlsx)
+use each model/task's highest-F1 eligible retained candidate for both ACC and F1;
+subject SD is recomputed from that same candidate's predictions. The
+[provenance](../comparative_methods/runs/performance_analysis/20261105_best_classification_tables_v2/selection_and_provenance.json)
+and [delivery checks](../comparative_methods/runs/performance_analysis/20261105_best_classification_tables_v2/delivery_verification.json)
+preserve the fixed-validation scope, missing/unsupported cells, and separate
+Visual three-fold appendix. This dated export is not a final five-fold ranking.
+The [STA-Net completion run](../comparative_methods/runs/performance_analysis/20261105_sta_completion_v1/summary.json)
+and [independent checks](../comparative_methods/runs/performance_analysis/20261105_sta_completion_v1/verification.json)
+add WG, n-back and DSR under the same fixed-validation protocol, using the
+[retained input references](../comparative_methods/runs/performance_analysis/20261105_sta_completion_v1/input_reference.json)
+and original frozen STA-Net source. The updated
+[v3 table deck](../comparative_methods/runs/performance_analysis/20261105_best_classification_tables_v3/best_classification_tables.pptx)
+and [workbook](../comparative_methods/runs/performance_analysis/20261105_best_classification_tables_v3/tables.xlsx)
+preserve each selected candidate's paired ACC/F1 and subject SD; previous exports
+remain retained, and BrainFusion DSR remains unsupported.
+The later [planning analysis](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/final_plan_analysis_v1.json)
+and [method/task gap table](../comparative_methods/runs/performance_analysis/20261105_downstream_input_audit_v1/final_plan_gap_cases_v1.csv)
+compare strong-baseline deficits, convergence, Visual label attributes and REFED
+dynamic/calibration errors from those retained predictions; they do not refit a
+model or read new test signals. The [v2 design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v2)
+uses this evidence without relabeling the completed diagnostic as final metrics.
 Its [bounded follow-up](../comparative_methods/downstream_input_followup_v1.yaml)
 checks the physical HRF time grid and actual REFED temporal output. Preserve the
 original controls, frozen sources, per-phase services and negative results.
 These validation-selected diagnostics share the new cache's partitions and
 cannot replace final test scores or be subtracted from the old five-fold means.
+
+The versioned repair probes retain [round 1's complete aggregate](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1/summary.json)
+and [independent arithmetic verification](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v1/verification.json).
+[Round 2's frozen plan](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v2/plan.json)
+and [job matrix](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v2/jobs.json)
+cover reference, per-window normalization, trajectory readout and separate
+within-person record controls. Their original development subjects and sample
+identities remain fixed. Each run retains its sources, service launch, failures,
+fold predictions and scalar summaries; registered execution is held by the
+project registry, and task repair is judged by the v2 metric acceptance owner.
+[Round 3](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v3/summary.json)
+retains native-Hb REFED comparisons and the failed Visual clock replay; its
+verification covers completed outputs without promoting the failed suite.
+[Round 4](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v4/summary.json)
+preserves the corrected-clock Visual comparison separately.
+[Round 5's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v5/jobs.json)
+holds the fixed encoder-FT and temporal regularization probes. These versioned
+diagnostics do not overwrite frozen cache arrays or qualify final paper metrics.
+[Round 6's optimization failure recheck](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v6/smoke/visual/optimization_control_recheck.json)
+and [mode diagnostic](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v6/smoke/visual/dropout_fastpath_diagnostic.json)
+are retained beside [round 7's encoder-mode comparison](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v7/summary.json).
+[Round 8](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v8/summary.json)
+contains signal-to-stimulus students and mask-only controls; its versioned
+`source_v2/jobs_v2/launch_v2` migration retains the rejected initial launch.
+[Round 9](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v9/summary.json)
+uses additional unlabelled person context and remains a separate information condition.
+[Round 10](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v10/summary.json)
+compares native EEG highpass cutoffs after exact original-band replay.
+[Round 11's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v11/jobs.json)
+holds fold-specific EFRM temporal feature extraction and readouts.
+[Round 12's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v12/jobs.json)
+continues the fixed same-fold temporal head with actual updates to both signal encoders.
+[Round 13's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v13/jobs.json)
+compares compact shared temporal/spatial heads on raw Visual EEG and frozen
+per-second CBraMod representations; target events and four-class scoring stay fixed.
+[Round 14](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v14/summary.json)
+is the paired within-window frontal-proxy projection diagnostic; it retains every
+event and the removed-component RMS ratios without claiming clean neural truth.
+[Round 15's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v15/jobs.json)
+holds the fixed-budget EFRM encoder learning-rate comparison.
+[Round 16](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v16/summary.json)
+compares native positional BIOT transfer with eight exact source bipolar
+derivations available within the same physical electrode budget.
+[Round 17's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v17/jobs.json)
+holds the fixed regularization grid on retained Visual event, covariance and
+relative-band features, preserving all candidates and the same subject folds.
+[Round 18's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v18/jobs.json)
+holds the complete-record CCC objective comparison with the same record-batched
+MSE control on raw and fold-specific frozen EFRM temporal features.
+[Round 19's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v19/jobs.json)
+holds paired encoder FT and frozen-encoder continuation from the same round-18
+head, with the longest complete-record gradient/memory smoke retained.
+[Round 20's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v20/jobs.json)
+compares subject-equal Visual kernel fitting without inverse class weights to
+the retained otherwise identical round-1/2 class-balanced fits.
+[Round 21's manifest](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v21/jobs.json)
+holds single-modality EEG/Hb temporal fits with the same round-18 record objective
+and training budget, using only the retained development features.
+The [dated iteration report](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v14/iteration_report_v1.html),
+[complete metric/SD table](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v14/probe_cells_v1.csv)
+and [export verification](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v14/report_export_verification_v1.json)
+summarize the retained candidates and failures. They are communication exports;
+owning run summaries and the registered state remain authoritative.
+The [round-18 dated report](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v18/iteration_report_v1.html),
+[full numeric/SD table](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v18/probe_cells_v1.csv)
+and [export verification](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v18/report_export_verification_v1.json)
+retain the later learning-rate, montage, regularization and record-objective
+comparisons, including constant-target record denominators.
+The [round-21 dated report](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v21/iteration_report_v1.html),
+[full numeric/SD table](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v21/probe_cells_v1.csv)
+and [export verification](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v21/report_export_verification_v1.json)
+also include class-weight and modality controls, the
+[EFRM paired encoder effect](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v21/refed_paired_encoder_effect_v1.json)
+and [record-wise error decomposition](../comparative_methods/runs/performance_analysis/20261105_downstream_repair_probe_v21/refed_error_components_summary_v1.json).
+These are dated derivations from retained predictions and summaries; exploratory
+subject intervals do not replace the final five-fold repair inference.
+The [solver replay](../comparative_methods/runs/performance_analysis/20261105_downstream_convergence_probe_v1/summary.json)
+keeps the original selected objectives and original fixed split; it is not another
+three-fold repair result.
 
 The [2026-10-29 one-page downstream result brief v2](../docs/reports/interpretability_analysis/20261029_downstream_best_available_v2/REPORT.pdf)
 and [editable table](../docs/reports/interpretability_analysis/20261029_downstream_best_available_v2/best_available.csv)

@@ -32,6 +32,16 @@ Documentation changes do not authorize measured or protected-data access.
 | `simultaneous_eeg_nirs` | n-back; word generation; DSR | 28 scalp channels after the admitted EOG-auxiliary branch | released HbO/HbR | DSR labels are EEG-native Go/No-go; fNIRS is synchronized context |
 
 `croce_local_cache` is derived teacher evidence, not a fifth measured dataset.
+
+The independently versioned [frozen classification view](../comparative_methods/downstream_frozen_classification_v1.yaml)
+derives REFED low/high arousal from each retained 30-second window's valid
+arousal mean: `<=128` is low and `>128` is high. This user-selected midpoint
+definition includes neutral windows and preserves partial-tail masks; it does
+not replace the native continuous targets, use video classes, or alter the
+cache partitions. Only the retained original train/validation population is
+used. The computation owner is `refed_arousal_binary_targets` in
+`src/data/downstream_benchmark.py`; historical regression tasks stay unchanged.
+
 Every analysis must name the measured dataset, task, record/session, subject,
 condition/event, branch, and window/patch identity it consumes.
 
@@ -375,6 +385,75 @@ diagnostic. It is not a newly fitted teacher or a trained tokenizer result.
 Full 90-second EEG processing and already bandpassed Hb are offline inputs.
 Natural data have no clean-neural-voltage ground truth; real-EOG correlations
 and low-EOG distortion are diagnostics, not proof of neural purification.
+
+### EEG spatial/temporal voltage separation — 2026-11-05
+
+[`dual_component_voltage_separation_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_separation_v1.yaml)
+reuses the exact verified public windows from the preceding feasibility run.
+The first retained window of each training subject fits raw-power coordinates,
+shared full-band covariance, neighbor predictors, voltage RMS scales and waveform
+dictionaries. The second training window selects stable spatial directions;
+prespecified independent synthetic probes select rank and temporal strength.
+Validation subjects never fit or select these objects. EOG is validation-only:
+it supplies independent diagnostics and an intervention donor, never a model input.
+
+New Hb-only Tak fits provide slow training guidance; masked EEG observations do
+not enter those fits. Failed guidance is retained and excluded, without replacing
+it with a joint EEG/Hb fit. The frozen voltage frontend then reads native EEG only:
+full-band spatial projection plus a symmetric neighbor predictor with up to four
+samples on either side. Its outputs preserve 200 Hz, microvolts, TP9 reference
+and exact S+O closure. O is the spatial complement plus the prediction residual;
+neither term is presumed pure noise. Known artifacts and 10/35/55 Hz neural-like
+changes test both unwanted leakage and signal loss.
+
+Training-only residual waveform dictionaries encode 100 ms single-electrode
+cells after the multichannel frontend. Independent decoders read their own
+integer IDs and fixed training channel scales; they cannot read raw EEG or the
+other branch. Four 128-way IDs cost 280 bits/s/electrode/branch; the raw comparator
+uses eight IDs, matching both branches together. An eight-level O capacity
+diagnostic has a higher declared rate. Hard-decoder O transfer and closure are
+measured directly, never inferred from S. Whole-window Hb guidance and training
+filters are offline; validation encoding requires EEG with 20 ms look-ahead.
+
+The separately versioned [one-window power-reference diagnostic](../experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_v1.yaml)
+reads only the same admitted first training windows and the explicitly named
+validation case. Training EEG fixes log-power means/covariance, absolute baseline
+power and local channel correlations; EOG is not a calibration or model input.
+It replays the retained known Fp1 ocular addition, plus prespecified neural-like
+changes, and uses full-window **joint EEG/Hb** fits at the original fixed Tak
+parameters and training coordinates. This differs from the preceding Hb-only
+spatial-guidance experiment. All components of native voltage, including the
+unmodelled frequency/offset complement, enter the local power constraint.
+Local reflection and overlap-add preserve the 200 Hz output clock; final
+reanalysis records any bound violations introduced by synthesis. The diagnostic
+does not alter the four-dataset cache or the preceding frozen labels.
+
+The [four-subject illustration extension](../experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_examples_v1.yaml)
+admits only the first already retained validation window of VP005, VP014, VP017
+and VP019, chosen from the verified parent metadata before any array reads.
+The original VP002 example is replayed unchanged. All examples use the same
+retained Fp1 addition, in the same microvolt amplitude, and the same frozen
+training reference/coordinates. Its donor is VP005's other retained window;
+the VP005 example is therefore not a different-subject donor comparison. EOG
+is not a model input and no new transfer/calibration is fitted. Each additional
+window refits its joint baseline and its affected prefrontal ocular condition;
+unaffected motor-ROI fits are reused only after unchanged inputs are verified.
+Failures remain in the four-window denominator. Selecting an attractive figure
+from this display panel is illustrative selection, not a new independent test.
+
+The [posterior extension](../experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_power_cap_posterior_v1.yaml)
+uses the existing VP002 last window and VP005 first window, injecting the same
+retained waveform directly into O1 and O2 respectively. The central geometry
+selects POOz Hb and POz/O1/O2/Pz/P3/P4 EEG; this occipital ROI replaces the right
+motor ROI in a separately versioned 17-electrode view. Native EEG and cached Hb
+come through the registered readers after checking the original source/window
+identity. Overlapping EEG samples and the Hb clock must exactly reproduce the
+retained inputs. The original six first training windows alone fit the new
+occipital PCA/scale and the 17-channel power reference. Original left-motor and
+frontal coordinates are retained; their accepted fits may be reused only after
+same-weight, exact-observation checks. Both occipital EEG conditions enter
+independent joint EEG/Hb fits. This known additive waveform is an engineering
+intervention, not evidence for natural ocular amplitude/topography at the occiput.
 
 ### v1 patch target (historical)
 

@@ -21,6 +21,7 @@ in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 | What are the dataset-native facts and original sources? | [`DATASETS_DESCRIPTION.md`](DATASETS_DESCRIPTION.md) |
 | What code/runtime exists today? | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
 | Which hemodynamic model is the research baseline, and why? | [`METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27`](METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27); implementation and settings: [`ARCHITECTURE.md#tak-hemodynamic-baseline`](ARCHITECTURE.md#tak-hemodynamic-baseline) |
+| Which Hb-prioritized joint-fit setting is reusable for EEG voltage targets? | [`METHOD_RATIONALE.md#hb-prioritized-joint-fitting-for-voltage-targets--2026-11-06`](METHOD_RATIONALE.md#hb-prioritized-joint-fitting-for-voltage-targets--2026-11-06), with its versioned executable contract and claim boundary |
 | Which entrypoint, config and tests cover a diagnostic? | [Experiment map](../experiments/README.md#entrypoint-config-and-test-map) |
 | What theory and architecture principles are frozen? | [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md#frozen-theory-and-architecture-contract-unimplemented) |
 | Where is the abandoned pre-freeze candidate snapshot? | [tracked design note](physiology_semantic_tokenizer/architecture/observation_source_exploration_v2.json) · [candidate snapshot figure](physiology_semantic_tokenizer/figures/plans/observation_source_exploration_v2.svg) |
@@ -28,7 +29,7 @@ in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 | What happened in E0–E2 and R0–R2? | [`physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md`](physiology_semantic_tokenizer/06_EXPERIMENT_LOG.md) |
 | What is the full R-series evidence? | [`20260728_R_SERIES_EXPERIMENT_REPORT.md`](physiology_semantic_tokenizer/analysis/20260728_R_SERIES_EXPERIMENT_REPORT.md) |
 | What is the retained comparison contract? | [`comparisons/PROTOCOL.md`](comparisons/PROTOCOL.md): frozen legacy benchmark |
-| How will downstream performance be reacquired? | [`DOWNSTREAM-REBENCH-v1`](EXPERIMENT_PLAN.md#downstream-rebench-v1): design and execution scope; [versioned implementation](../comparative_methods/README.md#downstream-rebenchmark-v1) |
+| How will downstream performance be reacquired? | [`DOWNSTREAM-REBENCH-v2`](EXPERIMENT_PLAN.md#downstream-rebench-v2): current five-method frozen classification / REFED binary revision, with the prior five-fold regression design retained; [retained v1](EXPERIMENT_PLAN.md#downstream-rebench-v1) and [existing implementation](../comparative_methods/README.md#downstream-rebenchmark-v1) remain separate |
 | Which comparisons stopped, and which follow-ups were abandoned? | [`PROJECT_STATUS.md#对比实验`](PROJECT_STATUS.md#对比实验) (generated) |
 | What is the short comparison-method summary? | [`comparisons/STATUS.md`](comparisons/STATUS.md) |
 | What are the completed protected-comparison results? | [`comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md`](comparisons/PROTECTED_CAMPAIGN_RESULTS_20260814.md) |
