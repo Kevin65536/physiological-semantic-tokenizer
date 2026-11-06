@@ -1631,6 +1631,16 @@ explain input-window accounting, channel/configuration changes, aggregation
 sensitivity, same-round LP/FT contrasts and author-paper comparability. They are
 dated communication exports; their source manifest links the owning run evidence.
 
+The [2026-11-06 user-requested local sequence closure](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/stop_archive_20261106T092508Z/closure.json)
+retains the [stop-time aggregate](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/stop_archive_20261106T092508Z/aggregate/summary.json),
+[per-job retention index](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/stop_archive_20261106T092508Z/retained_jobs.json),
+and [compact evidence archive](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/stop_archive_20261106T092508Z/retained_evidence.tar.gz).
+Full predictions, checkpoints and failure records remain at their original paths;
+the archive is a compact metadata/result package, not a duplicate of all payloads.
+It also indexes the completed frozen-classification and STA optimization,
+normalization and REFED source-v3 evidence. Earlier reports and source snapshots
+retain their dated identities. Current lifecycle state is owned by the registry.
+
 The independent [downstream rebenchmark v1](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1)
 retains its [frozen inventory, splits and job manifest](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/),
 [resource measurements](../comparative_methods/runs/downstream_rebench_v1/20261016_v2/resource_summary.json),

@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-06T00:44:19.877728+00:00",
+  "updated_at": "2026-11-06T09:28:02.786399+00:00",
   "tracks": [
     {
       "id": "main",
@@ -5468,6 +5468,60 @@
       "id": "e.downstream_sta_optimization_v1_progress",
       "label": "STA-Net源对齐优化 progress",
       "path": "comparative_methods/runs/performance_analysis/20261106_sta_optimization_v1/scheduler_status.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.downstream_stop_20261106",
+      "label": "本机下游序列停止与归档记录",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/stop_archive_20261106T092508Z/closure.json",
+      "role": "decision"
+    },
+    {
+      "id": "e.downstream_stop_20261106_aggregate",
+      "label": "停止时公开结果汇总（保留缺项与负结果）",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/stop_archive_20261106T092508Z/aggregate/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.downstream_stop_20261106_retention",
+      "label": "逐任务原位保留索引",
+      "path": "comparative_methods/runs/downstream_rebench_v1/20261016_v2/stop_archive_20261106T092508Z/retained_jobs.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.downstream_stop_sta_optimization_summary",
+      "label": "20261106_sta_optimization_v1 summary.json",
+      "path": "comparative_methods/runs/performance_analysis/20261106_sta_optimization_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.downstream_stop_sta_optimization_verification",
+      "label": "20261106_sta_optimization_v1 verification.json",
+      "path": "comparative_methods/runs/performance_analysis/20261106_sta_optimization_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.downstream_stop_sta_normalization_summary",
+      "label": "20261106_sta_normalization_v1 summary.json",
+      "path": "comparative_methods/runs/performance_analysis/20261106_sta_normalization_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.downstream_stop_sta_normalization_verification",
+      "label": "20261106_sta_normalization_v1 verification.json",
+      "path": "comparative_methods/runs/performance_analysis/20261106_sta_normalization_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.downstream_stop_sta_refed_source_v3_summary",
+      "label": "20261106_sta_refed_source_v3 summary.json",
+      "path": "comparative_methods/runs/performance_analysis/20261106_sta_refed_source_v3/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.downstream_stop_sta_refed_source_v3_verification",
+      "label": "20261106_sta_refed_source_v3 verification.json",
+      "path": "comparative_methods/runs/performance_analysis/20261106_sta_refed_source_v3/verification.json",
       "role": "diagnostic"
     }
   ],
@@ -13828,6 +13882,79 @@
       "updated_at": "2026-11-06T00:44:19.877728+00:00",
       "summary": "按用户要求检查STA-Net复现质量并作有界优化。对照作者固定源码及Keras2.10，发现位置编码加入顺序/初始化、BatchNorm参数与移动方差、注意力初始化、展开顺序及相关损失epsilon差异；新增显式source_aligned_v2，原model.py及旧结果不动。普通事件在共同缓存内用3秒EEG/13秒Hb，DSR仍2秒、REFED完整30秒直接二分类训练；保留Visual全窗和REFED原实现分类控制，困难任务另设弱对齐/类平衡候选。79项相关测试及四项实际batch32 FP32训练smoke通过，最大CUDA保留3.84GiB，既有持久调度器双GPU派发12个seed17拟合与6个锁定候选种子复核。未打开原测试、不微调其他预训练模型，不以源代码核对代替性能证据。",
       "next_step": "监控同一固定矩阵并保留所有候选、负结果和失败；完成后独立复算被试ACC/F1/SD、种子变异及原版差异，区分源实现修正、训练能力和跨被试泛化。"
+    },
+    {
+      "state_id": "comparison.downstream_rebench@2026-11-06.user-stop-archive",
+      "entity": "comparison.downstream_rebench",
+      "label": "统一测量v5下游任务性能重新获取",
+      "track": "comparisons",
+      "order": 100,
+      "entity_kind": "experiment",
+      "execution": "aborted",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "用户要求停止本机下游序列并归档。原调度器收到SIGTERM后记录interrupted并退出，5个工作进程全部停止；正式服务与3个历史smoke服务均已禁用自动启动。868项计划保留772完成、5中断、91待执行；计划分母不删除、不将中断算完成。停止时复用既有聚合入口核验保留公开预测：855个评价任务中760有效，83格中46格TABLE_READY_WITH_NOTE、30格REJECTED_VALUE、7格INVALID_VALUE。原位保留完整模型/预测/失败证据，紧凑证据包已逐文件回读核对；未读取原始或受保护数据、未新增拟合。旧Visual输入及REFED负结果边界继续保留，完整矩阵未完成，不能称最终全量基准。",
+      "evidence_ids": [
+        "e.downstream_rebench_contract",
+        "e.downstream_rebench_scope_20261027_jobs",
+        "e.downstream_rebench_scope_20261027_launch",
+        "e.downstream_rebench_v2_resources",
+        "e.downstream_rebench_v2_source",
+        "e.downstream_rebench_v2_progress",
+        "e.downstream_stop_20261106",
+        "e.downstream_stop_20261106_aggregate",
+        "e.downstream_stop_20261106_retention"
+      ],
+      "supersedes": [
+        "comparison.downstream_rebench@2026-10-27.v1"
+      ],
+      "updated_at": "2026-11-06T09:28:02.786399+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": true,
+      "next_step": null
+    },
+    {
+      "state_id": "comparison.downstream_rebench_v2@2026-11-06.user-stop-archive",
+      "entity": "comparison.downstream_rebench_v2",
+      "label": "五方法比较：STA-Net源对齐优化",
+      "track": "comparisons",
+      "order": 122,
+      "entity_kind": "experiment",
+      "execution": "stopped",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "headline": false,
+      "depends_on": [
+        "main.data_contract",
+        "comparison.downstream_input_audit"
+      ],
+      "supersedes": [
+        "comparison.downstream_rebench_v2@2026-11-06.sta-optimization-running"
+      ],
+      "evidence_ids": [
+        "e.experiment_plan",
+        "e.downstream_sta_optimization_v1_contract",
+        "e.downstream_sta_optimization_v1_plan",
+        "e.downstream_sta_optimization_v1_jobs",
+        "e.downstream_sta_optimization_v1_source",
+        "e.downstream_sta_optimization_v1_source_audit",
+        "e.downstream_sta_optimization_v1_software",
+        "e.downstream_sta_optimization_v1_resources",
+        "e.downstream_sta_optimization_v1_launch",
+        "e.downstream_sta_optimization_v1_progress",
+        "e.downstream_stop_20261106",
+        "e.downstream_stop_sta_optimization_summary",
+        "e.downstream_stop_sta_optimization_verification",
+        "e.downstream_stop_sta_normalization_summary",
+        "e.downstream_stop_sta_normalization_verification",
+        "e.downstream_stop_sta_refed_source_v3_summary",
+        "e.downstream_stop_sta_refed_source_v3_verification"
+      ],
+      "updated_at": "2026-11-06T09:28:02.786399+00:00",
+      "summary": "用户要求停止本机下游序列并归档。本地STA-Net优化与归一化调度均已结束，无存活工作进程；保留源对齐优化18次拟合、训练统计重估18次以及REFED source_aligned_v3三种子结果与通过的独立复算。优化开发结果DSR F1由48.60%到61.01%，REFED二分类由45.23%到55.98%；Visual F1为22.27%，仍低于24.76%无信息基线。归一化后DSR/REFED/Visual F1分别60.78%/52.69%/21.73%，未显示整体改善；REFED源v3 F1为54.32%。这些是固定验证开发证据，不表示确认性显著改善。冻结分类、优化、归一化和源v3证据均原位归档；REFED normalization合同没有本地输出，本次不启动；下游自动续跑停止。",
+      "next_step": null
     }
   ]
 }
