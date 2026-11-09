@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-07T13:55:24.652109+00:00",
+  "updated_at": "2026-11-07T15:25:45.348059+00:00",
   "tracks": [
     {
       "id": "main",
@@ -5733,6 +5733,72 @@
       "label": "τ/β配对 S/O：historical",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/historical_audit.csv",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.cache_ocular_contract",
+      "label": "缓存眼电实际注入确认：contract",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_cache_ocular_confirmation_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.cache_ocular_plan",
+      "label": "缓存眼电实际注入确认：plan",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/plan.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.cache_ocular_resources",
+      "label": "缓存眼电实际注入确认：resources",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/resources.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.cache_ocular_pilot_launch",
+      "label": "缓存眼电实际注入确认：pilot_launch",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/pilot_launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.cache_ocular_summary",
+      "label": "缓存眼电实际注入确认：summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.cache_ocular_verification",
+      "label": "缓存眼电实际注入确认：verification",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.cache_ocular_final_checks",
+      "label": "缓存眼电实际注入确认：final_checks",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/final_checks.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.cache_ocular_report",
+      "label": "缓存眼电实际注入确认：report",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/report_v2/report.html",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.cache_ocular_fits",
+      "label": "缓存眼电实际注入确认：fits",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/cache_ocular_fit_execution.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.cache_ocular_targets",
+      "label": "缓存眼电实际注入确认：targets",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/cache_ocular_targets_execution.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.cache_ocular_launch",
+      "label": "缓存眼电实际注入确认：launch",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/run_launch.json",
+      "role": "run_manifest"
     }
   ],
   "records": [
@@ -14416,6 +14482,67 @@
       ],
       "headline": false,
       "next_step": "保留τ/β可调以改善模型拟合；将眼电接收与神经样保留分开判断。此次结果不支持为增强O眼电接收而扩大参数自由度，也不据此改变权重或重生成全量缓存。"
+    },
+    {
+      "state_id": "main.cache_ocular@2026-11-07.v1-running",
+      "entity": "main.cache_ocular",
+      "label": "已完成缓存的眼电注入与SSM重拟合确认",
+      "track": "main",
+      "order": 215,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "按用户要求，冻结选取此前权重/τβ对照之外12名验证被试的24段缓存窗口，原生电压加入实测VEOG派生波形及预设额前空间混合，0.5/1/2倍局部整体RMS三档。保持缓存等权/PCA/尺度/τβ先验和训练功率参考；实际重算代理、重新拟合基线及污染条件，构建S/O并完整绘制前后对照。工程阈值事先固定、全部失败保留；不读取test/protected或更改全量缓存。",
+      "evidence_ids": [
+        "e.cache_ocular_contract",
+        "e.cache_ocular_plan",
+        "e.cache_ocular_resources",
+        "e.cache_ocular_pilot_launch"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-11-07T15:07:59.831348+00:00",
+      "depends_on": [
+        "main.tak_subject_cache",
+        "main.weight_so"
+      ],
+      "headline": false,
+      "next_step": "核验四库试跑吞吐后执行固定288次ROI拟合与96组S/O目标，逐强度汇报抗眼电效果、形态变化、通过率和失败。"
+    },
+    {
+      "state_id": "main.cache_ocular@2026-11-07.v1-completed",
+      "entity": "main.cache_ocular",
+      "label": "已完成缓存的眼电注入与SSM重拟合确认",
+      "track": "main",
+      "order": 215,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "完成四库12名验证被试24段新窗口的实际原生电压VEOG派生注入，0.5/1/2倍原窗RMS、额前较强空间混合；保持等权/τβ先验/PCA/尺度/参考。288次独立ROI拟合287数值合格；唯一VP005 n-back基线失败与原缓存一致，造成96个S/O目标中92可用，每档23/24可配对。72个基线预测复现最大差3.81e-14个被试SD，原生特征逐点一致、Hb输入不变、S+O闭合。三档S泄漏0.342/0.274/0.215，O增量相关0.963/0.978/0.988；预定S泄漏≤0.30且O相关≥0.90通过9/24、12/24、19/24。S前后相关随强度从0.959降至0.908/0.826，S变化/基线S升至0.453/0.723/1.137；Hb预测变化0.175/0.299/0.437个冻结SD。支持O接收主要眼电，但不支持S近似扰动不变；REFED与Visual较好，Single-Trial/Simultaneous较弱，Visual仅1名被试。49幅完整图及版本化可读导出保留，56项相关测试通过；原缓存未改写。",
+      "evidence_ids": [
+        "e.cache_ocular_contract",
+        "e.cache_ocular_plan",
+        "e.cache_ocular_resources",
+        "e.cache_ocular_pilot_launch",
+        "e.cache_ocular_summary",
+        "e.cache_ocular_verification",
+        "e.cache_ocular_final_checks",
+        "e.cache_ocular_report",
+        "e.cache_ocular_fits",
+        "e.cache_ocular_targets",
+        "e.cache_ocular_launch"
+      ],
+      "supersedes": [
+        "main.cache_ocular@2026-11-07.v1-running"
+      ],
+      "updated_at": "2026-11-07T15:25:45.348059+00:00",
+      "depends_on": [
+        "main.tak_subject_cache",
+        "main.weight_so"
+      ],
+      "headline": false,
+      "next_step": "本批确认了条件性的眼电分配能力及S/Hb仍受污染影响的边界。生产验收需明确允许的S与Hb变化，不能仅用O相关或强扰动相对泄漏判定完全抗扰动；不自动重生成缓存。"
     }
   ]
 }

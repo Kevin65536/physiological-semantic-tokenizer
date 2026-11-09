@@ -403,6 +403,17 @@ reconstructs fixed-parameter targets and freezes baseline predictions in a
 separate ocular mechanism control. No new raw reads or nonlinear fits occur.
 `targets --pilot` measures four dataset cases before the supervised full matrix;
 the same two targeted test files cover arm routing and the retained split boundary.
+The [cached-window ocular confirmation](configs/physiology_semantic_tokenizer/shared_driver_cache_ocular_confirmation_v1.yaml)
+uses `--cache-ocular-confirmation --cache-ocular-stage <plan|pilot|run|summarize>`.
+It freezes a metadata-selected development batch, replays native features against
+the source cache, injects known EOG-derived voltage at three local RMS levels,
+actually refits every condition, then constructs and plots before/after S/O.
+The supervised pilot measures four native readers and eight fits; the full run
+resumes those exact tasks. The same cache and power-cap test files cover selection,
+split exclusion, amplitude/support invariants, numerical fits and projections.
+`summarize --cache-ocular-export <fresh_run_child>` creates a versioned figure
+and HTML export, requiring exact reproduction of the retained scientific summary;
+it leaves the original report, numeric evidence and fitted cache unchanged.
 Both explicitly fit τ/β at log-prior SD 0.125. Fits use 90 s,
 or the actual shorter REFED support, and the corrected Visual native identities.
 `produce` resumes matching terminal work, completes preparation/calibration,

@@ -146,6 +146,14 @@ untouched confirmation set. The new input cache creates no protected-data unlock
 
 ## Subject-calibrated Tak reconstruction cache — 2026-11-04
 
+The [cached-window ocular confirmation](../experiments/configs/physiology_semantic_tokenizer/shared_driver_cache_ocular_confirmation_v1.yaml)
+freezes a new finite validation-only batch from completed v1 metadata. The central
+native-voltage reader admits only those exact 90-second windows; their bandpower
+features must reproduce the retained cache before known voltage perturbations are
+added. Hb, PCA and individual scales come from the cache; training power references
+are reused unchanged. No test/protected signals or new training-reference signals
+are read. All before/after SSM fits and S/O targets are written to a fresh run.
+
 The [four-dataset weight/SO diagnostic](../experiments/configs/physiology_semantic_tokenizer/shared_driver_weight_so_v1.yaml)
 uses a fresh run, two metadata-selected validation subjects per dataset and
 three training reference subjects per dataset. Its plan fixes exact 90-second

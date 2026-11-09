@@ -196,6 +196,18 @@ references resolve within the new export, and the owning run evidence remains
 at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
+
+The [cached-window ocular confirmation](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/summary.json)
+retains [all actual refit statuses](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/fit_status.csv),
+[native-rate target metrics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/target_metrics.csv),
+[cache/input replay checks](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/verification.json)
+and the [reviewed before/after waveform atlas](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/report_v3/report.html).
+The versioned atlas explicitly shows EEG, HbO and HbR residual branches before
+and after injection. “Same input” labels only the unchanged measured Hb curves;
+both their S and O decompositions can change after joint refitting.
+Its frozen metadata selection, intervention strengths, unchanged model settings,
+engineering check lines and failure denominators are owned by the resolved contract.
+
 The [paired fixed/variable τ/β S/O comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/summary.json)
 retains [subject-level ocular pairs](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/ocular_paired.csv),
 [frozen-prediction mechanism controls](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/mechanism_metrics.csv)

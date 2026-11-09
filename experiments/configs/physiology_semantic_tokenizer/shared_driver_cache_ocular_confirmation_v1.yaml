@@ -1,0 +1,56 @@
+schema: shared_driver_cache_ocular_confirmation_v1
+experiment_id: SSM-CACHE-OCULAR-CONFIRMATION-v1
+created: '2026-11-07'
+seed: 20261107
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1
+reference_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1
+selection:
+  subjects: all_validation_subjects_excluding_previous_weight_study_evaluation_subjects
+  records: first_and_last_lexical_eligible_record_matching_training_reference_channel_order_and_three_ROIs
+  window: middle_complete_90_second_window_in_each_record
+  expected_subjects: 12
+  expected_windows: 24
+  outcome_selection: forbidden_no_replacement_for_numerical_failure
+controls:
+  weights: [1, 1, 1]
+  parameters: original_cache_tau_beta_priors_starts_solver_and_fixed_warm_start
+  normalization: frozen_source_population_PCA_and_individual_scales
+  voltage_target: original_power_cap1_same_three_training_subject_reference_per_dataset
+  Hb: byte_identical_before_and_after
+interventions:
+  variants: [baseline, ocular05, ocular1, ocular2]
+  amplitudes: {ocular05: 0.5, ocular1: 1.0, ocular2: 2.0}
+  source: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4/inputs.npz
+  provenance: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/result.json
+  waveform: retained_measured_VEOG_derived_carrier_resampled_to_native_rate
+  support_s: [30, 50]
+  edge_taper_s: 1.0
+  topography: fixed_name_based_anterior_pattern_FP_AFP_1_AF_0.65_F_0.4_FC_0.22_other_0.08_case_insensitive
+  amplitude_reference: RMS_of_original_native_voltage_over_all_selected_channels_and_score_support
+  inputs: add_known_voltage_then_recompute_all_bandpowers_and_PCA_proxies_before_independent_SSM_refit
+  interpretation: engineered_spatial_mixing_of_a_measured_EOG_waveform_not_measured_individual_EOG_transfer
+endpoints:
+  primary: norm_delta_S_over_norm_known_ocular_lower_better_native_rate
+  engineering_checks: {maximum_S_leakage: 0.30, minimum_O_delta_correlation: 0.90}
+  threshold_meaning: descriptive_prespecified_tolerances_not_literature_validated_physiological_cutoffs
+  secondary: O_signed_gain_S_pair_correlation_S_change_relative_baseline_Hb_change_and_outside_support_change
+  baseline: same_window_without_added_ocular_recomputed_and_checked_against_source_cache
+  truth: only_added_ocular_is_known_original_window_is_not_clean_truth
+  aggregation: windows_within_subject_then_subjects_within_dataset_then_equal_four_datasets
+  denominators: all_24_windows_each_amplitude_failures_retained_no_success_only_confirmation
+  'null': S_may_follow_added_ocular_and_O_may_not_recover_it
+  verdict: report_each_strength_and_dataset_do_not_tune_after_viewing_results
+boundary:
+  splits: [train, validation]
+  new_native_reads: only_frozen_24_validation_windows_through_central_reader
+  training_reads: retained_reference_models_only
+  Hb_reads: retained_source_features_only
+  test_and_protected: forbidden
+resources:
+  preparation_workers: 4
+  pilot_fit_workers: 4
+  fit_workers: 48
+  target_workers: 12
+  numerical_threads: 1
+  supervisor: user_systemd_with_linger
+stopping: complete_fixed_matrix_no_outcome_based_expansion_or_full_cache_regeneration

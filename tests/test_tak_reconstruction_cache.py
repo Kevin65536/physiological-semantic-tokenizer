@@ -160,6 +160,32 @@ def test_tau_beta_SO_retained_boundary_rejects_protected_before_signal_reads():
         runner.tau_beta_so_validate_plan(dict(schema=cfg['source_schema'],rows=[dict(split='test')]),cfg)
 
 
+def test_cache_ocular_injection_has_exact_frozen_RMS_and_compact_support():
+    x=np.tile(np.sin(np.arange(18000)/200)[:,None],(1,3));donor=np.cos(np.arange(18000)/31)
+    before=x.copy();n,meta=runner.cache_ocular_injection(x,200,['FP1','AF3','O1'],donor,.5)
+    np.testing.assert_array_equal(x,before)
+    assert not n[:6000].any() and not n[10000:].any()
+    assert np.sqrt(np.mean(n[6000:10000]**2))/np.sqrt(np.mean(x[6000:10000]**2))==pytest.approx(.5)
+    np.testing.assert_allclose(n[:,1],.65*n[:,0]);np.testing.assert_allclose(n[:,2],.08*n[:,0])
+    assert meta['electrode']==0
+    with pytest.raises(ValueError):runner.cache_ocular_injection(x,200,['FP1','AF3','O1'],donor,0)
+
+
+def test_cache_ocular_selection_is_metadata_only_and_excludes_previous_and_test():
+    cfg=runner.cache_ocular_config();cfg['selection'].update(expected_subjects=1,expected_windows=2)
+    template=dict(dataset='fixture',split='train',record_plan=dict(eeg_channel_names=['F1']))
+    reference=dict(datasets={'fixture':dict(validation_subjects=['s1'],pairs=['P'])},rows=[template])
+    records=[]
+    for split,subject in [('validation','s1'),('validation','s2'),('test','s3')]:
+        for rec in ['a','b','c']:
+            records.append(dict(dataset='fixture',subject=subject,split=split,record=rec,cache_key=subject+'/'+rec,
+                eeg_channel_names=['F1'],pairs=[dict(id='P',status='available')],
+                cache_windows=[dict(key=str(i),duration_s=90) for i in range(3)]))
+    selected,counts=runner.cache_ocular_select(dict(records=records),reference,cfg)
+    assert counts=={'fixture':1} and [r['record_plan']['record'] for r in selected]==['a','c']
+    assert all(r['subject']=='s2' and r['window']['key']=='1' for r in selected)
+
+
 def test_tau_beta_SO_frozen_control_changes_input_but_holds_prediction(tmp_path,monkeypatch):
     import json
     import src.data.dual_component_tokenizer as voltage_module
