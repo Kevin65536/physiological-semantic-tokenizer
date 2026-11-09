@@ -21,6 +21,20 @@ def model_fixture(channels=4):
         complement_power=np.ones(channels))
 
 
+@pytest.mark.parametrize('rate',[200,500,1000])
+def test_native_rate_carriers_match_ssm_power_and_preserve_complement(rate):
+    from src.inference.observation_baselines import eeg_band_power
+    from src.data.dual_component_tokenizer import BANDS
+    t=np.arange(rate*3)/rate;x=np.column_stack((np.sin(2*np.pi*10*t),np.cos(2*np.pi*35*t)))
+    bank=voltage_power_cap_bank(x,sample_rate_hz=rate)
+    np.testing.assert_allclose(bank.sum(1),x,atol=1e-15)
+    power=np.mean(bank[:,:5].reshape(30,rate//10,5,2)**2,axis=1).transpose(0,2,1)
+    np.testing.assert_allclose(power,eeg_band_power(x,bands=BANDS,sample_rate=rate,target_rate=10),atol=1e-14)
+    frames,clock=voltage_power_cap_frames(bank,window=rate,hop=rate//10,sample_rate_hz=rate)
+    assert frames.shape==(31,6,2,rate)
+    np.testing.assert_allclose(clock,np.arange(31)/10)
+
+
 def test_normalization_audit_separates_gains_training_sd_and_objective_weights():
     from src.analysis.dual_component_tokenizer import voltage_normalization_statistics
     t=np.arange(100)/10;raw=np.column_stack((np.sin(t)+2,3*np.cos(t),.5*np.sin(2*t)))
@@ -38,6 +52,17 @@ def test_normalization_audit_separates_gains_training_sd_and_objective_weights()
     np.testing.assert_allclose(a['distributions']['objective_units']['sd'],
         np.array(b['distributions']['objective_units']['sd'])*np.sqrt([.1,10,10]))
     assert a['distributions']['model']['rms'][0]>a['distributions']['model']['sd'][0]
+
+
+@pytest.mark.parametrize('rate',[500,1000])
+def test_native_rate_voltage_target_identity_and_closure(rate):
+    t=np.arange(rate*3)/rate
+    x=np.column_stack([.001*np.sin(2*np.pi*(8+j)*t) for j in range(4)])
+    model=model_fixture();model['sample_rate_hz']=rate
+    result=voltage_power_cap_target(x,model,None)
+    np.testing.assert_allclose(result['s'],x,atol=1e-12)
+    np.testing.assert_allclose(result['s']+result['o'],x,atol=1e-15)
+    assert result['frame_time_s'][-1]==pytest.approx(3)
 
 
 def test_normalization_variance_partition_includes_window_mean_offsets():

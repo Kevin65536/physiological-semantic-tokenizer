@@ -103,6 +103,57 @@ def test_amplitude_frequency_rejects_test_record_before_any_task_read(tmp_path):
             dict(dataset='refed',split='test'),{},1.))
 
 
+def test_weight_SO_changes_only_objective_denominator_and_keeps_total_weight(monkeypatch):
+    cfg=runner.weight_so_config();target=np.ones((900,3));sd=np.array([.025,.03,.01])
+    co=dict(eeg_factor=2.,hb_factor=3.,sd=sd)
+    core=dict(arms=[dict(name='tak_fixed',fit=[])])
+    weight=runner.weight_so_weights(cfg['weights']['hbo4'])
+    assert weight.sum()==pytest.approx(3)
+    def captured(core,arm,y,operator,actual_sd,mask,warm,**kwargs):
+        np.testing.assert_array_equal(y[0],target*[2,3,3])
+        np.testing.assert_allclose(actual_sd[0],sd/np.sqrt(weight))
+        assert mask[0,:-1].all() and not mask[0,-1].any()
+        assert kwargs['observation_reference_steps']==50
+        raise RuntimeError('captured_weighted_objective')
+    monkeypatch.setattr(runner,'tak_fit_group',captured)
+    with pytest.raises(RuntimeError,match='captured_weighted_objective'):
+        runner.tak_cache_fit_arrays(core,target,co,sd,structured=True,observation_weights=weight)
+    np.testing.assert_array_equal(co['sd'],sd)
+
+
+def test_weight_native_reader_rejects_test_split_before_cache_access(tmp_path):
+    from src.data.tak_mismatch import read_tak_weight_voltage_window
+    with pytest.raises(ValueError,match='Development split'):
+        read_tak_weight_voltage_window(tmp_path,{'split':'test'}, {},split='test',cache_root='missing',
+            geometry_root='missing',refed_geometry_root='missing',visual_eeg_channel_identity=None)
+
+
+def test_weight_SO_delta_metrics_distinguish_rejection_preservation_and_units():
+    rng=np.random.default_rng(4);base=rng.normal(size=(100,3));delta=rng.normal(size=(100,3))
+    assert runner.weight_so_delta_metrics(base,base,delta,kind='noise')['normalized_error']==0
+    assert runner.weight_so_delta_metrics(base,base+delta,delta,kind='noise')['normalized_error']==pytest.approx(1)
+    assert runner.weight_so_delta_metrics(base,base+delta,delta,kind='neural')['normalized_error']<1e-15
+    assert runner.weight_so_delta_metrics(base,base,delta,kind='neural')['normalized_error']==pytest.approx(1)
+    a=runner.weight_so_delta_metrics(base,base+.3*delta,delta,kind='neural')
+    b=runner.weight_so_delta_metrics(base*1e-6,(base+.3*delta)*1e-6,delta*1e-6,kind='neural')
+    assert a['normalized_error']==pytest.approx(b['normalized_error'])
+
+
+def test_weight_SO_selected_arm_owns_qualification_and_prediction(tmp_path):
+    import json
+    path=tmp_path/'fit.json'
+    path.write_text(json.dumps(dict(qualified=False,fits=dict(
+        tak_fixed=dict(qualified=True,tau=2.,beta=1.),
+        tak_tau_beta=dict(qualified=False,tau=3.,beta=.5)))))
+    np.savez(path.with_suffix('.npz'),fixed_prediction=np.full((900,3),2.),prediction=np.full((900,3),3.))
+    pred,record=runner.weight_so_prediction(path,'tak_fixed')
+    np.testing.assert_array_equal(pred,np.full((900,3),2.));assert record['tau']==2.
+    with pytest.raises(ValueError,match='Unqualified SSM'):
+        runner.weight_so_prediction(path,'tak_tau_beta')
+    with pytest.raises(ValueError,match='Unknown SSM arm'):
+        runner.weight_so_prediction(path,'unknown')
+
+
 
 
 def test_windows_cover_complete_support_without_crossing_gaps_and_short_refed_is_fitted():

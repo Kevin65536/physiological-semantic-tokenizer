@@ -382,6 +382,20 @@ Thresholds are engineering diagnostics and do not establish causal attribution.
 The existing cache test file covers inclusive boundaries, missing/failed counts
 and rejecting test-split access before task reads; no model is refitted.
 
+The [weight/SO comparison](configs/physiology_semantic_tokenizer/shared_driver_weight_so_v1.yaml)
+uses the same entry with `--weight-so-comparison --weight-so-stage
+<check|plan|prepare|pilot|fit|targets|summarize|review> --run-dir <fresh_run>`.
+Native preparation and fitting/target production run under a durable supervisor.
+`targets --pilot` benchmarks the equal-weight target for the first validation
+case of each dataset; normal `targets` resumes the full fixed matrix.
+The shared voltage reference/projection owner supports native 200/500/1000 Hz;
+the default 200 Hz path retains its numerical definition. Targeted tests are
+`test_tak_reconstruction_cache.py` and `test_dual_component_power_cap.py`.
+The study keeps normalization and τ/β fitting fixed and normalizes weight sums
+to three; it generates a configuration recommendation, not a new full cache.
+`review` adds Hb waveform diagnostics and a versioned report that distinguishes
+the relative screening result from the production recommendation; original
+numerical results and the first report remain retained.
 Both explicitly fit τ/β at log-prior SD 0.125. Fits use 90 s,
 or the actual shorter REFED support, and the corrected Visual native identities.
 `produce` resumes matching terminal work, completes preparation/calibration,

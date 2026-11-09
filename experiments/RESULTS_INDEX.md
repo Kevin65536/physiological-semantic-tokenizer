@@ -196,6 +196,17 @@ references resolve within the new export, and the owning run evidence remains
 at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
+The [four-dataset weight/SO matrix](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/summary.json)
+retains [all fit statuses](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/fit_status.csv),
+[all target metrics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/target_metrics.csv),
+[Hb morphology](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/Hb_morphology_summary.csv),
+[known-change projection diagnostics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/neural_change_projection.csv)
+and the [reviewed waveform report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/report_v2.html).
+The [review](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/review.json)
+separates the prespecified relative screen from the recommendation about changing
+production weights. Native rates/units and frozen normalization remain explicit;
+the source reconstruction cache is unchanged.
+
 The [four-dataset amplitude-frequency audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/summary.json)
 retains [threshold and subject rates](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/rates.csv),
 [threshold sensitivity](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/threshold_sensitivity.csv),

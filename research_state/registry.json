@@ -5609,6 +5609,60 @@
       "role": "run_manifest"
     },
     {
+      "id": "e.weight_so_contract",
+      "label": "权重与S/O：实验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_weight_so_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.weight_so_plan",
+      "label": "权重与S/O：固定窗口与校准来源",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/plan.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.weight_so_pilot",
+      "label": "权重与S/O：基线与资源复现",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/pilot_verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.weight_so_launch",
+      "label": "权重与S/O：持久监督命令",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/launches.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.weight_so_summary",
+      "label": "权重与S/O：完整拟合与S/O矩阵",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.weight_so_review",
+      "label": "权重与S/O：生产权重建议",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/review.json",
+      "role": "decision"
+    },
+    {
+      "id": "e.weight_so_verification",
+      "label": "权重与S/O：目标函数与基线核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.weight_so_report",
+      "label": "权重与S/O：波形与统计报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/report_v2.html",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.weight_so_hb_morphology",
+      "label": "权重与S/O：Hb原始波形形态",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/Hb_morphology_summary.csv",
+      "role": "diagnostic"
+    },
+    {
       "id": "e.tak_subject_cache_final_summary",
       "label": "全量个体校准缓存：summary.json",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/summary.json",
@@ -14141,6 +14195,63 @@
       ],
       "headline": false,
       "next_step": "只读频次统计完成；保留固定阈值、敏感性、被试率、共同支持和失败分母，不自动扩展到测试或启动重拟合。"
+    },
+    {
+      "state_id": "main.weight_so@2026-11-07.v1-running",
+      "entity": "main.weight_so",
+      "label": "四数据集权重与S/O抗噪形态对照",
+      "track": "main",
+      "order": 213,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "用户要求根据不同EEG/HbO/HbR权重比较S/O抗噪与形态保留，决定未来缓存配置。固定四库各2名验证被试、各3名训练参考被试；三ROI、七组总和归一到3的权重、基线及六种已知扰动。20个原生窗口复现缓存特征，四数据集等权基线最大差1.5e-14个被试SD，50项相关测试通过。504个ROI拟合在48单线程CPU持久服务运行，随后生成392组S/O并检查已知变化、形态与闭合；没有全量缓存重生成。",
+      "evidence_ids": [
+        "e.weight_so_contract",
+        "e.weight_so_plan",
+        "e.weight_so_pilot",
+        "e.weight_so_launch"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-11-07T12:07:14.876466+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "完成固定权重矩阵、S/O目标和完整失败统计，核验波形后按预设取舍给出配置建议。"
+    },
+    {
+      "state_id": "main.weight_so@2026-11-07.v1-completed",
+      "entity": "main.weight_so",
+      "label": "四数据集权重与S/O抗噪形态对照",
+      "track": "main",
+      "order": 213,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "四库8名验证被试、七组总和3的EEG/HbO/HbR权重、基线及六种已知扰动完成。504次ROI拟合502合格，392组S/O目标384可用；2次失败均为1:100:100，导致8组目标不可用。24个等权基线与缓存最大差1.5e-14个被试SD，502份加权目标函数复算差≤4.55e-13。4:1:1相对等权使综合噪声误差0.4593→0.3129（下降31.9%），四库均超过20%，通过预设相对抗噪/EEG形态筛查；改善主要来自Hb扰动，眼电/肌电基本不变。Hb固定尺度NRMSE却由0.3610→0.4652，HbO/HbR相关从0.527/0.407降至0.323/0.273。各权重神经样保留误差均约0.994，新增10/35Hz电压主要进入O；此为Hb不变、训练RMS强度的工程探针，不是自然耦合神经真值。完整S+O闭合且全部失败保留。应用建议暂保留1:1:1，不因本轮权重结果全量重生成，4:1:1保留为抗噪候选；需要先明确/改善S/O保留与Hb保真取舍。",
+      "evidence_ids": [
+        "e.weight_so_contract",
+        "e.weight_so_plan",
+        "e.weight_so_pilot",
+        "e.weight_so_launch",
+        "e.weight_so_summary",
+        "e.weight_so_review",
+        "e.weight_so_verification",
+        "e.weight_so_report",
+        "e.weight_so_hb_morphology"
+      ],
+      "supersedes": [
+        "main.weight_so@2026-11-07.v1-running"
+      ],
+      "updated_at": "2026-11-07T12:49:09.174543+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "本轮有限矩阵已完成，未重生成生产缓存。就权重因素保留等权，4:1:1仅为抗噪候选；后续先验证S/O目标的绝对保留能力与Hb形态取舍。"
     },
     {
       "state_id": "main.tak_subject_cache@2026-11-07.v1-completion-verified",

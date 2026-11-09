@@ -146,6 +146,19 @@ untouched confirmation set. The new input cache creates no protected-data unlock
 
 ## Subject-calibrated Tak reconstruction cache — 2026-11-04
 
+The [four-dataset weight/SO diagnostic](../experiments/configs/physiology_semantic_tokenizer/shared_driver_weight_so_v1.yaml)
+uses a fresh run, two metadata-selected validation subjects per dataset and
+three training reference subjects per dataset. Its plan fixes exact 90-second
+windows and three Hb locations before signal access. Only those registered
+native EEG windows are read through the existing Tak boundary; Hb and frozen
+PCA/scales come from retained v1 features/coordinates. Test/protected reads and
+full-cache regeneration are excluded. Native EEG rates/units are preserved;
+200 Hz is only the display rate for originally higher-rate signals. Training
+power references, input scales, τ/β priors and solver limits are fixed across
+the normalized-sum-three weight matrix. Known added changes are the intervention
+truth, not clean baseline voltage. The existing full-spectrum power-cap target
+algorithm is retained, with final reanalysis and exact S+O closure recorded.
+
 [`shared_driver_tak_subject_cache_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml)
 owns this new, explicitly requested public reconstruction generation. It uses
 the native EEG/retained v5 Hb route above and the corrected Visual channel

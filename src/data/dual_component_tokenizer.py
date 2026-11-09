@@ -579,7 +579,7 @@ def prepare_voltage_teacher_record(root, cfg, entries, coordinates, read_parent)
         yield entry, payload, metadata
 
 
-def voltage_power_cap_bank(x):
+def voltage_power_cap_bank(x, *, sample_rate_hz=200):
     """Original five Butterworth carriers plus their exact voltage complement.
 
     The complement includes DC and frequencies outside the proxy bands. It is
@@ -588,30 +588,32 @@ def voltage_power_cap_bank(x):
     """
     from scipy.signal import butter, sosfiltfilt
     x = np.asarray(x, float)
-    if x.ndim != 2 or len(x) < 200 or not np.isfinite(x).all():
-        raise ValueError('finite native 200 Hz multichannel voltage required')
-    bands = [sosfiltfilt(butter(4, band, fs=200, btype='bandpass', output='sos'), x, axis=0)
+    if (sample_rate_hz not in (200,500,1000) or x.ndim != 2
+            or len(x) < sample_rate_hz or not np.isfinite(x).all()):
+        raise ValueError('finite supported native-rate multichannel voltage required')
+    bands = [sosfiltfilt(butter(4, band, fs=sample_rate_hz, btype='bandpass', output='sos'), x, axis=0)
              for band in BANDS]
     return np.stack([*bands, x - np.sum(bands, axis=0)], axis=1)
 
 
-def voltage_power_cap_frames(bank, *, window=200, hop=20):
+def voltage_power_cap_frames(bank, *, window=200, hop=20, sample_rate_hz=200):
     """One-second second-moment frames, 100 ms hop, reflected endpoints.
 
     No frame mean is removed. Reflection is solely a declared finite-window
     edge convention; reported interventions are in the interior [30,50) s.
     """
     bank = np.asarray(bank, float)
-    if (bank.ndim != 3 or window != 200 or hop != 20 or len(bank) % hop
+    if (bank.ndim != 3 or sample_rate_hz not in (200,500,1000)
+            or window != sample_rate_hz or hop != sample_rate_hz//10 or len(bank) % hop
             or not np.isfinite(bank).all()):
         raise ValueError('finite bank and declared one-second/100 ms frame clock required')
     padded = np.pad(bank, ((window//2, window//2), (0, 0), (0, 0)), mode='reflect')
     frames = np.lib.stride_tricks.sliding_window_view(padded, window, axis=0)[::hop]
     # [frame, band, channel, local sample], read-only view; time is the centre.
-    return frames, np.arange(len(frames)) * hop / 200.
+    return frames, np.arange(len(frames)) * hop / sample_rate_hz
 
 
-def fit_voltage_power_cap_reference(training, projection, *, shrinkage=.1):
+def fit_voltage_power_cap_reference(training, projection, *, shrinkage=.1, sample_rate_hz=200):
     """Frozen train-only log-power completion and six second-moment references.
 
     This is a signal-statistics reference, not estimated clean covariance.
@@ -627,16 +629,16 @@ def fit_voltage_power_cap_reference(training, projection, *, shrinkage=.1):
     features, baselines, correlations, complements = [], [], [], []
     for item in training:
         x = np.asarray(item['x'], float)
-        if x.shape != (18000, c):
+        if x.shape != (90*sample_rate_hz, c):
             raise ValueError('each reference window must retain complete 90 s support')
-        bank = voltage_power_cap_bank(x)
-        power = np.mean(bank[:, :5].reshape(900, 20, 5, c)**2, axis=1).transpose(0, 2, 1)
+        bank = voltage_power_cap_bank(x,sample_rate_hz=sample_rate_hz)
+        power = np.mean(bank[:, :5].reshape(900, sample_rate_hz//10, 5, c)**2, axis=1).transpose(0, 2, 1)
         log = np.log(np.maximum(power, 1e-20)); baseline = log[:50].mean(axis=0)
         features.append((log - baseline)[150:750].reshape(600, -1))
         baselines.append(baseline.reshape(-1))
-        frames, time_s = voltage_power_cap_frames(bank)
+        frames, time_s = voltage_power_cap_frames(bank,window=sample_rate_hz,hop=sample_rate_hz//10,sample_rate_hz=sample_rate_hz)
         frames = frames[(time_s >= 15) & (time_s < 75)]
-        second = np.einsum('nbcl,nbdl->nbcd', frames, frames) / 200
+        second = np.einsum('nbcl,nbdl->nbcd', frames, frames) / sample_rate_hz
         diagonal = np.diagonal(second, axis1=-2, axis2=-1)
         if np.any(diagonal <= 0):
             raise ValueError('zero training channel/band power cannot define a reference')
@@ -654,7 +656,7 @@ def fit_voltage_power_cap_reference(training, projection, *, shrinkage=.1):
     return dict(projection=a, mean=mu, covariance=covariance, lift=lift,
         baseline_log_power=np.median(baselines, axis=0), correlation=correlation,
         complement_power=np.median(np.concatenate(complements), axis=0),
-        shrinkage=np.array(shrinkage), training_windows=np.array(len(training)),
+        shrinkage=np.array(shrinkage), sample_rate_hz=np.array(sample_rate_hz), training_windows=np.array(len(training)),
         training_feature_rows=np.array(len(ell)))
 
 
@@ -732,26 +734,28 @@ def voltage_power_cap_target(x, model, proxy, *, cap=1., audit_final=True):
     final sum can change those blocks; its violations are measured, never hidden
     or promoted to a global bound. No mean or out-of-band voltage is added back.
     """
-    x = np.asarray(x, float); bank = voltage_power_cap_bank(x)
-    frames, time_s = voltage_power_cap_frames(bank)
+    rate=int(model.get('sample_rate_hz',200));hop=rate//10
+    x = np.asarray(x, float); bank = voltage_power_cap_bank(x,sample_rate_hz=rate)
+    frames, time_s = voltage_power_cap_frames(bank,window=rate,hop=hop,sample_rate_hz=rate)
     power = voltage_power_cap_reference(model, proxy, time_s)
     d = np.sqrt(power)
     covariance = d[..., :, None] * model['correlation'][None] * d[..., None, :]
     estimated, diagnostic = project_voltage_second_moment(frames, covariance, cap)
     if np.max(diagnostic['max_output_eigenvalue']) > cap*(1+1e-8):
         raise AssertionError('local spectral cap was not satisfied')
-    window = np.hanning(201)[:-1]
-    accumulated = np.zeros((len(x)+200, x.shape[1])); weight = np.zeros(len(x)+200)
+    window = np.hanning(rate+1)[:-1]
+    accumulated = np.zeros((len(x)+rate, x.shape[1])); weight = np.zeros(len(x)+rate)
     for k, block in enumerate(estimated):
-        start = k*20
-        accumulated[start:start+200] += block.sum(axis=0).T * window[:, None]
-        weight[start:start+200] += window
-    section = slice(100, 100+len(x))
+        start = k*hop
+        accumulated[start:start+rate] += block.sum(axis=0).T * window[:, None]
+        weight[start:start+rate] += window
+    section = slice(rate//2, rate//2+len(x))
     s = accumulated[section]/weight[section, None]
     o = x-s
     post = np.empty((0, 6))
     if audit_final:
-        final_frames, _ = voltage_power_cap_frames(voltage_power_cap_bank(s))
+        final_frames, _ = voltage_power_cap_frames(voltage_power_cap_bank(s,sample_rate_hz=rate),
+            window=rate,hop=hop,sample_rate_hz=rate)
         _, check = project_voltage_second_moment(final_frames, covariance, cap)
         post = check['max_input_eigenvalue']/cap
     return dict(s=s, o=o, reference_power=power, frame_time_s=time_s,

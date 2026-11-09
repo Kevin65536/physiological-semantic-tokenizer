@@ -711,6 +711,28 @@ def tak_reconstruction_windows(record_plan, *, stride_s=60.):
     return windows, exclusions
 
 
+def read_tak_weight_voltage_window(project_root,record_plan,window,*,split,cache_root,geometry_root,
+                                   refed_geometry_root,visual_eeg_channel_identity):
+    """Native voltage for a declared development cache window; same central boundary."""
+    if split not in ('train','validation') or record_plan.get('split')!=split:
+        raise ValueError('Development split required before native voltage access')
+    if window not in record_plan['cache_windows'] or window['duration_s']!=90:
+        raise ValueError('Declared complete 90-second cache window required')
+    root=Path(project_root)
+    record,names,identity,_=_validated_tak_record(root,record_plan,cache_root=cache_root,
+        geometry_root=geometry_root,refed_geometry_root=refed_geometry_root,seed=20261104,
+        visual_eeg_channel_identity=visual_eeg_channel_identity)
+    eeg=load_native_eeg_record(root,record);rate=int(eeg.sample_rate_hz)
+    if (rate not in (200,500,1000) or rate!=eeg.sample_rate_hz or list(eeg.channel_names)!=names
+            or (identity is not None and eeg.channel_identity!=identity)
+            or str(Path(eeg.source_path).resolve()) not in _registered_sources(record,root)):
+        raise ValueError('Native source/channel/rate identity changed')
+    start=round(window['eeg_start_s']*rate);x=np.asarray(eeg.values[start:start+90*rate],float)
+    if x.shape!=(90*rate,len(names)):raise ValueError('Incomplete native voltage support')
+    return dict(x=x,rate=rate,channels=names,unit=eeg.native_unit,
+        reference=getattr(eeg,'reference',None),source=str(eeg.source_path),start_sample=start)
+
+
 def iter_tak_reconstruction_record(project_root, record_plan, *, cache_root=DEFAULT_CLEAN_CACHE_ROOT,
                                   geometry_root=None, refed_geometry_root=None, seed=20261104,
                                   index=None, pending_windows=None, visual_eeg_channel_identity=None):

@@ -11166,7 +11166,8 @@ def _tak_cache_errors(target,prediction,sd):
                 hb_nmse=float(value[1:].mean()))
 
 
-def tak_cache_fit_arrays(core,target_unscaled,coordinate,common_sd, *, structured=False,linear_solver=None):
+def tak_cache_fit_arrays(core,target_unscaled,coordinate,common_sd, *, structured=False,linear_solver=None,
+                         observation_weights=None):
     """The same two-parameter fit for 90 s and actual-duration REFED supports."""
     from src.inference.shared_driver_reconstruction import nonlinear_driver_forward
     target_unscaled=np.asarray(target_unscaled,float)
@@ -11178,6 +11179,10 @@ def tak_cache_fit_arrays(core,target_unscaled,coordinate,common_sd, *, structure
             or np.shape(common_sd)!=(3,) or np.any(np.asarray(common_sd)<=0)):
         raise ValueError('Finite three-component target and fixed positive scales required')
     target=target_unscaled*scale
+    weights=np.ones(3) if observation_weights is None else np.asarray(observation_weights,float)
+    if weights.shape!=(3,) or not np.isfinite(weights).all() or np.any(weights<=0):
+        raise ValueError('Three positive finite observation weights required')
+    fit_sd=sd if observation_weights is None else sd/np.sqrt(weights)
     operator=None if structured else _tak_cache_operator(n)
     mask=np.ones((1,n,3),bool);mask[:,-1]=False
     arrays=dict(target=target_unscaled,scale=scale,sd_subject=sd/scale,
@@ -11186,7 +11191,7 @@ def tak_cache_fit_arrays(core,target_unscaled,coordinate,common_sd, *, structure
     results={};warm=None
     for arm in core['arms']:
         started=time.monotonic()
-        fit=tak_fit_group(core,arm,target[None],None if operator is None else operator[None],sd[None],mask,warm,
+        fit=tak_fit_group(core,arm,target[None],None if operator is None else operator[None],fit_sd[None],mask,warm,
             observation_reference_steps=50 if structured else None,linear_solver=linear_solver)
         details={k:v for k,v in fit.items() if k not in
                  ('driver','initial_state','prediction','canonical_prediction','states')}
@@ -11225,6 +11230,7 @@ def tak_cache_fit_arrays(core,target_unscaled,coordinate,common_sd, *, structure
         execution_backend=dict(observation_algebra='structured' if structured else 'dense',
             linear_solver=getattr(linear_solver,'backend','scipy_cpu_float64')),
         zero_baseline=_tak_cache_errors(target_unscaled,np.zeros_like(target_unscaled),common_sd),
+        observation_weights=weights.tolist(),
         normalization=dict(subject='individual_calibration_SD',common=coordinate.get(
             'common_scale_interpretation','training_subjects_common_projection_SD')),
         duration_s=n/10.,scored_steps=n-1,reference_steps=50)
@@ -12500,6 +12506,630 @@ def amplitude_frequency_main(args):
     print(json.dumps(serial({k:v for k,v in result.items() if k!='rows'})),flush=True);return result
 
 
+def weight_so_config(path=None):
+    owner=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_weight_so_v1.yaml'
+    cfg=yaml.safe_load(Path(path or owner).read_text())
+    if cfg!=yaml.safe_load(owner.read_text()):raise ValueError('Use reviewed weight/SO contract')
+    return cfg
+
+
+def weight_so_weights(ratios):
+    ratios=np.asarray(ratios,float)
+    if ratios.shape!=(3,) or not np.isfinite(ratios).all() or np.any(ratios<=0):
+        raise ValueError('Three positive weight ratios required')
+    return 3*ratios/ratios.sum()
+
+
+def weight_so_plan(cfg,out):
+    source=CODE_ROOT/cfg['source_run'];old=json.loads((source/'plan.json').read_text())
+    coordinates=json.loads((source/'coordinates.json').read_text());cache=json.loads((source/'resolved_config.json').read_text())
+    core=json.loads((source/'resolved_model_config.json').read_text())
+    if old['schema']!=cfg['source_schema'] or coordinates['schema']!=cfg['source_schema']:raise ValueError('Wrong source cache')
+    rows=[];datasets={}
+    numeric=lambda s:(int(re.search(r'\d+',s).group()),s)
+    for ds in cfg['datasets']:
+        records=[r for r in old['records'] if r['dataset']==ds and r['split'] in cfg['boundary']['splits']
+            and any(w['duration_s']==90 for w in r['cache_windows'])]
+        training=sorted({r['subject'] for r in records if r['split']=='train'},key=numeric)[:3]
+        validation=sorted({r['subject'] for r in records if r['split']=='validation'},key=numeric)
+        if len(training)!=3 or len(validation)<2:raise ValueError('Insufficient metadata subject support')
+        reference=min([r for r in records if r['subject']==training[0]],key=lambda r:r['record'])
+        available=[p for p in reference['pairs'] if p['status']=='available']
+        pairs=[available[i]['id'] for i in (0,len(available)//2,len(available)-1)]
+        for split,subjects in [('train',training),('validation',[validation[0],validation[-1]])]:
+            for subject in subjects:
+                candidates=[r for r in records if r['subject']==subject and r['split']==split
+                    and all(any(p['id']==name and p['status']=='available' for p in r['pairs']) for name in pairs)
+                    and r['eeg_channel_names']==reference['eeg_channel_names']]
+                if not candidates:raise ValueError('Matching training/evaluation geometry missing')
+                record=min(candidates,key=lambda r:r['record']);windows=[w for w in record['cache_windows'] if w['duration_s']==90]
+                window=windows[0 if split=='train' else len(windows)//2]
+                selected=[next(p for p in record['pairs'] if p['id']==name) for name in pairs]
+                co=coordinates['individual'][ds+'__'+subject]
+                if co.get('status')!='completed':raise ValueError('Source individual coordinate unavailable')
+                np.testing.assert_allclose(co['pc'],coordinates['population'][ds]['pc'],rtol=0,atol=1e-12)
+                rows.append(dict(case=record['cache_key'].replace('/','__')+'__'+window['key'],dataset=ds,
+                    subject=subject,split=split,record_plan=record,window=window,pairs=selected,
+                    coordinate={k:co[k] for k in ('pc','eeg_factor','hb_factor','sd')},
+                    feature=str(source/'features'/record['cache_key']/(window['key']+'.npz'))))
+        datasets[ds]=dict(pairs=pairs,training_subjects=training,validation_subjects=[validation[0],validation[-1]])
+    result=dict(schema=cfg['schema'],source=str(source),rows=rows,datasets=datasets,
+        cache_data=cache['data'],weights={k:weight_so_weights(v).tolist() for k,v in cfg['weights'].items()},
+        model_config=core,selection='metadata_only_no_fit_outcome_selection',raw_reads=0)
+    write_json(out/'plan.json',result);return dict(status='completed',training_cases=12,validation_cases=8,datasets=datasets,weights=result['weights'])
+
+
+@lru_cache(maxsize=2)
+def _weight_so_plan(out_string):
+    return json.loads((Path(out_string)/'plan.json').read_text())
+
+
+def _weight_so_prepare_native(payload):
+    from src.data.tak_mismatch import read_tak_weight_voltage_window,BANDS_HZ
+    from src.inference.observation_baselines import eeg_band_power
+    out_string,row=payload;out=Path(out_string);path=out/'inputs'/(row['case']+'.npz');meta=path.with_suffix('.json')
+    if meta.exists():return json.loads(meta.read_text())
+    started=time.monotonic();plan=_weight_so_plan(out_string);d=plan['cache_data']
+    if row not in plan['rows'] or row['split'] not in ('train','validation'):raise ValueError('Undeclared voltage input')
+    try:
+        native=read_tak_weight_voltage_window(CODE_ROOT,row['record_plan'],row['window'],split=row['split'],
+            cache_root=d['cache_root'],geometry_root=d['geometry_root'],refed_geometry_root=d['refed_geometry_root'],
+            visual_eeg_channel_identity=d['visual_eeg_channel_identity'])
+        indices=sorted({i for p in row['pairs'] for i in p['channel_sets']['nearest6']})
+        roi=np.array([[indices.index(i) for i in p['channel_sets']['nearest6']] for p in row['pairs']])
+        x=native.pop('x')[:,indices]
+        if not np.isfinite(x).all():raise ValueError('Invalid selected native channels')
+        with np.load(row['feature'],allow_pickle=False) as a:
+            if not a['eeg_valid'][indices].all() or not a['hb_valid'][[p['native_index'] for p in row['pairs']]].all():
+                raise ValueError('Cached support invalid')
+            features=a['eeg'][:,indices];hb=a['hb'][:,[p['native_index'] for p in row['pairs']]]
+        computed=np.log(eeg_band_power(x,bands=BANDS_HZ,sample_rate=native['rate'],target_rate=10));computed-=computed[:50].mean(0)
+        np.testing.assert_allclose(computed,features,rtol=1e-9,atol=1e-9)
+        a=np.zeros((3,len(indices)*5));pc=np.asarray(row['coordinate']['pc']).reshape(6,5)
+        for r in range(3):
+            for j,c in enumerate(roi[r]):a[r,c*5:c*5+5]=pc[j]
+        if np.linalg.matrix_rank(a)!=3:raise ValueError('Rank-deficient proxy-to-power projection')
+        _tak_cache_npz(path,x=x,features=features,hb=hb,roi_indices=roi,projection=a,rate=np.array(native['rate']),
+            channels=np.array([native['channels'][i] for i in indices]),unit=np.array(str(native['unit'])))
+        result=dict(status='completed',case=row['case'],dataset=row['dataset'],subject=row['subject'],split=row['split'],
+            native=native,indices=indices,feature_replay_max_abs=float(np.max(abs(computed-features))),
+            seconds=time.monotonic()-started,peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    except Exception:result=dict(status='failed',case=row['case'],error=traceback.format_exc(),seconds=time.monotonic()-started)
+    write_json(meta,result);return result
+
+
+def weight_so_prepare(cfg,out,workers):
+    from src.data.dual_component_tokenizer import fit_voltage_power_cap_reference,BANDS
+    from src.inference.observation_baselines import eeg_band_power
+    from scipy.signal import butter,sosfiltfilt,resample_poly
+    plan=_weight_so_plan(str(out));rows=plan['rows']
+    execution=_tak_cache_pool(_weight_so_prepare_native,[(str(out),r) for r in rows],out=out,
+        phase='weight_so_native',workers=workers,total=len(rows))
+    failures=[r for r in execution['rows'] if r['status']!='completed']
+    if failures:
+        write_json(out/'preparation_failures.json',failures);raise ValueError('Native preparation failures retained; no replacement')
+    references={}
+    for ds in cfg['datasets']:
+        training=[];a=None;rate=None;channels=None
+        for row in rows:
+            if row['dataset']!=ds or row['split']!='train':continue
+            with np.load(out/'inputs'/(row['case']+'.npz'),allow_pickle=False) as z:
+                if a is not None:
+                    np.testing.assert_array_equal(a,z['projection']);np.testing.assert_array_equal(channels,z['channels']);assert rate==int(z['rate'])
+                a=z['projection'];rate=int(z['rate']);channels=z['channels'];training.append(dict(x=z['x'],split='train'))
+        model=fit_voltage_power_cap_reference(training,a,sample_rate_hz=rate)
+        model['voltage_rms']=np.sqrt(np.mean([np.mean(r['x']**2,axis=0) for r in training],axis=0))
+        _tak_cache_npz(out/'references'/(ds+'.npz'),**model);references[ds]=model
+    with np.load(CODE_ROOT/cfg['interventions']['ocular_source'],allow_pickle=False) as a:
+        n=a['n_ocular'];donor=n[:,np.argmax(np.sum(n*n,axis=0))]
+    tasks=[]
+    for index,row in enumerate(r for r in rows if r['split']=='validation'):
+        case=row['case'];model=references[row['dataset']]
+        with np.load(out/'inputs'/(case+'.npz'),allow_pickle=False) as a:base={k:a[k] for k in a.files}
+        np.testing.assert_array_equal(base['projection'],model['projection'])
+        x=base['x'];rate=int(base['rate']);t=np.arange(len(x))/rate;th=np.arange(900)/10
+        use=(t>=30)&(t<50);huse=(th>=30)&(th<50);electrode=int(base['roi_indices'][0,0]);q=float(model['voltage_rms'][electrode])
+        envelope=np.where(use,np.sin(np.pi*np.clip((t-30)/20,0,1))**2,0.)
+        rng=np.random.default_rng(cfg['seed']+index);shapes={}
+        shapes['ocular']=resample_poly(donor,rate,200)
+        shapes['muscle']=sosfiltfilt(butter(4,[25,70],btype='bandpass',fs=rate,output='sos'),rng.normal(size=len(t)))*envelope
+        for f in (10,35):shapes['neural'+str(f)]=np.sin(2*np.pi*f*t+rng.uniform(0,2*np.pi))*envelope
+        arrays={};changed={}
+        for variant in cfg['interventions']['variants']:
+            de=np.zeros_like(x);dh=np.zeros_like(base['hb']);feature=base['features'].copy()
+            if variant in shapes:
+                n=shapes[variant];de[:,electrode]=n*(q/np.sqrt(np.mean(n[use]**2)))
+                power=eeg_band_power(x[:,[electrode]]+de[:,[electrode]],bands=BANDS,sample_rate=rate,target_rate=10)
+                log=np.log(power);log-=log[:50].mean(0);feature[:,electrode]=log[:,0]
+            if variant in ('hbo_noise','hbr_noise'):
+                j=0 if variant=='hbo_noise' else 1
+                pulse=np.where(huse,np.sin(np.pi*np.clip((th-30)/20,0,1))**2,0.)
+                co=row['coordinate'];amplitude=co['sd'][j+1]/co['hb_factor']
+                dh[:,0,j]=pulse*amplitude/np.sqrt(np.mean(pulse[huse]**2))
+            arrays['features_'+variant]=feature;arrays['hb_'+variant]=base['hb']+dh
+            arrays['delta_eeg_'+variant]=de;arrays['delta_hb_'+variant]=dh
+            affected=[r for r in range(3) if variant=='baseline' or not np.array_equal(feature[:,base['roi_indices'][r]],base['features'][:,base['roi_indices'][r]])
+                or not np.array_equal(dh[:,r],np.zeros((900,2)))]
+            changed[variant]=affected
+            for weight in cfg['weights']:
+                for roi in affected:tasks.append(dict(case=case,weight=weight,variant=variant,roi=roi))
+        _tak_cache_npz(out/'variants'/(case+'.npz'),**arrays)
+        write_json(out/'variants'/(case+'.json'),dict(case=case,changed_rois=changed,electrode=electrode,
+            electrode_name=str(base['channels'][electrode]),injected_EEG_RMS=q,score_seconds=[30,50]))
+    write_json(out/'fit_plan.json',dict(schema=cfg['schema'],tasks=tasks,planned=len(tasks),validation_cases=8,
+        raw_access='exact_20_metadata_selected_development_windows',new_Hb_raw_reads=0))
+    return dict(status='completed',input_cases=len(rows),planned_fits=len(tasks),datasets=cfg['datasets'])
+
+
+def _weight_so_fit(payload):
+    out_string,task=payload;out=Path(out_string);plan=_weight_so_plan(out_string)
+    row=next(r for r in plan['rows'] if r['case']==task['case']);co=row['coordinate'];w=plan['weights'][task['weight']]
+    key=f"{task['case']}__{task['weight']}__{task['variant']}__r{task['roi']}";path=out/'fits'/(key+'.json')
+    if path.exists():return json.loads(path.read_text())
+    began=time.monotonic();result=dict(task=task,key=key,qualified=False,observation_weights=w)
+    try:
+        with np.load(out/'inputs'/(row['case']+'.npz'),allow_pickle=False) as a:indices=a['roi_indices'][task['roi']]
+        with np.load(out/'variants'/(row['case']+'.npz'),allow_pickle=False) as a:
+            target=np.column_stack((a['features_'+task['variant']][:,indices].reshape(900,30)@co['pc'],a['hb_'+task['variant']][:,task['roi']]))
+        gain=np.array([co['eeg_factor'],co['hb_factor'],co['hb_factor']]);sd=np.asarray(co['sd'])/gain
+        fit,arrays=tak_cache_fit_arrays(plan['model_config'],target,co,sd,structured=True,observation_weights=w)
+        result.update(fit);_tak_cache_npz(path.with_suffix('.npz'),**arrays)
+        if task['weight']=='equal' and task['variant']=='baseline':
+            source=Path(plan['source'])/'tasks'/row['record_plan']['cache_key']/(row['window']['key']+f"__p{row['pairs'][task['roi']]['native_index']:03d}.npz")
+            if source.exists():
+                with np.load(source,allow_pickle=False) as a:
+                    np.testing.assert_allclose(target,a['target'],rtol=1e-9,atol=1e-9)
+                    if 'prediction' in arrays and 'prediction' in a:result['baseline_replay_max_subject_SD']=float(np.max(abs(arrays['prediction']-a['prediction'])/sd))
+    except Exception:result.update(status='failed_exception',error=traceback.format_exc())
+    result.update(seconds=time.monotonic()-began,peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    write_json(path,result);return {k:result[k] for k in ('key','status','qualified','seconds','peak_rss_mib')}
+
+
+def weight_so_check(cfg,out):
+    for name,ratio in cfg['weights'].items():
+        weights=weight_so_weights(ratio);assert abs(weights.sum()-3)<1e-12
+        np.testing.assert_allclose(weights/weights[0],np.asarray(ratio)/ratio[0])
+    np.testing.assert_array_equal(weight_so_weights([1,1,1]),np.ones(3))
+    write_json(out/'software_checks.json',dict(status='passed',checks=['positive_weights','constant_sum_three','equal_weight_identity'],measured_reads=0))
+    return dict(status='passed')
+
+
+def weight_so_delta_metrics(s0,s1,delta,*,kind):
+    change=np.asarray(s1)-np.asarray(s0);delta=np.asarray(delta)
+    norm=float(np.linalg.norm(delta))
+    if norm<=0:raise ValueError('Nonzero known intervention required')
+    error=change-delta if kind=='neural' else change
+    return dict(normalized_error=float(np.linalg.norm(error)/norm),
+        signed_projection=float(np.sum(change*delta)/(norm*norm)),
+        changed_S_rms_over_injection=float(np.linalg.norm(change)/norm))
+
+
+def weight_so_prediction(path,arm):
+    """Read the selected numerical arm, including its own qualification flag."""
+    if arm not in ('tak_fixed','tak_tau_beta'):raise ValueError('Unknown SSM arm')
+    path=Path(path);fit=json.loads(path.read_text());record=fit['fits'][arm]
+    if not record['qualified']:raise ValueError('Unqualified SSM: '+str(path)+' '+arm)
+    with np.load(path.with_suffix('.npz'),allow_pickle=False) as a:
+        prediction=a['fixed_prediction' if arm=='tak_fixed' else 'prediction'].copy()
+    if prediction.shape!=(900,3) or not np.isfinite(prediction).all():raise ValueError('Invalid retained prediction')
+    return prediction,dict(source=str(path),arm=arm,tau=record['tau'],beta=record['beta'])
+
+
+def _weight_so_target(payload):
+    from src.data.dual_component_tokenizer import voltage_power_cap_target,BANDS
+    from src.inference.observation_baselines import eeg_band_power
+    from scipy.signal import resample_poly
+    out_string,case,weight=payload[:3];options=payload[3] if len(payload)>3 else {}
+    out=Path(out_string);plan=_weight_so_plan(out_string)
+    arm=options.get('arm','tak_tau_beta');freeze=options.get('freeze_baseline',False)
+    row=next(r for r in plan['rows'] if r['case']==case);cfg=weight_so_config();start=time.monotonic()
+    folder=Path(options.get('destination',out/'targets'))/case/weight;summary=folder/'summary.json'
+    if summary.exists():return json.loads(summary.read_text())
+    with np.load(out/'inputs'/(case+'.npz'),allow_pickle=False) as a:base={k:a[k] for k in a.files}
+    with np.load(out/'references'/(row['dataset']+'.npz'),allow_pickle=False) as a:model={k:a[k] for k in a.files}
+    changed=json.loads((out/'variants'/(case+'.json')).read_text());rate=int(base['rate']);electrode=changed['electrode']
+    use=slice(30*rate,50*rate);hs=slice(300,500);records=[];s0=None;h0=None
+    with np.load(out/'variants'/(case+'.npz'),allow_pickle=False) as variants:
+        for variant in options.get('variants',cfg['interventions']['variants']):
+            result=dict(case=case,dataset=row['dataset'],subject=row['subject'],weight=weight,variant=variant,
+                status='failed',qualified=False,unit=str(base['unit']),rate=rate,arm=arm,freeze_baseline=freeze)
+            try:
+                predictions=[];fit_status=[]
+                for roi in range(3):
+                    v=variant if not freeze and roi in changed['changed_rois'][variant] else 'baseline'
+                    path=out/'fits'/f'{case}__{weight}__{v}__r{roi}.json'
+                    prediction,record=weight_so_prediction(path,arm);predictions.append(prediction)
+                    fit_status.append(dict(roi=roi,**record))
+                pred=np.stack(predictions,axis=1);proxy=pred[:,:,0];hb_s=pred[:,:,1:]
+                de=variants['delta_eeg_'+variant];dh=variants['delta_hb_'+variant]
+                x=base['x']+de;hb=variants['hb_'+variant]
+                voltage=voltage_power_cap_target(x,model,proxy,cap=1.,audit_final=True)
+                s=voltage['s'];o=voltage['o'];q=model['voltage_rms']
+                correlations=[];derivatives=[]
+                for j in range(x.shape[1]):
+                    correlations.append(float(np.corrcoef(x[use,j],s[use,j])[0,1]) if s[use,j].std()>1e-20 else 0.)
+                    derivatives.append(float(np.corrcoef(np.diff(x[use,j]),np.diff(s[use,j]))[0,1]) if np.diff(s[use,j]).std()>1e-20 else 0.)
+                co=row['coordinate'];hsd=np.asarray(co['sd'])[1:]/co['hb_factor']
+                result.update(status='completed',qualified=True,noise_error=None,neural_error=None,
+                    baseline_correlation=float(np.median(correlations)),derivative_correlation=float(np.median(derivatives)),
+                    baseline_nrmse=float(np.sqrt(np.mean(((s[use]-x[use])/q)**2))),
+                    retained_voltage_RMS=float(np.sqrt(np.mean((s[use]/q)**2))),
+                    Hb_reference_nrmse=float(np.sqrt(np.mean(((hb_s[:-1]-hb[:-1])/hsd)**2))),
+                    EEG_closure_max_abs=float(voltage['closure_max_abs']),
+                    Hb_closure_max_abs=float(np.max(abs(hb_s+(hb-hb_s)-hb))),
+                    final_bound_max=float(np.max(voltage['final_reanalysis_ratio'])),
+                    final_bound_exceedance_fraction=float(np.mean(voltage['final_reanalysis_ratio']>1+1e-8)),fits=fit_status)
+                raw_power=eeg_band_power(x,bands=BANDS,sample_rate=rate,target_rate=10)[300:500].mean(0)
+                retained_power=eeg_band_power(s,bands=BANDS,sample_rate=rate,target_rate=10)[300:500].mean(0)
+                for j,(low,high) in enumerate(BANDS):
+                    result[f'band_power_ratio_{low:g}_{high:g}']=float(np.median(retained_power[:,j]/raw_power[:,j]))
+                if variant=='baseline':s0=s.copy();h0=hb_s.copy()
+                elif s0 is None:raise ValueError('No qualified same-weight baseline target')
+                else:
+                    if variant.startswith('neural'):
+                        metric=weight_so_delta_metrics(s0[use],s[use],de[use],kind='neural');result['neural_error']=metric['normalized_error']
+                    elif variant.startswith('ocular') or variant=='muscle':
+                        metric=weight_so_delta_metrics(s0[use],s[use],de[use],kind='noise');result['noise_error']=metric['normalized_error']
+                    else:
+                        metric=weight_so_delta_metrics(h0[hs],hb_s[hs],dh[hs],kind='noise');result['noise_error']=metric['normalized_error']
+                    result.update(signed_projection=metric['signed_projection'],
+                        EEG_branch_change=float(np.sqrt(np.mean(((s[use]-s0[use])/q)**2))),
+                        Hb_branch_change=float(np.sqrt(np.mean(((hb_s[hs]-h0[hs])/hsd)**2))))
+                    if options.get('audit_interference'):
+                        change=s[use]-s0[use];known=de[use];do=known-change
+                        outside=np.r_[np.arange(5*rate,25*rate),np.arange(55*rate,85*rate)]
+                        result.update(O_delta_correlation=float(np.corrcoef(do.ravel(),known.ravel())[0,1]),
+                            O_signed_gain=1-metric['signed_projection'],
+                            S_pair_correlation=float(np.median([np.corrcoef(s0[use,j],s[use,j])[0,1] for j in range(x.shape[1])])),
+                            S_change_relative_baseline=float(np.linalg.norm(change)/np.linalg.norm(s0[use])),
+                            outside_S_change_relative_baseline=float(np.linalg.norm(s[outside]-s0[outside])/np.linalg.norm(s0[outside])))
+                display=lambda a:resample_poly(a,200,rate,axis=0)
+                _tak_cache_npz(folder/(variant+'.npz'),s_display=display(s),hb_s=hb_s,hb_o=hb-hb_s,
+                    delta_s_display=display(s-s0) if s0 is not None else np.zeros((18000,x.shape[1])),
+                    delta_hb_s=hb_s-h0 if h0 is not None else np.zeros_like(hb_s),
+                    display_rate=np.array(200),electrode=np.array(electrode))
+            except Exception:result.update(status='failed',qualified=False,error=traceback.format_exc())
+            write_json(folder/(variant+'.json'),result);records.append(result)
+    result=dict(case=case,weight=weight,status='completed',planned=len(records),qualified=sum(r['qualified'] for r in records),
+        rows=records,seconds=time.monotonic()-start,peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    write_json(summary,result)
+    return {k:v for k,v in result.items() if k!='rows'}
+
+
+def weight_so_targets(cfg,out,workers,*,pilot=False):
+    if not os.environ.get('SSM_SYSTEMD_UNIT'):raise ValueError('Durable voltage target production required')
+    plan=_weight_so_plan(str(out));rows=[r for r in plan['rows'] if r['split']=='validation']
+    if pilot:rows=[next(r for r in rows if r['dataset']==d) for d in cfg['datasets']]
+    jobs=[(str(out),r['case'],w) for r in rows for w in (['equal'] if pilot else cfg['weights'])]
+    with (out/'target_controller.lock').open('w') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        return _tak_cache_pool(_weight_so_target,jobs,out=out,phase='weight_so_target_pilot' if pilot else 'weight_so_targets',
+            workers=workers,total=len(jobs))
+
+
+def weight_so_summarize(cfg,out):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from scipy.signal import resample_poly
+    plan=_weight_so_plan(str(out));cases=[r for r in plan['rows'] if r['split']=='validation'];rows=[];fit_rows=[]
+    fit_plan=json.loads((out/'fit_plan.json').read_text())['tasks'];checks=[]
+    for task in fit_plan:
+        key=f"{task['case']}__{task['weight']}__{task['variant']}__r{task['roi']}";path=out/'fits'/(key+'.json')
+        if not path.exists():raise ValueError('Missing fit: '+key)
+        r=json.loads(path.read_text());fit_rows.append(dict(**task,status=r['status'],qualified=r['qualified'],seconds=r['seconds']))
+        if r['qualified']:
+            with np.load(path.with_suffix('.npz'),allow_pickle=False) as a:
+                w=np.asarray(plan['weights'][task['weight']]);e=(a['prediction']-a['target'])[:-1]/a['sd_subject']
+                cost=.4*np.sum(e*e*w)
+                expected=r['fits']['tak_tau_beta']['solver']['objective_components']['data']
+                np.testing.assert_allclose(cost,expected,rtol=1e-9,atol=1e-8)
+                checks.append(abs(float(cost-expected)))
+    for case in cases:
+        for weight in cfg['weights']:
+            path=out/'targets'/case['case']/weight/'summary.json'
+            if not path.exists():raise ValueError('Missing target group: '+str(path))
+            rows.extend(json.loads(path.read_text())['rows'])
+    scalar=[{k:v for k,v in r.items() if k not in ('fits','error')} for r in rows]
+    frame=pd.DataFrame(scalar);input_scales=[]
+    for case in cases:
+        with np.load(out/'inputs'/(case['case']+'.npz'),allow_pickle=False) as a,np.load(out/'references'/(case['dataset']+'.npz'),allow_pickle=False) as b:
+            rate=int(a['rate']);x=a['x'][30*rate:50*rate];q=b['voltage_rms'];electrode=int(a['roi_indices'][0,0])
+            normalized_rms=float(np.sqrt(np.mean((x/q)**2)))
+            input_scales.append(dict(case=case['case'],dataset=case['dataset'],subject=case['subject'],
+                input_training_normalized_rms=normalized_rms,
+                injection_to_current_electrode_rms=float(q[electrode]/np.sqrt(np.mean(x[:,electrode]**2)))))
+            mask=(frame.case==case['case'])&(frame.variant=='baseline')
+            frame.loc[mask,'baseline_S_input_RMS_ratio']=frame.loc[mask,'retained_voltage_RMS']/normalized_rms
+            frame.loc[mask,'baseline_input_relative_distortion']=frame.loc[mask,'baseline_nrmse']/normalized_rms
+    pd.DataFrame(input_scales).to_csv(out/'input_morphology_scales.csv',index=False)
+    frame.to_csv(out/'target_metrics.csv',index=False);pd.DataFrame(fit_rows).to_csv(out/'fit_status.csv',index=False)
+    case_metrics=[]
+    for (ds,subject,case,weight),g in frame.groupby(['dataset','subject','case','weight'],sort=False):
+        baseline=g[g.variant=='baseline'].iloc[0];noise=g[g.variant.isin(['ocular','muscle','hbo_noise','hbr_noise'])]
+        neural=g[g.variant.isin(['neural10','neural35'])]
+        case_metrics.append(dict(dataset=ds,subject=subject,case=case,weight=weight,targets=len(g),qualified=int(g.qualified.sum()),
+            noise_error=float(noise.noise_error.mean()),neural_error=float(neural.neural_error.mean()),
+            baseline_correlation=baseline.get('baseline_correlation'),baseline_nrmse=baseline.get('baseline_nrmse'),
+            derivative_correlation=baseline.get('derivative_correlation'),Hb_reference_nrmse=baseline.get('Hb_reference_nrmse'),
+            baseline_S_input_RMS_ratio=baseline.get('baseline_S_input_RMS_ratio'),
+            baseline_input_relative_distortion=baseline.get('baseline_input_relative_distortion')))
+    case_frame=pd.DataFrame(case_metrics);case_frame.to_csv(out/'case_metrics.csv',index=False)
+    m=['noise_error','neural_error','baseline_correlation','baseline_nrmse','derivative_correlation','Hb_reference_nrmse',
+       'baseline_S_input_RMS_ratio','baseline_input_relative_distortion']
+    ds_frame=case_frame.groupby(['dataset','weight'],sort=False)[m].mean().reset_index()
+    counts=frame.groupby(['dataset','weight'],sort=False).agg(qualified_targets=('qualified','sum'),planned_targets=('qualified','size')).reset_index()
+    ds_frame=ds_frame.merge(counts,on=['dataset','weight'])
+    ds_frame.to_csv(out/'dataset_metrics.csv',index=False);aggregate=ds_frame.groupby('weight',sort=False)[m].mean().reindex(cfg['weights']).reset_index()
+    aggregate=aggregate.merge(counts.groupby('weight')[['qualified_targets','planned_targets']].sum().reset_index(),on='weight')
+    failures=pd.DataFrame(fit_rows).assign(failed=lambda a:~a.qualified).groupby('weight').failed.sum()
+    aggregate['failed_fits']=aggregate.weight.map(failures)
+    aggregate.to_csv(out/'aggregate_metrics.csv',index=False)
+    variant=frame.groupby(['dataset','weight','variant'],sort=False)[['noise_error','neural_error','EEG_branch_change','Hb_branch_change']].mean().reset_index()
+    variant.to_csv(out/'variant_metrics.csv',index=False)
+    decisions=[];criteria=cfg['decision']
+    for weight in cfg['weights']:
+        if weight=='equal':continue
+        reasons=[];dataset_checks=[]
+        for ds in cfg['datasets']:
+            b=ds_frame[(ds_frame.dataset==ds)&(ds_frame.weight=='equal')].iloc[0]
+            c=ds_frame[(ds_frame.dataset==ds)&(ds_frame.weight==weight)].iloc[0]
+            complete=bool((case_frame[(case_frame.dataset==ds)&(case_frame.weight.isin(['equal',weight]))].qualified==7).all())
+            check=dict(dataset=ds,complete_paired_support=complete,
+                noise_gain=float(1-c.noise_error/b.noise_error),neural_error_increase=float(c.neural_error-b.neural_error),
+                correlation_change=float(c.baseline_correlation-b.baseline_correlation),nrmse_increase=float(c.baseline_nrmse-b.baseline_nrmse))
+            passed=(complete and check['noise_gain']>=criteria['candidate_noise_reduction_fraction']
+                and check['neural_error_increase']<=criteria['maximum_neural_error_increase']
+                and check['correlation_change']>=-criteria['maximum_baseline_correlation_decrease']
+                and check['nrmse_increase']<=criteria['maximum_baseline_NRMSE_increase'])
+            check['passed']=bool(passed);dataset_checks.append(check)
+            if not passed:reasons.append(ds)
+        decisions.append(dict(weight=weight,eligible=not reasons,dataset_checks=dataset_checks,failed_datasets=reasons))
+    aliases=dict(equal='1:1:1',eeg4='4:1:1',hb2='1:2:2',hb4='1:4:4',hbo4='1:4:1',hbr4='1:1:4',hb100='1:100:100')
+    colors=plt.cm.tab10(np.arange(7));fig,axes=plt.subplots(1,3,figsize=(16,5),constrained_layout=True)
+    for i,key in enumerate(('noise_error','neural_error','baseline_correlation')):
+        axes[i].bar(range(7),aggregate[key],color=colors);axes[i].set_xticks(range(7),[aliases[w] for w in cfg['weights']],rotation=30)
+        axes[i].set_title(['Known-noise leakage into S (lower better)','Neural-like change preservation error (lower better)','Baseline S/input correlation (higher better)'][i],fontsize=10)
+        axes[i].set_xlabel('EEG:HbO:HbR ratio (sum normalized to 3)');axes[i].grid(axis='y',alpha=.2)
+        if i<2:axes[i].axhline(1,color='gray',ls=':')
+    fig.suptitle('Equal subject means within dataset, then equal means across four datasets; inspect failures separately')
+    fig.savefig(out/'weight_summary.png',dpi=220);plt.close(fig)
+    fig,axes=plt.subplots(2,2,figsize=(12,9),constrained_layout=True)
+    for ax,(ds,g) in zip(axes.flat,ds_frame.groupby('dataset',sort=False)):
+        for i,w in enumerate(cfg['weights']):
+            r=g[g.weight==w].iloc[0];ax.scatter(r.neural_error,r.noise_error,color=colors[i],s=65,label=aliases[w])
+            ax.annotate(w,(r.neural_error,r.noise_error),xytext=(3,4),textcoords='offset points',fontsize=8)
+        ax.set_title(ds,fontsize=10);ax.set_xlabel('Neural-like change error');ax.set_ylabel('Noise leakage');ax.grid(alpha=.2)
+    fig.suptitle('Noise rejection / morphology trade-off: lower-left preferred; axes independent by dataset')
+    fig.savefig(out/'weight_tradeoff.png',dpi=220);plt.close(fig)
+    figures=[]
+    for case in cases:
+        cid=case['case']
+        with np.load(out/'inputs'/(cid+'.npz'),allow_pickle=False) as a:
+            x=a['x'];rate=int(a['rate']);channels=a['channels'];hb=a['hb'];unit=str(a['unit'])
+        xdisplay=resample_poly(x,200,rate,axis=0);tv=np.arange(18000)/200;th=np.arange(900)/10
+        info=json.loads((out/'variants'/(cid+'.json')).read_text());electrode=info['electrode']
+        for kind in ('baseline','ocular','neural10','hbo_noise','hbr_noise'):
+            fig,axes=plt.subplots(3,7,figsize=(24,9),constrained_layout=True)
+            with np.load(out/'variants'/(cid+'.npz'),allow_pickle=False) as a:
+                de=resample_poly(a['delta_eeg_'+kind],200,rate,axis=0);dh=a['delta_hb_'+kind]
+            eeg_kind=kind in ('baseline','ocular','neural10')
+            if eeg_kind:
+                center=40. if kind=='baseline' else float(tv[np.argmax(abs(de[:,electrode]))]);zoom=(tv>=center-2)&(tv<=center+2)
+            else:zoom=(th>=25)&(th<=55)
+            ylims=[[],[],[]]
+            for j,w in enumerate(cfg['weights']):
+                folder=out/'targets'/cid/w;path=folder/(kind+'.npz');meta=json.loads((folder/(kind+'.json')).read_text())
+                if not meta['qualified'] or not path.exists():
+                    for ax in axes[:,j]:ax.text(.5,.5,'FAILED / NO TARGET',ha='center',transform=ax.transAxes,fontsize=9)
+                    continue
+                with np.load(path,allow_pickle=False) as a:s=a['s_display'];hs=a['hb_s'];ds=a['delta_s_display'];dhs=a['delta_hb_s']
+                if kind=='baseline':
+                    pairs=[(tv[zoom],xdisplay[zoom,electrode],s[zoom,electrode]),(th[:-1],hb[:-1,0,0],hs[:-1,0,0]),(th[:-1],hb[:-1,0,1],hs[:-1,0,1])]
+                    yl=[f'EEG ({unit})','HbO (cached units)','HbR (cached units)'];leg=[('Input','S'),('Observed','S'),('Observed','S')]
+                elif eeg_kind:
+                    pairs=[(tv[zoom],(xdisplay+de)[zoom,electrode],s[zoom,electrode]),
+                        (tv[zoom],de[zoom,electrode],ds[zoom,electrode]),(tv[zoom],de[zoom,electrode],(de-ds)[zoom,electrode])]
+                    yl=[f'EEG ({unit})','Known addition / delta S','Known addition / delta O'];leg=[('Perturbed input','S'),('Added change','delta S'),('Added change','delta O')]
+                else:
+                    component=0 if kind=='hbo_noise' else 1
+                    pairs=[(th[zoom],(hb+dh)[zoom,0,component],hs[zoom,0,component]),
+                        (th[zoom],dh[zoom,0,component],dhs[zoom,0,component]),(th[zoom],dh[zoom,0,component],(dh-dhs)[zoom,0,component])]
+                    yl=['Hb (cached units)','Known addition / delta S','Known addition / delta O'];leg=[('Perturbed input','S'),('Added change','delta S'),('Added change','delta O')]
+                for k,(tt,obs,estimate) in enumerate(pairs):
+                    ax=axes[k,j];ax.plot(tt,obs,color='#777777',lw=.9,label=leg[k][0]);ax.plot(tt,estimate,color=colors[j],lw=1,label=leg[k][1]);ax.grid(alpha=.2)
+                    ylims[k].extend([float(obs.min()),float(obs.max()),float(estimate.min()),float(estimate.max())])
+                    if k==0 or kind=='baseline':
+                        other=obs-estimate;ax.plot(tt,other,color='#b44b4b',ls=':',lw=.85,label='O = input - S')
+                        ylims[k].extend([float(other.min()),float(other.max())])
+                    if j==0:ax.set_ylabel(yl[k],fontsize=9)
+                    ax.legend(fontsize=8.5,loc='best')
+                    if k==2:ax.set_xlabel('Window time (s)')
+                metric=meta.get('neural_error') if kind.startswith('neural') else meta.get('noise_error')
+                axes[0,j].set_title(aliases[w]+(f'\nerror={metric:.3f}' if metric is not None else f"\nmedian corr={meta['baseline_correlation']:.3f}"),fontsize=10)
+            for k in range(3):
+                if ylims[k]:
+                    lo,hi=min(ylims[k]),max(ylims[k]);margin=(hi-lo)*.05+1e-12
+                    for ax in axes[k]:ax.set_ylim(lo-margin,hi+margin)
+            expectation='Noise: delta S should be zero; delta O should match addition' if kind in ('ocular','hbo_noise','hbr_noise') else 'Neural-like probe: delta S should match addition; delta O should be zero'
+            if kind=='baseline':expectation='Original window is not clean ground truth; shape/distortion diagnostic only'
+            fig.suptitle(f"{case['dataset']} | {case['subject']} | {kind} | electrode {channels[electrode]} / Hb site {case['pairs'][0]['id']}\n{expectation}\nZoom is display-only; scalar errors use all channels on [30,50) s; row axes shared",fontsize=12)
+            filename=cid+'__'+kind+'.png';fig.savefig(out/filename,dpi=200);plt.close(fig);figures.append(dict(case=cid,variant=kind,file=filename))
+    summary=dict(schema=cfg['schema'],status='completed',planned_fits=len(fit_rows),qualified_fits=sum(r['qualified'] for r in fit_rows),
+        planned_targets=len(rows),qualified_targets=sum(r['qualified'] for r in rows),datasets=cfg['datasets'],subjects=8,
+        weights=plan['weights'],aggregate=aggregate.to_dict('records'),dataset_metrics=ds_frame.to_dict('records'),
+        decisions=decisions,eligible_weights=[r['weight'] for r in decisions if r['eligible']],
+        recommendation='retain_equal_weight_cache' if not any(r['eligible'] for r in decisions) else 'candidate_weights_require_review_before_full_cache_regeneration',
+        failed_fits=[r for r in fit_rows if not r['qualified']],failed_targets=[{k:r.get(k) for k in ('case','weight','variant','error')} for r in rows if not r['qualified']],
+        verification=dict(weighted_objective_max_abs=max(checks,default=0),qualified_costs_checked=len(checks),
+            EEG_closure_max_abs=float(frame.EEG_closure_max_abs.max()),Hb_closure_max_abs=float(frame.Hb_closure_max_abs.max())),
+        figures=figures,input_morphology_scales=input_scales,scope=cfg['boundary'],claim_limits=cfg['endpoints'])
+    write_json(out/'summary.json',summary)
+    html='''<html><head><meta charset="utf-8"><style>body{font-family:sans-serif;max-width:1600px;margin:25px auto;line-height:1.7;padding:0 20px}img{width:100%}.waveform{overflow-x:auto}.waveform img{width:2400px;max-width:none}table{border-collapse:collapse;font-size:13px}td,th{border:1px solid #ccc;padding:5px}</style></head><body>
+<h1>四数据集 τ/β 权重与 S/O 抗噪、形态保留实验</h1>
+<p>权重顺序为 EEG:HbO:HbR，显示比例均归一化到总和3；固定现有PCA、个体尺度、τ/β先验、求解器和S/O功率上限算法。
+四数据集各两名验证被试，按元数据选窗；各三名训练被试提供电压功率参考。没有按结果替换样本。
+原生EEG以200/500/1000Hz读取和计算，绘图重采样到200Hz；未知单位保留原相对单位。
+SSM可见完整90秒EEG与Hb；人工变化只用于评价目标的响应，不是盲预测。</p>
+<p>抗噪误差 = ||S(扰动后)-S(原始)|| / ||已知噪声||，理想为0；神经样保留误差 = ||S(扰动后)-S(原始)-已知变化|| / ||已知变化||，理想为0。
+二者在[30,50)秒、对应模态全部所选通道上计算。S+O严格互补，delta O与delta S的成功不是两项独立证据。
+神经样探针为10/35Hz电压变化且Hb保持不变；它不是已知神经血管耦合真值。
+原始窗口并非干净信号，因此S与原输入的相关/差异是形态诊断，不能单独证明去噪正确。</p>
+<p>噪声均值先平均眼电、肌电、HbO/HbR扰动，神经均值先平均10/35Hz，再被试内汇总、数据集内等权、四数据集等权。
+基线NRMSE使用训练电压RMS；导数相关反映快速形态。频带功率比、跨模态泄漏和最终功率越界在CSV保留。
+未合格拟合不生成替代目标；有失败时数值均值为可用子集，配置推荐另要求完整配对支持。
+拟合误差小不等于成分归属正确。全量缓存尚未重生成。</p>'''
+    html+=f'<p>拟合合格 {summary["qualified_fits"]}/{summary["planned_fits"]}；S/O目标合格 {summary["qualified_targets"]}/{summary["planned_targets"]}。满足预设推荐条件的权重：{summary["eligible_weights"]}。</p>'
+    html+='<h2>汇总</h2>'+aggregate.to_html(index=False,float_format=lambda x:f'{x:.4f}')+'<img src="weight_summary.png"><img src="weight_tradeoff.png">'
+    html+='<h2>各数据集</h2>'+ds_frame.to_html(index=False,float_format=lambda x:f'{x:.4f}')
+    html+='<p>推荐条件：每个数据集噪声误差至少下降20%，神经样误差增量不超过0.05、基线相关下降不超过0.02、基线NRMSE增量不超过0.05，并保留完整配对支持。这是工程选择规则，不是人群显著性检验。</p>'
+    html+='<h2>扰动强度与幅度保留的分母</h2><p>EEG扰动RMS固定为对应训练参考电极RMS，未按当前窗口重定标；下表给出它相对当前电极输入的倍数。这是工程压力探针，不代表自然神经事件幅度。S/input RMS比与输入相对失真均先按固定训练通道尺度处理，再对同一窗口比较；它们区别于仅反映形态相似度的相关系数。原生频率上计算，图像降采样不进入评分。</p>'+pd.DataFrame(input_scales).to_html(index=False,float_format=lambda x:f'{x:.4f}')
+    html+='<p><a href="summary.json">唯一数值汇总</a> · <a href="target_metrics.csv">逐目标指标与频带功率</a> · <a href="fit_status.csv">完整拟合状态</a> · <a href="variant_metrics.csv">按扰动类型统计</a></p>'
+    for fig in figures:
+        html+=f'<h2>{fig["case"]} / {fig["variant"]}</h2><p>灰线为观测或已知添加量；彩色线为S或相对同权重原始窗口的变化；红色点线为完整O。眼电/Hb噪声应进入O，神经样变化应进入S。各列是不同权重；图内每行统一刻度，不同窗口图独立刻度。七列图可横向滚动，点击查看原图。</p><div class="waveform"><a href="{fig["file"]}"><img src="{fig["file"]}"></a></div>'
+    html+='</body></html>';(out/'report.html').write_text(html)
+    return {k:summary[k] for k in ('status','planned_fits','qualified_fits','planned_targets','qualified_targets','eligible_weights','recommendation','verification')}
+
+
+def weight_so_compact_example(out):
+    """Display-only comparison from retained targets; first Visual case, no refits."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from scipy.signal import resample_poly
+    plan=_weight_so_plan(str(out));r=next(r for r in plan['rows'] if r['dataset']=='visual_cognitive_motivation' and r['split']=='validation')
+    case=r['case'];info=json.loads((out/'variants'/(case+'.json')).read_text());electrode=info['electrode']
+    with np.load(out/'inputs'/(case+'.npz'),allow_pickle=False) as a:rate=int(a['rate']);unit=str(a['unit'])
+    t=np.arange(18000)/200;fig,axes=plt.subplots(2,3,figsize=(13,7),constrained_layout=True)
+    for i,kind in enumerate(('ocular','neural10')):
+        with np.load(out/'variants'/(case+'.npz'),allow_pickle=False) as a:
+            added=resample_poly(a['delta_eeg_'+kind][:,electrode],200,rate)
+        center=float(t[np.argmax(abs(added))]);width=2 if kind=='ocular' else .5
+        mask=(t>=center-width)&(t<=center+width)
+        for j,(weight,label) in enumerate((('equal','1:1:1'),('eeg4','4:1:1'),('hb4','1:4:4'))):
+            folder=out/'targets'/case/weight
+            with np.load(folder/(kind+'.npz'),allow_pickle=False) as a:delta=a['delta_s_display'][:,electrode]
+            meta=json.loads((folder/(kind+'.json')).read_text());error=meta['noise_error' if kind=='ocular' else 'neural_error']
+            ax=axes[i,j];ax.plot(t[mask],added[mask],color='black',ls='--',lw=1.2,label='Known added change')
+            ax.plot(t[mask],delta[mask],color='#2475b5',lw=1.2,label='delta S')
+            ax.plot(t[mask],(added-delta)[mask],color='#d65f29',lw=1.1,label='delta O')
+            ax.set_title(f'EEG:HbO:HbR {label} | error={error:.3f}',fontsize=11);ax.set_xlabel('Within-window time (s)');ax.grid(alpha=.2)
+            ax.legend(fontsize=9)
+            if j==0:ax.set_ylabel(('Ocular addition' if i==0 else '10 Hz neural-like addition')+' ('+unit+')')
+        lo=min(ax.get_ylim()[0] for ax in axes[i]);hi=max(ax.get_ylim()[1] for ax in axes[i])
+        for ax in axes[i]:ax.set_ylim(lo,hi)
+    fig.suptitle(f"Visual {r['subject']} | {info['electrode_name']} | same data and perturbations across weights\nNoise should enter O; neural-like change should enter S. Errors use all selected channels on [30,50) s.",fontsize=12)
+    fig.savefig(out/'compact_SO_example.png',dpi=220);plt.close(fig)
+    return dict(file='compact_SO_example.png',case=case,selection='first_metadata_selected_Visual_case',new_fits=0)
+
+
+def weight_so_review(out):
+    """Versioned presentation of the completed matrix; never changes fitted evidence."""
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    summary=json.loads((out/'summary.json').read_text());plan=_weight_so_plan(str(out));rows=[]
+    for r in plan['rows']:
+        if r['split']!='validation':continue
+        with np.load(out/'inputs'/(r['case']+'.npz'),allow_pickle=False) as a:target=a['hb'][:-1]
+        for weight in plan['weights']:
+            folder=out/'targets'/r['case']/weight;meta=json.loads((folder/'baseline.json').read_text())
+            if not meta['qualified']:continue
+            with np.load(folder/'baseline.npz',allow_pickle=False) as a:pred=a['hb_s'][:-1]
+            for j,component in enumerate(('HbO','HbR')):
+                sd=target[:,:,j].std(0)
+                rows.append(dict(dataset=r['dataset'],subject=r['subject'],weight=weight,component=component,
+                    correlation=float(np.mean([np.corrcoef(target[:,k,j],pred[:,k,j])[0,1] for k in range(3)])),
+                    local_nrmse=float(np.mean(np.sqrt(np.mean((pred[:,:,j]-target[:,:,j])**2,0))/sd)),
+                    amplitude_ratio=float(np.mean(pred[:,:,j].std(0)/sd))))
+    morphology=pd.DataFrame(rows);by_hb=morphology.groupby(['dataset','weight','component']).mean(numeric_only=True).groupby(['weight','component']).mean()
+    for frame,name in [(morphology,'Hb_morphology_by_subject.csv'),(by_hb.reset_index(),'Hb_morphology_summary.csv')]:
+        path=out/name
+        if path.exists():
+            old=pd.read_csv(path);numeric=[k for k in ('correlation','local_nrmse','amplitude_ratio') if k in frame]
+            np.testing.assert_allclose(old[numeric],frame[numeric],rtol=1e-12,atol=1e-12)
+        else:frame.to_csv(path,index=False)
+    targets=pd.read_csv(out/'target_metrics.csv');neural=targets[targets.variant.isin(['neural10','neural35']) & targets.qualified].copy()
+    neural['change_norm_ratio']=np.sqrt(np.maximum(neural.neural_error**2-1+2*neural.signed_projection,0))
+    projections=neural.groupby(['dataset','weight','variant'])[['signed_projection','change_norm_ratio']].mean().groupby(['weight','variant']).mean()
+    if not (out/'neural_change_projection.csv').exists():projections.to_csv(out/'neural_change_projection.csv')
+    aggregate=pd.DataFrame(summary['aggregate']).set_index('weight');weights=list(plan['weights'])
+    aliases=['1:1:1','4:1:1','1:2:2','1:4:4','1:4:1','1:1:4','1:100:100'];colors=plt.cm.tab10(np.arange(7))
+    fig,axes=plt.subplots(2,2,figsize=(14,9),constrained_layout=True)
+    metrics=['noise_error','neural_error','Hb_reference_nrmse','baseline_S_input_RMS_ratio']
+    titles=['Known-noise error in S (lower better)','Neural-like preservation error (lower better)',
+        'Original Hb reconstruction NRMSE (fixed subject SD)','Baseline S/input RMS ratio (fixed channel scales)']
+    for ax,metric,title in zip(axes.flat,metrics,titles):
+        bars=ax.bar(range(7),aggregate.loc[weights,metric],color=colors);bars[-1].set_hatch('///')
+        ax.set_xticks(range(7),aliases,rotation=20);ax.set_title(title,fontsize=11);ax.grid(axis='y',alpha=.2)
+        ax.set_xlabel('EEG:HbO:HbR ratio, normalized sum = 3')
+        if metric in ('neural_error','baseline_S_input_RMS_ratio'):ax.axhline(1,color='gray',ls=':')
+    fig.suptitle('Four-dataset equal means | 56/56 targets per setting; hatched Hb100 uses only 48/56',fontsize=13)
+    fig.savefig(out/'weight_summary_v2.png',dpi=220);plt.close(fig)
+    ds=pd.DataFrame(summary['dataset_metrics']);fig,axes=plt.subplots(2,2,figsize=(12,9),constrained_layout=True)
+    markers=['o','s','^','v','D','P','X']
+    for ax,(dataset,g) in zip(axes.flat,ds.groupby('dataset',sort=False)):
+        for i,w in enumerate(weights):
+            r=g[g.weight==w].iloc[0];ax.scatter(r.neural_error,r.noise_error,color=colors[i],marker=markers[i],s=65,label=aliases[i])
+        ax.scatter([0],[0],marker='+',s=90,color='black');ax.axvline(1,color='gray',ls=':',lw=1)
+        ax.set_xlim(-.02,1.1);ax.set_ylim(-.02,1.1);ax.grid(alpha=.2);ax.set_title(dataset,fontsize=10)
+        ax.set_xlabel('Neural-like preservation error');ax.set_ylabel('Noise error in S')
+    axes[0,0].legend(fontsize=9,loc='upper left');fig.suptitle('Same axes: lower-left preferred; unchanged S under neural addition gives error 1')
+    fig.savefig(out/'weight_tradeoff_v2.png',dpi=220);plt.close(fig)
+    narrative='''<h2>结论：抗噪候选与生产缓存建议分开</h2>
+<p><strong>4:1:1通过预设的相对抗噪/EEG形态筛查，但暂不建议据此重生成全量缓存。</strong>
+其综合噪声误差从0.4593降至0.3129，下降31.9%；四数据集分别下降约48.0%、28.8%、23.3%、28.0%。
+改善主要来自HbO/HbR噪声，眼电和肌电指标基本不变。该筛查只约束相对等权的神经样/EEG形态退化，
+没有要求绝对神经样保留达标，也没有把Hb原始波形保真设成硬门槛。</p>
+<p>Hb重建的固定尺度NRMSE从0.3610升至0.4652（约28.9%）；HbO/HbR原始波形平均相关
+分别从0.527/0.407降至0.323/0.273。因此不能把抗噪总分改善解释为双模态保真同时改善。
+Hb优先通常改善Hb观测重建，但也更容易把Hb扰动分配给S；极端配置两次拟合失败导致8组目标不可用。</p>
+<p>所有权重的神经样保留误差都约0.994。等权10Hz/35Hz新增变化在delta S中的有符号投影系数
+约0.0226/-0.0069，delta S的范数仅约添加量的0.057/0.045，说明该档新增变化主要进入O。
+这是投影幅度与范数比，不是来源能量百分比。S+O仍闭合；O不能据此命名为纯噪声。</p>
+<p>神经样探针保持Hb不变，强度按训练电极RMS确定，相对当前窗口为1.08–18.79倍；
+其中Single-Trial两例为14–19倍，是强压力测试，不能外推为自然神经事件的恢复率。
+原始窗口S/input RMS约0.40、形态相关约0.87也提示：相关较高不等于幅度完整保留。
+就本轮调权因素而言，生产缓存暂保留1:1:1，4:1:1作为抗噪候选保留；先改进或明确S/O目标
+对电压变化的保留要求，再决定缓存替换。若最终更改权重，需重新求解驱动、初态和τ/β，不能事后乘系数替代。</p>'''
+    html=(out/'report.html').read_text().replace('<h2>汇总</h2>',narrative+'<h2>汇总</h2>')
+    html=html.replace('weight_summary.png','weight_summary_v2.png').replace('weight_tradeoff.png','weight_tradeoff_v2.png')
+    table='<h2>Hb原始波形形态：先平均三位置，再等权汇总被试与数据集</h2>'+by_hb.reset_index().to_html(index=False,float_format=lambda x:f'{x:.4f}')
+    table+='<p>local_nrmse使用每个窗口/位置观测SD，与主表的冻结被试尺度NRMSE分母不同；低波动位置也保留在分母中。Hb100为可用子集，不与完整组直接判优。</p>'
+    html=html.replace('<h2>各数据集</h2>',table+'<h2>各数据集</h2>');(out/'report_v2.html').write_text(html)
+    result=dict(status='completed',report='report_v2.html',source_summary='summary.json',
+        new_fits=0,production_weight_recommendation='retain_equal_for_now',relative_screen_candidate='eeg4',
+        additional_evidence=['Hb_morphology_summary.csv','Hb_morphology_by_subject.csv','neural_change_projection.csv'],
+        original_report_retained='report.html',reason='Hb fidelity tradeoff and poor absolute neural-like preservation despite relative screen pass')
+    write_json(out/'review.json',result);return result
+
+
+def weight_so_main(args):
+    cfg=weight_so_config(args.config);out=args.run_dir.resolve();out.mkdir(parents=True,exist_ok=True)
+    resolved=out/'resolved_config.json'
+    if resolved.exists() and json.loads(resolved.read_text())!=cfg:raise ValueError('Weight study contract changed')
+    write_json(resolved,cfg);stage=args.weight_so_stage
+    if stage=='check':result=weight_so_check(cfg,out)
+    elif stage=='plan':result=weight_so_plan(cfg,out)
+    elif stage=='prepare':
+        if not os.environ.get('SSM_SYSTEMD_UNIT'):raise ValueError('Durable preparation required')
+        if json.loads((out/'software_checks.json').read_text())['status']!='passed':raise ValueError('Check first')
+        result=weight_so_prepare(cfg,out,args.workers)
+    elif stage in ('pilot','fit'):
+        if not os.environ.get('SSM_SYSTEMD_UNIT'):raise ValueError('Durable fit required')
+        tasks=json.loads((out/'fit_plan.json').read_text())['tasks'];plan=_weight_so_plan(str(out))
+        if stage=='pilot':
+            cases=[next(r['case'] for r in plan['rows'] if r['split']=='validation' and r['dataset']==ds) for ds in cfg['datasets']]
+            tasks=[t for t in tasks if t['case'] in cases and t['weight']=='equal' and t['variant']=='baseline' and t['roi']==0]
+        with (out/'controller.lock').open('w') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            result=_tak_cache_pool(_weight_so_fit,[(str(out),t) for t in tasks],out=out,phase='weight_so_'+stage,workers=args.workers,total=len(tasks),structured=True)
+    elif stage=='targets':result=weight_so_targets(cfg,out,args.workers,pilot=args.pilot)
+    elif stage=='review':result=weight_so_review(out)
+    else:result=weight_so_summarize(cfg,out)
+    print(json.dumps(serial({k:v for k,v in result.items() if k!='rows'})),flush=True);return result
+
+
 
 
 def main():
@@ -12533,6 +13163,8 @@ def main():
     ap.add_argument('--tak-reconstruction-cache',action='store_true')
     ap.add_argument('--normalization-comparison',action='store_true')
     ap.add_argument('--amplitude-frequency',action='store_true')
+    ap.add_argument('--weight-so-comparison',action='store_true')
+    ap.add_argument('--weight-so-stage',choices=['check','plan','prepare','pilot','fit','targets','summarize','review'],default='check')
     ap.add_argument('--frequency-stage',choices=['check','scan','summarize'],default='check')
     ap.add_argument('--normalization-stage',choices=['check','prepare','pilot','run','summarize'],default='check')
     ap.add_argument('--cache-stage',choices=['check','plan','synthetic','pilot','produce','verify','accelerator-check'],default='check')
@@ -12565,6 +13197,9 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.weight_so_comparison:
+        if args.run_dir is None:ap.error('--run-dir is required')
+        return weight_so_main(args)
     if args.amplitude_frequency:
         if args.run_dir is None:ap.error('--run-dir is required')
         return amplitude_frequency_main(args)

@@ -1,0 +1,80 @@
+schema: shared_driver_weight_so_v1
+experiment_id: SSM-WEIGHT-SO-v1
+created: '2026-11-07'
+seed: 20261107
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1
+source_schema: shared_driver_tak_subject_cache_v1
+datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, refed, visual_cognitive_motivation]
+selection:
+  validation_subjects: first_and_last_numeric_ID_with_metadata_complete_90s_support
+  record: first_lexical_record_with_complete_90s_support
+  window: middle_complete_90s_window_by_time
+  sites: first_middle_last_available_native_pair_from_dataset_reference_record
+  training: first_three_training_subjects_first_matching_record_first_90s_window
+  outcome_based_selection: false
+controls:
+  PCA_and_scales: frozen_v1_population_direction_and_individual_scales
+  model: exact_source_tau_beta_priors_starts_solver_and_fixed_warm_start
+  objective_SD: frozen_original_subject_SD
+  weight_order: [EEG, HbO, HbR]
+  weight_sum: 3.0
+  rationale: isolate_relative_modality_weights_without_changing_total_data_weight_vs_priors
+weights:
+  equal: [1, 1, 1]
+  eeg4: [4, 1, 1]
+  hb2: [1, 2, 2]
+  hb4: [1, 4, 4]
+  hbo4: [1, 4, 1]
+  hbr4: [1, 1, 4]
+  hb100: [1, 100, 100]
+interventions:
+  variants: [baseline, ocular, muscle, hbo_noise, hbr_noise, neural10, neural35]
+  support_s: [30, 50]
+  EEG_site: first_ROI_nearest_electrode
+  EEG_rms: one_training_reference_channel_RMS_over_score_support
+  ocular_source: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4/inputs.npz
+  ocular: retained_known_added_waveform_resampled_to_native_rate_and_fixed_training_RMS
+  muscle: seeded_25_70Hz_bandpassed_noise_with_smooth_20s_envelope
+  Hb_noise: component_specific_smooth_transient_first_ROI_one_original_subject_component_SD_in_native_units
+  neural: seeded_10_or_35Hz_burst_same_fixed_training_RMS_Hb_unchanged
+  interpretation: known_added_changes_only_neural_like_probe_is_not_a_known_coupled_physiological_event
+voltage_SO:
+  method: retained_local_power_cap_algorithm_cap1
+  reference: three_training_windows_only_per_dataset_frozen_across_weights_and_interventions
+  reference_baseline: retained_training_median_logpower_no_normalization_redesign
+  projection: original_population_PC_embedded_in_selected_three_ROIs_unscaled_proxy_gauge
+  native_rate: preserve_200_500_or_1000Hz_no_resampling_before_feature_or_voltage_estimation
+  units: preserve_native_units_no_unverified_microvolt_claim
+  sixth_component: retain_original_power_cap_treatment_not_changed_in_this_weight_experiment
+  final_check: full_native_rate_reanalysis_and_exact_S_plus_O_closure
+Hb_SO:
+  S: fitted_Hb_in_original_cached_units
+  O: observed_minus_S
+endpoints:
+  primary_noise: norm_delta_S_over_norm_known_added_noise_lower_better
+  primary_neural: norm_delta_S_minus_known_neural_change_over_norm_change_lower_better
+  morphology: original_window_S_vs_input_correlation_NRMSE_derivative_correlation_bandpower_and_Hb_fit
+  branch_leakage: report_unperturbed_modality_change_with_fixed_training_denominators
+  inference: within_subject_then_equal_subject_equal_dataset_aggregation_no_window_pseudoreplication
+  failures: all_planned_fits_and_targets_retained_no_fallback_or_success_subset_only_selection
+  truth: only_known_injected_delta_is_ground_truth_original_window_is_not_clean_ground_truth
+decision:
+  candidate_noise_reduction_fraction: 0.20
+  maximum_neural_error_increase: 0.05
+  maximum_baseline_correlation_decrease: 0.02
+  maximum_baseline_NRMSE_increase: 0.05
+  numerical_failures: no_more_than_equal_weight
+  rule: require_noise_gain_and_all_preservation_constraints_per_dataset_before_recommending_cache_weight_change
+  outcome: recommendation_only_no_full_cache_regeneration_or_tokenizer_training
+boundary:
+  splits: [train, validation]
+  test_and_protected: forbidden
+  native_reads: exact_metadata_selected_registered_EEG_windows_only
+  Hb_reads: retained_source_features_only_no_new_raw_Hb_reads
+resources:
+  supervisor: user_systemd_with_linger
+  numerical_threads: 1
+  pilot_fit_workers: 4
+  maximum_fit_workers: 48
+  maximum_target_workers: 12
+stopping: complete_fixed_eight_case_weight_and_intervention_matrix_no_outcome_based_expansion
