@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-06T09:28:02.786399+00:00",
+  "updated_at": "2026-11-07T12:49:09.174543+00:00",
   "tracks": [
     {
       "id": "main",
@@ -5523,6 +5523,24 @@
       "label": "20261106_sta_refed_source_v3 verification.json",
       "path": "comparative_methods/runs/performance_analysis/20261106_sta_refed_source_v3/verification.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_subject_cache_final_summary",
+      "label": "全量个体校准缓存：summary.json",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tak_subject_cache_final_verification",
+      "label": "全量个体校准缓存：verification.json",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tak_subject_cache_final_execution",
+      "label": "全量个体校准缓存：execution.json",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/execution.json",
+      "role": "run_manifest"
     }
   ],
   "records": [
@@ -13955,6 +13973,59 @@
       "updated_at": "2026-11-06T09:28:02.786399+00:00",
       "summary": "用户要求停止本机下游序列并归档。本地STA-Net优化与归一化调度均已结束，无存活工作进程；保留源对齐优化18次拟合、训练统计重估18次以及REFED source_aligned_v3三种子结果与通过的独立复算。优化开发结果DSR F1由48.60%到61.01%，REFED二分类由45.23%到55.98%；Visual F1为22.27%，仍低于24.76%无信息基线。归一化后DSR/REFED/Visual F1分别60.78%/52.69%/21.73%，未显示整体改善；REFED源v3 F1为54.32%。这些是固定验证开发证据，不表示确认性显著改善。冻结分类、优化、归一化和源v3证据均原位归档；REFED normalization合同没有本地输出，本次不启动；下游自动续跑停止。",
       "next_step": null
+    },
+    {
+      "state_id": "main.tak_subject_cache@2026-11-07.v1-completion-verified",
+      "entity": "main.tak_subject_cache",
+      "label": "全量个体校准τ/β重建缓存",
+      "track": "main",
+      "order": 207,
+      "entity_kind": "engineering",
+      "execution": "completed",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "engineering",
+      "summary": "核对原持久生产器及其owning summary/verification：209340个计划单元全部终结，208570个数值合格、770个失败；全部终态数组核验通过、issues为空。原τ/β个体尺度缓存已完成，失败结果保留，不代表神经真值或所有波形质量合格。完成核验不启动个体PCA后继版本或任何权重重生成。",
+      "evidence_ids": [
+        "e.tak_subject_cache_contract",
+        "e.tak_subject_cache_plan",
+        "e.tak_subject_cache_source",
+        "e.tak_subject_cache_checks",
+        "e.tak_subject_cache_synthetic",
+        "e.tak_subject_cache_resources",
+        "e.tak_subject_cache_pilot_launch",
+        "e.tak_subject_cache_pilot",
+        "e.tak_subject_cache_production_resources",
+        "e.tak_subject_cache_production_launch",
+        "e.tak_subject_cache_execution_source_v2",
+        "e.tak_subject_cache_parallel_resources_v2",
+        "e.tak_subject_cache_parallel_launch_v2",
+        "e.tak_subject_cache_parallel_integrity_v2",
+        "e.tak_subject_cache_parallel_cutover_v2",
+        "e.tak_subject_cache_accelerator_validation_v2",
+        "e.tak_subject_cache_accelerator_verification_v2",
+        "e.tak_subject_cache_hybrid_source_v6",
+        "e.tak_subject_cache_hybrid_validation_v3",
+        "e.tak_subject_cache_gpu_queue_timing_v5",
+        "e.tak_subject_cache_hybrid_resources_v6",
+        "e.tak_subject_cache_hybrid_launch_v6",
+        "e.tak_subject_cache_hybrid_cutover_v6",
+        "e.tak_subject_cache_hybrid_integrity_v6",
+        "e.tak_subject_cache_hybrid_timing_v6",
+        "e.tak_subject_cache_hybrid_sample_verification_v6",
+        "e.tak_subject_cache_final_summary",
+        "e.tak_subject_cache_final_verification",
+        "e.tak_subject_cache_final_execution"
+      ],
+      "supersedes": [
+        "main.tak_subject_cache@2026-11-05.v1-hybrid64"
+      ],
+      "updated_at": "2026-11-07T12:49:09.174543+00:00",
+      "depends_on": [
+        "main.data_contract",
+        "main.shared_driver_tak"
+      ],
+      "headline": false,
+      "next_step": "保留已完成v1缓存作为现有基线；个体PCA后继与权重/SO实验各自按版本合同处理，不自动重启原生产器。"
     }
   ]
 }
