@@ -196,6 +196,13 @@ references resolve within the new export, and the owning run evidence remains
 at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
+The [paired fixed/variable τ/β S/O comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/summary.json)
+retains [subject-level ocular pairs](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/ocular_paired.csv),
+[frozen-prediction mechanism controls](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/mechanism_metrics.csv)
+and the [theory and waveform report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/report.html).
+It reuses both numerical fit arms from the weight study and isolates parameter
+freedom under identical inputs, scales, training references and voltage targets.
+
 The [four-dataset weight/SO matrix](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/summary.json)
 retains [all fit statuses](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/fit_status.csv),
 [all target metrics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/target_metrics.csv),

@@ -396,6 +396,13 @@ to three; it generates a configuration recommendation, not a new full cache.
 `review` adds Hb waveform diagnostics and a versioned report that distinguishes
 the relative screening result from the production recommendation; original
 numerical results and the first report remain retained.
+The [paired τ/β S/O diagnostic](configs/physiology_semantic_tokenizer/shared_driver_tau_beta_so_v1.yaml)
+uses `--tau-beta-so-comparison --tau-beta-so-stage <prepare|targets|summarize>`.
+It reuses both qualified prediction arms from the completed weight study,
+reconstructs fixed-parameter targets and freezes baseline predictions in a
+separate ocular mechanism control. No new raw reads or nonlinear fits occur.
+`targets --pilot` measures four dataset cases before the supervised full matrix;
+the same two targeted test files cover arm routing and the retained split boundary.
 Both explicitly fit τ/β at log-prior SD 0.125. Fits use 90 s,
 or the actual shorter REFED support, and the corrected Visual native identities.
 `produce` resumes matching terminal work, completes preparation/calibration,

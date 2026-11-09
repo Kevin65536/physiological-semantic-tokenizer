@@ -154,6 +154,45 @@ def test_weight_SO_selected_arm_owns_qualification_and_prediction(tmp_path):
         runner.weight_so_prediction(path,'unknown')
 
 
+def test_tau_beta_SO_retained_boundary_rejects_protected_before_signal_reads():
+    cfg=runner.tau_beta_so_config()
+    with pytest.raises(ValueError,match='Disallowed split'):
+        runner.tau_beta_so_validate_plan(dict(schema=cfg['source_schema'],rows=[dict(split='test')]),cfg)
+
+
+def test_tau_beta_SO_frozen_control_changes_input_but_holds_prediction(tmp_path,monkeypatch):
+    import json
+    import src.data.dual_component_tokenizer as voltage_module
+    import src.inference.observation_baselines as observations
+    for name in ('inputs','references','variants','fits'):(tmp_path/name).mkdir()
+    case='synthetic';rate=200;t=np.arange(18000)/rate;x=np.sin(t)[:,None]
+    de=np.zeros_like(x);de[6000:10000]=np.sin(3*t[6000:10000,None]);hb=np.zeros((900,3,2))
+    (tmp_path/'plan.json').write_text(json.dumps(dict(rows=[dict(case=case,dataset='fixture',subject='one',coordinate=dict(sd=[1,1,1],hb_factor=1))])))
+    np.savez(tmp_path/'inputs'/f'{case}.npz',x=x,rate=rate,unit='fixture')
+    np.savez(tmp_path/'references'/'fixture.npz',voltage_rms=np.ones(1))
+    (tmp_path/'variants'/f'{case}.json').write_text(json.dumps(dict(electrode=0,changed_rois=dict(baseline=[0,1,2],ocular1=[0]))))
+    np.savez(tmp_path/'variants'/f'{case}.npz',delta_eeg_baseline=np.zeros_like(x),delta_eeg_ocular1=de,
+        delta_hb_baseline=hb,delta_hb_ocular1=hb,hb_baseline=hb,hb_ocular1=hb)
+    for variant,level in [('baseline',1.),('ocular1',9.)]:
+        for roi in range(3):
+            path=tmp_path/'fits'/f'{case}__equal__{variant}__r{roi}.json'
+            path.write_text(json.dumps(dict(fits=dict(tak_fixed=dict(qualified=True,tau=2,beta=1)))))
+            np.savez(path.with_suffix('.npz'),fixed_prediction=np.full((900,3),level))
+    calls=[]
+    def mock_projection(signal,model,proxy,**kwargs):
+        calls.append((signal.copy(),proxy.copy()))
+        return dict(s=.5*signal,o=.5*signal,closure_max_abs=0,final_reanalysis_ratio=np.ones(1))
+    monkeypatch.setattr(voltage_module,'voltage_power_cap_target',mock_projection)
+    monkeypatch.setattr(observations,'eeg_band_power',lambda *args,**kwargs:np.ones((900,1,5)))
+    result=runner._weight_so_target((str(tmp_path),case,'equal',dict(arm='tak_fixed',freeze_baseline=True,
+        variants=['baseline','ocular1'],destination=str(tmp_path/'frozen'),audit_interference=True)))
+    assert result['qualified']==2
+    np.testing.assert_allclose(calls[1][0]-calls[0][0],de,atol=1e-15)
+    np.testing.assert_array_equal(calls[1][1],calls[0][1])
+    metric=json.loads((tmp_path/'frozen'/case/'equal'/'ocular1.json').read_text())
+    assert metric['noise_error']==pytest.approx(.5)
+    assert metric['O_signed_gain']==pytest.approx(.5)
+    assert metric['O_delta_correlation']==pytest.approx(1.)
 
 
 def test_windows_cover_complete_support_without_crossing_gaps_and_short_refed_is_fitted():

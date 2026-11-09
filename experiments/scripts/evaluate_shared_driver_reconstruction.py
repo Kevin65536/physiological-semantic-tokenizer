@@ -13130,6 +13130,230 @@ def weight_so_main(args):
     print(json.dumps(serial({k:v for k,v in result.items() if k!='rows'})),flush=True);return result
 
 
+def tau_beta_so_config(path=None):
+    owner=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tau_beta_so_v1.yaml'
+    cfg=yaml.safe_load(Path(path or owner).read_text())
+    if cfg!=yaml.safe_load(owner.read_text()):raise ValueError('Use reviewed tau/beta SO contract')
+    return cfg
+
+
+def tau_beta_so_validate_plan(plan,cfg):
+    if plan['schema']!=cfg['source_schema']:raise ValueError('Wrong source schema')
+    if any(r['split'] not in cfg['boundary']['splits'] for r in plan['rows']):
+        raise ValueError('Disallowed split before signal reads')
+    rows=[r for r in plan['rows'] if r['split']=='validation']
+    if len(rows)!=8 or len({(r['dataset'],r['subject']) for r in rows})!=8:
+        raise ValueError('Expected eight distinct source validation subjects')
+    if len({r['dataset'] for r in rows})!=4:raise ValueError('Expected four datasets')
+    return rows
+
+
+def tau_beta_so_prepare(cfg,out):
+    source=CODE_ROOT/cfg['source_run'];plan=_weight_so_plan(str(source))
+    rows=tau_beta_so_validate_plan(plan,cfg);checks=[]
+    for task in json.loads((source/'fit_plan.json').read_text())['tasks']:
+        if task['weight'] not in cfg['weights']:continue
+        case=task['case']
+        if case not in {r['case'] for r in rows}:raise ValueError('Unplanned source case')
+        key=f"{case}__{task['weight']}__{task['variant']}__r{task['roi']}"
+        for arm in cfg['arms']:
+            prediction,record=weight_so_prediction(source/'fits'/(key+'.json'),arm)
+            checks.append(dict(key=key,qualified=True,**record))
+    if len(checks)!=288:raise ValueError('Incomplete paired fit inventory')
+    for row in rows:
+        for weight in cfg['weights']:
+            for variant in cfg['variants']:
+                target=json.loads((source/'targets'/row['case']/weight/(variant+'.json')).read_text())
+                if not target['qualified']:raise ValueError('Missing source free-arm target')
+    result=dict(schema=cfg['schema'],source=str(source),cases=rows,retained_fit_arms=checks,
+        paired_fit_tasks=len(checks)//2,new_nonlinear_fits=0,new_raw_reads=0,
+        fixed_targets=112,reused_free_targets=112,frozen_control_targets=64)
+    write_json(out/'plan.json',result);return dict(status='completed',paired_fit_tasks=len(checks)//2,cases=len(rows))
+
+
+def tau_beta_so_targets(cfg,out,workers,pilot=False):
+    if not os.environ.get('SSM_SYSTEMD_UNIT'):raise ValueError('Durable target production required')
+    if workers<1 or workers>cfg['resources']['target_workers']:raise ValueError('Worker resource bound')
+    saved=json.loads((out/'plan.json').read_text());source=Path(saved['source'])
+    rows=tau_beta_so_validate_plan(_weight_so_plan(str(source)),cfg)
+    if pilot:rows=[next(r for r in rows if r['dataset']==ds) for ds in dict.fromkeys(r['dataset'] for r in rows)]
+    jobs=[]
+    for row in rows:
+        for weight in (['equal'] if pilot else cfg['weights']):
+            for name,arm,freeze in [('fixed','tak_fixed',False),('frozen_fixed','tak_fixed',True),('frozen_free','tak_tau_beta',True)]:
+                if pilot and name!='fixed':continue
+                jobs.append((str(source),row['case'],weight,dict(arm=arm,freeze_baseline=freeze,
+                    destination=str(out/name),variants=['baseline','ocular'] if freeze else cfg['variants'])))
+    with (out/'controller.lock').open('w') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        return _tak_cache_pool(_weight_so_target,jobs,out=out,phase='tau_beta_so_pilot' if pilot else 'tau_beta_so_targets',
+            workers=workers,total=len(jobs))
+
+
+def tau_beta_so_summarize(cfg,out):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from scipy.signal import resample_poly
+    saved=json.loads((out/'plan.json').read_text());source=Path(saved['source'])
+    cases=tau_beta_so_validate_plan(_weight_so_plan(str(source)),cfg)
+    destinations=dict(fixed=out/'fixed',free=source/'targets',frozen_fixed=out/'frozen_fixed',frozen_free=out/'frozen_free')
+    rows=[];mechanism=[];proxy_rows=[];parameters=[];figures=[];baseline_replay=[]
+    for case in cases:
+        key=case['case'];dataset=case['dataset'];subject=case['subject']
+        with np.load(source/'inputs'/(key+'.npz'),allow_pickle=False) as a:
+            rate=int(a['rate']);unit=str(a['unit']);channel_names=a['channels'].astype(str)
+        with np.load(source/'variants'/(key+'.npz'),allow_pickle=False) as a:
+            delta={v:resample_poly(a['delta_eeg_'+v],200,rate,axis=0) for v in ('ocular','neural10')}
+        electrode=json.loads((source/'variants'/(key+'.json')).read_text())['electrode']
+        displays={};proxies={}
+        for weight in cfg['weights']:
+            for label,destination in destinations.items():
+                variants=['baseline','ocular'] if label.startswith('frozen') else cfg['variants']
+                for variant in variants:
+                    path=destination/key/weight/(variant+'.json');record=json.loads(path.read_text())
+                    row={k:v for k,v in record.items() if k!='fits'};row['condition']=label;rows.append(row)
+                    if record['qualified'] and variant in ('baseline','ocular','neural10'):
+                        with np.load(path.with_suffix('.npz'),allow_pickle=False) as a:
+                            displays[weight,label,variant]={k:a[k].copy() for k in ('s_display','delta_s_display')}
+            for arm,label in [('tak_fixed','fixed'),('tak_tau_beta','free')]:
+                frozen='frozen_'+label
+                b=displays[weight,label,'baseline']['s_display'];fb=displays[weight,frozen,'baseline']['s_display']
+                baseline_replay.append(dict(case=key,weight=weight,arm=arm,max_abs=float(np.max(abs(b-fb)))))
+                np.testing.assert_allclose(b,fb,rtol=0,atol=1e-10)
+                ds=displays[weight,label,'ocular']['delta_s_display'][6000:10000]
+                df=displays[weight,frozen,'ocular']['delta_s_display'][6000:10000]
+                n=delta['ocular'][6000:10000];den=np.linalg.norm(n)
+                update=ds-df
+                mechanism.append(dict(case=key,dataset=dataset,subject=subject,weight=weight,arm=label,
+                    display_rate=200,full_change=float(np.linalg.norm(ds)/den),
+                    frozen_reference_change=float(np.linalg.norm(df)/den),
+                    reference_update_change=float(np.linalg.norm(update)/den),
+                    reference_update_signed_gain=float(np.sum(update*n)/den**2),
+                    decomposition_max_abs=float(np.max(abs(df+update-ds)))))
+                for roi in range(3):
+                    original=source/'fits'/f'{key}__{weight}__baseline__r{roi}.npz'
+                    perturbed=source/'fits'/f'{key}__{weight}__ocular__r{roi}.npz'
+                    if not perturbed.exists():perturbed=original
+                    predkey='fixed_prediction' if label=='fixed' else 'prediction'
+                    with np.load(original,allow_pickle=False) as a:
+                        p0=a[predkey].copy();y0=a['target'].copy();sd=a['sd_subject'].copy()
+                    with np.load(perturbed,allow_pickle=False) as a:p1=a[predkey].copy();y1=a['target'].copy()
+                    rec0=json.loads(original.with_suffix('.json').read_text())['fits'][arm]
+                    rec1=json.loads(perturbed.with_suffix('.json').read_text())['fits'][arm]
+                    parameters.append(dict(case=key,dataset=dataset,subject=subject,weight=weight,arm=label,roi=roi,
+                        tau_baseline=rec0['tau'],tau_ocular=rec1['tau'],beta_baseline=rec0['beta'],beta_ocular=rec1['beta']))
+                    proxy_rows.append(dict(case=key,dataset=dataset,subject=subject,weight=weight,arm=label,roi=roi,
+                        EEG_baseline_NRMSE=float(np.sqrt(np.mean(((p0[:-1,0]-y0[:-1,0])/sd[0])**2))),
+                        Hb_baseline_NRMSE=float(np.sqrt(np.mean(((p0[:-1,1:]-y0[:-1,1:])/sd[1:])**2))),
+                        ocular_prediction_change_over_observed_change=(float(np.linalg.norm((p1-p0)[300:500,0])/np.linalg.norm((y1-y0)[300:500,0])) if roi==0 else None)))
+                    if roi==0:proxies[weight,label]=(y1-y0,p1-p0,sd)
+        # All eight cases are exported: no outcome-dependent example selection.
+        for variant in ('ocular','neural10'):
+            fig,axes=plt.subplots(3,2,figsize=(13,10),sharex='col',sharey='row',layout='constrained')
+            t=np.arange(4000)/200+30;n=delta[variant][6000:10000,electrode]
+            rms=float(np.sqrt(np.mean(n*n)))
+            for col,weight in enumerate(cfg['weights']):
+                ax=axes[0,col]
+                if variant=='ocular':
+                    y,_,sd=proxies[weight,'fixed'];ax.plot(np.arange(200)/10+30,y[300:500,0]/sd[0],'k--',lw=1,label='Observed proxy change')
+                    for label,color in [('fixed','#1764ab'),('free','#dc6b21')]:
+                        _,p,_=proxies[weight,label];ax.plot(np.arange(200)/10+30,p[300:500,0]/sd[0],color=color,label=label+' SSM change')
+                    ax.set_ylabel('Proxy change / frozen subject SD')
+                else:
+                    ax.plot(t,n/rms,'k--',lw=.8,label='Known 10 Hz addition')
+                    for label,color in [('fixed','#1764ab'),('free','#dc6b21')]:
+                        base=displays[weight,label,'baseline']['s_display'][6000:10000,electrode]
+                        ax.plot(t,base/rms,color=color,lw=.7,label=label+' baseline S')
+                    ax.set_ylabel('Voltage / injection RMS')
+                ax.set_title('EEG:HbO:HbR = '+('1:1:1' if weight=='equal' else '4:1:1'));ax.legend(fontsize=8)
+                for row in (1,2):
+                    ax=axes[row,col];ax.plot(t,n/rms,'k--',lw=1,label='Known addition')
+                    for label,color in [('fixed','#1764ab'),('free','#dc6b21')]:
+                        ds=displays[weight,label,variant]['delta_s_display'][6000:10000,electrode]
+                        ax.plot(t,(ds if row==1 else n-ds)/rms,color=color,lw=.9,label=label+(' delta S' if row==1 else ' delta O'))
+                        if row==1 and variant=='ocular':
+                            frozen=displays[weight,'frozen_'+label,variant]['delta_s_display'][6000:10000,electrode]
+                            ax.plot(t,frozen/rms,color=color,lw=.8,ls=':',label=label+' frozen prediction')
+                    ax.set_ylabel(('S' if row==1 else 'O')+' change / injection RMS');ax.legend(fontsize=8,ncol=2)
+                axes[2,col].set_xlabel('Time in 90 s window / s')
+            for ax in axes.flat:ax.grid(alpha=.2);ax.set_xlim(30,50)
+            for row in range(3):
+                low,high=axes[row,0].get_ylim();axes[row,0].set_ylim(low,high+.3*(high-low))
+            fig.suptitle(f'{dataset} | {subject} | {channel_names[electrode]} | {variant}\nKnown added change; each model uses the full 90 s window. Display 200 Hz; metrics native rate.',fontsize=12)
+            filename=f'{key}_{variant}.png';fig.savefig(out/filename,dpi=180);plt.close(fig);figures.append(filename)
+    frame=pd.DataFrame(rows);frame.to_csv(out/'target_metrics.csv',index=False)
+    if not frame.qualified.all():raise ValueError('Incomplete targets: inspect retained target_metrics.csv')
+    if len(frame)!=288:raise ValueError('Expected 224 main and 64 frozen targets')
+    frame['O_signed_projection']=1-frame.signed_projection
+    frame.to_csv(out/'target_metrics.csv',index=False)
+    numeric=['noise_error','neural_error','signed_projection','O_signed_projection','baseline_correlation',
+        'baseline_nrmse','Hb_reference_nrmse','EEG_branch_change','Hb_branch_change']
+    byds=frame.groupby(['dataset','weight','condition','variant'],sort=False)[numeric].mean().reset_index()
+    aggregate=byds.groupby(['weight','condition','variant'],sort=False)[numeric].mean().reset_index()
+    byds.to_csv(out/'dataset_metrics.csv',index=False);aggregate.to_csv(out/'aggregate_metrics.csv',index=False)
+    ocular=frame[(frame.variant=='ocular')&frame.condition.isin(['fixed','free'])]
+    paired=ocular.pivot(index=['dataset','subject','case','weight'],columns='condition',values='noise_error').reset_index()
+    paired['free_minus_fixed']=paired.free-paired.fixed;paired.to_csv(out/'ocular_paired.csv',index=False)
+    neural=frame[frame.variant.isin(['neural10','neural35'])&frame.condition.isin(['fixed','free'])]
+    nsummary=neural.groupby(['dataset','subject','weight','condition'])[['neural_error','signed_projection']].mean().groupby(['dataset','weight','condition']).mean().groupby(['weight','condition']).mean().reset_index()
+    nsummary.to_csv(out/'neural_summary.csv',index=False)
+    pd.DataFrame(proxy_rows).to_csv(out/'proxy_metrics.csv',index=False)
+    proxy_summary=pd.DataFrame(proxy_rows).groupby(['dataset','subject','weight','arm']).mean(numeric_only=True).groupby(['dataset','weight','arm']).mean().groupby(['weight','arm']).mean().reset_index()
+    proxy_summary.to_csv(out/'proxy_summary.csv',index=False)
+    pd.DataFrame(parameters).to_csv(out/'parameters.csv',index=False)
+    mf=pd.DataFrame(mechanism);mf.to_csv(out/'mechanism_metrics.csv',index=False)
+    ms=mf.groupby(['dataset','weight','arm']).mean(numeric_only=True).groupby(['weight','arm']).mean().reset_index();ms.to_csv(out/'mechanism_summary.csv',index=False)
+    fig,axes=plt.subplots(1,2,figsize=(12,4.5),sharey=True,layout='constrained')
+    for ax,weight in zip(axes,cfg['weights']):
+        subset=paired[paired.weight==weight]
+        for index,(_,row) in enumerate(subset.iterrows()):
+            ax.plot([0,1],[row.fixed,row.free],marker='o',lw=1,label=row.dataset+' '+str(row.subject))
+        means=subset[['fixed','free']].mean();ax.plot([0,1],means,'k--s',lw=2,label='Equal-dataset mean')
+        ax.set_xticks([0,1],['Fixed tau/beta','Variable tau/beta']);ax.set_title('1:1:1' if weight=='equal' else '4:1:1')
+        ax.set_ylabel('Ocular S leakage: norm(delta S) / norm(noise)');ax.grid(alpha=.2)
+    axes[1].legend(fontsize=7,loc='upper left',bbox_to_anchor=(1.01,1))
+    fig.savefig(out/'ocular_paired.png',dpi=200);plt.close(fig)
+    result=dict(schema=cfg['schema'],status='completed',cases=8,datasets=4,main_targets=224,frozen_targets=64,
+        qualified_targets=int(frame.qualified.sum()),paired_fit_tasks=saved['paired_fit_tasks'],new_nonlinear_fits=0,
+        primary=aggregate[aggregate.variant=='ocular'].to_dict('records'),neural=nsummary.to_dict('records'),
+        proxy=proxy_summary.to_dict('records'),mechanism=ms.to_dict('records'),
+        improved_subjects={w:int(((paired.weight==w)&(paired.free_minus_fixed<0)).sum()) for w in cfg['weights']},
+        baseline_replay_max_abs=max(x['max_abs'] for x in baseline_replay),
+        decomposition_max_abs=max(x['decomposition_max_abs'] for x in mechanism),figures=figures,
+        interpretation='Paired parameter intervention; O=X-S so complementary branch increments are not independent endpoints.')
+    write_json(out/'summary.json',result)
+    from html import escape
+    body='<html><meta charset="utf-8"><style>body{font-family:sans-serif;max-width:1400px;margin:auto;padding:28px;line-height:1.65}img{width:100%}table{border-collapse:collapse;font-size:13px}td,th{border:1px solid #bbb;padding:5px}</style><h1>τ/β 固定与可调：S/O 配对实验</h1>'
+    body+='<p>同一批四库八名验证被试，三位置，90 秒完整窗口条件拟合。固定分支 τ=2 秒、β=1；可调分支沿用原缓存先验与起点，log 参数先验标准差 0.125。每个输入条件重新拟合驱动和初态。144 组固定/可调拟合直接取自已保留结果；没有新增原始数据读取。两权重按 EEG/HbO/HbR 顺序，并把总和固定为 3。PCA、尺度、训练参考与功率约束完全相同。</p>'
+    body+='<p>眼电主指标为 [30,50) 秒所有电极的 ||S污染−S原始|| / ||已知眼电||，越小越好，使用原生采样率。O 有符号投影 = 1−S 有符号投影；它是方向上的增益，不是独立成功率或能量比例。先被试内，再数据集内等权，最后四库等权。每个点代表一名被试的一段窗口。</p><img src="ocular_paired.png">'
+    body+='<h2>眼电配对统计</h2>'+aggregate[(aggregate.variant=='ocular')&aggregate.condition.isin(['fixed','free'])][['weight','condition','noise_error','signed_projection','O_signed_projection']].to_html(index=False,float_format=lambda v:f'{v:.6f}')
+    body+='<p>本组结果支持两权重下 O 能接收已知眼电。可调参数相对固定参数并未降低平均 S 泄漏；固定参数也已具有这一能力。结合冻结预测对照，主要抗扰动效果在既定预测参考下的电压功率约束中已经存在。τ/β 可调改善基线 SSM 拟合，与 O 接收眼电的机制应分别解释。</p>'
+    body+='<h2>各被试配对差（可调减固定，负值为改善）</h2>'+paired.to_html(index=False,float_format=lambda v:f'{v:.6f}')
+    body+='<h2>冻结基线预测的机制对照</h2><p>冻结时，输入仍增加同一眼电，只有提供功率参考的 SSM 预测保持基线值。完整变化 = 冻结参考下的变化 + 更新预测造成的变化。下表范数都除以已知眼电范数，使用统一 200 Hz 显示数组；两项范数不直接相加。冻结基线与各自完整基线逐点复现。</p>'+ms.to_html(index=False,float_format=lambda v:f'{v:.6f}')
+    body+='<h2>SSM 代理和基线拟合</h2><p>代理误差以冻结原被试 SD 为分母；三个 ROI 先平均，再被试和数据集平均。眼电预测变化/观测变化仅针对第一处受扰动 ROI。</p>'+proxy_summary.to_html(index=False,float_format=lambda v:f'{v:.6f}')
+    body+='<h2>神经样变化保留</h2><p>10/35 Hz 探针的指标为 ||ΔS−已知添加|| / ||已知添加||，越小越好；误差接近 1 且有符号投影接近 0 表示新增波形大部分进入 O。两频率先在被试内平均。此探针保持 Hb 不变，幅度采用训练参考电极 RMS，不等同于真实耦合神经事件；原始电压也不是干净真值。</p>'+nsummary.to_html(index=False,float_format=lambda v:f'{v:.6f}')
+    body+='<h2>理论解释</h2><p>项目神经血管动力学中，血管舒张信号 a 的变化满足 da/dt = βr − κa − γ(f−1)，血流变化 df/dt = a。r 是共同驱动，β 是驱动到血管的增益；τ 是血液平均通过时间，控制血容量及脱氧变化的时间尺度。小扰动近似下 Hb ≈ βHτ[r]，Hτ 为血流动力学时间算子。固定错误的增益或时间尺度时，联合拟合可能通过修改 r 兼顾 Hb 和 EEG；放开参数可吸收这种失配。参数自由度也可吸收污染，所以改善基线拟合不自动等同于眼电剔除。log 先验标准差 0.125 是软惩罚，不是参数只能上下浮动 12.5% 的硬区间；实际值见 parameters.csv。</p>'
+    body+='<p>电压目标不是把预测代理直接当成电压。当前算法用训练统计把三条代理提升为通道频带功率参考，再对输入电压实施局部二阶矩约束，得到 S，最后定义 O=X−S。记整条映射为 F(X,p)，则扰动响应可精确写成：ΔS=[F(X+n,p₀)−F(X,p₀)]+[F(X+n,p₁)−F(X+n,p₀)]。X 为原始窗口，n 为已知眼电，p₀/p₁ 为基线/污染条件的预测代理。第一项反映既定参考下电压约束的响应；第二项反映重新拟合后参考更新的作用。表中的冻结对照分别评估它们。</p>'
+    body+='<h2>早期结果的方法差异</h2><p>早期同一 VP002 n-back 窗口的 current_target 是当时的空间目标；其 S 眼电误差为 0.83749、O 有符号增益为 0.17040。改用等权、固定 τ/β 的功率参考目标，误差已降到 0.50470、O 增益升至 0.58250。因此早期方法与当前方法的变化包含电压目标算法，而非只切换 τ/β。当前八被试的训练参考、窗口及扰动尺度也不同；跨代差异不能直接当作参数因果效应。历史提取表见 historical_audit.csv，其 source 字段指向原始 owning summary。</p>'
+    body+='<h2>全体样例波形</h2><p>每个样例两个权重并排，同行共用纵轴。眼电图第一行为观测代理变化与 SSM 预测变化；第二行为 ΔS，点线为冻结基线预测对照；第三行为 ΔO。黑虚线为已知添加。电压除以注入 RMS，代理除以冻结被试 SD。神经样图第一行为原始 S 与添加波形，后两行为分支增量。时间均为窗口内 [30,50) 秒；完整评分与所有次要干预见 CSV。</p>'
+    for filename in figures:body+='<p>'+escape(filename)+'</p><img src="'+escape(filename)+'">'
+    body+='<p>证据：summary.json、target_metrics.csv、ocular_paired.csv、parameters.csv、mechanism_metrics.csv 和 resolved_config.json。神经血管模型参考 <a href="https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf">Tak 等（2015）</a>；训练参考统计约束的相关背景见 <a href="https://sccn.ucsd.edu/~scott/pdf/Mullen_IEEE15.pdf">Mullen 等（2015）</a>。项目实现采用自己的局部功率上限，并非原论文 ASR 的等同实现。</p></html>'
+    (out/'report.html').write_text(body)
+    return {k:v for k,v in result.items() if k not in ('figures',)}
+
+
+def tau_beta_so_main(args):
+    cfg=tau_beta_so_config(args.config);out=args.run_dir.resolve();out.mkdir(parents=True,exist_ok=True)
+    resolved=out/'resolved_config.json'
+    if resolved.exists() and json.loads(resolved.read_text())!=cfg:raise ValueError('Frozen tau/beta comparison contract changed')
+    write_json(resolved,cfg)
+    if args.tau_beta_so_stage=='prepare':result=tau_beta_so_prepare(cfg,out)
+    elif args.tau_beta_so_stage=='targets':result=tau_beta_so_targets(cfg,out,args.workers,args.pilot)
+    else:result=tau_beta_so_summarize(cfg,out)
+    print(json.dumps(serial(result)),flush=True);return result
+
+
 
 
 def main():
@@ -13164,6 +13388,8 @@ def main():
     ap.add_argument('--normalization-comparison',action='store_true')
     ap.add_argument('--amplitude-frequency',action='store_true')
     ap.add_argument('--weight-so-comparison',action='store_true')
+    ap.add_argument('--tau-beta-so-comparison',action='store_true')
+    ap.add_argument('--tau-beta-so-stage',choices=['prepare','targets','summarize'],default='prepare')
     ap.add_argument('--weight-so-stage',choices=['check','plan','prepare','pilot','fit','targets','summarize','review'],default='check')
     ap.add_argument('--frequency-stage',choices=['check','scan','summarize'],default='check')
     ap.add_argument('--normalization-stage',choices=['check','prepare','pilot','run','summarize'],default='check')
@@ -13197,6 +13423,9 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.tau_beta_so_comparison:
+        if args.run_dir is None:ap.error('--run-dir is required')
+        return tau_beta_so_main(args)
     if args.weight_so_comparison:
         if args.run_dir is None:ap.error('--run-dir is required')
         return weight_so_main(args)

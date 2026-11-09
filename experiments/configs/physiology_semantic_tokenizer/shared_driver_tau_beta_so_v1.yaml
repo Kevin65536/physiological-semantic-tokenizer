@@ -1,0 +1,35 @@
+schema: shared_driver_tau_beta_so_v1
+experiment_id: SSM-TAU-BETA-SO-v1
+created: '2026-11-07'
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1
+source_schema: shared_driver_weight_so_v1
+weights: [equal, eeg4]
+variants: [baseline, ocular, muscle, hbo_noise, hbr_noise, neural10, neural35]
+arms: [tak_fixed, tak_tau_beta]
+controls:
+  fixed: retained_tau2_beta1_driver_and_initial_states_refitted_per_variant
+  variable: retained_tau_beta_joint_fit_log_prior_SD_0.125_reference_tau2_beta1
+  frozen_prediction: baseline_and_ocular_only_same_input_perturbation_baseline_prediction_held_fixed
+  unchanged: source_cases_PCA_scales_training_reference_noise_weights_solver_and_voltage_power_cap1
+  observation_weights: sum_three_EEG_HbO_HbR_equal_1_1_1_eeg4_2_0.5_0.5
+boundary:
+  retained_only: true
+  splits: [train, validation]
+  test_and_protected: forbidden
+  new_raw_reads: false
+  new_nonlinear_fits: false
+selection: exact_eight_source_validation_cases_no_outcome_selection
+endpoints:
+  primary: native_rate_ocular_norm_delta_S_over_norm_injected_noise_lower_better
+  secondary: other_noise_neural_like_preservation_baseline_morphology
+  mechanism: paired_proxy_response_and_200Hz_voltage_reference_update_decomposition
+  aggregation: variants_within_subject_then_subjects_within_dataset_then_equal_datasets
+  'null': variable_parameters_do_not_reduce_ocular_leakage_relative_to_fixed
+  interpretation: injected_delta_known_original_voltage_not_clean_truth_neural_probes_leave_Hb_unchanged
+  failures: preserve_all_planned_denominators_no_replacement
+resources:
+  supervisor: user_systemd_with_linger
+  numerical_threads: 1
+  pilot_workers: 4
+  target_workers: 12
+stopping: complete_paired_matrix_and_frozen_reference_controls_no_outcome_based_expansion

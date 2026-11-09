@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-07T12:49:09.174543+00:00",
+  "updated_at": "2026-11-07T13:55:24.652109+00:00",
   "tracks": [
     {
       "id": "main",
@@ -5679,6 +5679,60 @@
       "label": "全量个体校准缓存：execution.json",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/execution.json",
       "role": "run_manifest"
+    },
+    {
+      "id": "e.tau_beta_so_contract",
+      "label": "τ/β配对 S/O：contract",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_tau_beta_so_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tau_beta_so_plan",
+      "label": "τ/β配对 S/O：plan",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/plan.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tau_beta_so_resources",
+      "label": "τ/β配对 S/O：resources",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/resources.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tau_beta_so_pilot_launch",
+      "label": "τ/β配对 S/O：pilot_launch",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/pilot_launch_v2.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tau_beta_so_summary",
+      "label": "τ/β配对 S/O：summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tau_beta_so_verification",
+      "label": "τ/β配对 S/O：verification",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tau_beta_so_report",
+      "label": "τ/β配对 S/O：report",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/report.html",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tau_beta_so_execution",
+      "label": "τ/β配对 S/O：execution",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/tau_beta_so_targets_execution.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tau_beta_so_historical",
+      "label": "τ/β配对 S/O：historical",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_tau_beta_so_v1_paired/historical_audit.csv",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -14305,6 +14359,63 @@
       ],
       "headline": false,
       "next_step": "保留已完成v1缓存作为现有基线；个体PCA后继与权重/SO实验各自按版本合同处理，不自动重启原生产器。"
+    },
+    {
+      "state_id": "main.tau_beta_so@2026-11-07.v1-running",
+      "entity": "main.tau_beta_so",
+      "label": "τ/β固定与可调S/O配对归因",
+      "track": "main",
+      "order": 214,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "按用户要求固定八被试、权重1:1:1/4:1:1、PCA/尺度及S/O算法，复用144组双分支合格拟合，重建固定参数目标并加入眼电条件冻结预测机制对照。无新增原始读取或非线性拟合；持久监督器进行原生采样率S/O重建。",
+      "evidence_ids": [
+        "e.tau_beta_so_contract",
+        "e.tau_beta_so_plan",
+        "e.tau_beta_so_resources",
+        "e.tau_beta_so_pilot_launch"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-11-07T13:47:23.668693+00:00",
+      "depends_on": [
+        "main.weight_so"
+      ],
+      "headline": false,
+      "next_step": "完成原生S/O及冻结预测对照，核对配对差、代理响应、波形和历史方法差异。"
+    },
+    {
+      "state_id": "main.tau_beta_so@2026-11-07.v1-completed",
+      "entity": "main.tau_beta_so",
+      "label": "τ/β固定与可调S/O配对归因",
+      "track": "main",
+      "order": 214,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "同四库8被试、两权重、原PCA/尺度/参考/电压算法，复用144组双分支合格拟合；224个主目标与64个冻结预测对照均可用，无新增非线性拟合。固定→可调τ/β时，眼电S泄漏等权0.21543→0.21808、4:1:1为0.21746→0.21940；O有符号投影增益均约87%–88%，改善被试分别3/8、1/8。冻结基线预测仍有0.211–0.213的低泄漏，说明既定参考下电压功率约束已经实现主要眼电抑制；不支持将历史O改善主要归因于放开τ/β。可调参数确实改善等权基线代理NRMSE 0.3205→0.2866及逐ROI Hb NRMSE 0.3882→0.3460。10/35Hz、Hb不变的神经样探针保留误差两分支均约0.994，当前约束也会拒斥这些新增波形。288目标数值有效，冻结基线逐点复现、闭合通过，17幅图和54项相关测试通过。历史空间目标与功率目标区别保留，未改生产缓存。",
+      "evidence_ids": [
+        "e.tau_beta_so_contract",
+        "e.tau_beta_so_plan",
+        "e.tau_beta_so_resources",
+        "e.tau_beta_so_pilot_launch",
+        "e.tau_beta_so_summary",
+        "e.tau_beta_so_verification",
+        "e.tau_beta_so_report",
+        "e.tau_beta_so_execution",
+        "e.tau_beta_so_historical"
+      ],
+      "supersedes": [
+        "main.tau_beta_so@2026-11-07.v1-running"
+      ],
+      "updated_at": "2026-11-07T13:55:24.652109+00:00",
+      "depends_on": [
+        "main.weight_so"
+      ],
+      "headline": false,
+      "next_step": "保留τ/β可调以改善模型拟合；将眼电接收与神经样保留分开判断。此次结果不支持为增强O眼电接收而扩大参数自由度，也不据此改变权重或重生成全量缓存。"
     }
   ]
 }
