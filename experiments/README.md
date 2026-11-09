@@ -351,10 +351,16 @@ same-condition statistical analysis.
 
 The separately versioned full reconstruction cache uses this same entry with
 `--tak-reconstruction-cache --cache-stage
-<check|plan|synthetic|pilot|produce|verify> --run-dir <fresh_run>` and
-[`shared_driver_tak_subject_cache_v1.yaml`](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml).
-It explicitly fits τ/β at log-prior SD 0.125, retains the training-only common
-PCA direction and calibrates positive scales once per subject. Fits use 90 s,
+<check|plan|synthetic|pilot|produce|verify> --run-dir <fresh_run>`. The default
+[`v2 contract`](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml)
+fits PC1 and positive scales independently per dataset/subject, frozen across
+all that subject's records and sites. The population coordinate supplies only
+reference scoring SDs. The retained
+[`v1 contract`](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml)
+remains available through explicit `--config` and preserves shared PCA; the
+versions require separate output namespaces and cannot reuse each other's fits.
+
+Both explicitly fit τ/β at log-prior SD 0.125. Fits use 90 s,
 or the actual shorter REFED support, and the corrected Visual native identities.
 `produce` resumes matching terminal work, completes preparation/calibration,
 fits the fixed reference and τ/β, then independently verifies the saved arrays.

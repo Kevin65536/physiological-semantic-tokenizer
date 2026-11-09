@@ -10760,9 +10760,12 @@ def tak_main(args):
 
 
 def tak_cache_config(path=None):
-    default=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml'
+    folder=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer'
+    default=folder/'shared_driver_tak_subject_cache_v2.yaml'
     cfg=yaml.safe_load(Path(path or default).read_text())
-    if cfg!=yaml.safe_load(default.read_text()):
+    contracts={f'shared_driver_tak_subject_cache_v{v}':folder/f'shared_driver_tak_subject_cache_v{v}.yaml'
+               for v in (1,2)}
+    if cfg.get('schema') not in contracts or cfg!=yaml.safe_load(contracts[cfg['schema']].read_text()):
         raise ValueError('Use the reviewed subject-calibrated reconstruction cache contract')
     core=deepcopy(tak_config(CODE_ROOT/cfg['base_config']))
     core.update(schema=cfg['schema'],experiment_id=cfg['experiment_id'],seed=cfg['seed'])
@@ -10835,7 +10838,8 @@ def tak_cache_plan(cfg,root):
         downstream_input=str(source),downstream_joins=joins,counts=counts,
         planned_pair_windows=sum(v['pair_windows'] for v in counts.values()),
         measured_signal_reads=0,protected_reads=0,
-        interpretation='individual_unlabelled_adaptation_with_training_only_shared_PCA')
+        interpretation=('individual_unlabelled_PCA_and_scaling' if cfg['schema']=='shared_driver_tak_subject_cache_v2'
+                        else 'individual_unlabelled_adaptation_with_training_only_shared_PCA'))
 
 
 def _tak_cache_npz(path, **arrays):
@@ -11116,11 +11120,13 @@ def tak_cache_calibrate(cfg,out,plan, *, records=None, destination=None):
             raise ValueError('Frozen calibration contract changed')
         return value
     population={};individual={}
+    individual_pca=cfg['schema']=='shared_driver_tak_subject_cache_v2'
     for ds in cfg['data']['datasets']:
         selected=[r for r in records if r['dataset']==ds and r['split']=='train']
         sources=[]
         co=fit_feature_coordinate(_tak_cache_chunks(out,selected,counts=sources))
         co.update(subjects=sorted({s['subject'] for s in sources}),sources=sources,scope='training_only')
+        if individual_pca:co['purpose']='reference_scoring_SD_only_not_an_individual_projection'
         population[ds]=co
     identities=sorted({(r['dataset'],r['subject'],r['split']) for r in records})
     for ds,subject,split in identities:
@@ -11128,10 +11134,14 @@ def tak_cache_calibrate(cfg,out,plan, *, records=None, destination=None):
         try:
             co=fit_feature_coordinate(_tak_cache_chunks(out,[r for r in records
                 if r['dataset']==ds and r['subject']==subject],counts=sources),
-                fixed_pc=population[ds]['pc'])
+                fixed_pc=None if individual_pca else population[ds]['pc'])
             co.update(status='completed',dataset=ds,subject=subject,split=split,sources=sources,
                 scope='own_unlabelled_observations_all_prepared_records_and_sites',
-                PCA_source=ds,parameter_comparison='effective_in_individually_scaled_coordinates')
+                PCA_source=ds+'__'+subject if individual_pca else ds,
+                parameter_comparison=('effective_in_individual_PCA_and_scale_coordinates' if individual_pca
+                                      else 'effective_in_individually_scaled_coordinates'))
+            if individual_pca:
+                co['common_scale_interpretation']='fixed_training_reference_SD_not_a_shared_EEG_target'
         except ValueError as exc:
             co=dict(status='unavailable',dataset=ds,subject=subject,split=split,error=str(exc),sources=sources)
         individual[ds+'__'+subject]=co
@@ -11215,7 +11225,8 @@ def tak_cache_fit_arrays(core,target_unscaled,coordinate,common_sd, *, structure
         execution_backend=dict(observation_algebra='structured' if structured else 'dense',
             linear_solver=getattr(linear_solver,'backend','scipy_cpu_float64')),
         zero_baseline=_tak_cache_errors(target_unscaled,np.zeros_like(target_unscaled),common_sd),
-        normalization=dict(subject='individual_calibration_SD',common='training_subjects_common_projection_SD'),
+        normalization=dict(subject='individual_calibration_SD',common=coordinate.get(
+            'common_scale_interpretation','training_subjects_common_projection_SD')),
         duration_s=n/10.,scored_steps=n-1,reference_steps=50)
     if 'prediction' in arrays:
         result['nonpositive_correlation_components']=[w['component'] for w in free['waveform']
@@ -11291,7 +11302,7 @@ def _tak_cache_fit_worker(payload):
                 seconds=row['seconds'],peak_rss_mib=row['peak_rss_mib'],cached=False)
 
 
-def tak_cache_specs(records, *, pilot=False):
+def tak_cache_specs(records, *, pilot=False, individual_pca=False):
     for r in records:
         pairs=r['pairs']
         if pilot:
@@ -11302,7 +11313,8 @@ def tak_cache_specs(records, *, pilot=False):
                 yield dict(record_key=r['cache_key'],dataset=r['dataset'],subject=r['subject'],split=r['split'],
                     join_key=r['join_key'],record=r['record'],window=w,pair={k:pair[k] for k in
                         ('native_index','id','site_id','status','channel_sets','channel_set_names') if k in pair},
-                    output_coordinates='training_PC1_logpower_and_referenced_cached_Hb',
+                    output_coordinates=('individual_PC1_logpower_and_referenced_cached_Hb' if individual_pca
+                                        else 'training_PC1_logpower_and_referenced_cached_Hb'),
                     visibility='joint_full_declared_window',subject_adaptation=True)
 
 
@@ -11344,6 +11356,12 @@ def tak_cache_check(cfg,core,out):
     np.testing.assert_array_equal(own['pc'],population['pc'])
     np.testing.assert_allclose(own['eeg_factor'],population['eeg_factor']/3,rtol=1e-12)
     np.testing.assert_allclose(own['hb_factor'],population['hb_factor']/7,rtol=1e-12)
+    individual_pca=cfg['schema']=='shared_driver_tak_subject_cache_v2'
+    if individual_pca:
+        changed=x.copy();changed[:,np.argmin(abs(population['pc']))]*=100
+        individual=fit_feature_coordinate([(changed,h)])
+        assert abs(individual['pc']@population['pc'])<.5
+        np.testing.assert_allclose(np.std(changed@individual['pc'])*individual['eeg_factor'],.025,rtol=1e-12)
     for n in (900,450):
         y=rng.normal(size=(n,3))
         np.testing.assert_allclose((_tak_cache_operator(n)@y.ravel()).reshape(n,3),
@@ -11351,7 +11369,8 @@ def tak_cache_check(cfg,core,out):
     if (core['arms'][1]['fit']!=['tau','neurovascular_gain']
             or core['arms'][1]['log_sd']!=[.125,.125] or core['tensor']['dt_s']!=.1):
         raise ValueError('Explicit tau/beta 10Hz prior contract required')
-    result=dict(status='passed',checks=['frozen_PCA_individual_scaling','90s_and_short_reference_operator',
+    result=dict(status='passed',checks=[('individual_PCA_and_scaling' if individual_pca else 'frozen_PCA_individual_scaling'),
+        '90s_and_short_reference_operator',
         'explicit_tau_beta_prior_and_clock'],measured_signal_reads=0,protected_reads=0)
     write_json(out/'software_checks.json',result)
     return result
@@ -11383,7 +11402,7 @@ def tak_cache_pilot(cfg,core,root,out,plan,workers):
         total=len(records))
     coordinate_path=pilot/'coordinates.json'
     tak_cache_calibrate(cfg,out,plan,records=records,destination=coordinate_path)
-    specs=list(tak_cache_specs(records,pilot=True))
+    specs=list(tak_cache_specs(records,pilot=True,individual_pca=cfg['schema']=='shared_driver_tak_subject_cache_v2'))
     run=_tak_cache_pool(_tak_cache_fit_worker,
         ((cfg,core,str(out),str(coordinate_path),str(pilot),s) for s in specs),
         out=pilot,phase='pilot_fit',workers=min(workers,len(specs)),total=len(specs))
@@ -11428,7 +11447,7 @@ def _tak_cache_verify_record(payload):
                 nonpositive_EEG_correlation=0,nonpositive_HbO_correlation=0,
                 nonpositive_HbR_correlation=0,Hb_not_better_than_zero=0)
     sums={};maxima=dict(closure=0.,metric=0.,observation=0.);issues=[]
-    for spec in tak_cache_specs([record]):
+    for spec in tak_cache_specs([record],individual_pca=cfg['schema']=='shared_driver_tak_subject_cache_v2'):
         counts['planned']+=1
         path=out/'tasks'/spec['record_key']/(spec['window']['key']+f"__p{spec['pair']['native_index']:03d}.json")
         if not path.exists():
@@ -11808,7 +11827,8 @@ def tak_cache_main(args):
                     tak_cache_calibrate(cfg,out,plan)
                     coordinate_path=out/'coordinates.json'
                     _tak_cache_pool(_tak_cache_fit_worker,
-                        ((cfg,core,str(out),str(coordinate_path),str(out),s) for s in tak_cache_specs(records)),
+                        ((cfg,core,str(out),str(coordinate_path),str(out),s) for s in tak_cache_specs(
+                            records,individual_pca=cfg['schema']=='shared_driver_tak_subject_cache_v2')),
                         out=out,phase='reconstruction',workers=args.workers,total=plan['planned_pair_windows'],
                         structured=structured,gpu_devices=gpu_devices,gpu_batch_size=args.cache_gpu_batch_size,
                         gpu_workers=args.cache_gpu_workers)
@@ -11821,6 +11841,8 @@ def tak_cache_main(args):
     print(json.dumps(serial({k:v for k,v in result.items() if k not in
         ('records','downstream_joins','subject_partitions','rows')})),flush=True)
     return result
+
+
 
 
 def main():

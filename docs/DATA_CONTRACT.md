@@ -214,6 +214,34 @@ nearest their centre, retaining both modality offsets and the teacher's full
 input support. Missing joins remain explicit. Joint teacher outputs may be
 supervision, but cannot become unmasked inputs in missing-modality evaluation.
 
+### Individual-PCA successor — 2026-11-06
+
+[`shared_driver_tak_subject_cache_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml)
+defines the next cache generation requested by the user. Each **dataset ×
+subject** fits its own 30-dimensional PC1 from its own valid, unlabelled prepared
+windows and available Hb locations. Feature ordering remains the six
+geometry-nearest EEG slots × five bands. All admitted records contribute;
+samples are pooled with the existing window/site weighting. The largest
+absolute loading is positive; no population-direction alignment is applied.
+
+Each subject's PC1, positive EEG factor, common positive Hb factor and component
+SDs are fitted once and frozen across that subject's records, sites and tasks.
+Public validation/test subjects use their own unlabelled observations under the
+same declared offline adaptation scope. The data, timing, masks, native units,
+τ/β model and stopping criteria retain the v1 contract.
+
+The training-only population coordinate is retained **only to supply the fixed
+reference SDs for diagnostic error normalization**. It supplies no PCA direction
+or scale to an individual's SSM input. `metrics_common` therefore uses a shared
+reference denominator, while its EEG target is subject-specific; it is not an
+error on a common EEG projection. `metrics_subject` uses the individual's own
+SD. Within each subject, free and fixed-parameter fits use the same new target.
+Per-task coordinate metadata and `PCA_source` identify this distinction.
+
+Use a fresh v2 run with its own calibration, fits and verification. Existing v1
+coordinates and terminal fits are not reusable as v2 outcomes. The running v1
+generation and its execution snapshots retain their original contract.
+
 ## Canonical sample identity
 
 The join key is composed from stable dataset-native identity, not array order:

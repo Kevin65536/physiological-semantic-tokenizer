@@ -40,6 +40,8 @@ def test_subject_calibration_keeps_population_direction_and_preserves_scale_inve
         fit_feature_coordinate([(x,h)],fixed_pc=population['pc']*2)
 
 
+
+
 def test_windows_cover_complete_support_without_crossing_gaps_and_short_refed_is_fitted():
     r=record();windows,excluded=tak_reconstruction_windows(r)
     assert len(windows)==3 and not excluded
@@ -126,6 +128,73 @@ def test_population_pca_uses_training_only_while_individual_scales_use_only_own_
     assert {s['subject'] for s in own['sources']}=={'test'}
     np.testing.assert_array_equal(own['pc'],expected['pc'])
     assert own['eeg_factor']<expected['eeg_factor']/10
+
+
+def test_individual_pca_uses_only_own_subject_and_freezes_across_records(tmp_path):
+    cfg,_=runner.tak_cache_config()
+    assert cfg['schema']=='shared_driver_tak_subject_cache_v2'
+    cfg=deepcopy(cfg);cfg['data']['datasets']=['fixture']
+    rng=np.random.default_rng(61);records=[];chunks={};paths={}
+    for subject,split,axis in [('train','train',0),('heldout','test',12)]:
+        chunks[subject]=[]
+        for repeat in range(2):
+            r=record('fixture',90.,0.)
+            r.update(subject=subject,split=split,record=f'r{repeat}',
+                cache_key=f'fixture/{subject}/r{repeat}',join_key=f'fixture|{subject}|r{repeat}')
+            r['cache_windows'],_=tak_reconstruction_windows(r)
+            r['pairs']=[dict(status='available',native_index=0,channel_sets={'nearest6':list(range(6))})]
+            x=rng.normal(size=(900,30));x[:,axis]*=10
+            h=rng.normal(size=(900,2))*[2.,.5]
+            path=tmp_path/'features'/r['cache_key']/'w00000.npz'
+            runner._tak_cache_npz(path,eeg=x.reshape(900,6,5),hb=h[:,None],
+                eeg_valid=np.ones(6,bool),hb_valid=np.ones(1,bool))
+            runner.write_json(path.with_suffix('.json'),dict(status='completed'))
+            records.append(r);chunks[subject].append((x,h));paths[(subject,repeat)]=path
+    result=runner.tak_cache_calibrate(cfg,tmp_path,dict(records=records))
+    own=result['individual']['fixture__heldout']
+    expected=fit_feature_coordinate(chunks['heldout'])
+    np.testing.assert_array_equal(own['pc'],expected['pc'])
+    assert own['eeg_factor']==expected['eeg_factor']
+    assert own['PCA_source']=='fixture__heldout'
+    assert len({s['record_key'] for s in own['sources']})==2
+    assert {s['subject'] for s in own['sources']}=={'heldout'}
+    assert abs(own['pc']@result['population']['fixture']['pc'])<.1
+    # Change another person's covariance: neither this PC nor its scales may change.
+    for repeat in range(2):
+        x,h=chunks['train'][repeat];changed=x.copy();changed[:,20]*=100
+        runner._tak_cache_npz(paths[('train',repeat)],eeg=changed.reshape(900,6,5),hb=h[:,None],
+            eeg_valid=np.ones(6,bool),hb_valid=np.ones(1,bool))
+    repeated=runner.tak_cache_calibrate(cfg,tmp_path,dict(records=records),destination=tmp_path/'recalibrated.json')
+    same=repeated['individual']['fixture__heldout']
+    for key in ('pc','eeg_factor','hb_factor','sd'):
+        np.testing.assert_array_equal(same[key],own[key])
+    assert abs(repeated['population']['fixture']['pc']@result['population']['fixture']['pc'])<.1
+    # The persisted calibration is reused exactly, without rereading features.
+    assert runner.serial(runner.tak_cache_calibrate(cfg,tmp_path,dict(records=records)))==runner.serial(result)
+    old,_=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml')
+    with pytest.raises(ValueError,match='Frozen calibration'):
+        runner.tak_cache_calibrate(old,tmp_path,dict(records=records))
+    specs=list(runner.tak_cache_specs(records,individual_pca=True))
+    assert all(s['output_coordinates']=='individual_PC1_logpower_and_referenced_cached_Hb' for s in specs)
+
+
+def test_cache_versions_keep_prior_contract_and_reject_unreviewed_projection(tmp_path):
+    import yaml
+    new,core=runner.tak_cache_config()
+    old,old_core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml')
+    assert old['calibration']['projection']=='one_training_subject_only_PC1_per_dataset_all_available_sites'
+    assert new['calibration']['projection']=='one_PC1_per_dataset_subject_all_available_sites'
+    for key in ('data','windows','model','storage'):
+        assert new[key]==old[key]
+    for key in ('arms','solver','parameters'):
+        assert core[key]==old_core[key]
+    assert new['run_name']!=old['run_name']
+    bad=deepcopy(new);bad['calibration']['projection']=old['calibration']['projection']
+    path=tmp_path/'mixed.yaml';path.write_text(yaml.safe_dump(bad))
+    with pytest.raises(ValueError,match='reviewed'):
+        runner.tak_cache_config(path)
+    checks=runner.tak_cache_check(new,core,tmp_path)
+    assert 'individual_PCA_and_scaling' in checks['checks']
 
 
 def test_existing_terminal_task_with_wrong_identity_is_not_reused(tmp_path):

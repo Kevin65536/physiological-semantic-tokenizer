@@ -1,0 +1,93 @@
+schema: shared_driver_tak_subject_cache_v2
+experiment_id: SSM-TAK-SUBJECT-CACHE-v2
+created: '2026-11-06'
+seed: 20261106
+base_config: experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_10hz_v2.yaml
+output_root: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction
+run_name: 20261106_subject_pca_cache_v2
+data:
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, refed, visual_cognitive_motivation]
+  cache_root: data/cache/physiology_semantic_clean_v5
+  downstream_input: data/cache/physiology_downstream_v1
+  protected_data: forbidden
+  geometry_root: data/cache/physiology_semantic_clean_v5/channel_geometry
+  refed_geometry_root: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20261013_refed_graphical_registration_v1/channel_geometry
+  visual_eeg_channel_identity: visual_raw_channel_identity_v2
+  raw_reads: registered_native_EEG_only
+  Hb: retained_v5_none_float64_10Hz_no_second_filter
+  labels_as_inputs: false
+windows:
+  duration_s: 90
+  stride_s: 60
+  reference_s: 5
+  grid_hz: 10
+  phase: Hb_cached_100ms_grid_with_declared_segment_median_EEG_offset
+  tail: additional_complete_90s_window_ending_at_last_admitted_100ms_boundary
+  short_support: REFED_actual_continuous_duration_other_datasets_90s_no_padding_or_concatenation
+  overlap: retain_window_identity_not_independent_replicates_or_continuous_state_stitching
+  downstream_join: containing_window_nearest_sample_center_then_earliest_start
+  last_bin: retained_prediction_but_excluded_from_fit_and_score
+calibration:
+  projection: one_PC1_per_dataset_subject_all_available_sites
+  sign: largest_absolute_loading_positive_without_population_alignment
+  feature_order: six_geometry_nearest_channels_by_distance_then_five_bands
+  individual: own_PC1_positive_EEG_factor_common_positive_Hb_factor_and_component_SD
+  individual_support: all_valid_prepared_windows_and_sites_of_that_subject_label_blind
+  sharing: one_coordinate_per_dataset_subject_all_records_sites_and_tasks
+  update: once_before_fitting_never_per_window_or_site
+  EEG_SD_target: 0.025
+  Hb_common_SD_target: 0.025
+  heldout_use: explicit_unlabelled_subject_adaptation_not_strict_zero_shot
+  population_scoring: fixed_training_reference_SD_only_not_a_shared_EEG_target
+model:
+  condition: joint_full
+  parameters: [tau, neurovascular_gain]
+  reference: [2.0, 1.0]
+  log_prior_sd: [0.125, 0.125]
+  bounds: [[0.25, 12.0], [0.1, 10.0]]
+  starts: [[2.0, 1.0], [1.0, 0.5], [3.5, 2.0]]
+  constants: {kappa: 0.64, gamma: 0.32, tau_v: 2.0}
+  fit_unit: one_90s_window_and_one_Hb_pair
+  nuisance: independent_driver_and_four_initial_coordinates_per_fit
+  baseline: fixed_reference_same_driver_and_initial_freedom_also_used_for_warm_start
+  penalties: unchanged_base_10Hz_per_second_weights_driver_initial_and_flow_penalties
+synthetic:
+  cases:
+    - {subject: 0, repeat: 0, task: A, scenario: unchanged_parameters}
+    - {subject: 1, repeat: 0, task: B, scenario: tau_shift}
+    - {subject: 2, repeat: 1, task: B, scenario: beta_shift}
+  short_REFED_duration_s: 45
+  purpose: complete_90s_tensor_fit_integration_and_cache_roundtrip_before_measurements
+pilot:
+  selection: first_metadata_available_90s_training_record_per_dataset_plus_first_short_REFED_training_record
+  sites: first_middle_last_available_pair
+  window: first_90s_window
+  coordinates: provisional_training_record_only_never_reused_as_production_calibration
+  purpose: numerical_readout_and_resource_sizing_not_configuration_selection
+storage:
+  precision: float64
+  features: one_shared_window_array_for_all_Hb_pairs
+  results: prediction_residual_states_driver_initial_and_fixed_baseline_prediction
+  metadata: canonical_identity_split_calibration_references_masks_parameters_solver_and_waveform_quality
+  dense_observation_operator: reconstruct_from_one_declared_reference_operator_not_duplicated_per_fit
+  completion: atomic_arrays_then_task_record_resume_only_matching_terminal_identity
+endpoints:
+  primary: complete_planned_population_with_numerical_status_and_reusable_conditional_reconstruction
+  secondary: per_dataset_subject_equal_paired_error_relative_to_fixed_reference
+  diagnostic: component_correlation_amplitude_bias_local_error_zero_baseline_and_integration
+  null: free_parameters_do_not_guarantee_lower_error_or_good_waveform_recovery
+  failures: preserve_missing_support_preparation_calibration_and_numerical_failures_no_silent_fallback
+  stopping: all_frozen_window_pair_identities_terminal_then_independent_array_verification
+resources:
+  max_workers: 32
+  preparation_workers: 8
+  numerical_threads: 1
+  in_flight_per_worker: 2
+  supervisor: user_systemd_with_linger
+claim_limits:
+  - offline_joint_conditional_reconstruction_not_clean_signal_or_physiological_truth
+  - subject_scaling_changes_effective_model_coordinates_beta_is_not_absolute_coupling
+  - individual_PCA_changes_EEG_target_content_across_subjects_common_SD_is_only_a_reference_denominator
+  - privileged_bimodal_teacher_targets_never_unmasked_inputs_to_missing_modality_evaluation
+  - full_record_Hb_preprocessing_and_90s_EEG_support_preclude_real_time_claims
+  - short_REFED_records_use_actual_duration_and_are_reported_separately_with_stronger_relative_prior_influence

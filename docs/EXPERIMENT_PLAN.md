@@ -228,6 +228,13 @@ Hb 30秒目标网格、至多90秒原生EEG滤波支持、5秒参考、被试外
 
 ## 全量个体校准 τ/β 重建缓存（2026-11-04）
 
+**后续版本选择（2026-11-06）：** 用户指定下一轮使用每被试个体 PCA。
+[`v2 合同`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml)
+改为每个数据集内、每名被试仅用自身有效无标签观测拟合一个 PC1 及尺度，
+在其所有记录与位置间冻结；完整范围与评分分母由
+[数据合同](DATA_CONTRACT.md#individual-pca-successor--2026-11-06)规定。
+下一轮使用新版本输出，保留 v1 的公共 PCA 缓存；本节下述公共 PCA 设计属于 v1。
+
 用户明确要求在分析个体校准后开始全量缓存，并要求不足90秒的REFED也参与拟合。
 [`shared_driver_tak_subject_cache_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml)
 固定四个公开数据集、原生EEG与v5/none Hb输入、10 Hz网格、τ/β自由参数及两者
