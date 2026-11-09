@@ -682,6 +682,13 @@ include the installed `pdflatex` directory in that service's `PATH`. Report-only
 revisions can reuse the authored content and bitmap figures through
 `render_source_diagnostics_report.py`, with a fresh output directory. Numerical
 replay checks are covered by `test_dual_component_power_cap.py`.
+The same examples contract supports `--stage power-cap-normalization` with
+`--output <completed_examples> --posterior-run <completed_posterior>
+--report-output <fresh_export>`. This retained-array audit compares the original
+training calibration and named examples before/after coordinate scaling,
+training-SD standardization and objective weighting. It exports distributions,
+within/between-window variance accounting and bitmap plots without SSM refits
+or raw/test reads; its arithmetic tests use synthetic fixtures in the same suite.
 
 The independent Tak-component/residual generation uses
 [`scripts/run_dual_component_tokenizer.py`](scripts/run_dual_component_tokenizer.py)

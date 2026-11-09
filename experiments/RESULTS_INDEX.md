@@ -106,6 +106,12 @@ registered geometry, eight preparation records, training calibration, four new
 fits, four unchanged fit references, all target diagnostics and export history.
 These two plots reuse subjects/windows from the five-example panel; they do not
 add independent participants or establish an isolated anatomical effect.
+The [normalization distribution audit](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_examples_v1/normalization_audit_v1/summary.json)
+and [per-window distribution table](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_examples_v1/normalization_audit_v1/distribution_statistics.csv)
+separate coordinate gains, frozen training-SD denominators and objective weights,
+including within-window variance versus training-window mean shifts. This is a
+retained-observation analysis with no new SSM fits; arithmetic rescaling factors
+are not refitted-model outcomes.
 The [detailed EEG voltage-supervision method report](../docs/reports/interpretability_analysis/20261106_eeg_voltage_supervision_method_v2/report_v3/TECHNICAL_REPORT.pdf)
 and its [editable HTML companion](../docs/reports/interpretability_analysis/20261106_eeg_voltage_supervision_method_v2/report_v3/TECHNICAL_REPORT.html)
 explain the retained PCA/SSM/log-power completion/local projection/overlap-add

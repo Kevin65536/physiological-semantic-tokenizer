@@ -447,6 +447,192 @@ def _voltage_method_replay_case(payload):
     return record
 
 
+def voltage_normalization_statistics(raw,coordinate,*,prediction=None,weights=(.1,10.,10.)):
+    """Separate physical-feature scaling, training-SD residual units and weights."""
+    raw=np.asarray(raw,float);sd=np.asarray(coordinate['sd'],float);weights=np.asarray(weights,float)
+    scale=np.array([coordinate['eeg_factor'],coordinate['hb_factor'],coordinate['hb_factor']])
+    if (raw.ndim!=2 or raw.shape[1]!=3 or len(raw)<2 or sd.shape!=(3,) or weights.shape!=(3,)
+            or not all(np.isfinite(v).all() for v in (raw,sd,weights,scale))
+            or min(sd.min(),weights.min(),scale.min())<=0):
+        raise ValueError('finite three-component observations and positive scales required')
+    u=raw*scale;standardized=u/sd
+    def distribution(x):
+        q=np.quantile(x,[.01,.05,.25,.5,.75,.95,.99],axis=0)
+        return dict(mean=x.mean(0).tolist(),sd=x.std(0).tolist(),rms=np.sqrt(np.mean(x*x,0)).tolist(),
+            minimum=x.min(0).tolist(),maximum=x.max(0).tolist(),
+            **{name:y.tolist() for name,y in zip(('p01','p05','p25','median','p75','p95','p99'),q)})
+    std=u.std(0);hb_sd=np.sqrt(np.mean(std[1:]**2))
+    if std[0]<=0 or hb_sd<=0:raise ValueError('nondegenerate EEG and Hb required')
+    result=dict(samples=len(raw),scale=scale.tolist(),training_sd=sd.tolist(),weights=weights.tolist(),
+        distributions={key:distribution(x) for key,x in [('before_scale',raw),('model',u),
+            ('training_sd_units',standardized),('objective_units',standardized*np.sqrt(weights))]},
+        hb_combined_sd=float(hb_sd),hb_to_eeg_sd_ratio=float(hb_sd/std[0]),
+        sd_over_training=(std/sd).tolist(),
+        window_only_rescaling_factors=dict(eeg=float(.025/std[0]),common_hb=float(.025/hb_sd)))
+    if prediction is not None:
+        prediction=np.asarray(prediction,float)
+        if prediction.shape!=u.shape or not np.isfinite(prediction).all():raise ValueError('prediction shape/finite mismatch')
+        residual=(prediction-u)/sd
+        result['prediction']=dict(distribution=distribution(prediction),
+            sd_ratio=(prediction.std(0)/std).tolist(),
+            correlation=[float(np.corrcoef(u[:,j],prediction[:,j])[0,1]) if prediction[:,j].std()>0 else None for j in range(3)],
+            nrmse=np.sqrt(np.mean(residual**2,0)).tolist(),
+            data_cost_by_modality=(.4*np.sum(weights*residual**2,0)).tolist())
+    return result
+
+
+def voltage_normalization_variance_partition(chunks):
+    """Population variance = average within-window variance + mean-shift variance."""
+    chunks=[np.asarray(x,float) for x in chunks]
+    if not chunks or any(x.ndim!=2 or x.shape[1]!=3 or not len(x) or not np.isfinite(x).all() for x in chunks):
+        raise ValueError('nonempty finite three-component windows required')
+    lengths=np.array([len(x) for x in chunks]);weights=lengths/lengths.sum()
+    means=np.array([x.mean(0) for x in chunks]);mean=np.sum(means*weights[:,None],axis=0)
+    within=np.sum(np.array([x.var(0) for x in chunks])*weights[:,None],axis=0)
+    between=np.sum((means-mean)**2*weights[:,None],axis=0);total=np.concatenate(chunks).var(0)
+    np.testing.assert_allclose(total,within+between,atol=1e-12,rtol=1e-10)
+    return dict(samples=int(lengths.sum()),windows=len(chunks),mean=mean.tolist(),pooled_sd=np.sqrt(total).tolist(),
+        within_window_variance=within.tolist(),between_window_mean_variance=between.tolist(),
+        between_window_fraction=np.divide(between,total,out=np.zeros(3),where=total>0).tolist())
+
+
+def audit_voltage_power_cap_normalization(front,posterior,export):
+    """Distribution audit of the admitted six training/five validation subjects."""
+    import shutil
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from matplotlib.font_manager import FontProperties,fontManager
+    front,posterior,export=map(lambda p:Path(p).resolve(),(front,posterior,export))
+    if export.exists():raise FileExistsError('use a fresh normalization audit export')
+    def read(p):return json.loads(Path(p).read_text())
+    def arrays(p,keys):
+        with np.load(p,allow_pickle=False) as z:return {k:z[k] for k in keys}
+    summaries=[read(p/'summary.json') for p in (front,posterior)]
+    for root,summary in zip((front,posterior),summaries):
+        if summary['status']!='completed' or read(root/'verification.json')['status']!='passed':
+            raise ValueError('completed verified retained examples required')
+    postplan=read(posterior/'plan.json');parent=Path(postplan['parent']);plan=read(parent/'plan.json')
+    for value in (postplan,plan):
+        if value['test_access']!='forbidden' or value['protected_data']!='forbidden':
+            raise ValueError('retained public development boundary required before array reads')
+    training=[r for r in plan['rows'] if r['phase']=='fit']
+    if ({r['id'] for r in training}!={r['id'] for r in postplan['training']}
+            or any(r['split']!='train' for r in training)
+            or {r['subject'] for r in training}!=set(('VP001','VP003','VP006','VP007','VP008','VP009'))):
+        raise ValueError('six original first training windows required')
+    rows=summaries[0]['rows']+summaries[1]['rows']
+    if (len(rows)!=7 or any(r['case']['split']!='validation' for r in rows)
+            or {r['subject'] for r in rows}!=set(('VP002','VP005','VP014','VP017','VP019'))):
+        raise ValueError('seven retained examples from five validation subjects required')
+    coordinates=read(parent/'coordinates.json');coordinates.update(read(posterior/'coordinates.json'))
+    records=[];groups={};checks=[]
+    def observation(feature,hb,indices,co):
+        return np.column_stack((feature[:,indices].reshape(900,30)@np.asarray(co['pc']),hb))
+    for region in ('left_motor','prefrontal','right_motor','occipital'):
+        key='simultaneous_eeg_nirs__'+region;co=coordinates[key];parts=[]
+        ispost=region=='occipital';roi=2 if ispost else ('left_motor','prefrontal','right_motor').index(region)
+        for entry in training:
+            path=(posterior/'prepared' if ispost else parent/'features')/(entry['id']+'.npz')
+            feature_key='features_baseline' if ispost else 'features'
+            a=arrays(path,[feature_key,'hb','roi_indices'])
+            raw=observation(a[feature_key],a['hb'][:,roi],a['roi_indices'][roi],co);parts.append(raw)
+            records.append(dict(label=entry['subject'],subject=entry['subject'],case_id=entry['id'],region=region,
+                split='train',variant='baseline',source=str(path),statistics=voltage_normalization_statistics(raw[:899],co)))
+        scale=np.array([co['eeg_factor'],co['hb_factor'],co['hb_factor']]);u=[x*scale for x in parts]
+        partition=voltage_normalization_variance_partition(u)
+        np.testing.assert_allclose(partition['pooled_sd'],co['sd'],rtol=1e-10,atol=1e-12)
+        np.testing.assert_allclose([partition['pooled_sd'][0],np.sqrt(np.mean(np.array(partition['pooled_sd'][1:])**2))],[.025,.025],rtol=1e-10)
+        groups[region]=dict(coordinate=co,variance_partition=partition,
+            pooled_training=voltage_normalization_statistics(np.concatenate(parts),co),
+            statistical_unit='six retained windows, one per training subject; 900 bins per window')
+    for label,row in zip('ABCDEFG',rows):
+        if row['status']!='completed':
+            raise ValueError('retain failed-case evidence explicitly before expanding this audit')
+        run=Path(row['run']);case=row['case'];roi=row.get('metric_roi',1);region=case['rows'][roi]['anchor']['region']
+        key=case['rows'][roi]['coordinate'];co=read(run/'coordinates.json')[key]
+        for name in ('pc','eeg_factor','hb_factor','sd'):
+            np.testing.assert_array_equal(co[name],coordinates[key][name])
+        fits=read(run/'physical_fits.json')
+        a=arrays(run/'inputs.npz',['features_baseline','features_ocular','hb','roi_indices'])
+        for variant in ('baseline','ocular'):
+            f=next(f for f in fits if f['variant']==variant and f['roi']==roi)
+            if f['status']!='completed' or f['observation_weights']!=[.1,10.,10.]:
+                raise ValueError('same accepted weighted fit required')
+            v=arrays(f['array_path'],['u','physical','visible']);raw=observation(a['features_'+variant],a['hb'][:,roi],a['roi_indices'][roi],co)
+            scaled=raw*np.array([co['eeg_factor'],co['hb_factor'],co['hb_factor']])
+            np.testing.assert_allclose(scaled,v['u'],rtol=1e-12,atol=1e-12)
+            if not v['visible'][:899].all() or v['visible'][-1].any():raise ValueError('899-bin full-modality support required')
+            stats=voltage_normalization_statistics(raw[:899],co,prediction=v['physical'][:899])
+            cost_error=abs(sum(stats['prediction']['data_cost_by_modality'])-f['fit']['objective_components']['data'])
+            if cost_error>1e-8:raise ValueError('weighted data term mismatch')
+            checks.append(dict(label=label,variant=variant,observed_replay_error=float(np.max(abs(scaled-v['u']))),data_cost_error=cost_error))
+            records.append(dict(label=label,subject=row['subject'],case_id=case['id'],region=region,
+                split='validation',variant=variant,source=f['array_path'],statistics=stats))
+    export.mkdir(parents=True)
+    result=dict(schema='voltage_normalization_audit_v1',status='completed',records=records,training_groups=groups,
+        counts=dict(training_subjects=6,validation_subjects=5,unique_subjects=11,training_region_windows=24,
+            validation_region_windows=7,validation_conditions=14),checks=checks,
+        scope=dict(front=str(front),posterior=str(posterior),parent=str(parent),raw_signal_reads=0,new_SSM_fits=0,
+            access='retained train/validation arrays only'),
+        definitions=dict(modalities=['EEG_proxy','HbO','HbR'],before_scale_units=['PC1 relative log-power','uM','uM'],
+            support='per-window statistics: bins0..898, 899 points; exact calibration replay: all900 bins',
+            reference='first5s already subtracted; no full-window mean subtraction in the actual target',
+            sd='population SD ddof0 within stated support; RMS includes the mean',
+            stages='before_scale -> positive coordinate gain -> divide by original training SD -> multiply sqrt(objective weight)',
+            hb_combined_sd='sqrt((SD_HbO^2+SD_HbR^2)/2), not an amplitude average or across-subject pooling',
+            window_rescaling='arithmetic factors to give current-window EEG SD and combined Hb SD0.025; no SSM rerun and not a new calibration proposal',
+            uncertainty='descriptive retained windows; no timepoint independence, confidence interval, or causal effect of re-normalization'))
+    (export/'summary.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+    flat=[]
+    for r in records:
+        for stage,distribution in r['statistics']['distributions'].items():
+            for j,modality in enumerate(result['definitions']['modalities']):
+                flat.append(dict(**{k:r[k] for k in ('label','subject','case_id','region','split','variant','source')},
+                    stage=stage,modality=modality,**{k:v[j] for k,v in distribution.items()}))
+    with (export/'distribution_statistics.csv').open('w',newline='') as f:
+        writer=csv.DictWriter(f,fieldnames=list(flat[0]));writer.writeheader();writer.writerows(flat)
+    font=FontProperties(fname='/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc');fontManager.addfont(font.get_file())
+    plt.rcParams.update({'font.family':font.get_name(),'font.size':10,'axes.unicode_minus':False})
+    primary=[r for r in records if r['split']=='validation' and r['variant']=='baseline']
+    labels=[r['label']+' '+r['subject']+'\n'+('前额' if r['region']=='prefrontal' else '枕区') for r in primary]
+    colors=['#2469a0','#c24e40','#24826c'];modalities=['EEG 代理','HbO','HbR']
+    fig,axs=plt.subplots(2,3,figsize=(12,7.5),sharex=True,sharey='row')
+    for i,stage in enumerate(('model','training_sd_units')):
+        for j,ax in enumerate(axs[i]):
+            stats=[r['statistics']['distributions'][stage] for r in primary]
+            boxes=[dict(label=r['label'],med=s['median'][j],q1=s['p25'][j],q3=s['p75'][j],
+                whislo=s['p05'][j],whishi=s['p95'][j],fliers=[]) for r,s in zip(primary,stats)]
+            ax.bxp(boxes,showfliers=False,patch_artist=True,boxprops=dict(facecolor=colors[j],alpha=.5))
+            ax.axhline(0,color='grey',ls=':',lw=.8);ax.grid(alpha=.15);ax.set_title(modalities[j])
+            ax.set_ylabel('模型坐标' if i==0 else '原训练 SD 单位（未减全窗均值）')
+            ax.set_xlabel('保留样例 A–G；未注入眼电')
+    fig.suptitle('归一化后的实测分布：箱体 P25–P75，中线中位数，须 P5–P95；同一行共用纵轴',fontsize=12)
+    fig.tight_layout();fig.savefig(export/'observed_distributions.png',dpi=250);plt.close(fig)
+    fig,axs=plt.subplots(3,1,figsize=(11,9),sharex=True)
+    for ax,stage,title in zip(axs,('model','training_sd_units','objective_units'),
+            ('实际模型输入的标准差','标准差 / 原训练 SD','标准差 / 原训练 SD × 权重平方根')):
+        values=np.array([r['statistics']['distributions'][stage]['sd'] for r in primary])
+        for j in range(3):ax.bar(np.arange(7)+(j-1)*.25,values[:,j],width=.24,label=modalities[j],color=colors[j])
+        ax.set_title(title);ax.grid(axis='y',alpha=.2);ax.legend(ncol=3)
+        if stage=='training_sd_units':ax.axhline(1,color='grey',ls=':')
+    axs[-1].set_xticks(np.arange(7),labels);axs[0].set_ylabel('模型坐标');axs[1].set_ylabel('无量纲');axs[2].set_ylabel('无量纲')
+    fig.tight_layout();fig.savefig(export/'scale_comparison.png',dpi=250);plt.close(fig)
+    fig,axs=plt.subplots(1,2,figsize=(11,4.8),sharey=True)
+    for ax,region in zip(axs,('prefrontal','occipital')):
+        selected=[r for r in records if r['region']==region and r['variant']=='baseline']
+        for j,modality in enumerate(modalities):
+            vals=[r['statistics']['distributions']['model']['sd'][j] for r in selected]
+            ax.plot(range(len(vals)),vals,'o-',color=colors[j],label=modality)
+        ax.axvline(5.5,color='grey',ls=':');ax.set_xticks(range(len(selected)),[r['subject'] for r in selected],rotation=60,ha='right')
+        ax.set_title(('前额' if region=='prefrontal' else '枕区')+'：左六名训练被试，右侧验证样例')
+        ax.set_ylabel('归一化后窗口内 SD / 模型坐标');ax.legend();ax.grid(alpha=.15)
+    fig.tight_layout();fig.savefig(export/'training_and_validation_sd.png',dpi=250);plt.close(fig)
+    for source in (Path(__file__),Path('src/data/ssm_prepared.py'),Path('experiments/scripts/run_dual_component_tokenizer.py')):
+        destination=export/'source'/source.name;destination.parent.mkdir(exist_ok=True);shutil.copyfile(source,destination)
+    return dict(status='completed',export=str(export),counts=result['counts'],replay_checks=len(checks),new_SSM_fits=0)
+
+
 def render_voltage_power_cap_method_report(front,posterior,export,*,workers=2):
     """Explain retained development targets; replay voltage only, never refit SSM."""
     import concurrent.futures

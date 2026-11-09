@@ -41,7 +41,7 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'voltage', 'voltage-one', 'voltage-token-atlas', 'eeg-o', 'eeg-o-one',
           'voltage-teacher-plan', 'voltage-teacher-pilot', 'voltage-teacher', 'voltage-teacher-report',
           'separation-plan', 'separation-pilot', 'separation', 'separation-report',
-          'power-cap-plan', 'power-cap', 'power-cap-report', 'power-cap-method-report',
+          'power-cap-plan', 'power-cap', 'power-cap-report', 'power-cap-method-report', 'power-cap-normalization',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -1064,12 +1064,17 @@ def main(argv=None):
                     args.workers or cfg['resources']['cpu_workers'],args.stage)
         print(json.dumps(serial(result)));return
     if cfg['schema']=='dual_component_voltage_power_cap_examples_v1':
-        if args.stage not in ('check','synthetic','power-cap-plan','power-cap','power-cap-report','power-cap-method-report'):
+        if args.stage not in ('check','synthetic','power-cap-plan','power-cap','power-cap-report','power-cap-method-report','power-cap-normalization'):
             raise ValueError('use the bounded examples power-cap stages')
         if args.stage=='check':
             print(json.dumps(dict(status='examples_contract_valid',measured_arrays_read=0)));return
         if args.output is None:raise ValueError('--output required')
-        if args.stage=='power-cap-method-report':
+        if args.stage=='power-cap-normalization':
+            from src.analysis.dual_component_tokenizer import audit_voltage_power_cap_normalization
+            if args.report_output is None or args.posterior_run is None:
+                raise ValueError('--report-output and --posterior-run required')
+            result=audit_voltage_power_cap_normalization(args.output,args.posterior_run,args.report_output)
+        elif args.stage=='power-cap-method-report':
             from src.analysis.dual_component_tokenizer import render_voltage_power_cap_method_report
             if args.report_output is None or args.posterior_run is None:
                 raise ValueError('--report-output and --posterior-run required')

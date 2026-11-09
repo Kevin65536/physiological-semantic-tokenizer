@@ -21,6 +21,36 @@ def model_fixture(channels=4):
         complement_power=np.ones(channels))
 
 
+def test_normalization_audit_separates_gains_training_sd_and_objective_weights():
+    from src.analysis.dual_component_tokenizer import voltage_normalization_statistics
+    t=np.arange(100)/10;raw=np.column_stack((np.sin(t)+2,3*np.cos(t),.5*np.sin(2*t)))
+    co=dict(eeg_factor=.2,hb_factor=.1,sd=[.025,.03,.01])
+    u=raw*np.array([.2,.1,.1]);prediction=u+np.array([.025,.06,-.01])
+    a=voltage_normalization_statistics(raw,co,prediction=prediction)
+    b=voltage_normalization_statistics(raw,co,prediction=prediction,weights=[1,1,1])
+    np.testing.assert_allclose(a['distributions']['model']['mean'],u.mean(0))
+    np.testing.assert_allclose(a['distributions']['model']['sd'],u.std(0))
+    np.testing.assert_allclose(a['distributions']['model']['rms'],np.sqrt((u*u).mean(0)))
+    np.testing.assert_allclose(a['sd_over_training'],u.std(0)/co['sd'])
+    np.testing.assert_allclose(a['prediction']['nrmse'],[1,2,1])
+    np.testing.assert_allclose(a['prediction']['data_cost_by_modality'],.4*100*np.array([.1,40,10]))
+    assert a['distributions']['model']==b['distributions']['model']
+    np.testing.assert_allclose(a['distributions']['objective_units']['sd'],
+        np.array(b['distributions']['objective_units']['sd'])*np.sqrt([.1,10,10]))
+    assert a['distributions']['model']['rms'][0]>a['distributions']['model']['sd'][0]
+
+
+def test_normalization_variance_partition_includes_window_mean_offsets():
+    from src.analysis.dual_component_tokenizer import voltage_normalization_variance_partition
+    chunks=[np.zeros((2,3)),np.full((6,3),4.)]
+    result=voltage_normalization_variance_partition(chunks)
+    np.testing.assert_allclose(result['mean'],3.)
+    np.testing.assert_allclose(result['within_window_variance'],0.)
+    np.testing.assert_allclose(result['between_window_mean_variance'],3.)
+    np.testing.assert_allclose(result['pooled_sd'],np.sqrt(3))
+    np.testing.assert_allclose(result['between_window_fraction'],1.)
+
+
 def test_second_moment_projection_matches_independent_singular_value_solution():
     rng = np.random.default_rng(3)
     x = rng.normal(size=(4, 60))*5
