@@ -5573,6 +5573,42 @@
       "role": "diagnostic"
     },
     {
+      "id": "e.amplitude_frequency_contract",
+      "label": "幅度严重失配频次：筛查阈值与范围",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_amplitude_frequency_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.amplitude_frequency_summary",
+      "label": "幅度严重失配频次：完整频次",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.amplitude_frequency_verification",
+      "label": "幅度严重失配频次：数组复算",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.amplitude_frequency_paired",
+      "label": "幅度严重失配频次：共同支持与失败",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/paired_and_failed_audit.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.amplitude_frequency_report",
+      "label": "幅度严重失配频次：统计图与解释",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/report_v2.html",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.amplitude_frequency_launch",
+      "label": "幅度严重失配频次：持久监督命令",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/launches.json",
+      "role": "run_manifest"
+    },
+    {
       "id": "e.tak_subject_cache_final_summary",
       "label": "全量个体校准缓存：summary.json",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/summary.json",
@@ -14078,6 +14114,33 @@
       ],
       "headline": false,
       "next_step": "有限矩阵已完成；保留配对统计与全部波形，不自动扩展缓存。后续需独立校准区分观测增益与未建模血流成分。"
+    },
+    {
+      "state_id": "main.amplitude_frequency@2026-11-06.v1-completed",
+      "entity": "main.amplitude_frequency",
+      "label": "四数据集幅度失配与EEG放大频次",
+      "track": "main",
+      "order": 212,
+      "entity_kind": "analysis",
+      "execution": "completed",
+      "scientific_verdict": "not_applicable",
+      "analysis_intent": "exploratory",
+      "summary": "冻结2026-11-06 15:01:58 UTC的已有等权缓存，读取80名训练/验证被试161919个计划窗口×通道，两参数分支分别统计；测试和原始信号未读，无新拟合。工程阈值为输入Hb/EEG SD比≥1.5、EEG预测/观测SD比≥2，NRMSE≥1单列。去重叠且数值合格支持上，当前τ/β分支0/82620严重共现、25/82620输入偏大且大误差；固定参数分支26/82750严重共现（0.0314%，11/79被试），864/82750输入偏大且大误差（1.044%）。当前未合格有限解另有REFED一例2.30倍放大，239未合格、80不可计算、1286截止缺失单列。16组数组复算通过；共同合格支持20例固定参数严重放大均在当前分支低于2倍。历史高Hb权重面板1/7命中，只是挑选示例；统计为共现而非因果。",
+      "evidence_ids": [
+        "e.amplitude_frequency_contract",
+        "e.amplitude_frequency_summary",
+        "e.amplitude_frequency_verification",
+        "e.amplitude_frequency_paired",
+        "e.amplitude_frequency_report",
+        "e.amplitude_frequency_launch"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-11-06T15:10:23.839606+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "只读频次统计完成；保留固定阈值、敏感性、被试率、共同支持和失败分母，不自动扩展到测试或启动重拟合。"
     },
     {
       "state_id": "main.tak_subject_cache@2026-11-07.v1-completion-verified",

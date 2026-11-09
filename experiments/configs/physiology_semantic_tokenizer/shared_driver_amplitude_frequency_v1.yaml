@@ -1,0 +1,43 @@
+schema: shared_driver_amplitude_frequency_v1
+experiment_id: SSM-AMPLITUDE-FREQUENCY-v1
+created: '2026-11-06'
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1
+source_schema: shared_driver_tak_subject_cache_v1
+datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, refed, visual_cognitive_motivation]
+splits: [train, validation]
+arms: [tak_tau_beta, tak_fixed]
+thresholds:
+  input_Hb_over_EEG_SD: 1.5
+  prediction_over_observed_EEG_SD: 2.0
+  local_EEG_NRMSE: 1.0
+  attenuation_SD_ratio: 0.5
+sensitivity:
+  input_ratio: [1.25, 1.5, 2.0, 3.0]
+  amplification: [1.5, 2.0, 3.0, 5.0]
+definitions:
+  input_ratio: sqrt_mean_model_HbO_HbR_variances_divided_by_model_EEG_SD
+  primary_event: input_ratio_ge_1p5_AND_EEG_amplitude_ratio_ge_2
+  error_event: local_NRMSE_ge_1_reported_separately
+  threshold_interpretation: engineering_screen_not_normal_physiology_or_causal_attribution
+  primary_support: chronological_nonoverlapping_windows_in_both_clocks_all_planned_sites
+  unit: window_by_Hb_pair_corresponding_EEG_proxy
+  secondary_support: all_retained_windows_with_overlap_explicit
+  inference: descriptive_rates_equal_subject_mean_and_any_event_subject_fraction
+  missing: preserve_planned_terminal_finite_qualified_and_missing_denominators
+  duration: actual_support_REFED_short_windows_separate
+  scientific_null: amplitude_mismatch_need_not_cooccur_with_severe_EEG_reconstruction
+boundary:
+  source: exact_planned_completed_task_JSON_before_frozen_cutoff
+  signal_reads: bounded_matching_task_NPZ_for_independent_metric_verification_only
+  raw_test_protected_reads: forbidden
+  model_refits: forbidden
+historical_panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261106_hb_weighted_examples_v1/normalization_audit_v1/summary.json
+historical_scope: seven_baseline_examples_only_illustrative_not_dataset_prevalence
+verification:
+  samples: first_and_max_amplification_qualified_row_per_dataset_arm
+  rtol: 0.00000001
+resources:
+  workers: 8
+  threads_per_worker: 1
+  supervisor: user_systemd_with_linger
+stopping: all_frozen_plan_development_records_scanned_and_summary_verified

@@ -81,6 +81,28 @@ def test_normalization_metrics_separate_input_mismatch_and_prediction_amplificat
     assert m['input_hb_eeg_ratio']==pytest.approx(expected)
 
 
+def test_amplitude_frequency_inclusive_thresholds_and_explicit_failure_denominators(tmp_path):
+    import pandas as pd
+    cfg=runner.amplitude_frequency_config()
+    assert cfg['splits']==['train','validation']
+    assert runner.amplitude_frequency_check(cfg,tmp_path)['status']=='passed'
+    frame=pd.DataFrame(dict(subject=['a','a','b','b'],terminal=[True,True,True,False],
+        finite=[True,True,True,False],qualified=[True,True,False,False],
+        input_ratio=[1.5,1.49,3.,np.nan],amplitude=[2.,3.,4.,np.nan],error=[1.,2.,3.,np.nan]))
+    rates=runner.amplitude_frequency_rates(frame,cfg['thresholds'])
+    assert rates['planned']==4 and rates['qualified']==2 and rates['unqualified_finite']==1 and rates['missing']==1
+    assert rates['joint_count']==1 and rates['joint_rate']==.5
+    assert rates['amplified_count']==2 and rates['joint_subjects']==1
+    assert rates['subjects']==2 and rates['subjects_with_qualified']==1
+
+
+def test_amplitude_frequency_rejects_test_record_before_any_task_read(tmp_path):
+    cfg=runner.amplitude_frequency_config()
+    with pytest.raises(ValueError,match='Disallowed split'):
+        runner._amplitude_frequency_record((cfg,str(tmp_path),str(tmp_path),
+            dict(dataset='refed',split='test'),{},1.))
+
+
 
 
 def test_windows_cover_complete_support_without_crossing_gaps_and_short_refed_is_fitted():

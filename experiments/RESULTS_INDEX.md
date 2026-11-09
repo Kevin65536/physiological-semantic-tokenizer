@@ -196,6 +196,15 @@ references resolve within the new export, and the owning run evidence remains
 at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
+The [four-dataset amplitude-frequency audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/summary.json)
+retains [threshold and subject rates](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/rates.csv),
+[threshold sensitivity](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/threshold_sensitivity.csv),
+[array verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/verification.json),
+[paired/failed cases](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/paired_and_failed_audit.json)
+and a [reviewed report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_amplitude_frequency_v1/report_v2.html).
+It is a frozen-cutoff train/validation cache audit, with no new fits. Historical
+high-Hb-weight examples have a separate illustrative denominator.
+
 The [three-subject equal-weight normalization comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/summary.json)
 retains the [input-only selection](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/selection.json),
 [independent numerical verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/verification.json),

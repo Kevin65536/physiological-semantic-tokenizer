@@ -216,6 +216,14 @@ supervision, but cannot become unmasked inputs in missing-modality evaluation.
 
 ### Individual-PCA successor — 2026-11-06
 
+The separately versioned [amplitude-frequency audit](../experiments/configs/physiology_semantic_tokenizer/shared_driver_amplitude_frequency_v1.yaml)
+is a read-only diagnostic of the existing v1 cache's **train/validation** task
+metadata, with a frozen completion cutoff and bounded matching NPZ verification.
+It excludes test/protected and raw signal reads, preserves numerical failures
+and incomplete coverage, and does not refit or replace cached outputs. Its
+window-by-site rates, subject summaries and selected historical weighted examples
+have separate denominators; co-occurrence is not causal attribution.
+
 [`shared_driver_tak_subject_cache_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml)
 defines the next cache generation requested by the user. Each **dataset ×
 subject** fits its own 30-dimensional PC1 from its own valid, unlabelled prepared

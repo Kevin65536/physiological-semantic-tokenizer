@@ -12263,6 +12263,243 @@ def normalization_comparison_main(args):
     return result
 
 
+def amplitude_frequency_config(path=None):
+    owner=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_amplitude_frequency_v1.yaml'
+    cfg=yaml.safe_load(Path(path or owner).read_text())
+    if cfg!=yaml.safe_load(owner.read_text()):raise ValueError('Use reviewed amplitude frequency scope/thresholds')
+    return cfg
+
+
+def amplitude_frequency_flags(ratio,amplitude,error,thresholds):
+    high=np.asarray(ratio)>=thresholds['input_Hb_over_EEG_SD']
+    amplified=np.asarray(amplitude)>=thresholds['prediction_over_observed_EEG_SD']
+    bad=np.asarray(error)>=thresholds['local_EEG_NRMSE']
+    return dict(input_high=high,amplified=amplified,bad_error=bad,joint=high&amplified,
+        high_and_bad=high&bad,attenuated=np.asarray(amplitude)<=thresholds['attenuation_SD_ratio'])
+
+
+def amplitude_frequency_nonoverlap(windows):
+    selected=[]
+    for w in sorted(windows,key=lambda x:(x['hb_start_s'],x['key'])):
+        if all(w[k]>=v[k]+v['duration_s']-1e-8 for v in selected for k in ('eeg_start_s','hb_start_s')):
+            selected.append(w)
+    return {w['key'] for w in selected}
+
+
+def _amplitude_frequency_record(payload):
+    cfg,source_string,out_string,record,coordinate,cutoff=payload
+    if record['split'] not in cfg['splits'] or record['dataset'] not in cfg['datasets']:
+        raise ValueError('Disallowed split/dataset before task reads')
+    source,out=Path(source_string),Path(out_string);destination=out/'records'/record['cache_key']
+    destination=destination.with_suffix('.csv');meta=destination.with_suffix('.json')
+    if meta.exists():return json.loads(meta.read_text())
+    began=time.monotonic();nonoverlap=amplitude_frequency_nonoverlap(record['cache_windows']);rows=[]
+    for window in record['cache_windows']:
+        for pair in record['pairs']:
+            path=source/'tasks'/record['cache_key']/(window['key']+f"__p{pair['native_index']:03d}.json")
+            base=dict(dataset=record['dataset'],subject=record['subject'],split=record['split'],record=record['record'],
+                record_key=record['cache_key'],window=window['key'],site=pair['id'],pair=pair['native_index'],
+                duration_s=window['duration_s'],nonoverlap=window['key'] in nonoverlap,source_task=str(path))
+            item=None;reason='missing_at_cutoff'
+            if path.exists() and path.stat().st_mtime<=cutoff:
+                item=json.loads(path.read_text());identity=item['identity'];reason=item['status']
+                if (item['schema']!=cfg['source_schema'] or identity['record_key']!=record['cache_key']
+                        or identity['split']!=record['split'] or identity['window']!=window
+                        or identity['pair']['native_index']!=pair['native_index']):
+                    raise ValueError('Task identity mismatch: '+str(path))
+            for arm in cfg['arms']:
+                fit={} if item is None else item.get('fits',{}).get(arm,{})
+                row=dict(base,arm=arm,terminal=item is not None,status=reason,finite=False,
+                    qualified=bool(fit.get('qualified',False)),input_ratio=np.nan,amplitude=np.nan,error=np.nan,
+                    correlation=np.nan,observed_eeg_sd=np.nan)
+                wave=fit.get('waveform')
+                if wave and [v['component'] for v in wave]==['EEG','HbO','HbR'] and coordinate.get('status')=='completed':
+                    sd=np.array([v['target_centered_rms_in_cache_unit'] for v in wave],float)
+                    amplitude=wave[0]['centered_amplitude_ratio'];error=wave[0]['local_centered_nrmse']
+                    if np.isfinite(sd).all() and np.all(sd>1e-12) and amplitude is not None and error is not None:
+                        scaled=sd*np.array([coordinate['eeg_factor'],coordinate['hb_factor'],coordinate['hb_factor']])
+                        ratio=float(np.sqrt(np.mean(scaled[1:]**2))/scaled[0])
+                        row.update(finite=bool(np.isfinite([ratio,amplitude,error]).all()),input_ratio=ratio,
+                            amplitude=amplitude,error=error,correlation=wave[0]['pearson_r'],observed_eeg_sd=sd[0])
+                rows.append(row)
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    frame=pd.DataFrame(rows);temporary=destination.with_suffix('.tmp.csv');frame.to_csv(temporary,index=False);temporary.replace(destination)
+    result=dict(record_key=record['cache_key'],rows=len(rows),terminal=sum(r['terminal'] for r in rows),
+        finite=sum(r['finite'] for r in rows),qualified=sum(r['finite'] and r['qualified'] for r in rows),
+        seconds=time.monotonic()-began,file=str(destination))
+    write_json(meta,result);return result
+
+
+def amplitude_frequency_check(cfg,out):
+    th=cfg['thresholds'];r=amplitude_frequency_flags(np.array([1.49,1.5,2]),np.array([2,2,1.99]),np.ones(3),th)
+    assert r['joint'].tolist()==[False,True,False]
+    assert amplitude_frequency_nonoverlap([dict(key=str(i),eeg_start_s=i*60,hb_start_s=i*60+5,duration_s=90)
+        for i in range(5)])=={'0','2','4'}
+    result=dict(status='passed',measured_reads=0,checks=['inclusive_thresholds','both_clock_nonoverlap','explicit_train_validation_scope'])
+    write_json(out/'software_checks.json',result);return result
+
+
+def amplitude_frequency_scan(cfg,out,workers):
+    if not os.environ.get('SSM_SYSTEMD_UNIT'):raise ValueError('Durable supervisor required')
+    if json.loads((out/'software_checks.json').read_text())['status']!='passed':raise ValueError('Check first')
+    source=(CODE_ROOT/cfg['source_run']).resolve();plan_path=out/'plan.json'
+    if plan_path.exists():plan=json.loads(plan_path.read_text())
+    else:
+        original=json.loads((source/'plan.json').read_text());coords=json.loads((source/'coordinates.json').read_text())
+        if original['schema']!=cfg['source_schema'] or coords['schema']!=cfg['source_schema']:raise ValueError('Source schema mismatch')
+        records=[r for r in original['records'] if r['dataset'] in cfg['datasets'] and r['split'] in cfg['splits']]
+        plan=dict(schema=cfg['schema'],source=str(source),cutoff_epoch=time.time(),
+            cutoff_utc=datetime.now(timezone.utc).isoformat(),records=records,
+            excluded_test_records=sum(r['split']=='test' for r in original['records']),
+            coordinates={r['dataset']+'__'+r['subject']:coords['individual'].get(r['dataset']+'__'+r['subject'],{}) for r in records},
+            source_progress=json.loads((source/'progress.json').read_text()))
+        write_json(plan_path,plan)
+    payloads=[(cfg,str(source),str(out),r,plan['coordinates'][r['dataset']+'__'+r['subject']],plan['cutoff_epoch']) for r in plan['records']]
+    with (out/'controller.lock').open('w') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        return _tak_cache_pool(_amplitude_frequency_record,payloads,out=out,phase='frequency_scan',
+            workers=workers,total=len(payloads),structured=False)
+
+
+def amplitude_frequency_rates(group,thresholds):
+    valid=group[group.finite & group.qualified];n=len(valid)
+    result=dict(planned=len(group),terminal=int(group.terminal.sum()),finite=int(group.finite.sum()),qualified=n,
+        missing=int((~group.terminal).sum()),unqualified_finite=int((group.finite & ~group.qualified).sum()),
+        subjects=int(group.subject.nunique()),subjects_with_qualified=int(valid.subject.nunique()))
+    flags=amplitude_frequency_flags(valid.input_ratio,valid.amplitude,valid.error,thresholds)
+    for name,flag in flags.items():
+        counts=valid.assign(event=flag).groupby('subject').event.agg(['sum','size'])
+        result.update({name+'_count':int(flag.sum()),name+'_rate':float(flag.mean()) if n else None,
+            name+'_equal_subject_rate':float((counts['sum']/counts['size']).mean()) if len(counts) else None,
+            name+'_subjects':int((counts['sum']>0).sum())})
+    high=flags['input_high'];bad=flags['bad_error'];amp=flags['amplified']
+    result.update(error_given_high=float(bad[high].mean()) if high.any() else None,
+        error_given_not_high=float(bad[~high].mean()) if (~high).any() else None,
+        amplification_given_high=float(amp[high].mean()) if high.any() else None,
+        amplification_given_not_high=float(amp[~high].mean()) if (~high).any() else None)
+    return result
+
+
+def amplitude_frequency_summarize(cfg,out):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    plan=json.loads((out/'plan.json').read_text());frames=[]
+    for r in plan['records']:
+        path=(out/'records'/r['cache_key']).with_suffix('.csv')
+        if not path.with_suffix('.json').exists():raise ValueError('Incomplete record: '+r['cache_key'])
+        if json.loads(path.with_suffix('.json').read_text())['rows']:
+            frames.append(pd.read_csv(path,dtype={k:str for k in ('subject','record','window','site','split','dataset')}))
+    data=pd.concat(frames,ignore_index=True)
+    if any(not data[c].isin(cfg[c+'s']).all() for c in ('dataset','split')):raise ValueError('Unexpected scope in summary')
+    rates=[];subjects=[]
+    for support,frame in [('nonoverlap',data[data.nonoverlap]),('all_windows',data)]:
+        for (dataset,split,arm),g in frame.groupby(['dataset','split','arm']):
+            rates.append(dict(support=support,dataset=dataset,split=split,arm=arm,**amplitude_frequency_rates(g,cfg['thresholds'])))
+        for (dataset,arm),g in frame.groupby(['dataset','arm']):
+            rates.append(dict(support=support,dataset=dataset,split='development',arm=arm,**amplitude_frequency_rates(g,cfg['thresholds'])))
+        for (dataset,subject,arm),g in frame.groupby(['dataset','subject','arm']):
+            subjects.append(dict(support=support,dataset=dataset,subject=subject,arm=arm,**amplitude_frequency_rates(g,cfg['thresholds'])))
+    rates_frame=pd.DataFrame(rates);rates_frame.to_csv(out/'rates.csv',index=False)
+    pd.DataFrame(subjects).to_csv(out/'subject_rates.csv',index=False)
+    primary=data[data.nonoverlap & data.finite & data.qualified];sensitivity=[]
+    for (dataset,arm),g in primary.groupby(['dataset','arm']):
+        for rt in cfg['sensitivity']['input_ratio']:
+            for at in cfg['sensitivity']['amplification']:
+                count=int(((g.input_ratio>=rt)&(g.amplitude>=at)).sum())
+                sensitivity.append(dict(dataset=dataset,arm=arm,input_threshold=rt,amplification_threshold=at,
+                    count=count,denominator=len(g),rate=count/len(g)))
+    pd.DataFrame(sensitivity).to_csv(out/'threshold_sensitivity.csv',index=False)
+    # Failed numerical solutions remain a separate descriptive panel, not silently dropped.
+    failure_rates=[]
+    for (dataset,arm),g in data[data.nonoverlap & data.finite].groupby(['dataset','arm']):
+        f=amplitude_frequency_flags(g.input_ratio,g.amplitude,g.error,cfg['thresholds'])
+        failure_rates.append(dict(dataset=dataset,arm=arm,finite_including_unqualified=len(g),
+            unqualified=int((~g.qualified).sum()),amplified=int(f['amplified'].sum()),joint=int(f['joint'].sum())))
+    pd.DataFrame(failure_rates).to_csv(out/'all_finite_rates.csv',index=False)
+    duration=[]
+    for (dataset,arm,short),g in data[data.nonoverlap].assign(short=data[data.nonoverlap].duration_s<89.99).groupby(['dataset','arm','short']):
+        duration.append(dict(dataset=dataset,arm=arm,short_support=bool(short),**amplitude_frequency_rates(g,cfg['thresholds'])))
+    pd.DataFrame(duration).to_csv(out/'duration_rates.csv',index=False)
+    windows=[]
+    for (dataset,arm),g in primary.groupby(['dataset','arm']):
+        flags=amplitude_frequency_flags(g.input_ratio,g.amplitude,g.error,cfg['thresholds'])
+        w=g.assign(**flags).groupby(['subject','record','window'])[['input_high','amplified','joint','bad_error']].any()
+        windows.append(dict(dataset=dataset,arm=arm,windows_with_any_qualified_site=len(w),
+            **{k+'_any_site_count':int(w[k].sum()) for k in w}))
+    pd.DataFrame(windows).to_csv(out/'window_any_site_rates.csv',index=False)
+    examples=[];checks=[]
+    for (dataset,arm),g in primary.groupby(['dataset','arm']):
+        chosen=pd.concat([g.iloc[:1],g.nlargest(1,'amplitude')]).drop_duplicates('source_task')
+        for _,r in chosen.iterrows():
+            path=Path(r.source_task);co=plan['coordinates'][dataset+'__'+r.subject]
+            with np.load(path.with_suffix('.npz'),allow_pickle=False) as a:
+                y=a['target'][:-1];p=a['prediction' if arm=='tak_tau_beta' else 'fixed_prediction'][:-1]
+                sd=y.std(0)*a['scale'];ratio=np.sqrt(np.mean(sd[1:]**2))/sd[0]
+                amp=p[:,0].std()/y[:,0].std();err=np.sqrt(np.mean((p[:,0]-y[:,0])**2))/y[:,0].std()
+                np.testing.assert_allclose([ratio,amp,err],[r.input_ratio,r.amplitude,r.error],rtol=cfg['verification']['rtol'],atol=1e-10)
+                np.testing.assert_allclose(a['scale'],[co['eeg_factor'],co['hb_factor'],co['hb_factor']],rtol=1e-12)
+            checks.append(dict(dataset=dataset,arm=arm,source_task=str(path),max_absolute_difference=float(np.max(abs(np.array([ratio,amp,err])-np.array([r.input_ratio,r.amplitude,r.error]))))))
+        examples.extend(g.nlargest(5,'amplitude')[['dataset','subject','record','window','site','arm','input_ratio','amplitude','error','source_task']].to_dict('records'))
+    write_json(out/'verification.json',dict(status='passed',array_checks=checks,raw_reads=0,test_reads=0,protected_reads=0))
+    pd.DataFrame(examples).to_csv(out/'largest_amplification_examples.csv',index=False)
+    historical=json.loads((CODE_ROOT/cfg['historical_panel']).read_text());history=[]
+    for row in historical['records']:
+        if row['split']!='validation' or row['variant']!='baseline':continue
+        s=row['statistics'];pred=s['prediction'];ratio=s['hb_to_eeg_sd_ratio'];amp=pred['sd_ratio'][0]
+        local_error=pred['nrmse'][0]/s['sd_over_training'][0]
+        history.append(dict(label=row['label'],subject=row['subject'],region=row['region'],input_ratio=ratio,
+            amplitude=amp,error=local_error,original_training_SD_NRMSE=pred['nrmse'][0],
+            **amplitude_frequency_flags(ratio,amp,local_error,cfg['thresholds'])))
+    write_json(out/'historical_panel.json',dict(scope=cfg['historical_scope'],rows=history))
+    main=rates_frame[(rates_frame.support=='nonoverlap')&(rates_frame.split=='development')]
+    labels=dict(eeg_fnirs_single_trial='Single-Trial',simultaneous_eeg_nirs='Simultaneous',refed='REFED',visual_cognitive_motivation='Visual')
+    fig,axes=plt.subplots(1,3,figsize=(15,4.7),constrained_layout=True)
+    for ax,key,title in zip(axes,['input_high_rate','amplified_rate','joint_rate'],['Input Hb/EEG SD >= 1.5','EEG prediction SD >= 2x observed','Both conditions']):
+        for i,arm in enumerate(cfg['arms']):
+            values=[float(main[(main.dataset==d)&(main.arm==arm)][key].iloc[0])*100 for d in cfg['datasets']]
+            ax.bar(np.arange(4)+(i-.5)*.35,values,width=.34,label='Fitted tau/beta' if i==0 else 'Fixed parameters')
+        ax.set_xticks(range(4),[labels[d] for d in cfg['datasets']],rotation=15);ax.set_title(title);ax.set_ylabel('Qualified site-windows (%)');ax.grid(axis='y',alpha=.2)
+    axes[0].legend();fig.suptitle('Development cache: nonoverlapping windows, all sites; component weights = 1')
+    fig.savefig(out/'frequency.png',dpi=220);plt.close(fig)
+    summary=dict(schema=cfg['schema'],status='completed',cutoff_utc=plan['cutoff_utc'],thresholds=cfg['thresholds'],
+        primary=main.to_dict('records'),all_rates=rates,all_finite=failure_rates,any_site_windows=windows,
+        duration_rates=duration,examples=examples,threshold_sensitivity=sensitivity,
+        interpretation=cfg['definitions'],historical_panel='historical_panel.json',array_checks=len(checks),
+        scope=dict(splits=cfg['splits'],datasets=cfg['datasets'],excluded_test_records=plan['excluded_test_records'],
+            subject_count=len({(r['dataset'],r['subject']) for r in plan['records']})),new_fits=0)
+    write_json(out/'summary.json',summary)
+    cols=['dataset','arm','planned','terminal','qualified','missing','unqualified_finite','input_high_count','amplified_count','joint_count','bad_error_count','joint_equal_subject_rate','joint_subjects','subjects_with_qualified']
+    html='''<html><head><meta charset="utf-8"><style>body{font-family:sans-serif;max-width:1500px;margin:auto;padding:24px;line-height:1.7}table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #ccc;padding:4px}img{width:100%}</style></head><body>
+<h1>EEG–fNIRS 幅度失配与 EEG 重建严重放大的频次</h1>
+<p>工程筛查：输入 R = 合并 Hb 模型坐标 SD / EEG 模型坐标 SD；R≥1.5 为 Hb 相对偏大。
+输出 A = EEG 预测 SD / 观测 SD；A≥2 为严重放大。E = EEG RMSE / 观测 SD；E≥1 为较大误差。
+主事件为 R≥1.5 与 A≥2 共现。E 单独报告；A≥2 本身蕴含 E≥1，并非两项独立证据。
+阈值不是正常生理界限，共现不能证明因果。</p>
+<p>主分母是训练/验证分区、按两个时钟预先去重叠的窗口×Hb通道（对应一个 EEG 代理），
+且拟合数值合格、指标可计算。不同位置仍相关，不作独立样本显著性推断。
+另给逐被试等权率、出现过事件的被试数、任一通道触发的时间窗数、全部重叠窗口及数值未合格结果。
+REFED 短支持另表。测试/受保护分区未读，新模型拟合为零。</p>'''
+    html+=f'<p>源缓存按 {plan["cutoff_utc"]} 截止，后来完成任务不自动混入本次分母。</p>'
+    html+='<img src="frequency.png">'+main[cols].to_html(index=False,float_format=lambda x:f'{x:.6f}')
+    html+='<h2>条件发生率</h2>'+main[['dataset','arm','error_given_high','error_given_not_high','amplification_given_high','amplification_given_not_high']].to_html(index=False,float_format=lambda x:f'{x:.6f}')
+    html+='<h2>此前高 Hb 权重示例：单独列示</h2><p>这 7 个基线例子来自 5 名被试，是经过选择的说明性面板，不能用于估计数据集总体频次。原图 NRMSE 使用训练 SD；此处 error 列转换为窗口自身 SD 分母，以对应本次阈值。</p>'+pd.DataFrame(history).to_html(index=False,float_format=lambda x:f'{x:.4f}')
+    html+='<p><a href="rates.csv">分数据集/分区/支持的频次</a> · <a href="subject_rates.csv">被试级统计</a> · <a href="threshold_sensitivity.csv">阈值敏感性</a> · <a href="all_finite_rates.csv">包含未合格结果</a> · <a href="duration_rates.csv">短窗统计</a> · <a href="largest_amplification_examples.csv">最严重样例</a> · <a href="summary.json">数值事实源</a></p></body></html>'
+    (out/'report.html').write_text(html)
+    return dict(status='completed',rows=len(data),array_checks=len(checks),primary=main.to_dict('records'))
+
+
+def amplitude_frequency_main(args):
+    cfg=amplitude_frequency_config(args.config);out=args.run_dir.resolve();out.mkdir(parents=True,exist_ok=True)
+    resolved=out/'resolved_config.json'
+    if resolved.exists() and json.loads(resolved.read_text())!=cfg:raise ValueError('Frozen frequency contract changed')
+    write_json(resolved,cfg)
+    if args.frequency_stage=='check':result=amplitude_frequency_check(cfg,out)
+    elif args.frequency_stage=='scan':result=amplitude_frequency_scan(cfg,out,args.workers)
+    else:result=amplitude_frequency_summarize(cfg,out)
+    print(json.dumps(serial({k:v for k,v in result.items() if k!='rows'})),flush=True);return result
+
+
 
 
 def main():
@@ -12295,6 +12532,8 @@ def main():
     ap.add_argument('--tak-topography',action='store_true')
     ap.add_argument('--tak-reconstruction-cache',action='store_true')
     ap.add_argument('--normalization-comparison',action='store_true')
+    ap.add_argument('--amplitude-frequency',action='store_true')
+    ap.add_argument('--frequency-stage',choices=['check','scan','summarize'],default='check')
     ap.add_argument('--normalization-stage',choices=['check','prepare','pilot','run','summarize'],default='check')
     ap.add_argument('--cache-stage',choices=['check','plan','synthetic','pilot','produce','verify','accelerator-check'],default='check')
     ap.add_argument('--cache-algebra',choices=['dense','structured'],default='dense')
@@ -12326,6 +12565,9 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.amplitude_frequency:
+        if args.run_dir is None:ap.error('--run-dir is required')
+        return amplitude_frequency_main(args)
     if args.normalization_comparison:
         if args.run_dir is None:ap.error('--run-dir is required')
         return normalization_comparison_main(args)

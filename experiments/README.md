@@ -372,6 +372,16 @@ fits. Both fitting stages require a durable supervisor. The existing
 `test_tak_reconstruction_cache.py` covers selection, factorial controls and
 metrics; `summarize` writes CSV/JSON and bitmap waveform figures with HTML.
 
+The [amplitude frequency audit](configs/physiology_semantic_tokenizer/shared_driver_amplitude_frequency_v1.yaml)
+uses `--amplitude-frequency --frequency-stage <check|scan|summarize> --run-dir
+<fresh_run>`. It reads planned train/validation task metadata from the existing
+four-dataset cache before a frozen cutoff, with bounded task-array verification.
+The supervised scan preserves missing and failed denominators, both cached
+parameter arms, nonoverlapping/all-window counts and subject-level rates.
+Thresholds are engineering diagnostics and do not establish causal attribution.
+The existing cache test file covers inclusive boundaries, missing/failed counts
+and rejecting test-split access before task reads; no model is refitted.
+
 Both explicitly fit τ/β at log-prior SD 0.125. Fits use 90 s,
 or the actual shorter REFED support, and the corrected Visual native identities.
 `produce` resumes matching terminal work, completes preparation/calibration,
