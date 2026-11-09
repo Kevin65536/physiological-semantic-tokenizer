@@ -40,6 +40,47 @@ def test_subject_calibration_keeps_population_direction_and_preserves_scale_inve
         fit_feature_coordinate([(x,h)],fixed_pc=population['pc']*2)
 
 
+def test_normalization_comparison_keeps_weights_and_objective_sd_fixed(tmp_path):
+    cfg=runner.normalization_comparison_config()
+    assert json.loads(json.dumps(cfg))==cfg
+    assert cfg['controls']['explicit_component_weights']==[1.,1.,1.]
+    assert runner.normalization_comparison_check(cfg,tmp_path)['status']=='passed'
+    old=dict(pc=[1.,0.],eeg_factor=2.,hb_factor=3.,sd=[.025,.03,.01])
+    own=dict(pc=[0.,1.]);lo=dict(eeg_factor=5.,hb_factor=7.);ln=dict(eeg_factor=11.,hb_factor=7.)
+    arms=runner.normalization_comparison_coordinates(old,own,lo,ln)
+    assert arms['individual_pca']['eeg_factor']==2.
+    assert arms['local_scale']['eeg_factor']==5.
+    assert arms['individual_pca_local_scale']['eeg_factor']==11.
+    for co in arms.values():np.testing.assert_array_equal(co['sd'],old['sd'])
+
+
+def test_normalization_selection_ignores_reconstruction_outcomes_and_overlap():
+    rows=[]
+    for subject,ratio in [('high',5.),('medium',1.),('low',.2),('other',.6)]:
+        for k in range(12):
+            rows.append(dict(subject=subject,available=True,input_hb_eeg_ratio=ratio*(1+k*.01),
+                qualified=k%2==0,eeg_local_nrmse=1+k,
+                window=dict(key=f'w{k}',hb_start_s=k*60.,eeg_start_s=k*60.,duration_s=90.)))
+    a=runner.normalization_comparison_select(rows)
+    changed=[dict(r,eeg_local_nrmse=1e6-r['eeg_local_nrmse'],qualified=not r['qualified']) for r in rows]
+    b=runner.normalization_comparison_select(changed)
+    assert a['selected_subjects']==b['selected_subjects']==['high','medium','low']
+    assert [(r['subject'],r['window']['key']) for r in a['panel']]==[(r['subject'],r['window']['key']) for r in b['panel']]
+    assert set(a['nonoverlapping_counts'].values())=={6}
+
+
+def test_normalization_metrics_separate_input_mismatch_and_prediction_amplification():
+    t=np.arange(100)/10.;y=np.column_stack((np.sin(t),4*np.cos(t),2*np.sin(t)))
+    co=dict(eeg_factor=.1,hb_factor=.2,sd=[.025,.03,.01])
+    p=y.copy();p[:,0]*=5;p[-1]=1e12
+    m=runner.normalization_comparison_metrics(y,p,co)
+    assert m['eeg_amplitude_ratio']==pytest.approx(5)
+    assert m['eeg_correlation']==pytest.approx(1)
+    assert m['hb_rmse']==0
+    expected=np.sqrt(np.mean((y[:-1,1:].std(0)*.2)**2))/(y[:-1,0].std()*.1)
+    assert m['input_hb_eeg_ratio']==pytest.approx(expected)
+
+
 
 
 def test_windows_cover_complete_support_without_crossing_gaps_and_short_refed_is_fitted():

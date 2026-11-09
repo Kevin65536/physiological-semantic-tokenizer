@@ -196,6 +196,14 @@ references resolve within the new export, and the owning run evidence remains
 at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
+The [three-subject equal-weight normalization comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/summary.json)
+retains the [input-only selection](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/selection.json),
+[independent numerical verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/verification.json),
+[per-window metrics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/window_metrics.csv)
+and [reviewed HTML/bitmap waveform report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/report_v2.html).
+It compares individual PCA and target-site scaling using the retained cache;
+the explicit component weights and original objective denominators are fixed.
+The original export and failed configuration preflight are retained in the same run.
 
 The [cache contract](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml)
 and [frozen population/window/sample plan](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/plan.json)

@@ -5525,6 +5525,54 @@
       "role": "diagnostic"
     },
     {
+      "id": "e.norm_cache_three_subject_contract",
+      "label": "三被试等权归一化：实验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/shared_driver_normalization_comparison_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.norm_cache_three_subject_selection",
+      "label": "三被试等权归一化：输入幅度选样与窗口",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/selection.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.norm_cache_three_subject_checks",
+      "label": "三被试等权归一化：软件合成核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/software_checks.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.norm_cache_three_subject_resources",
+      "label": "三被试等权归一化：并行资源",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/resources.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.norm_cache_three_subject_launch",
+      "label": "三被试等权归一化：持久监督命令",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/launches.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.norm_cache_three_subject_summary",
+      "label": "三被试等权归一化：完整比较结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.norm_cache_three_subject_verification",
+      "label": "三被试等权归一化：独立数组与基线核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.norm_cache_three_subject_report",
+      "label": "三被试等权归一化：波形与统计报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261106_normalization_comparison_v1/report_v2.html",
+      "role": "diagnostic"
+    },
+    {
       "id": "e.tak_subject_cache_final_summary",
       "label": "全量个体校准缓存：summary.json",
       "path": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1/summary.json",
@@ -13973,6 +14021,63 @@
       "updated_at": "2026-11-06T09:28:02.786399+00:00",
       "summary": "用户要求停止本机下游序列并归档。本地STA-Net优化与归一化调度均已结束，无存活工作进程；保留源对齐优化18次拟合、训练统计重估18次以及REFED source_aligned_v3三种子结果与通过的独立复算。优化开发结果DSR F1由48.60%到61.01%，REFED二分类由45.23%到55.98%；Visual F1为22.27%，仍低于24.76%无信息基线。归一化后DSR/REFED/Visual F1分别60.78%/52.69%/21.73%，未显示整体改善；REFED源v3 F1为54.32%。这些是固定验证开发证据，不表示确认性显著改善。冻结分类、优化、归一化和源v3证据均原位归档；REFED normalization合同没有本地输出，本次不启动；下游自动续跑停止。",
       "next_step": null
+    },
+    {
+      "state_id": "main.norm_cache_three_subject@2026-11-06.v1-running",
+      "entity": "main.norm_cache_three_subject",
+      "label": "三被试等权缓存归一化控制实验",
+      "track": "main",
+      "order": 211,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "用户要求复用缓存控制比较个体PCA与尺度校准。固定Simultaneous开发验证n-back/POOz，根据观测幅度选三人各三个不重叠窗口；原缓存、仅个体PCA、仅局部尺度及结合四组保持显式权重1/1/1与原残差SD、τ/β模型及求解条件。独立基线复现和持久监督试运行已启动；没有原始、测试或受保护信号读取。",
+      "evidence_ids": [
+        "e.norm_cache_three_subject_contract",
+        "e.norm_cache_three_subject_selection",
+        "e.norm_cache_three_subject_checks",
+        "e.norm_cache_three_subject_resources",
+        "e.norm_cache_three_subject_launch"
+      ],
+      "supersedes": [],
+      "updated_at": "2026-11-06T14:09:10.362755+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "完成有限四组拟合、基线复现、配对统计与波形核验，保留所有失败。"
+    },
+    {
+      "state_id": "main.norm_cache_three_subject@2026-11-06.v1-completed",
+      "entity": "main.norm_cache_three_subject",
+      "label": "三被试等权缓存归一化控制实验",
+      "track": "main",
+      "order": 211,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "复用缓存完成VP002/VP014/VP005各3个不重叠n-back/POOz窗口、四组36单元，全部数值合格；3个基线复现数组与目标值完全一致。五候选145窗口中144合格，EEG预测/观测SD最大1.187，未复现此前Hb高权重固定参数示例的大幅放大。三被试内中位数再等权平均，原缓存EEG NRMSE 0.5232，仅个体PCA 0.5138，仅局部尺度0.4500，结合0.4470；Hb物理RMSE依次0.6565/0.6560/0.6889/0.6878 µM。结合方案EEG下降14.57%、Hb增大4.76%；VP005呈相反模态取舍。PCA方向近似原人口方向，主要变化来自尺度；不支持双模态一致改善或直接全量替换。显式权重和原残差SD固定，校准为包含评价支持的离线个体适配，未读原始/测试/受保护信号，未生成电压S/O。",
+      "evidence_ids": [
+        "e.norm_cache_three_subject_contract",
+        "e.norm_cache_three_subject_selection",
+        "e.norm_cache_three_subject_checks",
+        "e.norm_cache_three_subject_resources",
+        "e.norm_cache_three_subject_launch",
+        "e.norm_cache_three_subject_summary",
+        "e.norm_cache_three_subject_verification",
+        "e.norm_cache_three_subject_report"
+      ],
+      "supersedes": [
+        "main.norm_cache_three_subject@2026-11-06.v1-running"
+      ],
+      "updated_at": "2026-11-06T14:38:18.129336+00:00",
+      "depends_on": [
+        "main.data_contract"
+      ],
+      "headline": false,
+      "next_step": "有限矩阵已完成；保留配对统计与全部波形，不自动扩展缓存。后续需独立校准区分观测增益与未建模血流成分。"
     },
     {
       "state_id": "main.tak_subject_cache@2026-11-07.v1-completion-verified",

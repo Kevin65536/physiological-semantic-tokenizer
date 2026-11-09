@@ -1,0 +1,58 @@
+schema: shared_driver_normalization_comparison_v1
+experiment_id: SSM-NORM-CACHE-3SUBJECT-v1
+created: '2026-11-06'
+seed: 20261106
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1
+source_schema: shared_driver_tak_subject_cache_v1
+dataset: simultaneous_eeg_nirs
+candidate_subjects: [VP002, VP005, VP014, VP017, VP019]
+split: validation
+record: cnt_nback
+site: POOz
+selection:
+  subjects: highest_median_ratio_then_nearest_one_then_lowest_remaining
+  ratio: model_SD_Hb_combined_over_EEG
+  windows: chronological_nonoverlapping_then_ratio_quantiles
+  quantiles: [0.1, 0.5, 0.9]
+  n_subjects: 3
+  n_windows_each: 3
+  outcome_based: false
+calibration:
+  individual_PCA: own_all_retained_valid_records_windows_sites_same_support_as_v1_individual_scale
+  local_scale: own_all_retained_valid_records_windows_target_site_only
+  estimator: original_pooled_SD_no_new_robust_estimator
+  targets: {EEG: 0.025, Hb_common: 0.025}
+  scope: offline_unlabelled_subject_adaptation_includes_evaluation_support
+arms: [cached_baseline, individual_pca, local_scale, individual_pca_local_scale]
+controls:
+  explicit_component_weights: [1.0, 1.0, 1.0]
+  objective_sd: frozen_original_subject_SD_identical_across_all_arms
+  dynamics_priors_initialization_starts_solver: exact_source_resolved_model_config
+  new_Hb_gain_or_whitening_or_robust_loss: false
+  PCA_sign: largest_absolute_loading_positive
+  PCA_only: replace_direction_keep_original_gains_and_objective_SD
+  scale_only: keep_population_direction_replace_gains_keep_objective_SD
+  combined: individual_direction_local_gains_keep_objective_SD
+endpoints:
+  primary: paired_Hb_physical_RMSE_and_EEG_own_target_local_NRMSE
+  secondary: input_scale_ratio_prediction_amplitude_ratio_correlation_bias
+  diagnostics: PCA_target_correlation_and_angle_objective_components_tau_beta
+  EEG_comparison: own_projection_targets_differ_report_target_change_not_common_target_gain
+  aggregate: within_subject_median_then_equal_subject_mean_no_population_significance_claim
+  null: individual_PCA_or_local_scale_need_not_improve_fits
+  failures: retain_all_selected_cells_and_calibration_failures
+  stopping: nine_selected_windows_four_arms_plus_three_baseline_replays
+boundary:
+  reads: exact_parent_metadata_and_retained_features_tasks_only
+  raw_reads: forbidden
+  protected_or_test_reads: forbidden
+  new_voltage_SO_or_tokenizer: false
+replay:
+  windows: median_ratio_selected_window_per_subject
+  maximum_prediction_difference_original_SD: 0.01
+  maximum_relative_objective_difference: 0.00001
+resources:
+  supervisor: user_systemd_with_linger
+  workers: 8
+  numerical_threads: 1
+  backend: CPU_float64_structured

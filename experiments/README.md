@@ -360,6 +360,18 @@ reference scoring SDs. The retained
 remains available through explicit `--config` and preserves shared PCA; the
 versions require separate output namespaces and cannot reuse each other's fits.
 
+The bounded [three-subject normalization comparison](configs/physiology_semantic_tokenizer/shared_driver_normalization_comparison_v1.yaml)
+uses the same entry with `--normalization-comparison --normalization-stage
+<check|prepare|pilot|run|summarize> --run-dir <fresh_run>`. It reads retained v1
+features/tasks for five named Simultaneous development subjects only, selects
+three subjects and three nonoverlapping n-back/POOz windows each by observed
+amplitude, then compares individual PCA and local scaling factorially. Component
+weights and the original objective SDs stay fixed. `pilot` replays three cached
+baselines and benchmarks three local-scale fits; `run` resumes the 27 changed
+fits. Both fitting stages require a durable supervisor. The existing
+`test_tak_reconstruction_cache.py` covers selection, factorial controls and
+metrics; `summarize` writes CSV/JSON and bitmap waveform figures with HTML.
+
 Both explicitly fit τ/β at log-prior SD 0.125. Fits use 90 s,
 or the actual shorter REFED support, and the corrected Visual native identities.
 `produce` resumes matching terminal work, completes preparation/calibration,

@@ -11843,6 +11843,426 @@ def tak_cache_main(args):
     return result
 
 
+def normalization_comparison_config(path=None):
+    owner=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_normalization_comparison_v1.yaml'
+    cfg=yaml.safe_load(Path(path or owner).read_text())
+    if cfg!=yaml.safe_load(owner.read_text()):
+        raise ValueError('Use the reviewed three-subject normalization comparison contract')
+    return serial(cfg)
+
+
+def normalization_comparison_coordinates(original, individual, local_old, local_new):
+    """Factorial gains/direction; objective denominators never change."""
+    result={}
+    for name,pc,scale in (
+        ('cached_baseline',original['pc'],original),
+        ('individual_pca',individual['pc'],original),
+        ('local_scale',original['pc'],local_old),
+        ('individual_pca_local_scale',individual['pc'],local_new)):
+        result[name]=dict(pc=np.asarray(pc),eeg_factor=scale['eeg_factor'],hb_factor=scale['hb_factor'],
+            sd=np.asarray(original['sd']),common_scale_interpretation='fixed_original_reference_denominator')
+    return result
+
+
+def normalization_comparison_metrics(target,prediction,coordinate):
+    """Unscaled waveform metrics and model-space amplitudes, last bin excluded."""
+    y=np.asarray(target,float)[:-1];p=np.asarray(prediction,float)[:-1]
+    if y.shape!=p.shape or y.ndim!=2 or y.shape[1]!=3 or not np.isfinite(y).all() or not np.isfinite(p).all():
+        raise ValueError('Finite matched target/prediction required')
+    scale=np.array([coordinate['eeg_factor'],coordinate['hb_factor'],coordinate['hb_factor']])
+    denominator=np.asarray(coordinate['sd'])
+    sd=y.std(0);psd=p.std(0);rmse=np.sqrt(np.mean((p-y)**2,axis=0));model_sd=sd*scale
+    errors=(p-y)*scale/denominator
+    result=dict(input_hb_eeg_ratio=float(np.sqrt(np.mean(model_sd[1:]**2))/model_sd[0]),
+        objective_sse=(errors**2).sum(0).tolist(),
+        hb_rmse=float(np.sqrt(np.mean((p[:,1:]-y[:,1:])**2))))
+    for j,name in enumerate(('eeg','hbo','hbr')):
+        result.update({name+'_rmse':float(rmse[j]),name+'_local_nrmse':float(rmse[j]/sd[j]),
+            name+'_reference_nrmse':float(rmse[j]*scale[j]/denominator[j]),
+            name+'_amplitude_ratio':float(psd[j]/sd[j]),name+'_bias':float((p-y)[:,j].mean()),
+            name+'_correlation':float(np.corrcoef(y[:,j],p[:,j])[0,1]) if psd[j]>0 else None,
+            name+'_observed_sd':float(sd[j]),name+'_model_sd':float(model_sd[j])})
+    return result
+
+
+def normalization_comparison_select(rows,quantiles=(.1,.5,.9)):
+    """Selection depends on observed amplitude only, never reconstruction errors."""
+    grouped={}
+    for row in rows:
+        if row.get('available'):
+            grouped.setdefault(row['subject'],[]).append(row)
+    eligible={}
+    for subject,items in grouped.items():
+        chosen=[]
+        for row in sorted(items,key=lambda r:(r['window']['hb_start_s'],r['window']['key'])):
+            w=row['window']
+            if all(w[k]>=c['window'][k]+c['window']['duration_s']-1e-8
+                   for c in chosen for k in ('hb_start_s','eeg_start_s')):
+                chosen.append(row)
+        if len(chosen)>=len(quantiles):eligible[subject]=chosen
+    if len(eligible)<3:raise ValueError('Need three subjects with nonoverlapping cached support')
+    med={s:float(np.median([r['input_hb_eeg_ratio'] for r in rr])) for s,rr in eligible.items()}
+    high=max(med,key=lambda s:(med[s],s));remaining=set(med)-{high}
+    balanced=min(remaining,key=lambda s:(abs(np.log(med[s])),s));remaining.remove(balanced)
+    low=min(remaining,key=lambda s:(med[s],s))
+    panel=[]
+    for role,subject in zip(('high','near_one','low'),(high,balanced,low)):
+        ordered=sorted(eligible[subject],key=lambda r:(r['input_hb_eeg_ratio'],r['window']['key']))
+        for q in quantiles:
+            index=int(round(q*(len(ordered)-1)))
+            panel.append(dict(ordered[index],selection_role=role,ratio_quantile=q))
+    return dict(subject_median_ratio=med,nonoverlapping_counts={s:len(r) for s,r in eligible.items()},
+        selected_subjects=[high,balanced,low],panel=panel)
+
+
+def normalization_comparison_prepare(cfg,out):
+    from src.data.ssm_prepared import fit_feature_coordinate
+    source=(CODE_ROOT/cfg['source_run']).resolve()
+    plan=json.loads((source/'plan.json').read_text());coordinates=json.loads((source/'coordinates.json').read_text())
+    core=json.loads((source/'resolved_model_config.json').read_text())
+    _,expected=tak_cache_config(CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml')
+    if (plan['schema']!=cfg['source_schema'] or coordinates['schema']!=cfg['source_schema'] or core!=serial(expected)):
+        raise ValueError('Source plan/coordinate/model contract changed')
+    records=[r for r in plan['records'] if r['dataset']==cfg['dataset'] and r['subject'] in cfg['candidate_subjects']]
+    if any(r['split']!=cfg['split'] for r in records):raise ValueError('Reject test/protected/cross-split reads')
+    if {r['subject'] for r in records}!=set(cfg['candidate_subjects']):raise ValueError('Missing candidate subject')
+    census=[]
+    for record in records:
+        if record['record']!=cfg['record']:continue
+        pair=next(p for p in record['pairs'] if p['id']==cfg['site'])
+        if pair['status']!='available':raise ValueError('Requested site unavailable')
+        co=coordinates['individual'][cfg['dataset']+'__'+record['subject']]
+        for window in record['cache_windows']:
+            feature=source/'features'/record['cache_key']/(window['key']+'.npz')
+            task=source/'tasks'/record['cache_key']/(window['key']+f"__p{pair['native_index']:03d}.json")
+            row=dict(subject=record['subject'],record_key=record['cache_key'],window=window,pair=pair,
+                feature=str(feature),source_task=str(task),available=False)
+            if not task.exists() or not task.with_suffix('.npz').exists() or not feature.with_suffix('.json').exists():
+                row['reason']='missing_retained_task_or_feature';census.append(row);continue
+            meta=json.loads(feature.with_suffix('.json').read_text());result=json.loads(task.read_text())
+            if meta['split']!=cfg['split'] or meta['status']!='completed':
+                row['reason']='feature_unavailable';census.append(row);continue
+            if (result['identity']['split']!=cfg['split'] or result['identity']['window']!=window
+                    or result['identity']['pair']['native_index']!=pair['native_index']):
+                raise ValueError('Source task identity differs')
+            with np.load(feature,allow_pickle=False) as a:
+                indices=pair['channel_sets']['nearest6'];pi=pair['native_index']
+                if not a['eeg_valid'][indices].all() or not a['hb_valid'][pi]:
+                    row['reason']='invalid_measurement_support';census.append(row);continue
+                x=a['eeg'][:,indices].reshape(900,30);h=a['hb'][:,pi]
+                target=np.column_stack((x@co['pc'],h))
+            with np.load(task.with_suffix('.npz'),allow_pickle=False) as a:
+                if 'prediction' not in a:
+                    row['reason']='no_cached_prediction';census.append(row);continue
+                np.testing.assert_allclose(target,a['target'],rtol=1e-12,atol=1e-12)
+                np.testing.assert_allclose(a['scale'],[co['eeg_factor'],co['hb_factor'],co['hb_factor']])
+                metric=normalization_comparison_metrics(target,a['prediction'],co)
+            row.update(available=True,qualified=result['qualified'],**metric);census.append(row)
+    selected=normalization_comparison_select(census,cfg['selection']['quantiles'])
+    selected.update(schema=cfg['schema'],selection=cfg['selection'],candidate_windows=len(census),
+        unavailable=[r for r in census if not r['available']],scope=cfg['boundary'])
+    write_json(out/'selection.json',selected)
+    pd.DataFrame([{k:v for k,v in r.items() if k not in ('window','pair','objective_sse')}|{'window_key':r['window']['key']}
+        for r in census]).to_csv(out/'baseline_census.csv',index=False)
+    fitted={}
+    for subject in selected['selected_subjects']:
+        own_records=[r for r in records if r['subject']==subject]
+        original=coordinates['individual'][cfg['dataset']+'__'+subject]
+        counts=[];individual=fit_feature_coordinate(_tak_cache_chunks(source,own_records,counts=counts))
+        if individual['training_samples']!=original['training_samples'] or counts!=original['sources']:
+            raise ValueError('Individual PCA calibration support differs from retained individual calibration')
+        local_records=[dict(r,pairs=[p for p in r['pairs'] if p['id']==cfg['site']]) for r in own_records]
+        local_counts=[];local=list(_tak_cache_chunks(source,local_records,counts=local_counts))
+        local_old=fit_feature_coordinate(local,fixed_pc=original['pc'])
+        local_new=fit_feature_coordinate(local,fixed_pc=individual['pc'])
+        arms=normalization_comparison_coordinates(original,individual,local_old,local_new)
+        fitted[subject]=dict(arms=arms,original=original,individual=individual,local_old=local_old,local_new=local_new,
+            all_site_sources=counts,local_sources=local_counts,
+            pca_dot=float(np.asarray(original['pc'])@individual['pc']),
+            pca_unsigned_angle_degrees=float(np.degrees(np.arccos(np.clip(abs(np.asarray(original['pc'])@individual['pc']),0,1)))))
+    write_json(out/'coordinates.json',fitted);write_json(out/'resolved_model_config.json',core)
+    for row in selected['panel']:
+        key=row['subject']+'__'+row['window']['key'];co=fitted[row['subject']]['arms']['cached_baseline']
+        with np.load(row['feature'],allow_pickle=False) as a:
+            x=a['eeg'][:,row['pair']['channel_sets']['nearest6']].reshape(900,30);h=a['hb'][:,row['pair']['native_index']]
+        _tak_cache_npz(out/'inputs'/(key+'.npz'),features=x,hb=h)
+        task=Path(row['source_task']);baseline=json.loads(task.read_text())
+        with np.load(task.with_suffix('.npz'),allow_pickle=False) as a:arrays={k:a[k] for k in a.files}
+        baseline.update(arm='cached_baseline',case=key,subject=row['subject'],source_task=str(task),
+            coordinate=co,metrics=normalization_comparison_metrics(arrays['target'],arrays['prediction'],co),
+            target_correlation_with_original=1.)
+        _tak_cache_npz(out/'tasks'/(key+'__cached_baseline.npz'),**arrays)
+        write_json(out/'tasks'/(key+'__cached_baseline.json'),baseline)
+    result=dict(status='completed',selected_subjects=selected['selected_subjects'],selected_windows=len(selected['panel']),
+        baseline_available=sum(r['available'] for r in census),candidate_windows=len(census),
+        raw_reads=0,test_reads=0,protected_reads=0,weights=[1,1,1],objective_SD='frozen_original_all_arms')
+    write_json(out/'preparation.json',result)
+    return result
+
+
+def _normalization_comparison_worker(payload):
+    out_string,core,row,arm,coordinate=payload;out=Path(out_string);started=time.monotonic()
+    case=row['subject']+'__'+row['window']['key'];path=out/'tasks'/(case+'__'+arm+'.json')
+    if path.exists():return dict(case=case,arm=arm,status=json.loads(path.read_text())['status'],cached=True)
+    record=dict(case=case,subject=row['subject'],arm=arm,coordinate=coordinate,qualified=False)
+    try:
+        with np.load(out/'inputs'/(case+'.npz'),allow_pickle=False) as a:
+            x=a['features'];target=np.column_stack((x@coordinate['pc'],a['hb']))
+        with np.load(out/'tasks'/(case+'__cached_baseline.npz'),allow_pickle=False) as a:
+            old_target=a['target'];old_prediction=a['prediction'];old_sd=a['sd_subject']
+        record['target_correlation_with_original']=float(np.corrcoef(target[:,0],old_target[:,0])[0,1])
+        fit,arrays=tak_cache_fit_arrays(core,target,coordinate,old_sd,structured=True)
+        record.update(fit)
+        if 'prediction' in arrays:
+            record['metrics']=normalization_comparison_metrics(target,arrays['prediction'],coordinate)
+        if arm=='baseline_replay' and 'prediction' in arrays:
+            baseline=json.loads((out/'tasks'/(case+'__cached_baseline.json')).read_text())
+            objective=baseline['fits']['tak_tau_beta']['solver']['objective']
+            record['replay']=dict(max_prediction_difference_original_SD=float(np.max(abs((arrays['prediction']-old_prediction)/old_sd))),
+                relative_objective_difference=float(abs(fit['fits']['tak_tau_beta']['solver']['objective']-objective)/max(1,abs(objective))))
+        _tak_cache_npz(path.with_suffix('.npz'),**arrays)
+    except Exception:
+        record.update(status='failed_exception',error=traceback.format_exc())
+    record.update(seconds=time.monotonic()-started,peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    write_json(path,record)
+    return dict(case=case,arm=arm,status=record['status'],qualified=record.get('qualified'),seconds=record['seconds'])
+
+
+def normalization_comparison_run(cfg,out,workers,*,pilot=False):
+    selected=json.loads((out/'selection.json').read_text());co=json.loads((out/'coordinates.json').read_text())
+    core=json.loads((out/'resolved_model_config.json').read_text());jobs=[]
+    for row in selected['panel']:
+        arms=(['baseline_replay','local_scale'] if row['ratio_quantile']==.5 else []) if pilot else cfg['arms'][1:]
+        for arm in arms:
+            coord=co[row['subject']]['arms']['cached_baseline' if arm=='baseline_replay' else arm]
+            jobs.append((str(out),core,row,arm,coord))
+    return _tak_cache_pool(_normalization_comparison_worker,jobs,out=out,
+        phase='normalization_pilot' if pilot else 'normalization_fits',workers=workers,total=len(jobs),structured=True)
+
+
+def normalization_comparison_check(cfg,out):
+    from src.data.ssm_prepared import fit_feature_coordinate
+    rng=np.random.default_rng(cfg['seed']);x=rng.normal(size=(900,30));x[:,0]*=5
+    h=rng.normal(size=(900,2))*[3,1];old=fit_feature_coordinate([(x,h)])
+    changed=x.copy();changed[:,1]*=30
+    individual=fit_feature_coordinate([(changed,h)])
+    local_old=fit_feature_coordinate([(changed,h*8)],fixed_pc=old['pc'])
+    local_new=fit_feature_coordinate([(changed,h*8)],fixed_pc=individual['pc'])
+    arms=normalization_comparison_coordinates(old,individual,local_old,local_new)
+    for co in arms.values():np.testing.assert_array_equal(co['sd'],old['sd'])
+    assert arms['individual_pca']['hb_factor']==old['hb_factor']
+    np.testing.assert_array_equal(arms['local_scale']['pc'],old['pc'])
+    assert arms['local_scale']['hb_factor']!=old['hb_factor']
+    y=np.column_stack((x@old['pc'],h));m=normalization_comparison_metrics(y,y,old)
+    assert m['hb_rmse']==0 and m['eeg_local_nrmse']==0
+    result=dict(status='passed',measured_reads=0,checks=['four_arm_factorial','fixed_objective_SD','unchanged_component_weights','metric_roundtrip'])
+    write_json(out/'software_checks.json',result);return result
+
+
+def normalization_comparison_summarize(cfg,out):
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from scipy.stats import spearmanr
+    selected=json.loads((out/'selection.json').read_text());coordinates=json.loads((out/'coordinates.json').read_text())
+    rows=[];replays=[];missing=[]
+    for case in selected['panel']:
+        key=case['subject']+'__'+case['window']['key']
+        for arm in cfg['arms']:
+            path=out/'tasks'/(key+'__'+arm+'.json')
+            if not path.exists():missing.append(str(path));continue
+            item=json.loads(path.read_text())
+            rows.append(dict(case=key,subject=case['subject'],window=case['window']['key'],arm=arm,
+                ratio_quantile=case['ratio_quantile'],status=item['status'],qualified=item['qualified'],
+                target_correlation_with_original=item.get('target_correlation_with_original'),
+                **item.get('metrics',{})))
+        if case['ratio_quantile']==.5:
+            path=out/'tasks'/(key+'__baseline_replay.json')
+            if not path.exists():missing.append(str(path));continue
+            item=json.loads(path.read_text());r=item.get('replay',{})
+            passed=bool(item.get('qualified') and r.get('max_prediction_difference_original_SD',np.inf)<=cfg['replay']['maximum_prediction_difference_original_SD']
+                and r.get('relative_objective_difference',np.inf)<=cfg['replay']['maximum_relative_objective_difference'])
+            replays.append(dict(case=key,passed=passed,**r))
+    if missing:raise ValueError('Incomplete comparison: '+str(missing[:5]))
+    checks=dict(target_max_abs=0.,fixed_objective_sd_max_abs=0.,metric_max_abs=0.,
+        objective_data_max_abs=0.,closure_max_abs=0.,Hb_between_arms_max_abs=0.)
+    for row in rows:
+        case,arm=row['case'],row['arm'];co=coordinates[row['subject']]['arms'][arm]
+        with np.load(out/'inputs'/(case+'.npz'),allow_pickle=False) as inp:
+            expected_target=np.column_stack((inp['features']@co['pc'],inp['hb']))
+        with np.load(out/'tasks'/(case+'__'+arm+'.npz'),allow_pickle=False) as a:
+            y,p=a['target'],a['prediction'];gain=a['scale'];objective_sd=a['sd_subject']*gain
+            e=(p-y)[:-1];sd=y[:-1].std(0);rmse=np.sqrt((e*e).mean(0))
+            checks['target_max_abs']=max(checks['target_max_abs'],float(np.max(abs(y-expected_target))))
+            checks['fixed_objective_sd_max_abs']=max(checks['fixed_objective_sd_max_abs'],float(np.max(abs(objective_sd-co['sd']))))
+            checks['closure_max_abs']=max(checks['closure_max_abs'],float(np.max(abs(y-p-a['residual']))))
+            for j,name in enumerate(('eeg','hbo','hbr')):
+                checks['metric_max_abs']=max(checks['metric_max_abs'],abs(float(rmse[j]/sd[j])-row[name+'_local_nrmse']))
+            data_cost=.4*float(np.sum((e*gain/objective_sd)**2))
+            saved=json.loads((out/'tasks'/(case+'__'+arm+'.json')).read_text())
+            checks['objective_data_max_abs']=max(checks['objective_data_max_abs'],abs(data_cost-saved['fits']['tak_tau_beta']['solver']['objective_components']['data']))
+            with np.load(out/'tasks'/(case+'__cached_baseline.npz'),allow_pickle=False) as b:
+                checks['Hb_between_arms_max_abs']=max(checks['Hb_between_arms_max_abs'],float(np.max(abs(y[:,1:]-b['target'][:,1:]))))
+    passed=all(value<=1e-8 for value in checks.values()) and all(r['passed'] for r in replays)
+    write_json(out/'verification.json',dict(status='passed' if passed else 'failed',checks=checks,
+        baseline_replays=replays,explicit_weights=[1,1,1],fixed_original_objective_SD=True))
+    if not passed:raise ValueError('Independent comparison verification failed')
+    frame=pd.DataFrame(rows);frame.to_csv(out/'window_metrics.csv',index=False)
+    metrics=['input_hb_eeg_ratio','eeg_local_nrmse','eeg_amplitude_ratio','eeg_correlation',
+        'hb_rmse','hbo_local_nrmse','hbr_local_nrmse','hbo_correlation','hbr_correlation','target_correlation_with_original']
+    subject=frame.groupby(['subject','arm'],sort=False)[metrics].median().reset_index()
+    counts=frame.groupby(['subject','arm'],sort=False).agg(windows=('case','size'),qualified=('qualified','sum')).reset_index()
+    subject=subject.merge(counts,on=['subject','arm']);subject.to_csv(out/'subject_metrics.csv',index=False)
+    aggregate=subject.groupby('arm',sort=False)[metrics].mean().reset_index()
+    aggregate.to_csv(out/'aggregate_metrics.csv',index=False)
+    paired=[]
+    for _,r in frame.iterrows():
+        if r['arm']=='cached_baseline':continue
+        b=frame[(frame.case==r['case']) & (frame.arm=='cached_baseline')].iloc[0]
+        paired.append(dict(subject=r['subject'],case=r['case'],arm=r['arm'],
+            **{k+'_delta':float(r[k]-b[k]) for k in metrics if k!='target_correlation_with_original'}))
+    paired_frame=pd.DataFrame(paired);paired_frame.to_csv(out/'paired_differences.csv',index=False)
+    contrasts=paired_frame.groupby(['subject','arm'],sort=False).median(numeric_only=True).reset_index()
+    contrasts.to_csv(out/'subject_paired_differences.csv',index=False)
+    census=pd.read_csv(out/'baseline_census.csv');available=census[census.available==True]
+    correlations=[]
+    for s,g in available.groupby('subject'):
+        correlations.append(dict(subject=s,windows=len(g),qualified=int(g.qualified.sum()),
+            input_ratio_median=float(g.input_hb_eeg_ratio.median()),
+            input_ratio_p10=float(g.input_hb_eeg_ratio.quantile(.1)),input_ratio_p90=float(g.input_hb_eeg_ratio.quantile(.9)),
+            eeg_nrmse_median=float(g.eeg_local_nrmse.median()),eeg_nrmse_max=float(g.eeg_local_nrmse.max()),
+            amplitude_ratio_median=float(g.eeg_amplitude_ratio.median()),amplitude_ratio_max=float(g.eeg_amplitude_ratio.max()),
+            error_above_one=int((g.eeg_local_nrmse>1).sum()),amplitude_above_two=int((g.eeg_amplitude_ratio>2).sum()),
+            spearman_ratio_vs_eeg_error=float(spearmanr(g.input_hb_eeg_ratio,g.eeg_local_nrmse).statistic),
+            spearman_ratio_vs_amplitude=float(spearmanr(g.input_hb_eeg_ratio,g.eeg_amplitude_ratio).statistic)))
+    pd.DataFrame(correlations).to_csv(out/'baseline_severity.csv',index=False)
+    labels={'cached_baseline':'Cached baseline','individual_pca':'Individual PCA',
+        'local_scale':'Local scale','individual_pca_local_scale':'PCA + local scale'}
+    colors=['#666666','#2266bb','#df8124','#27946d'];figures=[]
+    fig,axes=plt.subplots(1,3,figsize=(15,4.6),constrained_layout=True)
+    for i,(metric,title) in enumerate((('eeg_local_nrmse','EEG error / own target SD'),
+            ('eeg_amplitude_ratio','Predicted / observed EEG SD'),('hb_rmse','Hb joint RMSE (uM)'))):
+        for k,arm in enumerate(cfg['arms']):
+            values=[float(subject[(subject.subject==s)&(subject.arm==arm)][metric].iloc[0]) for s in selected['selected_subjects']]
+            axes[i].bar(np.arange(3)+(k-1.5)*.19,values,width=.18,color=colors[k],label=labels[arm])
+        axes[i].set_xticks(np.arange(3),selected['selected_subjects']);axes[i].set_title(title);axes[i].grid(axis='y',alpha=.2)
+        if i<2:axes[i].axhline(1,color='black',ls=':',lw=1)
+    axes[0].legend(fontsize=8);fig.suptitle('Per-subject median of 3 fixed windows; all explicit weights = 1')
+    fig.savefig(out/'comparison.png',dpi=220);plt.close(fig);figures.append('comparison.png')
+    fig,axes=plt.subplots(1,2,figsize=(12,4.5),constrained_layout=True)
+    for s,g in available.groupby('subject'):
+        for ax,y in zip(axes,('eeg_local_nrmse','eeg_amplitude_ratio')):
+            ax.scatter(g.input_hb_eeg_ratio,g[y],s=25,alpha=.7,label=s);ax.set_xscale('log');ax.grid(alpha=.2)
+            ax.set_xlabel('Observed model-space combined Hb SD / EEG SD')
+    axes[0].set_ylabel('EEG error / observed window SD');axes[1].set_ylabel('Predicted / observed EEG SD')
+    axes[1].axhline(1,color='black',ls=':');axes[0].legend(fontsize=8)
+    fig.suptitle('Existing equal-weight cache: 5 development subjects; overlapping windows are dependent')
+    fig.savefig(out/'baseline_severity.png',dpi=220);plt.close(fig);figures.append('baseline_severity.png')
+    fig,axes=plt.subplots(2,3,figsize=(14,7),constrained_layout=True)
+    for k,s in enumerate(selected['selected_subjects']):
+        g=frame[frame.subject==s].copy();g['hb_model_sd']=np.sqrt((g.hbo_model_sd**2+g.hbr_model_sd**2)/2)
+        med=g.groupby('arm').median(numeric_only=True).reindex(cfg['arms'])
+        axes[0,k].plot(range(4),med.eeg_model_sd,'o-',label='EEG observed SD')
+        axes[0,k].plot(range(4),med.hb_model_sd,'s-',label='Combined Hb observed SD')
+        axes[0,k].axhline(.025,color='gray',ls=':',label='Calibration target 0.025')
+        axes[0,k].set_title(s);axes[0,k].set_ylabel('Model-coordinate SD');axes[0,k].legend(fontsize=8)
+        axes[1,k].bar(range(4),med.input_hb_eeg_ratio,color=colors)
+        axes[1,k].axhline(1,color='black',ls=':');axes[1,k].set_ylabel('Combined Hb SD / EEG SD')
+        for ax in axes[:,k]:ax.set_xticks(range(4),['Baseline','PCA','Scale','PCA+Scale']);ax.grid(axis='y',alpha=.2)
+    fig.suptitle('Observed amplitudes after calibration: per-subject median of the same 3 windows')
+    fig.savefig(out/'input_scales.png',dpi=220);plt.close(fig);figures.append('input_scales.png')
+    for case in selected['panel']:
+        key=case['subject']+'__'+case['window']['key'];fig,axes=plt.subplots(3,4,figsize=(18,9),sharex=True,constrained_layout=True)
+        ranges=[[],[],[]]
+        for k,arm in enumerate(cfg['arms']):
+            path=out/'tasks'/(key+'__'+arm+'.npz')
+            if not path.exists():
+                for ax in axes[:,k]:ax.text(.5,.5,'NO PREDICTION',ha='center',transform=ax.transAxes)
+                continue
+            with np.load(path,allow_pickle=False) as a:y=a['target'][:-1];p=a['prediction'][:-1];t=a['time_s'][:-1]
+            r=frame[(frame.case==key)&(frame.arm==arm)].iloc[0]
+            for j,name in enumerate(('eeg','hbo','hbr')):
+                ax=axes[j,k];ax.plot(t,y[:,j],color='#6c7481',lw=1,label='Observed (this PCA) ' if j==0 else 'Observed')
+                ax.plot(t,p[:,j],color=colors[k],lw=1.1,label='SSM reconstruction',ls='--' if k==0 else '-')
+                ranges[j].extend([float(y[:,j].min()),float(y[:,j].max()),float(p[:,j].min()),float(p[:,j].max())])
+                ax.set_title((labels[arm]+'\n' if j==0 else '')+
+                    f"NRMSE={r[name+'_local_nrmse']:.3f}  SD ratio={r[name+'_amplitude_ratio']:.2f}",fontsize=10)
+                ax.grid(alpha=.2)
+                if j==2:ax.set_xlabel('Within-window time (s)')
+                if k==0:ax.set_ylabel(('EEG PCA log-power','HbO (uM)','HbR (uM)')[j])
+                if j==0:ax.legend(fontsize=7,loc='best')
+        for j in range(3):
+            if ranges[j]:
+                lo,hi=min(ranges[j]),max(ranges[j]);pad=(hi-lo)*.06+1e-9
+                for ax in axes[j]:ax.set_ylim(lo-pad,hi+pad)
+        fig.suptitle(f"{case['subject']} | n-back | POOz | {case['window']['key']} | baseline input Hb/EEG ratio {case['input_hb_eeg_ratio']:.3f}\n"
+            'Same window and row limits; EEG observations change with PCA; Hb observations are identical',fontsize=13)
+        filename=key+'.png';fig.savefig(out/filename,dpi=220);plt.close(fig);figures.append(filename)
+    completion=dict(schema=cfg['schema'],status='completed',subjects=selected['selected_subjects'],
+        selected_windows=len(selected['panel']),planned_cells=len(selected['panel'])*4,terminal_cells=len(frame),
+        qualified_cells=int(frame.qualified.sum()),failed_cells=frame.loc[~frame.qualified,['case','arm','status']].to_dict('records'),
+        replay_verified=all(r['passed'] for r in replays),baseline_replays=replays,
+        baseline_severity=correlations,subject_metrics=subject.to_dict('records'),aggregate=aggregate.to_dict('records'),
+        contrasts=contrasts.to_dict('records'),figures=figures,
+        controls=cfg['controls'],calibration_scope=cfg['calibration']['scope'],
+        interpretation=cfg['endpoints'],raw_reads=0,protected_reads=0,test_reads=0)
+    write_json(out/'summary.json',completion)
+    tablecols=['subject','arm','input_hb_eeg_ratio','eeg_local_nrmse','eeg_amplitude_ratio','hb_rmse','qualified','windows']
+    intro='''<h1>三被试 EEG–fNIRS 归一化控制实验</h1>
+<p>目标：确认已有等权缓存的模态幅度失配程度，分离个体 PCA 与目标通道尺度校准的作用。
+所有组固定 τ/β 模型、三个参数起点、先验、驱动/初态正则、收敛与积分阈值。
+显式 EEG/HbO/HbR 权重均为 1；残差分母固定为原被试校准 SD。</p>
+<p>个体 PCA 使用该被试原有全部有效缓存窗口和位置；局部尺度使用同一被试全部记录的 POOz。
+尺度仍用原合并 SD 算法，未加入 MAD、Hb 观测增益、噪声白化或稳健损失。
+校准包括评价支持，属于离线无标签个体适配，不是独立窗口预测。</p>
+<p>候选为同一 Simultaneous 数据集的 5 名验证被试，固定 n-back 与 POOz。
+先按时间去除重叠窗口，按每人 Hb/EEG 模型尺度比的中位数选最高、最接近 1、最低者，
+各取幅度比分布 P10/P50/P90 附近的三个窗口。没有按拟合结果选样。</p>
+<p>输入比 = sqrt((SD(HbO)^2+SD(HbR)^2)/2)/SD(EEG)，在缓存模型坐标中计算。
+图中 NRMSE = RMSE/该窗口对应观测 SD；SD ratio = 预测 SD/观测 SD。
+统计排除末个缓存时间点，与原拟合掩码一致；均值偏差保留在 RMSE 中。
+表为被试内三个窗口的中位数，总汇总为三名被试等权平均。
+PCA 改变 EEG 目标内容，其误差仅表示对该组代理的拟合，Hb µM 误差是共同测量比较。</p>
+<p>Cached baseline=原缓存；Individual PCA=只换个体方向；Local scale=只换 POOz 尺度；
+PCA + local scale=两者结合。改变缩放会改变模型观测坐标，不能称为仅更换单位；
+未改显式权重和残差分母。质量失败完整保留，数值收敛不表示干净神经信号。</p>'''
+    html='<html><head><meta charset="utf-8"><style>body{font-family:sans-serif;max-width:1500px;margin:30px auto;padding:0 20px;line-height:1.7}table{border-collapse:collapse;font-size:13px}td,th{border:1px solid #ccc;padding:5px}img{width:100%;height:auto}h2{margin-top:35px}</style></head><body>'+intro
+    html+='<h2>原缓存幅度与重建严重程度</h2>'+pd.DataFrame(correlations).to_html(index=False,float_format=lambda x:f'{x:.4f}')
+    html+='<img src="baseline_severity.png"><h2>三被试配对比较</h2>'+subject[tablecols].to_html(index=False,float_format=lambda x:f'{x:.4f}')
+    html+='<img src="comparison.png"><h2>归一化后的实测输入幅度</h2><p>上排分别为 EEG 和合并 Hb 的模型坐标 SD，下排为两者比值；均是同一组三窗口的被试内中位数。0.025 是校准支持上的目标，不强制每个评价窗口达到该值。</p><img src="input_scales.png"><p>完整逐窗指标：<a href="window_metrics.csv">CSV</a>；配对差值：<a href="paired_differences.csv">CSV</a>；唯一数值汇总：<a href="summary.json">summary.json</a>。</p>'
+    html+='<h2>基线复现</h2>'+pd.DataFrame(replays).to_html(index=False,float_format=lambda x:f'{x:.6g}')
+    html+='<h2>PCA 方向与冻结尺度</h2>'+pd.DataFrame([dict(subject=s,arm=a,pca_dot=coordinates[s]['pca_dot'],
+        eeg_gain=c['eeg_factor'],hb_gain=c['hb_factor'],objective_SD=str(c['sd']))
+        for s in selected['selected_subjects'] for a,c in coordinates[s]['arms'].items()]).to_html(index=False,float_format=lambda x:f'{x:.5g}')
+    for case in selected['panel']:
+        key=case['subject']+'__'+case['window']['key']
+        html+=f'<h2>{key}：原幅度比 {case["input_hb_eeg_ratio"]:.3f}，分位选择 {case["ratio_quantile"]}</h2><p>每列为一组，灰线为该组观测，彩色线为完整 SSM 重建。逐行统一纵轴；个体 PCA 列的 EEG 观测随投影改变。完整 90 秒联合可见，非未来预测；时间终点按原末点掩码显示至 89.8 秒。</p><img src="{key}.png">'
+    html+=f'<p>计划 {len(frame)} 个比较单元，数值合格 {int(frame.qualified.sum())}，基线复现通过：{completion["replay_verified"]}。三名被试为针对性选择，不进行人群显著性检验；重叠缓存窗口不视为独立样本。未生成新的电压 S/O 标签。</p></body></html>'
+    (out/'report.html').write_text(html)
+    return {k:v for k,v in completion.items() if k not in ('subject_metrics','aggregate','contrasts','baseline_severity','figures')}
+
+
+def normalization_comparison_main(args):
+    cfg=normalization_comparison_config(args.config);out=args.run_dir.resolve();out.mkdir(parents=True,exist_ok=True)
+    resolved=out/'resolved_config.json'
+    if resolved.exists() and json.loads(resolved.read_text())!=cfg:raise ValueError('Comparison resume contract changed')
+    write_json(resolved,cfg)
+    stage=args.normalization_stage
+    if stage=='check':result=normalization_comparison_check(cfg,out)
+    elif stage=='prepare':
+        if json.loads((out/'software_checks.json').read_text())['status']!='passed':raise ValueError('Software check required')
+        if (out/'preparation.json').exists():result=json.loads((out/'preparation.json').read_text())
+        else:result=normalization_comparison_prepare(cfg,out)
+    elif stage in ('pilot','run'):
+        if not os.environ.get('SSM_SYSTEMD_UNIT'):raise ValueError('Durable supervised execution required')
+        with (out/'controller.lock').open('w') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            result=normalization_comparison_run(cfg,out,args.workers,pilot=stage=='pilot')
+    else:result=normalization_comparison_summarize(cfg,out)
+    print(json.dumps(serial(result if stage in ('check','prepare') else {k:v for k,v in result.items() if k!='rows'})),flush=True)
+    return result
+
+
 
 
 def main():
@@ -11874,6 +12294,8 @@ def main():
     ap.add_argument('--tak-task-parameters',action='store_true')
     ap.add_argument('--tak-topography',action='store_true')
     ap.add_argument('--tak-reconstruction-cache',action='store_true')
+    ap.add_argument('--normalization-comparison',action='store_true')
+    ap.add_argument('--normalization-stage',choices=['check','prepare','pilot','run','summarize'],default='check')
     ap.add_argument('--cache-stage',choices=['check','plan','synthetic','pilot','produce','verify','accelerator-check'],default='check')
     ap.add_argument('--cache-algebra',choices=['dense','structured'],default='dense')
     ap.add_argument('--cache-linear-backend',choices=['cpu','cuda'],default='cpu')
@@ -11904,6 +12326,9 @@ def main():
     ap.add_argument('--semantics-stage',choices=['synthetic','synthetic_feature','synthetic_joint','synthetic_kappa','synthetic_stress','synthetic_hierarchy','observation_math','inventory','prepare','qc_detail','cohort','training','fixed','measured','missing','profiles','diagnostics','integration_audit','geometry_sensitivity','four_dataset_transfer_summary','summarize'],default='synthetic')
     ap.add_argument('--phase',choices=['all','synthetic','measured'],default='all')
     args=ap.parse_args()
+    if args.normalization_comparison:
+        if args.run_dir is None:ap.error('--run-dir is required')
+        return normalization_comparison_main(args)
     if args.tak_reconstruction_cache:
         if args.run_dir is None or any(v is True for k,v in vars(args).items() if k!='tak_reconstruction_cache'):
             ap.error('Reconstruction cache requires an exclusive mode and run-dir')
