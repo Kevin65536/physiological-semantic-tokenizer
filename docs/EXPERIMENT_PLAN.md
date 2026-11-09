@@ -31,6 +31,11 @@ coupling-prior retention. The separately versioned `TK-FUNCTIONAL-v1` screen
 below tests conditional supervision without claiming physical qualification.
 Neither path uses task labels to train the tokenizer.
 
+The [2026-11-06 normalization redesign](#ssm-so-normalization-redesign-20261106)
+specifies a proposed successor for SSM calibration and voltage S/O targets.
+It separates numerical coordinates, observation gains, error weighting and
+supervision scales; existing executable contracts retain their recorded meaning.
+
 The bounded SSM entry points are indexed in
 [`experiments/README.md`](../experiments/README.md). The synthetic P0 launcher
 remains the qualification path; a separate synthetic-only `T3c` composite
@@ -5489,6 +5494,314 @@ S/O 电压、配对标签、独立重估变化、无先验和错配先验结果�
 图集、数值数组、逐窗/被试表及失败记录。PDF 图为位图，正文可检索；先完成
 软件/合成检查，再在持久监督下运行公开面板。可行性结论分别判断电压合同、
 天然伪迹依据、干预保留、物理增量与未覆盖干扰；不推出 token 泛化或来源可识别。
+
+<a id="ssm-so-normalization-redesign-20261106"></a>
+## SSM 拟合与原始信号 S/O 监督的归一化重规划（2026-11-06）
+
+用户随后明确要求先执行[三被试缓存控制实验](../experiments/configs/physiology_semantic_tokenizer/shared_driver_normalization_comparison_v1.yaml)。
+该有限实验只复用已有缓存：PCA 因子采用已实现的个体内跨位置方向，尺度因子
+只将原个体跨位置 SD 改为同被试 POOz SD，沿用原估计器和离线适配支持。
+四组固定显式权重 1/1/1、原目标函数 SD、τ/β 拟合、先验和求解器，不提前
+加入下文的稳健尺度、观测增益或误差模型。五名验证候选按输入幅度选三人，
+各选三个不重叠窗口；原基线独立复现、失败完整保留。它检验两个具体因素，
+不等同于实施下面整个重规划，也不生成新电压 S/O 标签。执行与结果由注册表
+及运行输出持有。
+
+本节按用户要求给出下一版本的设计，尚未实现或启动实测拟合。拟议诊断标识为
+`SSM-NORM-SO-v1`；正式执行前在既有 configs/runner 内版本化，不覆盖已完成
+S/O 标签、Hb 加权结果、缓存 v1 或已实现的个体 PCA 缓存 v2 配置。个体 PCA
+仍是下一代要求，本节增加的校准支持、观测增益与噪声模型需要独立的后继合同。
+当前实现与数据边界仍由 DATA_CONTRACT、源码和冻结运行配置持有。
+
+### 设计依据与需要区分的四种量
+
+问题证据引用[已有归一化审计](../experiments/RESULTS_INDEX.md)：冻结总体尺度
+不能消除局部窗口的 Hb/EEG 相对幅度差异；原电压重建还使用训练人口的绝对
+功率基线。审计未完成尺度、拟合权重、观测增益的因果分离。本节不把幅度差
+直接解释为非神经信号，也不把标准化后方差相等当作生理耦合证据。
+
+| 层次 | 新设计中的职责 | 估计支持与冻结范围 |
+| --- | --- | --- |
+| 测量单位与时间参考 | 保留 EEG 电压、已核验 Hb 单位及相对单位组；记录基线和滤波算子 | 中央 loader 和原数据合同；不加入通用逐通道 z-score |
+| 数值预条件尺度 D | 改善求解数值条件；数据、预测、误差协方差同步变换 | 被试自己的校准段，按 ROI/Hb 通道对估计；应用窗口内冻结 |
+| 观测增益与误差协方差 | 分别表达稳定的有效响应幅度与预测误差可靠性 | 校准段和训练被试的超参数选择；评价窗口不自由重标增益/噪声尺度 |
+| 监督训练尺度 | 方便网络学习，保留原信号与 S/O 的线性闭合 | 仅训练被试的原测量拟合；X、S、O 共用同一尺度和固定单位 |
+
+必须先验证坐标不变性。令原观测为 y、模型预测为 f、误差协方差为 R，D
+为可逆正对角矩阵。使用 z=D^-1 y、f_z=D^-1 f、R_z=D^-1 R D^-T 时，
+
+\[
+(y-f)^T R^{-1}(y-f)=(z-f_z)^T R_z^{-1}(z-f_z).
+\]
+
+因此，仅更改数值标准化不能改变同一模型的物理拟合结果。更改状态坐标时还
+必须变换动力学、初态、过程噪声和先验；本设计优先保持状态坐标不变。估计
+R 时使用完整似然中的 log-determinant，不能靠无限增大误差尺度降低平方项。
+已有代码中的输入增益同时定义了观测映射，不能当作纯数值预条件器。
+
+### 个体校准、PCA 与幅度参考
+
+按 dataset × subject 建立独立校准身份，并在个体内按 ROI 建立 PCA/尺度，
+明确这比缓存 v2 的“个体内跨位置共用一个 PCA”更细。保持六个几何近邻 ×
+五频带和原时间支持；不先逐 EEG 通道/频带强制单位方差。PCA 只读取该被试
+校准段 EEG，符号采用最大绝对载荷为正；不用目标 Hb 选择 PCA 符号或方向。
+共享电极身份在不同 ROI 中严格一致。个体主成分是统计坐标，不直接横向解释
+PC1 绝对值为相同神经源强度。
+
+校准数据与拟合评价窗口分开，禁止重叠窗口重复计数同一原始样本。初始诊断
+可使用既有开发面板的两个不重叠 90 秒窗口，做首窗校准/末窗评价及反向交叉
+拟合；它是离线个体适配，两个方向不是独立被试。预处理仍是已声明的整记录
+离线滤波，不能称为严格未来预测。现有 A–G 仅用于回放展示，原首窗成为校准
+数据时不能再计为独立验证结果。全量扩展先从 metadata 固定每个个体的校准
+记录/连续块及样本支持；校准不足保留为不可用，不暗中借用其他被试的 PCA。
+超参数和算法选择只使用训练/验证边界允许的支持，测试分区不用于本设计选择。
+
+保留当前自然对数功率特征：
+
+\[
+b_{w,c,b}=\operatorname{mean}_{t\in B_w}\log P_{w,c,b}(t),\quad
+\ell_{w,c,b}(t)=\log P_{w,c,b}(t)-b_{w,c,b},\quad
+p_{s,j}(t)=w_{s,j}^{T}\ell_w(t).
+\]
+
+w 是窗口下标时写在 b/ell 中，w_{s,j} 是被试 s、ROI j 的单位 PCA 载荷；
+c 为电极，b 为频带，B_w 为窗口前 5 秒，P 是 100 ms 均方电压（µV²）。
+前 5 秒是计算参考，不自动称为生理静息。参考基线、功率下限和掩码必须保存；
+基线受污染时标记不可用或按预定方案整体重定义参考，不只修改逆变换一端。
+Hb 使用同一前 5 秒的线性均值参考，HbO/HbR 不分别做幅度单位化。
+
+数值尺度的首选候选是个体校准块内中心化后的稳健幅度：对等长、非重叠的
+校准块 k 计算 q_k=1.4826 median|u-median(u)|，再取各块 q_k 的中位数。
+这只用于估计幅度，不把应用窗口重新中心化。记录退化、排除和全部块数；
+有效块不足或尺度退化时判不可用，不用任意 1 伪装正常尺度。首轮与块内 SD
+的中位数作敏感性比较，MAD 不是脑信号真实标准差的无条件估计。
+
+设所得尺度为 a_E、a_O、a_R，采用
+
+\[
+a_H=\sqrt{(a_O^2+a_R^2)/2},\qquad D=\mathrm{diag}(a_E,a_H,a_H).
+\]
+
+共同 Hb 尺度保留色团幅度比；去除块间均值对尺度估计的贡献，不消除记录
+本身的有意义偏移。MAD、分块和 ROI 粒度是待验证的本项目选择；文献依据
+支持稳健个体参考与光学异质性，不规定此精确组合。[R1,R2,R6]
+
+### SSM：固定 EEG 尺度锚点，单独校准 Hb 有效增益
+
+模型在未标准化的代理/Hb 测量坐标中定义：
+
+\[
+p=c_E\,\mathcal R r+\epsilon_E,\qquad
+\mathbf h=c_H\,\mathcal O_H H_\theta[r]+Z\eta+\boldsymbol\epsilon_H.
+\]
+
+r 为原 Tak 驱动，mathcal R 表示其前 5 秒参考算子；H_theta[r] 是 Tak
+状态产生的二维 Hb 读出，mathcal O_H 包含匹配的采样、滤波及基线参考；
+Z 是实测辅助回归量，eta 为系数。c_E 固定为 a_E/0.025，使驱动沿用已有
+工程尺度，0.025 不解释为生理常数。c_H>0 为该被试/ROI 的共同有效 Hb
+读出增益，初始化 a_H/0.025，在独立校准段估计后冻结。对数增益的收缩先验
+由训练被试内部验证确定；它不是 DPF 的物理估计。HbO、HbR 共用 c_H。
+
+第一版固定 neurovascular_gain=1 及现有血容量/氧提取读出常数，避免同时
+放开驱动幅度、神经血管增益和光学增益。其他动力学先采用固定 Tak 参照，
+通过之后才单独比较 τ 自由度。每个应用窗口只估计驱动和初态，不能用该窗
+Hb 幅度重新拟合 c_H 以掩盖失配。增益与动力学仍需做灵敏度、剖面和跨块
+复现检查；不可识别时保留失败，不作为可靠监督。此为本项目对已有生成模型
+中“生理状态—光学读出—观测误差”分离的简化适配。[R2,R3]
+
+对于已带通的 Hb，模型比较对象必须经过等价观测算子；不能只滤数据而把
+未滤模型输出直接拟合。先合成核验完整处理支持、边界和前 5 秒参考的影响。
+有限窗口若缺少复现滤波边界所需上下文，明确扩大已允许的上下文或限制评分
+支持，不能在短窗口上再次滤缓存假装匹配。基线参考导致的相关性/秩约束进入
+误差传播，求解使用独立有效支持。[R4]
+
+### 噪声权重：从校准预测误差出发，替换固定 Hb 百倍偏好
+
+不再把信号的总 SD 当作噪声 SD，也不把 0.1/10/10 当成新默认。先在校准
+支持内做连续块遮挡的交叉预测，估计冻结的工作误差协方差；隐藏块必须考虑
+滤波时间支持，不使用随机散点遮挡。误差包含未建模变化，命名为预测误差
+模型，不宣称纯仪器噪声。校准不足时记录不可用。
+
+误差模型第一版分为 EEG 标量与 HbO/HbR 二维块，不预先白化掉跨模态耦合。
+校准误差的 AR 算子 F 处理时间相关，Hb 二维协方差 R_H 处理色团残差相关；
+用收缩估计保持可逆。相同 F 必须作用于观测和预测残差两端。AR 阶数用校准
+块内验证选择，并在未用于估计的块上检查残差相关。[R4,R7]
+
+主候选使用白化创新的 Student-t 负对数似然：
+
+\[
+e_{m,t}=F_m[y_m-f_m]_t,\quad
+L=\sum_{m,t}\left\{\tfrac12\log|R_m|
++\tfrac{\nu+d_m}{2}\log\left(1+
+\tfrac{e_{m,t}^{T}R_m^{-1}e_{m,t}}{\nu}\right)\right\}+L_{prior}.
+\]
+
+m 为 EEG 或二维 Hb，d_m=1 或 2；nu 首轮固定为 5（工程候选），R_m 是
+t 分布的尺度矩阵，协方差为 nu/(nu-2) R_m。另保留 Gaussian 创新对照。
+序列起始项按相同约定处理；若拟合 F，其变换行列式与初始创新项也必须一致。
+原驱动/初态先验保留物理坐标定义，不能在新损失下直接假定旧系数仍有相同
+相对强度；用合成与训练内验证校准后冻结。评价窗口不重新估计 R_m；稳健
+似然可以降低单点异常影响，但不能把持续失配解释为成功。
+
+Barker 等的直接依据是 AR 预白化与 IRLS 在 fNIRS GLM 中的应用；这里的
+Student-t 非线性 SSM 是本项目的待验证推广，不是该研究已验证的算法。[R4]
+
+若数据确有短距离通道/外周生理辅助量，可在 Z 中加入并保持校准/评价边界。
+没有这些测量时，首轮令 Z 为空；全头 Hb PC 或均值仅作独立敏感性对照，
+不默认删除，因为它可能含共同神经活动。乘法尺度处理不了加性浅表血流。
+这一步的依据是浅表生理干扰和短距离回归研究。[R3,R5,R8]
+
+### 从 SSM 代理回到电压：同一坐标、匹配基线与最小修正
+
+先把 SSM 输出逆数值变换为 p_hat；绝不能把单位 SD、0.025 模型坐标或
+白化创新直接送入电压反演。A_s 将多个 ROI 的个体 PCA 载荷按真实电极顺序
+嵌入全部通道 × 五频带，满足 p_obs=A_s ell_obs。若采用归一化代理，则 A_s
+也必须带同一缩放；本设计主路径统一在未缩放代理上完成反演。
+
+以“对观测 log-power 做最小修正”为主候选：
+
+\[
+K_s=\Sigma_s A_s^T(A_s\Sigma_s A_s^T)^{-1},\qquad
+\widehat\ell=\ell_{obs}+K_s(\widehat p-A_s\ell_{obs}).
+\]
+
+Sigma_s 从独立个体校准段估计并收缩，定义修正的统计度量，不是已知干净
+信号协方差。A_s 满行秩时 A_s K_s=I；必须检查奇异值和条件数，秩不足则
+按预定规则只处理独立代理方向并报告丢失维数。此式保留 (I-K_s A_s)ell_obs，
+即代理未约束的分量；p_hat=p_obs 时严格不改 log-power。它不同于旧的
+mu+K(p_hat-A mu)，后者将未约束部分替换为人口模板。这是本项目提出的
+最小变化估计器，是否保留了伪迹由已知干预单独验证。
+
+绝对功率使用与特征定义完全匹配的当前参考：
+
+\[
+\widehat P_{c,b}(t)=\exp[\widehat\ell_{c,b}(t)+b_{w,c,b}].
+\]
+
+b_w 是上述已存的当前窗口 log-power 基线，不再无条件使用人口训练基线。
+若仍使用旧的 b_train，功率会多乘 exp(b_train-b_w)，电压尺度对应平方根；
+这与 SSM 是否拟合成功无关。参考污染必须显式检测/做基线污染干预，不能用
+受污染基线宣称得到干净功率。[R1] 的基线研究支持明确区分参考规则，不直接
+验证本项目电压反演。
+
+现有电压最小变化投影/重叠合成可作为实现起点，但功率支持必须匹配：SSM
+的 100 ms 功率先在线性功率域聚合到投影的 1 秒支持；不能把均值 log-power
+指数化冒充 1 秒算术均方。窗口端点、反射和重叠规则与实际电压块一致。
+校准相关矩阵与时变对角功率构成的正定矩阵只提供工程约束，不是假定的
+生理真值协方差。若使用协方差上界，p_hat=p_obs 仅保证功率反演恒等，
+空间相关矩阵仍可能改变电压；因此保留“无代理修正”的同参考投影对照，并
+单列它的电压改变，不能把两者混称恒等映射。
+
+不再用 Hb 代理去设定没有对应观测的第六频带/偏置补项的功率上限；该补项
+在此分支原样保留，并明确它只是未修改成分。其他频段保留原电压的相位/
+载波并作最小变化估计，定义 S 为估计电压、O=X-S。功率代理本身不能恢复
+唯一相位。最终在 µV 中核验 S+O=X，重新提取 S 的代理与频带功率，并检验
+合成后的约束；局部投影通过不能代替最终输出核验。ASR 提供了独立参考、
+稳健协方差和回到通道空间的先例，不证明当前 S 是干净神经信号。[R6,R7]
+
+Hb 分支同样先回到原测量单位：在去基线测量 h 上定义
+S_H=c_H mathcal O_H H_theta[r]，O_H=h-S_H；辅助项 Z eta 归入 O_H，
+完整预测另存为 S_H+Z eta。需要恢复带参考的缓存信号时，保存的基线只加回
+S_H 一次，记录这是闭合约定；该基线不是可测绝对静息 Hb 浓度。原始信号
+在此指已声明的原生 EEG/缓存 Hb 支持，不指被滤除频率或光学原始强度。
+
+### 监督网络与评价：同一线性尺度作用于 X、S、O
+
+标签以 µV 和合法 Hb 测量单位保存。网络尺度只从训练被试原 X 估计，按
+被试等权汇总均方后开方；EEG 每个固定电极身份一个 q_c，Hb 每个合法单位组/
+位置一个共同 q_H。同一路径的原信号与两分支统一除以同一正尺度：
+
+\[
+X'=X/q,\quad S'=S/q,\quad O'=O/q,\quad X'=S'+O'.
+\]
+
+不分别用 S、O 自身 SD 归一化，不按窗口重新定标，不分别减三个不同均值。
+如需减去中心 m，必须明确 X'=(X-m)/q、S'=(S-m)/q、O'=O/q。默认仅缩放。
+网络 decoder 使用已冻结训练尺度恢复单位；不新增被试/窗口增益连续 sidecar。
+SSM 的个体适配尺度仅用于产生物理单位标签，不自动成为 hard-token 解码条件。
+损失先在同一被试内汇总再跨被试平均，避免记录多的个体主导训练。
+
+评价同时报告：物理 RMSE、共同训练尺度 NRMSE、局部 SD NRMSE、相关、
+均值偏差与预测/观测 SD 比。局部 SD 只用于明确标注的诊断分母，不能把
+尺度设成一样后只报告标准化误差。S/O 的闭合、神经样变化保留、伪迹变化
+归属、无先验及错配 Hb 对照分别评分。天然 S/O 为模型条件估计；合成信号
+及已知注入变化提供对应范围内的真值。
+
+### 有限验证顺序与实施边界
+
+1. 软件/合成：单位变换不变性；PCA/尺度来源独立；冻结变换的正逆一致；
+   增益、先验与协方差同步；HbO/HbR 比例保留；相同代理的 log-power 恒等；
+   匹配基线往返；100 ms→1 s 线性功率聚合；S+O 闭合及最终重分析。
+2. 合成因子分离：分别改变单位、共同 Hb 测量增益、真实驱动幅度、加性
+   Hb 生理波动、校准污染和参考污染。单位改变应完全不变；稳定测量增益
+   由 c_H 吸收；真实驱动改变应保留；加性干扰不能仅靠缩放解释。包含神经
+   与伪迹独立/相关、HbO/HbR 不等比例增益的失配情形，检查共同增益边界。
+3. 后续实测诊断限定于已有开发被试面板，全部读权限/身份先按原合同核对。
+   六名训练被试内部选有限超参数；五名验证被试独立个体校准后评价，两个
+   交叉方向先在被试内汇总。现有 F/G 是解释性反例，不用它们挑最佳设置。
+4. 核心对照分步加入：旧坐标/旧权重；只做严格坐标变换（应复现旧解）；
+   个体 ROI 校准及 c_H；固定信号 SD 下取消 Hb 特殊权重；交叉预测误差
+   协方差；时间白化与稳健创新。不能将 PCA、尺度、权重和反演一起改变后
+   把全部收益称为归一化收益。可用辅助量的回归单列，不加入隐含自由度。
+5. SSM 冻结后，电压反演分别比较旧人口基线、仅匹配基线、再加最小修正，
+   并保留同参考无代理修正/错配代理。已知眼电、神经样变化及参考污染都要
+   测量；抑制更多电压不是单独的成功指标。
+6. 完整分母保留校准不足、不可识别、数值失败、最终功率越界和质量失败。
+   数值收敛不自动生成可靠 S/O 标签。可靠性范围由训练内留出预测和已知
+   干预固定，不能临时按验证结果挑阈值；同时给出未筛选结果和可用标签覆盖率。
+   配对改善按被试汇总，说明 EEG 误差、Hb 误差与神经保留的取舍；完成后
+   才决定是否扩展四数据集全量缓存。该规划本身不启动此类运行。
+
+实现继续使用 `ssm_prepared.py` 的坐标 owner、既有 SSM 求解器与
+`dual_component_tokenizer.py` 的电压参考/投影 owner；元数据保存原单位、
+校准身份、原始支持、PCA、电压基线、D、c_E/c_H、误差模型、监督尺度和
+逆变换。只在既有版本配置/缓存元数据内扩展，不建立平行 normalization manager。
+
+### 原始研究依据与适用范围
+
+- **[R1] Grandchamp & Delorme, 2011.** *Single-Trial Normalization for
+  Event-Related Spectral Decomposition Reduces Sensitivity to Noisy Trials*.
+  [Frontiers in Psychology](https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2011.00236/full).
+  比较功率基线与单试次归一化的统计影响，支持明确记录加性/乘性/对数参考。
+  本项目保留原 log-power 规则并修正其逆变换，不把文中的 ERSP 结论直接
+  当成 SSM 或电压 S/O 已验证。
+- **[R2] Chiarelli et al., 2019.** *Differential pathlength factor in continuous
+  wave functional near-infrared spectroscopy: reducing hemoglobin’s cross talk
+  in high-density recordings*. [Neurophotonics](https://pmc.ncbi.nlm.nih.gov/articles/PMC6689143/).
+  光程差异涉及个体/位置；平均 DPF 误差改变幅度，光谱依赖误差还导致色团
+  串扰。支持检查个体观测增益，也说明共同标量不能修复所有测量差异。
+- **[R3] Tak et al., 2015.** *Dynamic causal modelling for functional
+  near-infrared spectroscopy*.
+  [NeuroImage，作者全文](https://www.fil.ion.ucl.ac.uk/~wpenny/publications/tak-penny15.pdf).
+  原式 y=g(theta)+X beta+e 分开生成模型、混杂项与误差协方差，并对生理/
+  光学参数和误差精度作贝叶斯估计。支持本方案的分层职责；共同 Hb 标量、
+  EEG 锚点和冻结校准是本项目简化设计，不是照搬原文参数化。
+- **[R4] Barker, Aarabi & Huppert, 2013.** *Autoregressive model based algorithm
+  for correcting motion and serially correlated errors in fNIRS*.
+  [Biomedical Optics Express 4:1366–1379](https://doi.org/10.1364/BOE.4.001366).
+  使用 AR 预白化及 IRLS 处理序列相关和运动异常。支持区分信号幅度与误差
+  权重；非线性 Student-t 扩展和预测误差交叉校准需由本项目单独检验。
+- **[R5] Kirilina et al., 2012.** *The physiological origin of task-evoked
+  systemic artefacts in functional near infrared spectroscopy*.
+  [NeuroImage 61:70–81](https://pubmed.ncbi.nlm.nih.gov/22426347/).
+  联合光学、MRI 和外周生理测量识别浅表血流干扰，支持把加性生理成分与
+  乘性尺度区分，不能把 Hb 幅度统一当作去除干扰。
+- **[R6] Mullen et al., 2015.** *Real-Time Neuroimaging and Cognitive Monitoring
+  Using Wearable Dry EEG*.
+  [IEEE TBME，作者全文](https://sccn.ucsd.edu/~scott/pdf/Mullen_IEEE15.pdf).
+  ASR 使用低伪迹校准参考、稳健协方差及通道回投影。支持独立参考的原则；
+  不提供当前 Hb 条件电压上限的生理真实性或所选阈值依据。
+- **[R7] Ledoit & Wolf, 2004.** *A well-conditioned estimator for
+  large-dimensional covariance matrices*.
+  [Journal of Multivariate Analysis，作者全文](https://www.ledoit.net/Well-conditioned2004.pdf).
+  支持有限样本下的协方差收缩与稳定求逆。时间相关样本不直接视为独立样本，
+  收缩强度在分块校准中验证，不从该论文推导固定 10% 的最优性。
+- **[R8] Gagnon et al., 2014.** *Further improvement in reducing superficial
+  contamination in NIRS using double short separation measurements*.
+  [NeuroImage 85:127–135](https://pubmed.ncbi.nlm.nih.gov/23403181/).
+  支持使用有空间对应关系的短距离观测解释浅表干扰；没有该类通道的数据
+  不能凭算法补造同等证据。
+
 
 ## 四数据集优化权重与 S/O 已知干预对照（2026-11-07）
 
