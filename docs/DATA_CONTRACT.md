@@ -1510,3 +1510,40 @@ SSM 选择。若修复改变有效支持，主比较限制在共同真实支持�
 dataset-ID probe 只能诊断残留设备指纹：任务/脑区不匹配也可预测数据集身份。
 不能以所有 PSD 相同或 probe 降到随机为成功标准。现有开源方法说明可用已知尺度、
 位置和通道信息降低输入差异，但不能据此跳过 SSM 的均值、协方差与状态恢复检查。
+
+## Individual-PCA, Hb-prioritized reconstruction cache v3 — 2026-11-09
+
+[`shared_driver_tak_subject_cache_v3.yaml`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v3.yaml)
+owns the user-requested full replacement generation. It retains the exact v1
+public subject partitions, record/window/pair identities, clocks, masks and
+sample-to-fit joins. The verified v1 prepared feature tree is read through a
+recorded symbolic link; the new producer never writes that tree or reads raw
+signals. Missing or invalid input support remains an explicit failure.
+
+Each dataset/subject independently estimates PC1 and positive EEG/shared-Hb
+scales from all its own admitted unlabelled windows/sites, following the v2
+adaptation scope, including registered public validation/test subjects. The old
+population coordinate supplies training-reference scoring SDs only. This public
+teacher preparation and its array verification do not unlock protected material,
+labels or downstream held-out performance evaluation.
+
+The observation weights are exactly (1/3, 4/3, 4/3), preserving the previously
+examined 1:4:4 ratio and sum three. τ/β priors, bounds, dynamics and stopping
+criteria are unchanged. A matching qualified v1 free solution supplies only its
+driver, physical initial state and τ/β as a numerical initial guess; all variables
+are reoptimized in the new coordinates. Missing/invalid seeds and unqualified
+warm attempts use the existing fixed-prefit plus three-start procedure. Failed
+warm JSON/arrays are retained separately before fallback. Pilot subjects whose
+warm objective is worse than the standard result beyond 1e−6 use the standard
+path throughout production; this subject guard is owned by the run's pilot summary.
+
+A warm-success task need not contain `tak_fixed` or `fixed_prediction`. Those
+fields exist only when a standard path actually computed them under the new
+weights. Consumers must use the free result and its validity flag, and must not
+interpret an absent fixed baseline as a failed or zero prediction. Every task
+records the schema, frozen coordinate source, observation weights, initialization
+route, old seed provenance, backend and numerical status. Prediction/residual
+closure, state readout and the weighted observation objective are independently
+verified for the completed population. Historical cache generations and dated
+experiments retain their original identities. New experiments use a completed,
+verified v3 cache; a running producer is not a complete result source.

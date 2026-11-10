@@ -1,0 +1,77 @@
+schema: shared_driver_ocular_modality_weight_v1
+experiment_id: SSM-OCULAR-MODALITY-WEIGHT-v1
+created: '2026-11-09'
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1
+source_schema: shared_driver_cache_ocular_confirmation_v1
+subjects:
+  eeg_fnirs_single_trial: [subject_02, subject_14]
+  simultaneous_eeg_nirs: [VP014, VP017]
+  refed: ['9']
+  visual_cognitive_motivation: [S08]
+selection: first_record_screen_second_record_review_exact_retained_windows
+weights:
+  eeg4: [4, 1, 1]
+  equal: [1, 1, 1]
+  hb2: [1, 2, 2]
+  hb4: [1, 4, 4]
+controls:
+  weight_sum: 3
+  model: exact_parent_tau_beta_priors_bounds_starts_solver_and_fixed_warm_start
+  normalization: frozen_parent_PCA_positive_scales_and_original_component_SD
+  voltage_target: parent_training_reference_and_power_cap1
+  observations: exact_parent_native_voltage_and_ocular_realizations_Hb_unchanged
+  baseline_reuse: verify_source_configuration_weights_targets_scales_qualification_and_arrays
+screen:
+  variants: [baseline, ocular1]
+  ROI_count: 3
+  subject_count: 6
+  expected_ROI_conditions: 144
+  expected_new_ROI_conditions: 108
+  primary_support_s: [30, 85]
+  early_support_s: [30, 50]
+  late_support_s: [50, 85]
+  outside_support_s: [5, 25]
+  proxy_transfer_denominator_min_SD: 0.000001
+mechanism:
+  full: refitted_proxy_reference
+  frozen: same_weight_baseline_proxy_reference_with_identical_polluted_voltage
+  metrics: native_rate_full_and_frozen_S_change_and_display_rate_reference_update_decomposition
+selection_rule:
+  minimum_HbO_change_reduction: 0.20
+  maximum_HbR_change_increase: 0.0
+  maximum_proxy_change_increase: 0.0
+  maximum_baseline_NRMSE_increase_each_component: 0.05
+  maximum_EEG_S_baseline_correlation_decrease: 0.02
+  new_numerical_failures: 0
+  require_HbO_improvement_each_dataset: true
+  candidate_order_nearest_equal: [hb2, eeg4, hb4]
+  double_modality_improvement_proxy_reduction: 0.20
+  meaning: exploratory_engineering_tolerances_not_population_significance
+continuation:
+  trigger: exactly_one_passing_candidate_otherwise_stop_and_report_tradeoffs
+  second_record: baseline_and_ocular1_candidate_vs_equal
+  first_record_strengths: [ocular05, ocular2]
+  reverse_Hb: HbO_only_and_HbR_only_one_frozen_component_SD_most_anterior_ROI_EEG_unchanged
+  positive_synthetic: two_legal_tau_beta_combinations_times_fast_slow_driver_changes_same_initial_and_noise_per_pair
+  general_cache_guard: no_reverse_or_synthetic_normalized_error_increase_over_0.05
+  maximum_new_measured_ROI_conditions: 204
+  maximum_positive_synthetic_fits: 16
+endpoints:
+  primary: SSM_HbO_prediction_change_RMS_over_frozen_SD
+  secondary: HbR_and_proxy_change_baseline_fidelity_timing_parameter_and_beta_r_response
+  target_layer: EEG_S_and_O_before_after_full_vs_frozen_reference
+  aggregation: mean_ROIs_within_subject_then_equal_subjects_within_dataset_then_equal_datasets
+  failures: all_planned_denominators_retained_no_replacement_no_qualification_from_success_subset
+  truth: only_injected_delta_known_baseline_observations_not_clean_truth
+boundary:
+  retained_only: true
+  splits: [validation]
+  new_raw_reads: forbidden
+  test_and_protected: forbidden
+resources:
+  pilot_workers: 4
+  fit_workers: 48
+  target_workers: 12
+  numerical_threads: 1
+  supervisor: user_systemd_with_linger
+stopping: stop_after_screen_if_no_candidate_otherwise_complete_fixed_continuation_no_weight_grid_expansion

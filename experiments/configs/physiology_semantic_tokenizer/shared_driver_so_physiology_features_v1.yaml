@@ -1,0 +1,84 @@
+schema: shared_driver_so_physiology_features_v1
+experiment_id: SSM-SO-PHYSIOLOGY-FEATURES-v1
+created: '2026-11-09'
+sources:
+  recent: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_ocular_modality_weight_v1
+  earlier: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1
+weight: hb4
+selection:
+  recent: all_six_screen_subjects
+  earlier: all_eight_validation_subjects
+  training: exact_twelve_retained_training_reference_windows_from_earlier_run
+  baseline_subjects: 14
+  ocular_subjects: 6
+  ocular_scope: recent_run_ocular1_only_same_anterior_mixing_and_local_RMS
+  exclusions: no_outcome_based_replacement
+targets:
+  EEG: regenerate_native_voltage_power_cap1_from_saved_predictions_and_training_reference
+  replay: match_saved_200Hz_target_at_1e-10_training_voltage_RMS
+  Hb: exact_saved_hb_s_and_hb_o
+  model_refits: false
+  transforms: preserve_all_original_PCA_scales_weights_and_references
+features:
+  EEG:
+    common_rate_hz: 200
+    analysis_filter_hz: [1, 45]
+    filter: fourth_order_Butterworth_zero_phase_same_for_X_S_O_after_resampling
+    windows_s: [[15, 35], [35, 55], [55, 75]]
+    spectral_method: Welch_periodic_Hann_4s_50percent_overlap_constant_detrend_mean_density
+    bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+    native_diagnostics: raw_native_RMS_SD_kurtosis_and_full_native_PSD_no_extra_filter
+  Hb:
+    rate_hz: 10
+    support_s: [5, 85]
+    analysis_filter: none
+    spectral_method: single_80s_periodic_Hann_constant_detrend_density_no_zero_padding
+    primary_band_hz: [0.0375, 0.2]
+    subbands_hz: [[0.0375, 0.1], [0.1, 0.2]]
+    extra_band_hz: [0.2, 5.0001]
+    interpretation: below_0.0375Hz_has_fewer_than_three_cycles_and_is_descriptive_only
+  kurtosis: Fisher_excess_unbiased_normal_distribution_zero
+  zero_variance: retain_flags_and_NaN_undefined_shape_features_never_impute_zero
+  minimum_reference_normalized_SD: 1.0e-12
+  power_floor_for_log_features: 1.0e-12
+  paired_metrics: RMS_and_band_power_ratios_kurtosis_skewness_Hjorth_entropy_centroid_edge_and_waveform_correlation
+  spectral_identity: P_X_equals_P_S_plus_P_O_plus_twice_real_cross_PSO
+  Hb_joint: preserve_measured_HbO_HbR_correlation_comparison_no_forced_anticorrelation
+embedding:
+  modalities: [EEG, HbO, HbR]
+  feature_views: [shape, shape_amplitude]
+  normalization: training_original_features_only_equal_dataset_equal_subject_weighted_mean_SD_no_clipping
+  amplitude_reference: existing_training_EEG_channel_RMS_and_pooled_training_Hb_ROI_RMS
+  invalid_rows: retain_counts_exclude_incomplete_rows_from_embedding_only
+  constant_training_features: drop_SD_below_1e-8_and_record
+  primary_population: baseline_only_all_fourteen_subjects_X_S_O_joint_embedding
+  perplexities: {EEG: [30, 60], HbO: [10, 20], HbR: [10, 20]}
+  seeds: [17, 29, 43]
+  primary_plot: first_perplexity_seed17_no_posthoc_best_map_selection
+  iterations: 1000
+  learning_rate: auto
+  init: pca
+  reference: PCA_fitted_on_training_original_features_only
+  diagnostics: trustworthiness_k5_high_dimensional_paired_distances_and_seed_perplexity_panels
+  ocular_secondary: six_recent_subjects_joint_before_after_embedding_default_settings_deduplicate_identical_Hb_input
+  interpretation: visualization_of_feature_neighborhoods_not_neural_truth_or_cluster_separation_acceptance
+boundary:
+  retained_only: true
+  splits: [train, validation]
+  raw_and_protected_and_test_reads: forbidden
+  new_model_training_or_SSM_fits: forbidden
+endpoints:
+  primary: paired_baseline_signal_feature_and_PSD_changes_per_subject
+  secondary: known_ocular_feature_shifts_and_joint_Hb_relationship
+  diagnostic: multifeature_tSNE_PCA_and_embedding_stability
+  aggregation: channels_and_windows_within_subject_then_subjects_within_dataset_then_equal_datasets
+  independent_units: subjects_not_channels_ROIs_or_windows
+  'null': additive_targets_need_not_preserve_original_spectral_shape_distribution_or_feature_geometry
+  truth: raw_measured_baseline_is_reference_not_clean_neural_ground_truth
+resources:
+  native_workers: 6
+  pilot_workers: 4
+  embedding_workers: 4
+  numerical_threads: 1
+  supervisor: user_systemd_with_linger
+stopping: complete_fixed_feature_panel_and_embedding_grid_no_outcome_based_expansion_or_cache_rebuild

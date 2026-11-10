@@ -1,0 +1,62 @@
+schema: shared_driver_warmstart_pca_weight_v1
+experiment_id: SSM-WARMSTART-PCA-WEIGHT-v1
+created: '2026-11-09'
+source_run: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261104_subject_calibrated_cache_v1
+source_contract: experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml
+individual_contract: experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml
+selection:
+  split: train
+  subjects: first_training_subject_with_full_window_per_dataset_by_record_key
+  records: first_full_record_per_subject_plus_first_short_REFED_record_same_subject
+  windows: first_per_record
+  sites: first_middle_last_available_native_pair
+  expected_subjects: 4
+  expected_records_for_fits: 5
+  expected_fits_per_arm_per_repeat: 15
+  replacement: none_for_unqualified_old_seeds_or_new_failures
+calibration:
+  scope: all_admitted_records_windows_sites_of_each_selected_subject
+  cold_features: reextract_native_EEG_and_read_retained_Hb_with_central_reader
+  warm_features: exact_parent_prepared_features
+  coordinates: independent_PC1_and_positive_scales_per_subject_frozen_across_records_sites
+  population: parent_training_reference_SD_for_scoring_only
+  agreement: full_feature_masks_and_arrays_then_PCA_scales_and_new_targets
+  tolerance: 1.0e-10
+fitting:
+  weight_ratio: [1, 4, 4]
+  weight_sum: 3
+  cold: fixed_parameter_fit_from_default_then_three_tau_beta_starts_using_its_driver_initial
+  warm: single_start_old_free_driver_initial_tau_beta_no_fixed_prefit
+  update: all_driver_initial_tau_beta_variables_free_under_new_objective
+  old_seed_coordinate_mapping: none_old_legal_state_is_only_a_numerical_guess
+  prior_bounds_and_stopping: unchanged_individual_contract_and_base_solver
+  backend: CPU_float64_structured_observation_one_numerical_thread
+  repeats: 2
+  order: paired_sequential_same_worker_counterbalanced_by_case_and_repeat
+  timing: exclude_same_worker_synthetic_JIT_warmup_include_fixed_prefit_in_cold_total
+  automatic_fallback: none_in_comparison_preserve_failures
+endpoints:
+  primary: paired_total_fitting_time_and_new_objective_and_qualification
+  secondary: free_stage_time_evaluations_parameters_predictions_driver_initial
+  diagnostic: native_preparation_coordinate_time_and_training_reference_waveform_errors
+  comparison: within_case_repeat_then_subject_dataset_summary_preserve_all_statuses
+  null: cached_start_does_not_save_time_or_reaches_a_worse_new_objective
+  engineering_checks:
+    relative_objective_tolerance: 1.0e-6
+    prediction_RMS_subject_SD_tolerance: 1.0e-3
+    parameter_relative_tolerance: 1.0e-3
+  decision: bounded_feasibility_not_full_cache_switch
+boundary:
+  allowed_split: train
+  raw_reads: only_selected_subjects_registered_native_EEG_via_central_reader
+  Hb: retained_v5_none_no_second_filter
+  test_and_protected: forbidden_before_array_read
+  production_writes: forbidden
+resources:
+  preparation_pilot_workers: 4
+  preparation_workers: 4
+  fit_pilot_workers: 2
+  fit_workers: 8
+  numerical_threads: 1
+  supervisor: user_systemd_linger
+stopping: fixed_fifteen_case_two_repeat_comparison_and_report_no_full_cache_generation

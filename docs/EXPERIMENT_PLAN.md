@@ -5867,3 +5867,203 @@ Hb 泄漏与支持外变化。预先声明 S 泄漏≤0.30、O 增量相关≥0.
 工程核对线，不作为经文献验证的生理阈值。逐强度保留全部窗口和失败分母，
 先窗内、被试内、数据集内再四库等权；完整图谱显示所有前后波形和失败。
 允许完成当前有限公开验证批次，不读取 test/protected、不重新生成全量缓存。
+
+### 眼电跨模态传递下的拟合权重序列（2026-11-09）
+
+本节设计经用户后续明确要求执行，固化为
+[`SSM-OCULAR-MODALITY-WEIGHT-v1`](../experiments/configs/physiology_semantic_tokenizer/shared_driver_ocular_modality_weight_v1.yaml)。
+问题是：τ/β 允许拟合时，相对提高 EEG 或
+Hb 权重，怎样影响眼电对 SSM 代理、HbO/HbR-S 及最终 EEG-S 的传递。旧权重
+实验的综合噪声分数混合 EEG 和 Hb 扰动，本序列把两个传播方向分别报告。
+
+**有限面板与不变量。** 复用
+`20261107_cache_ocular_confirmation_v1` 的已保留输入、三位置、原生采样率、
+训练功率参考和三档眼电。取 Single-Trial subject_02/subject_14、Simultaneous
+VP014/VP017、REFED 9、Visual S08，共六名被试。其两个保留窗口的三个基线
+ROI 均数值合格；VP005 已知不收敛基线继续作为来源失败记录，不混入这组
+完整配对的主面板。第一记录用于定向筛查，第二记录用于同被试跨记录复核。
+这是已观察公开开发数据上的机制消融和配置比较，不是独立未见被试评价。
+Visual 只有一名被试，按该实际支持报告。
+
+固定数据集级 PCA、个体尺度、目标函数 SD、滤波、初态与驱动正则、训练统计
+和功率上限 cap=1；本轮不混入个体 PCA、尺度校准或 S/O 算法修改。所有主
+条件独立重拟合驱动、初态、τ、β，保留原 log 参数先验 SD=0.125、边界、
+三个起点及固定参数热启动；τ/β 每窗每 ROI 为常数，不作为时变曲线估计。
+实测眼电条件只改 EEG，Hb 输入逐点相同；相同窗口的所有权重共享同一注入。
+
+**权重面板。** 顺序统一为 EEG/HbO/HbR；三个平方误差权重总和归一到 3，
+保持数据项相对正则的总系数一致。HbO/HbR 之间保持等权，不增加单色团偏好。
+
+| 比例 | 实际平方误差乘数 | 作用 |
+| --- | --- | --- |
+| 4:1:1 | 2, 0.5, 0.5 | EEG 偏重对照 |
+| 1:1:1 | 1, 1, 1 | 当前缓存基线 |
+| 1:2:2 | 0.6, 1.2, 1.2 | 温和 Hb 偏重 |
+| 1:4:4 | 1/3, 4/3, 4/3 | 较强 Hb 偏重 |
+
+不用不同权重各自的加权目标函数值给候选排名。所有评价均回到同一冻结 SD
+及测量坐标，逐个模态报告；权重总和一致也不等同于实际残差贡献相同。
+
+**序列一：直接检查 SSM。** 六个第一记录窗口，各比较未注入和 1 倍原窗口
+RMS 眼电，三 ROI、四权重，形成 144 个 ROI 条件。等权的 36 个条件已有，
+先完成软件/张量检查和合成 dry-run，再核对等权配置及基线复现；同源结果
+可复用，其余新增 108 个。HbO/HbR 的预测增量 RMS/原冻结
+分量 SD 为主终点，主支持取 [30,85) 秒，以覆盖注入之后的血流响应；另列
+[30,50) 和 [50,85) 的有符号均值、正/负峰，定位 HbO 上抬及延迟效应。
+EEG 端主比较预测代理增量 RMS/冻结 EEG 代理 SD，尚未经过电压功率约束。
+预测代理增量/观测代理增量的范数比作为传递诊断；观测增量 RMS 不超过冻结
+代理 SD 的 1e-6 时标为分母不足，保留主指标而不把该比值设为零或参与平均。
+记录 τ、β 注入前后数值与模型实际血管输入 βr 的变化，检验是否由参数补偿
+维持 Hb 拟合。基线各模态 NRMSE/相关、[5,25) 秒支持外变化及所有失败同时报告。
+
+**序列二：分离电压构建的贡献。** 对序列一同一批预测构建 EEG/Hb S/O。
+EEG 同时构建“污染条件重拟合代理提供参考”和“冻结该权重注入前代理参考”
+两条路径。后一条件仍使用相同污染电压、训练统计及 cap，不增加 SSM 拟合，
+也不把主实验的 τ/β 改为固定。比较 ΔS 全量、冻结参考下的 ΔS 及二者差，
+分别展示 SSM 代理层与电压目标层的敏感性。Hb-O 的变化等于 −ΔHb-S，
+作为解释图展示，不重复计为独立成功证据。
+
+**序列三：有限复核。** 筛查后最多保留一个候选与等权基线。用六名被试的
+第二记录重复未注入/1 倍条件；在六个第一记录补看 0.5/2 倍强度。等权条件
+全部复用，新候选分别增加 36、36 个 ROI 条件。不在第二记录上继续调权重。
+如没有候选满足下述约束，停止候选扩展并报告权衡，不自动加大到 Hb 百倍权重。
+
+**序列四：方向性及保留核对。** 为判断建议能否用于一般缓存，而不只是保护
+“Hb 干净、EEG 被污染”的情况，候选与等权在六个第一记录各增加 HbO-only、
+HbR-only 平滑干扰：仅预先由眼电空间权重确定的最前部 ROI，幅度为对应冻结
+被试 SD，EEG 与另一色团不变。每条件仅重拟合改变的 ROI，其余基线复用，
+共新增 24 个 ROI 条件。分别评价 Hb 扰动保留与向 EEG 代理/电压的传播，不与
+眼电分数平均为一个“综合抗噪”分数。
+
+同时做最小的模型内阳性核对：使用两组合法已知 τ/β 和快/慢两种驱动包络，
+从同一前向模型生成配套 EEG 代理与 Hb 响应；每对保持相同初态及同一噪声实现，
+仅加入已知驱动变化。四个合成配对、两权重、前后条件共 16 个拟合单元。
+比较恢复的驱动增量与生成器真值，检查权重变化是否仅靠削弱 EEG 响应换取
+稳定。本项只检验 SSM 层，不能冒称恢复了真实 EEG 电压或生理真值；不再把
+“只加 10/35 Hz 电压而 Hb 不变”的旧探针当作耦合神经事件保留证据。
+
+**预设比较和停止规则。** 筛查的工程候选要求：相对等权，分层平均 HbO-S
+扰动 RMS 至少下降 20%，HbR-S 扰动不增加，冻结尺度下 EEG 代理预测变化不增加；
+未注入时 EEG/HbO/HbR 的固定尺度 NRMSE 增量各不超过 0.05，EEG-S 与原输入
+相关下降不超过 0.02，无新增数值失败。HbO 改善方向需在每个有支持的数据集
+一致。若多个候选满足，优先选择距离等权最近的比例。EEG 代理扰动若也下降
+至少 20%，才额外标注 SSM 双模态抗扰动改善；否则只标注 Hb 保护改善。
+这些是预先提出的工程容差，不是生理标准或显著性结论。
+
+第二记录和强度复核保留相同护栏。反向 Hb 干扰与耦合合成的归一化恢复误差
+若比等权增加超过 0.05，则该候选不能推荐为通用缓存配置，可报告为特定噪声
+条件下的取舍。所有计划条件和失败保留，不以成功子集代替分母。先 ROI/窗口
+在被试内汇总，再数据集内被试等权、最后四库等权；另列每 ROI 值和最大变化，
+避免空间平均掩盖局部抬升。六名被试而非时间点/ROI 是独立统计单元；只给配对
+差和分布，不据此作人群优越性判断。未注入观测用于保真护栏，不作为干净真值。
+
+**预计工作量与交付。** 若进入全部复核，约 204 个新增实测 ROI 条件及 16 个
+合成拟合单元；计数中的每个实测单元包含原求解器内部的固定参数热启动。
+已保留的等权数据与数值结果先验算同源后复用，不新读原始数据，不启动全量
+缓存。输出分层统计及全体面板：代理观测/预测前后、HbO/HbR 实测与 S/O 前后、
+各分量增量、τ/β 参数变化、EEG 目标冻结参考对照。时间支持、纵轴与归一化
+分母固定，所有候选与等权配对。执行时仍按既有入口、检查和持久监督器合同
+实现。执行状态由研究注册表持有，筛查结果与是否触发后续序列由运行的
+`summary.json` 和 `selection.json` 持有。每名被试至少导出四种配置的原始/
+注入后 EEG、SSM 三路输出、EEG-S、EEG-O 对比，并在对话汇报数值与读图结论。
+
+## S/O traditional physiology feature audit — 2026-11-09
+
+The [versioned feature contract](../experiments/configs/physiology_semantic_tokenizer/shared_driver_so_physiology_features_v1.yaml)
+reuses retained 1:4:4 free-τ/β predictions from the two weight experiments. Its
+metadata panel comprises fourteen validation subjects (four/four/three/three
+across Single/Sim/REFED/Visual), plus twelve retained training windows used only
+for feature scales. The six recent subjects provide a separate ocular panel;
+the older injection protocol is not pooled. No new fit or raw/protected read is
+part of this audit. Source model settings, reference arrays and weights must
+match before pooling. Native EEG S/O must reproduce the saved display target;
+Hb S/O use the retained arrays exactly.
+
+The EEG comparison uses the same 200 Hz, 1–45 Hz analysis view for X/S/O,
+three nonoverlapping 20-second segments, and mean Welch PSD with four-second
+Hann windows. Unfiltered native RMS, kurtosis and spectra remain separate
+checks. Hb uses the original 10 Hz signal over 5–85 seconds without additional
+filtering. Its 0.0125 Hz spectral resolution supports a primary 0.0375–0.2 Hz
+comparison; lower frequencies have fewer than three cycles and are descriptive.
+RMS, Fisher excess kurtosis, skewness, Hjorth statistics, spectral shape/band
+powers and HbO–HbR correlation are paired to the original measured signal.
+The spectral cross term is retained: additive S/O are not an orthogonal power
+partition. Original measurements are the reference, not clean neural truth.
+
+Within each subject, paired channel/segment statistics use the median; subjects
+are then averaged within dataset, followed by equal dataset averaging. Full
+point tables, subject values and invalid-feature counts accompany these means.
+Separate EEG/HbO/HbR shape and shape-plus-amplitude embeddings use feature
+scales fitted only on training originals, with equal dataset/subject weights.
+PCA is also fitted on training originals. t-SNE jointly embeds the selected
+analysis points; two perplexities and three seeds are retained without choosing
+a favorable map. The six-subject intervention uses joint before/after coordinates,
+deduplicating unchanged Hb inputs. Standardized original-space paired distances
+and local-neighborhood trustworthiness accompany the plots; cluster separation
+is not a physiological acceptance criterion. Complete the fixed feature grid
+and report its results without expanding the panel or rebuilding the cache.
+
+## Individual PCA and 1:4:4 cache warm-start comparison — 2026-11-09
+
+The [bounded comparison contract](../experiments/configs/physiology_semantic_tokenizer/shared_driver_warmstart_pca_weight_v1.yaml)
+compares standard optimization against a single cached-solution start under the
+same new individual-PCA, positive-scale and normalized 1:4:4 objective. Select
+one metadata-first training subject per dataset; fit the first full record/window
+at first/middle/last available native pair, plus the same REFED subject's first
+short record. The fixed panel contains fifteen window/pair units from four
+subjects, without replacing failures. All admitted records/windows/sites of each
+selected subject enter that individual's PCA and scales.
+
+The cold input route re-extracts native EEG with the central reader and reads the
+existing Hb measurement cache without another filter. The warm input route reuses
+v1 prepared features. Compare all features/masks, independently estimated PCA
+and scales, then the new three-component targets before fitting. This diagnostic
+allows only these training subjects and excludes test/protected arrays before
+reads. Raw processing and calibration time are reported separately from solver
+time; common preparation is not credited as a numerical optimization speedup.
+
+Cold optimization retains the fixed-parameter nuisance fit and three free τ/β
+starts. Warm optimization takes the old free driver, physical initial state and
+τ/β as one numerical guess and optimizes all variables under the new objective,
+without a fixed prefit or automatic fallback. It does not assert that the old
+and new PCA coordinates represent the same latent physiology. Both paths use
+CPU float64 structured observation algebra, identical priors/bounds/stopping,
+one numerical thread and the same final-bin exclusion. Each pair runs twice in
+one worker with counterbalanced order after an untimed synthetic JIT warmup.
+
+Report qualification, total and free-stage time, new objective, evaluations,
+parameter changes and prediction RMS differences divided by the fixed new
+subject SD, with every failed/unavailable unit retained. Objective relative
+change uses (warm−cold)/abs(cold); engineering checks use 1e−6 for objective,
+1e−3 subject SD for prediction RMS and 1e−3 relative parameter change. These are
+comparison diagnostics, not physiological tolerances. The fixed panel ends with
+paired tables and three-modality waveforms. It does not launch the full new cache
+or switch any downstream experiment source. Registered lifecycle remains owned
+by the research-state registry; numerical outcomes remain in the run artifacts.
+
+## Full individual-PCA 1:4:4 cache generation — 2026-11-09
+
+The [v3 cache contract](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v3.yaml)
+implements the user's full-cache launch after the bounded warm-start comparison.
+Reuse the verified v1 prepared inputs and immutable time/identity plan; recompute
+all individual coordinates. Produce free τ/β reconstructions under sum-three
+1:4:4 weights, with cached-solution initialization and explicit standard fallback.
+No old fit becomes a new terminal outcome. Public unlabelled teacher adaptation
+uses the existing data contract and excludes protected material.
+
+Software/synthetic checks precede source-array access. The training-only pilot
+uses first full records, short REFED and each dataset's training subject with the
+largest signed-PC direction change. Compare standard CPU, cached-start CPU and
+cached-start CUDA at production coordinates. Preserve all statuses; subjects
+whose warm result is worse than the standard objective by more than 1e−6 use the
+standard production route. CPU/CUDA checks require matching qualification and
+1e−4 prediction/parameter tolerances on jointly qualified cases. Pilot results
+remain diagnostic rather than silently reused production outcomes.
+
+Full execution uses a frozen source snapshot, bounded user-systemd supervision,
+CPU/CUDA allocation grounded in the retained resource measurements, resumable
+atomic tasks and final population verification. Warm failures and fallback
+outcomes remain auditable. Completion requires all planned identities terminal
+and independent arrays/objective checks. A pending or numerically failed task is
+not a usable target. The registry owns lifecycle; the run's plan, coordinates,
+execution/progress, task records and final summary own generated evidence.

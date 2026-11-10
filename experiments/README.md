@@ -352,13 +352,42 @@ same-condition statistical analysis.
 The separately versioned full reconstruction cache uses this same entry with
 `--tak-reconstruction-cache --cache-stage
 <check|plan|synthetic|pilot|produce|verify> --run-dir <fresh_run>`. The default
-[`v2 contract`](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml)
+[`v3 contract`](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v3.yaml)
+uses normalized 1:4:4 observation weights and cached-solution starts with explicit
+standard fallback. It reuses verified input features and independently
 fits PC1 and positive scales independently per dataset/subject, frozen across
 all that subject's records and sites. The population coordinate supplies only
-reference scoring SDs. The retained
+reference scoring SDs. Its pilot compares standard CPU, warm CPU and warm CUDA
+using production coordinates, including large-PCA-change training subjects.
+Successful warm tasks omit the uncomputed fixed baseline; consumers use free
+predictions and validity flags. The earlier individual-PCA
+[`v2 contract`](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml)
+remains explicit and equal-weight. The retained
 [`v1 contract`](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml)
 remains available through explicit `--config` and preserves shared PCA; the
 versions require separate output namespaces and cannot reuse each other's fits.
+
+Read-only v1/v3 descriptive comparisons use
+[`analyze_tak_cache_versions.py`](scripts/analyze_tak_cache_versions.py) with
+`--v1 <completed_v1> --v3 <completed_v3> --output <fresh_v3_child> --stage
+<plan|pilot|run|summarize|report>`. The frozen analysis configuration owns the full
+metadata census, outcome-independent spectral panel, common-success pairing,
+and record-then-subject aggregation. `report` writes a fresh bitmap/HTML export
+with robust amplitude and spectral summaries. Pilot/run use a durable supervisor;
+no raw inputs, labels, or refits are read or generated. Synthetic frequency,
+pairing and aggregation checks live in `test_tak_cache_version_analysis.py`.
+
+The same owner provides `--fnirs-audit --run <completed_v3> --features
+<retained_so_feature_run> --comparison <completed_v1_v3_audit> --output
+<fresh_v3_child> --stage <plan|pilot|run|summarize|report>` for the Hb amplitude,
+morphology and residual-cancellation census. It reuses retained waveform
+metadata and the fixed spectral panel, independently checks residual algebra
+on one saved task per subject, and joins Visual's native channel-reference
+metadata. Pilot/run use a durable supervisor; reports retain subject-level
+rates, local-amplitude strata, undefined metrics and numerical failures.
+`--stage examples --example-export <fresh_audit_child>` adds a bounded real
+HbO/HbR waveform comparison in the saved common subject Hb coordinate, with
+source-file unit/header checks and replay against retained prepared inputs.
 
 The bounded [three-subject normalization comparison](configs/physiology_semantic_tokenizer/shared_driver_normalization_comparison_v1.yaml)
 uses the same entry with `--normalization-comparison --normalization-stage
@@ -414,7 +443,41 @@ split exclusion, amplitude/support invariants, numerical fits and projections.
 `summarize --cache-ocular-export <fresh_run_child>` creates a versioned figure
 and HTML export, requiring exact reproduction of the retained scientific summary;
 it leaves the original report, numeric evidence and fitted cache unchanged.
-Both explicitly fit τ/β at log-prior SD 0.125. Fits use 90 s,
+The [ocular modality-weight comparison](configs/physiology_semantic_tokenizer/shared_driver_ocular_modality_weight_v1.yaml)
+uses `--ocular-modality-weight --modality-weight-stage <plan|pilot|screen|analyze|verify|report|parameters>`.
+It reads only its six-subject retained development panel, verifies equal-weight
+reuse, and compares direct SSM responses separately from voltage power-cap targets.
+The supervised pilot runs four weighted synthetic fits and eight measured fits;
+screening preserves the declared stopping rule before any candidate continuation.
+Tests in `test_tak_reconstruction_cache.py` cover frozen-scale metrics and enforcing
+fidelity guards even when Hb disturbance improves. Every subject receives a
+four-configuration waveform panel and a model-versus-target change panel.
+`parameters` reads retained fits to export paired τ/β sensitivity: common qualified
+ROI support for cross-weight summaries, plus all qualified 1:4:4 subject values.
+It preserves failed locations, distinguishes signed and absolute relative changes,
+and writes a fresh parameter review without refitting or changing the source results.
+The [individual-PCA 1:4:4 warm-start comparison](configs/physiology_semantic_tokenizer/shared_driver_warmstart_pca_weight_v1.yaml)
+uses `--warmstart-comparison --warmstart-stage <plan|synthetic|prepare|pilot|run|report>`.
+It reconstructs selected training subjects' native EEG features, checks retained
+input equivalence, and compares standard optimization with old-cache starts under
+the same new coordinates and weights. Timing separates preparation, calibration
+and fitting; repeated pairs use counterbalanced order. Tests in
+`test_tak_reconstruction_cache.py` cover explicit-start routing, unchanged weighted
+observations and the pre-read training boundary. Production cache defaults remain
+unchanged by this diagnostic. `report --warmstart-export <fresh_export>`
+re-exports the same numerical comparison into a fresh report directory.
+The [S/O physiology feature audit](configs/physiology_semantic_tokenizer/shared_driver_so_physiology_features_v1.yaml)
+uses `--so-physiology-features --feature-stage <plan|pilot|run|report>`.
+It replays retained 1:4:4 native targets, compares spectra and traditional
+features, and exports separate training-scaled t-SNE/PCA views. It performs no
+new SSM fits or raw dataset reads. Use `report --feature-export <fresh_export>`
+for a revised figure export while preserving retained numerical results.
+`src/analysis/physiological_patch_features.py`
+owns the native audit feature definitions, separate from its legacy Atlas API;
+`test_physiological_patch_features.py` checks physical-unit invariance, known
+spectra, undefined features and cross-power cancellation, and
+`test_dual_component_power_cap.py` covers target construction.
+The source cache fitting arms explicitly fit τ/β at log-prior SD 0.125. Fits use 90 s,
 or the actual shorter REFED support, and the corrected Visual native identities.
 `produce` resumes matching terminal work, completes preparation/calibration,
 fits the fixed reference and τ/β, then independently verifies the saved arrays.

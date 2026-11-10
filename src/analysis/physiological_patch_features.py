@@ -1,12 +1,15 @@
 """Versioned, channel-resolved physiological patch feature extraction.
 
-The extractors in this module operate on the canonical robust-SD normalized
+The legacy patch extractors operate on the canonical robust-SD normalized
 signals used by the physiology tokenizer.  Amplitude-derived features therefore
 do *not* have physical voltage or concentration units.
 
 Both patch-major ``[batch, patch, channel, sample]`` arrays and legacy
 continuous ``[batch, channel, sample]`` arrays are accepted.  The latter require
 ``patch_size`` so that the token-aligned patches can be reconstructed.
+
+The separate ``supervision_*`` audit functions preserve native amplitude units
+and use explicit training references; they do not relax the legacy v1 contract.
 """
 
 from __future__ import annotations
@@ -996,7 +999,94 @@ def extract_fnirs_patch_features(
     )
 
 
+def supervision_signal_features(values, sample_rate_hz, modality, reference_rms):
+    """Float64 native-unit supervision audit, separate from the canonical v1 API.
+
+    EEG callers provide the declared common-band analysis signal; Hb is unchanged.
+    Reference RMS is fixed from training originals, never fitted to S/O or a window.
+    Returned PSD is in reference-RMS-squared/Hz; amplitude fields retain native units.
+    """
+    from scipy.signal import welch
+    from scipy.stats import kurtosis, skew
+    x=np.asarray(values,dtype=np.float64);q=np.asarray(reference_rms,dtype=np.float64)
+    if x.ndim!=2 or q.shape!=(x.shape[1],) or not np.isfinite(x).all() or not np.isfinite(q).all() or np.any(q<=0):
+        raise ValueError('Finite time-by-channel signals and positive training reference RMS required')
+    if modality not in ('EEG','HbO','HbR') or sample_rate_hz<=0:raise ValueError('Declared signal modality and sampling rate required')
+    z=x/q;std=z.std(axis=0);valid=std>1e-12;mean=z.mean(axis=0);rms=np.sqrt(np.mean(z*z,axis=0))
+    first=np.diff(z,axis=0)*sample_rate_hz;second=np.diff(first,axis=0)*sample_rate_hz
+    with np.errstate(divide='ignore',invalid='ignore'):
+        mobility=np.sqrt(first.var(axis=0))/std
+        complexity=(np.sqrt(second.var(axis=0)/first.var(axis=0)))/mobility
+        line=np.mean(abs(first),axis=0)/std
+    nperseg=min(len(z),round(4*sample_rate_hz)) if modality=='EEG' else len(z)
+    f,p=welch(z,fs=sample_rate_hz,window='hann',nperseg=nperseg,noverlap=nperseg//2 if modality=='EEG' else 0,
+        nfft=nperseg,detrend='constant',scaling='density',average='mean',axis=0)
+    df=f[1]-f[0];low,high=(1.,45.) if modality=='EEG' else (.0375,.2);core=(f>=low-1e-12)&(f<high-1e-12)
+    power=p[core].sum(axis=0)*df;prob=p[core]/np.maximum(p[core].sum(axis=0),1e-300)
+    entropy=-(prob*np.log(np.maximum(prob,1e-300))).sum(axis=0)/np.log(core.sum())
+    centroid=(f[core,None]*prob).sum(axis=0);cdf=np.cumsum(prob,axis=0)
+    edge=f[core][np.argmax(cdf>=.95,axis=0)];peak=f[core][np.argmax(p[core],axis=0)]
+    features=dict(mean=mean*q,rms=rms*q,std=std*q,mean_ref=mean,rms_ref=rms,std_ref=std,
+        log_rms_ref=np.log10(np.maximum(rms,1e-12)),valid_shape=valid,core_power_ref=power,
+        hjorth_activity=std*std*q*q,hjorth_mobility=mobility,hjorth_complexity=complexity,
+        log_mobility=np.log10(np.maximum(mobility,1e-12)),log_complexity=np.log10(np.maximum(complexity,1e-12)),
+        normalized_line_length=line,log_normalized_line_length=np.log10(np.maximum(line,1e-12)),
+        zero_crossing_rate=np.mean(np.diff(np.signbit(z-mean),axis=0),axis=0)*sample_rate_hz,
+        spectral_entropy=entropy,spectral_centroid=centroid,spectral_edge95=edge,spectral_peak=peak)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore',RuntimeWarning)
+        features['excess_kurtosis']=kurtosis(z,axis=0,fisher=True,bias=False)
+        features['skewness']=skew(z,axis=0,bias=False)
+    bands=(('delta',1,4),('theta',4,8),('alpha',8,13),('beta',13,30),('gamma',30,45)) if modality=='EEG' else (('slow',.0375,.1),('fast',.1,.2))
+    for name,a,b in bands:
+        value=p[(f>=a-1e-12)&(f<b-1e-12)].sum(axis=0)*df
+        features['power_'+name+'_ref']=value;features['relative_'+name]=value/np.maximum(power,1e-300)
+    if modality!='EEG':
+        outside=p[f>=.2-1e-12].sum(axis=0)*df
+        features['outband_power_ref']=outside;features['outband_fraction']=outside/np.maximum(outside+power,1e-300)
+        features['log_outband_ratio']=np.log10(np.maximum(outside,1e-12)/np.maximum(power,1e-12))
+        t=np.arange(len(z))/sample_rate_hz;tc=t-t.mean()
+        features['slope_over_sd']=(tc[:,None]*(z-mean)).sum(axis=0)/np.sum(tc*tc)/np.maximum(std,1e-300)
+        for lag_s in (1,5):
+            lag=round(lag_s*sample_rate_hz);u=z[:-lag];v=z[lag:];u=u-u.mean(0);v=v-v.mean(0)
+            features['autocorr_'+str(lag_s)+'s']=np.sum(u*v,axis=0)/np.maximum(np.sqrt(np.sum(u*u,axis=0)*np.sum(v*v,axis=0)),1e-300)
+    undefined=['excess_kurtosis','skewness','hjorth_mobility','hjorth_complexity','log_mobility','log_complexity',
+        'normalized_line_length','log_normalized_line_length','zero_crossing_rate','spectral_entropy','spectral_centroid','spectral_edge95','spectral_peak']
+    for key in undefined:features[key]=np.where(valid,features[key],np.nan)
+    return features,f,p
+
+
+def supervision_spectral_triplet(x,s,o,sample_rate_hz,modality,reference_rms):
+    """PSD and real cross term with identical linear Welch operators for X=S+O."""
+    from scipy.signal import welch,csd
+    x,s,o=(np.asarray(v,dtype=np.float64) for v in (x,s,o));q=np.asarray(reference_rms,float)
+    if x.shape!=s.shape or x.shape!=o.shape or x.ndim!=2 or q.shape!=(x.shape[1],) or np.any(q<=0):
+        raise ValueError('Matching finite signal triplet and positive reference required')
+    if not all(np.isfinite(v).all() for v in (x,s,o)):raise ValueError('Nonfinite spectral input')
+    nperseg=min(len(x),round(4*sample_rate_hz)) if modality=='EEG' else len(x)
+    settings=dict(fs=sample_rate_hz,window='hann',nperseg=nperseg,noverlap=nperseg//2 if modality=='EEG' else 0,
+        nfft=nperseg,detrend='constant',scaling='density',average='mean',axis=0)
+    spectra=[welch(v/q,**settings) for v in (x,s,o)];f=spectra[0][0];p=np.stack([v[1] for v in spectra])
+    cross=2*np.real(csd(s/q,o/q,**settings)[1]);error=np.max(abs(p[0]-p[1]-p[2]-cross))
+    relative_error=float(error/max(float(np.max(p)),1e-300))
+    return f,p,cross,relative_error
+
+
+def supervision_embedding_features(modality,view):
+    """Nonredundant amplitude coordinate added to a declared shape feature view."""
+    if view not in ('shape','shape_amplitude'):raise ValueError('Unknown supervision feature view')
+    names=['excess_kurtosis','skewness','log_mobility','log_complexity','log_normalized_line_length',
+        'zero_crossing_rate','spectral_entropy','spectral_centroid','spectral_edge95']
+    if modality=='EEG':names+=['relative_'+v for v in ('delta','theta','alpha','beta','gamma')]
+    elif modality in ('HbO','HbR'):names+=['relative_slow','log_outband_ratio','slope_over_sd','autocorr_1s','autocorr_5s']
+    else:raise ValueError('Unknown modality')
+    return names+(['log_rms_ref'] if view=='shape_amplitude' else [])
+
+
 __all__ = [
+    "supervision_signal_features",
+    "supervision_spectral_triplet",
+    "supervision_embedding_features",
     "CANONICAL_SIGNAL_UNIT",
     "DEFAULT_FEATURE_SPEC",
     "FEATURE_SPEC_SCHEMA_VERSION",

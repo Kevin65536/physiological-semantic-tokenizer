@@ -10,7 +10,37 @@ from src.analysis.physiological_patch_features import (
     PhysiologicalPatchFeatureSpec,
     extract_eeg_patch_features,
     extract_fnirs_patch_features,
+    supervision_signal_features,
+    supervision_spectral_triplet,
 )
+
+
+def test_supervision_features_resolve_band_and_preserve_unit_invariance():
+    fs=200;t=np.arange(4000)/fs;x=np.sin(2*np.pi*10*t)[:,None]
+    a,f,p=supervision_signal_features(x,fs,'EEG',np.ones(1))
+    b,_,_=supervision_signal_features(x*1e-6,fs,'EEG',np.ones(1)*1e-6)
+    assert a['spectral_peak'][0]==10 and a['relative_alpha'][0]==pytest.approx(1.)
+    assert a['power_alpha_ref'][0]==pytest.approx(.5)
+    assert a['excess_kurtosis'][0]==pytest.approx(-1.5,abs=.002)
+    for name in ['excess_kurtosis','skewness','hjorth_mobility','hjorth_complexity','log_rms_ref','relative_alpha']:
+        np.testing.assert_allclose(a[name],b[name],atol=1e-12,rtol=1e-12)
+    np.testing.assert_allclose(b['rms'],a['rms']*1e-6)
+
+
+def test_supervision_spectra_keep_negative_cross_term_instead_of_energy_partition():
+    fs=200;t=np.arange(4000)/fs;x=np.sin(2*np.pi*10*t)[:,None]
+    f,p,cross,error=supervision_spectral_triplet(x,2*x,-x,fs,'EEG',np.ones(1))
+    assert error<1e-12
+    np.testing.assert_allclose(p[1],4*p[0],atol=1e-12);np.testing.assert_allclose(p[2],p[0],atol=1e-12)
+    np.testing.assert_allclose(cross,-4*p[0],atol=1e-12)
+
+
+def test_supervision_zero_variance_and_Hb_outband_are_explicit():
+    a,_,_=supervision_signal_features(np.ones((4000,1)),200,'EEG',np.ones(1))
+    assert not a['valid_shape'][0] and np.isnan(a['excess_kurtosis'][0])
+    t=np.arange(800)/10;x=(np.sin(2*np.pi*.075*t)+.5*np.sin(2*np.pi*.5*t))[:,None]
+    a,_,_=supervision_signal_features(x,10,'HbO',np.ones(1))
+    assert a['outband_fraction'][0]==pytest.approx(.2,abs=1e-10)
 
 
 def _coordinate(batch, name):

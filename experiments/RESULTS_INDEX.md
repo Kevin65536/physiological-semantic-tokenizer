@@ -197,6 +197,63 @@ at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
 
+The [v3 individual-PCA 1:4:4 cache plan](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/plan.json)
+retains the original identities and joins in a separate generation. Its
+[execution record](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/execution.json),
+[pilot](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/pilot/summary.json)
+and [configuration](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v3.yaml)
+identify preparation, guarded warm starts and backend validation. Completion and
+availability are determined by the run's final summary/verification, not this index.
+
+The [v3 final summary](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/summary.json)
+and [independent verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/verification.json)
+own the terminal population and validity counts. The retained
+[v1/v3 paired statistical audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/statistical_comparison_20261110_v1/summary.json)
+and [illustrated comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/statistical_comparison_20261110_v1/report_v1/report.html)
+link the full metadata census, subject-level paired errors/correlations, and a
+fixed spectral panel. Sampling, failed pairs and near-constant Hb denominators
+are retained in that audit; it performs no refits.
+
+The [fNIRS cancellation census](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/summary.json)
+and [dataset/channel comparison report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/report.html)
+retain the complete v3 amplitude/morphology denominator, subject-level severity,
+input-amplitude strata, the native Visual channel-reference grouping, and the
+original figure panel as a separate population. Frequency comparisons reuse
+the outcome-independent retained spectral panel; no model fits are added.
+The [four-record HbO/HbR comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/examples_20261110_v2/report.html)
+reuses frozen subject normalization and retains native unit/header checks,
+exact selected identities and input/S/O arrays. Its source-header observation
+about Visual's `Exception Ch` is local to the selected record.
+
+The [individual-PCA 1:4:4 warm-start comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_warmstart_pca_weight_v1/summary.json)
+retains [paired precision/timing](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_warmstart_pca_weight_v1/report_v2/paired_metrics.csv),
+[independent objective verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_warmstart_pca_weight_v1/verification.json),
+[waveform report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_warmstart_pca_weight_v1/report_v2/report.html)
+and [four-subject waveform overview](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_warmstart_pca_weight_v1/report_v2/subjects_overview.png).
+Native preparation, individual coordinate fitting and solver time are separated;
+repeated pairs are timing replicates rather than independent subjects. The
+versioned report corrects NRMSE column labels without changing the retained
+numerical summary; the first export remains available in the same run.
+
+The [1:4:4 S/O physiological feature audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_so_physiology_features_v1/summary.json)
+retains [paired subject statistics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_so_physiology_features_v1/subject_features.csv),
+[training-only feature scales](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_so_physiology_features_v1/feature_scalers.json),
+[embedding diagnostics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_so_physiology_features_v1/embedding_diagnostics.csv)
+and the [spectra, feature and t-SNE/PCA report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_so_physiology_features_v1/report_v3/report.html).
+Native replay, cross-spectral identities and subject/dataset aggregation remain
+traceable to the exact retained windows in its plan.
+
+The [ocular modality-weight comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_ocular_modality_weight_v1/summary.json)
+retains the [prespecified candidate decision](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_ocular_modality_weight_v1/selection.json),
+[matched ROI effects](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_ocular_modality_weight_v1/paired_weight_effects.csv),
+[objective/input verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_ocular_modality_weight_v1/verification.json)
+and [six-subject four-configuration waveform report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_ocular_modality_weight_v1/report/report.html).
+The [paired τ/β parameter review](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_ocular_modality_weight_v1/parameter_review_v1/report.html)
+compares changes on common qualified ROI support and retains a full 1:4:4
+subject/ROI view, including direction and magnitude rather than only group means.
+Direct SSM sensitivity, baseline observation fidelity and voltage target construction
+are evaluated separately; failures remain in the decision denominator.
+
 The [cached-window ocular confirmation](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/summary.json)
 retains [all actual refit statuses](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/fit_status.csv),
 [native-rate target metrics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_cache_ocular_confirmation_v1/target_metrics.csv),

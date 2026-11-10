@@ -186,6 +186,36 @@ def test_cache_ocular_selection_is_metadata_only_and_excludes_previous_and_test(
     assert all(r['subject']=='s2' and r['window']['key']=='1' for r in selected)
 
 
+def test_modality_weight_metrics_distinguish_model_change_and_unchanged_Hb():
+    cfg=runner.modality_weight_config();y=np.zeros((900,3));sd=np.array([1.,2.,4.])
+    p=y.copy();p[300:850]=sd;observed=y.copy();observed[300:850,0]=2.
+    result=runner.modality_weight_delta_metrics(y,y,observed,p,sd,cfg)
+    assert result['HbO_change']==pytest.approx(1)
+    assert result['HbR_late_mean']==pytest.approx(1)
+    assert result['EEG_outside_RMS']==0 and result['HbO_baseline_NRMSE']==0
+    assert result['proxy_transfer_ratio']==pytest.approx(.5)
+    assert runner.modality_weight_delta_metrics(y,y,y,p,sd,cfg)['proxy_transfer_ratio'] is None
+
+
+def test_modality_weight_selection_keeps_fidelity_guard_and_stops_without_candidate():
+    import pandas as pd
+    cfg=runner.modality_weight_config();rows=[]
+    for weight in cfg['weights']:
+        rows.append(dict(weight=weight,HbO_change=1.,HbR_change=1.,EEG_change=1.,
+            EEG_baseline_NRMSE=.1,HbO_baseline_NRMSE=.1,HbR_baseline_NRMSE=.1,EEG_S_correlation=.9))
+    frame=pd.DataFrame(rows);frame.loc[frame.weight=='hb2',['HbO_change','HbR_change','EEG_change']]=[.7,.9,.8]
+    ds=pd.concat([frame.assign(dataset=d) for d in ('a','b')]);counts={w:dict(qualified_fits=36,qualified_targets=12) for w in cfg['weights']}
+    assert runner.modality_weight_select(frame,ds,counts,cfg)['candidate']=='hb2'
+    matched=frame.set_index('weight').loc['equal'].copy();matched['HbO_change']=.8
+    matched_ds=ds[ds.weight=='equal'].set_index('dataset').copy();matched_ds['HbO_change']=.8
+    paired=runner.modality_weight_select(frame,ds,counts,cfg,{'hb2':dict(aggregate=matched,datasets=matched_ds,ROIs=17)})
+    assert paired['candidate'] is None and not paired['candidates'][0]['checks']['HbO_reduction']
+    frame.loc[frame.weight=='hb2','EEG_baseline_NRMSE']=.151
+    result=runner.modality_weight_select(frame,ds,counts,cfg)
+    assert result['candidate'] is None and not result['continuation_required']
+    assert not result['candidates'][0]['checks']['baseline_fidelity']
+
+
 def test_tau_beta_SO_frozen_control_changes_input_but_holds_prediction(tmp_path,monkeypatch):
     import json
     import src.data.dual_component_tokenizer as voltage_module
@@ -310,7 +340,7 @@ def test_population_pca_uses_training_only_while_individual_scales_use_only_own_
 
 
 def test_individual_pca_uses_only_own_subject_and_freezes_across_records(tmp_path):
-    cfg,_=runner.tak_cache_config()
+    cfg,_=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml')
     assert cfg['schema']=='shared_driver_tak_subject_cache_v2'
     cfg=deepcopy(cfg);cfg['data']['datasets']=['fixture']
     rng=np.random.default_rng(61);records=[];chunks={};paths={}
@@ -359,7 +389,7 @@ def test_individual_pca_uses_only_own_subject_and_freezes_across_records(tmp_pat
 
 def test_cache_versions_keep_prior_contract_and_reject_unreviewed_projection(tmp_path):
     import yaml
-    new,core=runner.tak_cache_config()
+    new,core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml')
     old,old_core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v1.yaml')
     assert old['calibration']['projection']=='one_training_subject_only_PC1_per_dataset_all_available_sites'
     assert new['calibration']['projection']=='one_PC1_per_dataset_subject_all_available_sites'
@@ -415,3 +445,106 @@ def test_execution_capacity_rejects_cgroup_path_escape(tmp_path,monkeypatch):
     monkeypatch.setattr(runner.os,'sched_getaffinity',lambda pid:set(range(64)))
     with pytest.raises(ValueError,match='cgroup path'):
         runner.tak_cache_worker_capacity(cgroup_root=tmp_path/'cg',membership_path=membership)
+
+
+def test_so_feature_audit_uses_training_only_scales_and_preserves_pairing(tmp_path):
+    """A changed evaluation target must not redefine its own feature scale."""
+    import pandas as pd
+    from src.analysis.physiological_patch_features import supervision_signal_features
+    cfg=runner.so_features_config();rows=[]
+    # One synthetic dataset suffices to test the analysis mechanics; production
+    # panel cardinality and split selection are enforced by so_features_plan.
+    for i,role in enumerate(['training']*3+['evaluation']):
+        case=f'fixture_{i}';folder=tmp_path/'cases'/case;folder.mkdir(parents=True)
+        rows.append(dict(case=case,role=role,variants=['baseline','ocular1'] if role=='evaluation' else ['baseline']))
+        records=[]
+        for modality in ('EEG','HbO','HbR'):
+            fs=200 if modality=='EEG' else 10;t=np.arange(fs*(20 if modality=='EEG' else 80))/fs
+            freq=(7+i) if modality=='EEG' else (.05+.0125*i)
+            x=np.sin(2*np.pi*freq*t)+(.1+.1*i)*np.cos(2*np.pi*freq*1.8*t)
+            for condition in rows[-1]['variants']:
+                for branch,gain in [('X',1.)] if role=='training' else [('X',1.),('S',.5),('O',.5)]:
+                    feats,_,_=supervision_signal_features((x*gain)[:,None],fs,modality,np.ones(1))
+                    rec={k:float(v[0]) for k,v in feats.items()};rec.update(case=case,dataset='fixture',subject=str(i),role=role,condition=condition,branch=branch,modality=modality,point_key=f'{case}|{modality}|0',channel='C',segment=0,anchor=True,correlation_to_X=1.,valid_shape=True)
+                    rec.update(native_rms=rec['rms'],native_std=rec['std'],native_mean=rec['mean'],native_excess_kurtosis=rec['excess_kurtosis']);records.append(rec)
+        pd.DataFrame(records).to_csv(folder/'features.csv',index=False)
+        pd.DataFrame([dict(case=case)]).to_csv(folder/'Hb_relation.csv',index=False)
+        runner.write_json(folder/'status.json',dict(status='completed'))
+    runner.write_json(tmp_path/'plan.json',dict(rows=rows))
+    runner.so_features_prepare_embeddings(cfg,tmp_path)
+    before=json.loads((tmp_path/'feature_scalers.json').read_text());pairs=pd.read_csv(tmp_path/'paired_features.csv')
+    np.testing.assert_allclose(pairs.rms_ratio,.5)
+    np.testing.assert_allclose(pairs.core_power_ref_ratio,.25)
+    np.testing.assert_allclose(pairs.query('condition=="baseline"').feature_distance_shape,0,atol=1e-8)
+    assert (pairs.query('condition=="baseline"').feature_distance_shape_amplitude>0).all()
+    folder=tmp_path/'cases'/'fixture_3';a=pd.read_csv(folder/'features.csv');a.loc[a.branch=='S','log_rms_ref']+=20;a.to_csv(folder/'features.csv',index=False)
+    runner.so_features_prepare_embeddings(cfg,tmp_path)
+    assert json.loads((tmp_path/'feature_scalers.json').read_text())==before
+    after=pd.read_csv(tmp_path/'paired_features.csv')
+    assert (after.query('condition=="baseline" and branch=="S"').feature_distance_shape_amplitude>pairs.query('condition=="baseline" and branch=="S"').feature_distance_shape_amplitude).all()
+
+
+def test_explicit_cached_start_replaces_prefit_but_preserves_new_weighted_objective(monkeypatch):
+    _,core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml')
+    calls=[]
+    def record_fit(cfg,arm,y,operator,sd,mask,warm,**kwargs):
+        calls.append(dict(arm=arm['name'],y=y.copy(),sd=sd.copy(),mask=mask.copy(),warm=warm,**kwargs))
+        return dict(converged=False,status='synthetic_no_trajectory')
+    monkeypatch.setattr(runner,'tak_fit_group',record_fit)
+    target=np.ones((60,3));co=dict(eeg_factor=2.,hb_factor=3.,sd=[.025,.03,.02]);weights=runner.weight_so_weights([1,4,4])
+    start=dict(parameter_values=np.array([2.3,.9]),driver=np.full((1,60),.02),initial_state=np.array([[0.,1.,1.,1.,1.]]))
+    runner.tak_cache_fit_arrays(core,target,co,np.ones(3),structured=True,observation_weights=weights)
+    assert [r['arm'] for r in calls]==['tak_fixed','tak_tau_beta'];cold=calls[-1];calls.clear()
+    runner.tak_cache_fit_arrays(core,target,co,np.ones(3),structured=True,observation_weights=weights,initial_solution=start)
+    assert len(calls)==1 and calls[0]['arm']=='tak_tau_beta'
+    np.testing.assert_array_equal(calls[0]['y'],cold['y']);np.testing.assert_array_equal(calls[0]['sd'],cold['sd']);np.testing.assert_array_equal(calls[0]['mask'],cold['mask'])
+    np.testing.assert_allclose(calls[0]['sd'][0],np.asarray(co['sd'])/np.sqrt(weights))
+    assert calls[0]['starts_override'][0] is start
+    assert not calls[0]['mask'][0,-1].any()
+
+
+def test_warmstart_refuses_test_split_before_signal_read(tmp_path):
+    cfg=runner.warmstart_config()
+    assert json.loads(json.dumps(cfg))==cfg
+    with pytest.raises(ValueError,match='Training-only'):
+        runner._warmstart_fit_worker((str(tmp_path),dict(id='forbidden',split='test')))
+    with pytest.raises(ValueError,match='heldout/protected'):
+        runner._warmstart_prepare_worker(({},str(tmp_path),dict(split='test')))
+
+
+def test_v3_default_uses_individual_pca_new_weights_and_same_physiological_penalties():
+    cfg,core=runner.tak_cache_config()
+    old,base=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml')
+    assert cfg['schema']=='shared_driver_tak_subject_cache_v3'
+    assert cfg['calibration']==old['calibration'] and cfg['windows']==old['windows']
+    np.testing.assert_allclose(cfg['model']['observation_weights'],[1/3,4/3,4/3])
+    assert core['solver']==base['solver'] and core['arms']==base['arms']
+    assert cfg['data']['protected_data']=='forbidden'
+
+
+def test_v3_retains_failed_warm_attempt_and_refits_standard(tmp_path,monkeypatch):
+    cfg,core=runner.tak_cache_config();out=tmp_path/'new';source=tmp_path/'old';n=60
+    spec=dict(record_key='fixture/s/r',dataset='fixture',subject='s',split='train',window={'key':'w00000'},pair=dict(native_index=0,status='available',channel_sets={'nearest6':list(range(6))}))
+    old=source/'tasks/fixture/s/r/w00000__p000.json'
+    runner.write_json(old,dict(schema='old',identity=spec,qualified=True,fits={'tak_tau_beta':dict(tau=2.,beta=1.)}))
+    runner._tak_cache_npz(old.with_suffix('.npz'),driver=np.zeros(n),initial_state=np.array([0.,1.,1.,1.,1.]),time_s=np.arange(n)/10.)
+    seed,info=runner.tak_cache_v3_seed(source,spec,n)
+    assert info['status']=='available' and seed['driver'].shape==(1,n)
+    changed=deepcopy(spec);changed['subject']='other'
+    with pytest.raises(ValueError,match='identity'):runner.tak_cache_v3_seed(source,changed,n)
+    co=dict(status='completed',pc=[1.]+[0.]*29,eeg_factor=1.,hb_factor=1.,sd=[1.,1.,1.]);coordinate=out/'coordinates.json'
+    runner.write_json(coordinate,dict(individual={'fixture__s':co},population={'fixture':co}));runner.write_json(out/'source_reuse.json',dict(source=str(source)))
+    feature=out/'features/fixture/s/r/w00000.npz';runner._tak_cache_npz(feature,eeg=np.zeros((n,6,5)),hb=np.zeros((n,1,2)),eeg_valid=np.ones(6,bool),hb_valid=np.ones(1,bool),eeg_reference=np.zeros((6,5)),hb_reference=np.zeros((1,2)))
+    runner.write_json(feature.with_suffix('.json'),dict(status='completed',split='train',provenance={}))
+    starts=[]
+    def fake_fit(core,target,coordinate,common,**kwargs):
+        starts.append(kwargs['initial_solution'] if 'initial_solution' in kwargs else None)
+        return dict(qualified=starts[-1] is None,status='completed' if starts[-1] is None else 'failed_numerical',fits={'tak_tau_beta':{'solver':{'objective_components':{'data':0.}}}}),dict(target=target,prediction=target.copy(),residual=np.zeros_like(target),sd_subject=np.ones(3))
+    monkeypatch.setattr(runner,'tak_cache_fit_arrays',fake_fit)
+    result=runner._tak_cache_v3_fit_worker((cfg,core,str(out),str(coordinate),str(out),spec))
+    assert result['qualified'] and result['route']=='standard_after_unqualified_warm'
+    assert len(starts)==2 and starts[0] is not None and starts[1] is None
+    attempt=out/'warm_attempts/fixture/s/r/w00000__p000.json'
+    assert json.loads(attempt.read_text())['qualified'] is False and attempt.with_suffix('.npz').exists()
+    row=json.loads((out/'tasks/fixture/s/r/w00000__p000.json').read_text());assert row['failed_warm_attempt']==str(attempt.relative_to(out))
+    assert runner._tak_cache_v3_fit_worker((cfg,core,str(out),str(coordinate),str(out),spec))['cached']
