@@ -31,6 +31,19 @@ def require_current_cache_manifest(manifest: Mapping[str, Any]) -> None:
             "Old caches are retained for historical evidence only. A separate versioned "
             "rebuild is required; this reader never rebuilds automatically."
         )
+    if (manifest.get('measurement_cache_version') == 'physiology_semantic_clean_v6'
+            and manifest.get('dataset_id') == 'visual_cognitive_motivation'):
+        selection=manifest.get('fnirs_selection',{})
+        columns=selection.get('retained_columns',[])
+        names=manifest.get('measurement',{}).get('fnirs_channel_names',[])
+        native=[f'CH{i}_{h}' for i in range(1,25) for h in ['HbO','HbR']]
+        excluded=set(selection.get('device_excluded_channels',[]))
+        if (selection.get('schema')!='visual_device_exclusion_v1' or not columns
+                or columns!=sorted(set(columns)) or any(not isinstance(i,int) or not 0<=i<48 for i in columns)
+                or len(columns)%2 or any(columns[i]%2 or columns[i+1]!=columns[i]+1 for i in range(0,len(columns),2))
+                or names!=[native[i] for i in columns]
+                or any(n.rsplit('_',1)[0] in excluded for n in names)):
+            raise ValueError('Visual v6 requires exact compact usable-channel identity')
     if manifest.get('processing_schema') == MEASUREMENT_ALIGNMENT_V5_SCHEMA:
         method = manifest.get('motion_method')
         if method not in ('none', 'mne_tddr'):

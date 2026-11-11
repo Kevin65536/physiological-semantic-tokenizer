@@ -348,6 +348,38 @@ def window_within_alignment_support(
 
 
 
+def read_visual_fnirs_exclusions(path: str | Path) -> dict[str, Any]:
+    """Read the device exclusion contract before reading any signal rows.
+
+    The native CH order, binary exclusion vector and 10 Hz clock are required;
+    missing/ambiguous metadata cannot silently admit an excluded channel.
+    """
+    header = {}
+    with Path(path).open(encoding='utf-8-sig', newline='') as handle:
+        for row in csv.reader(handle):
+            if row == ['Data']:
+                columns = next(csv.reader(handle), None)
+                break
+            if row and row[0] in ('Exception Ch', 'Sampling Period[s]'):
+                if row[0] in header:
+                    raise ValueError('Duplicate Visual device header field')
+                header[row[0]] = row[1:]
+        else:
+            raise ValueError('Visual CSV has no Data boundary')
+    if columns is None or header.get('Sampling Period[s]') != ['0.1']:
+        raise ValueError('Visual exclusion metadata requires the native 10 Hz clock')
+    names = [n.strip() for n in columns if re.fullmatch(r'CH\d+', n.strip())]
+    bits = header.get('Exception Ch', [])
+    if (names != [f'CH{i}' for i in range(1,25)] or len(bits) != len(names)
+            or any(v.strip() not in ('0','1') for v in bits)):
+        raise ValueError('Missing or invalid Visual Exception Ch / channel order')
+    excluded = [name for name,flag in zip(names,bits) if flag.strip()=='1']
+    if len(excluded)==len(names):
+        raise ValueError('Visual record has no device-usable channels')
+    return dict(schema='visual_device_exclusion_v1',source=str(Path(path).resolve()),
+                channel_names=names,excluded_channels=excluded,zero_means='usable',one_means='excluded')
+
+
 def read_visual_fnirs_csv(path: str | Path, *, load_signals: bool = False) -> dict[str, Any]:
     """Read one ETG export without compressing dropped rows or its native clock."""
     lines = Path(path).read_text(encoding="utf-8-sig").splitlines()

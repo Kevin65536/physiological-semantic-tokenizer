@@ -144,6 +144,56 @@ PCA, scaling, tokenizer selection and codebook fitting must use the correspondin
 training partition. These are previously examined public subjects, not a new
 untouched confirmation set. The new input cache creates no protected-data unlock.
 
+## Visual measurement v6 / downstream input v2 — 2026-11-10
+
+The [v2 input contract](../experiments/configs/physiology_semantic_tokenizer/downstream_input_v2.yaml)
+owns this Visual-only migration, produced through the existing
+`build_clean_eeg_fnirs_cache.py --downstream-config <v2_contract>
+--downstream-stage <plan|pilot|build|verify>` entry. Completion and exact counts
+belong to the two cache manifests and verification files, not this description.
+
+- `data/cache/physiology_semantic_clean_v6/` retains measurement coordinates.
+  Visual Hb columns are physically selected by the intersection of matching
+  Oxy/Deoxy `Exception Ch=0` and existing paired signal support. Native CH names
+  remain intact; excluded positions are not zero-valued observations. The
+  record's `fnirs_selection` owns the original-to-compact column map and reasons.
+- `data/cache/physiology_downstream_v2/` uses the same compact Visual positions
+  and applies one positive subject Hb factor, shared by HbO/HbR and all records.
+  Its Visual `fnirs` coordinate is explicitly `subject_normalized_Hb`.
+  The factor/inverse and calibration support have one owner in the measurement
+  root's `normalization/<subject>.json`; downstream metadata points there.
+- The common-SD target remains 0.025. Calibration reuses the exact previously
+  admitted subject windows, with the original first-five-second reference and
+  window/site/time weighting, now excluding device-rejected positions. The
+  continuous cached arrays receive only the factor, with no new centering.
+  Previous public unlabelled individual adaptation, including validation/test
+  subjects, remains explicit; no labels, SSM predictions or fitted states are
+  used. The metadata input window plan is frozen into the migration evidence.
+- Both roots reuse the verified downstream-v1 Visual EEG arrays, preserving
+  all 31 correctly mapped channels including FCz. This also removes the old
+  measurement-root EEG identity defect without a new EEG filtering pass.
+  Other datasets retain their corresponding original signal arrays and unit
+  semantics. REFED receives no additional quality-table processing.
+- Event clocks, samples, labels, dependency identities, subject splits and
+  exclusions are copied from the v1 input plan. The retained S06 Part1 record
+  exclusion is not lifted. A retained record without admitted samples does
+  not enter the new calibration or sample-level evaluation denominator.
+
+The storage schema stays `clean_eeg_fnirs_cache_v2`, and the inherited temporal
+processing identity stays `physiology_measurement_alignment_v5` / `none`:
+there is no new filter, resampling or MBLL pass. The new measurement generation,
+selection and normalization have separate explicit identities. Existing v5/v1
+arrays and old SSM generations remain unchanged. Historical default roots do
+not silently redirect; consumers select the new roots explicitly.
+
+`DownstreamInputDataset` accepts the v2 plan and returns compact channel names,
+geometry and the explicit normalization reference. Channel counts vary across
+records; consumers must align by identity rather than by array column number.
+The measurement Hb reader rejects normalized downstream records, preventing
+an accidental second calibration of already scaled observations. Verification
+checks all records and samples, exact retained measurement values, new scaling,
+unchanged other-dataset arrays and inherited sample/split/label identities.
+
 ## Subject-calibrated Tak reconstruction cache — 2026-11-04
 
 The [cached-window ocular confirmation](../experiments/configs/physiology_semantic_tokenizer/shared_driver_cache_ocular_confirmation_v1.yaml)
@@ -270,6 +320,64 @@ Per-task coordinate metadata and `PCA_source` identify this distinction.
 Use a fresh v2 run with its own calibration, fits and verification. Existing v1
 coordinates and terminal fits are not reusable as v2 outcomes. The running v1
 generation and its execution snapshots retain their original contract.
+
+## Visual / REFED source-quality finding — 2026-11-10
+
+The [source review](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/source_review_20261110_v1/report.html)
+joins the local original papers, publisher resources, device documentation,
+native metadata and bounded retained-calibration replay. Its JSON/CSV files own
+the checked identities and numeric evidence. Existing caches, coordinates and
+fits retain their recorded identities; the review changes none of them.
+
+Hitachi's *Topo Signal Processing* v2.08 manual (Q1J-FS0241-7, 2006;
+[manufacturer document in a public mirror](https://studylib.net/doc/25894667/manual),
+§6.3 p.11 and §6.8.1 p.25) identifies `Exception Ch` as channel exclusion,
+with 0 valid and 1 excluded. This is distinct from a transient motion annotation.
+The current Visual reader stores the header under an annotation-only policy,
+while measurement support and subject calibration still admit finite flagged
+channels. The header census and moment replay confirm that these channels enter
+the existing amplitude denominator. The previous comparison's higher-amplitude,
+better-fitting group must therefore not be treated as a normal physiological
+reference. Masks vary by record; a fixed list inferred from one example is
+insufficient.
+
+A versioned repair should use each paired Oxy/Deoxy record's verified exclusion
+metadata before calibration and fitting, preserving the same common-Hb scale
+formula and original time support. Do not overwrite retained scales/fits or
+substitute zero observations for excluded channels. Geometry interpolation
+does not establish measurement validity.
+
+The REFED paper appendix A.3 explicitly identifies `fNIRS_reservations.csv` as
+acquisition logs with bad-channel markers. Current Hb production/calibration
+does not join that table. The reviewed public paper, README and author code do
+not specify its bit polarity, so this review reports flag0/flag1 separately;
+neither the filename nor amplitude alone establishes which bit means valid.
+Resolve that source meaning before applying a new exclusion rule.
+
+The subsequent [author-loader call-graph review](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/author_loader_review_20261110_v1/report.html)
+pins REFED-codes commit `2fc2e2ef6a37773f94cb99e5b28dac9b4635366d` and
+checks loading through the actual training caller with synthetic arrays. The
+published author pipeline also retains all 51 channels and never reads the
+reservations table in this path. Thus, the absence of that join in our current
+reader is consistent with the author example; it is not by itself evidence of
+a loading defect or a reason to delete either bit group. The author's default
+training path selects HbT after 0.01–10 Hz / 25 Hz / one-second preprocessing,
+does no explicit waveform amplitude normalization or baseline subtraction at
+the training loader, and uses BatchNorm/LayerNorm inside the network. Our
+HbO/HbR 0.01–0.2 Hz / 10 Hz input, first-five-second reference and frozen
+subject common-Hb calibration are separate, declared SSM choices. Evaluate
+their reconstruction behavior as such; do not attribute them to author loading
+requirements. Earlier flag-group statistics retain their descriptive identity.
+
+The Hitachi manual §6.5 p.14 labels Hb display units `mMmm`
+(concentration × path length). Shimadzu's
+[manufacturer explanation](https://www.shimadzu.com/es-es/an/industries/life-science/life-science-brain-function-imaging/brain-activity-during-motor-control/index.html)
+likewise describes concentration-length. These clarify device semantics but do
+not supply a dataset-specific optical path length or prove an unrecorded export
+conversion. Keep existing Visual/REFED relative-unit identities; do not assign
+µM, repeat MBLL, or divide Hb exports by analog/digital detector gains. A common
+positive unit factor cancels against the consistently transformed common-Hb
+calibration factor; the confirmed Visual issue is the admitted channel set.
 
 ## Canonical sample identity
 
@@ -1545,5 +1653,50 @@ records the schema, frozen coordinate source, observation weights, initializatio
 route, old seed provenance, backend and numerical status. Prediction/residual
 closure, state readout and the weighted observation objective are independently
 verified for the completed population. Historical cache generations and dated
-experiments retain their original identities. New experiments use a completed,
-verified v3 cache; a running producer is not a complete result source.
+experiments retain their original identities. Consumers of this version use a
+completed, verified v3 cache; a running producer is not a complete result source.
+
+## Visual usable-channel reconstruction cache v4 — 2026-11-10
+
+The [v4 executable contract](../experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v4.yaml)
+owns the user-requested migration from the verified v3 reconstruction cache.
+Only Visual is refitted, using each record's own compact usable positions in
+measurement v6. No global intersection or bilateral restriction is applied.
+Excluded positions have no task specification, result placeholder or solver call.
+Original `native_index` and Probe/CH identities remain stable; `compact_index`
+addresses the new measurement and prepared-feature columns.
+
+Hb is read in measurement coordinates, referenced over the same first five
+seconds, and independently checked against the retained prepared columns.
+The shared Hb factor and component SDs come from the existing measurement-v6
+normalization owner used by downstream-input v2; the solver applies that factor
+once. EEG prepared features, subject PC1, EEG factor and EEG SD remain frozen
+from v3. This isolates the requested Hb input repair. Window clocks, splits,
+sample joins, dynamics, priors, observation weights and numerical qualification
+remain unchanged. Public unlabelled individual adaptation retains its declared
+scope; no labels or protected performance data are read.
+
+Other datasets reuse their exact v3 feature/result directories and coordinates
+through explicit read-only-consumer links. Their task schema and coordinate
+provenance remain v3 inside the v4 cache manifest; consumers must not relabel
+those original tasks. Visual v3 solutions supply initial guesses only, followed
+by new optimization and the existing standard fallback. A new-scale training
+pilot checks standard/warm CPU and warm CUDA before production. Completion
+requires independent array verification, including new Visual target/scale
+identity and an exact task census that rejects excluded or extra tasks.
+The run's plan, execution, summary and verification files own its counts and
+status; an in-progress v4 root is not a completed reconstruction source.
+
+The [completed-cache tokenizer audit](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/tokenizer_audit_20261110_v2/report_final.html)
+and its [versioned analysis contract](../experiments/configs/physiology_semantic_tokenizer/tokenizer_cache_audit_v2.yaml)
+describe the input/teacher interface without changing cache arrays or masks.
+Consumers must retain native sample lengths and actual tail support, distinguish
+input validity from solver qualification and scored-time support, and join by
+absolute integer indices on the record grid. Rounding a relative time difference
+is not equivalent to subtracting separately rounded absolute sample indices.
+Visual's downstream Hb is already scaled; SSM arrays retain their recorded
+unscaled coordinates and explicit `scale`. Unknown native export units remain
+unknown. Device channel availability is independent of local dynamic amplitude;
+the audit's low-variance flags are diagnostics, not a new automatic exclusion.
+Overlapping fits remain separate conditional estimates, and the identical p/v
+state columns do not provide independent supervision targets.

@@ -197,6 +197,21 @@ at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
 
+The [tokenizer cache integrity and physiology audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/tokenizer_audit_20261110_v2/report_final.html)
+combines the completed measurement/input/SSM generations. Its
+[census and statistics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/tokenizer_audit_20261110_v2/summary.json),
+[sample-to-Hb replay](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/tokenizer_audit_20261110_v2/join_check.json)
+and [robust review](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/tokenizer_audit_20261110_v2/review_summary.json)
+own its denominators and findings. The earlier audit-v1 export and stopped
+relative-offset join attempt remain retained diagnostic evidence.
+
+The [Visual usable-channel v4 plan](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/plan.json)
+and [contract](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v4.yaml)
+own the migration to measurement-v6 usable positions and downstream-v2 Hb scales.
+Its [execution](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/execution.json)
+records supervised Visual refits; other datasets retain exact v3 task provenance.
+Completion requires the run's final summary and verification.
+
 The [v3 individual-PCA 1:4:4 cache plan](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/plan.json)
 retains the original identities and joins in a separate generation. Its
 [execution record](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/execution.json),
@@ -224,6 +239,45 @@ The [four-record HbO/HbR comparison](runs/physiology_semantic_tokenizer/shared_d
 reuses frozen subject normalization and retains native unit/header checks,
 exact selected identities and input/S/O arrays. Its source-header observation
 about Visual's `Exception Ch` is local to the selected record.
+The subsequent [publisher/device source review](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/source_review_20261110_v1/report.html)
+retains the admitted-record Visual header census, REFED quality metadata,
+bounded calibration-moment replay and online author-code snapshots. It resolves
+the Hitachi exclusion semantics and identifies their omission from existing
+calibration; REFED flag polarity remains unresolved. Historical exports stay
+unchanged.
+
+The [REFED flag-group audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/refed_flags_20261110_v1/summary.json)
+and [frequency/statistical/waveform report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/refed_flags_20261110_v1/report_v2/report.html)
+retain the subject-by-channel marker matrix, full-cache group denominators,
+subject-paired intervals, duration/channel-composition sensitivity and matched
+time-window examples. It preserves the frozen normalization and source bit
+values; it does not infer validity polarity or refit the model.
+
+The [REFED parameter/state/amplitude audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/refed_state_amplitude_20261110_v1/summary.json)
+retains [corrected significance, empirical amplitude ranges and raw/filter waveforms](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/refed_state_amplitude_20261110_v1/report_v2/report.html).
+Parameter/state tests use paired subjects and one declared Holm family; all
+planned finite inputs contribute amplitude statistics, including numerical fit
+failures. The three native examples reuse frozen subject scales and independently
+replay the retained low-band cache; the existing SSM outcomes remain unchanged.
+
+The [cross-dataset amplitude audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/cross_dataset_amplitude_20261110_v1/summary.json)
+and [amplitude/beta/cancellation report](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/cross_dataset_amplitude_20261110_v1/report_v2/report.html)
+compare frozen model-coordinate amplitudes and within-window channel spreads
+across all four datasets, using completed usable-channel Visual preparation.
+Missing inputs and numerical failures remain explicit. REFED parameter and
+waveform diagnostics reuse completed v3 fits; posthoc gain is not a beta refit,
+and no partial v4 solver outcomes enter this comparison.
+
+The [REFED author loading/training comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/author_loader_review_20261110_v1/report.html)
+pins the upstream commit and call graph, retains source snapshots, and verifies
+channel/amplitude/baseline behavior with synthetic MATs. It establishes that
+retaining all channels matches the author example, while our SSM normalization
+and observation choices are distinct from the author's HbT training path.
+
+The [Visual usable-channel normalization comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/summary.json)
+retains [MNE layouts and measured waveform comparisons](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/report_v2/report.html),
+per-record EEG/Hb availability and per-subject old/usable-only common Hb scales.
+It isolates Hb normalization with frozen EEG coordinates and no SSM refits.
 
 The [individual-PCA 1:4:4 warm-start comparison](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_warmstart_pca_weight_v1/summary.json)
 retains [paired precision/timing](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_warmstart_pca_weight_v1/report_v2/paired_metrics.csv),
@@ -353,6 +407,17 @@ separate from production. Current execution is owned by the registry; this
 retention entry does not establish successful full-cache completion.
 
 ## Four-dataset downstream input cache — 2026-11-04
+
+The Visual-only [v2 migration contract](configs/physiology_semantic_tokenizer/downstream_input_v2.yaml)
+produces the [measurement v6 manifest](../data/cache/physiology_semantic_clean_v6/cache_manifest.json)
+and [downstream v2 manifest](../data/cache/physiology_downstream_v2/cache_manifest.json).
+The [measurement verification](../data/cache/physiology_semantic_clean_v6/verification.json)
+and [complete downstream verification](../data/cache/physiology_downstream_v2/verification.json)
+own completion and exact support. The
+[statistics and channel-distribution report](../data/cache/physiology_downstream_v2/analysis_20261110_v1/report.html)
+links per-subject normalization, common/variable native channel identities and
+matched-window spectral summaries. The original generations below remain
+retained; SSM outputs are not migrated by this input-only producer.
 
 The [input contract](configs/physiology_semantic_tokenizer/downstream_input_v1.yaml)
 and [frozen sample/split plan](../data/cache/physiology_downstream_v1/input_plan.json)

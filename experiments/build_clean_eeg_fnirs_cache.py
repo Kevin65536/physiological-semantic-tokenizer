@@ -612,6 +612,8 @@ def build_downstream_cache(args):
 
     root = args.project_root.resolve()
     cfg = downstream.read_config(args.downstream_config)
+    if cfg['schema']==downstream.SCHEMA_V2:
+        return downstream.migrate_visual_caches(root,cfg,args.downstream_stage,args.workers)
     out = root/cfg['output_cache']; out.mkdir(parents=True, exist_ok=True)
     with (out/'controller.lock').open('a+') as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

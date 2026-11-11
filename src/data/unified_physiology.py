@@ -677,9 +677,10 @@ def load_native_eeg_record(project_root: Path, record: CleanCacheRecord) -> Nati
 
 
 @lru_cache(maxsize=1)
-def _native_fnirs_mat(path: str):
+def _native_fnirs_mat(path: str, variable: str | None = None):
     # Single-Trial sessions and REFED videos share one source per subject.
-    return loadmat(path, struct_as_record=False, squeeze_me=True)
+    return loadmat(path, struct_as_record=False, squeeze_me=True,
+                   variable_names=None if variable is None else [variable])
 
 
 def load_cached_fnirs_record(project_root: Path, record: CleanCacheRecord) -> dict[str, Any]:
@@ -695,6 +696,8 @@ def load_cached_fnirs_record(project_root: Path, record: CleanCacheRecord) -> di
 
     require_measurement_producer(record.manifest)
     manifest = record.manifest
+    if manifest.get('fnirs_normalization'):
+        raise ValueError('Cached Hb measurement reader requires unscaled measurement coordinates; use the measurement cache root')
     if (manifest.get('storage') != MEASUREMENT_CACHE_STORAGE
             or manifest.get('processing_schema') != MEASUREMENT_ALIGNMENT_V5_SCHEMA
             or manifest.get('motion_method') != 'none'):
@@ -737,7 +740,7 @@ def load_cached_fnirs_record(project_root: Path, record: CleanCacheRecord) -> di
         valid_mask=np.broadcast_to(supported.reshape(1, -1, 2), values.shape))
 
 
-def load_native_fnirs_record(project_root: Path, record: CleanCacheRecord) -> dict[str, Any]:
+def load_native_fnirs_record(project_root: Path, record: CleanCacheRecord, *, record_only: bool = False) -> dict[str, Any]:
     """Read source Hb for native-versus-processed audits and frozen replay only.
 
     New measured model inputs use load_cached_fnirs_record instead.
@@ -745,6 +748,8 @@ def load_native_fnirs_record(project_root: Path, record: CleanCacheRecord) -> di
     Single-Trial is intensity, so its output is explicitly a relative MBLL
     estimate. Missing/nonpositive optical support stays missing. Other datasets
     retain released chromophore units. No scaling or task selection is fitted.
+    ``record_only=True`` restricts a REFED MAT read to the named video variable,
+    so a bounded waveform audit need not decode the other videos in its file.
     """
     from .registry import REGISTERED_DATASETS
     from .event_alignment import read_visual_fnirs_csv
@@ -756,6 +761,8 @@ def load_native_fnirs_record(project_root: Path, record: CleanCacheRecord) -> di
     if not sources or any(not p.is_relative_to(root) for p in sources):
         raise ValueError('native fNIRS source outside registered dataset root')
     ds = record.dataset_id
+    if record_only and ds != 'refed':
+        raise ValueError('Selective MAT record reading is currently supported for REFED only')
     metadata = dict(source_paths=[str(p) for p in sources],
                     native_unit=record.manifest['native_contract']['native_unit'],
                     transform='released_HbO_HbR_no_project_temporal_processing')
@@ -794,7 +801,7 @@ def load_native_fnirs_record(project_root: Path, record: CleanCacheRecord) -> di
         names = [f'{p}_{role}' for p in np.atleast_1d(o.clab) for role in ('HbO', 'HbR')]
     elif ds == 'refed':
         path = next(p for p in sources if p.name == 'fNIRS_videos.mat')
-        tensor = np.asarray(_native_fnirs_mat(str(path))[record.base_record_id], dtype=float)
+        tensor = np.asarray(_native_fnirs_mat(str(path), record.base_record_id if record_only else None)[record.base_record_id], dtype=float)
         values = tensor[:2].transpose(2, 1, 0)
         rate = float(record.manifest['native_sample_rate_hz'])
         times = np.arange(len(values)) / rate

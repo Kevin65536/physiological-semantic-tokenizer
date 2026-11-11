@@ -39,6 +39,11 @@ Visual 原论文 §3.2/§4.3–4.5（[全文 XML](https://www.ebi.ac.uk/europepm
 设备型号、典型幅值、论文称 concentration 或 raw 均不替代数组单位证据；也不把
 设备可能使用的浓度×光程单位擅自当成 µM。
 
+2026-11-10 的[原论文、设备手册及发布者代码复核](DATA_CONTRACT.md#visual--refed-source-quality-finding--2026-11-10)
+补充了 Hitachi Hb 显示量 `mMmm` 的设备层证据，并确认 Visual 的
+`Exception Ch` 是排除通道信息。数据集文件的单位身份保持不变；通道有效性及其对
+已有共同幅度尺度的影响见该复核，不以高幅度或拟合优度代替测量有效性。
+
 reader 已去除 REFED 的硬编码 V 声明及 MATLAB EEG 缺失 `yUnit` 时的 µV 默认值。
 每条记录保留原单位与证据字段；Visual 保留每通道 EDF 单位及增益解码来源。
 有头字段证据的 EEG 可转 µV，有 `yUnit=mmol/L` 证据的发布 Hb 可乘 1000 转 µM；
@@ -269,11 +274,196 @@ REFED-dataset/
 - Probe1/Probe2 各生成 24 个完整 graphical-template channel coordinates 和 52 条无向邻接边；统一 loader 按 record 中的 probe 后缀选择对应侧 geometry。
 - 这些坐标不是逐被试 digitization，也不提供真实 source/detector 三维点。它们只允许用于通道邻接、图模型、可视化和 coarse EEG-fNIRS alignment，不能用于精确光程、MBLL replay 或 exact co-registration。
 
+#### Probe、Part 与通道身份
+
+| 文件标识 | 实际含义 | 使用规则 |
+| --- | --- | --- |
+| `Probe1` | 左半球 fNIRS 探头阵列，名义位置 CH1–CH24 | 通道身份必须包含 Probe，例如 `Probe1:CH13`。 |
+| `Probe2` | 右半球 fNIRS 探头阵列，名义位置 CH1–CH24 | 同编号与 Probe1 不同位置，例如 CH13 分别对应 FC3、FC4；Probe2 工作簿中的 `FP4` 误记由已有几何校正规则处理。 |
+| `Part1` / `Part2` | 同一实验因中途休息等原因形成的时间分段 | 与左右半球无关；保留具体 Part 的文件、时间轴和事件身份。 |
+| `Oxy` / `Deoxy` | 同一位置的 HbO / HbR 导出序列 | 两种色团是同一测量位置的两条序列，不是两个独立空间通道。 |
+
+同一 Part 的两个 Probe 同时记录，共享同一份 EEG 和实验事件。一段完整双侧记录通常
+对应 `Probe1_Oxy`、`Probe1_Deoxy`、`Probe2_Oxy`、`Probe2_Deoxy` 四个 CSV。
+两侧通道排除标记分别读取；不能因为编号相同就共享有效性，也不能把重复使用的 EEG
+计算为两份独立记录。依据为原论文 §3 与发布者
+[`fNIRS_to_EEG_channel_reference.xlsx`](<../data/A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults/fNIRS_to_EEG_channel_reference.xlsx>)。
+
+#### 已核实的数据问题与处理影响（2026-11-10 证据快照）
+
+本节汇总 **2026-11-10 对保留 v3 重建输入的核查**，不是滚动维护的实验状态。
+精确记录身份、失败分母和数值以表末所链接的 JSON/CSV 为准；执行边界及版本迁移规则
+由 [`DATA_CONTRACT.md`](DATA_CONTRACT.md#visual--refed-source-quality-finding--2026-11-10)
+负责。本次已完成来源核查、通道统计和只改变 Hb 校准集合的对照，**尚未完成新生产缓存
+及新 S/O 重拟合**。旧数据、尺度和结果均保留原身份。
+
+**1. EEG 的论文电极数、发布通道和旧缓存身份需要区分。**
+
+论文描述32个电极；经发布者 `Raw_EEG_channel_reference.xls`、EDF 和既有准备数组核对，
+当前原生读取路径有31个正确映射且有数据支持的 EEG 通道，包括 `A64 → FCz`。
+触发 `DC9/DC09` 和参考不计入这31条 EEG 信号。应以原始通道工作簿确定放大器编号，
+以 `Location.ced` 的电极名称连接坐标；CED 的 `Number` 不是放大器通道ID。
+历史 v5 EEG 路径曾混淆这两个编号并遗漏 FCz，已记录于
+[Visual EEG 身份核查](DATA_CONTRACT.md#visual-eeg-channel-identity-finding--2026-10-29)。
+本节的31通道结论对应已修正的原生 EEG 路径，不追溯重标旧数组；Hb缓存的设备排除问题
+是另一个独立问题。fNIRS通道被排除不意味着同位置 EEG 自动失效。
+
+**2. `Exception Ch` 是设备通道排除信息，不能只当普通注释。**
+
+日立 *Topo Signal Processing* v2.08 手册（Q1J-FS0241-7，2006；
+[原厂文档公开镜像](https://studylib.net/doc/25894667/manual)）§6.3 p.11说明该字段用于
+排除测量通道，§6.8.1 p.25给出编码：**0为有效，1为排除**。这与某一时刻的运动标注
+不同；设备排除状态本身也不说明是何种接触、布局或采集故障，不能自行补写原因。
+
+此次核查范围为16名被试、27个 EEG 会话、54个 Probe 记录的108个 Oxy/Deoxy 文件。
+54个记录均含排除通道；同一记录的两种色团标记一致。共542个“记录×测量位置”被
+标记排除，却仍进入旧 v3 计划的可用通道集合。它不是542个独立物理传感器或被试。
+原目录112个CSV与本次纳入108个CSV的统计范围不同；既有 S06 Part1 排除边界保持不变。
+
+S06 Part2 的两个 Probe 均排除 CH2、5、6、9、15、17、19、20、22、24。
+这个10通道名单在54个记录中的36个成立，其余记录有增减，**不能硬编码为整个数据集
+通用名单**。工作簿中“有 EEG 对应标签的14个通道／标为 `-` 的10个通道”是位置映射
+分组，不是通道有效性的替代定义；即使二者在某些记录中吻合，也必须使用逐记录标记。
+
+核查时的实现链如下：
+
+1. `src/data/event_alignment.py::read_visual_fnirs_csv` 保存 `Exception Ch` 等文件头，
+   但声明 `annotation_only_not_signal_validity`。
+2. `src/data/homer2_preprocessing.py` 的处理后有效性来自原数据有限性，未接入设备排除。
+3. `experiments/build_clean_eeg_fnirs_cache.py::build_measurement_record` 将该有效性写入
+   `fnirs_supported_channels`。
+4. 既有 `_tak_cache_chunks` 和 `src/data/ssm_prepared.py::fit_feature_coordinate`
+   据此将数值有限的设备排除通道纳入被试校准；几何插值提供坐标，不提供测量有效性。
+
+**3. 实际可用数量应按空间位置、色团序列及独立会话分别报告。**
+
+以下“可用”表示设备标记允许且满足既有数据支持检查，不等于已证明没有全部生理伪迹。
+EEG支持检查覆盖各记录参与校准的全部保存窗口。
+
+| 对象 | 本次保留记录中的数量 |
+| --- | --- |
+| 同一 EEG 会话 | 31个 EEG 通道；两个 Probe 共用，不能重复计成62个。 |
+| 每侧 fNIRS Probe | 名义24个位置；可用12–15个位置。 |
+| 双侧 fNIRS 合计 | 名义48个位置；可用25–29个，排除19–23个。 |
+| 双侧可用 HbO/HbR 序列 | 50–58条，最常见为28个位置对应56条序列。 |
+| 27个会话的双侧可用位置数分布 | 25个：1会话；26个：2会话；27个：3会话；28个：13会话；29个：8会话。 |
+
+MNE图使用注册的CED／设备布局模板，鼻尖朝上、图左为左半球。绿色圆点标可用，红叉
+标排除；频率图表示被试内记录排除率再对16人等权平均，不是脑激活图。部分位置由既有
+几何插值获得，不能据此推定真实光程或逐被试皮层位置。
+
+**4. 已发布 Hb 的单位语义与通道质量问题应分开处理。**
+
+本地[Phukhachee等原论文](<paper_pdf/Phukhachee 等 - 2024 - A simultaneous EEG-fNIRS dataset of the visual cognitive motivation study in healthy adults.pdf>)
+§3、§4.5说明文件为设备导出的 Oxy/Deoxy，作者未进一步处理fNIRS；“raw export”
+不表示数组是原始光强。日立手册§6.5 p.14将Hb显示纵轴标为 `mMmm`，指浓度×光程；
+A/D图另以V为单位。该设备层证据仍不提供本数据集各通道的实际光程或额外导出换算，
+所以保留既有 `relative:visual_cognitive_motivation` 坐标，不直接赋予µM单位。
+也没有证据支持对这些已导出的Hb再次做OD/MBLL，或直接除以 `Analog Gain`、
+`Digital Gain`；这些增益字段保留为采集元数据。
+
+本文前面的历史幅值表包含当时检查范围内的原始通道，没有按本次设备排除标记重算。
+因此它可用于辨认文件量级，不能作为有效通道的正常生理幅度参考，也不能凭幅值判断单位。
+
+**5. 设备排除通道显著抬高了旧共同幅度分母。**
+
+沿用既有每被试共同Hb归一化：
+
+\[
+g_s=\frac{0.025}{\sqrt{\{\operatorname{Var}_{\mathcal C_s}(HbO)
+ +\operatorname{Var}_{\mathcal C_s}(HbR)\}/2}},\qquad
+z_{s,w,c,k}(t)=g_s\,[x_{s,w,c,k}(t)-\bar x_{s,w,c,k,[0,5\mathrm{s})}].
+\]
+
+其中，\(\mathcal C_s\) 为该被试的校准时间×位置样本集合；\(w,c,k\) 分别是窗口、
+位置和色团，\(x\) 是既有实测Hb缓存。旧集合包含所有准备路径判为有效的通道；新对照
+进一步排除 `Exception Ch=1` 的位置。两者均保留原窗口及重叠权重、10 Hz采样、
+既有全记录0.01–0.2 Hz处理和前5秒参考；同一被试所有记录、位置、HbO/HbR共用一个
+因子，不按当前窗口或单个通道重新标准化。被试尺度来自既有合同允许的自身无标签数据，
+包括已声明的验证／测试被试适配，不是严格零样本归一化。
+
+16名被试的旧因子均从保存输入精确重现。设备排除通道贡献旧共同方差的
+**98.69%–99.97%，中位数99.85%**；仅用可用通道后的因子为旧因子的
+**6.68–44.33倍，中位数23.05倍**。方差贡献按原全体均值计算，包含组间均值偏离，
+两组贡献之和等于原方差。可用集合在旧尺度下的共同SD为0.000564–0.003740，
+在新尺度下按定义为0.025；这个目标值是归一化定义，不是拟合成绩。
+
+S06的完整校准重放可具体说明影响：
+
+| 校准集合 | 共同Hb SD（既有相对坐标） | 缩放因子 | 占原共同方差 |
+| --- | ---: | ---: | ---: |
+| 旧：全部通道 | 2.554036 | 0.00978843 | 100% |
+| 仅 `Exception Ch=0` | 0.128789 | 0.19411542 | 0.1613% |
+| `Exception Ch=1` 组，诊断统计 | 3.953144 | 0.00632408 | 99.8387% |
+
+对同一 `S06_Part2_Probe1 / w00005 / CH12` 可用记录，新旧因子相差19.83倍。
+其HbO波动SD由0.000609变为0.012084，HbR由0.000168变为0.003337，均为模型坐标。
+同窗口排除的CH6在参考后的缓存坐标中，HbO/HbR SD为1.808049/1.650199，
+可用CH12仅为0.062251/0.017191。所展示波形是既有处理后的实测输入，不是模型生成信号。
+
+新旧归一化是同一波形乘以被试内共同正数，形态相关性为1；绝对功率乘以该数的平方，
+相对谱形、谱重心和HbO/HbR相关性不变。若只统一换单位且相应变换校准因子，常数会
+抵消；因此“补乘1000”不能解决排除通道混入校准的问题。
+
+**6. 旧 S/O 结果的解释需要结合设备标记更新。**
+
+旧v3模型中Hb的S直接取预测、O取X−S。按每记录真实标记重新分组，已有数值合格且
+相关性可定义的拟合中，严重放大率如下；严重定义为SD(S)/SD(X)≥2，先记录内平均，
+再记录及被试等权，重复窗口不作为独立被试。
+
+| 设备标记组 | HbO严重放大率 | HbR严重放大率 | HbO平均corr(S,X) |
+| --- | ---: | ---: | ---: |
+| 0：可用 | 89.33% | 70.79% | 0.276 |
+| 1：设备排除 | 2.78% | 0.65% | 0.890 |
+
+这些数值描述旧拟合，不是修复后的成绩。高幅度、拟合较好的设备排除组不能作为正常
+生理参考；小幅度可用组也不能仅因与模型不符被判为噪声。上述结果确认了旧尺度对可用
+信号的压低，但归一化后S/O能改善多少仍须配对重拟合。仅将旧X、S、O统一乘以新因子，
+SD(S)/SD(X)与相关性不变；S06 CH12的旧HbO/HbR幅度比4.0446/3.9357在这种操作下
+原样保留。本次对照固定EEG PCA及EEG尺度，隔离Hb归一化变化，不代替完整的新校准流程。
+
+**7. 后续实现应遵守的处理范围。**
+
+按数据合同进行版本化迁移：逐记录核对Oxy/Deoxy标记与通道身份，将设备排除和既有
+数值支持合成同一个有效性掩码，并在校准、PCA所用样本集合及拟合前生效。被排除的
+位置保留身份和排除原因，但不以零值参与方差、损失或评价分母。保留共同Hb尺度公式、
+两种色团的相对幅度与原时间支持；无需通过猜测单位或逐窗口自归一化掩盖数据边界问题。
+旧缓存、尺度、拟合及负结果保留；新版本独立记录实际分母、配对重拟合和失败处理。
+S06 Part1等已存在的记录排除不因这次通道修复而自动解除。
+
+**复核证据与图表入口：**
+
+| 内容 | 唯一数值来源／图表 |
+| --- | --- |
+| 原论文、设备手册、作者代码与实现链核查 | [来源复核报告](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/source_review_20261110_v1/report.html) |
+| 每份原始文件头及排除名单 | [visual_headers.json](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/source_review_20261110_v1/visual_headers.json) |
+| 按设备标记分组的旧S/O统计 | [dataset_source_flag_groups.csv](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/source_review_20261110_v1/dataset_source_flag_groups.csv) |
+| 逐Probe掩码、名称与通道数量 | [record_counts.json](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/record_counts.json) |
+| 27个会话的双侧数量 | [session_counts.csv](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/session_counts.csv) |
+| 16人新旧因子、方差贡献和归一化SD | [subject_normalization.csv](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/subject_normalization.csv) |
+| MNE位置、排除频率、实测与归一化波形 | [完整图表报告](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/report_v2/report.html) |
+| 示例身份与幅度核验 | [example_selection.json](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/example_selection.json) · [example_metrics.csv](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/example_metrics.csv) |
+| 检查与完成摘要 | [verification.json](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/verification.json) · [summary.json](../experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3/fnirs_cancellation_20261110_v1/visual_valid_normalization_20261110_v1/summary.json) |
+
 #### 适用场景
 ✅ 记忆编码研究  
 ✅ 认知动机与注意力  
 ✅ 同步EEG-fNIRS记录方法学  
 ✅ 事件相关范式
+
+#### 后续输入缓存迁移的证据入口
+
+上方证据快照之后的生产迁移由
+[`downstream_input_v2.yaml`](../experiments/configs/physiology_semantic_tokenizer/downstream_input_v2.yaml)
+及[对应数据合同](DATA_CONTRACT.md#visual-measurement-v6--downstream-input-v2--2026-11-10)定义。
+底层测量v6保存按原始CH身份压缩后的可用测量值；下游输入v2的Visual Hb明确应用
+仅用可用通道计算的被试共同因子，归一化信息与逆变换保留。其他数据集、样本划分及
+标签保持原合同；旧SSM结果不随输入缓存迁移而改变。
+
+[新缓存统计与通道分布报告](../data/cache/physiology_downstream_v2/analysis_20261110_v1/report.html)
+提供实际加载后的幅度统计、固定窗口频谱、各被试稳定/变化通道集合和Jaccard比较。
+最新完成状态及校验分母由[下游验证记录](../data/cache/physiology_downstream_v2/verification.json)
+和项目注册状态负责，本节不维护第二份当前计数。
 
 ---
 

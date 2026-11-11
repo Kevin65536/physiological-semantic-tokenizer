@@ -35,6 +35,7 @@ from .unified_physiology import (
 
 
 SCHEMA = "physiology_downstream_input_v1"
+SCHEMA_V2 = "physiology_downstream_input_v2"
 EEG_SCHEMA = "native_voltage_measurement_200hz_v1"
 VISUAL = "visual_cognitive_motivation"
 
@@ -63,6 +64,11 @@ def write_json(path, value):
 
 def read_config(path):
     cfg = yaml.safe_load(Path(path).read_text())
+    if cfg.get('schema') == SCHEMA_V2:
+        owner=Path(__file__).resolve().parents[2]/'experiments/configs/physiology_semantic_tokenizer/downstream_input_v2.yaml'
+        if cfg != yaml.safe_load(owner.read_text()):
+            raise ValueError('Use the reviewed Visual-only v2 migration contract')
+        return cfg
     if (cfg.get("schema") != SCHEMA or set(cfg["datasets"]) != set(RAW_DATASET_IDS)
             or cfg["source_cache"] != "data/cache/physiology_semantic_clean_v5"
             or cfg["output_cache"] != "data/cache/physiology_downstream_v1"
@@ -341,6 +347,8 @@ def prepare_sidecars(project_root, cfg, output):
 
 def verify_cache(cache_root):
     """Check every stored record and every actual sample, including partial labels."""
+    if json.loads((Path(cache_root)/'input_plan.json').read_text()).get('schema') == SCHEMA_V2:
+        return verify_visual_migration(cache_root)
     dataset = DownstreamInputDataset(cache_root)
     source = _source_index(dataset.plan["source_cache"])
     errors = []; record_counts = Counter(); sample_counts = Counter(); partial = Counter()
@@ -402,10 +410,11 @@ class DownstreamInputDataset:
     def __init__(self, cache_root, *, split=None, task=None):
         self.root = Path(cache_root)
         self.plan = json.loads((self.root/"input_plan.json").read_text())
-        if self.plan.get("schema") != SCHEMA:
+        self.schema=self.plan.get('schema')
+        if self.schema not in (SCHEMA,SCHEMA_V2):
             raise ValueError("Expected the versioned downstream input plan")
         self.index = CleanPhysiologyCacheIndex(self.root)
-        if self.index.cache_manifest.get("downstream_input_schema") != SCHEMA:
+        if self.index.cache_manifest.get("downstream_input_schema") != self.schema:
             raise ValueError("Expected a completed downstream input cache")
         self.records = {r.join_key:r for r in self.index.records}
         if set(self.records) != {r["join_key"] for r in self.plan["records"]}:
@@ -471,7 +480,7 @@ class DownstreamInputDataset:
                                                    window_duration_s=row["duration_s"])
             label = dict(kind=row["target_kind"], values=target["values"], valid_mask=target["valid_mask"],
                          names=target["target_names"], time_s=target["time_s"], rate_hz=1.)
-        return dict(schema=SCHEMA, id=row["id"], dependency_id=row["dependency_id"],
+        return dict(schema=self.schema, id=row["id"], dependency_id=row["dependency_id"],
                     dependency_views=row["dependency_views"], split=row["split"],
                     dataset=row["dataset"], subject=row["subject"], record=row["record"], task=row["task"],
                     eeg=values["eeg"], fnirs=values["fnirs"], valid_mask=masks, time_s=times,
@@ -480,4 +489,281 @@ class DownstreamInputDataset:
                     channel_geometry=deepcopy(self._geometry[r.join_key]),
                     unit={k:m[k+"_preprocessing_state"]["canonical_unit"] for k in ("eeg", "fnirs")},
                     label=label, partial=row["partial"], preprocessing_support="complete_native_record_offline",
-                    source_identity=r.manifest["source_files"])
+                    source_identity=r.manifest["source_files"],
+                    fnirs_normalization=deepcopy(r.manifest.get('fnirs_normalization')))
+
+
+def _visual_selection(record):
+    """Device agreement is checked before the signal array is opened."""
+    from .event_alignment import read_visual_fnirs_exclusions
+    files=[Path(s['path']) for s in record['source_files']]
+    pair=[]
+    for suffix in ['_Oxy.csv','_Deoxy.csv']:
+        found=[p for p in files if p.name.endswith(suffix)]
+        if len(found)!=1:raise ValueError('Exact paired Visual source files required')
+        pair.append(read_visual_fnirs_exclusions(found[0]))
+    if any(pair[0][k]!=pair[1][k] for k in ['channel_names','excluded_channels']):
+        raise ValueError('Visual Oxy/Deoxy exclusion metadata disagree')
+    names=record['measurement']['fnirs_channel_names']
+    expected=[c+'_'+h for c in pair[0]['channel_names'] for h in ['HbO','HbR']]
+    if names!=expected:raise ValueError('Visual cached/native channel identity mismatch')
+    mask=np.load(Path(record['record_npz'])/record['arrays']['fnirs_supported_channels'],allow_pickle=False)
+    if mask.dtype!=bool or mask.shape!=(48,):raise ValueError('Unexpected Visual support')
+    supported=mask.reshape(24,2).all(1)
+    good=[i for i,c in enumerate(pair[0]['channel_names']) if c not in pair[0]['excluded_channels'] and supported[i]]
+    if not good:raise ValueError('No usable Visual Hb pairs')
+    columns=[2*i+j for i in good for j in [0,1]]
+    return dict(schema='visual_device_exclusion_v1',native_pair_count=24,
+        retained_pair_indices=good,retained_columns=columns,
+        retained_names=[names[i] for i in columns],device_excluded_channels=pair[0]['excluded_channels'],
+        unsupported_channels=[c for c,v in zip(pair[0]['channel_names'],supported) if not v],
+        source_headers=pair,rule='device_zero_intersection_existing_paired_support')
+
+
+def visual_migration_plan(root,cfg):
+    root=Path(root)
+    base=json.loads((root/cfg['source_measurement']/'cache_manifest.json').read_text())
+    down=json.loads((root/cfg['source_downstream']/'cache_manifest.json').read_text())
+    checked=json.loads((root/cfg['source_downstream']/'verification.json').read_text())
+    if base['execution']!='completed' or down['execution']!='completed' or checked['status']!='passed' or checked['errors']:
+        raise ValueError('Completed verified sources required')
+    for m in [base,down]:require_measurement_producer(m)
+    if down['downstream_input_schema']!=SCHEMA:raise ValueError('Migration must start from downstream v1')
+    sources={m['join_key']:m for m in base['records']};inputs={m['join_key']:m for m in down['records']}
+    if set(sources)!=set(inputs):raise ValueError('Input and measurement populations differ')
+    plan=json.loads((root/cfg['source_downstream']/'input_plan.json').read_text())
+    selection={k:_visual_selection(m) for k,m in sources.items() if m['dataset_id']==VISUAL}
+    # Freeze only previously admitted input windows, not SSM predictions or states.
+    calibration_root=root/cfg['source_calibration_inputs']
+    old_plan=json.loads((calibration_root/'plan.json').read_text())
+    old_coords=json.loads((calibration_root/'coordinates.json').read_text())['individual']
+    records={r['cache_key']:r for r in old_plan['records'] if r['dataset']==VISUAL}
+    subjects=sorted({m['canonical_subject_id'] for m in sources.values() if m['dataset_id']==VISUAL})
+    calibrations={}
+    for sub in subjects:
+        coordinate=old_coords[VISUAL+'__'+sub];windows=[]
+        for source in coordinate['sources']:
+            r=records[source['record_key']];w=next(w for w in r['cache_windows'] if w['key']==source['window_key'])
+            key=r['join_key']
+            if key not in selection or r['status']!='available':raise ValueError('Unadmitted calibration record')
+            windows.append(dict(join_key=key,window_key=w['key'],start=round(w['hb_start_s']*10),
+                steps=round(w['duration_s']*10),original_pairs=source['pairs']))
+        calibrations[sub]=dict(windows=windows,old_factor=coordinate['hb_factor'],old_count=coordinate['training_samples'],
+            split=coordinate['split'],scope='own_unlabelled_previously_admitted_90s_windows_with_overlap')
+    return dict(schema=SCHEMA_V2,configuration=cfg,selection=selection,calibrations=calibrations,
+        source_record_keys=sorted(sources),subject_partitions=plan['subject_partitions'],
+        original_samples=len(plan['samples']),original_exclusions=len(plan['exclusions']))
+
+
+def _migration_directory(root,record):
+    return Path(root)/'records'/record['dataset_id']/record['canonical_subject_id']/record['base_record_id']
+
+
+def _visual_migration_subject(payload):
+    import resource
+    root_s,cfg,sub,selection,calibration,source_records,downstream_records=payload
+    root=Path(root_s);lower=root/cfg['output_measurement'];upper=root/cfg['output_cache']
+    started=time.monotonic();done=upper/'tasks'/(sub+'.json')
+    if done.exists():return json.loads(done.read_text())
+    # Fail closed on changed header metadata before any Hb signal read.
+    for key,m in source_records.items():
+        if _visual_selection(m)!=selection[key]:raise ValueError('Visual source selection changed after planning')
+    arrays={k:np.load(Path(m['record_npz'])/m['arrays']['fnirs'],mmap_mode='r',allow_pickle=False).reshape(-1,24,2)
+            for k,m in source_records.items()}
+    acc={k:[0,np.zeros(2),np.zeros(2)] for k in ['old','usable','excluded']}
+    for w in calibration['windows']:
+        x=arrays[w['join_key']][w['start']:w['start']+w['steps']]
+        if len(x)!=w['steps'] or w['steps']<50:raise ValueError('Changed calibration time support')
+        m=source_records[w['join_key']]
+        support=np.load(Path(m['record_npz'])/m['arrays']['fnirs_supported_channels']).reshape(24,2).all(1)
+        if int(support.sum())!=w['original_pairs']:raise ValueError('Prior calibration pair support changed')
+        selected=np.zeros(24,bool);selected[selection[w['join_key']]['retained_pair_indices']]=True
+        x=x-x[:50].mean(0)
+        for label,mask in [('old',support),('usable',selected),('excluded',support & ~selected)]:
+            v=x[:,mask].reshape(-1,2)
+            if not np.isfinite(v).all():raise ValueError('Nonfinite admitted measurement')
+            a=acc[label];a[0]+=len(v);a[1]+=v.sum(0);a[2]+=(v*v).sum(0)
+    moments={}
+    mean=acc['old'][1]/acc['old'][0];total=(acc['old'][2]-acc['old'][0]*mean**2).sum()
+    for label,(n,s,q) in acc.items():
+        if not n:raise ValueError('Empty calibration group')
+        variance=q/n-(s/n)**2
+        if min(variance)<=1e-24:raise ValueError('Degenerate subject Hb scale')
+        common=float(np.sqrt(variance.mean()))
+        moments[label]=dict(samples=n,component_sd=np.sqrt(variance).tolist(),common_sd=common,
+            factor=cfg['normalization']['target_common_sd']/common,
+            original_variance_fraction=float((q-2*mean*s+n*mean**2).sum()/total))
+    np.testing.assert_allclose(moments['old']['factor'],calibration['old_factor'],rtol=1e-9)
+    if moments['old']['samples']!=calibration['old_count']:raise ValueError('Old calibration count changed')
+    factor=moments['usable']['factor'];normalization_path=lower/'normalization'/(sub+'.json')
+    norm=dict(schema=cfg['normalization']['schema'],dataset=VISUAL,subject=sub,factor=factor,
+        inverse_factor=1/factor,target_common_sd=.025,calibration=calibration,moments=moments,
+        baseline='first_5s_reference_for_calibration_windows_only; continuous_cached_record_not_recentered',
+        applies_to='both_HbO_HbR_all_records_same_subject',fitted_predictions_used=False)
+    write_json(normalization_path,norm)
+    lower_records=[];upper_records=[]
+    for key,old in source_records.items():
+        prior=downstream_records[key];select=selection[key];columns=select['retained_columns']
+        lowdir=_migration_directory(lower,old);updir=_migration_directory(upper,old)
+        lowdir.mkdir(parents=True,exist_ok=True);updir.mkdir(parents=True,exist_ok=True)
+        for name in ['eeg','eeg_supported_channels','eeg_bad_channel_mask']:
+            origin=Path(prior['record_npz'])/prior['arrays'][name]
+            _link(origin,lowdir/(name+'.npy'));_link(origin,updir/(name+'.npy'))
+        physical=arrays[key].reshape(len(arrays[key]),48)[:,columns]
+        if not np.isfinite(physical).all():raise ValueError('Invalid compact usable record')
+        _save_array(lowdir/'fnirs.npy',physical);_save_array(lowdir/'fnirs_supported_channels.npy',np.ones(len(columns),bool))
+        _save_array(updir/'fnirs.npy',physical*factor);_link(lowdir/'fnirs_supported_channels.npy',updir/'fnirs_supported_channels.npy')
+        lm=deepcopy(prior);lm.pop('downstream_input_schema',None)
+        lm.update(record_npz=str(lowdir.resolve()),measurement_cache_version='physiology_semantic_clean_v6',
+            fnirs_selection=select,migration_source=dict(measurement=str(old['record_npz']),EEG=str(prior['record_npz'])),
+            preprocessing_scope='retained_v5_measurement; compact_usable_Visual_Hb; verified_native_identity_EEG')
+        lm['arrays']={k:k+'.npy' for k in ['eeg','fnirs','eeg_supported_channels','fnirs_supported_channels','eeg_bad_channel_mask']}
+        lm['array_shapes'].update(fnirs=list(physical.shape),fnirs_supported_channels=[len(columns)])
+        lm['measurement']['fnirs_channel_names']=select['retained_names']
+        lm['measurement']['fnirs_component_roles']=[n.rsplit('_',1)[1] for n in select['retained_names']]
+        lm['measurement']['fnirs_preprocessing_state'].update(channel_selection='visual_device_exclusion_v1',scaling='none; measurement coordinates retained')
+        lm['Hb_reuse']=dict(operation='exact_retained_usable_column_selection',source_record=key)
+        um=deepcopy(lm);um.update(record_npz=str(updir.resolve()),downstream_input_schema=SCHEMA_V2,
+            source_cache_record=str(lowdir.resolve()),fnirs_normalization=dict(schema=norm['schema'],source=str(normalization_path.resolve())),
+            preprocessing_scope='compact_usable_Visual_Hb_times_frozen_subject_factor; no_new_centering')
+        um['measurement']['fnirs_preprocessing_state'].update(canonical_unit='subject_normalized_Hb',
+            scaling='one_subject_common_Hb_factor',normalization_source=str(normalization_path.resolve()),
+            measurement_unit=lm['measurement']['fnirs_preprocessing_state']['canonical_unit'])
+        um['Hb_reuse']=dict(operation='usable_measurement_times_frozen_subject_factor',source_record=key)
+        write_json(lowdir/'record.json',lm);write_json(updir/'record.json',um)
+        lower_records.append(str(lowdir/'record.json'));upper_records.append(str(updir/'record.json'))
+    result=dict(status='completed',subject=sub,measurement_records=lower_records,downstream_records=upper_records,
+        factor=factor,old_factor=calibration['old_factor'],multiplier=factor/calibration['old_factor'],
+        seconds=time.monotonic()-started,peak_rss_mib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/1024)
+    write_json(done,result);return result
+
+
+def _migration_sidecars(source,destination):
+    for folder in ['event_index','channel_geometry']:
+        (destination/folder).mkdir(parents=True,exist_ok=True)
+        for name in (source/folder).iterdir():
+            if name.is_file():
+                target=destination/folder/name.name
+                if target.exists():
+                    if target.read_bytes()!=name.read_bytes():raise ValueError('Sidecar changed')
+                else:shutil.copyfile(name,target)
+
+
+def migrate_visual_caches(root,cfg,stage,workers):
+    import fcntl
+    from concurrent.futures import ProcessPoolExecutor
+    root=Path(root).resolve();low=root/cfg['output_measurement'];out=root/cfg['output_cache']
+    if low.resolve() in [(root/cfg['source_measurement']).resolve(),(root/cfg['source_downstream']).resolve()] or out==low:
+        raise ValueError('Fresh distinct cache generations required')
+    low.mkdir(parents=True,exist_ok=True);out.mkdir(parents=True,exist_ok=True)
+    with (out/'controller.lock').open('a+') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        plan=visual_migration_plan(root,cfg)
+        planpath=out/'migration_plan.json'
+        if planpath.exists():
+            if json.loads(planpath.read_text())!=_plain(plan):raise ValueError('Frozen migration plan changed')
+        else:
+            if (out/'cache_manifest.json').exists() or (low/'cache_manifest.json').exists():raise ValueError('Existing output without this migration plan')
+            write_json(planpath,plan)
+        if stage=='plan':return dict(stage='plan',visual_records=len(plan['selection']),subjects=len(plan['calibrations']),signal_reads=0)
+        if stage=='verify':return verify_visual_migration(out)
+        if not os.environ.get('INVOCATION_ID'):raise ValueError('Use durable user systemd for cache migration')
+        base=json.loads((root/cfg['source_measurement']/'cache_manifest.json').read_text())
+        olddown=json.loads((root/cfg['source_downstream']/'cache_manifest.json').read_text())
+        sources={m['join_key']:m for m in base['records']};prior={m['join_key']:m for m in olddown['records']}
+        selected=['S01','S06'] if stage=='pilot' else sorted(plan['calibrations'])
+        payloads=[]
+        for sub in selected:
+            keys=[k for k in plan['selection'] if sources[k]['canonical_subject_id']==sub]
+            payloads.append((str(root),cfg,sub,{k:plan['selection'][k] for k in keys},plan['calibrations'][sub],
+                {k:sources[k] for k in keys},{k:prior[k] for k in keys}))
+        started=time.monotonic();results=[]
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            for r in pool.map(_visual_migration_subject,payloads):
+                results.append(r);print(json.dumps({k:r[k] for k in ['subject','multiplier','seconds','peak_rss_mib']}),flush=True)
+                write_json(out/'progress.json',dict(stage=stage,completed_subjects=len(results),total_subjects=len(selected)))
+        write_json(out/(stage+'_execution.json'),dict(status='completed',subjects=len(results),workers=workers,
+            seconds=time.monotonic()-started,peak_worker_mib=max(r['peak_rss_mib'] for r in results),supervisor=os.environ.get('INVOCATION_ID')))
+        if stage=='pilot':return dict(status='completed',subjects=len(results))
+        # Other datasets retain the same bytes and semantics in both new roots.
+        for key,m in sources.items():
+            if m['dataset_id']==VISUAL:continue
+            for target,original,is_down in [(low,m,False),(out,prior[key],True)]:
+                directory=_migration_directory(target,original);directory.mkdir(parents=True,exist_ok=True)
+                mm=deepcopy(original);mm['record_npz']=str(directory.resolve())
+                for name,relative in original['arrays'].items():
+                    _link(Path(original['record_npz'])/relative,directory/(name+'.npy'))
+                    mm['arrays'][name]=name+'.npy'
+                if is_down:
+                    mm['downstream_input_schema']=SCHEMA_V2;mm['source_cache_record']=str(_migration_directory(low,m).resolve())
+                else:mm['measurement_cache_version']='physiology_semantic_clean_v6'
+                write_json(directory/'record.json',mm)
+        _migration_sidecars(root/cfg['source_measurement'],low)
+        _migration_sidecars(root/cfg['source_downstream'],out)
+        lower_records=[json.loads((_migration_directory(low,m)/'record.json').read_text()) for m in sources.values()]
+        upper_records=[json.loads((_migration_directory(out,m)/'record.json').read_text()) for m in sources.values()]
+        newplan=json.loads((root/cfg['source_downstream']/'input_plan.json').read_text())
+        newplan.update(schema=SCHEMA_V2,configuration=cfg,source_cache=str(low.resolve()),source_downstream=str((root/cfg['source_downstream']).resolve()))
+        lowerlookup={r['join_key']:r for r in lower_records}
+        for entry in newplan['records']:
+            r=lowerlookup[entry['join_key']];entry['fnirs_channels']=r['measurement']['fnirs_channel_names']
+            entry['source_signature']=dict(join_key=r['join_key'],source_files=r['source_files'],array_shapes=r['array_shapes'],
+                processing_schema=r['processing_schema'],motion_method=r['motion_method'],fnirs_channels=r['measurement']['fnirs_channel_names'],
+                fnirs_preprocessing=r['measurement']['fnirs_preprocessing_state'])
+        write_json(out/'input_plan.json',newplan)
+        for target,original,rows in [(low,base,lower_records),(out,olddown,upper_records)]:
+            manifest=deepcopy(original);manifest.update(records=rows,record_count=len(rows),execution='completed',
+                migration_contract=cfg,source_cache=str(root/cfg['source_measurement']) if target==low else str(low.resolve()))
+            if target==low:manifest.update(measurement_cache_version='physiology_semantic_clean_v6',output_dir=str(low.resolve()))
+            else:manifest['downstream_input_schema']=SCHEMA_V2
+            write_json(target/'cache_manifest.json',manifest)
+        return verify_visual_migration(out)
+
+
+def verify_visual_migration(cache_root):
+    out=Path(cache_root);migration=json.loads((out/'migration_plan.json').read_text());cfg=migration['configuration']
+    root=out.resolve().parents[2];low=root/cfg['output_measurement']
+    olddown=json.loads((root/cfg['source_downstream']/'cache_manifest.json').read_text())
+    oldbase=json.loads((root/cfg['source_measurement']/'cache_manifest.json').read_text())
+    original={r['join_key']:r for r in oldbase['records']};previous={r['join_key']:r for r in olddown['records']}
+    dataset=DownstreamInputDataset(out);lower=CleanPhysiologyCacheIndex(low);lm={r.join_key:r for r in lower.records}
+    oldplan=json.loads((root/cfg['source_downstream']/'input_plan.json').read_text())
+    for key in ['samples','exclusions','subject_partitions','groups']:
+        if dataset.plan[key]!=oldplan[key]:raise ValueError('Frozen '+key+' changed')
+    counts=Counter();visual=[];samples=Counter();max_error=0.
+    for record in dataset.index.records:
+        m=record.manifest;old=original[record.join_key];prior=previous[record.join_key];bottom=lm[record.join_key]
+        for key in ['eeg','eeg_supported_channels','eeg_bad_channel_mask']:
+            if not os.path.samefile(record.npz_path/m['arrays'][key],Path(prior['record_npz'])/prior['arrays'][key]):raise ValueError('EEG changed')
+        if record.dataset_id!=VISUAL:
+            for key in ['fnirs','fnirs_supported_channels']:
+                if not os.path.samefile(record.npz_path/m['arrays'][key],Path(prior['record_npz'])/prior['arrays'][key]):raise ValueError('Nonvisual signal changed')
+                if not os.path.samefile(bottom.npz_path/bottom.manifest['arrays'][key],Path(old['record_npz'])/old['arrays'][key]):raise ValueError('Nonvisual measurement changed')
+        else:
+            expected=_visual_selection(old)
+            if expected!=m['fnirs_selection'] or expected!=bottom.manifest['fnirs_selection']:raise ValueError('Selection mismatch')
+            columns=expected['retained_columns'];raw=np.load(Path(old['record_npz'])/old['arrays']['fnirs'],mmap_mode='r')
+            physical=np.load(bottom.npz_path/'fnirs.npy',mmap_mode='r');normalized=np.load(record.npz_path/'fnirs.npy',mmap_mode='r')
+            norm=json.loads(Path(m['fnirs_normalization']['source']).read_text());factor=norm['factor']
+            np.testing.assert_array_equal(physical,raw[:,columns]);np.testing.assert_allclose(normalized,physical*factor,rtol=1e-12,atol=1e-12)
+            if m['measurement']['fnirs_channel_names']!=expected['retained_names'] or not np.isfinite(normalized).all():raise ValueError('Compact identities/values differ')
+            np.testing.assert_array_equal(np.load(record.npz_path/'fnirs_supported_channels.npy'),np.ones(len(columns),bool))
+            max_error=max(max_error,float(np.max(abs(normalized/factor-physical))))
+            visual.append(dict(subject=record.canonical_subject_id,record=record.base_record_id,locations=len(columns)//2,
+                channels=[n[:-4] for n in expected['retained_names'][::2]],factor=factor))
+        counts[record.dataset_id]+=1
+    for i,row in enumerate(dataset.samples):
+        sample=dataset[i];samples[sample['dataset']]+=1
+        for modality in ['eeg','fnirs']:
+            value=sample[modality];mask=sample['valid_mask'][modality]
+            if value.shape!=mask.shape or value.shape[0]!=len(sample['channel_names'][modality]) or not np.isfinite(value[mask]).all():raise ValueError('Invalid consumer sample')
+            if len(sample['channel_geometry'][modality])!=value.shape[0] or any(not g['position_available'] for g in sample['channel_geometry'][modality]):raise ValueError('Geometry/channel mismatch')
+        if sample['dataset']==VISUAL and sample['unit']['fnirs']!='subject_normalized_Hb':raise ValueError('Missing explicit normalized coordinate')
+    result=dict(schema=SCHEMA_V2+'_verification',status='passed',checked_records=len(dataset.index.records),checked_samples=len(dataset),
+        record_counts=dict(counts),sample_counts=dict(samples),visual_records=visual,inverse_normalization_max_error=max_error,
+        errors=[],unchanged_samples_splits_labels=True,other_datasets_byte_identical=True,SSM_refits=0)
+    write_json(out/'verification.json',result)
+    write_json(low/'verification.json',dict(schema='physiology_semantic_clean_v6_verification',status='passed',checked_records=len(lower.records),
+        visual_records=len(visual),exact_usable_measurement_selection=True,corrected_Visual_EEG_reused=True,
+        other_datasets_byte_identical=True,verification_source=str((out/'verification.json').resolve()),errors=[]))
+    return {k:v for k,v in result.items() if k!='visual_records'}

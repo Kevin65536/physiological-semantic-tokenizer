@@ -90,6 +90,7 @@ Measurement caches, coordinate and scale audits, native Hb summaries and optical
 | Diagnostic / usage | Entry | Config | Targeted tests |
 | --- | --- | --- | --- |
 | Four-dataset downstream input freeze; metadata `--downstream-stage plan`, supervised `pilot`/`build`, retained-input `verify`; corrected Visual native channels, raw-voltage record preprocessing and unchanged cached Hb | [`build_clean_eeg_fnirs_cache.py`](build_clean_eeg_fnirs_cache.py) with `--downstream-config <contract>`; consumer: [`DownstreamInputDataset`](../src/data/downstream_input_cache.py) | [`downstream_input_v1.yaml`](configs/physiology_semantic_tokenizer/downstream_input_v1.yaml); [input/split/label contract](../docs/DATA_CONTRACT.md#four-dataset-downstream-input-cache--2026-11-04) | `test_visual_channel_identity.py`, `test_downstream_input_cache.py`, `test_unified_physiology.py`, `test_clean_cache_builder.py`, `test_cached_fnirs_input.py` |
+| Visual-only measurement v6 / downstream v2 migration; same `--downstream-stage <plan|pilot|build|verify>`; compact usable Hb columns and frozen subject normalization | Existing [`build_clean_eeg_fnirs_cache.py`](build_clean_eeg_fnirs_cache.py) and [`downstream_input_cache.py`](../src/data/downstream_input_cache.py); completed-cache report: [`analyze_tak_cache_versions.py`](scripts/analyze_tak_cache_versions.py) `--visual-cache-review <v2_cache> --export <fresh_cache_child>` | [`downstream_input_v2.yaml`](configs/physiology_semantic_tokenizer/downstream_input_v2.yaml); [measurement and normalization coordinates](../docs/DATA_CONTRACT.md#visual-measurement-v6--downstream-input-v2--2026-11-10); other datasets and sample identities preserved; no SSM refits | `test_visual_cache_migration.py`, `test_downstream_input_cache.py`, `test_cached_fnirs_input.py`, `test_unified_physiology.py`, `test_clean_cache_builder.py`, `test_visual_channel_identity.py` |
 | General public measurement cache; explicit versioned output root, signal → event → geometry builders under a durable supervisor | [`build_clean_eeg_fnirs_cache.py`](build_clean_eeg_fnirs_cache.py), [`build_clean_event_index.py`](build_clean_event_index.py), [`build_clean_channel_geometry.py`](build_clean_channel_geometry.py) | [Data contract](../docs/DATA_CONTRACT.md#无运动校正的通用缓存--2026-09-28); CLI `--processing-schema physiology_measurement_alignment_v5 --motion-method none`; MNE is an explicit optical comparison in a separate root. Metadata-only REFED layout ([paper extraction](scripts/extract_refed_paper_layout.py)): `--datasets refed --refed-geometry paper_layout_v1 --output-dir <fresh_geometry_root>`, consumed via `geometry_root`; [planar geometry contract](../docs/DATA_CONTRACT.md#refed-paper-layout-registration--2026-10-13) | `test_clean_cache_builder.py`, `test_clean_physiology_cache.py`, `test_homer2_measurement_v5.py`, `test_homer2_measurement_v4.py`, `test_unified_physiology.py`, `test_event_alignment.py`, `test_channel_geometry.py`, `test_physiology_semantic_local.py` |
 | Observation coordinate stability, native EOG events, hardware donor contrasts and matched synthetic mechanisms; `--stage check`, supervised `pilot` / `all`, bounded `refinement`, retained-array `verify` | [`scripts/evaluate_observation_semantics.py`](scripts/evaluate_observation_semantics.py); [`PPT/PDF renderer`](scripts/render_observation_semantics_report.py) | [`v1`](configs/physiology_semantic_tokenizer/observation_semantics_v1.yaml), [`C/D v2`](configs/physiology_semantic_tokenizer/observation_semantics_v2.yaml); [protocol](../docs/EXPERIMENT_PLAN.md#观测物理量事件锚点与竞争机制2026-10-09) | `test_observation_semantics.py` |
 | Measurement precision and unit revision; fixed v3 stage 1/2 | [`evaluate_ssm_overnight_diagnostics.py`](evaluate_ssm_overnight_diagnostics.py) | [`ssm_measurement_alignment_v3.yaml`](configs/physiology_semantic_tokenizer/ssm_measurement_alignment_v3.yaml) | `test_ssm_overnight_diagnostics.py`, `test_step5_observation_diagnostic.py`, `test_step5.py`, `test_homer2_preprocessing.py` |
@@ -367,6 +368,31 @@ remains explicit and equal-weight. The retained
 remains available through explicit `--config` and preserves shared PCA; the
 versions require separate output namespaces and cannot reuse each other's fits.
 
+The explicit [v4 Visual migration contract](configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v4.yaml)
+uses the same cache entry and stages. It refits only each Visual record's usable
+positions from measurement v6, using the frozen downstream-v2 Hb scale once and
+retaining v3 EEG coordinates. Other datasets' exact v3 tasks/features are linked
+with their original provenance. Native pair IDs remain stable while a separate
+compact index addresses selected Hb columns. The plan excludes rejected pairs
+before any solver call; final verification checks target/scale identity and
+rejects extra task files. Synthetic sparse-index, feature-replay and warm-start
+tests are in `test_tak_reconstruction_cache.py`.
+
+The [tokenizer cache audit](configs/physiology_semantic_tokenizer/tokenizer_cache_audit_v2.yaml)
+uses `analyze_tak_cache_versions.py --tokenizer-cache-audit --stage
+<plan|pilot|run|join-check|review>` on the completed measurement-v6,
+downstream-v2 and reconstruction-v4 roots. It checks every record/sample/task,
+keeps failure and undefined denominators, describes input/latent/S–O statistics,
+compares Visual on the same retained locations, and checks adjacent-window Hb
+agreement after restoring window references. `join-check` independently compares
+loaded Hb samples with prepared targets using absolute integer record indices;
+naive relative-offset and reported-clock rounding discrepancies remain explicit.
+Input spectral panels require at least 30 seconds of supported data; native
+short sample lengths remain in the input census. `review` adds robust amplitude
+distributions and the complete low-variance-window list without changing masks.
+Tests: `test_tak_cache_version_analysis.py`; synthetic checks cover cancellation,
+unit invariance, subject aggregation, reference restoration and half-grid joins.
+
 Read-only v1/v3 descriptive comparisons use
 [`analyze_tak_cache_versions.py`](scripts/analyze_tak_cache_versions.py) with
 `--v1 <completed_v1> --v3 <completed_v3> --output <fresh_v3_child> --stage
@@ -388,6 +414,47 @@ rates, local-amplitude strata, undefined metrics and numerical failures.
 `--stage examples --example-export <fresh_audit_child>` adds a bounded real
 HbO/HbR waveform comparison in the saved common subject Hb coordinate, with
 source-file unit/header checks and replay against retained prepared inputs.
+`--stage source-audit --source-export <fresh_audit_child>` joins the completed
+cache's Visual header exclusions and REFED acquisition quality table, replays
+the two previously illustrated subjects' retained calibration moments, and
+checks common-unit invariance. It changes no production mask, scale or fit;
+REFED's unresolved flag polarity remains explicit.
+`--stage author-check --source-export <author_review_child>` exercises pinned,
+reviewed REFED author function definitions on temporary synthetic MAT files,
+checking channel preservation, amplitude linearity, HbT selection and the
+actual training baseline/normalization path. It runs no training or real data.
+`--stage <refed-plan|refed-pilot|refed-run|refed-report> --source-export
+<fresh_audit_child>` audits the published subject-by-channel REFED flags across
+all retained records. It preserves failure/undefined denominators, computes
+paired subject statistics and all-channel spectra, checks duration/channel
+composition sensitivity, and exports same-window flag0/flag1 waveforms in the
+saved normalization. Pilot/run use a durable supervisor; neither flag is
+reclassified as valid/invalid by this analysis.
+`--stage <state-plan|state-pilot|state-run|state-report|state-readout>
+--source-export <fresh_audit_child>` extends the retained REFED audit to
+tau/beta distributions, physical-state summaries and input-amplitude ranges.
+Subject-level sign-flip tests and Holm correction preserve repeated-record
+dependence. The requested raw/filter display reads only the three previously
+selected video variables through the unified reader and checks the low-band
+replay against the retained cache. Pilot/run use a durable supervisor; no SSM
+fits or production scales change. `state-readout` adds versioned explanatory
+zooms from the first export's saved numeric arrays.
+The same analysis owner accepts `--amplitude-comparison --run <completed_v3>
+--visual-run <v4_with_completed_verified_preparation> --audit <fnirs_audit>
+--export <fresh_audit_child> --stage <plan|pilot|run|report>`. It compares all
+finite admitted prepared inputs in frozen subject coordinates, preserves
+missing-input and failed-fit denominators, and joins retained REFED beta/S/O
+statistics. Visual uses its repaired usable-channel inputs; running v4 fit
+results are not read. Weighted amplitude distributions, same-window channel
+spreads, 90-second sensitivity and posthoc waveform-gain diagnostics are
+descriptive. Pilot/run use a durable supervisor; no model is refitted.
+`--stage <visual-plan|visual-pilot|visual-run|visual-report> --visual-export
+<fresh_audit_child>` performs the Visual-only usable-channel Hb normalization
+comparison. It counts native EEG and per-record usable Hb locations, renders
+MNE scalp layouts, and compares retained waveforms under old and usable-only
+common Hb scales. Pilot/run use a durable supervisor; EEG PCA/scales and all
+SSM fits remain frozen. The excluded-channel amplitude fixture is in the same
+targeted test module.
 
 The bounded [three-subject normalization comparison](configs/physiology_semantic_tokenizer/shared_driver_normalization_comparison_v1.yaml)
 uses the same entry with `--normalization-comparison --normalization-stage

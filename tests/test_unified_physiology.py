@@ -41,6 +41,18 @@ def test_unified_loader_default_observation_window_is_twenty_seconds():
     assert default == DEFAULT_UNIFIED_WINDOW_DURATION_S == 20.0
 
 
+def test_refed_native_mat_selects_only_requested_video(tmp_path):
+    from scipy.io import savemat
+    from src.data.unified_physiology import _native_fnirs_mat
+    path=tmp_path/'fNIRS_videos.mat'
+    first=np.arange(60).reshape(2,3,10);second=-first
+    savemat(path,dict(video_1=first,video_2=second))
+    selected=_native_fnirs_mat(str(path),'video_2')
+    assert 'video_1' not in selected
+    np.testing.assert_array_equal(selected['video_2'],second)
+    assert 'video_1' in _native_fnirs_mat(str(path))
+
+
 def test_unified_loader_default_eeg_branch_is_single_trial_v4():
     default = inspect.signature(UnifiedPhysiologyWindowDataset).parameters["eeg_signal_branch"].default
     assert default == "single_trial_eeg_artifact_clean_v4"

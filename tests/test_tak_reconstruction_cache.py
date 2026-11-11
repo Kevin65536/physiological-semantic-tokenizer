@@ -548,3 +548,81 @@ def test_v3_retains_failed_warm_attempt_and_refits_standard(tmp_path,monkeypatch
     assert json.loads(attempt.read_text())['qualified'] is False and attempt.with_suffix('.npz').exists()
     row=json.loads((out/'tasks/fixture/s/r/w00000__p000.json').read_text());assert row['failed_warm_attempt']==str(attempt.relative_to(out))
     assert runner._tak_cache_v3_fit_worker((cfg,core,str(out),str(coordinate),str(out),spec))['cached']
+
+
+def test_v4_compact_hb_preserves_sparse_native_identity_and_never_copies_excluded(tmp_path):
+    cfg,_=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v4.yaml')
+    cfg=deepcopy(cfg);cfg['source_cache']['run']='parent'
+    out=tmp_path/'new';out.mkdir();lower=tmp_path/'measurement';lower.mkdir()
+    rng=np.random.default_rng(4);raw=rng.normal(size=(100,3,2));eeg=rng.normal(size=(60,6,5));indices=[0,2]
+    np.save(lower/'fnirs.npy',raw[:,indices].reshape(100,4))
+    selection=dict(retained_pair_indices=indices)
+    runner.write_json(lower/'record.json',dict(fnirs_selection=selection,arrays={'fnirs':'fnirs.npy'}))
+    w=dict(key='w00000',hb_start_s=1.,duration_s=6.)
+    r=dict(cache_key='visual/s/r',measurement_record=str(lower),fnirs_selection=selection,pairs=[dict(native_index=i) for i in indices],cache_windows=[w],split='train')
+    p=tmp_path/'parent/features/visual/s/r/w00000.npz';reference=raw[10:60].mean(0)
+    runner._tak_cache_npz(p,eeg=eeg,eeg_reference=np.ones((6,5)),eeg_valid=np.ones(6,bool),hb=raw[10:70]-reference,hb_reference=reference,hb_valid=np.ones(3,bool))
+    runner.write_json(p.with_suffix('.json'),dict(status='completed',window=w,split='train',provenance={'hb':{}}))
+    runner._tak_cache_v4_prepare_worker((cfg,str(tmp_path),str(out),r))
+    with np.load(out/'features/visual/s/r/w00000.npz') as a:
+        assert a['hb'].shape==(60,2,2)
+        np.testing.assert_array_equal(a['eeg'],eeg)
+        np.testing.assert_allclose(a['hb'],(raw[10:70]-reference)[:,indices],atol=1e-12)
+    r.update(dataset='visual',subject='s',record='r',join_key='visual|s|r')
+    r['pairs']=[dict(native_index=2,compact_index=1,id='CH3',status='available',channel_sets={})]
+    spec=next(runner.tak_cache_specs([r],individual_pca=True))
+    assert spec['pair']['native_index']==2 and spec['pair']['compact_index']==1 and spec['pair']['id']=='CH3'
+
+
+def test_v4_sparse_pair_warm_seed_and_target_use_different_indices(tmp_path,monkeypatch):
+    cfg,core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v4.yaml')
+    out=tmp_path/'new';source=tmp_path/'old';n=60
+    spec=dict(record_key='visual/s/r',dataset='visual',subject='s',split='train',window={'key':'w00000'},pair=dict(native_index=12,compact_index=1,id='CH13',status='available',channel_sets={'nearest6':list(range(6))}))
+    oldspec=deepcopy(spec);oldspec['pair'].pop('compact_index')
+    old=source/'tasks/visual/s/r/w00000__p012.json'
+    runner.write_json(old,dict(schema='v3',identity=oldspec,qualified=True,fits={'tak_tau_beta':dict(tau=2.,beta=1.)}))
+    runner._tak_cache_npz(old.with_suffix('.npz'),driver=np.zeros(n),initial_state=np.array([0.,1.,1.,1.,1.]),time_s=np.arange(n)/10.)
+    co=dict(status='completed',pc=[1.]+[0.]*29,eeg_factor=1.,hb_factor=.2,sd=[1.,1.,1.]);coordinate=out/'coordinates.json'
+    runner.write_json(coordinate,dict(individual={'visual__s':co},population={'visual':co}));runner.write_json(out/'source_reuse.json',dict(source=str(source)))
+    feature=out/'features/visual/s/r/w00000.npz';hb=np.arange(n*4,dtype=float).reshape(n,2,2)
+    runner._tak_cache_npz(feature,eeg=np.zeros((n,6,5)),hb=hb,eeg_valid=np.ones(6,bool),hb_valid=np.ones(2,bool),eeg_reference=np.zeros((6,5)),hb_reference=np.zeros((2,2)))
+    runner.write_json(feature.with_suffix('.json'),dict(status='completed',split='train',provenance={}))
+    def fake_fit(core,target,coordinate,common,**kwargs):
+        np.testing.assert_array_equal(target[:,1:],hb[:,1]);assert coordinate['hb_factor']==.2 and kwargs['initial_solution'] is not None
+        return dict(qualified=True,status='completed',fits={'tak_tau_beta':{'solver':{'objective_components':{'data':0.}}}}),dict(target=target,prediction=target.copy(),residual=np.zeros_like(target),sd_subject=np.ones(3))
+    monkeypatch.setattr(runner,'tak_cache_fit_arrays',fake_fit)
+    result=runner._tak_cache_fit_worker((cfg,core,str(out),str(coordinate),str(out),spec))
+    assert result['qualified'] and result['route']=='cached_free_start'
+    assert (out/'tasks/visual/s/r/w00000__p012.json').exists()
+    assert not (out/'tasks/visual/s/r/w00000__p001.json').exists()
+
+
+def test_v4_keeps_v3_model_and_explicit_visual_only_migration():
+    cfg,core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v4.yaml')
+    old,base=runner.tak_cache_config()
+    assert cfg['model']==old['model'] and cfg['windows']==old['windows']
+    assert core['arms']==base['arms'] and core['solver']==base['solver']
+    assert cfg['migration']['dataset']=='visual_cognitive_motivation'
+    assert cfg['data']['cache_root'].endswith('_v6') and cfg['data']['downstream_input'].endswith('_v2')
+
+
+def test_v4_pilot_retains_individual_nonconvergence_without_reclassifying_channel(tmp_path):
+    cfg,core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v4.yaml')
+    records=[]
+    for sub in ['good','failed']:
+        records.append(dict(dataset='visual_cognitive_motivation',subject=sub,split='train',cache_key='visual_cognitive_motivation/'+sub+'/r',join_key=sub,record='r',cache_windows=[dict(key='w00000')],pairs=[dict(id='CH3',native_index=2,compact_index=0,status='available',channel_sets={})]))
+    specs=list(runner.tak_cache_specs(records,pilot=True,individual_pca=True));pilot=tmp_path/'pilot'
+    runner.write_json(pilot/'plan.json',dict(specs=specs,selection=cfg['pilot']['selection']))
+    runner.write_json(pilot/'summary.json',dict(status='failed',reason='previous_all_examples_success_requirement'))
+    original=(pilot/'summary.json').read_bytes()
+    for folder in ['cpu_standard','cpu_warm','cuda_warm']:
+        runner.write_json(pilot/(folder+'_execution.json'),dict(seconds=1.))
+        for spec in specs:
+            path=pilot/folder/'tasks'/spec['record_key']/'w00000__p002.json';good=spec['subject']=='good'
+            runner.write_json(path,dict(identity=spec,qualified=good,seconds=1.,fits={'tak_tau_beta':dict(tau=2.,beta=1.,solver={'objective':3.})}))
+            if good:runner._tak_cache_npz(path.with_suffix('.npz'),target=np.zeros((60,3)),prediction=np.zeros((60,3)),sd_subject=np.ones(3))
+    review=runner.tak_cache_v4_pilot(cfg,core,tmp_path,records,[0,1])
+    assert review['status']=='passed' and len(review['retained_unqualified_examples'])==1
+    assert review['standard_subjects']==['visual_cognitive_motivation__failed']
+    assert (pilot/'summary.json').read_bytes()==original
+    assert (pilot/'verification_v2.json').exists()

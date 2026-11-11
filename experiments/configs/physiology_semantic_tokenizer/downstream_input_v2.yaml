@@ -1,0 +1,36 @@
+schema: physiology_downstream_input_v2
+source_measurement: data/cache/physiology_semantic_clean_v5
+source_downstream: data/cache/physiology_downstream_v1
+output_measurement: data/cache/physiology_semantic_clean_v6
+output_cache: data/cache/physiology_downstream_v2
+changed_dataset: visual_cognitive_motivation
+source_calibration_inputs: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261109_subject_pca_hb4_cache_v3
+channel_selection:
+  schema: visual_device_exclusion_v1
+  rule: paired_Oxy_Deoxy_Exception_Ch_zero_AND_existing_paired_support
+  storage: remove_columns_preserve_native_CH_identity_no_zero_imputation
+  before_signal_read: validate_both_native_headers_and_frozen_source_identity
+normalization:
+  schema: visual_subject_common_hb_v1
+  target_common_sd: 0.025
+  formula: target_divided_by_sqrt_mean_HbO_HbR_pooled_variances
+  support: exact_retained_subject_calibration_windows_first_5s_referenced
+  weights: original_window_site_time_weighting_after_device_exclusion
+  application: one_positive_factor_per_subject_shared_HbO_HbR_and_all_records
+  measurement_cache: retain_measurement_units
+  downstream_cache: Visual_fnirs_is_measurement_times_factor_no_new_window_centering
+  heldout_scope: inherited_public_unlabelled_individual_adaptation
+preserve:
+  other_datasets: byte_identical_arrays_and_metadata_semantics
+  EEG: reuse_verified_downstream_v1_arrays_including_corrected_31_Visual_channels
+  timing_filter_units: no_reprocessing_or_new_unit_conversion
+  samples_splits_labels: exact_source_downstream_plan
+  S06_Part1: retained_record_exclusion_and_no_supervised_samples
+  SSM: no_prediction_or_fitted_state_reads_no_refits_no_overwrite
+boundary: retained_registered_public_inputs_only_no_protected_data
+resources:
+  pilot_workers: 2
+  workers: 8
+  numerical_threads: 1
+  supervisor: user_systemd_with_linger
+verification: all_records_all_samples_compact_identity_mask_scaling_and_unchanged_sources

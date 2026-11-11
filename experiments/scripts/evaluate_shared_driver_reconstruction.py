@@ -10767,7 +10767,7 @@ def tak_cache_config(path=None):
     default=folder/'shared_driver_tak_subject_cache_v3.yaml'
     cfg=yaml.safe_load(Path(path or default).read_text())
     contracts={f'shared_driver_tak_subject_cache_v{v}':folder/f'shared_driver_tak_subject_cache_v{v}.yaml'
-               for v in (1,2,3)}
+               for v in (1,2,3,4)}
     if cfg.get('schema') not in contracts or cfg!=yaml.safe_load(contracts[cfg['schema']].read_text()):
         raise ValueError('Use the reviewed subject-calibrated reconstruction cache contract')
     core=deepcopy(tak_config(CODE_ROOT/cfg['base_config']))
@@ -10805,6 +10805,7 @@ def tak_cache_sample_join(sample, record):
 
 
 def tak_cache_plan(cfg,root):
+    if cfg['schema']=='shared_driver_tak_subject_cache_v4':return tak_cache_v4_plan(cfg,root)
     from src.data.tak_mismatch import inventory_tak_mismatch,tak_reconstruction_windows
     data=cfg['data'];source=root/data['downstream_input']
     previous=json.loads((source/'input_plan.json').read_text())
@@ -10841,7 +10842,7 @@ def tak_cache_plan(cfg,root):
         downstream_input=str(source),downstream_joins=joins,counts=counts,
         planned_pair_windows=sum(v['pair_windows'] for v in counts.values()),
         measured_signal_reads=0,protected_reads=0,
-        interpretation=('individual_unlabelled_PCA_and_scaling' if cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3')
+        interpretation=('individual_unlabelled_PCA_and_scaling' if cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4')
                         else 'individual_unlabelled_adaptation_with_training_only_shared_PCA'))
 
 
@@ -11123,7 +11124,7 @@ def tak_cache_calibrate(cfg,out,plan, *, records=None, destination=None):
             raise ValueError('Frozen calibration contract changed')
         return value
     population={};individual={}
-    individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3')
+    individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4')
     for ds in cfg['data']['datasets']:
         selected=[r for r in records if r['dataset']==ds and r['split']=='train']
         sources=[]
@@ -11264,7 +11265,7 @@ def _tak_cache_feature_arrays(path):
 def _tak_cache_fit_worker(payload):
     from src.inference.shared_driver_reconstruction import LinearSolverUnavailable
     cfg,core,out_string,coordinate_string,destination_string,spec=payload
-    if cfg['schema']=='shared_driver_tak_subject_cache_v3':return _tak_cache_v3_fit_worker(payload)
+    if cfg['schema'] in ('shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4'):return _tak_cache_v3_fit_worker(payload)
     out,destination=Path(out_string),Path(destination_string);started=time.monotonic()
     path=destination/'tasks'/spec['record_key']/(spec['window']['key']+f"__p{spec['pair']['native_index']:03d}.json")
     if path.exists():
@@ -11290,7 +11291,7 @@ def _tak_cache_fit_worker(payload):
         metadata=json.loads(feature.with_suffix('.json').read_text())
         if metadata['status']!='completed':
             raise ValueError('feature_preparation_failed: '+str(metadata.get('error')))
-        a=_tak_cache_feature_arrays(str(feature));indices=pair['channel_sets']['nearest6'];p=pair['native_index']
+        a=_tak_cache_feature_arrays(str(feature));indices=pair['channel_sets']['nearest6'];p=pair.get('compact_index',pair['native_index'])
         if not a['hb_valid'][p] or not a['eeg_valid'][indices].all():
             raise ValueError('unsupported_Hb_pair_or_required_native_EEG_channel')
         n=len(a['eeg']);pc=np.asarray(co['pc'],float)
@@ -11326,7 +11327,7 @@ def tak_cache_specs(records, *, pilot=False, individual_pca=False):
             for pair in pairs:
                 yield dict(record_key=r['cache_key'],dataset=r['dataset'],subject=r['subject'],split=r['split'],
                     join_key=r['join_key'],record=r['record'],window=w,pair={k:pair[k] for k in
-                        ('native_index','id','site_id','status','channel_sets','channel_set_names') if k in pair},
+                        ('native_index','compact_index','id','site_id','status','channel_sets','channel_set_names') if k in pair},
                     output_coordinates=('individual_PC1_logpower_and_referenced_cached_Hb' if individual_pca
                                         else 'training_PC1_logpower_and_referenced_cached_Hb'),
                     visibility='joint_full_declared_window',subject_adaptation=True)
@@ -11371,7 +11372,7 @@ def tak_cache_check(cfg,core,out):
     np.testing.assert_array_equal(own['pc'],population['pc'])
     np.testing.assert_allclose(own['eeg_factor'],population['eeg_factor']/3,rtol=1e-12)
     np.testing.assert_allclose(own['hb_factor'],population['hb_factor']/7,rtol=1e-12)
-    individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3')
+    individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4')
     if individual_pca:
         changed=x.copy();changed[:,np.argmin(abs(population['pc']))]*=100
         individual=fit_feature_coordinate([(changed,h)])
@@ -11417,7 +11418,7 @@ def tak_cache_pilot(cfg,core,root,out,plan,workers):
         total=len(records))
     coordinate_path=pilot/'coordinates.json'
     tak_cache_calibrate(cfg,out,plan,records=records,destination=coordinate_path)
-    specs=list(tak_cache_specs(records,pilot=True,individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3')))
+    specs=list(tak_cache_specs(records,pilot=True,individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4')))
     run=_tak_cache_pool(_tak_cache_fit_worker,
         ((cfg,core,str(out),str(coordinate_path),str(pilot),s) for s in specs),
         out=pilot,phase='pilot_fit',workers=min(workers,len(specs)),total=len(specs))
@@ -11458,14 +11459,17 @@ def tak_cache_pilot(cfg,core,root,out,plan,workers):
 def _tak_cache_verify_record(payload):
     """Independently check retained arrays; no source signals or refitting."""
     cfg,core,out_string,record=payload;out=Path(out_string)
+    migration=cfg['schema']=='shared_driver_tak_subject_cache_v4'
+    if migration and record['dataset']!=cfg['migration']['dataset']:
+        cfg=dict(cfg,schema=cfg['source_cache']['schema'])
     counts=dict(planned=0,terminal=0,qualified=0,failed=0,paired=0,short=0,
                 nonpositive_EEG_correlation=0,nonpositive_HbO_correlation=0,
                 nonpositive_HbR_correlation=0,Hb_not_better_than_zero=0)
     sums={};maxima=dict(closure=0.,metric=0.,observation=0.);issues=[]
-    if cfg['schema']=='shared_driver_tak_subject_cache_v3':
+    if cfg['schema'] in ('shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4'):
         counts.update(cached_free_start=0,standard_after_unqualified_warm=0,standard_missing_seed=0,standard_subject_guard=0)
         maxima['weighted_data_cost']=0.
-    for spec in tak_cache_specs([record],individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3')):
+    for spec in tak_cache_specs([record],individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4')):
         counts['planned']+=1
         path=out/'tasks'/spec['record_key']/(spec['window']['key']+f"__p{spec['pair']['native_index']:03d}.json")
         if not path.exists():
@@ -11473,7 +11477,7 @@ def _tak_cache_verify_record(payload):
         row=json.loads(path.read_text());counts['terminal']+=1
         if row.get('schema')!=cfg['schema'] or row.get('identity')!=spec:
             issues.append(dict(key=str(path.relative_to(out)),reason='identity_mismatch'));continue
-        if cfg['schema']=='shared_driver_tak_subject_cache_v3':
+        if cfg['schema'] in ('shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4'):
             route=row.get('initialization_route')
             if route in counts:counts[route]+=1
             if row.get('observation_weights')!=cfg['model']['observation_weights']:issues.append(dict(key=str(path),reason='observation_weight_mismatch'))
@@ -11493,6 +11497,14 @@ def _tak_cache_verify_record(payload):
                         or not a['observation_valid'].all()
                         or not np.array_equal(a['time_s'],np.arange(n)/10.)):
                     raise ValueError('shape, precision, mask or clock mismatch')
+                if migration and record['dataset']==cfg['migration']['dataset']:
+                    coordinate=_tak_cache_coordinates(str(out/'coordinates.json'))['individual'][spec['dataset']+'__'+spec['subject']]
+                    feature=_tak_cache_feature_arrays(str(out/'features'/spec['record_key']/(spec['window']['key']+'.npz')))
+                    pair=spec['pair'];indices=pair['channel_sets']['nearest6']
+                    expected_target=np.column_stack((feature['eeg'][:,indices].reshape(n,30)@np.asarray(coordinate['pc']),feature['hb'][:,pair['compact_index']]))
+                    np.testing.assert_array_equal(y,expected_target)
+                    np.testing.assert_array_equal(a['scale'],[coordinate['eeg_factor'],coordinate['hb_factor'],coordinate['hb_factor']])
+                    np.testing.assert_allclose(a['sd_subject']*a['scale'],coordinate['sd'],rtol=1e-14)
                 closure=float(np.max(abs(y-p-e)));maxima['closure']=max(maxima['closure'],closure)
                 if not np.allclose(y,p+e,rtol=1e-12,atol=1e-12):raise ValueError('residual closure')
                 squared=np.sum((p[:-1]-y[:-1])**2,axis=0)/(n-1)
@@ -11505,7 +11517,7 @@ def _tak_cache_verify_record(payload):
                         if not np.isclose(value,actual[key],rtol=1e-10,atol=1e-10):
                             raise ValueError('retained metric disagrees with arrays')
                         sums['free_'+name+'_'+key]=sums.get('free_'+name+'_'+key,0.)+float(value)
-                if cfg['schema']=='shared_driver_tak_subject_cache_v3':
+                if cfg['schema'] in ('shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4'):
                     cost=core['tensor']['dt_s']/core['solver'].get('observation_reference_dt_s',core['tensor']['dt_s'])*np.sum(np.asarray(cfg['model']['observation_weights'])*((p-y)[:-1]/a['sd_subject'])**2)
                     saved=row['fits']['tak_tau_beta']['solver']['objective_components']['data']
                     maxima['weighted_data_cost']=max(maxima['weighted_data_cost'],abs(float(cost)-saved))
@@ -11531,6 +11543,10 @@ def _tak_cache_verify_record(payload):
                             sums[name]=sums.get(name,0.)+float(value)
         except Exception as exc:
             issues.append(dict(key=str(path.relative_to(out)),reason=str(exc)))
+    if migration and record['dataset']==cfg['migration']['dataset']:
+        expected={w['key']+f"__p{p['native_index']:03d}.json" for w in record['cache_windows'] for p in record['pairs']}
+        actual={p.name for p in (out/'tasks'/record['cache_key']).glob('*.json')}
+        if actual!=expected:issues.append(dict(reason='unexpected_or_excluded_task_identity'))
     return dict(record_key=record['cache_key'],dataset=record['dataset'],subject=record['subject'],
                 split=record['split'],durations_s=sorted({w['duration_s'] for w in record['cache_windows']}),
                 counts=counts,sums=sums,maxima=maxima,issues=issues)
@@ -11569,6 +11585,8 @@ def tak_cache_verify(cfg,core,out,plan,workers):
         datasets=summaries,issues=issues,
         maxima={k:max((r['maxima'][k] for r in rows),default=0.) for k in rows[0]['maxima']},
         source='frozen_plan_coordinates_and_every_terminal_task_array',raw_signal_reads=0,refits=0)
+    if cfg['schema']=='shared_driver_tak_subject_cache_v4':
+        result['migration']=dict(plan['migration'],excluded_tasks_present=any(i.get('reason')=='unexpected_or_excluded_task_identity' for i in issues))
     write_json(out/'verification.json',result)
     summary=dict(schema=cfg['schema'],experiment_id=cfg['experiment_id'],
         status='completed' if not issues else 'verification_failed',counts=counts,datasets=summaries,
@@ -11576,6 +11594,7 @@ def tak_cache_verify(cfg,core,out,plan,workers):
         layout='tasks/<dataset>/<subject>/<record>/<window>__p<pair>.json_and_npz',
         claim_limits=cfg['claim_limits'],downstream_join='plan.json:downstream_joins',
         complete_population_includes_failures=True)
+    if cfg['schema']=='shared_driver_tak_subject_cache_v4':summary['migration']=result['migration']
     write_json(out/'summary.json',summary)
     if issues:raise ValueError('Independent full-cache verification failed; evidence retained')
     return summary
@@ -11858,11 +11877,12 @@ def _tak_cache_v3_fit_worker(payload):
         if pair['status']!='available' or co['status']!='completed':raise ValueError('Unavailable geometry or subject calibration')
         metadata=json.loads(feature.with_suffix('.json').read_text())
         if metadata['status']!='completed' or metadata['split']!=spec['split']:raise ValueError('Prepared feature status or split mismatch')
-        a=_tak_cache_feature_arrays(str(feature));indices=pair['channel_sets']['nearest6'];p=pair['native_index']
+        a=_tak_cache_feature_arrays(str(feature));indices=pair['channel_sets']['nearest6'];p=pair.get('compact_index',pair['native_index'])
         if not a['hb_valid'][p] or not a['eeg_valid'][indices].all():raise ValueError('Unsupported source samples')
         n=len(a['eeg']);pc=np.asarray(co['pc']);target=np.column_stack((a['eeg'][:,indices].reshape(n,30)@pc,a['hb'][:,p]))
         common_sd=np.asarray(population['sd'])/np.array([population['eeg_factor'],population['hb_factor'],population['hb_factor']])
-        seed,source_info=tak_cache_v3_seed(source,spec,n);row['warm_source']=source_info
+        seed_spec=deepcopy(spec);seed_spec['pair'].pop('compact_index',None)
+        seed,source_info=tak_cache_v3_seed(source,seed_spec,n);row['warm_source']=source_info
         policy=out/'pilot'/'summary.json';guarded=set(_tak_cache_coordinates(str(policy)).get('standard_subjects',[])) if mode=='auto' and policy.exists() else set()
         use_warm=mode!='standard' and seed is not None and (mode!='auto' or key not in guarded)
         if mode=='warm_only' and seed is None:raise ValueError('Pilot old seed unavailable')
@@ -11954,6 +11974,189 @@ def tak_cache_v3_execute(cfg,core,root,out,plan,args,devices):
         if args.cache_stage=='pilot' and execution['status']=='running':execution.update(status='pilot_completed',seconds=time.monotonic()-started);write_json(out/'execution.json',execution)
 
 
+def tak_cache_v4_plan(cfg,root):
+    """Migrate verified metadata; excluded locations never become task specs."""
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    source=root/cfg['source_cache']['run'];lower=root/cfg['data']['cache_root'];upper=root/cfg['data']['downstream_input']
+    parent=json.loads((source/'plan.json').read_text())
+    if parent['schema']!=cfg['source_cache']['schema'] or json.loads((source/'verification.json').read_text())['status']!='passed':
+        raise ValueError('Verified v3 parent required')
+    for cache in (lower,upper):
+        if json.loads((cache/'verification.json').read_text())['status']!='passed':raise ValueError('Verified input migration required')
+    inputs=json.loads((upper/'input_plan.json').read_text())
+    if inputs['schema']!='physiology_downstream_input_v2' or Path(inputs['source_cache']).resolve()!=lower.resolve():raise ValueError('Mismatched v2 measurement source')
+    if inputs['subject_partitions']!=parent['subject_partitions']:raise ValueError('Subject splits changed')
+    index=CleanPhysiologyCacheIndex(lower);lookup={r.join_key:r for r in index.records}
+    if set(lookup)!={r['join_key'] for r in parent['records']}:raise ValueError('Record identities changed')
+    plan=deepcopy(parent);plan.update(schema=cfg['schema'],downstream_input=str(upper.resolve()))
+    removed=[]
+    for record in plan['records']:
+        if record['dataset']!=cfg['migration']['dataset']:continue
+        m=lookup[record['join_key']].manifest;selection=m['fnirs_selection'];kept=selection['retained_pair_indices']
+        if selection['retained_names']!=m['measurement']['fnirs_channel_names']:raise ValueError('Channel names changed')
+        original=record['pairs'];pairs=[]
+        for i in kept:
+            pair=deepcopy(original[i])
+            if pair['native_index']!=i or pair['id'].split(':')[-1]!=f'CH{i+1}':raise ValueError('Native pair order changed')
+            if pair['status']!='available' and record['cache_windows']:raise ValueError('Usable pair geometry unavailable')
+            pair['compact_index']=len(pairs);pair['component_indices']=[2*len(pairs),2*len(pairs)+1];pairs.append(pair)
+        removed.append(dict(record_key=record['cache_key'],excluded_pair_ids=[p['id'] for p in original if p['native_index'] not in kept],
+            removed_pair_windows=len(record['cache_windows'])*(len(original)-len(pairs))))
+        record.update(pairs=pairs,hb_channel_names=m['measurement']['fnirs_channel_names'],array_shapes=m['array_shapes'],
+            measurement_record=str(lookup[record['join_key']].npz_path),fnirs_selection=selection)
+        if 'geometry_identity' in record:
+            record['geometry_identity']['fnirs']=[record['geometry_identity']['fnirs'][i] for i in selection['retained_columns']]
+    lookup={r['join_key']:r for r in plan['records']}
+    joins=[tak_cache_sample_join(s,lookup[s['join_key']]) for s in inputs['samples']]
+    if joins!=parent['downstream_joins']:raise ValueError('Window-to-downstream joins changed')
+    for ds,counts in plan['counts'].items():
+        rr=[r for r in plan['records'] if r['dataset']==ds]
+        counts['pair_windows']=sum(len(r['cache_windows'])*len(r['pairs']) for r in rr)
+    plan['planned_pair_windows']=sum(v['pair_windows'] for v in plan['counts'].values())
+    changed=cfg['migration']['dataset'];new_count=plan['counts'][changed]['pair_windows']
+    plan['migration']=dict(source=str(source.resolve()),measurement=str(lower.resolve()),downstream=str(upper.resolve()),
+        refit_dataset=changed,new_fits=new_count,reused_fits=plan['planned_pair_windows']-new_count,
+        excluded_pair_windows=parent['counts'][changed]['pair_windows']-new_count,excluded_records=removed,
+        EEG_coordinate='frozen_v3',Hb_coordinate='measurement_v6_normalization',other_datasets='immutable_v3_reuse')
+    return plan
+
+
+def _tak_cache_v4_prepare_worker(payload):
+    """Copy EEG features; independently replay compact Hb from measurements."""
+    cfg,root_string,out_string,record=payload;root=Path(root_string);out=Path(out_string)
+    source=root/cfg['source_cache']['run'];directory=out/'features'/record['cache_key'];directory.mkdir(parents=True,exist_ok=True)
+    lower=Path(record['measurement_record']);meta=json.loads((lower/'record.json').read_text())
+    if meta['fnirs_selection']!=record['fnirs_selection']:raise ValueError('Compact selection changed')
+    values=np.load(lower/meta['arrays']['fnirs'],mmap_mode='r').reshape(-1,len(record['pairs']),2)
+    indices=[p['native_index'] for p in record['pairs']]
+    for w in record['cache_windows']:
+        old=source/'features'/record['cache_key']/(w['key']+'.npz');target=directory/old.name
+        if target.exists() and target.with_suffix('.json').exists():continue
+        metadata=json.loads(old.with_suffix('.json').read_text())
+        if metadata['status']!='completed' or metadata['window']!=w or metadata['split']!=record['split']:raise ValueError('Prepared window changed')
+        with np.load(old,allow_pickle=False) as a:arrays={k:a[k] for k in a.files}
+        start=round(w['hb_start_s']*10);steps=round(w['duration_s']*10);raw=np.asarray(values[start:start+steps]);reference=raw[:50].mean(0);hb=raw-reference
+        if len(raw)!=steps or not np.isfinite(raw).all():raise ValueError('Compact measurement support incomplete')
+        np.testing.assert_allclose(hb,arrays['hb'][:,indices],rtol=0,atol=1e-12)
+        np.testing.assert_allclose(reference,arrays['hb_reference'][indices],rtol=0,atol=1e-12)
+        if not arrays['hb_valid'][indices].all():raise ValueError('Usable Hb lacks valid prepared support')
+        arrays.update(hb=hb,hb_reference=reference,hb_valid=np.ones(len(indices),bool))
+        metadata.update(schema=cfg['schema'],measurement_record=str(lower),source_prepared=str(old),
+            fnirs_selection=record['fnirs_selection'],Hb_coordinates='unscaled_measurement_first_5s_referenced; frozen_factor_applied_once_in_solver')
+        metadata['provenance']['hb']['cache_path']=str(lower)
+        metadata['provenance']['hb']['channel_selection']='visual_device_exclusion_v1'
+        _tak_cache_npz(target,**arrays);write_json(target.with_suffix('.json'),metadata)
+    return dict(record_key=record['cache_key'],status='completed',windows=len(record['cache_windows']),retained_pairs=len(indices))
+
+
+def tak_cache_v4_prepare(cfg,root,out,plan):
+    source=root/cfg['source_cache']['run'];changed=cfg['migration']['dataset']
+    for kind in ('features','tasks'):
+        (out/kind).mkdir(exist_ok=True)
+        for ds in cfg['data']['datasets']:
+            if ds==changed:continue
+            path=out/kind/ds;origin=source/kind/ds
+            if path.exists():
+                if not path.is_symlink() or path.resolve()!=origin.resolve():raise ValueError('Immutable dataset reuse changed')
+            else:path.symlink_to(origin.resolve(),target_is_directory=True)
+    write_json(out/'source_reuse.json',dict(source=str(source.resolve()),schema=cfg['source_cache']['schema'],
+        read_boundary='same_registered_public_subjects_unlabelled_teacher_cache_no_protected_material',raw_reads=0,
+        unchanged_datasets=[ds for ds in cfg['data']['datasets'] if ds!=changed]))
+    records=[r for r in plan['records'] if r['dataset']==changed and r['cache_windows']]
+    _tak_cache_pool(_tak_cache_v4_prepare_worker,[(cfg,str(root),str(out),r) for r in records],out=out,
+        phase='preparation',workers=cfg['resources']['preparation_workers'],total=len(records))
+    parent=json.loads((source/'coordinates.json').read_text());coordinates=deepcopy(parent)
+    coordinates.update(schema=cfg['schema'],calibration=cfg['calibration'],source=str(source.resolve()))
+    for key,co in coordinates['individual'].items():
+        if co['dataset']!=changed:continue
+        norm_path=root/cfg['data']['cache_root']/'normalization'/(co['subject']+'.json');norm=json.loads(norm_path.read_text())
+        np.testing.assert_allclose(norm['moments']['old']['factor'],co['hb_factor'],rtol=1e-9)
+        co.update(hb_factor=norm['factor'],sd=[co['sd'][0],*(np.array(norm['moments']['usable']['component_sd'])*norm['factor']).tolist()],
+            normalization_source=str(norm_path.resolve()),EEG_coordinate_source=str(source/'coordinates.json'),
+            Hb_training_samples=norm['moments']['usable']['samples'],sources_scope='retained_v3_EEG_sources; Hb_support_owned_by_normalization_source')
+    target=out/'coordinates.json'
+    if target.exists() and json.loads(target.read_text())!=coordinates:raise ValueError('Frozen v4 coordinate changed')
+    write_json(target,coordinates)
+    return records
+
+
+def tak_cache_v4_pilot(cfg,core,out,records,devices):
+    pilot=out/'pilot';pilot.mkdir(exist_ok=True)
+    retained=(pilot/'summary.json').exists()
+    path=pilot/('verification_v2.json' if retained else 'summary.json')
+    if path.exists():return json.loads(path.read_text())
+    selected={}
+    for r in records:
+        if r['split']=='train':selected.setdefault(r['subject'],r)
+    specs=list(tak_cache_specs(list(selected.values()),pilot=True,individual_pca=True))
+    pilot_plan=dict(specs=specs,selection=cfg['pilot']['selection'])
+    if retained:
+        if json.loads((pilot/'plan.json').read_text())!=pilot_plan:raise ValueError('Retained pilot identities changed')
+    else:write_json(pilot/'plan.json',pilot_plan)
+    executions={}
+    for mode,folder,gpus in [('standard','cpu_standard',()),('warm_only','cpu_warm',()),('warm_only','cuda_warm',tuple(devices))]:
+        if retained:
+            executions[folder]=json.loads((pilot/(folder+'_execution.json')).read_text());continue
+        executions[folder]=_tak_cache_pool(_tak_cache_v3_fit_worker,
+            [(cfg,core,str(out),str(out/'coordinates.json'),str(pilot/folder),s,mode) for s in specs],
+            out=pilot,phase=folder,workers=8,total=len(specs),structured=True,gpu_devices=gpus,gpu_batch_size=4)
+    issues=[];guarded=set();comparisons=[]
+    for spec in specs:
+        relative=Path('tasks')/spec['record_key']/(spec['window']['key']+f"__p{spec['pair']['native_index']:03d}.json")
+        standard,cpu,gpu=[json.loads((pilot/folder/relative).read_text()) for folder in ('cpu_standard','cpu_warm','cuda_warm')]
+        key=spec['dataset']+'__'+spec['subject'];row=dict(subject_key=key,identity=spec,
+            standard_qualified=standard['qualified'],warm_qualified=cpu['qualified'],gpu_qualified=gpu['qualified'],
+            standard_seconds=standard['seconds'],warm_seconds=cpu['seconds'],gpu_seconds=gpu['seconds'])
+        if not cpu['qualified']:guarded.add(key)
+        if cpu['qualified'] and standard['qualified']:
+            a=standard['fits']['tak_tau_beta']['solver']['objective'];b=cpu['fits']['tak_tau_beta']['solver']['objective']
+            row['warm_relative_objective_change']=(b-a)/max(abs(a),1e-12)
+            if row['warm_relative_objective_change']>cfg['warm_start']['objective_relative_tolerance']:guarded.add(key)
+        if cpu['qualified']!=gpu['qualified']:issues.append(dict(identity=spec,reason='CPU_GPU_qualification_mismatch'))
+        if cpu['qualified'] and gpu['qualified']:
+            with np.load((pilot/'cpu_warm'/relative).with_suffix('.npz')) as a,np.load((pilot/'cuda_warm'/relative).with_suffix('.npz')) as b:
+                np.testing.assert_array_equal(a['target'],b['target']);delta=float(np.max(abs(a['prediction']-b['prediction'])/a['sd_subject']))
+            parameter=max(abs(cpu['fits']['tak_tau_beta'][k]/gpu['fits']['tak_tau_beta'][k]-1) for k in ('tau','beta'))
+            row.update(CPU_GPU_prediction_max_SD=delta,CPU_GPU_parameter_relative=parameter)
+            if delta>1e-4 or parameter>1e-4:issues.append(dict(identity=spec,reason='CPU_GPU_numerical_tolerance'))
+        comparisons.append(row)
+    if not any(r['standard_qualified'] or r['warm_qualified'] for r in comparisons):
+        issues.append(dict(reason='no_qualified_Visual_pilot_fit'))
+    result=dict(status='failed' if issues else 'passed',planned=len(specs),comparisons=comparisons,
+        standard_subjects=sorted(guarded),issues=issues,source_root=str(CODE_ROOT),devices=devices,
+        phase_seconds={k:v['seconds'] for k,v in executions.items()},
+        retained_unqualified_examples=[r['identity'] for r in comparisons if not r['standard_qualified'] and not r['warm_qualified']],
+        qualification_policy='backend_equivalence_and_Visual_successful_smoke; individual_failures_retained_without_relaxing_solver_qualification',
+        prior_pilot_summary=str(pilot/'summary.json') if retained else None)
+    write_json(path,result)
+    if issues:raise ValueError('v4 pilot checks failed; inspect retained evidence')
+    return result
+
+
+def tak_cache_v4_execute(cfg,core,root,out,plan,args,devices):
+    if serial(tak_cache_v4_plan(cfg,root))!=plan:raise ValueError('Frozen v4 input inventory changed')
+    if args.cache_stage=='produce' and (out/'summary.json').exists():raise ValueError('Completed cache is read-only')
+    if args.cache_algebra!='structured' or args.cache_linear_backend!='cuda' or devices!=cfg['resources']['gpu_devices']:
+        raise ValueError('v4 uses validated structured hybrid CPU/CUDA execution')
+    started=time.monotonic();execution=dict(schema=cfg['schema'],status='running',stage=args.cache_stage,
+        supervisor=os.environ['SSM_SYSTEMD_UNIT'],command=sys.argv,working_directory=str(Path.cwd()),
+        started_at=datetime.now(timezone.utc).isoformat(),workers=args.workers,gpu_workers=args.cache_gpu_workers,source_root=str(CODE_ROOT))
+    write_json(out/'execution.json',execution)
+    try:
+        records=tak_cache_v4_prepare(cfg,root,out,plan);pilot=tak_cache_v4_pilot(cfg,core,out,records,devices)
+        if pilot['status']!='passed' or pilot['source_root']!=str(CODE_ROOT) or pilot['devices']!=devices:raise ValueError('Matching-source v4 pilot required')
+        if args.cache_stage=='pilot':
+            execution.update(status='pilot_completed',seconds=time.monotonic()-started);write_json(out/'execution.json',execution);return pilot
+        _tak_cache_pool(_tak_cache_fit_worker,
+            ((cfg,core,str(out),str(out/'coordinates.json'),str(out),s) for s in tak_cache_specs(records,individual_pca=True)),
+            out=out,phase='reconstruction',workers=args.workers,total=plan['migration']['new_fits'],structured=True,
+            gpu_devices=devices,gpu_batch_size=args.cache_gpu_batch_size,gpu_workers=args.cache_gpu_workers)
+        result=tak_cache_verify(cfg,core,out,plan,args.workers)
+        execution.update(status='completed',seconds=time.monotonic()-started);write_json(out/'execution.json',execution);return result
+    except Exception:
+        execution.update(status='failed',error=traceback.format_exc(),seconds=time.monotonic()-started);write_json(out/'execution.json',execution);raise
+
+
 def tak_cache_main(args):
     cfg,core=tak_cache_config(args.config);root=args.project_root.resolve();out=args.run_dir.resolve()
     if out.parent!=(root/cfg['output_root']).resolve():
@@ -11998,6 +12201,9 @@ def tak_cache_main(args):
         if not json.loads((out/'synthetic_summary.json').read_text()).get('numerical_checks_passed'):
             raise ValueError('Synthetic numerical checks required before measured reads')
         plan=json.loads((out/'plan.json').read_text())
+        if cfg['schema']=='shared_driver_tak_subject_cache_v4' and stage in ('pilot','produce'):
+            result=tak_cache_v4_execute(cfg,core,root,out,plan,args,devices)
+            print(json.dumps(serial(result)),flush=True);return result
         if cfg['schema']=='shared_driver_tak_subject_cache_v3' and stage in ('pilot','produce'):
             result=tak_cache_v3_execute(cfg,core,root,out,plan,args,devices)
             print(json.dumps(serial(result)),flush=True);return result
@@ -12038,7 +12244,7 @@ def tak_cache_main(args):
                     coordinate_path=out/'coordinates.json'
                     _tak_cache_pool(_tak_cache_fit_worker,
                         ((cfg,core,str(out),str(coordinate_path),str(out),s) for s in tak_cache_specs(
-                            records,individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3'))),
+                            records,individual_pca=cfg['schema'] in ('shared_driver_tak_subject_cache_v2','shared_driver_tak_subject_cache_v3','shared_driver_tak_subject_cache_v4'))),
                         out=out,phase='reconstruction',workers=args.workers,total=plan['planned_pair_windows'],
                         structured=structured,gpu_devices=gpu_devices,gpu_batch_size=args.cache_gpu_batch_size,
                         gpu_workers=args.cache_gpu_workers)
