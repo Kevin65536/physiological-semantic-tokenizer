@@ -1,0 +1,28 @@
+schema: so_supervision_spectral_overlap_v1
+experiment_id: SO-SPECTRAL-OVERLAP-v1
+source_audit: experiments/runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1
+output_child: spectral_overlap_v1
+scope: reuse_exact_103_subject_position_windows_and_12_mechanism_windows
+spectra:
+  signals: [X, S_i, S_j, S_joint, O_i, O_j, O_joint]
+  estimator: Welch_native_rate_8s_Hann_50percent_overlap_constant_segment_detrend
+  bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  band_rule: left_inclusive_right_exclusive_sum_PSD_times_df
+  shape_denominator: same_signal_1_to_45_Hz_power
+  retention_denominator: X_power_in_same_band
+  averaging: channel_mean_power_then_subject_distribution_no_pooled_subject_pseudoreplication
+overlap:
+  scope: original_three_proxy_dynamic_reference_original_native_voltage
+  score: interior_15_to_75_seconds
+  variants: [original_normalized_Hann, normalized_boxcar_same_projected_blocks]
+  diagnostics: [adjacent_overlap_disagreement, Hann_weighted_local_moment, exact_Jensen_mixture_and_disagreement, local_and_reassembled_same_1s_Hann_spectrum]
+primary: location_of_power_increase_and_projected_block_consistency
+secondary: original_S_and_O_band_power_retention_and_shape
+null: consistent_overlapping_blocks_reconstruct_the_same_signal
+stopping: fixed103_plus12_jobs_with_explicit_failures
+protected_data: forbidden
+SSM_refits: false
+reference_refits: false
+cache_mutations: false
+seed: 0
+workers: 12

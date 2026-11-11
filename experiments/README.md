@@ -393,6 +393,49 @@ distributions and the complete low-variance-window list without changing masks.
 Tests: `test_tak_cache_version_analysis.py`; synthetic checks cover cancellation,
 unit invariance, subject aggregation, reference restoration and half-grid joins.
 
+Long-window full-electrode EEG and paired-Hb S/O targets use the existing
+`run_dual_component_tokenizer.py --config
+experiments/configs/physiology_semantic_tokenizer/long_so_supervision_v2.yaml
+--stage <check|so-plan|so-reference|so-pilot|so-produce|so-verify>` entry.
+The [contract](configs/physiology_semantic_tokenizer/long_so_supervision_v2.yaml)
+retains exact completed-v4 supports, combines identical-support Visual Probes,
+uses training-only voltage references and up to three rank-revealing proxy rows,
+and preserves all Hb positions with explicit source-failure masks. Production
+includes an independent final verification. Substantial stages require the
+owning user-systemd service. The earlier all-proxy v1 pilot remains failed
+evidence and owns the reused training-reference arrays. Tests:
+`test_so_supervision_cache.py`, `test_dual_component_power_cap.py`.
+
+The read-only [S/O synthesis audit](scripts/audit_so_supervision_synthesis.py)
+uses [its population/mechanism contract](configs/physiology_semantic_tokenizer/so_supervision_synthesis_audit_v1.yaml)
+with `--stage <plan|pilot|population|mechanism|summarize|render>` and the
+[subject-wide position comparison](configs/physiology_semantic_tokenizer/so_supervision_position_audit_v1.yaml)
+with `--stage <position-plan|position|position-summary>`. It reads the completed
+public cache only: all retained windows contribute cross-position conditional
+power-reference comparisons; metadata-selected windows isolate carrier
+overlap-add from recombination/refiltering, with a constant-reference control.
+Single-position voltage outputs are explicitly diagnostic reconstructions,
+not separate electrode targets already present in the SSM cache. Population
+and subject sampling have separate denominators. No SSM/reference refits or
+cache mutations occur. Substantial stages use user systemd, bounded workers
+and single numerical threads. Tests: `test_so_supervision_synthesis_audit.py`.
+The [matched temporal control](configs/physiology_semantic_tokenizer/so_supervision_temporal_audit_v1.yaml)
+uses `--stage temporal` on the same mechanism windows. It fixes each selected
+proxy to its mean over the original reference frames, explicitly verifying
+unchanged mean log power before synthesis; this separates temporal variation
+from differences in average reference level.
+The [spectral/overlap extension](configs/physiology_semantic_tokenizer/so_supervision_spectral_overlap_v1.yaml)
+uses `--stage <spectrum-plan|spectrum|overlap-pilot|overlap|spectrum-summary|spectrum-render>`
+and writes a separate `spectral_overlap_v1/` evidence child. It reuses the same
+subject and mechanism identities. Native-rate Welch spectra compare original,
+single-position and joint S/O voltage using separate band-retention and
+within-signal shape denominators. Exact binned outer products verify the Jensen
+mixture identity; the boxcar control reuses the same projected blocks. Matched
+one-second spectra isolate synthesis changes; these have a different estimator
+and sample denominator from the eight-second subject spectra. No cache repair
+or new SSM/reference fitting occurs. Tests remain in
+`test_so_supervision_synthesis_audit.py`.
+
 Read-only v1/v3 descriptive comparisons use
 [`analyze_tak_cache_versions.py`](scripts/analyze_tak_cache_versions.py) with
 `--v1 <completed_v1> --v3 <completed_v3> --output <fresh_v3_child> --stage

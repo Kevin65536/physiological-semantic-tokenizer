@@ -197,6 +197,45 @@ at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
 
+The [long-window S/O supervision plan](../data/cache/physiology_so_supervision_v2/plan.json)
+and [v2 contract](configs/physiology_semantic_tokenizer/long_so_supervision_v2.yaml)
+define full-electrode EEG voltage and all retained Hb-position targets from SSM
+v4. Its [pilot](../data/cache/physiology_so_supervision_v2/pilot_summary.json),
+[waveform diagnostics](../data/cache/physiology_so_supervision_v2/pilot_waveform_diagnostics.json)
+and [execution](../data/cache/physiology_so_supervision_v2/execution.json) preserve
+numerical qualification separately from signal attenuation and post-synthesis
+power diagnostics. Completion is owned by the final [cache manifest](../data/cache/physiology_so_supervision_v2/cache_manifest.json),
+[summary](../data/cache/physiology_so_supervision_v2/summary.json) and
+[verification](../data/cache/physiology_so_supervision_v2/verification.json). The dated
+[completion review](../data/cache/physiology_so_supervision_v2/completion_review_20261111_v1.json)
+records per-dataset coverage, the four feature-replay floor discrepancies, three
+SVD failures, independent Hb replay for all failed EEG windows, and final-cap diagnostics.
+The [failed all-proxy pilot](../data/cache/physiology_so_supervision_v1/pilot_summary.json)
+and [completion-condition comparison](../data/cache/physiology_so_supervision_v1/joint_reference_diagnostic.json)
+remain retained; v2's reference link still depends on v1's completed training
+statistics, so that reference tree is not disposable failed-run output.
+
+The [S/O synthesis audit](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/summary.json)
+owns the complete-population conditional-reference comparisons and staged
+synthesis controls. Its [subject-level position comparison](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/position_summary.json)
+uses diagnostic single-position voltage reconstructions with separate subject
+denominators. [Population plots](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/population.png),
+[mechanism/position plots](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/mechanism_and_positions.png)
+and [same-electrode waveforms](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/same_electrode_waveforms.png)
+show the distinction between cross-position reference differences, local
+projection, carrier overlap-add and post-synthesis reanalysis. The
+[matched temporal control](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/temporal_summary.json)
+preserves mean log power while removing reference time variation. Original
+supervision arrays and failure masks remain unchanged.
+The [spectral and overlap extension](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/spectral_overlap_v1/summary.json)
+owns the matched-block Jensen/boxcar diagnostics and native-voltage spectral
+comparisons. Its [overlap mechanism](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/spectral_overlap_v1/overlap_mechanism.png),
+[PSD curves](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/spectral_overlap_v1/spectra.png),
+[band retention](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/spectral_overlap_v1/band_retention.png)
+and [spectral shape](runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/spectral_overlap_v1/band_shapes.png)
+keep inferred-reference violations separate from physical band power and
+cross-spectral S/O closure.
+
 The [tokenizer cache integrity and physiology audit](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/tokenizer_audit_20261110_v2/report_final.html)
 combines the completed measurement/input/SSM generations. Its
 [census and statistics](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/tokenizer_audit_20261110_v2/summary.json),

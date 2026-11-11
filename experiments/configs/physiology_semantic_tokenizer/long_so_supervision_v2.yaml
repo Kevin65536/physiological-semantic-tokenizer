@@ -1,0 +1,79 @@
+schema: physiology_so_supervision_v2
+experiment_id: LONG-SO-SUPERVISION-v2
+source_ssm: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4
+measurement: data/cache/physiology_semantic_clean_v6
+output: data/cache/physiology_so_supervision_v2
+boundary:
+  source: exact_completed_registered_public_SSM_population
+  splits:
+  - train
+  - validation
+  - test
+  protected_data: forbidden
+  native_reads: central_registry_EEG_only_exact_registered_records_and_declared_SSM_windows
+  SSM_refits: false
+  tokenizer_training: false
+windows:
+  support: exact_source_SSM_windows_90s_and_actual_short_REFED
+  grouping: same_native_EEG_record_absolute_start_sample_and_duration
+  Visual: combine_two_Probes_only_on_identical_native_EEG_support_preserve_each_Hb_clock
+  overlap: retain_separate_windows_no_stitching_no_short_patches
+reference:
+  training: first_complete_90s_window_per_unique_training_native_record
+  weighting: equal_selected_training_windows_no_duplicate_Visual_Probe_voltage
+  features: first5s_referenced_log_power_interior15_to75s
+  shrinkage: 0.1
+  channel_scope: all_native_EEG_channels_in_record_order
+  completion: exact_three_independent_qualified_proxies_subject_PC1_SVD_lift
+  statistics: train_only_mean_covariance_baseline_correlation_complement_power
+  extrapolation: fail_nonfinite_no_power_clipping_or_hidden_fallback
+  maximum_proxies: 3
+  selection: pivoted_QR_of_training_covariance_whitened_projection_rows_no_prediction_or_quality_score_selection
+  reference_source: data/cache/physiology_so_supervision_v1
+EEG:
+  layout: one_full_electrode_voltage_S_and_O_per_long_window
+  reference_proxies: up_to_three_rank_revealing_selected_numerically_qualified_positions_all_Hb_targets_retained
+  input: exact_native_voltage_verify_10Hz_features_against_SSM_prepared_cache
+  bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+  carriers: five_original_Butterworth_bands_plus_exact_complement
+  cap: 1.0
+  local_seconds: 1
+  hop_seconds: 0.1
+  synthesis: unchanged_Hann_overlap_add
+  units: dataset_native_voltage_units
+  unconstrained_electrodes: retain_training_conditional_reference_and_explicit_direct_proxy_coverage
+fNIRS:
+  positions: all_retained_source_pairs_no_device_excluded_Visual_channels
+  targets: exact_SSM_predictions_and_residuals_times_frozen_subject_Hb_scale_once
+  observations: exact_prepared_first5s_referenced_Hb_times_same_scale
+  units: subject_normalized_Hb
+  inverse: retain_subject_scale_and_unscaled_window_reference
+  failed_fit: retain_observation_and_source_failure_invalid_S_O_with_NaN_and_false_teacher_mask
+storage:
+  precision: float64
+  arrays: X_S_O_for_both_modalities_masks_native_clocks_reference_and_provenance
+  failed_window: explicit_terminal_record_never_zero_target_fallback
+  final_sample: retained_prediction_with_separate_source_scoring_mask
+  final_power_cap: audit_after_synthesis_not_a_guaranteed_global_bound
+validation:
+  primary: all_planned_windows_terminal_and_exact_source_identity
+  secondary: complete_X_equals_S_plus_O_validity_units_and_normalization_replay
+  diagnostic: local_cap_final_reanalysis_reference_extrapolation_and_coverage
+resources:
+  reference_workers: 8
+  pilot_workers: 4
+  production_workers: 16
+  numerical_threads: 1
+  max_in_flight_per_worker: 1
+  frame_batch_size: 8
+  supervisor: user_systemd_with_linger

@@ -1700,3 +1700,72 @@ unknown. Device channel availability is independent of local dynamic amplitude;
 the audit's low-variance flags are diagnostics, not a new automatic exclusion.
 Overlapping fits remain separate conditional estimates, and the identical p/v
 state columns do not provide independent supervision targets.
+
+## Full long-window S/O supervision cache — 2026-11-11
+
+The [long-window v2 contract](../experiments/configs/physiology_semantic_tokenizer/long_so_supervision_v2.yaml)
+owns `data/cache/physiology_so_supervision_v2/`. It consumes completed SSM v4
+results without refitting. Each target window retains the source SSM duration
+and absolute native EEG sample support, including actual shorter REFED windows.
+Visual's two Probes are grouped only when their native EEG record, start sample
+and sample count agree exactly; each member's original Hb clock and pair identity
+remain in metadata. Overlapping windows are separate conditional targets.
+
+Each window has one full-electrode EEG voltage target. Frozen reference
+statistics use the first complete 90-second window of each unique training
+native record; duplicate Visual Probe voltage is counted once. The reference
+statistics are independent of the individual PC1 projection. A subject/window
+uses up to three qualified proxy rows selected by pivoted QR of the projection
+in the training covariance metric, with no selection by prediction values or
+waveform scores. This preserves the three-proxy completion structure; every
+fNIRS position still retains its own SSM S/O target. Direct proxy electrode
+coverage is recorded separately from the full-electrode conditional output.
+
+The all-qualified-proxy exact-completion v1 pilot is retained as a failed
+extension: ill-conditioned joint completion produced extreme reference powers
+and cancellation that failed voltage closure. Its completed training statistics
+are unchanged and reused by v2 through an explicit reference link. Keep that
+reference dependency; the failed pilot is not an accepted target source.
+
+The computation owner is `src/data/so_supervision_cache.py`, using the existing
+voltage-power completion and local projection in `dual_component_tokenizer.py`.
+Native EEG is read through the central registry/loader only after validating
+the exact public parent, source identity, split and support. Native five-band
+features must reproduce the retained SSM preparation. Reference fitting uses
+training windows only; public validation/test inputs receive frozen references
+and their already-declared SSM subject adaptation. Protected evaluation remains
+outside this cache-production contract.
+
+- `eeg_x/s/o`: float64 `[native_time, electrode]`, preserving native voltage
+  units and rate. This input is the native voltage used by the SSM preparation,
+  not an implicit substitution of the filtered 200 Hz downstream EEG view.
+- `fnirs_x/s/o`: float64 `[10Hz_time, position, HbO/HbR]`, first-five-second
+  referenced and multiplied once by the retained subject Hb factor. The factor
+  and unscaled window reference are saved for inversion.
+- Observation masks, teacher masks and source scoring masks have distinct
+  meanings. Failed SSM positions keep observations; S/O stay NaN with a false
+  teacher mask. The final unscored SSM bin remains explicitly marked.
+- Projection/reference identities, native clocks, member SSM task paths,
+  channel names, selected proxies, local-cap and final-reanalysis diagnostics
+  are retained. The local cap is checked; it is not relabelled a guaranteed
+  post-synthesis global power bound.
+
+`SOSupervisionDataset` opens only a completed manifest and preserves these
+masks and coordinates. Completion requires all planned windows to be terminal,
+with independent shape/closure checks and exact fNIRS/proxy source replay.
+The cache's manifest, summary and verification own counts and availability.
+
+The [synthesis audit](../experiments/configs/physiology_semantic_tokenizer/so_supervision_synthesis_audit_v1.yaml)
+and its [subject-wide position diagnostic](../experiments/configs/physiology_semantic_tokenizer/so_supervision_position_audit_v1.yaml)
+consume exactly this completed public population, retaining original splits,
+failed windows and position identities. They reuse frozen training statistics
+and stored voltage/SSM arrays; no raw dataset access or model/reference refit is
+added. An SSM position supplies a scalar projection of six electrodes' five-band
+log-power features, not six individually identified voltage S/O signals.
+Per-position electrode comparisons therefore explicitly apply single-position
+conditional completion and the existing voltage projection as a diagnostic.
+Full-population power-reference comparisons and metadata-selected waveform
+comparisons have separate denominators; dependent windows/electrodes are not
+treated as independent subjects. Constant-reference and carrier-preserving
+overlap-add controls change only the diagnostic synthesis path. These outputs
+do not replace or repair the completed supervision targets.

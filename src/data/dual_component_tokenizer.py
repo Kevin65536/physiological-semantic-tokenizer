@@ -672,9 +672,10 @@ def voltage_power_cap_reference(model, proxy, time_s):
         ell = np.broadcast_to(mu, (len(time_s), len(mu)))
     else:
         p = np.asarray(proxy, float)
-        if p.shape != (900, 3) or not np.isfinite(p).all():
-            raise ValueError('three complete finite 10 Hz reconstructed proxy trajectories required')
-        aligned = np.stack([np.interp(time_s, np.arange(900)/10, p[:, j]) for j in range(3)], axis=1)
+        steps=int(model.get('proxy_steps',900));rank=a.shape[0]
+        if p.shape != (steps, rank) or steps<=50 or not np.isfinite(p).all():
+            raise ValueError('complete finite 10 Hz reconstructed proxy trajectories required')
+        aligned = np.stack([np.interp(time_s, np.arange(steps)/10, p[:, j]) for j in range(rank)], axis=1)
         ell = mu + (aligned - a @ mu) @ lift.T
         if not np.allclose(ell @ a.T, aligned, rtol=1e-10, atol=1e-11):
             raise ValueError('completed reference does not reproduce the proxy coordinate')
@@ -727,7 +728,7 @@ def project_voltage_second_moment(x, reference, cap):
         minimum_gain=gain.min(axis=-1))
 
 
-def voltage_power_cap_target(x, model, proxy, *, cap=1., audit_final=True):
+def voltage_power_cap_target(x, model, proxy, *, cap=1., audit_final=True, frame_batch_size=None):
     """Cap every local carrier and overlap-add; exact residual voltage O=x-S.
 
     The proven cap applies to individual local carrier blocks. Refiltering the
@@ -738,32 +739,41 @@ def voltage_power_cap_target(x, model, proxy, *, cap=1., audit_final=True):
     x = np.asarray(x, float); bank = voltage_power_cap_bank(x,sample_rate_hz=rate)
     frames, time_s = voltage_power_cap_frames(bank,window=rate,hop=hop,sample_rate_hz=rate)
     power = voltage_power_cap_reference(model, proxy, time_s)
-    d = np.sqrt(power)
-    covariance = d[..., :, None] * model['correlation'][None] * d[..., None, :]
-    estimated, diagnostic = project_voltage_second_moment(frames, covariance, cap)
-    if np.max(diagnostic['max_output_eigenvalue']) > cap*(1+1e-8):
-        raise AssertionError('local spectral cap was not satisfied')
+    batch=len(frames) if frame_batch_size is None else int(frame_batch_size)
+    if batch<1:raise ValueError('Positive frame batch size required')
     window = np.hanning(rate+1)[:-1]
     accumulated = np.zeros((len(x)+rate, x.shape[1])); weight = np.zeros(len(x)+rate)
-    for k, block in enumerate(estimated):
-        start = k*hop
-        accumulated[start:start+rate] += block.sum(axis=0).T * window[:, None]
-        weight[start:start+rate] += window
-    section = slice(rate//2, rate//2+len(x))
-    s = accumulated[section]/weight[section, None]
-    o = x-s
-    post = np.empty((0, 6))
+    diagnostics=[]
+    for first in range(0,len(frames),batch):
+        last=min(first+batch,len(frames));d=np.sqrt(power[first:last])
+        covariance=d[..., :, None]*model['correlation'][None]*d[..., None, :]
+        estimated, diagnostic=project_voltage_second_moment(frames[first:last],covariance,cap)
+        if np.max(diagnostic['max_output_eigenvalue'])>cap*(1+1e-8):
+            raise AssertionError('local spectral cap was not satisfied')
+        diagnostics.append(diagnostic)
+        for k,block in enumerate(estimated,first):
+            start=k*hop
+            accumulated[start:start+rate]+=block.sum(axis=0).T*window[:,None]
+            weight[start:start+rate]+=window
+    diagnostic={k:np.concatenate([d[k] for d in diagnostics]) for k in diagnostics[0]}
+    section=slice(rate//2,rate//2+len(x))
+    s=accumulated[section]/weight[section,None];o=x-s
+    post=np.empty((0,6))
     if audit_final:
-        final_frames, _ = voltage_power_cap_frames(voltage_power_cap_bank(s,sample_rate_hz=rate),
+        final_frames,_=voltage_power_cap_frames(voltage_power_cap_bank(s,sample_rate_hz=rate),
             window=rate,hop=hop,sample_rate_hz=rate)
-        _, check = project_voltage_second_moment(final_frames, covariance, cap)
-        post = check['max_input_eigenvalue']/cap
-    return dict(s=s, o=o, reference_power=power, frame_time_s=time_s,
+        pieces=[]
+        for first in range(0,len(frames),batch):
+            last=min(first+batch,len(frames));d=np.sqrt(power[first:last])
+            covariance=d[..., :,None]*model['correlation'][None]*d[...,None,:]
+            _,check=project_voltage_second_moment(final_frames[first:last],covariance,cap)
+            pieces.append(check['max_input_eigenvalue']/cap)
+        post=np.concatenate(pieces)
+    return dict(s=s,o=o,reference_power=power,frame_time_s=time_s,
         local_input_ratio=diagnostic['max_input_eigenvalue']/cap,
         local_output_ratio=diagnostic['max_output_eigenvalue']/cap,
-        clipped_directions=diagnostic['clipped_directions'],
-        minimum_gain=diagnostic['minimum_gain'], final_reanalysis_ratio=post,
-        closure_max_abs=np.array(np.max(abs(s+o-x))))
+        clipped_directions=diagnostic['clipped_directions'],minimum_gain=diagnostic['minimum_gain'],
+        final_reanalysis_ratio=post,closure_max_abs=np.array(np.max(abs(s+o-x))))
 
 
 def voltage_stft(x, spec):

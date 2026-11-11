@@ -42,6 +42,7 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'voltage-teacher-plan', 'voltage-teacher-pilot', 'voltage-teacher', 'voltage-teacher-report',
           'separation-plan', 'separation-pilot', 'separation', 'separation-report',
           'power-cap-plan', 'power-cap', 'power-cap-report', 'power-cap-method-report', 'power-cap-normalization',
+          'so-plan','so-reference','so-pilot','so-produce','so-verify',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -84,6 +85,10 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg,dict) and cfg.get('schema') in ('physiology_so_supervision_v1','physiology_so_supervision_v2'):
+        owner=SOURCE/'experiments/configs/physiology_semantic_tokenizer'/('long_so_supervision_'+cfg['schema'].rsplit('_',1)[-1]+'.yaml')
+        if cfg!=yaml.safe_load(owner.read_text()):raise ValueError('Use reviewed long-window S/O contract')
+        return cfg
     if isinstance(cfg,dict) and cfg.get('schema')=='dual_component_voltage_power_cap_posterior_v1':
         extra=cfg;cfg=read_config(SOURCE/extra['base_contract'])
         cfg.update(schema=extra['schema'],experiment_id=extra['experiment_id'],posterior=extra['posterior'])
@@ -1045,8 +1050,101 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def run_long_so_cache(cfg,args):
+    from src.data import so_supervision_cache as data
+    root=args.project_root.resolve();out=(args.output or root/cfg['output']).resolve()
+    if out!=(root/cfg['output']).resolve():raise ValueError('Use the versioned supervision cache root')
+    if args.stage=='check':
+        print(json.dumps(dict(status='contract_valid',measured_reads=0)));return
+    if args.stage not in ('so-plan','so-reference','so-pilot','so-produce','so-verify'):raise ValueError('Use explicit supervision cache stages')
+    out.mkdir(parents=True,exist_ok=True)
+    with owner_lock(out):
+        resolved=dict(config=cfg,project_root=str(root));path=out/'resolved_config.json'
+        if path.exists() and read_json(path)!=resolved:raise ValueError('Frozen supervision contract changed')
+        if not path.exists():write_json(path,resolved)
+        if args.stage=='so-plan':
+            plan=data.make_plan(root,cfg);path=out/'plan.json'
+            if path.exists() and read_json(path)!=plan:raise ValueError('Frozen supervision plan changed')
+            if not path.exists():write_json(path,plan)
+            print(json.dumps(dict(windows=len(plan['groups']),source_pairs=plan['source_pair_windows'],counts=plan['counts'])));return
+        if not os.environ.get('SSM_SYSTEMD_UNIT') or not os.environ.get('INVOCATION_ID'):raise ValueError('Durable supervisor required')
+        plan=read_json(out/'plan.json');workers=args.workers or cfg['resources']['production_workers'];start=time.monotonic()
+        state=dict(status='running',stage=args.stage,unit=os.environ['SSM_SYSTEMD_UNIT'],workers=workers,source_root=str(SOURCE),started_at=datetime.now(timezone.utc).isoformat())
+        write_json(out/'execution.json',state)
+        try:
+            if args.stage=='so-reference' and cfg['reference'].get('reference_source'):
+                previous=root/cfg['reference']['reference_source'];old=read_json(previous/'plan.json');oldcfg=read_json(previous/'resolved_config.json')['config']
+                if old['reference_groups']!=plan['reference_groups']:raise ValueError('Training reference support changed')
+                for key in ['training','weighting','features','shrinkage','channel_scope','statistics']:
+                    if oldcfg['reference'][key]!=cfg['reference'][key]:raise ValueError('Reference statistics contract changed')
+                if any(v['status']!='completed' for v in read_json(previous/'reference_summary.json').values()):raise ValueError('Completed frozen reference required')
+                if not (out/'references').exists():(out/'references').symlink_to((previous/'references').resolve(),target_is_directory=True)
+                write_json(out/'reference_summary.json',read_json(previous/'reference_summary.json'))
+                write_json(out/'reference_reuse.json',dict(source=str(previous.resolve()),statistics_unchanged=True,training_only=True))
+                state.update(status='completed',seconds=time.monotonic()-start);write_json(out/'execution.json',state);print(json.dumps(state));return
+            if args.stage=='so-reference':
+                jobs=[(str(root),cfg,str(out),g) for g in plan['reference_groups']];worker=data.reference_worker
+            elif args.stage in ('so-pilot','so-produce'):
+                if not (out/'reference_summary.json').exists():raise ValueError('Frozen training reference required')
+                if args.stage=='so-produce':
+                    if (out/'cache_manifest.json').exists():raise ValueError('Completed cache is read-only')
+                    pilot=read_json(out/'pilot_summary.json')
+                    if pilot['status']!='passed':raise ValueError('Passing numerical pilot required')
+                    selected=plan['groups'];destination=out
+                else:
+                    selected=[next(g for g in plan['groups'] if g['dataset']==ds and g['split']=='train' and g['duration_s']==90) for ds in plan['counts']]
+                    selected += [next(g for g in plan['groups'] if g['dataset']=='refed' and g['split']=='train' and g['duration_s']==duration) for duration in sorted({g['duration_s'] for g in plan['groups'] if g['dataset']=='refed' and g['duration_s']<90})]
+                    destination=out/'pilot';destination.mkdir(exist_ok=True)
+                    if not (destination/'references').exists():(destination/'references').symlink_to((out/'references').resolve(),target_is_directory=True)
+                jobs=[(str(root),cfg,str(destination),g) for g in selected];worker=data.supervision_worker
+            else:
+                selected=plan['groups'];jobs=[(str(out),g) for g in selected];worker=data.verify_worker
+            def progress(row,done):
+                write_json(out/'progress.json',dict(stage=args.stage,total=len(jobs),terminal=done,elapsed_s=time.monotonic()-start,workers=workers,updated_at=datetime.now(timezone.utc).isoformat()))
+            rows=_bounded_jobs(worker,jobs,workers,inflight=1,progress=progress)
+            write_json(out/(args.stage+'_execution.json'),dict(status='completed',rows=rows,seconds=time.monotonic()-start,workers=workers))
+            if args.stage=='so-reference':
+                if any(r['status']!='completed' for r in rows):raise ValueError('Reference preparation failed; retained evidence')
+                data.finalize_references(out,plan,cfg)
+            elif args.stage=='so-pilot':
+                checks=[data.verify_worker((str(destination),g)) for g in selected]
+                passed=all(r['status']=='completed' for r in rows) and all(not c['issues'] for c in checks)
+                result=dict(status='passed' if passed else 'failed',windows=len(rows),completed=sum(r['status']=='completed' for r in rows),rows=rows,checks=checks,seconds=time.monotonic()-start)
+                write_json(out/'pilot_summary.json',result)
+                if not passed:raise ValueError('Long-window S/O pilot failed; production not launched')
+            elif args.stage=='so-produce':
+                if any('key' not in r for r in rows):raise ValueError('Worker failed outside terminal window writer')
+                state.update(status='production_completed',seconds=time.monotonic()-start);write_json(out/'execution.json',state)
+                args.stage='so-verify'
+                # The same controller verifies all retained outputs before completion.
+                checks=_bounded_jobs(data.verify_worker,[(str(out),g) for g in plan['groups']],min(workers,8),inflight=1)
+                finalize_long_so_cache(out,cfg,plan,checks)
+            else:finalize_long_so_cache(out,cfg,plan,rows)
+            state.update(status='completed',seconds=time.monotonic()-start);write_json(out/'execution.json',state)
+        except Exception:
+            state.update(status='failed',error=traceback.format_exc(),seconds=time.monotonic()-start);write_json(out/'execution.json',state);raise
+    print(json.dumps({k:v for k,v in state.items() if k!='error'}))
+
+
+def finalize_long_so_cache(out,cfg,plan,checks):
+    issues=[dict(key=r.get('key'),issues=r.get('issues',r.get('error'))) for r in checks if r.get('issues') or r.get('status') is None]
+    pairs=sum(r.get('source_pairs',0) for r in checks)
+    if len(checks)!=len(plan['groups']) or pairs!=plan['source_pair_windows']:issues.append(dict(reason='source denominator mismatch',pairs=pairs))
+    result=dict(schema=cfg['schema'],status='passed' if not issues else 'failed',windows=len(checks),source_pairs=pairs,
+        EEG_completed=sum(r.get('EEG_available',False) for r in checks),EEG_failed=sum(not r.get('EEG_available',False) for r in checks),
+        SSM_qualified_pairs=sum(r.get('SSM_qualified_pairs',0) for r in checks),SSM_failed_pairs=sum(r.get('SSM_failed_pairs',0) for r in checks),
+        max_closure=max((r.get('closure',0) for r in checks),default=0.),issues=issues)
+    write_json(out/'verification.json',result)
+    if issues:raise ValueError('Supervision cache verification failed')
+    windows=[dict(key=g['key'],dataset=g['dataset'],subject=g['subject'],split=g['split'],metadata=str((out/'windows'/g['key']).with_suffix('.json').resolve())) for g in plan['groups']]
+    write_json(out/'cache_manifest.json',dict(schema=cfg['schema'],status='completed',windows=windows,verification='verification.json',source_ssm=plan['source'],complete_population_includes_failures=True))
+    write_json(out/'summary.json',dict(result,counts=plan['counts'],SSM_refits=0,tokenizer_training_runs=0,storage='one_full_electrode_long_window_with_Hb_positions_and_masks'))
+
+
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema'] in ('physiology_so_supervision_v1','physiology_so_supervision_v2'):
+        return run_long_so_cache(cfg,args)
     if cfg['schema']=='dual_component_voltage_power_cap_posterior_v1':
         if args.stage not in ('check','synthetic','power-cap-plan','power-cap','power-cap-report'):
             raise ValueError('use the bounded posterior power-cap stages')
