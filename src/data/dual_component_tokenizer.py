@@ -30,6 +30,203 @@ STEPS = 900
 STUDENT = slice(300, 500)
 
 
+def state_pilot_plan(cache_root, spec, source_ssm):
+    """Metadata-first, training-only small panel from the completed S/O cache."""
+    from .so_supervision_cache import SOSupervisionDataset
+    root = Path(cache_root).resolve()
+    if (spec['allowed_splits'] != ['train'] or spec['test_access'] != 'forbidden'
+            or spec['protected_data'] != 'forbidden' or spec['raw_reads'] or spec['teacher_refits']):
+        raise ValueError('training-only state pilot boundary required before reads')
+    manifest = json.loads((root / 'cache_manifest.json').read_text())
+    verification = json.loads((root / 'verification.json').read_text())
+    if (manifest['schema'] != spec['source_schema'] or manifest['status'] != 'completed'
+            or verification['status'] != 'passed'
+            or Path(manifest['source_ssm']).resolve() != Path(source_ssm).resolve()):
+        raise ValueError('completed verified exact S/O source required')
+    subjects = {}
+    for row in manifest['windows']:
+        identity = (row['dataset'], row['subject'])
+        if identity in subjects and subjects[identity] != row['split']:
+            raise ValueError('subject crosses source partitions')
+        subjects[identity] = row['split']
+    reader = SOSupervisionDataset(root, split='train')
+    selected = []
+    for dataset in spec['datasets']:
+        population = [r for r in reader.windows if r['dataset'] == dataset]
+        if not population:
+            raise ValueError('missing planned training dataset')
+        subject = min(r['subject'] for r in population)
+        candidates = []
+        for index, row in enumerate(reader.windows):
+            if row['dataset'] != dataset or row['subject'] != subject:
+                continue
+            expected = (root / 'windows' / row['key']).with_suffix('.json').resolve()
+            if (Path(row['metadata']).resolve() != expected or not expected.is_relative_to(root / 'windows')):
+                raise ValueError('metadata path escapes source identity')
+            meta = json.loads(expected.read_text())
+            _state_pilot_identity(root, row, meta, spec)
+            candidates.append(dict(index=index, row=row, metadata=meta))
+        order = lambda v: (v['metadata']['source']['native_record'], v['metadata']['source']['start_sample'])
+        full = [r for r in candidates if r['metadata']['source']['duration_s'] == 90]
+        if not full:
+            raise ValueError('selected training subject lacks a full source window')
+        selected.append(dict(min(full, key=order), role='first_full'))
+        if dataset == 'refed':
+            short = [r for r in candidates if 30 <= r['metadata']['source']['duration_s'] < 90]
+            if not short:
+                raise ValueError('selected REFED subject lacks short-window coverage')
+            selected.append(dict(min(short, key=order), role='first_short'))
+    return dict(schema='dual_component_state_plan_v1', cache_root=str(root),
+                source_ssm=str(Path(source_ssm).resolve()), windows=selected,
+                selected_without_signal_scores=True, measured_arrays_read=0,
+                allowed_splits=['train'], independent_evaluation=False)
+
+
+def _state_pilot_identity(root, row, meta, spec):
+    """Check paths and split again at the actual array read boundary."""
+    if row['split'] != 'train' or row['dataset'] not in spec['datasets']:
+        raise ValueError('training-only registered state pilot row required')
+    for key in ('key', 'dataset', 'subject', 'split'):
+        if meta[key] != row[key] or meta['source'][key] != row[key]:
+            raise ValueError('source identity mismatch before array read')
+    source = meta['source']
+    if (meta['schema'] != spec['source_schema'] or source['rate'] != spec['native_rate_hz'][row['dataset']]
+            or source['samples'] != round(source['duration_s'] * source['rate'])):
+        raise ValueError('source schema or native time grid changed')
+    expected = (Path(root) / 'windows' / row['key']).with_suffix('.npz').resolve()
+    if meta.get('array_file') and (Path(meta['array_file']).resolve() != expected
+            or not expected.is_relative_to(Path(root).resolve() / 'windows')):
+        raise ValueError('array path escapes source identity')
+
+
+def state_pilot_window(cache_root, selected, spec):
+    from .so_supervision_cache import SOSupervisionDataset
+    if spec['allowed_splits'] != ['train'] or spec['test_access'] != 'forbidden':
+        raise ValueError('training-only state pilot before array read')
+    reader = SOSupervisionDataset(cache_root, split='train')
+    row = reader.windows[selected['index']]
+    if row != selected['row']:
+        raise ValueError('source plan changed before array read')
+    meta = json.loads(Path(row['metadata']).read_text())
+    _state_pilot_identity(cache_root, row, meta, spec)
+    if meta != selected['metadata']:
+        raise ValueError('source metadata changed before array read')
+    return reader[selected['index']]
+
+
+def state_eeg_200hz(values, scoring, source_rate, cut_sample):
+    """One linear antialias operator for X/S/O; no filtering across the pilot holdout."""
+    from math import gcd
+    from scipy.signal import firwin, resample_poly
+    if source_rate == 200:
+        return values, scoring, dict(source_hz=200, target_hz=200, operator='identity')
+    divisor = gcd(int(source_rate), 200)
+    up, down = 200 // divisor, int(source_rate) // divisor
+    half = 10 * max(up, down)
+    kernel = firwin(2 * half + 1, 1 / max(up, down), window=('kaiser', 5.0))
+    support_kernel = np.ones(len(kernel)) / up
+    bounds = sorted(set((0, int(cut_sample), len(scoring))))
+    chunks = {key: [] for key in values}
+    scored = []
+    for begin, end in zip(bounds[:-1], bounds[1:]):
+        def transform(a):
+            return resample_poly(a, up, down, axis=0, window=kernel, padtype='line')
+        def supported(mask, outside_bad=0):
+            count = resample_poly((~mask).astype(float), up, down, axis=0,
+                window=support_kernel, padtype='constant', cval=outside_bad)
+            return count < .5
+        observation = values['observation_valid'][begin:end] & np.isfinite(values['x'][begin:end])
+        teacher = (values['teacher_valid'][begin:end] & np.isfinite(values['s'][begin:end])
+                   & np.isfinite(values['o'][begin:end]))
+        masks = {'observation_valid': supported(observation), 'teacher_valid': supported(teacher)}
+        for key in ('x', 's', 'o'):
+            valid = observation if key == 'x' else teacher
+            y = transform(np.where(valid, values[key][begin:end], 0.))
+            y[~masks['observation_valid' if key == 'x' else 'teacher_valid']] = np.nan
+            chunks[key].append(y)
+        for key in masks:
+            chunks[key].append(masks[key])
+        scored.append(supported(scoring[begin:end], outside_bad=1))
+    return {k: np.concatenate(v) for k, v in chunks.items()}, np.concatenate(scored), dict(
+        source_hz=int(source_rate), target_hz=200, operator='scipy_resample_poly', up=up, down=down,
+        window=['kaiser', 5.0], taps=len(kernel), padtype='line', source_block_bounds=bounds,
+        source_half_support_samples=half / up, scoring_excludes_padded_filter_support=True)
+
+
+def state_pilot_coordinates(meta, arrays, modality, variance_floor):
+    """Unified 200 Hz EEG / 10 Hz Hb; scales use the training-input prefix only."""
+    prefix = 'eeg' if modality == 'eeg' else 'fnirs'
+    rate = int(meta['source']['rate']) if modality == 'eeg' else 10
+    channels = 1 if modality == 'eeg' else 2
+    duration = meta['source']['duration_s']
+    holdout_start = int((duration - 30) // 2) * 2
+    training_end = holdout_start if duration >= 60 else duration
+    starts = list(range(0, int((training_end - 30) // 2) * 2 + 1, 2))
+    if not starts:
+        raise ValueError('no complete training input in selected parent')
+    n = round(duration * rate)
+    values = {}
+    for key in ('x', 's', 'o', 'observation_valid', 'teacher_valid'):
+        a = np.asarray(arrays[prefix + '_' + key])
+        if modality == 'eeg':
+            a = a[..., None]
+        if a.ndim != 3 or a.shape[0] != n or a.shape[-1] != channels:
+            raise ValueError('native target shape mismatch')
+        values[key] = a
+    if any(v.shape != values['x'].shape for v in values.values()):
+        raise ValueError('mask and target shape mismatch')
+    scoring = np.asarray(arrays['eeg_source_scoring_mask' if modality == 'eeg' else 'source_scoring_mask'])
+    if scoring.shape != (n,) or scoring.dtype != np.bool_:
+        raise ValueError('explicit source scoring support required')
+    expected_time = np.arange(n) / rate
+    np.testing.assert_allclose(arrays[prefix + '_time_s'], expected_time, rtol=0, atol=1e-10)
+    native_rate = rate
+    resampling = dict(source_hz=rate, target_hz=rate, operator='identity')
+    if modality == 'eeg':
+        values, scoring, resampling = state_eeg_200hz(values, scoring, rate, round(training_end * rate))
+        rate = 200
+        if len(scoring) != round(duration * rate):
+            raise ValueError('200 Hz time support changed during resampling')
+    mask = values['teacher_valid'] & values['observation_valid'] & scoring[:, None, None]
+    finite = np.isfinite(values['x']) & np.isfinite(values['s']) & np.isfinite(values['o'])
+    if not finite[mask].all():
+        raise ValueError('nonfinite valid supervision')
+    np.testing.assert_allclose(values['x'][mask], (values['s'] + values['o'])[mask], rtol=1e-10, atol=1e-9)
+    # Same location panel for all three arms; invalid source locations stay in the denominator.
+    observed = (values['observation_valid'] & np.isfinite(values['x'])).all(axis=(0, 2))
+    target_available = mask[:round(training_end * rate)].any(axis=(0, 2))
+    available = observed & target_available
+    train = slice(0, round(training_end * rate))
+    x = values['x'][train]
+    xvar = np.var(x, axis=0)
+    scale = np.sqrt(np.mean(xvar, axis=-1, keepdims=True))
+    floor = np.maximum(np.sqrt(np.mean(x * x, axis=(0, 2)))[:, None] * 1e-6, 1e-12)
+    scale = np.maximum(scale, floor)
+    scale[~available] = 1.
+    packed = {key: np.asarray(values[key] / scale, np.float32) for key in ('x', 's', 'o')}
+    packed['mask'] = mask
+    variances = {}
+    for key in ('x', 's', 'o'):
+        a = np.where(mask[train], values[key][train] / scale, 0.)
+        count = mask[train].sum(axis=0)
+        mean = a.sum(axis=0) / np.maximum(count, 1)
+        variance = (a * a).sum(axis=0) / np.maximum(count, 1) - mean * mean
+        variances[key] = np.maximum(variance, variance_floor).tolist()
+    positions = meta['EEG_channels'] if modality == 'eeg' else meta['fNIRS_positions']
+    if len(positions) != values['x'].shape[1]:
+        raise ValueError('native position identity mismatch')
+    info = dict(dataset=meta['dataset'], subject=meta['subject'], split='train', parent=meta['key'],
+                record=meta['source']['native_record'], rate=rate, channels=channels, modality=modality,
+                positions=positions, available_positions=np.flatnonzero(available).tolist(),
+                unavailable_positions=np.flatnonzero(~available).tolist(), train_starts_s=starts,
+                holdout_starts_s=[holdout_start] if duration >= 60 else [],
+                scale=scale.tolist(), target_variance=variances, training_scale_end_s=training_end,
+                duration_s=duration, native_start_sample=meta['source']['start_sample'],
+                source_status=meta['status'], native_rate_hz=native_rate, resampling=resampling,
+                low_variance_positions=np.flatnonzero((xvar <= floor ** 2).any(-1)).tolist())
+    return info, packed
+
+
 def latent_health_plan(parent, spec):
     """Metadata-only admission of retained public train/validation Hb targets."""
     parent = Path(parent)

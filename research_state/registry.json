@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-11T13:28:09.098974+00:00",
+  "updated_at": "2026-11-12T12:58:13.811839+00:00",
   "tracks": [
     {
       "id": "main",
@@ -6398,6 +6398,36 @@
       "id": "e.so_spectral_overlap_v1_summary",
       "label": "局部片段重叠与频谱：summary",
       "path": "experiments/runs/physiology_semantic_tokenizer/so_supervision_synthesis/20261111_v1/spectral_overlap_v1/summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_pilot_contract",
+      "label": "200Hz tokenizer首批pilot：contract",
+      "path": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_state_pilot_plan",
+      "label": "200Hz tokenizer首批pilot：plan",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/plan.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tk_state_pilot_software",
+      "label": "200Hz tokenizer首批pilot：software",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/software_validation.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_pilot_synthetic",
+      "label": "200Hz tokenizer首批pilot：synthetic",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/synthetic.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_pilot_resources",
+      "label": "200Hz tokenizer首批pilot：resources",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/resources.json",
       "role": "diagnostic"
     }
   ],
@@ -15869,6 +15899,32 @@
       "headline": false,
       "updated_at": "2026-11-11T13:28:09.098974+00:00",
       "next_step": "本项诊断已结束，无待执行任务；缓存交付安排以main.long_so_cache_v2的当前登记为准，既有诊断证据保留。"
+    },
+    {
+      "state_id": "main.tk_state_pilot_v1@2026-11-12.prepared",
+      "entity": "main.tk_state_pilot_v1",
+      "label": "统一200Hz EEG的tokenizer首批训练pilot",
+      "track": "main",
+      "order": 226,
+      "entity_kind": "experiment",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "engineering",
+      "summary": "计划已提交；按用户新约束，EEG X/S/O统一200Hz，Hb保留10Hz。元数据先选四库各一名训练被试的首个90秒窗及REFED同被试短窗，原生缓存保持不变。25项相关测试、3026项测试收集、两模态整数接口及已知状态/任务锁定阴性合成检查通过。准备在持久监督下测量GPU并发吞吐，运行连续S/O、K128 S/O与K128普通量化的六模型有界pilot。",
+      "evidence_ids": [
+        "e.tk_state_pilot_contract",
+        "e.tk_state_pilot_plan",
+        "e.tk_state_pilot_software",
+        "e.tk_state_pilot_synthetic",
+        "e.tk_state_pilot_resources"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.long_so_cache_v2"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-12T12:58:13.811839+00:00",
+      "next_step": "冻结源码并启动持久监督：准备五个训练父窗，比较单/双GPU worker吞吐，完成六个500步等曝光pilot；读取范围保持训练分区。"
     }
   ]
 }

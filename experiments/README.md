@@ -827,6 +827,19 @@ Tests: `test_model_compatibility.py`, `test_model_compatibility_runner.py`,
 
 ### Semantic and tokenizer development
 
+The [TK-STATE-v1 training/acceptance design](../docs/EXPERIMENT_PLAN.md#tk-state-v1)
+starts with the bounded [state pilot contract](configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml)
+in `scripts/run_dual_component_tokenizer.py`: `--stage check`, `--stage synthetic`,
+metadata-only `--stage state-plan`, then supervised `--stage state-pilot`.
+`state-prepare`, `state-benchmark` and controller-owned `state-one` expose the
+same stages. The completed long-window S/O v2 reader supplies a metadata-selected
+training-only panel. EEG X/S/O share one 200 Hz antialias conversion; Hb retains
+10 Hz. The three equal-exposure controls are continuous S/O, K128 S/O and K128
+raw-waveform quantization. `test_dual_component_state.py` covers source boundaries,
+resampling/closure/masks, time-block isolation, frozen training scales, raw-only
+loss, integer replay and synthetic state/null controls. Pilot within-subject
+input holdout is separate from the later A–F acceptance and protected evaluation.
+
 The 30-second global latent health pilot uses the same dual-component runner
 with [`dual_component_latent_health_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml).
 Run `--stage check`, `--stage synthetic --output <fresh-run>`, then supervised

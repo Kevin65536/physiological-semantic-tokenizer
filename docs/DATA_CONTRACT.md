@@ -1755,6 +1755,26 @@ masks and coordinates. Completion requires all planned windows to be terminal,
 with independent shape/closure checks and exact fNIRS/proxy source replay.
 The cache's manifest, summary and verification own counts and availability.
 
+### Tokenizer EEG supervision at 200 Hz — 2026-11-12
+
+The user fixes **200 Hz EEG supervision for every dataset** in the
+[TK-STATE-v1 consumer](EXPERIMENT_PLAN.md#tk-state-v1). Its model input X,
+supervision S/O and decoded voltage all use that grid: 6,000 samples per
+30-second input and 400 per 2-second patch. The native cache above remains the
+unchanged source. The [consumer contract](../experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml)
+applies the same linear polyphase antialias operator to X/S/O; existing 200 Hz
+arrays follow the identity path. Native units, clocks and channel identities
+remain explicit. Verify additive closure and retain the native/200 Hz index map.
+
+The bounded pilot resamples its training prefix and final input-holdout block
+separately, with a fixed Kaiser-5 FIR and linear boundary extension. Scoring
+excludes padding-dependent filter support; invalid observation and teacher
+support propagate separately through the filter footprint. Source scoring masks
+are retained, never promoted to valid by interpolation. Scales use only the
+training prefix. This is an offline within-training-subject diagnostic under the
+retained parent teacher, while later independent-subject acceptance has its own
+frozen split. Hb remains on its existing 10 Hz paired-color grid.
+
 The [synthesis audit](../experiments/configs/physiology_semantic_tokenizer/so_supervision_synthesis_audit_v1.yaml)
 and its [subject-wide position diagnostic](../experiments/configs/physiology_semantic_tokenizer/so_supervision_position_audit_v1.yaml)
 consume exactly this completed public population, retaining original splits,
