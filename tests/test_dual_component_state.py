@@ -184,3 +184,44 @@ def test_known_state_and_task_locked_negative_control():
     result = runner.state_pilot_synthetic(settings())
     assert result['status'] == 'passed' and result['known_state_accuracy'] >= .8
     assert result['task_locked_pairing_gain'] == 0 and result['measured_arrays_read'] == 0
+
+
+def test_visualization_weights_balance_parent_and_dataset_not_window_count():
+    from src.analysis.dual_component_tokenizer import state_balanced_weights
+    ds = np.array([0, 0, 0, 1, 1, 1]); parent = np.array([0, 0, 1, 2, 2, 2])
+    w = state_balanced_weights(ds, parent, np.array([True, True, True, True, True, False]))
+    np.testing.assert_allclose(w, [.125, .125, .25, .25, .25, 0])
+
+
+def test_visualization_pca_axes_are_frozen_before_holdout_projection():
+    from src.analysis.dual_component_tokenizer import state_weighted_pca
+    x = np.array([[1., 0], [-1, 0], [0, .2], [0, -.2], [100., 200.]])
+    w = np.array([.25, .25, .25, .25, 0])
+    fit = state_weighted_pca(x, w)
+    x[-1] *= 10000
+    second = state_weighted_pca(x, w)
+    np.testing.assert_array_equal(fit['mean'], second['mean'])
+    np.testing.assert_array_equal(fit['axes'], second['axes'])
+    np.testing.assert_allclose(fit['explained'], [1 / 1.04, .04 / 1.04])
+
+
+def test_pattern_psd_preserves_oscillation_when_average_waveform_cancels():
+    from src.analysis.dual_component_tokenizer import state_pattern_statistics
+    t = np.arange(400) / 200
+    signal = np.sin(2 * np.pi * 10 * t)
+    patches = np.stack([signal, -signal])[:, :, None]
+    result = state_pattern_statistics(patches, np.ones(2), 200)
+    np.testing.assert_allclose(result['mean'], 0, atol=1e-15)
+    assert result['frequency'][np.argmax(result['psd'][:, 0])] == 10
+    assert np.isclose(np.trapezoid(result['psd'][:, 0], result['frequency']), .5)
+    assert result['mean_waveform_energy_fraction'] == 0
+
+
+def test_visualization_rejects_unfinished_parent_before_arrays(tmp_path, monkeypatch):
+    cfg = runner.read_config(CONFIG)
+    runner.write_json(tmp_path / 'summary.json', dict(status='running'))
+    runner.write_json(tmp_path / 'resolved_config.json', dict(config=cfg))
+    monkeypatch.setattr(np, 'load', lambda *a, **k: pytest.fail('unexpected measured-array read'))
+    with pytest.raises(ValueError, match='completed exact'):
+        runner.main(['--config', str(CONFIG), '--stage', 'state-visualize', '--output', str(tmp_path),
+                     '--analysis-output', str(tmp_path / 'fresh')])

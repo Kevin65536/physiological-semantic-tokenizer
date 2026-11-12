@@ -28,6 +28,365 @@ MODALITIES = ('eeg', 'hb')
 BRANCHES = ('S', 'O')
 
 
+def state_balanced_weights(dataset, parent, selected):
+    """Equal datasets, equal parents within dataset, equal selected anchors within parent."""
+    dataset, parent, selected = np.asarray(dataset), np.asarray(parent), np.asarray(selected, bool)
+    weights = np.zeros(len(dataset), dtype=float)
+    groups = np.unique(dataset[selected])
+    for d in groups:
+        parents = np.unique(parent[selected & (dataset == d)])
+        for p in parents:
+            mask = selected & (dataset == d) & (parent == p)
+            weights[mask] = 1 / (len(groups) * len(parents) * mask.sum())
+    return weights
+
+
+def state_weighted_pca(values, weights):
+    """Fit in the original latent metric; zero-weight holdout points never affect the axes."""
+    x, w = np.asarray(values, float), np.asarray(weights, float)
+    if x.ndim != 2 or w.shape != (len(x),) or np.any(w < 0) or w.sum() <= 0:
+        raise ValueError('matrix and positive training mass required')
+    use = w > 0; train = x[use]; w = w[use] / w[use].sum()
+    mean = np.sum(train * w[:, None], axis=0)
+    centered = train - mean
+    covariance = (centered * w[:, None]).T @ centered
+    eigen, axes = np.linalg.eigh(covariance); order = np.argsort(eigen)[::-1]
+    eigen, axes = np.maximum(eigen[order], 0), axes[:, order]
+    for j in range(axes.shape[1]):
+        if axes[np.argmax(np.abs(axes[:, j])), j] < 0:
+            axes[:, j] *= -1
+    return dict(mean=mean, axes=axes, explained=eigen / max(eigen.sum(), 1e-30),
+                participation_rank=float(eigen.sum() ** 2 / max(eigen @ eigen, 1e-30)))
+
+
+def state_pattern_statistics(patches, weights, sample_rate):
+    """Dispersion is across patches; PSD is averaged after computing each patch spectrum."""
+    from scipy.signal import periodogram
+    x, w = np.asarray(patches, float), np.asarray(weights, float)
+    if x.ndim != 3 or w.shape != (len(x),) or not np.isfinite(x).all() or w.sum() <= 0:
+        raise ValueError('finite complete patches with positive weights required')
+    w = w / w.sum(); mean = np.einsum('n,ntc->tc', w, x)
+    variance = np.einsum('n,ntc->tc', w, (x - mean) ** 2)
+    frequency, psd = periodogram(x, fs=sample_rate, window='hann', detrend='constant', scaling='density', axis=1)
+    power = np.einsum('n,nfc->fc', w, psd)
+    energy = float(np.dot(w, np.mean(x * x, axis=(1, 2))))
+    return dict(mean=mean, sd=np.sqrt(variance), frequency=frequency, psd=power,
+                mean_patch_energy=energy, mean_waveform_energy_fraction=float(np.mean(mean * mean) / max(energy, 1e-30)))
+
+
+def _state_information(ids, groups, weights, size=128):
+    joint = np.zeros((size, int(np.max(groups)) + 1))
+    np.add.at(joint, (ids, groups), weights)
+    joint /= joint.sum(); expected = joint.sum(1)[:, None] * joint.sum(0)[None]
+    take = joint > 0
+    return float(np.sum(joint[take] * np.log2(joint[take] / expected[take])))
+
+
+def render_state_codebook_figures(export, modality, candidate, branch):
+    """Pattern, occupancy and frozen-latent geometry for one retained codebook."""
+    import os
+    import resource
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    from matplotlib.colors import LogNorm
+    from sklearn.manifold import TSNE, trustworthiness
+    from threadpoolctl import threadpool_limits
+    threadpool_limits(limits=1); torch.set_num_threads(1)
+    start_time = time.monotonic(); export = Path(export)
+    stem = modality + '_' + candidate; key = stem + '_' + branch
+    folder = export / key; folder.mkdir()
+    meta = json.loads((export / (stem + '_windows.json')).read_text())
+    with np.load(export / (stem + '.npz')) as stored:
+        ids = stored['ids_' + branch].ravel()
+        latent = stored['latent_' + branch].reshape(-1, 32).astype(float)
+        book = stored['codebook_' + branch].astype(float)
+        pattern_index = stored['pattern_index']
+        pattern_x = stored['pattern_x']
+        pattern_y = stored['pattern_' + branch.lower()] if candidate == 'q_so' else pattern_x
+        pattern_hat = stored['pattern_hat_' + branch.lower()] if candidate == 'q_so' else stored['pattern_hat_s'] + stored['pattern_hat_o']
+        x_rms = stored['x_rms'].ravel(); x_mean = stored['x_mean'].ravel()
+    names = ['eeg_fnirs_single_trial', 'refed', 'simultaneous_eeg_nirs', 'visual_cognitive_motivation']
+    short = ['Single-Trial', 'REFED', 'Simultaneous', 'Visual']
+    colors = ['#0072B2', '#D55E00', '#009E73', '#CC79A7']
+    ds = np.repeat([names.index(r['dataset']) for r in meta], 15)
+    parent = np.repeat([r['parent'] for r in meta], 15)
+    role = np.repeat([r['role'] for r in meta], 15)
+    slot = np.tile(np.arange(15), len(meta))
+    weights = {r: state_balanced_weights(ds, parent, role == r) for r in ('train', 'holdout')}
+    probabilities = {r: np.bincount(ids, weights=weights[r], minlength=128) for r in weights}
+    top = np.argsort(-probabilities['train'], kind='stable')[:8]
+    rows = []; usage = {}
+    for r in ('train', 'holdout'):
+        for d in [-1, 0, 1, 2, 3]:
+            selected = (role == r) & ((ds == d) if d >= 0 else True)
+            w = state_balanced_weights(ds, parent, selected)
+            count = np.bincount(ids[selected], minlength=128)
+            p = np.bincount(ids, weights=w, minlength=128)
+            positive = p[p > 0]
+            record = dict(role=r, dataset='equal-dataset' if d < 0 else short[d], counts=count.tolist(), probability=p.tolist(),
+                active=int(np.count_nonzero(count)), effective=float(np.exp(-(positive * np.log(positive)).sum())),
+                pmax=float(p.max()), top10=float(np.sort(p)[-10:].sum()), assignments=int(count.sum()))
+            usage[(r, d)] = record; rows.append(record)
+    _json(folder / 'usage.json', rows)
+    display_branch = branch if candidate == 'q_so' else ('codebook 1' if branch == 'S' else 'codebook 2')
+    label = f"{modality.upper()} | {'S/O supervision' if candidate == 'q_so' else 'Raw quantization'} | {display_branch}"
+    pages = []
+    plt.rcParams.update({'font.size': 10.5, 'axes.titlesize': 11.5, 'axes.labelsize': 10.5,
+        'legend.fontsize': 8.5, 'figure.facecolor': 'white', 'savefig.facecolor': 'white'})
+
+    def save(fig, name, title, caption, category):
+        path = folder / (name + '.png')
+        fig.savefig(path, dpi=220); plt.close(fig)
+        pages.append(dict(figure=str(path.relative_to(export)), title=title, caption=caption,
+                          category=category, book=key))
+
+    fig, axes = plt.subplots(3, 1, figsize=(14, 10.5), constrained_layout=True, gridspec_kw={'height_ratios': [1, 1, 1.45]})
+    for r, col in [('train', '#0072B2'), ('holdout', '#D55E00')]:
+        p = probabilities[r] * 100
+        axes[0].plot(np.arange(128), p, color=col, lw=1, marker='.', ms=3,
+                     label=f"{r}: active {usage[(r,-1)]['active']}/128; effective {usage[(r,-1)]['effective']:.1f}")
+        order = np.argsort(-probabilities['train'], kind='stable')
+        axes[1].plot(np.arange(1, 129), p[order], color=col, label=r)
+    axes[0].axhline(100 / 128, color='#555', ls='--', lw=.8, label='Uniform 1/128 reference')
+    axes[0].set(xlabel='Code ID (categorical)', ylabel='Assignments (%)', xlim=(-1, 128), title='Actual code identity; dataset / parent balanced')
+    axes[0].legend(ncol=3)
+    axes[1].set(xlabel='Rank fixed by training usage', ylabel='Assignments (%)', title='The holdout curve keeps the training ordering')
+    axes[1].legend(); axes[0].grid(alpha=.2); axes[1].grid(alpha=.2)
+    matrix = np.stack([usage[(r, d)]['probability'] for d in range(4) for r in ('train', 'holdout')]) * 100
+    cmap = plt.get_cmap('viridis').copy(); cmap.set_bad('#e5e7eb')
+    im = axes[2].imshow(np.ma.masked_equal(matrix, 0), aspect='auto', interpolation='nearest', cmap=cmap,
+                        norm=LogNorm(vmin=.01, vmax=30))
+    axes[2].set_yticks(np.arange(8), [f"{short[d]} {r}: eff={usage[(r,d)]['effective']:.1f}" for d in range(4) for r in ('train', 'holdout')])
+    axes[2].set(xlabel='Code ID', title='Per-dataset use: grey = zero; common logarithmic color scale')
+    fig.colorbar(im, ax=axes[2], label='Assignments (%)', ticks=[.01, .1, 1, 10, 30])
+    fig.suptitle(label + ' — code usage', fontsize=16)
+    save(fig, 'usage', label + '：码字使用率',
+        '全部合法训练滑窗与同被试留出输入；一个赋码来自一个位置、一个30秒上下文中的2秒锚点。先在父窗内归一化，再父窗/数据集等权。虚线为等频参考；色图统一0.01%–30%，零频为灰色。重复滑窗不是独立被试。', 'usage')
+
+    # Pattern views use unique physical anchors from nonoverlapping input windows and complete scoring support.
+    pr = role[pattern_index]; pd = ds[pattern_index]; pp = parent[pattern_index]; pid = ids[pattern_index]
+    pattern_weights = {r: state_balanced_weights(pd, pp, pr == r) for r in ('train', 'holdout')}
+    rate = 200 if modality == 'eeg' else 10
+    stats = {}; pattern_summary = []
+    for r in ('train', 'holdout'):
+        for code in top:
+            choose = (pr == r) & (pid == code)
+            if not choose.any():
+                stats[(r, int(code))] = None; continue
+            w = pattern_weights[r][choose]
+            values = dict(target=state_pattern_statistics(pattern_y[choose], w, rate),
+                          decoded=state_pattern_statistics(pattern_hat[choose], w, rate),
+                          observed=state_pattern_statistics(pattern_x[choose], w, rate))
+            ix = np.flatnonzero(choose)
+            overlays = ix[np.linspace(0, len(ix) - 1, min(24, len(ix))).round().astype(int)]
+            values.update(n=len(ix), indices=overlays, dataset_counts={short[d]: int(np.sum(choose & (pd == d))) for d in range(4)})
+            stats[(r, int(code))] = values
+            pattern_summary.append(dict(role=r, code=int(code), n=len(ix), dataset_counts=values['dataset_counts'],
+                mean_waveform_energy_fraction=values['target']['mean_waveform_energy_fraction'],
+                observed_mean_waveform_energy_fraction=values['observed']['mean_waveform_energy_fraction']))
+    limits = {}
+    for kind in ('target', 'observed'):
+        values = [v for v in stats.values() if v is not None]
+        lo = min(float(np.min(v[kind]['mean'] - v[kind]['sd'])) for v in values)
+        hi = max(float(np.max(v[kind]['mean'] + v[kind]['sd'])) for v in values)
+        if kind == 'target':
+            lo = min(lo, min(float(v['decoded']['mean'].min()) for v in values))
+            hi = max(hi, max(float(v['decoded']['mean'].max()) for v in values))
+        else:
+            lo = min(lo, min(float(pattern_x[v['indices']].min()) for v in values))
+            hi = max(hi, max(float(pattern_x[v['indices']].max()) for v in values))
+        pad = max((hi - lo) * .06, .01); limits[kind] = (lo - pad, hi + pad)
+    if modality == 'eeg':
+        powers = [v[k]['psd'][1:] for v in stats.values() if v is not None for k in ('target', 'decoded', 'observed')]
+        spectral_limits = (max(min(float(x.min()) for x in powers) * .7, 1e-12), max(float(x.max()) for x in powers) * 1.5)
+    for r in ('train', 'holdout'):
+        for page_number in range(2):
+            codes = top[page_number * 4:(page_number + 1) * 4]
+            fig, axes = plt.subplots(4, 3, figsize=(14, 10.6), constrained_layout=True)
+            for i, code in enumerate(codes):
+                v = stats[(r, int(code))]; a, b, c = axes[i]
+                if v is None:
+                    for ax in axes[i]:
+                        ax.axis('off'); ax.text(.05, .5, f'Code {code}: n=0 in this role', transform=ax.transAxes)
+                    continue
+                t = np.arange(pattern_y.shape[1]) / rate
+                target_label = ('Teacher ' + branch + ' (conditional)') if candidate == 'q_so' else 'Observed X'
+                if modality == 'eeg':
+                    mean, sd = v['target']['mean'][:, 0], v['target']['sd'][:, 0]
+                    a.fill_between(t, mean - sd, mean + sd, color='#0072B2', alpha=.2, label='Patch mean +/- SD')
+                    a.plot(t, mean, color='#0072B2', label=target_label)
+                    a.plot(t, v['decoded']['mean'][:, 0], color='#D55E00', ls='--', label='Integer decode mean')
+                    for kind, color, style in [('target', '#0072B2', '-'), ('decoded', '#D55E00', '--'), ('observed', '#777777', ':')]:
+                        f = v[kind]['frequency']; power = v[kind]['psd'][:, 0]; good = f > 0
+                        b.semilogy(f[good], np.maximum(power[good], 1e-12), color=color, ls=style, label=kind)
+                    b.set(xlabel='Frequency (Hz)', ylabel='Training SD squared / Hz', xlim=(.5, 100),
+                          ylim=spectral_limits, title='Mean individual-patch PSD; DC removed')
+                    for y in pattern_x[v['indices']]:
+                        c.plot(t, y[:, 0], color='#808890', alpha=.20, lw=.6)
+                    c.plot(t, v['observed']['mean'][:, 0], color='#b32025', lw=1.5, label='Observed X mean')
+                    c.set(title='Observed X: up to 24 actual patch overlays')
+                else:
+                    for ch, color, name in [(0, '#c23b3e', 'HbO'), (1, '#2771ad', 'HbR')]:
+                        mean, sd = v['target']['mean'][:, ch], v['target']['sd'][:, ch]
+                        a.fill_between(t, mean - sd, mean + sd, color=color, alpha=.16)
+                        a.plot(t, mean, color=color, label=name + ' target')
+                        a.plot(t, v['decoded']['mean'][:, ch], color=color, ls='--', label=name + ' decode')
+                        for y in pattern_x[v['indices']]:
+                            c.plot(t, y[:, ch], color=color, alpha=.12, lw=.6)
+                        c.plot(t, v['observed']['mean'][:, ch], color=color, lw=1.5, label=name + ' observed mean')
+                    for y in pattern_y[v['indices']]:
+                        b.plot(y[:, 0], y[:, 1], color='#888', alpha=.3, lw=.6)
+                    path = v['target']['mean']; b.plot(path[:, 0], path[:, 1], color='#333', lw=1.5)
+                    b.scatter(path[0, 0], path[0, 1], color='#009E73', s=25, marker='o', label='Start')
+                    b.scatter(path[-1, 0], path[-1, 1], color='#D55E00', s=30, marker='^', label='End')
+                    b.set(xlabel='HbO / joint training SD', ylabel='HbR / joint training SD',
+                          title='Joint target trajectory over 2 s', xlim=limits['target'], ylim=limits['target'])
+                    c.set(title='Observed paired Hb: actual patch overlays')
+                a.set(title=f'Code {code} | n={v["n"]} patches', xlabel='Time from anchor (s)',
+                      ylabel='Amplitude / training X SD', xlim=(0, 2), ylim=limits['target'])
+                c.set(xlabel='Time from anchor (s)', ylabel='Amplitude / training X SD', xlim=(0, 2), ylim=limits['observed'])
+                for ax in (a, b, c):
+                    ax.grid(alpha=.2)
+                if i == 0:
+                    a.legend(ncol=2); b.legend(fontsize=7.5); c.legend(fontsize=7.5)
+            fig.suptitle(label + f' — {r} patterns | training ranks {page_number * 4 + 1}–{page_number * 4 + 4}', fontsize=15)
+            save(fig, f'patterns_{r}_{page_number + 1}', label + f'：{r} token patterns（{page_number + 1}/2）',
+                '码字按训练赋码率选定，留出图复用相同ID。n为不重叠输入窗中具有完整评分支持的2秒片段数，阴影为片段间SD。实线为条件目标/观测的加权均值，虚线为完整15-ID序列解码后同锚点的均值；每个ID由30秒上下文决定。'
+                + ('频谱先对每段去均值并计算Hann周期图，再平均，分辨率0.5Hz；不是平均波形的频谱。' if modality == 'eeg' else 'Hb用双色团短程轨迹展示联合变化；圆点/三角为2秒片段起止。')
+                + '同一码本各页的目标/观测纵轴分别固定；不同码本不共享幅度轴。', 'patterns')
+    _json(folder / 'pattern_statistics.json', pattern_summary)
+    np.savez_compressed(folder / 'pattern_means.npz', **{f'{r}_{code}_{kind}_{field}': v[kind][field]
+        for (r, code), v in stats.items() if v is not None for kind in ('target', 'decoded', 'observed')
+        for field in ('mean', 'sd', 'frequency', 'psd')})
+
+    projection = state_weighted_pca(latent, weights['train'])
+    xy = (latent - projection['mean']) @ projection['axes'][:, :2]
+    bx = (book - projection['mean']) @ projection['axes'][:, :2]
+    rng = np.random.default_rng(17); sample = []
+    for r in ('train', 'holdout'):
+        for d in range(4):
+            parents = np.unique(parent[(role == r) & (ds == d)])
+            for par in parents:
+                ix = np.flatnonzero((role == r) & (ds == d) & (parent == par))
+                sample.extend(rng.choice(ix, min(len(ix), 192 // len(parents)), replace=False).tolist())
+    sample = np.array(sorted(sample), dtype=int)
+    allxy = np.concatenate([xy, bx]); full_lo, full_hi = allxy.min(0), allxy.max(0)
+    margin = np.maximum((full_hi - full_lo) * .05, .01); full_lo -= margin; full_hi += margin
+    zoom_lo, zoom_hi = np.quantile(xy, [.01, .99], axis=0)
+    code_colors = plt.get_cmap('turbo')(np.linspace(0, 1, 128))
+    fig, axes = plt.subplots(2, 3, figsize=(14, 9.5), constrained_layout=True)
+    for i, r in enumerate(('train', 'holdout')):
+        ix = sample[role[sample] == r]
+        for d in range(4):
+            keep = ix[ds[ix] == d]
+            axes[i, 0].scatter(xy[keep, 0], xy[keep, 1], s=5, alpha=.45, color=colors[d], label=short[d])
+        axes[i, 0].scatter(bx[:, 0], bx[:, 1], marker='x', s=18, color='#222', linewidths=.6, label='Codebook vectors')
+        axes[i, 1].scatter(xy[ix, 0], xy[ix, 1], s=5, alpha=.55, c=code_colors[ids[ix]])
+        axes[i, 1].scatter(bx[:, 0], bx[:, 1], marker='*', s=35, c=code_colors, edgecolors='#222', linewidths=.35)
+        for code in top[:4]:
+            if np.all(bx[code] >= zoom_lo) and np.all(bx[code] <= zoom_hi):
+                axes[i, 1].annotate(str(code), bx[code], xytext=(3, 3), textcoords='offset points', fontsize=8)
+        sc = axes[i, 2].scatter(xy[ix, 0], xy[ix, 1], c=slot[ix], s=6, alpha=.55, cmap='viridis', vmin=0, vmax=14)
+        for j in (0, 2):
+            axes[i, j].set(xlim=(full_lo[0], full_hi[0]), ylim=(full_lo[1], full_hi[1]))
+        outside = int(np.sum(np.any((xy[ix] < zoom_lo) | (xy[ix] > zoom_hi), axis=1)))
+        axes[i, 1].set(xlim=(zoom_lo[0], zoom_hi[0]), ylim=(zoom_lo[1], zoom_hi[1]))
+        for j, title in enumerate(('Dataset; full range', f'Code ID; central 98% zoom; outside={outside}', 'Window slot; full range')):
+            axes[i, j].set(title=f'{r}: {title}', xlabel=f"PC1 ({projection['explained'][0]*100:.1f}%)",
+                           ylabel=f"PC2 ({projection['explained'][1]*100:.1f}%)")
+            axes[i, j].grid(alpha=.15)
+        axes[i, 0].legend(fontsize=8)
+    fig.colorbar(sc, ax=axes[:, 2], label='Slot index in 30 s context (0–14)', ticks=[0, 7, 14])
+    fig.suptitle(label + f" — training-fitted PCA | first two PCs {projection['explained'][:2].sum()*100:.1f}%", fontsize=15)
+    save(fig, 'pca', label + '：量化前 latent 与码本的 PCA',
+        'PCA只在训练latent上拟合，按数据集/父窗等权且不逐维标准化。点为上下文中的2秒锚点；黑叉/星为128个码本向量。训练与留出共用轴；中列明确放大到全体点坐标1%–99%范围，并列出抽样点中未显示的数量。码字颜色仅为类别标识，编号大小无连续意义。', 'latent')
+    embedding_input = np.concatenate([latent[sample], book])
+    embeddings = []; neighborhood = []
+    for seed in (17, 29):
+        tsne = TSNE(n_components=2, perplexity=30, max_iter=750, learning_rate='auto', init='random', random_state=seed, n_jobs=1)
+        embedding = tsne.fit_transform(embedding_input)
+        trust = float(trustworthiness(embedding_input, embedding, n_neighbors=15))
+        embeddings.append(embedding); neighborhood.append(dict(seed=seed, trustworthiness_15=trust, KL=float(tsne.kl_divergence_)))
+    fig, axes = plt.subplots(2, 2, figsize=(13, 10), constrained_layout=True)
+    for j, (embedding, check) in enumerate(zip(embeddings, neighborhood)):
+        z, centers = embedding[:-128], embedding[-128:]
+        for d in range(4):
+            take = ds[sample] == d
+            axes[0, j].scatter(z[take, 0], z[take, 1], s=6, alpha=.5, color=colors[d], label=short[d])
+        axes[0, j].scatter(centers[:, 0], centers[:, 1], marker='x', color='#222', s=18, linewidths=.7, label='Codebook vectors')
+        axes[1, j].scatter(z[:, 0], z[:, 1], s=6, alpha=.6, c=code_colors[ids[sample]])
+        axes[1, j].scatter(centers[:, 0], centers[:, 1], marker='*', s=45, c=code_colors, edgecolors='#222', linewidths=.4)
+        for code in top[:4]:
+            axes[1, j].annotate(str(code), centers[code], xytext=(3, 3), textcoords='offset points', fontsize=8)
+        axes[0, j].legend(fontsize=8)
+        for i in range(2):
+            axes[i, j].set(xlabel='t-SNE 1 (arbitrary scale)', ylabel='t-SNE 2 (arbitrary scale)',
+                           title=f"seed {check['seed']}; neighborhood preservation {check['trustworthiness_15']:.3f}")
+            axes[i, j].grid(alpha=.12)
+    fig.suptitle(label + ' — joint t-SNE: datasets (top), code IDs (bottom)', fontsize=15)
+    save(fig, 'tsne', label + '：t-SNE 两个固定种子的分布',
+        '同一组分层抽样latent与全部码本向量联合降维，仅用于描述分布：每数据集每角色最多192个锚点，父窗内均衡。perplexity=30、750次迭代，两个种子全部展示。邻域保持率用原32维与2维的15近邻计算；图中远近、簇大小和跨种子方向不是原空间的定量距离。', 'latent')
+    np.savez_compressed(folder / 'embedding_coordinates.npz', PCA_mean=projection['mean'], PCA_axes=projection['axes'],
+        PCA_explained=projection['explained'], PCA_points=xy, PCA_codebook=bx, sampled_index=sample,
+        tsne_seed17=embeddings[0], tsne_seed29=embeddings[1], code_ids=ids, dataset=ds, parent=parent, role=role, slot=slot)
+    def correlation(a, b, w):
+        aa = a - np.dot(w, a); bb = b - np.dot(w, b)
+        return float(np.dot(w, aa * bb) / max(np.sqrt(np.dot(w, aa * aa) * np.dot(w, bb * bb)), 1e-30))
+    summary = dict(status='completed', key=key, label=label, top_training_codes=top.tolist(), usage=rows,
+        PCA_first_two_variance=float(projection['explained'][:2].sum()), latent_participation_rank=projection['participation_rank'],
+        PC1_observed_RMS_correlation=correlation(xy[:, 0], x_rms, weights['train']),
+        PC1_observed_mean_correlation=correlation(xy[:, 0], x_mean, weights['train']),
+        code_dataset_MI_bits=_state_information(ids, ds, weights['train']),
+        code_slot_MI_bits=_state_information(ids, slot, weights['train']),
+        tsne=neighborhood, pattern_summary=pattern_summary, pages=pages,
+        seconds=time.monotonic() - start_time, peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    _json(folder / 'summary.json', summary)
+    return summary
+
+
+def assemble_state_token_atlas(export, results, analysis):
+    """PNG-only figures with searchable PDF captions and a local HTML figure index."""
+    import html
+    import fitz
+    export = Path(export)
+    results = sorted(results, key=lambda r: (0 if '_q_so_' in r['key'] else 1, r['key']))
+    pages = [p for r in results for p in r['pages']]
+    intro = ('本图集分析已完成的200 Hz EEG / 10 Hz Hb tokenizer pilot，主模型四个S/O码本及普通量化四个码本均为K128。'
+             '只有四名训练被试；holdout为同被试父窗末段，所有图均未读取测试分区。码字由30秒上下文推断，锚点每2秒更新。'
+             '使用率覆盖全部允许滑窗；pattern仅采用不重叠输入中的完整评分片段；降维抽样及训练PCA拟合范围在相邻图注中说明。')
+    doc = fitz.open()
+    for index, page_info in enumerate(pages):
+        page = doc.new_page(width=1000, height=850)
+        for rect, text, size in [(fitz.Rect(30, 18, 970, 62), page_info['title'], 17),
+                (fitz.Rect(30, 745, 970, 820), page_info['caption'], 10.5)]:
+            if page.insert_textbox(rect, text, fontname='china-s', fontsize=size, lineheight=1.25) < 0:
+                raise ValueError('figure atlas caption overflow')
+        page.insert_image(fitz.Rect(30, 68, 970, 735), filename=str(export / page_info['figure']), keep_proportion=True)
+        page.insert_text((30, 837), f"{index+1}/{len(pages)} | 200 Hz EEG; 30 s context / 2 s anchor | {page_info['book']}", fontsize=8)
+    doc.save(export / 'TOKEN_PATTERN_ATLAS.pdf', deflate=True, garbage=4); doc.close()
+    pdf = fitz.open(export / 'TOKEN_PATTERN_ATLAS.pdf')
+    checks = [dict(page=i+1, images=len(page.get_images()), vector_paths=len(page.get_drawings()), searchable_characters=len(page.get_text()))
+              for i, page in enumerate(pdf)]
+    if any(c['images'] != 1 or c['vector_paths'] or c['searchable_characters'] < 40 for c in checks):
+        raise AssertionError('atlas bitmap/searchable-caption contract failed')
+    pdf.close(); _json(export / 'pdf_verification.json', dict(status='passed', pages=checks))
+    blocks = []
+    for record in results:
+        links = ' · '.join(f'<a href="#{html.escape(p["book"]+"_"+Path(p["figure"]).stem)}">{html.escape(Path(p["figure"]).stem)}</a>' for p in record['pages'])
+        blocks.append(f'<section><h2>{html.escape(record["label"])}</h2><p>{links}</p><p>PCA前两维解释{record["PCA_first_two_variance"]*100:.1f}%；latent参与率有效维度{record["latent_participation_rank"]:.2f}。数据集/槽位与码字的互信息分别为{record["code_dataset_MI_bits"]:.3f}/{record["code_slot_MI_bits"]:.3f} bit；它们描述依赖关系，不是生理标签。</p><p><a href="{record["key"]}/summary.json">全部数值</a></p></section>')
+        for p in record['pages']:
+            ident = p['book'] + '_' + Path(p['figure']).stem
+            blocks.append(f'<section id="{html.escape(ident)}"><h3>{html.escape(p["title"])}</h3><a href="{p["figure"]}"><img loading="lazy" src="{p["figure"]}" alt="{html.escape(p["title"])}"></a><p>{html.escape(p["caption"])}</p></section>')
+    style = 'body{font:16px/1.7 system-ui,sans-serif;background:#edf1f5;color:#15283d;margin:0}main{max-width:1500px;margin:auto;padding:18px}section{background:white;padding:24px;margin:18px 0;border-radius:8px}img{width:100%;height:auto}a{color:#126da1}h1,h2,h3{line-height:1.4}'
+    (export / 'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Token pattern 与码本健康图集</title><style>'+style+'</style><main><section><h1>Token pattern、码字使用率与潜在表示分布</h1><p>'+intro+'</p><p><a href="TOKEN_PATTERN_ATLAS.pdf">完整 PDF 图集</a> · <a href="analysis_config.json">作图口径</a></p></section>'+''.join(blocks)+'</main></html>', encoding='utf-8')
+    _json(export / 'figure_index.json', dict(pages=pages, analysis=analysis))
+    return dict(status='completed', books=len(results), figures=len(pages), pdf_pages=len(checks),
+                index='index.html', pdf='TOKEN_PATTERN_ATLAS.pdf', results=[{k:r[k] for k in
+                ('key','PCA_first_two_variance','latent_participation_rank','PC1_observed_RMS_correlation',
+                 'PC1_observed_mean_correlation','code_dataset_MI_bits','code_slot_MI_bits','tsne')} for r in results])
+
+
 def separation_wave_metrics(x,s,o,scale,eog=None):
     """Natural waveform diagnostics; no clean truth is assumed."""
     from scipy.signal import butter,sosfiltfilt

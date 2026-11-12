@@ -840,6 +840,17 @@ resampling/closure/masks, time-block isolation, frozen training scales, raw-only
 loss, integer replay and synthetic state/null controls. Pilot within-subject
 input holdout is separate from the later A–F acceptance and protected evaluation.
 
+For a completed pilot, `--stage state-visualize --output <completed-run>
+--analysis-output <fresh-direct-child> --device cuda:0` exports token patterns,
+complete code-use distributions, training-fitted PCA and two-seed t-SNE through
+the same runner and `src/analysis/dual_component_tokenizer.py`. Pattern panels
+use fully scored anchors from nonoverlapping inputs; occupancy uses every legal
+training crop. Conditional teacher components, full integer-sequence decodes
+and observed patches are labelled separately. All codebooks include the raw
+quantization control; its branches are named codebook 1/2. The local HTML index
+links PNG figures, numerical coordinates and a bitmap-only PDF figure atlas.
+This freezes model weights and uses only the retained pilot training population.
+
 The 30-second global latent health pilot uses the same dual-component runner
 with [`dual_component_latent_health_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml).
 Run `--stage check`, `--stage synthetic --output <fresh-run>`, then supervised

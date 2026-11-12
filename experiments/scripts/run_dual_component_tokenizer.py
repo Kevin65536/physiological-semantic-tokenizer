@@ -43,7 +43,7 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'separation-plan', 'separation-pilot', 'separation', 'separation-report',
           'power-cap-plan', 'power-cap', 'power-cap-report', 'power-cap-method-report', 'power-cap-normalization',
           'so-plan','so-reference','so-pilot','so-produce','so-verify',
-          'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot',
+          'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -5265,13 +5265,15 @@ def state_pilot_synthetic(cfg):
 
 def state_pilot_dispatch(args, cfg):
     from src.data.dual_component_tokenizer import state_pilot_plan
-    if args.stage not in ('check', 'synthetic', 'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot') or args.evaluation_split != 'development':
+    if args.stage not in ('check', 'synthetic', 'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize') or args.evaluation_split != 'development':
         raise ValueError('bounded state pilot cannot launch other stages or test evaluation')
     if args.stage == 'check':
         return dict(status='state_pilot_contract_valid', EEG_hz=200, measured_arrays_read=0)
     if args.output is None:
         raise ValueError('explicit state pilot output required')
     out = args.output.resolve(); root = args.project_root.resolve()
+    if args.stage == 'state-visualize':
+        return visualize_state_pilot(cfg, args)
     if args.stage == 'synthetic':
         result = state_pilot_synthetic(cfg); write_json(out / 'synthetic.json', result); return result
     if args.stage == 'state-one':
@@ -5332,6 +5334,119 @@ def state_pilot_dispatch(args, cfg):
         except Exception:
             state.update(status='failed', error=traceback.format_exc(), updated=now())
             write_json(out / 'controller.json', state); raise
+
+
+def _state_book_figures(payload):
+    from src.analysis.dual_component_tokenizer import render_state_codebook_figures
+    return render_state_codebook_figures(*payload)
+
+
+def visualize_state_pilot(cfg, args):
+    """Fresh, read-only visualization export from completed training-only pilot models."""
+    import torch
+    from src.tokenizers.dual_component_tokenizer import GlobalLatentComponentTokenizer
+    from src.analysis.dual_component_tokenizer import assemble_state_token_atlas
+    run = args.output.resolve()
+    if args.analysis_output is None:
+        raise ValueError('fresh --analysis-output required')
+    export = args.analysis_output.resolve()
+    if export.parent != run or export.exists():
+        raise ValueError('use a fresh direct-child visualization export')
+    source = read_json(run / 'summary.json')
+    resolved = read_json(run / 'resolved_config.json')['config']
+    if source['status'] != 'completed' or resolved != cfg or cfg['data']['allowed_splits'] != ['train']:
+        raise ValueError('completed exact training-only pilot required before arrays')
+    export.mkdir(); torch.set_num_threads(2)
+    if args.device.startswith('cuda'):
+        torch.cuda.set_device(args.device)
+        torch.cuda.set_per_process_memory_fraction(.15, args.device)
+    analysis = dict(schema='state_token_visualization_v1', source_run=str(run), source_models='frozen final checkpoints',
+        token_usage='all legal training crops and within-training-subject holdout',
+        patterns='nonoverlapping input windows; fully scored 2s anchor patches only; top eight codes chosen by training usage',
+        PCA='fit training latent covariance with equal dataset and parent weights, then project holdout and codebook',
+        TSNE='joint visualization only, balanced 192 tokens per dataset per role plus all 128 codebook vectors; seeds 17/29',
+        model_training=False, EEG_hz=200, Hb_hz=10, bitmap_dpi=220)
+    write_json(export / 'analysis_config.json', analysis)
+    jobs = []; collection = []; started = time.monotonic()
+    for modality in cfg['training']['modalities']:
+        manifest, rows, arrays = _state_cache(cfg, run, modality)
+        for candidate in ('q_so', 'q_x'):
+            key = modality + '_' + candidate
+            saved = torch.load(run / 'models' / modality / candidate / 'checkpoint.pt', map_location='cpu', weights_only=False)
+            if saved['signature']['source'] != manifest['plan_identity'] or saved['step'] != cfg['training']['continuation_steps']:
+                raise ValueError('checkpoint identity or exposure mismatch')
+            model = GlobalLatentComponentTokenizer(dict(cfg['model'], input_dim=400 if modality == 'eeg' else 40),
+                                                  codebook_size=cfg['model']['codebook_size']).to(args.device)
+            model.load_state_dict(saved['model_state']); model.eval()
+            before = {k: v.clone() for k, v in model.state_dict().items()}
+            examples, metadata = [], []
+            for role in ('train', 'holdout'):
+                for i, row in enumerate(rows):
+                    starts = row['train_starts_s' if role == 'train' else 'holdout_starts_s']
+                    for start in starts:
+                        for position in row['available_positions']:
+                            examples.append((i, start, position))
+                            metadata.append(dict(dataset=row['dataset'], parent=i, record=row['record'], subject=row['subject'],
+                                position=row['positions'][position], role=role, start_s=start,
+                                pattern_window=(role == 'holdout' or start % 30 == 0)))
+            values = {k: [] for k in ('ids_S', 'ids_O', 'latent_S', 'latent_O', 'x_rms', 'x_mean',
+                      'pattern_index', 'pattern_x', 'pattern_s', 'pattern_o', 'pattern_hat_s', 'pattern_hat_o')}
+            valid_patterns = 0; excluded_patterns = 0
+            for offset in range(0, len(examples), 64):
+                take = examples[offset:offset + 64]
+                batch = _state_batch(rows, arrays, take, args.device)
+                with torch.no_grad():
+                    result = model(batch['x']); decoded = model.decode_ids(result['ids'])
+                for branch in ('S', 'O'):
+                    torch.testing.assert_close(decoded[branch], result[branch], atol=2e-6, rtol=1e-5)
+                    values['ids_' + branch].append(result['ids'][branch].cpu().numpy())
+                    values['latent_' + branch].append(result['latent'][branch].cpu().numpy())
+                values['x_rms'].append(batch['x'].square().mean(-1).sqrt().cpu().numpy())
+                values['x_mean'].append(batch['x'].mean(-1).cpu().numpy())
+                channel_count = 1 if modality == 'eeg' else 2
+                pattern_windows = np.array([m['pattern_window'] for m in metadata[offset:offset + len(take)]])
+                mask = batch['mask'].all(-1).cpu().numpy()
+                good = mask & pattern_windows[:, None]
+                excluded_patterns += int((~mask & pattern_windows[:, None]).sum())
+                valid_patterns += int(good.sum())
+                values['pattern_index'].append((np.arange(offset, offset + len(take))[:, None] * 15 + np.arange(15))[good])
+                for k in ('x', 's', 'o'):
+                    values['pattern_' + k].append(batch[k].cpu().numpy().reshape(len(take), 15, -1, channel_count)[good])
+                for branch in ('S', 'O'):
+                    values['pattern_hat_' + branch.lower()].append(decoded[branch].cpu().numpy().reshape(len(take), 15, -1, channel_count)[good])
+            if any(not torch.equal(before[k], v) for k, v in model.state_dict().items()):
+                raise AssertionError('frozen visualization changed model state')
+            packed = {k: np.concatenate(v) for k, v in values.items()}
+            for branch in ('S', 'O'):
+                packed['codebook_' + branch] = model.branches[branch]['quantizer'].codebook.cpu().numpy()
+            write_npz(export / (key + '.npz'), **packed)
+            write_json(export / (key + '_windows.json'), metadata)
+            collection.append(dict(key=key, contexts=len(metadata), pattern_patches=valid_patterns,
+                                   pattern_excluded_unscored=excluded_patterns, model_state_unchanged=True))
+            jobs.extend([(str(export), modality, candidate, branch) for branch in ('S', 'O')])
+            write_json(export / 'progress.json', dict(stage='collect', completed_models=len(collection), total_models=4, updated=now()))
+            del model, before, packed, values
+    write_json(export / 'collection.json', collection)
+    # Measure one complete book, then parallelize all remaining independent books within memory/CPU limits.
+    first = _state_book_figures(jobs[0])
+    available_gib = os.sysconf('SC_AVPHYS_PAGES') * os.sysconf('SC_PAGE_SIZE') / 2**30
+    per_worker_gib = max(first['peak_rss_kib'] / 2**20 * 1.5, 1.)
+    workers = min(len(jobs) - 1, len(os.sched_getaffinity(0)), max(1, int(available_gib / per_worker_gib)))
+    if args.workers is not None:
+        workers = min(workers, args.workers)
+    write_json(export / 'render_resources.json', dict(pilot_seconds=first['seconds'], pilot_peak_rss_kib=first['peak_rss_kib'],
+        available_memory_gib=available_gib, workers=workers, numerical_threads=1,
+        reason='one measured render, then independent remaining books bounded by measured memory and CPU affinity'))
+    def progress(value, count):
+        write_json(export / 'progress.json', dict(stage='render', completed_books=count + 1, total_books=8, updated=now()))
+    results = [first, *_bounded_jobs(_state_book_figures, jobs[1:], workers, inflight=1, progress=progress)]
+    if any(r.get('status') != 'completed' for r in results):
+        write_json(export / 'failures.json', results); raise RuntimeError('visualization failed; retained partial export')
+    result = assemble_state_token_atlas(export, results, analysis)
+    result['seconds'] = time.monotonic() - started
+    write_json(export / 'export.json', result)
+    write_json(export / 'progress.json', dict(stage='completed', updated=now()))
+    return result
 
 
 if __name__ == '__main__':
