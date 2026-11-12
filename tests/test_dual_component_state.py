@@ -237,3 +237,19 @@ def test_visualization_uses_existing_canonical_config_serialization(tmp_path, mo
     with pytest.raises(RuntimeError, match='fixture cache boundary reached'):
         runner.main(['--config', str(CONFIG), '--stage', 'state-visualize', '--output', str(tmp_path),
                      '--analysis-output', str(tmp_path / 'fresh')])
+
+
+def test_atlas_long_control_title_fits_with_bitmap_and_searchable_caption(tmp_path):
+    from PIL import Image
+    from src.analysis.dual_component_tokenizer import assemble_state_token_atlas
+    Image.new('RGB', (300, 200), 'white').save(tmp_path / 'fixture.png')
+    page = dict(figure='fixture.png', title='EEG | Raw quantization | codebook 1：holdout token patterns（1/2）',
+                caption='固定合成检查：30秒输入，每2秒一个锚点。图像为位图，图注保持可检索；本页不使用实测数据。',
+                category='patterns', book='eeg_q_x_S')
+    record = dict(key='eeg_q_x_S', label='Synthetic fixture', pages=[page], PCA_first_two_variance=.8,
+                  latent_participation_rank=2., PC1_observed_RMS_correlation=0., PC1_observed_mean_correlation=0.,
+                  code_dataset_MI_bits=0., code_slot_MI_bits=0., tsne=[])
+    result = assemble_state_token_atlas(tmp_path, [record], {})
+    assert result['pdf_pages'] == 1
+    check = json.loads((tmp_path / 'pdf_verification.json').read_text())['pages'][0]
+    assert check['images'] == 1 and check['vector_paths'] == 0 and check['searchable_characters'] > 40

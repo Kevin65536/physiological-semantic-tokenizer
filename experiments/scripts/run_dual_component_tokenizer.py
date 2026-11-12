@@ -5350,22 +5350,35 @@ def visualize_state_pilot(cfg, args):
     if args.analysis_output is None:
         raise ValueError('fresh --analysis-output required')
     export = args.analysis_output.resolve()
-    if export.parent != run or export.exists():
-        raise ValueError('use a fresh direct-child visualization export')
+    if export.parent != run:
+        raise ValueError('use a direct-child visualization export')
     source = read_json(run / 'summary.json')
     resolved = read_json(run / 'resolved_config.json')['config']
     if source['status'] != 'completed' or resolved != serial(cfg) or cfg['data']['allowed_splits'] != ['train']:
         raise ValueError('completed exact training-only pilot required before arrays')
-    export.mkdir(); torch.set_num_threads(2)
-    if args.device.startswith('cuda'):
-        torch.cuda.set_device(args.device)
-        torch.cuda.set_per_process_memory_fraction(.15, args.device)
     analysis = dict(schema='state_token_visualization_v1', source_run=str(run), source_models='frozen final checkpoints',
         token_usage='all legal training crops and within-training-subject holdout',
         patterns='nonoverlapping input windows; fully scored 2s anchor patches only; top eight codes chosen by training usage',
         PCA='fit training latent covariance with equal dataset and parent weights, then project holdout and codebook',
         TSNE='joint visualization only, balanced 192 tokens per dataset per role plus all 128 codebook vectors; seeds 17/29',
         model_training=False, EEG_hz=200, Hb_hz=10, bitmap_dpi=220)
+    if export.exists():
+        if read_json(export / 'analysis_config.json') != analysis:
+            raise ValueError('existing export has a different analysis contract')
+        if (export / 'export.json').exists():
+            return read_json(export / 'export.json')
+        results = [read_json(export / f'{m}_{c}_{b}/summary.json') for m in cfg['training']['modalities']
+                   for c in ('q_so', 'q_x') for b in ('S', 'O')]
+        if any(r['status'] != 'completed' for r in results):
+            raise ValueError('complete retained book figures required for assembly resume')
+        result = assemble_state_token_atlas(export, results, analysis)
+        write_json(export / 'export.json', result)
+        write_json(export / 'progress.json', dict(stage='completed', resumed='assembly_only', updated=now()))
+        return result
+    export.mkdir(); torch.set_num_threads(2)
+    if args.device.startswith('cuda'):
+        torch.cuda.set_device(args.device)
+        torch.cuda.set_per_process_memory_fraction(.15, args.device)
     write_json(export / 'analysis_config.json', analysis)
     jobs = []; collection = []; started = time.monotonic()
     for modality in cfg['training']['modalities']:

@@ -200,6 +200,11 @@ def render_state_codebook_figures(export, modality, candidate, branch):
     if modality == 'eeg':
         powers = [v[k]['psd'][1:] for v in stats.values() if v is not None for k in ('target', 'decoded', 'observed')]
         spectral_limits = (max(min(float(x.min()) for x in powers) * .7, 1e-12), max(float(x.max()) for x in powers) * 1.5)
+    else:
+        shown = np.concatenate([pattern_y[v['indices']] for v in stats.values() if v is not None])
+        lo, hi = float(shown.min()), float(shown.max())
+        pad = max((hi - lo) * .05, .01)
+        limits['joint'] = (lo - pad, hi + pad)
     for r in ('train', 'holdout'):
         for page_number in range(2):
             codes = top[page_number * 4:(page_number + 1) * 4]
@@ -241,7 +246,7 @@ def render_state_codebook_figures(export, modality, candidate, branch):
                     b.scatter(path[0, 0], path[0, 1], color='#009E73', s=25, marker='o', label='Start')
                     b.scatter(path[-1, 0], path[-1, 1], color='#D55E00', s=30, marker='^', label='End')
                     b.set(xlabel='HbO / joint training SD', ylabel='HbR / joint training SD',
-                          title='Joint target trajectory over 2 s', xlim=limits['target'], ylim=limits['target'])
+                          title='Joint target trajectory over 2 s', xlim=limits['joint'], ylim=limits['joint'])
                     c.set(title='Observed paired Hb: actual patch overlays')
                 a.set(title=f'Code {code} | n={v["n"]} patches', xlabel='Time from anchor (s)',
                       ylabel='Amplitude / training X SD', xlim=(0, 2), ylim=limits['target'])
@@ -292,7 +297,7 @@ def render_state_codebook_figures(export, modality, candidate, branch):
             axes[i, j].set(xlim=(full_lo[0], full_hi[0]), ylim=(full_lo[1], full_hi[1]))
         outside = int(np.sum(np.any((xy[ix] < zoom_lo) | (xy[ix] > zoom_hi), axis=1)))
         axes[i, 1].set(xlim=(zoom_lo[0], zoom_hi[0]), ylim=(zoom_lo[1], zoom_hi[1]))
-        for j, title in enumerate(('Dataset; full range', f'Code ID; central 98% zoom; outside={outside}', 'Window slot; full range')):
+        for j, title in enumerate(('Dataset; full range', f'Code ID; 1–99% axis zoom; outside={outside}', 'Window slot; full range')):
             axes[i, j].set(title=f'{r}: {title}', xlabel=f"PC1 ({projection['explained'][0]*100:.1f}%)",
                            ylabel=f"PC2 ({projection['explained'][1]*100:.1f}%)")
             axes[i, j].grid(alpha=.15)
@@ -300,7 +305,7 @@ def render_state_codebook_figures(export, modality, candidate, branch):
     fig.colorbar(sc, ax=axes[:, 2], label='Slot index in 30 s context (0–14)', ticks=[0, 7, 14])
     fig.suptitle(label + f" — training-fitted PCA | first two PCs {projection['explained'][:2].sum()*100:.1f}%", fontsize=15)
     save(fig, 'pca', label + '：量化前 latent 与码本的 PCA',
-        'PCA只在训练latent上拟合，按数据集/父窗等权且不逐维标准化。点为上下文中的2秒锚点；黑叉/星为128个码本向量。训练与留出共用轴；中列明确放大到全体点坐标1%–99%范围，并列出抽样点中未显示的数量。码字颜色仅为类别标识，编号大小无连续意义。', 'latent')
+        'PCA只在训练latent上拟合，按数据集/父窗等权且不逐维标准化。点为上下文中的2秒锚点；黑叉/星为128个码本向量。训练与留出共用轴；中列放大到坐标1%–99%范围，并列出抽样点中未显示数量。各码本独立降维，ID和颜色仅在当前码本内有意义，坐标不可跨码本直接比较。', 'latent')
     embedding_input = np.concatenate([latent[sample], book])
     embeddings = []; neighborhood = []
     for seed in (17, 29):
@@ -358,12 +363,12 @@ def assemble_state_token_atlas(export, results, analysis):
     doc = fitz.open()
     for index, page_info in enumerate(pages):
         page = doc.new_page(width=1000, height=850)
-        for rect, text, size in [(fitz.Rect(30, 18, 970, 62), page_info['title'], 17),
+        for rect, text, size in [(fitz.Rect(30, 18, 970, 74), page_info['title'], 17),
                 (fitz.Rect(30, 745, 970, 820), page_info['caption'], 10.5)]:
             if page.insert_textbox(rect, text, fontname='china-s', fontsize=size, lineheight=1.25) < 0:
                 raise ValueError('figure atlas caption overflow')
-        page.insert_image(fitz.Rect(30, 68, 970, 735), filename=str(export / page_info['figure']), keep_proportion=True)
-        page.insert_text((30, 837), f"{index+1}/{len(pages)} | 200 Hz EEG; 30 s context / 2 s anchor | {page_info['book']}", fontsize=8)
+        page.insert_image(fitz.Rect(30, 82, 970, 735), filename=str(export / page_info['figure']), keep_proportion=True)
+        page.insert_text((30, 837), f"{index+1}/{len(pages)} | 4 training subjects; within-subject holdout | 200 Hz EEG; 30 s context / 2 s anchor | {page_info['book']}", fontsize=8)
     doc.save(export / 'TOKEN_PATTERN_ATLAS.pdf', deflate=True, garbage=4); doc.close()
     pdf = fitz.open(export / 'TOKEN_PATTERN_ATLAS.pdf')
     checks = [dict(page=i+1, images=len(page.get_images()), vector_paths=len(page.get_drawings()), searchable_characters=len(page.get_text()))
@@ -379,7 +384,16 @@ def assemble_state_token_atlas(export, results, analysis):
             ident = p['book'] + '_' + Path(p['figure']).stem
             blocks.append(f'<section id="{html.escape(ident)}"><h3>{html.escape(p["title"])}</h3><a href="{p["figure"]}"><img loading="lazy" src="{p["figure"]}" alt="{html.escape(p["title"])}"></a><p>{html.escape(p["caption"])}</p></section>')
     style = 'body{font:16px/1.7 system-ui,sans-serif;background:#edf1f5;color:#15283d;margin:0}main{max-width:1500px;margin:auto;padding:18px}section{background:white;padding:24px;margin:18px 0;border-radius:8px}img{width:100%;height:auto}a{color:#126da1}h1,h2,h3{line-height:1.4}'
-    (export / 'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Token pattern 与码本健康图集</title><style>'+style+'</style><main><section><h1>Token pattern、码字使用率与潜在表示分布</h1><p>'+intro+'</p><p><a href="TOKEN_PATTERN_ATLAS.pdf">完整 PDF 图集</a> · <a href="analysis_config.json">作图口径</a></p></section>'+''.join(blocks)+'</main></html>', encoding='utf-8')
+    overview = []
+    for r in results:
+        by_role = {v['role']: v for v in r.get('usage', []) if v['dataset'] == 'equal-dataset'}
+        if len(by_role) != 2:
+            continue
+        overview.append('<tr><td>'+html.escape(r['label'])+'</td>'+''.join(f'<td>{by_role[role]["active"]}/128；{by_role[role]["effective"]:.1f}</td>' for role in ('train','holdout'))+
+                        f'<td>{r["PCA_first_two_variance"]*100:.1f}%</td><td>{r["code_slot_MI_bits"]:.3f}</td></tr>')
+    table = '<table><tr><th>码本</th><th>训练：活跃；有效码数</th><th>留出：活跃；有效码数</th><th>PCA前两维</th><th>码字–槽位互信息(bit)</th></tr>'+''.join(overview)+'</table>'
+    style += 'table{width:100%;border-collapse:collapse;font-size:14px}td,th{text-align:left;border-bottom:1px solid #d5dce4;padding:8px}'
+    (export / 'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Token pattern 与码本健康图集</title><style>'+style+'</style><main><section><h1>Token pattern、码字使用率与潜在表示分布</h1><p>'+intro+'</p><p><a href="TOKEN_PATTERN_ATLAS.pdf">完整 PDF 图集</a> · <a href="analysis_config.json">作图口径</a></p>'+table+'</section>'+''.join(blocks)+'</main></html>', encoding='utf-8')
     _json(export / 'figure_index.json', dict(pages=pages, analysis=analysis))
     return dict(status='completed', books=len(results), figures=len(pages), pdf_pages=len(checks),
                 index='index.html', pdf='TOKEN_PATTERN_ATLAS.pdf', results=[{k:r[k] for k in
