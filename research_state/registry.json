@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-12T12:58:13.811839+00:00",
+  "updated_at": "2026-11-12T13:06:13.927399+00:00",
   "tracks": [
     {
       "id": "main",
@@ -6428,6 +6428,54 @@
       "id": "e.tk_state_pilot_resources",
       "label": "200Hz tokenizer首批pilot：resources",
       "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/resources.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_pilot_source",
+      "label": "200Hz tokenizer首批pilot：source",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/source_manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tk_state_pilot_launch",
+      "label": "200Hz tokenizer首批pilot：launch",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tk_state_pilot_input_check",
+      "label": "200Hz tokenizer首批pilot：input_check",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/input_verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_pilot_summary",
+      "label": "200Hz tokenizer首批pilot：summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_state_pilot_benchmark",
+      "label": "200Hz tokenizer首批pilot：benchmark",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/benchmark.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_pilot_verification",
+      "label": "200Hz tokenizer首批pilot：verification",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_pilot_comparison",
+      "label": "200Hz tokenizer首批pilot：comparison",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/pilot_comparison.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_pilot_visual_position",
+      "label": "首批pilot Visual位置级输入分布诊断",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/visual_position_diagnostic.json",
       "role": "diagnostic"
     }
   ],
@@ -15925,6 +15973,73 @@
       "headline": false,
       "updated_at": "2026-11-12T12:58:13.811839+00:00",
       "next_step": "冻结源码并启动持久监督：准备五个训练父窗，比较单/双GPU worker吞吐，完成六个500步等曝光pilot；读取范围保持训练分区。"
+    },
+    {
+      "state_id": "main.tk_state_pilot_v1@2026-11-12.running",
+      "entity": "main.tk_state_pilot_v1",
+      "label": "统一200Hz EEG的tokenizer首批训练pilot",
+      "track": "main",
+      "order": 226,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "engineering",
+      "summary": "首批已由user-systemd独立启动，冻结源码2333f6be。四名训练被试、五个父窗已准备；EEG X/S/O统一200Hz、Hb为10Hz，独立检查输入shape、时间块隔离和加法闭合通过。正在两张RTX4090上测量每设备1/2 worker的100步吞吐，随后按实测并发运行六个等曝光500步pilot。未读取validation/test或重拟合teacher。",
+      "evidence_ids": [
+        "e.tk_state_pilot_contract",
+        "e.tk_state_pilot_plan",
+        "e.tk_state_pilot_software",
+        "e.tk_state_pilot_synthetic",
+        "e.tk_state_pilot_resources",
+        "e.tk_state_pilot_source",
+        "e.tk_state_pilot_launch",
+        "e.tk_state_pilot_input_check"
+      ],
+      "supersedes": [
+        "main.tk_state_pilot_v1@2026-11-12.prepared"
+      ],
+      "depends_on": [
+        "main.long_so_cache_v2"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-12T13:00:39.018603+00:00",
+      "next_step": "监控既有tk-state-pilot-20261112-v1.service至六模型终态；报告分库重建、量化增量、用码与失败，不自动扩展完整训练或A–F验收。"
+    },
+    {
+      "state_id": "main.tk_state_pilot_v1@2026-11-12.completed",
+      "entity": "main.tk_state_pilot_v1",
+      "label": "统一200Hz EEG的tokenizer首批训练pilot",
+      "track": "main",
+      "order": 226,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "engineering",
+      "summary": "首批6/6模型完成，每模型100步预热加400步继续训练，无新增准备或训练失败；四名训练被试、五个父窗，EEG统一200Hz、Hb为10Hz。25项相关测试和3026项收集通过，整数回放最大差1.43e-6。两GPU每卡1/2 worker合计吞吐18.49/33.81步每秒，采用2 worker。同被试输入留出、四库等权X NMSE：连续/普通量化/SO量化，EEG 0.3034/0.3677/0.4302，Hb 0.8176/0.8172/0.8794；SO量化相对普通量化误差增加17.0%/7.6%。Visual Hb总误差94%–96%来自Probe1:CH23，保留完整分母；该位置留出均值相对训练SD改变约-12.35/-5.91。工程流程成立，生理状态与独立被试验收尚未开展。",
+      "evidence_ids": [
+        "e.tk_state_pilot_contract",
+        "e.tk_state_pilot_plan",
+        "e.tk_state_pilot_software",
+        "e.tk_state_pilot_synthetic",
+        "e.tk_state_pilot_resources",
+        "e.tk_state_pilot_source",
+        "e.tk_state_pilot_launch",
+        "e.tk_state_pilot_input_check",
+        "e.tk_state_pilot_summary",
+        "e.tk_state_pilot_benchmark",
+        "e.tk_state_pilot_verification",
+        "e.tk_state_pilot_comparison",
+        "e.tk_state_pilot_visual_position"
+      ],
+      "supersedes": [
+        "main.tk_state_pilot_v1@2026-11-12.running"
+      ],
+      "depends_on": [
+        "main.long_so_cache_v2"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-12T13:06:13.927399+00:00",
+      "next_step": "本批有界pilot结束。建议后续在既有证据上定位Visual学生均值/幅度外推与EEG量化损失，再确定完整训练预算；独立被试A–F验收仍按计划冻结后开展。"
     }
   ]
 }

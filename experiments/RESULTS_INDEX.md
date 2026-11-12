@@ -32,6 +32,22 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## State-tokenizer 200 Hz engineering pilot — 2026-11-12
+
+The [bounded contract](configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml)
+and [training/acceptance design](../docs/EXPERIMENT_PLAN.md#tk-state-v1) distinguish
+this training-only pilot from subsequent independent-subject A–F acceptance.
+The [run summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/summary.json)
+owns all continuous/SO-quantized/raw-quantized outcomes. Its
+[comparison table](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/pilot_comparison.csv),
+[input checks](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/input_verification.json)
+and [metric verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/verification.json)
+retain the 200 Hz X/S/O closure, original mask denominators, paired within-subject
+input holdout, rate/quantization costs and Visual position-level error concentration.
+Source snapshots, supervised launch, throughput trials, individual checkpoints
+and per-position scores remain in the same run. No position is removed after
+viewing its error, and the native teacher cache remains unchanged.
+
 ## EEG spatial/temporal voltage separation — 2026-11-05
 
 The [versioned contract](configs/physiology_semantic_tokenizer/dual_component_voltage_separation_v1.yaml)
