@@ -5354,7 +5354,7 @@ def visualize_state_pilot(cfg, args):
         raise ValueError('use a fresh direct-child visualization export')
     source = read_json(run / 'summary.json')
     resolved = read_json(run / 'resolved_config.json')['config']
-    if source['status'] != 'completed' or resolved != cfg or cfg['data']['allowed_splits'] != ['train']:
+    if source['status'] != 'completed' or resolved != serial(cfg) or cfg['data']['allowed_splits'] != ['train']:
         raise ValueError('completed exact training-only pilot required before arrays')
     export.mkdir(); torch.set_num_threads(2)
     if args.device.startswith('cuda'):

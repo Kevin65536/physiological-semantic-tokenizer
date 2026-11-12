@@ -225,3 +225,15 @@ def test_visualization_rejects_unfinished_parent_before_arrays(tmp_path, monkeyp
     with pytest.raises(ValueError, match='completed exact'):
         runner.main(['--config', str(CONFIG), '--stage', 'state-visualize', '--output', str(tmp_path),
                      '--analysis-output', str(tmp_path / 'fresh')])
+
+
+def test_visualization_uses_existing_canonical_config_serialization(tmp_path, monkeypatch):
+    cfg = runner.read_config(CONFIG)
+    runner.write_json(tmp_path / 'summary.json', dict(status='completed'))
+    runner.write_json(tmp_path / 'resolved_config.json', dict(config=cfg))
+    def reached_boundary(*args):
+        raise RuntimeError('fixture cache boundary reached')
+    monkeypatch.setattr(runner, '_state_cache', reached_boundary)
+    with pytest.raises(RuntimeError, match='fixture cache boundary reached'):
+        runner.main(['--config', str(CONFIG), '--stage', 'state-visualize', '--output', str(tmp_path),
+                     '--analysis-output', str(tmp_path / 'fresh')])
