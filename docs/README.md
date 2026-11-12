@@ -15,6 +15,7 @@ in [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md)._
 | --- | --- |
 | What lifecycle is recorded for each track? | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) (generated) |
 | Where are experiment designs and their boundaries? | [`EXPERIMENT_PLAN.md#reading-guide`](EXPERIMENT_PLAN.md#reading-guide): navigation across independently versioned diagnostics, tokenizer studies and downstream comparisons |
+| How are tokenizer training and physiological-state acceptance arranged? | [`TK-STATE-v1`](EXPERIMENT_PLAN.md#tk-state-v1): training controls, frozen state families, A–F acceptance cards and cross-modal challenges |
 | What rationale and evidence support the scientific conclusion? | [`METHOD_RATIONALE.md`](METHOD_RATIONALE.md) |
 | Where should paper Methods, Results, Discussion, and Figures take material from? | [`PAPER_EVIDENCE_INDEX.md`](PAPER_EVIDENCE_INDEX.md) |
 | What data, masks, joins, geometry, and splits are valid? | [`DATA_CONTRACT.md`](DATA_CONTRACT.md) |
