@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-13T09:43:05.237778+00:00",
+  "updated_at": "2026-11-13T09:53:37.826724+00:00",
   "tracks": [
     {
       "id": "main",
@@ -6500,6 +6500,30 @@
       "id": "e.tk_state_reconstruction_resources",
       "label": "Tokenizer重建改良：resources",
       "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resources.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_reconstruction_source_manifest",
+      "label": "Tokenizer重建改良：source_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/source_manifest.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tk_state_reconstruction_launch",
+      "label": "Tokenizer重建改良：launch",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tk_state_reconstruction_input_reuse",
+      "label": "Tokenizer重建改良：input_reuse",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/input_reuse.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_reconstruction_benchmark",
+      "label": "Tokenizer重建改良：benchmark",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/benchmark.json",
       "role": "diagnostic"
     }
   ],
@@ -16089,6 +16113,37 @@
       "headline": false,
       "updated_at": "2026-11-13T09:43:05.237778+00:00",
       "next_step": "在user-systemd下实测单/双worker吞吐并执行固定矩阵，保留全部失败；按原留出面板及固定27样例比较S/O/X重建、码本健康和量化增量。"
+    },
+    {
+      "state_id": "main.tk_state_reconstruction_v1@2026-11-13.running",
+      "entity": "main.tk_state_reconstruction_v1",
+      "label": "固定低码率EEG与Hb波形重建改良",
+      "track": "main",
+      "order": 227,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "engineering",
+      "summary": "固定12模型重建改良矩阵已由user-systemd独立启动，源码a4645a68。四组1000步连续预热已完成；原采样网格、目标、尺度和掩码保持，原留出时间块明确作为开发比较。单/双GPU worker实测完成，选择每卡2个worker；正在执行各3000步的连续/K128/K512训练。尚无最终重建改善结论。",
+      "evidence_ids": [
+        "e.tk_state_reconstruction_contract",
+        "e.tk_state_reconstruction_synthetic",
+        "e.tk_state_reconstruction_software",
+        "e.tk_state_reconstruction_resources",
+        "e.tk_state_reconstruction_source_manifest",
+        "e.tk_state_reconstruction_launch",
+        "e.tk_state_reconstruction_input_reuse",
+        "e.tk_state_reconstruction_benchmark"
+      ],
+      "supersedes": [
+        "main.tk_state_reconstruction_v1@2026-11-13.prepared"
+      ],
+      "depends_on": [
+        "main.tk_state_pilot_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-13T09:53:37.826724+00:00",
+      "next_step": "监控现有tk-state-reconstruction-20261113-v1.service完成全部固定终态；复算S/O/X和健康，固定27个样例对比旧模型。"
     }
   ]
 }

@@ -331,6 +331,10 @@ def test_waveform_refinement_integer_replay_branch_isolation_and_gradients(modal
         changed=dict(result['ids'],O=(result['ids']['O']+1)%128);other=model.decode_ids(changed)
     assert result['sum'].shape==x.shape and result['ids']['S'].shape==(10,15)
     torch.testing.assert_close(replay['S'],result['S'],atol=2e-6,rtol=1e-5)
+    assert torch.equal(replay['S'],result['S']) and torch.equal(replay['O'],result['O'])
+    with torch.no_grad():
+        far=model(x*1e6);direct=model.decode_ids(far['ids'])
+    assert torch.equal(far['sum'],direct['sum'])
     assert torch.equal(replay['S'],other['S']) and not torch.equal(replay['O'],other['O'])
     assert all(torch.equal(before[k],v) for k,v in model.state_dict().items())
     model.train();prediction=model(x);prediction['sum'].square().mean().backward()

@@ -810,7 +810,11 @@ class GlobalLatentComponentTokenizer(nn.Module):
                 if not self.training and not bool(quantizer.initialized):
                     raise RuntimeError('training-only codebook initialization required')
                 output = quantizer(latent)
-                value = output.quantized
+                # The waveform consumer evaluates the actual dictionary entry.
+                # STE subtraction/addition is only needed while training; its
+                # float32 cancellation can be amplified by the synthesis stack.
+                value = (quantizer.get_embedding(output.hard_ids)
+                         if self.waveform_io and not self.training else output.quantized)
                 ids[component], health[component] = output.hard_ids, output.health
                 commitment = commitment + output.commitment_loss
             else:

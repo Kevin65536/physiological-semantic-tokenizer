@@ -871,6 +871,9 @@ read-only; dense extended-budget and sampled-waveform paths share the 30-second,
 quantization effects separately. `test_dual_component_state.py` also covers
 waveform-grid shapes, integer replay, branch isolation, gradients, adjacent-mask
 loss and exact warmup/continuation budgets.
+Frozen re-evaluation and the fixed-example before/after atlas use
+`--stage state-refine-report --output <terminal-run> --analysis-output <fresh-child>`.
+Training failures remain in their original records; this stage never updates weights.
 
 The 30-second global latent health pilot uses the same dual-component runner
 with [`dual_component_latent_health_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml).

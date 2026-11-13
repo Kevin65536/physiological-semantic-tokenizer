@@ -44,7 +44,7 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'power-cap-plan', 'power-cap', 'power-cap-report', 'power-cap-method-report', 'power-cap-normalization',
           'so-plan','so-reference','so-pilot','so-produce','so-verify',
           'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize', 'state-reconstruction',
-          'state-refine', 'state-refine-one',
+          'state-refine', 'state-refine-one', 'state-refine-report',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -5785,11 +5785,12 @@ def _state_refinement_jobs(cfg,args,jobs,workers,benchmark_name=None):
 
 
 def state_refinement_dispatch(args,cfg):
-    if args.stage not in ('check','synthetic','state-refine','state-refine-one') or args.evaluation_split!='development':
+    if args.stage not in ('check','synthetic','state-refine','state-refine-one','state-refine-report') or args.evaluation_split!='development':
         raise ValueError('bounded refinement stages and development only')
     if args.stage=='check':return dict(status='contract_valid',planned_final_models=12,measured_arrays_read=0)
     if args.output is None:raise ValueError('explicit versioned output required')
     out=args.output.resolve()
+    if args.stage=='state-refine-report':return report_state_refinement(cfg,args)
     if args.stage=='state-refine-one':
         if args.parent_pid is not None and os.getppid()!=args.parent_pid:raise ValueError('owning controller required')
         return train_state_refinement(cfg,out,args.modality,args.candidate,args.device,args.steps,args.seed)
@@ -5842,6 +5843,110 @@ def state_refinement_dispatch(args,cfg):
             return dict(status=result['status'],planned_models=12,completed_models=sum(r['status']=='completed' for r in trained['results']))
         except Exception:
             state.update(status='failed',error=traceback.format_exc(),updated=now());write_json(out/'controller.json',state);raise
+
+
+def report_state_refinement(cfg,args):
+    """Frozen re-evaluation and fixed-example figures; retained training attempts stay untouched."""
+    import torch
+    from src.analysis.dual_component_tokenizer import (state_reconstruction_metrics,
+        assemble_state_reconstruction_atlas,render_state_refinement_overview)
+    run=args.output.resolve();export=args.analysis_output.resolve() if args.analysis_output else None
+    if export is None or export.parent!=run or export.exists():raise ValueError('fresh direct-child export required')
+    if (read_json(run/'summary.json')['status'] not in ('completed','completed_with_failures')
+            or read_json(run/'resolved_config.json')['config']!=serial(cfg)):
+        raise ValueError('terminal exact refinement required before arrays')
+    export.mkdir();torch.set_num_threads(2)
+    torch.backends.cuda.matmul.allow_tf32=False;torch.backends.cudnn.allow_tf32=False
+    parent=SOURCE/cfg['parent_run'];old_summary=read_json(parent/'summary.json')
+    old_models={(r['modality'],r['candidate']):r for r in old_summary['models']}
+    cache={m:_state_refinement_cache(cfg,m) for m in cfg['training']['modalities']}
+    records=[];frozen_checks=[]
+    def macro(evaluation):return {k:float(np.mean([d['within_subject_holdout'][k+'_nmse'] for d in evaluation['by_dataset'].values()])) for k in ('s','o','x')}
+    for modality in cfg['training']['modalities']:
+        base,manifest,rows,arrays=cache[modality]
+        baseline=macro(old_models[modality,'q_so']['evaluation'])
+        for architecture in cfg['architectures']:
+            for candidate in cfg['training']['candidates']:
+                name=architecture+'__'+candidate;job=export/'models'/modality/name/'seed_17'
+                checkpoint=run/'models'/modality/name/'seed_17/checkpoint.pt';stamp=checkpoint.stat().st_mtime_ns
+                saved=torch.load(checkpoint,map_location='cpu',weights_only=False)
+                if (saved['signature']['config']!=identity(cfg) or saved['signature']['parent']!=manifest['plan_identity']
+                        or saved['step']!=cfg['training']['continuation_steps']):raise ValueError('checkpoint source/config/budget mismatch')
+                model=_state_refinement_model(cfg,architecture,modality,candidate).to(args.device);model.load_state_dict(saved['model_state']);model.eval()
+                k=512 if candidate=='vq512' else 128
+                evaluation=evaluate_state_pilot(dict(base,model=dict(base['model'],codebook_size=k)),model,rows,arrays,
+                    'q_so' if model.hard else 'continuous',args.device,job,waveform_diagnostics=True)
+                metrics=macro(evaluation);health=None
+                if model.hard:
+                    health=_state_refinement_usage(model,rows,arrays,args.device);threshold=cfg['evaluation']['health_screen']
+                    for h in health['summaries']:
+                        pooled=h['dataset']=='equal-dataset'
+                        h['passed']=(h['effective']/k>=threshold['pooled_minimum_effective_fraction' if pooled else 'dataset_minimum_effective_fraction']
+                            and h['top1']<=threshold['pooled_maximum_top1' if pooled else 'dataset_maximum_top1']
+                            and (not pooled or h['active']/k>=threshold['pooled_minimum_active_fraction']))
+                    health['passed']=all(h['passed'] for h in health['summaries']);write_json(job/'full_code_usage.json',health)
+                if any(not torch.equal(v.cpu(),saved['model_state'][key]) for key,v in model.state_dict().items()):raise AssertionError('evaluation changed model state')
+                if checkpoint.stat().st_mtime_ns!=stamp:raise AssertionError('evaluation modified checkpoint')
+                record=dict(modality=modality,architecture=architecture,candidate=candidate,seed=17,macro=metrics,
+                    relative_error={key:metrics[key]/baseline[key] for key in baseline},baseline_macro=baseline,
+                    ranking_score=float(np.mean([metrics[key]/baseline[key] for key in baseline])),
+                    reconstruction_goal=metrics['x']<=.8*baseline['x'] and all(metrics[key]<=1.05*baseline[key] for key in ('s','o')),
+                    health_pass=health['passed'] if health else None,nominal_bits_per_second=(9 if k==512 else 7) if model.hard else None,
+                    evaluation=evaluation,checkpoint=str(checkpoint),evaluation_folder=str(job))
+                records.append(record);write_json(job/'summary.json',record)
+                frozen_checks.append(dict(modality=modality,name=name,steps=saved['step'],total_steps=saved['step']+cfg['training']['warmup_steps'],model_state_unchanged=True,checkpoint_unchanged=True,replay_max_abs=evaluation['replay_max_abs']))
+                write_json(export/'progress.json',dict(stage='frozen_evaluation',completed=len(records),total=12,updated=now()))
+                del model,saved
+    chosen={m:min([r for r in records if r['modality']==m and r['candidate']!='continuous'],key=lambda r:r['ranking_score']) for m in cfg['training']['modalities']}
+    comparison=dict(status='completed',records=records,selected={m:{k:r[k] for k in ('architecture','candidate','macro','relative_error','reconstruction_goal','health_pass','nominal_bits_per_second')} for m,r in chosen.items()},
+        selection=cfg['evaluation']['selection'],original_training_summary=str(run/'summary.json'),initial_replay_failures_retained=True,new_training=False)
+    write_json(export/'comparison.json',comparison);write_json(export/'verification.json',dict(status='passed',models=frozen_checks))
+    old_export=parent/'reconstruction_curves_20261113_v1';selection=read_json(old_export/'selection.json');jobs=[];case_checks=[]
+    for modality in cfg['training']['modalities']:
+        _,_,rows,arrays=cache[modality];selected=chosen[modality];models={}
+        for label,candidate in [('hard',selected['candidate']),('continuous','continuous')]:
+            checkpoint=run/'models'/modality/(selected['architecture']+'__'+candidate)/'seed_17/checkpoint.pt'
+            model=_state_refinement_model(cfg,selected['architecture'],modality,candidate).to(args.device)
+            model.load_state_dict(torch.load(checkpoint,map_location=args.device,weights_only=False)['model_state']);model.eval();models[label]=model
+        for ordinal,case in enumerate(selection['examples']):
+            if case['modality']!=modality:continue
+            key=f'case_{ordinal+1:02d}_{modality}';info=read_json(old_export/(key+'.json'))
+            with np.load(old_export/(key+'.npz')) as f:old=dict(f)
+            i=next(i for i,r in enumerate(rows) if r['parent']==case['parent']);row=rows[i];position=row['positions'].index(case['position']);start=int(case['start_s'])
+            if start not in row['holdout_starts_s'] or position not in row['available_positions']:raise ValueError('fixed example escaped parent support')
+            sl=slice(start*row['rate'],(start+30)*row['rate']);packed={k:np.array(arrays[i][k][sl,position]) for k in ('x','s','o','mask')}
+            for k in packed:np.testing.assert_array_equal(packed[k],old[k])
+            packed.update(time_s=old['time_s'],display_scale=old['display_scale'])
+            info['metrics']={'baseline':info['metrics']['hard']};info['hard_label']=selected['architecture']+' '+selected['candidate']+' integer decode'
+            info['new_exposure_steps']=4000;info['baseline_exposure_steps']=500
+            batch=_state_batch(rows,arrays,[(i,start,position)],args.device)
+            for label,model in models.items():
+                with torch.no_grad():result=model(batch['x']);decoded=model.decode_ids(result['ids']) if model.hard else result
+                info['metrics'][label]={}
+                for component,field in [('S','s'),('O','o'),('sum','x')]:
+                    estimate=decoded[component].cpu().numpy().reshape(-1,row['channels']);packed[label+'_'+field]=estimate
+                    variance=np.array(row['target_variance'][field][position]);packed['variance_'+field]=variance
+                    info['metrics'][label][field]=state_reconstruction_metrics(packed[field],estimate,packed['mask'],variance)
+                    packed['baseline_'+field]=old['hard_'+field]
+                np.testing.assert_array_equal(packed[label+'_x'],packed[label+'_s']+packed[label+'_o'])
+                for b in ('S','O'):
+                    packed[label+'_latent_'+b]=result['latent'][b].cpu().numpy()[0]
+                    if model.hard:packed['ids_'+b]=result['ids'][b].cpu().numpy()[0]
+            info['verification']=dict(original_identity_targets_masks_unchanged=True,predicted_sum_exact=True)
+            write_npz(export/(key+'.npz'),**packed);write_json(export/(key+'.json'),info);jobs.append((str(export),key));case_checks.append(dict(case=key,**info['verification']))
+        del models
+    write_json(export/'case_verification.json',dict(status='passed',cases=case_checks))
+    analysis=dict(schema='state_reconstruction_refinement_export_v1',source_run=str(run),parent_run=str(parent),new_training=False,
+        decoder='actual integer lookup; eval bypasses STE subtraction/addition only; training unchanged',TF32=False,
+        fixed_examples=str(old_export/'selection.json'),selection=cfg['evaluation']['selection'],model_selection= comparison['selected'])
+    write_json(export/'analysis_config.json',analysis);write_json(export/'selection.json',selection)
+    overview=render_state_refinement_overview(export,comparison)
+    first=_state_reconstruction_figure(jobs[0]);workers=min(8,max(1,len(jobs)-1),len(os.sched_getaffinity(0)))
+    results=[first,*_bounded_jobs(_state_reconstruction_figure,jobs[1:],workers,inflight=1)]
+    if any(r.get('status')!='completed' for r in results):write_json(export/'render_failures.json',results);raise RuntimeError('figure rendering failed')
+    plan=dict(selection,comparison=True,overview_pages=[overview],intro='本轮比较固定30秒输入、每支2秒单ID的重建改良。原结构延长训练与波形改良组合均为1000步预热加3000步继续训练；连续/K128/K512全部保留。蓝线为按预定S/O/X相对误差均值排序选出的硬模型，紫点线为上一轮500步K128，橙虚线为新结构等曝光连续参照。所有27个样例沿用上一图集身份，目标、掩码、训练尺度和200Hz EEG/10Hz Hb网格均不变；此前看过的四名训练被试留出时间块用于开发比较。NRMSE为原训练方差归一化MSE的平方根；Hb表值先对双色团NMSE等权再开方。完整12模型、分库结果与健康判断见 comparison.json。')
+    result=assemble_state_reconstruction_atlas(export,results,plan);write_json(export/'export.json',result);write_json(export/'progress.json',dict(stage='completed',updated=now()))
+    return result
 
 
 if __name__ == '__main__':

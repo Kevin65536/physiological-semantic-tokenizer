@@ -496,9 +496,12 @@ def render_state_reconstruction_case(export, key):
             begin,end=(14.,16.) if info['modality']=='eeg' and j else (0.,30.)
             take=(t>=begin)&(t<end)
             lines=[]
-            for value,color,style,width,label in [(target,colors[0],'-',.85,'Target / observed X'),
-                    (hard,colors[1],'-',1.0,'Q-SO integer-ID decode'),
-                    (continuous,colors[2],'--',.95,'Continuous S/O student')]:
+            linespec=[(target,colors[0],'-',.85,'Target / observed X'),
+                    (hard,colors[1],'-',1.0,info.get('hard_label','Q-SO integer-ID decode')),
+                    (continuous,colors[2],'--',.95,'Continuous S/O student')]
+            if 'baseline_'+component in arrays:
+                linespec.append((arrays['baseline_'+component],'#8b58a0',':',1.,'Previous 500-step Q-SO K128'))
+            for value,color,style,width,label in linespec:
                 lines.append(ax.plot(t[take],value[take,channel],color=color,ls=style,lw=width,label=label)[0])
             if not handles:handles=lines
             invalid=~arrays['mask'][:,channel];edges=np.diff(np.r_[False,invalid,False].astype(int))
@@ -508,22 +511,26 @@ def render_state_reconstruction_case(export, key):
                 if begin<boundary<end:ax.axvline(boundary,color='#9da6ad',lw=.45,ls=':',alpha=.5)
             ax.axhline(0,color='#777',lw=.5,alpha=.5)
             h=info['metrics']['hard'][component]['channels'][channel]
-            c=info['metrics']['continuous'][component]['channels'][channel]
+            comparator='baseline' if 'baseline' in info['metrics'] else 'continuous'
+            c=info['metrics'][comparator][component]['channels'][channel]
             def value(x):return 'NA' if x is None else f'{x:.3f}'
             if info['modality']=='eeg':
                 head=title+(' | full 30 s' if j==0 else ' | central 2 s, own y scale')
             else:head=title+' | '+('HbO' if j==0 else 'HbR')
-            ax.set_title(head+f"\n30 s NRMSE hard/cont: {h['NRMSE']:.3f}/{c['NRMSE']:.3f}; r: {value(h['correlation'])}/{value(c['correlation'])}",fontsize=10)
+            pair='new/old' if comparator=='baseline' else 'hard/cont'
+            ax.set_title(head+f"\n30 s NRMSE {pair}: {h['NRMSE']:.3f}/{c['NRMSE']:.3f}; r: {value(h['correlation'])}/{value(c['correlation'])}",fontsize=10)
             ax.set(xlabel='Time within visible input (s)',ylabel='Amplitude / training X scale',xlim=(begin,end))
             if info['modality']=='hb':ax.set_ylim(lo-pad,hi+pad)
             ax.grid(alpha=.17)
     handles.append(Patch(facecolor='#b9bfc6',alpha=.35,label='Unscored source / filter support'))
-    fig.legend(handles=handles,loc='upper center',bbox_to_anchor=(.5,.924),ncol=4,fontsize=9,frameon=False)
+    fig.legend(handles=handles,loc='upper center',bbox_to_anchor=(.5,.924),ncol=3 if 'baseline' in info['metrics'] else 4,fontsize=9,frameon=False)
     figure=key+'.png';fig.savefig(export/figure,dpi=220);plt.close(fig)
     caption=(f"{name}，{info['subject']}，{info['record']}，{info['position']}；父窗{info['duration_s']:g}秒中的[{info['start_s']},{info['start_s']+30})秒。"
         '黑线为缓存条件S/O目标或原始观测X，蓝线为完整15-ID序列解码，橙虚线为独立训练的连续学生；模型仅见本模态30秒X。'
         'NRMSE使用对应分量/色团的冻结训练方差，r为相关；两者均按完整30秒有效掩码计算。灰区不计分。'
         +('EEG右列固定放大14–16秒并独立设置纵轴；放大图未重新拟合。' if info['modality']=='eeg' else 'HbO/HbR分列，同一分量共用纵轴。'))
+    if 'baseline' in info['metrics']:
+        caption+='紫点线为上一轮500步K128；标题比较新/旧硬模型，橙线为新结构等曝光连续参照。'
     page=dict(figure=figure,title=f"{info['modality'].upper()} · {name} · {info['position']} · {','.join(info['selection_tags'])}",
               caption=caption,book=key,category='reconstruction')
     # Long supplement labels remain visible in the figure and case metadata; keep the PDF title compact.
@@ -534,25 +541,59 @@ def render_state_reconstruction_case(export, key):
 
 def assemble_state_reconstruction_atlas(export, results, plan):
     import html
-    export=Path(export);results=sorted(results,key=lambda r:r['key']);pages=[r['page'] for r in results]
+    export=Path(export);results=sorted(results,key=lambda r:r['key']);pages=plan.get('overview_pages',[])+[r['page'] for r in results]
     checks=_state_bitmap_pdf(export,pages,'SO_RECONSTRUCTION_ATLAS.pdf')
     blocks=[];table=[]
     for r in results:
         info=json.loads((export/(r['key']+'.json')).read_text());page=r['page']
         identity=f"{info['modality'].upper()} / {info['dataset']} / {info['record']} / {info['position']} / {','.join(info['selection_tags'])}"
+        models=('hard','baseline','continuous') if plan.get('comparison') else ('hard','continuous')
         table.append('<tr><td><a href="#'+r['key']+'">'+html.escape(identity)+'</a></td>'+''.join(
-            f"<td>{info['metrics']['hard'][c]['NRMSE']:.3f} / {info['metrics']['continuous'][c]['NRMSE']:.3f}</td>" for c in ('s','o','x'))+'</tr>')
+            '<td>'+' / '.join(f"{info['metrics'][m][c]['NRMSE']:.3f}" for m in models)+'</td>' for c in ('s','o','x'))+'</tr>')
         blocks.append(f'<section id="{r["key"]}"><h2>{html.escape(page["title"])}</h2><a href="{page["figure"]}"><img loading="lazy" src="{page["figure"]}"></a><p>{html.escape(page["caption"])}</p><p><a href="{r["key"]}.json">身份、误差与核验</a> · <a href="{r["key"]}.npz">完整曲线、latent、整数ID与掩码</a></p></section>')
     intro=('本图集直接比较冻结tokenizer的S、O输出及两支之和。蓝线来自K128硬量化模型的整数ID解码；橙虚线来自独立训练、等曝光500步的连续S/O学生。'
            '两者输入均为本模态完整30秒观测，绘图没有重新拟合、平滑或逐窗重新定标。S/O目标是缓存条件估计及残差；原始X采用统一200Hz EEG或10Hz Hb视图。'
            '样例按每库每模态的Q-SO总X误差P10/P50/P90选取，另补充REFED短窗和Visual Probe1:CH23；排序单位是位置×窗口，选例用于解释。'
            'holdout为四名训练被试各父窗的留出时间块；完整候选分母保存在selection.json。')
-    table_html='<table><tr><th>样例</th><th>S NRMSE：硬/连续</th><th>O NRMSE：硬/连续</th><th>X NRMSE：硬/连续</th></tr>'+''.join(table)+'</table>'
+    intro=plan.get('intro',intro)
+    labels='新硬/旧硬/新连续' if plan.get('comparison') else '硬/连续'
+    table_html='<table><tr><th>样例</th>'+''.join(f'<th>{c} NRMSE：{labels}</th>' for c in ('S','O','X'))+'</tr>'+''.join(table)+'</table>'
+    table_html+=''.join(f'<h2>{html.escape(p["title"])}</h2><img src="{p["figure"]}"><p>{html.escape(p["caption"])}</p>' for p in plan.get('overview_pages',[]))
     style='body{font:16px/1.7 system-ui,sans-serif;background:#edf1f5;color:#17283a;margin:0}main{max-width:1500px;margin:auto;padding:20px}section{background:white;margin:18px 0;padding:24px;border-radius:8px}img{width:100%;height:auto}a{color:#126da1}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:8px;border-bottom:1px solid #d5dce4;text-align:left}'
     (export/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>S/O与总信号重建曲线</title><style>'+style+'</style><main><section><h1>S/O目标与双分支总重建：逐窗对比</h1><p>'+intro+'</p><p><a href="SO_RECONSTRUCTION_ATLAS.pdf">完整PDF图集</a> · <a href="selection.json">选例规则与分母</a></p>'+table_html+'</section>'+''.join(blocks)+'</main></html>',encoding='utf-8')
     _json(export/'figure_index.json',dict(pages=pages,selection=plan['rule']))
     return dict(status='completed',cases=len(results),figures=len(pages),pdf_pages=len(checks),
                 pdf='SO_RECONSTRUCTION_ATLAS.pdf',index='index.html',new_training=False)
+
+
+def render_state_refinement_overview(export, comparison):
+    """Paired frozen-scale error ratios; no examples are reselected for this comparison."""
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    export=Path(export)
+    fig,axes=plt.subplots(2,3,figsize=(16,8.5))
+    fig.subplots_adjust(left=.065,right=.985,bottom=.13,top=.88,wspace=.27,hspace=.65)
+    fig.suptitle('Frozen-panel reconstruction | 30 s context | one ID / branch / 2 s',fontsize=17)
+    fig.text(.5,.93,'Bar height: NMSE / previous Q-SO NMSE (lower is better) | numbers above bars: actual NMSE | 4 datasets equally weighted',ha='center',fontsize=10)
+    order=[('dense_long','continuous'),('dense_long','vq128'),('dense_long','vq512'),('waveform','continuous'),('waveform','vq128'),('waveform','vq512')]
+    labels=['Old\nK128','Dense\nC','Dense\nK128','Dense\nK512','Wave\nC','Wave\nK128','Wave\nK512']
+    colors=['#888888','#a8bdd0','#5795c8','#245a8b','#f1ba80','#e99242','#af5e20']
+    for i,modality in enumerate(('eeg','hb')):
+        rows=[next(r for r in comparison['records'] if r['modality']==modality and r['architecture']==a and r['candidate']==c) for a,c in order]
+        for j,component in enumerate(('s','o','x')):
+            ax=axes[i,j];baseline=rows[0]['baseline_macro'][component]
+            actual=[baseline,*[r['macro'][component] for r in rows]];ratio=np.array(actual)/baseline
+            ax.bar(np.arange(7),ratio,color=colors)
+            ax.axhline(1,color='#333',ls='--',lw=1)
+            ax.set(xticks=np.arange(7),xticklabels=labels,ylabel='NMSE relative to old K128',ylim=(0,max(1.25,float(ratio.max())*1.2)))
+            ax.set_title(modality.upper()+' — '+{'s':'S component','o':'O component','x':'S+O versus X'}[component],fontsize=12)
+            for k,(v,h) in enumerate(zip(actual,ratio)):ax.text(k,h+.025,f'{v:.3f}',ha='center',fontsize=9)
+            ax.tick_params(axis='x',labelsize=9);ax.grid(axis='y',alpha=.2)
+    fig.text(.5,.025,'Old: 500 steps; Dense/Wave: 4000 steps | K128: 7 bit/s; K512: 9 bit/s (both branches) | same training subjects, development time blocks',ha='center',fontsize=10)
+    fig.savefig(export/'reconstruction_overview.png',dpi=220);plt.close(fig)
+    return dict(figure='reconstruction_overview.png',title='固定开发面板：S、O与总重建的改良幅度',book='comparison',category='overview',
+        caption='每行一个模态、每列一个评分目标；柱高为四库等权NMSE相对上一轮K128之比，虚线1为原误差，越低越好。柱顶为实际NMSE。C为连续参照；Dense为原结构延长训练，Wave为卷积波形路径、增宽及损失改良组合。新模型均4000步，旧模型500步；K128/K512双支码率为7/9bit每秒。全部位置包含于主表，Visual高误差位置保留；本轮为四名训练被试的同被试时间留出开发比较。')
 
 
 def separation_wave_metrics(x,s,o,scale,eog=None):
