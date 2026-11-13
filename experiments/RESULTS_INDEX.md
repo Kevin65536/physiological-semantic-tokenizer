@@ -32,6 +32,33 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## State-tokenizer reconstruction refinement — 2026-11-13
+
+The [historical review and fixed design](../docs/EXPERIMENT_PLAN.md#tk-state-reconstruction-v1)
+and [execution contract](configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml)
+compare extended dense training with sampled-waveform encoding/decoding and
+paired continuous/K128/K512 controls. All inputs, targets, masks and scales
+come from the retained training-only pilot; its already-viewed time holdout
+is a development comparison. The
+[training summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/summary.json)
+retains every fixed-budget outcome, including the initial waveform EEG replay
+failures. Their [floating-point audit](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/integer_replay_failure_audit.json)
+identifies STE cancellation before integer decoding; the corrected evaluation
+uses direct dictionary lookup without changing training or checkpoints.
+
+The [frozen comparison](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/comparison.json)
+owns the final per-model reconstruction and health decisions. Its
+[HTML figures](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/index.html)
+and [bitmap PDF atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/SO_RECONSTRUCTION_ATLAS.pdf)
+show all-model error ratios and the unchanged previous example identities,
+with old hard, new hard and matched continuous curves. Hb satisfies the declared
+reconstruction/health screen; EEG retains the failed screen alongside its
+reconstruction gain. The
+[delivery verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/delivery_verification.json)
+recomputes macro errors, parent/dataset-balanced usage and example metrics,
+and checks bitmap embedding, selectable captions and rendered pages.
+Earlier training and figure exports remain at their original paths.
+
 ## State-tokenizer 200 Hz engineering pilot — 2026-11-12
 
 The [bounded contract](configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml)

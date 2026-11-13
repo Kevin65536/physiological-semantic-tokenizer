@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-13T09:53:37.826724+00:00",
+  "updated_at": "2026-11-13T10:26:20.214179+00:00",
   "tracks": [
     {
       "id": "main",
@@ -6524,6 +6524,42 @@
       "id": "e.tk_state_reconstruction_benchmark",
       "label": "Tokenizer重建改良：benchmark",
       "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/benchmark.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_reconstruction_training_summary",
+      "label": "Tokenizer重建改良：training_summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_state_reconstruction_replay_audit",
+      "label": "Tokenizer重建改良：replay_audit",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/integer_replay_failure_audit.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_reconstruction_comparison",
+      "label": "Tokenizer重建改良：comparison",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/comparison.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_state_reconstruction_figures",
+      "label": "Tokenizer重建改良：figures",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/index.html",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_reconstruction_delivery",
+      "label": "Tokenizer重建改良：delivery",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/delivery_verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_reconstruction_frozen_verification",
+      "label": "Tokenizer重建改良：frozen_verification",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
       "role": "diagnostic"
     }
   ],
@@ -16144,6 +16180,43 @@
       "headline": false,
       "updated_at": "2026-11-13T09:53:37.826724+00:00",
       "next_step": "监控现有tk-state-reconstruction-20261113-v1.service完成全部固定终态；复算S/O/X和健康，固定27个样例对比旧模型。"
+    },
+    {
+      "state_id": "main.tk_state_reconstruction_v1@2026-11-13.completed",
+      "entity": "main.tk_state_reconstruction_v1",
+      "label": "固定低码率EEG与Hb波形重建改良",
+      "track": "main",
+      "order": 227,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "engineering",
+      "summary": "12个固定模型均完成1000步预热加3000步继续训练，冻结复评完成。初次两个EEG波形硬模型的整数重放失败来自STE浮点减加差异，审计后仅评价改为直接码字查表；训练及checkpoint未改，原失败保留。四库等权开发留出X NMSE：EEG原结构K128/K512为0.38365/0.35069，相对旧0.43021降低10.8%/18.5%；四个EEG硬模型均未通过预定健康筛查，K512扩大码率至9bit/s。Hb波形K128在原7bit/s下降至0.68862（旧0.87945，降低21.7%），S/O分别降低27.0%/15.9%，重建与健康筛查均通过，留出S/O有效码91.13/93.77。波形EEG连续总NMSE0.16139但K512为0.35997，量化优势未保留。仍为四名训练被试的已查看时间留出开发比较；36项相关测试、3043项收集、12模型独立指标与用码复算通过，固定27样例及28页位图图集保留全部失败。",
+      "evidence_ids": [
+        "e.tk_state_reconstruction_contract",
+        "e.tk_state_reconstruction_synthetic",
+        "e.tk_state_reconstruction_software",
+        "e.tk_state_reconstruction_resources",
+        "e.tk_state_reconstruction_source_manifest",
+        "e.tk_state_reconstruction_launch",
+        "e.tk_state_reconstruction_input_reuse",
+        "e.tk_state_reconstruction_benchmark",
+        "e.tk_state_reconstruction_training_summary",
+        "e.tk_state_reconstruction_replay_audit",
+        "e.tk_state_reconstruction_comparison",
+        "e.tk_state_reconstruction_figures",
+        "e.tk_state_reconstruction_delivery",
+        "e.tk_state_reconstruction_frozen_verification"
+      ],
+      "supersedes": [
+        "main.tk_state_reconstruction_v1@2026-11-13.running"
+      ],
+      "depends_on": [
+        "main.tk_state_pilot_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-13T10:26:20.214179+00:00",
+      "next_step": "固定矩阵结束。保留Hb waveform K128作为后续工程参照；EEG优先检验连续表示到离散码字的训练衔接与停止复活后的保留，保持200Hz和2秒单ID。Visual大幅慢漂移及REFED部分S/O分支偏差继续作为固定困难样例；不能把总波形改善当作全面分支通过。"
     }
   ]
 }
