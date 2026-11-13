@@ -44,6 +44,7 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'power-cap-plan', 'power-cap', 'power-cap-report', 'power-cap-method-report', 'power-cap-normalization',
           'so-plan','so-reference','so-pilot','so-produce','so-verify',
           'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize', 'state-reconstruction',
+          'state-refine', 'state-refine-one',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -86,6 +87,11 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_state_refinement_v1':
+        owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml'
+        if cfg != yaml.safe_load(owner.read_text()):
+            raise ValueError('use the reviewed state reconstruction refinement contract')
+        return cfg
     if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_state_v1':
         owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml'
         if cfg != yaml.safe_load(owner.read_text()):
@@ -1150,6 +1156,9 @@ def finalize_long_so_cache(out,cfg,plan,checks):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema'] == 'dual_component_state_refinement_v1':
+        print(json.dumps(serial(state_refinement_dispatch(args,cfg))))
+        return
     if cfg['schema'] == 'dual_component_state_v1':
         result = state_pilot_dispatch(args, cfg)
         print(json.dumps(serial(result)))
@@ -5012,7 +5021,7 @@ def _state_loss(result, batch, candidate):
     return loss
 
 
-def evaluate_state_pilot(cfg, model, rows, arrays, candidate, device, job):
+def evaluate_state_pilot(cfg, model, rows, arrays, candidate, device, job, waveform_diagnostics=False):
     import torch
     tables, counts = [], {}
     maximum = 0.; model.eval()
@@ -5056,6 +5065,14 @@ def evaluate_state_pilot(cfg, model, rows, arrays, candidate, device, job):
                         entry[key + '_correlation'] = [float(np.corrcoef(predicted[:, c][mask[:, c]], truth[:, c][mask[:, c]])[0, 1])
                             if np.std(predicted[:, c][mask[:, c]]) > 0 and np.std(truth[:, c][mask[:, c]]) > 0 else None
                             for c in range(row['channels'])]
+                        if waveform_diagnostics:
+                            difference=(predicted-truth)[1:]-(predicted-truth)[:-1]
+                            pair_mask=mask[1:]&mask[:-1]
+                            boundary=(np.arange(1,len(truth))%(2*row['rate'])==0)[:,None]&pair_mask
+                            entry[key+'_delta_nmse_by_channel']=(np.where(pair_mask,difference**2,0.).sum(0)/np.maximum(pair_mask.sum(0),1)/np.asarray(row['difference_variance'][key][position])).tolist()
+                            entry[key+'_boundary_nmse_by_channel']=(np.where(boundary,difference**2,0.).sum(0)/np.maximum(boundary.sum(0),1)/variance).tolist()
+                            entry[key+'_amplitude_ratio']=[float(np.std(predicted[:,c][mask[:,c]])/np.std(truth[:,c][mask[:,c]]))
+                                if np.std(truth[:,c][mask[:,c]])>0 else None for c in range(row['channels'])]
                     tables.append(entry)
     summary = {}
     for dataset in sorted({r['dataset'] for r in rows}):
@@ -5581,6 +5598,250 @@ def export_state_reconstructions(cfg, args):
     result=assemble_state_reconstruction_atlas(export,results,plan)
     write_json(export/'export.json',result);write_json(export/'progress.json',dict(stage='completed',updated=now()))
     return result
+
+
+def _state_refinement_cache(cfg, modality):
+    """Only the exact completed training-only pilot may supply numerical inputs."""
+    if (cfg['data']['allowed_splits']!=['train'] or cfg['data']['test_access']!='forbidden'
+            or cfg['data']['protected_data']!='forbidden'):
+        raise ValueError('training-only refinement boundary required before arrays')
+    parent=SOURCE/cfg['parent_run'];base=read_config(SOURCE/cfg['base_contract'])
+    if (read_json(parent/'summary.json')['status']!='completed'
+            or read_json(parent/'resolved_config.json')['config']!=serial(base)):
+        raise ValueError('completed exact parent required before arrays')
+    manifest,rows,arrays=_state_cache(base,parent,modality)
+    rows=[dict(r) for r in rows]
+    for row,a in zip(rows,arrays):
+        stop=min(row['holdout_starts_s'])*row['rate'];mask=np.asarray(a['mask'][:stop])
+        dm=mask[1:]&mask[:-1];row['difference_variance']={}
+        for key in ('s','o','x'):
+            d=np.diff(np.asarray(a[key][:stop],dtype=float),axis=0)
+            count=dm.sum(0);mean=np.where(dm,d,0.).sum(0)/np.maximum(count,1)
+            var=np.where(dm,d*d,0.).sum(0)/np.maximum(count,1)-mean*mean
+            floor=np.asarray(row['target_variance'][key])*cfg['training']['target_difference_variance_floor_fraction']
+            row['difference_variance'][key]=np.maximum(var,floor).tolist()
+    return base,manifest,rows,arrays
+
+
+def _state_refinement_model(cfg, architecture, modality, candidate):
+    from src.tokenizers.dual_component_tokenizer import GlobalLatentComponentTokenizer
+    base=read_config(SOURCE/cfg['base_contract'])
+    setting=dict(base['model'],**cfg['architectures'][architecture])
+    setting.update({k:cfg['training'][k] for k in ('ema_decay','dead_code_threshold','revival_stop_after_steps','max_revivals_per_event')})
+    setting.update(input_dim=400 if modality=='eeg' else 40,channels=1 if modality=='eeg' else 2,
+                   sample_strides=[5,4,5] if modality=='eeg' else [5])
+    return GlobalLatentComponentTokenizer(setting,codebook_size=512 if candidate=='vq512' else 128,
+                                         hard=candidate.startswith('vq'))
+
+
+def _state_refinement_batch(rows,arrays,examples,device):
+    import torch
+    batch=_state_batch(rows,arrays,examples,device)
+    for key in ('s','o','x'):
+        batch['dv'+key]=torch.tensor([rows[i]['difference_variance'][key][p] for i,_,p in examples],device=device,dtype=torch.float32)
+    return batch
+
+
+def _state_refinement_loss(result,batch,spec):
+    import torch
+    terms={};mask=batch['mask'];channels=batch['dvs'].shape[-1]
+    def masked_mean(errors,valid):
+        return (torch.where(valid,errors,0.).flatten(1).sum(1)/valid.flatten(1).sum(1).clamp_min(1)).mean()
+    for output,key in [('S','s'),('O','o'),('sum','x')]:
+        terms[key]=masked_mean((result[output]-batch[key]).square()/batch['v'+key],mask)
+    loss=(terms['s']+terms['o'])/2+spec['sum_weight']*terms['x']+result['commitment']
+    derivative=loss*0.
+    if spec['derivative_weight']:
+        m=mask.reshape(mask.shape[0],-1,channels);valid=m[:,1:]&m[:,:-1]
+        for output,key in [('S','s'),('O','o'),('sum','x')]:
+            error=(result[output]-batch[key]).reshape(mask.shape[0],-1,channels)
+            derivative=derivative+masked_mean(error.diff(dim=1).square()/batch['dv'+key][:,None,:],valid)/3
+        loss=loss+spec['derivative_weight']*derivative
+    return loss,dict(terms,derivative=derivative)
+
+
+def _state_refinement_usage(model,rows,arrays,device):
+    import torch
+    k=model.branches['S']['quantizer'].codebook_size;counts=[]
+    model.eval()
+    for i,row in enumerate(rows):
+        for role,starts in [('train',row['train_starts_s']),('within_subject_holdout',row['holdout_starts_s'])]:
+            values={b:np.zeros(k,np.int64) for b in ('S','O')}
+            samples=[(i,t,p) for t in starts for p in row['available_positions']]
+            for start in range(0,len(samples),64):
+                with torch.no_grad():result=model(_state_batch(rows,arrays,samples[start:start+64],device)['x'])
+                for b in values:values[b]+=np.bincount(result['ids'][b].cpu().numpy().ravel(),minlength=k)
+            for b,c in values.items():counts.append(dict(dataset=row['dataset'],parent=row['parent'],role=role,branch=b,counts=c.tolist()))
+    summaries=[]
+    for role in ('train','within_subject_holdout'):
+        for b in ('S','O'):
+            per_dataset=[]
+            for dataset in sorted({r['dataset'] for r in rows}):
+                parts=[np.array(c['counts'],float) for c in counts if c['role']==role and c['branch']==b and c['dataset']==dataset]
+                per_dataset.append((dataset,np.mean([a/a.sum() for a in parts],axis=0)))
+            for dataset,p in per_dataset+[('equal-dataset',np.mean([p for _,p in per_dataset],axis=0))]:
+                positive=p[p>0];summaries.append(dict(dataset=dataset,role=role,branch=b,active=int((p>0).sum()),
+                    effective=float(np.exp(-(positive*np.log(positive)).sum())),top1=float(p.max()),codebook_size=k))
+    return dict(parent_counts=counts,summaries=summaries)
+
+
+def train_state_refinement(cfg,out,modality,name,device,benchmark_steps=None,seed=17):
+    import torch
+    architecture,candidate=name.split('__');spec=cfg['architectures'][architecture];training=cfg['training']
+    if candidate not in ['warmup',*training['candidates']] or seed not in training['seeds']:
+        raise ValueError('candidate or seed outside fixed matrix')
+    if benchmark_steps is not None and benchmark_steps!=cfg['resources']['benchmark_steps']:
+        raise ValueError('only declared benchmark budget allowed')
+    job=Path(out)/'models'/modality/name/f'seed_{seed}'
+    with owner_lock(job):
+        if (job/'summary.json').exists():return read_json(job/'summary.json')
+        try:
+            torch.set_num_threads(cfg['resources']['torch_threads']);torch.manual_seed(seed)
+            if device.startswith('cuda'):
+                torch.cuda.set_device(device);torch.cuda.set_per_process_memory_fraction(.16,device);torch.cuda.reset_peak_memory_stats(device)
+            base,manifest,rows,arrays=_state_refinement_cache(cfg,modality)
+            model=_state_refinement_model(cfg,architecture,modality,candidate).to(device)
+            optimizer=torch.optim.AdamW(model.parameters(),lr=training['learning_rate'],weight_decay=training['weight_decay'])
+            budget=benchmark_steps or training['warmup_steps' if candidate=='warmup' else 'continuation_steps']
+            signature=dict(config=identity(cfg),parent=manifest['plan_identity'],name=name,modality=modality,seed=seed,budget=budget,benchmark=benchmark_steps is not None)
+            path=job/'checkpoint.pt';history=[];start=0;rng=np.random.default_rng(seed+(0 if candidate=='warmup' else 1000))
+            if path.exists():
+                saved=torch.load(path,map_location=device,weights_only=False)
+                if saved['signature']!=signature:raise ValueError('refinement resume identity changed')
+                model.load_state_dict(saved['model_state']);optimizer.load_state_dict(saved['optimizer_state'])
+                start,history=saved['step'],saved['history'];rng.bit_generator.state=saved['numpy_rng'];torch.set_rng_state(saved['torch_rng'].cpu())
+                if device.startswith('cuda'):torch.cuda.set_rng_state(saved['cuda_rng'].cpu(),device)
+            elif candidate!='warmup' and benchmark_steps is None:
+                warm=Path(out)/'models'/modality/(architecture+'__warmup')/f'seed_{seed}'
+                if read_json(warm/'summary.json')['status']!='completed':raise ValueError('completed paired warmup required')
+                saved=torch.load(warm/'checkpoint.pt',map_location=device,weights_only=False)
+                if saved['signature']['config']!=identity(cfg) or saved['step']!=training['warmup_steps']:raise ValueError('warmup mismatch')
+                loaded=model.load_state_dict({k:v for k,v in saved['model_state'].items() if '.quantizer.' not in k},strict=False)
+                if loaded.unexpected_keys or any('.quantizer.' not in k for k in loaded.missing_keys):raise ValueError('warmup architecture changed')
+            if model.hard and not bool(model.branches['S']['quantizer'].initialized):
+                examples=_state_sample(np.random.default_rng(seed+9000),rows,4*training['initialization_per_dataset'])
+                model.initialize_codebooks(_state_batch(rows,arrays,examples,device)['x'])
+                write_json(job/'initialization.json',dict(examples=examples,split='train',targets_used=False))
+            monitor=_state_refinement_batch(rows,arrays,_state_sample(np.random.default_rng(seed+8000),rows,128),device)
+            began=time.monotonic();model.train()
+            for step in range(start,budget):
+                batch=_state_refinement_batch(rows,arrays,_state_sample(rng,rows,training['batch_size']),device)
+                loss,terms=_state_refinement_loss(model(batch['x']),batch,spec)
+                if not bool(torch.isfinite(loss)):raise FloatingPointError('nonfinite refinement loss')
+                optimizer.zero_grad(set_to_none=True);loss.backward()
+                norm=torch.nn.utils.clip_grad_norm_(model.parameters(),training['gradient_clip'])
+                if not bool(torch.isfinite(norm)):raise FloatingPointError('nonfinite refinement gradient')
+                optimizer.step()
+                if step==0 or (step+1)%training['checkpoint_every']==0 or step+1==budget:
+                    model.eval()
+                    with torch.no_grad():monitor_loss,monitor_terms=_state_refinement_loss(model(monitor['x']),monitor,spec)
+                    history.append(dict(step=step+1,loss=float(loss.detach()),monitor_loss=float(monitor_loss),
+                        monitor={k:float(v) for k,v in monitor_terms.items()},gradient_norm=float(norm),seconds=time.monotonic()-began,
+                        revivals={b:int(model.branches[b]['quantizer'].revival_count) for b in ('S','O')}))
+                    model.train()
+                    _torch_save(path,dict(signature=signature,step=step+1,model_state=model.state_dict(),optimizer_state=optimizer.state_dict(),history=history,
+                        numpy_rng=rng.bit_generator.state,torch_rng=torch.get_rng_state(),cuda_rng=torch.cuda.get_rng_state(device) if device.startswith('cuda') else None))
+                    write_json(job/'progress.json',dict(status='training',completed_steps=step+1,budget=budget,updated=now()))
+            elapsed=time.monotonic()-began
+            result=dict(status='completed',architecture=architecture,candidate=candidate,modality=modality,seed=seed,
+                completed_steps=budget,total_exposure_steps=budget+(training['warmup_steps'] if candidate!='warmup' and benchmark_steps is None else 0),
+                training_seconds=elapsed,steps_per_second=(budget-start)/max(elapsed,1e-9),history=history,
+                peak_gpu_reserved_bytes=torch.cuda.max_memory_reserved(device) if device.startswith('cuda') else 0,
+                parameters=sum(p.numel() for p in model.parameters()),checkpoint=str(path),nominal_bits_per_location_second=(9 if candidate=='vq512' else 7) if model.hard else None)
+            if candidate!='warmup' and benchmark_steps is None:
+                evaluation_cfg=dict(base,model=dict(base['model'],codebook_size=512 if candidate=='vq512' else 128))
+                result['evaluation']=evaluate_state_pilot(evaluation_cfg,model,rows,arrays,'q_so' if model.hard else 'continuous',device,job,waveform_diagnostics=True)
+                if model.hard:write_json(job/'full_code_usage.json',_state_refinement_usage(model,rows,arrays,device))
+            write_json(job/'summary.json',result);write_json(job/'progress.json',dict(status='completed',completed_steps=budget,updated=now()))
+            return result
+        except Exception:
+            write_json(job/'failure.json',dict(status='failed',name=name,modality=modality,error=traceback.format_exc(),updated=now()))
+            raise
+
+
+def _state_refinement_jobs(cfg,args,jobs,workers,benchmark_name=None):
+    out=args.output.resolve();destination=out/'benchmark'/benchmark_name if benchmark_name else out
+    pending=list(jobs);active=[];results=[];began=time.monotonic();devices=cfg['resources']['devices']
+    while pending or active:
+        while pending and len(active)<len(devices)*workers:
+            modality,name,seed=pending.pop(0)
+            device=min(devices,key=lambda d:sum(a['device']==d for a in active))
+            job=destination/'models'/modality/name/f'seed_{seed}';job.mkdir(parents=True,exist_ok=True)
+            command=[sys.executable,str(Path(__file__).resolve()),'--config',str(args.config.resolve()),'--output',str(destination),
+                '--stage','state-refine-one','--modality',modality,'--candidate',name,'--seed',str(seed),'--device',device,'--parent-pid',str(os.getpid())]
+            if benchmark_name:command+=['--steps',str(cfg['resources']['benchmark_steps'])]
+            log=open(job/'worker.log','a');process=subprocess.Popen(command,stdout=log,stderr=subprocess.STDOUT,cwd=SOURCE)
+            active.append(dict(process=process,log=log,job=job,device=device,modality=modality,name=name,seed=seed))
+        for item in active[:]:
+            if item['process'].poll() is None:continue
+            item['log'].close();active.remove(item)
+            if item['process'].returncode==0:result=read_json(item['job']/'summary.json')
+            else:result=dict(status='failed',modality=item['modality'],name=item['name'],seed=item['seed'],log=str(item['job']/'worker.log'))
+            results.append(result)
+        write_json(out/'progress.json',dict(stage='benchmark' if benchmark_name else 'training',completed=len(results),pending=len(pending),
+            active=[{k:v for k,v in a.items() if k in ('modality','name','seed','device')} for a in active],updated=now()))
+        if active:time.sleep(1)
+    return dict(results=results,wall_seconds=time.monotonic()-began)
+
+
+def state_refinement_dispatch(args,cfg):
+    if args.stage not in ('check','synthetic','state-refine','state-refine-one') or args.evaluation_split!='development':
+        raise ValueError('bounded refinement stages and development only')
+    if args.stage=='check':return dict(status='contract_valid',planned_final_models=12,measured_arrays_read=0)
+    if args.output is None:raise ValueError('explicit versioned output required')
+    out=args.output.resolve()
+    if args.stage=='state-refine-one':
+        if args.parent_pid is not None and os.getppid()!=args.parent_pid:raise ValueError('owning controller required')
+        return train_state_refinement(cfg,out,args.modality,args.candidate,args.device,args.steps,args.seed)
+    if args.stage=='synthetic':
+        import torch
+        torch.set_num_threads(2);torch.manual_seed(17);checks=[]
+        for architecture in cfg['architectures']:
+            for modality in cfg['training']['modalities']:
+                model=_state_refinement_model(cfg,architecture,modality,'vq128')
+                x=torch.randn(10,15,400 if modality=='eeg' else 40);model.initialize_codebooks(x);model.eval()
+                with torch.no_grad():result=model(x);replay=model.decode_ids(result['ids'])
+                error=max(float((replay[b]-result[b]).abs().max()) for b in ('S','O'))
+                torch.testing.assert_close(replay['sum'],replay['S']+replay['O'],rtol=0,atol=0)
+                if error>2e-5:raise AssertionError('synthetic integer replay failed')
+                checks.append(dict(architecture=architecture,modality=modality,shape=list(replay['sum'].shape),integer_replay_max_abs=error))
+        result=dict(status='passed',cases=checks,measured_arrays_read=0);write_json(out/'synthetic.json',result);return result
+    with owner_lock(out):
+        if (out/'summary.json').exists():return read_json(out/'summary.json')
+        if read_json(out/'synthetic.json')['status']!='passed' or read_json(out/'software_validation.json')['status']!='passed':
+            raise ValueError('synthetic and targeted checks required')
+        contract=out/'resolved_config.json'
+        if contract.exists() and read_json(contract)['config']!=serial(cfg):raise ValueError('frozen refinement configuration changed')
+        write_json(contract,dict(config=cfg,created=now()))
+        stats={}
+        for modality in cfg['training']['modalities']:
+            _,manifest,rows,_=_state_refinement_cache(cfg,modality)
+            stats[modality]=dict(parent_identity=manifest['plan_identity'],rows=rows)
+        write_json(out/'input_reuse.json',dict(parent=cfg['parent_run'],modalities=stats,arrays_modified=False))
+        state=dict(status='running',started=now(),experiment_id=cfg['experiment_id']);write_json(out/'controller.json',state)
+        try:
+            bench_path=out/'benchmark.json'
+            if bench_path.exists():benchmark=read_json(bench_path)
+            else:
+                trials=[]
+                for workers in cfg['resources']['workers_per_device_candidates']:
+                    jobs=[(m,a+'__continuous',17) for a in cfg['architectures'] for m in cfg['training']['modalities']]
+                    trial=_state_refinement_jobs(cfg,args,jobs,workers,'workers_'+str(workers))
+                    if any(r['status']!='completed' for r in trial['results']):raise RuntimeError('refinement throughput trial failed')
+                    trials.append(dict(workers_per_device=workers,throughput_steps_per_s=4*cfg['resources']['benchmark_steps']/trial['wall_seconds'],**trial))
+                best=max(trials,key=lambda t:t['throughput_steps_per_s'])
+                benchmark=dict(status='completed',workers_per_device=best['workers_per_device'],trials=trials);write_json(bench_path,benchmark)
+            workers=benchmark['workers_per_device']
+            warmups=_state_refinement_jobs(cfg,args,[(m,a+'__warmup',s) for a in cfg['architectures'] for m in cfg['training']['modalities'] for s in cfg['training']['seeds']],workers)
+            if any(r['status']!='completed' for r in warmups['results']):raise RuntimeError('warmup failure retained')
+            trained=_state_refinement_jobs(cfg,args,[(m,a+'__'+c,s) for a in cfg['architectures'] for m in cfg['training']['modalities'] for c in cfg['training']['candidates'] for s in cfg['training']['seeds']],workers)
+            result=dict(status='completed' if all(r['status']=='completed' for r in trained['results']) else 'completed_with_failures',
+                experiment_id=cfg['experiment_id'],planned_models=12,models=trained['results'],warmups=warmups,
+                parent=cfg['parent_run'],scope=cfg['data'],completed_at=now())
+            write_json(out/'summary.json',result);state.update(status=result['status'],completed=now());write_json(out/'controller.json',state)
+            return dict(status=result['status'],planned_models=12,completed_models=sum(r['status']=='completed' for r in trained['results']))
+        except Exception:
+            state.update(status='failed',error=traceback.format_exc(),updated=now());write_json(out/'controller.json',state);raise
 
 
 if __name__ == '__main__':

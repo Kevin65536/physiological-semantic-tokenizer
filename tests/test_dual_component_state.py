@@ -17,6 +17,7 @@ SPEC = importlib.util.spec_from_file_location('state_pilot_runner', ROOT / 'expe
 runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
 CONFIG = ROOT / 'experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml'
+REFINEMENT = ROOT / 'experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml'
 
 
 def settings():
@@ -314,3 +315,65 @@ def test_reconstruction_synthetic_curve_and_bitmap_atlas(tmp_path, modality, rat
     assert result['cases'] == result['pdf_pages'] == 1
     assert (tmp_path/'case.png').stat().st_size > 10000
     assert '30秒' in render['page']['caption']
+
+
+@pytest.mark.parametrize('modality', ['eeg', 'hb'])
+def test_waveform_refinement_integer_replay_branch_isolation_and_gradients(modality):
+    torch.set_num_threads(2);torch.manual_seed(17)
+    cfg=runner.read_config(REFINEMENT)
+    cfg['architectures']['waveform'].update(width=16,latent_dim=8,local_width=4)
+    model=runner._state_refinement_model(cfg,'waveform',modality,'vq128')
+    x=torch.randn(10,15,400 if modality=='eeg' else 40)
+    model.initialize_codebooks(x);model.eval()
+    before={k:v.clone() for k,v in model.state_dict().items()}
+    with torch.no_grad():
+        result=model(x);replay=model.decode_ids(result['ids'])
+        changed=dict(result['ids'],O=(result['ids']['O']+1)%128);other=model.decode_ids(changed)
+    assert result['sum'].shape==x.shape and result['ids']['S'].shape==(10,15)
+    torch.testing.assert_close(replay['S'],result['S'],atol=2e-6,rtol=1e-5)
+    assert torch.equal(replay['S'],other['S']) and not torch.equal(replay['O'],other['O'])
+    assert all(torch.equal(before[k],v) for k,v in model.state_dict().items())
+    model.train();prediction=model(x);prediction['sum'].square().mean().backward()
+    for b in ('S','O'):
+        for module in ('input','output'):
+            assert any(p.grad is not None and bool(p.grad.abs().sum()>0) for p in model.branches[b][module].parameters())
+
+
+def test_refinement_delta_loss_uses_adjacent_valid_samples_and_both_colors():
+    x=torch.zeros(1,15,40);mask=torch.ones_like(x,dtype=torch.bool)
+    batch=dict(x=x,s=x,o=x,mask=mask,vx=torch.ones_like(x),vs=torch.ones_like(x),vo=torch.ones_like(x),
+               dvs=torch.ones(1,2),dvo=torch.ones(1,2),dvx=torch.ones(1,2))
+    s=x.clone();s[0,0,0]=1000;mask[0,0,0]=False
+    result=dict(S=s,O=x,sum=s,commitment=torch.tensor(0.))
+    loss,terms=runner._state_refinement_loss(result,batch,dict(sum_weight=.5,derivative_weight=.1))
+    assert loss==0 and terms['derivative']==0
+    s[0,0,1]=1
+    loss,terms=runner._state_refinement_loss(result,batch,dict(sum_weight=.5,derivative_weight=.1))
+    assert loss>0 and terms['derivative']>0
+
+
+def test_refinement_rejects_data_scope_before_array_reads(tmp_path,monkeypatch):
+    cfg=runner.read_config(REFINEMENT);cfg['data']['allowed_splits']=['train','test']
+    monkeypatch.setattr(np,'load',lambda *a,**k:pytest.fail('unexpected array read'))
+    with pytest.raises(ValueError,match='before arrays'):runner._state_refinement_cache(cfg,'eeg')
+    with pytest.raises(ValueError,match='bounded refinement'):runner.main(['--config',str(REFINEMENT),'--stage','all'])
+
+
+def test_refinement_fixed_budgets_shared_warmup_and_completed_resume(tmp_path,monkeypatch):
+    old=settings();root,source=fixture_cache(tmp_path,old)
+    plan=state_pilot_plan(root,old['data'],source);parent=tmp_path/'parent'
+    monkeypatch.setattr(runner,'_bounded_jobs',lambda worker,payloads,*a,**k:[worker(p) for p in payloads])
+    runner.prepare_state_pilot(old,parent,plan)
+    manifest,rows,arrays=runner._state_cache(old,parent,'hb')
+    for row in rows:row['difference_variance']=row['target_variance']
+    cfg=runner.read_config(REFINEMENT)
+    cfg['training'].update(warmup_steps=2,continuation_steps=3,batch_size=4,checkpoint_every=1,initialization_per_dataset=4)
+    cfg['architectures']['waveform'].update(width=16,latent_dim=8,local_width=4)
+    monkeypatch.setattr(runner,'_state_refinement_cache',lambda *a:(old,manifest,rows,arrays))
+    out=tmp_path/'refinement'
+    warm=runner.train_state_refinement(cfg,out,'hb','waveform__warmup','cpu')
+    fit=runner.train_state_refinement(cfg,out,'hb','waveform__vq128','cpu')
+    assert warm['completed_steps']==2 and fit['completed_steps']==3 and fit['total_exposure_steps']==5
+    assert fit['evaluation']['replay_max_abs']<2e-6
+    assert runner.train_state_refinement(cfg,out,'hb','waveform__vq128','cpu')==fit
+    with pytest.raises(ValueError,match='benchmark'):runner.train_state_refinement(cfg,out,'hb','waveform__vq128','cpu',200)

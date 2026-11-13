@@ -464,6 +464,56 @@ A–F 完成检查与 A–F 科学通过分别记录。部分通过时明确已�
 学习曲线、梯度、整数回放、分库 S/O/X 误差、短窗支持、用码及全部失败。
 本批结束于工程可行性和正式预算建议，不自动扩展到三种子完整训练或 A–F 验收。
 
+<a id="tk-state-reconstruction-v1"></a>
+### 重建改良与历史核对：TK-STATE-RECON-v1（2026-11-13）
+
+本轮依用户要求，将 EEG 与 fNIRS 的可见重建改良设为直接工程目标，同时保留
+码本健康检查。执行合同为
+[`dual_component_state_refinement_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml)。
+固定 30 秒可见上下文、每位置每分支每 2 秒一个整数 ID、EEG 200 Hz、Hb 10 Hz；
+解码器只读取本分支整数序列，不接收当前窗均值、幅度或原始 X 的旁路。
+
+**已核对的历史经验。** 下表的不同代际保留原目标、尺度和码率，数值用于选择
+本轮设计，跨代际绝对误差不充当同条件优劣比较。
+
+| 保留证据 | 核对结果 | 本轮采用的结论 |
+| --- | --- | --- |
+| [E1 健康审计](physiology_semantic_tokenizer/analysis/20260722_E1_TOKENIZER_OPTIMIZATION_HEALTH_AND_COUPLING_REPORT.md) | 有效复活、训练初始化和停止复活后的保留提高了占用；高占用仍伴随低谱参与维数 | 记录完整用码分布与复活历史，保留足够长的无复活训练段 |
+| [2026-10-28 三轮 refinement](../experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261028_refine_v3/refinement_summary.json) | 上下文和两层波形 VQ 改善总波形，但 EEG 目标是代理量，且每模态每 2 秒为 28 bit；分支门未全通过 | 总重建与 S/O 分支分别核验，所有离散容量均计入码率 |
+| [2026-10-29 电压合同](../experiments/configs/physiology_semantic_tokenizer/dual_component_voltage_v2.yaml)及[结果](../experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261029_voltage_v2/voltage_summary.json) | EEG 每 0.1 秒每分支 4 层 K128，合计 560 bit/s，是当前双支 K128 的 80 倍；Hb 固定合成改善 0.1 秒接缝，对 0.5 秒偏移改善有限 | 不用高码率历史重建承诺当前低码率表现；将整条采样网格作为解码对象，并检查宽尺度波形而非只看接缝 |
+| [2026-11-05 全局潜在量化](../experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_latent_health_v1/summary.json) | 3,000 步 Hb 实验中，K512 相对 K128 的两库总 NMSE 降低约 36.6%/13.7%；均值漂移仍造成连续模型误差 | 同时保留连续、K128、K512，分开判断学生拟合与量化损失 |
+| [当前 500 步 pilot](../experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/summary.json)与[逐窗重建](../experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/reconstruction_curves_20261113_v1/index.html) | 训练监测仍在下降；连续学生已存在 EEG 高频幅度不足、Hb 分支偏差和 Visual 大幅漂移 | 先增加固定曝光并改良波形路径，保留高误差位置和原评分分母 |
+
+**有限矩阵。** 沿用完成 pilot 的四名训练被试、五个父窗及其训练/留出时间块，
+不扩展数据人口或重拟合 teacher。已查看的同被试留出块明确作为 development。
+每模态两组结构各训练连续、K128、K512，seed17，共 12 个终态；每组共享
+1,000 步连续预热，再各继续 3,000 步。末态统一评价，不按留出曲线选 checkpoint。
+
+- **dense_long：** 原始 64 宽度、32 维 latent 与 S/O 等权损失，延长优化预算；
+  复活窗口延至第 1,500 个量化更新，随后固定码字维护策略至训练结束。
+- **waveform：** 宽度 128、latent 64；在完整采样网格做时间卷积编码，按 15 个
+  锚点进入全局交互；本分支解码特征经可学习上采样与卷积生成完整 30 秒曲线。
+  不逐 patch 独立拼接输出。目标为原 S/O 等权项，加 0.5 倍 X 误差及 0.1 倍
+  S/O/X 相邻样本差分误差。差分方差仅由原训练前缀估计，mask 要求相邻两点均有效。
+  容量、波形路径与损失作为一个改良组合检验；不把组合结果归因于单个组件。
+- 两组各自比较连续到硬量化的损失；两种结构在同 K 下比较。K128/K512 的
+  双分支名义码率分别为 7/9 bit/s；K512 的收益同时标明增加的容量。
+
+**验收与逐项交付。** 本轮工程目标预定为两模态四库等权总 X NMSE 均较
+500 步 Q-SO 降低至少 20%，且对应 S/O 宏平均误差各不恶化超过 5%。同时给出
+与等曝光 dense_long 的同 K 比较。完整面板是主表，Visual 高误差位置不剔除；
+分位数仅补充描述。HbO/HbR、记录和数据集分别保留，通道与窗口不充当独立被试。
+若目标未达则保留失败，不按结果追加训练预算或改写门槛。
+
+- [ ] 确认父运行完成、200 Hz 配对数组/尺度/掩码一致，任何数组读取前限定 train。
+- [ ] 合成整数重放、分支隔离、全采样网格 shape、反向梯度、差分 mask、固定预算与恢复测试通过。
+- [ ] user-systemd 持久执行；先实测每 GPU 1/2 worker，按吞吐与显存选择并发。
+- [ ] 全部固定任务完成，保留失败及每 500 步固定训练探针的 S/O/X 误差和复活计数。
+- [ ] 全允许训练滑窗及完整留出集按库/支计算活跃码、有效码和最大占用；健康阈值见合同，末半程无复活。
+- [ ] 分开汇报 S/O/X 的冻结尺度 NMSE、相关、幅度、差分与有符号边界误差。
+- [ ] 固定复用上一图集的 27 个身份，展示改良前后及连续参照，保留完整曲线与 ID。
+- [ ] 报告主目标、同 K 比较、码率代价、全部负结果及下一步；这些同被试开发结果用于工程选择。
+
 ## 四库下游测量输入冻结（2026-11-04）
 
 用户确认保留现有90秒SSM拟合规则，并要求修复Visual、更新加载器和构建四库新版

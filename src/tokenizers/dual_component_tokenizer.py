@@ -697,6 +697,43 @@ class ProjectionGainResidualPredictor(nn.Module):
                     log_gain=nodes.reshape(batch,self.channels,5,steps).transpose(-1,-2))
 
 
+class WaveformPatchInput(nn.Module):
+    """Sampled-waveform encoder with exactly fifteen temporal output anchors."""
+    def __init__(self, channels, strides, width, local_width, patches):
+        super().__init__()
+        self.channels, self.patches = channels, patches
+        layers=[]; incoming=channels
+        for stride in strides:
+            layers += [nn.Conv1d(incoming, local_width, 2*stride+1, stride=stride, padding=stride), nn.GELU()]
+            incoming=local_width
+        self.features=nn.Sequential(*layers)
+        self.project=nn.Linear(local_width*4, width)
+
+    def forward(self, x):
+        h=self.features(x.reshape(x.shape[0],-1,self.channels).transpose(1,2))
+        if h.shape[-1] != self.patches*4:raise ValueError('four internal samples per declared anchor required')
+        return self.project(h.transpose(1,2).reshape(x.shape[0],self.patches,-1))
+
+
+class WaveformPatchOutput(nn.Module):
+    """Synthesize the full waveform from same-branch decoded anchor features."""
+    def __init__(self, channels, strides, width, local_width, patches, input_dim):
+        super().__init__()
+        self.patches, self.input_dim, self.local_width=patches,input_dim,local_width
+        self.project=nn.Linear(width,local_width*4)
+        layers=[]
+        for stride in reversed(strides):
+            layers += [nn.ConvTranspose1d(local_width,local_width,2*stride,stride=stride,
+                         padding=(stride+1)//2,output_padding=stride%2),nn.GELU(),
+                       nn.Conv1d(local_width,local_width,5,padding=2),nn.GELU()]
+        layers += [nn.Conv1d(local_width,channels,7,padding=3)]
+        self.synthesis=nn.Sequential(*layers)
+
+    def forward(self, x):
+        h=self.project(x).reshape(x.shape[0],self.patches*4,self.local_width).transpose(1,2)
+        return self.synthesis(h).transpose(1,2).reshape(x.shape[0],self.patches,self.input_dim)
+
+
 class GlobalLatentComponentTokenizer(nn.Module):
     """One latent ID per patch/branch; global time context, no continuous bypass.
 
@@ -741,6 +778,15 @@ class GlobalLatentComponentTokenizer(nn.Module):
                     revival_stop_after_steps=int(cfg.get('revival_stop_after_steps', 1500)),
                     max_revivals_per_event=int(cfg.get('max_revivals_per_event', 8)),
                     revival_strategy='diverse_farthest', revival_count_prior='uniform_batch')))
+        # The retained dense default keeps identical names and behavior.
+        self.waveform_io = cfg.get('waveform_io', False)
+        if self.waveform_io:
+            channels=int(cfg['channels']); strides=tuple(cfg['sample_strides'])
+            if self.input_dim != channels*4*math.prod(strides):
+                raise ValueError('waveform strides must preserve the declared sample grid')
+            for branch in self.branches.values():
+                branch['input']=WaveformPatchInput(channels,strides,width,int(cfg['local_width']),self.patches)
+                branch['output']=WaveformPatchOutput(channels,strides,width,int(cfg['local_width']),self.patches,self.input_dim)
 
     def encode_continuous(self, values: torch.Tensor) -> dict[str, torch.Tensor]:
         if (values.ndim != 3 or tuple(values.shape[1:]) != (self.patches, self.input_dim)

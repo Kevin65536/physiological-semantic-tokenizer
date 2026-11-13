@@ -861,6 +861,17 @@ latents and frozen-scale metrics accompany the PNG, HTML and bitmap PDF.
 The export checks exact predicted additivity, integer replay, unchanged model
 state and agreement with retained per-position evaluations before rendering.
 
+The [reconstruction refinement](../docs/EXPERIMENT_PLAN.md#tk-state-reconstruction-v1)
+uses [`dual_component_state_refinement_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml)
+through the same runner: `--stage check`, `--stage synthetic --output <fresh-run>`,
+then supervised `--stage state-refine --output <same-run>`. Controller-owned
+`state-refine-one` trains each fixed job. The parent pilot arrays and masks are
+read-only; dense extended-budget and sampled-waveform paths share the 30-second,
+200 Hz EEG / 10 Hz Hb interface. Continuous/K128/K512 expose reconstruction and
+quantization effects separately. `test_dual_component_state.py` also covers
+waveform-grid shapes, integer replay, branch isolation, gradients, adjacent-mask
+loss and exact warmup/continuation budgets.
+
 The 30-second global latent health pilot uses the same dual-component runner
 with [`dual_component_latent_health_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml).
 Run `--stage check`, `--stage synthetic --output <fresh-run>`, then supervised

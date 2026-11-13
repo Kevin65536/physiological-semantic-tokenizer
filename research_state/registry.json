@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-12T13:06:13.927399+00:00",
+  "updated_at": "2026-11-13T09:43:05.237778+00:00",
   "tracks": [
     {
       "id": "main",
@@ -6476,6 +6476,30 @@
       "id": "e.tk_state_pilot_visual_position",
       "label": "首批pilot Visual位置级输入分布诊断",
       "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/visual_position_diagnostic.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_reconstruction_contract",
+      "label": "Tokenizer重建改良：contract",
+      "path": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_state_reconstruction_synthetic",
+      "label": "Tokenizer重建改良：synthetic",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/synthetic.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_reconstruction_software",
+      "label": "Tokenizer重建改良：software",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/software_validation.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_reconstruction_resources",
+      "label": "Tokenizer重建改良：resources",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resources.json",
       "role": "diagnostic"
     }
   ],
@@ -16040,6 +16064,31 @@
       "headline": false,
       "updated_at": "2026-11-12T13:06:13.927399+00:00",
       "next_step": "本批有界pilot结束。建议后续在既有证据上定位Visual学生均值/幅度外推与EEG量化损失，再确定完整训练预算；独立被试A–F验收仍按计划冻结后开展。"
+    },
+    {
+      "state_id": "main.tk_state_reconstruction_v1@2026-11-13.prepared",
+      "entity": "main.tk_state_reconstruction_v1",
+      "label": "固定低码率EEG与Hb波形重建改良",
+      "track": "main",
+      "order": 227,
+      "entity_kind": "experiment",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "engineering",
+      "summary": "核对E1、三轮局部词表、电压词表和30秒latent-health历史后，固定同一四训练被试/五父窗，比较延长训练的原结构与完整采样网格卷积编解码改良组合。两模态各连续/K128/K512，共12个seed17终态；每组1000步连续预热后继续3000步。EEG仍200Hz，30秒输入与每支2秒单ID保持；36项相关测试、3043项收集及四项合成接口检查通过。",
+      "evidence_ids": [
+        "e.tk_state_reconstruction_contract",
+        "e.tk_state_reconstruction_synthetic",
+        "e.tk_state_reconstruction_software",
+        "e.tk_state_reconstruction_resources"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.tk_state_pilot_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-13T09:43:05.237778+00:00",
+      "next_step": "在user-systemd下实测单/双worker吞吐并执行固定矩阵，保留全部失败；按原留出面板及固定27样例比较S/O/X重建、码本健康和量化增量。"
     }
   ]
 }
