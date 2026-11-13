@@ -1,0 +1,146 @@
+{
+  "eeg": {
+    "primary": "NMSE",
+    "primary_ratio": 0.9982286867845351,
+    "relative_errors": {
+      "s": {
+        "NMSE": 0.997487330743749,
+        "shape_nmse": 0.9908394015212372,
+        "slope_2_dynamic_nmse": 0.915810892414265,
+        "slope_6_dynamic_nmse": 0.9373638923385629
+      },
+      "o": {
+        "NMSE": 0.9977153727025612,
+        "shape_nmse": 1.007694178049506,
+        "slope_2_dynamic_nmse": 1.139450773850208,
+        "slope_6_dynamic_nmse": 1.1269139608956322
+      },
+      "x": {
+        "NMSE": 0.9994833569072952,
+        "shape_nmse": 1.0034156638407037,
+        "slope_2_dynamic_nmse": 1.0788858662291863,
+        "slope_6_dynamic_nmse": 1.0848838635236635
+      }
+    },
+    "reconstruction_noninferiority": true,
+    "dynamic_concurrence": true,
+    "no_dataset_collapse": true,
+    "dataset_error_ratios": {
+      "eeg_fnirs_single_trial": {
+        "s": 1.000975653199588,
+        "o": 1.0235204299630067,
+        "x": 1.0190674746215573
+      },
+      "refed": {
+        "s": 0.9768642918620709,
+        "o": 0.9991469172771181,
+        "x": 0.9965551820144749
+      },
+      "simultaneous_eeg_nirs": {
+        "s": 1.0045927308171338,
+        "o": 1.037372245020458,
+        "x": 0.998805128747356
+      },
+      "visual_cognitive_motivation": {
+        "s": 1.0137078860192879,
+        "o": 0.9255502637802847,
+        "x": 0.9704042600908176
+      }
+    },
+    "full_code_health": false,
+    "integer_replay_max_abs": 0.0,
+    "numeric_eligible": false,
+    "visual_review": "visual_review.json",
+    "decision": "rejected",
+    "rules": {
+      "primary": {
+        "hb": "shape_nmse",
+        "eeg": "NMSE"
+      },
+      "minimum_relative_improvement": 0.1,
+      "maximum_component_nmse_regression": 0.05,
+      "maximum_dataset_component_nmse_regression": 0.25,
+      "hb_dynamic": "mean relative S/O/X shape error and 2 s slope error each <=0.90; 6 s and fixed figures checked",
+      "eeg_dynamic": "waveform and spectrum inspection; primary is macro mean relative S/O/X error because voltage oscillations are not characterized by OLS slopes",
+      "health": "all retained pooled and dataset rules on full train and holdout; report stop=1500 and final=3000",
+      "replay": "existing atol=2e-6 rtol=1e-5; finite every model",
+      "visual": "must inspect fixed overview, difficult cases and patterns; no new plateaus, false slopes or jitter",
+      "confirmation": "one extra seed per fully eligible modality; same rules against seed17 parent; shared warmup explicitly retained"
+    },
+    "visual_pass": false,
+    "reason": "reconstruction unchanged and full health still fails",
+    "next_hypothesis": "reduce commitment gradient pressure on waveform encoder while keeping full reconstruction updates"
+  },
+  "hb": {
+    "primary": "shape_nmse",
+    "primary_ratio": 0.9400786527181663,
+    "relative_errors": {
+      "s": {
+        "NMSE": 0.9822264520405355,
+        "shape_nmse": 0.9705471316052872,
+        "slope_2_dynamic_nmse": 0.9150078022662453,
+        "slope_6_dynamic_nmse": 0.9653688974382898
+      },
+      "o": {
+        "NMSE": 0.9948060203175891,
+        "shape_nmse": 0.9504446097479563,
+        "slope_2_dynamic_nmse": 0.9594857535506586,
+        "slope_6_dynamic_nmse": 1.0215647180393153
+      },
+      "x": {
+        "NMSE": 1.035618870240474,
+        "shape_nmse": 0.8992442168012552,
+        "slope_2_dynamic_nmse": 0.8769489397518656,
+        "slope_6_dynamic_nmse": 1.1008994020206764
+      }
+    },
+    "reconstruction_noninferiority": true,
+    "dynamic_concurrence": false,
+    "no_dataset_collapse": true,
+    "dataset_error_ratios": {
+      "eeg_fnirs_single_trial": {
+        "s": 1.0447495737357777,
+        "o": 1.0109783481308592,
+        "x": 1.1457362177111423
+      },
+      "refed": {
+        "s": 1.0106190971543305,
+        "o": 1.0428478076715797,
+        "x": 0.9227482328750105
+      },
+      "simultaneous_eeg_nirs": {
+        "s": 0.9610836165046636,
+        "o": 0.8740843782602133,
+        "x": 1.0928425823024581
+      },
+      "visual_cognitive_motivation": {
+        "s": 0.9556711837642807,
+        "o": 1.0317994768029282,
+        "x": 1.035921534922248
+      }
+    },
+    "full_code_health": true,
+    "integer_replay_max_abs": 0.0,
+    "numeric_eligible": false,
+    "visual_review": "visual_review.json",
+    "decision": "rejected",
+    "rules": {
+      "primary": {
+        "hb": "shape_nmse",
+        "eeg": "NMSE"
+      },
+      "minimum_relative_improvement": 0.1,
+      "maximum_component_nmse_regression": 0.05,
+      "maximum_dataset_component_nmse_regression": 0.25,
+      "hb_dynamic": "mean relative S/O/X shape error and 2 s slope error each <=0.90; 6 s and fixed figures checked",
+      "eeg_dynamic": "waveform and spectrum inspection; primary is macro mean relative S/O/X error because voltage oscillations are not characterized by OLS slopes",
+      "health": "all retained pooled and dataset rules on full train and holdout; report stop=1500 and final=3000",
+      "replay": "existing atol=2e-6 rtol=1e-5; finite every model",
+      "visual": "must inspect fixed overview, difficult cases and patterns; no new plateaus, false slopes or jitter",
+      "confirmation": "one extra seed per fully eligible modality; same rules against seed17 parent; shared warmup explicitly retained"
+    },
+    "visual_pass": false,
+    "reason": "shape improvement 5.99% below 10%; fixed component slopes remain inaccurate",
+    "next_hypothesis": "increase the single shape loss weight to test whether observed partial trend strengthens within level-error guardrails"
+  }
+}

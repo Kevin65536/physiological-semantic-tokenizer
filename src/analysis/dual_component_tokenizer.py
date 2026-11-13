@@ -99,12 +99,13 @@ def render_state_codebook_figures(export, modality, candidate, branch):
     meta = json.loads((export / (stem + '_windows.json')).read_text())
     with np.load(export / (stem + '.npz')) as stored:
         ids = stored['ids_' + branch].ravel()
-        latent = stored['latent_' + branch].reshape(-1, 32).astype(float)
+        latent = stored['latent_' + branch].reshape(-1, stored['latent_' + branch].shape[-1]).astype(float)
         book = stored['codebook_' + branch].astype(float)
+        size = len(book)
         pattern_index = stored['pattern_index']
         pattern_x = stored['pattern_x']
-        pattern_y = stored['pattern_' + branch.lower()] if candidate == 'q_so' else pattern_x
-        pattern_hat = stored['pattern_hat_' + branch.lower()] if candidate == 'q_so' else stored['pattern_hat_s'] + stored['pattern_hat_o']
+        pattern_y = stored['pattern_' + branch.lower()] if candidate != 'q_x' else pattern_x
+        pattern_hat = stored['pattern_hat_' + branch.lower()] if candidate != 'q_x' else stored['pattern_hat_s'] + stored['pattern_hat_o']
         x_rms = stored['x_rms'].ravel(); x_mean = stored['x_mean'].ravel()
     names = ['eeg_fnirs_single_trial', 'refed', 'simultaneous_eeg_nirs', 'visual_cognitive_motivation']
     short = ['Single-Trial', 'REFED', 'Simultaneous', 'Visual']
@@ -114,23 +115,23 @@ def render_state_codebook_figures(export, modality, candidate, branch):
     role = np.repeat([r['role'] for r in meta], 15)
     slot = np.tile(np.arange(15), len(meta))
     weights = {r: state_balanced_weights(ds, parent, role == r) for r in ('train', 'holdout')}
-    probabilities = {r: np.bincount(ids, weights=weights[r], minlength=128) for r in weights}
+    probabilities = {r: np.bincount(ids, weights=weights[r], minlength=size) for r in weights}
     top = np.argsort(-probabilities['train'], kind='stable')[:8]
     rows = []; usage = {}
     for r in ('train', 'holdout'):
         for d in [-1, 0, 1, 2, 3]:
             selected = (role == r) & ((ds == d) if d >= 0 else True)
             w = state_balanced_weights(ds, parent, selected)
-            count = np.bincount(ids[selected], minlength=128)
-            p = np.bincount(ids, weights=w, minlength=128)
+            count = np.bincount(ids[selected], minlength=size)
+            p = np.bincount(ids, weights=w, minlength=size)
             positive = p[p > 0]
             record = dict(role=r, dataset='equal-dataset' if d < 0 else short[d], counts=count.tolist(), probability=p.tolist(),
                 active=int(np.count_nonzero(count)), effective=float(np.exp(-(positive * np.log(positive)).sum())),
                 pmax=float(p.max()), top10=float(np.sort(p)[-10:].sum()), assignments=int(count.sum()))
             usage[(r, d)] = record; rows.append(record)
     _json(folder / 'usage.json', rows)
-    display_branch = branch if candidate == 'q_so' else ('codebook 1' if branch == 'S' else 'codebook 2')
-    label = f"{modality.upper()} | {'S/O supervision' if candidate == 'q_so' else 'Raw quantization'} | {display_branch}"
+    display_branch = branch if candidate != 'q_x' else ('codebook 1' if branch == 'S' else 'codebook 2')
+    label = f"{modality.upper()} | {'S/O supervision' if candidate != 'q_x' else 'Raw quantization'} | {display_branch}"
     pages = []
     plt.rcParams.update({'font.size': 10.5, 'axes.titlesize': 11.5, 'axes.labelsize': 10.5,
         'legend.fontsize': 8.5, 'figure.facecolor': 'white', 'savefig.facecolor': 'white'})
@@ -144,12 +145,12 @@ def render_state_codebook_figures(export, modality, candidate, branch):
     fig, axes = plt.subplots(3, 1, figsize=(14, 10.5), constrained_layout=True, gridspec_kw={'height_ratios': [1, 1, 1.45]})
     for r, col in [('train', '#0072B2'), ('holdout', '#D55E00')]:
         p = probabilities[r] * 100
-        axes[0].plot(np.arange(128), p, color=col, lw=1, marker='.', ms=3,
-                     label=f"{r}: active {usage[(r,-1)]['active']}/128; effective {usage[(r,-1)]['effective']:.1f}")
+        axes[0].plot(np.arange(size), p, color=col, lw=1, marker='.', ms=3,
+                     label=f"{r}: active {usage[(r,-1)]['active']}/{size}; effective {usage[(r,-1)]['effective']:.1f}")
         order = np.argsort(-probabilities['train'], kind='stable')
-        axes[1].plot(np.arange(1, 129), p[order], color=col, label=r)
-    axes[0].axhline(100 / 128, color='#555', ls='--', lw=.8, label='Uniform 1/128 reference')
-    axes[0].set(xlabel='Code ID (categorical)', ylabel='Assignments (%)', xlim=(-1, 128), title='Actual code identity; dataset / parent balanced')
+        axes[1].plot(np.arange(1, size+1), p[order], color=col, label=r)
+    axes[0].axhline(100 / size, color='#555', ls='--', lw=.8, label=f'Uniform 1/{size} reference')
+    axes[0].set(xlabel='Code ID (categorical)', ylabel='Assignments (%)', xlim=(-1, size), title='Actual code identity; dataset / parent balanced')
     axes[0].legend(ncol=3)
     axes[1].set(xlabel='Rank fixed by training usage', ylabel='Assignments (%)', title='The holdout curve keeps the training ordering')
     axes[1].legend(); axes[0].grid(alpha=.2); axes[1].grid(alpha=.2)
@@ -216,7 +217,7 @@ def render_state_codebook_figures(export, modality, candidate, branch):
                         ax.axis('off'); ax.text(.05, .5, f'Code {code}: n=0 in this role', transform=ax.transAxes)
                     continue
                 t = np.arange(pattern_y.shape[1]) / rate
-                target_label = ('Teacher ' + branch + ' (conditional)') if candidate == 'q_so' else 'Observed X'
+                target_label = ('Teacher ' + branch + ' (conditional)') if candidate != 'q_x' else 'Observed X'
                 if modality == 'eeg':
                     mean, sd = v['target']['mean'][:, 0], v['target']['sd'][:, 0]
                     a.fill_between(t, mean - sd, mean + sd, color='#0072B2', alpha=.2, label='Patch mean +/- SD')
@@ -279,7 +280,7 @@ def render_state_codebook_figures(export, modality, candidate, branch):
     allxy = np.concatenate([xy, bx]); full_lo, full_hi = allxy.min(0), allxy.max(0)
     margin = np.maximum((full_hi - full_lo) * .05, .01); full_lo -= margin; full_hi += margin
     zoom_lo, zoom_hi = np.quantile(xy, [.01, .99], axis=0)
-    code_colors = plt.get_cmap('turbo')(np.linspace(0, 1, 128))
+    code_colors = plt.get_cmap('turbo')(np.linspace(0, 1, size))
     fig, axes = plt.subplots(2, 3, figsize=(14, 9.5), constrained_layout=True)
     for i, r in enumerate(('train', 'holdout')):
         ix = sample[role[sample] == r]
@@ -305,7 +306,7 @@ def render_state_codebook_figures(export, modality, candidate, branch):
     fig.colorbar(sc, ax=axes[:, 2], label='Slot index in 30 s context (0–14)', ticks=[0, 7, 14])
     fig.suptitle(label + f" — training-fitted PCA | first two PCs {projection['explained'][:2].sum()*100:.1f}%", fontsize=15)
     save(fig, 'pca', label + '：量化前 latent 与码本的 PCA',
-        'PCA只在训练latent上拟合，按数据集/父窗等权且不逐维标准化。点为上下文中的2秒锚点；黑叉/星为128个码本向量。训练与留出共用轴；中列放大到坐标1%–99%范围，并列出抽样点中未显示数量。各码本独立降维，ID和颜色仅在当前码本内有意义，坐标不可跨码本直接比较。', 'latent')
+        'PCA只在训练latent上拟合，按数据集/父窗等权且不逐维标准化。点为上下文中的2秒锚点；黑叉/星为全部码本向量。训练与留出共用轴；中列放大到坐标1%–99%范围，并列出抽样点中未显示数量。各码本独立降维，ID和颜色仅在当前码本内有意义，坐标不可跨码本直接比较。', 'latent')
     embedding_input = np.concatenate([latent[sample], book])
     embeddings = []; neighborhood = []
     for seed in (17, 29):
@@ -315,7 +316,7 @@ def render_state_codebook_figures(export, modality, candidate, branch):
         embeddings.append(embedding); neighborhood.append(dict(seed=seed, trustworthiness_15=trust, KL=float(tsne.kl_divergence_)))
     fig, axes = plt.subplots(2, 2, figsize=(13, 10), constrained_layout=True)
     for j, (embedding, check) in enumerate(zip(embeddings, neighborhood)):
-        z, centers = embedding[:-128], embedding[-128:]
+        z, centers = embedding[:-size], embedding[-size:]
         for d in range(4):
             take = ds[sample] == d
             axes[0, j].scatter(z[take, 0], z[take, 1], s=6, alpha=.5, color=colors[d], label=short[d])
@@ -331,7 +332,7 @@ def render_state_codebook_figures(export, modality, candidate, branch):
             axes[i, j].grid(alpha=.12)
     fig.suptitle(label + ' — joint t-SNE: datasets (top), code IDs (bottom)', fontsize=15)
     save(fig, 'tsne', label + '：t-SNE 两个固定种子的分布',
-        '同一组分层抽样latent与全部码本向量联合降维，仅用于描述分布：每数据集每角色最多192个锚点，父窗内均衡。perplexity=30、750次迭代，两个种子全部展示。邻域保持率用原32维与2维的15近邻计算；图中远近、簇大小和跨种子方向不是原空间的定量距离。', 'latent')
+        '同一组分层抽样latent与全部码本向量联合降维，仅用于描述分布：每数据集每角色最多192个锚点，父窗内均衡。perplexity=30、750次迭代，两个种子全部展示。邻域保持率用原latent维度与2维的15近邻计算；图中远近、簇大小和跨种子方向不是原空间的定量距离。', 'latent')
     np.savez_compressed(folder / 'embedding_coordinates.npz', PCA_mean=projection['mean'], PCA_axes=projection['axes'],
         PCA_explained=projection['explained'], PCA_points=xy, PCA_codebook=bx, sampled_index=sample,
         tsne_seed17=embeddings[0], tsne_seed29=embeddings[1], code_ids=ids, dataset=ds, parent=parent, role=role, slot=slot)
@@ -342,8 +343,8 @@ def render_state_codebook_figures(export, modality, candidate, branch):
         PCA_first_two_variance=float(projection['explained'][:2].sum()), latent_participation_rank=projection['participation_rank'],
         PC1_observed_RMS_correlation=correlation(xy[:, 0], x_rms, weights['train']),
         PC1_observed_mean_correlation=correlation(xy[:, 0], x_mean, weights['train']),
-        code_dataset_MI_bits=_state_information(ids, ds, weights['train']),
-        code_slot_MI_bits=_state_information(ids, slot, weights['train']),
+        code_dataset_MI_bits=_state_information(ids, ds, weights['train'], size),
+        code_slot_MI_bits=_state_information(ids, slot, weights['train'], size),
         tsne=neighborhood, pattern_summary=pattern_summary, pages=pages,
         seconds=time.monotonic() - start_time, peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
     _json(folder / 'summary.json', summary)
@@ -464,6 +465,105 @@ def state_reconstruction_metrics(target, predicted, mask, training_variance):
                 NRMSE=float(np.sqrt(np.mean([x['NMSE'] for x in per_channel]))))
 
 
+def state_curve_limits(*curves):
+    """Common limits include every plotted finite value, including older controls."""
+    finite = np.concatenate([np.asarray(a)[np.isfinite(a)] for a in curves])
+    if not len(finite):
+        raise ValueError('no finite plotted values')
+    lo, hi = float(finite.min()), float(finite.max())
+    pad = max(.06 * (hi - lo), .01)
+    return lo - pad, hi + pad
+
+
+def state_patch_features(values, mask, rate, seconds=2):
+    """Masked OLS on the actual second grid, separately for every color/patch."""
+    values = np.asarray(values, float); mask = np.asarray(mask, bool)
+    n = round(rate * seconds)
+    if values.shape != mask.shape or values.ndim != 2 or len(values) % n:
+        raise ValueError('complete time-by-color blocks and matching mask required')
+    y = values.reshape(-1, n, values.shape[-1]); m = mask.reshape(y.shape)
+    if not np.isfinite(y[m]).all():
+        raise ValueError('nonfinite scored waveform')
+    count = m.sum(1); safe = np.maximum(count, 1)
+    t = (np.arange(n) / rate)[None, :, None]
+    level = np.where(m, y, 0).sum(1) / safe
+    u = t - np.where(m, t, 0).sum(1)[:, None, :] / safe[:, None, :]
+    centered = np.where(m, y - level[:, None, :], 0.)
+    support = np.where(m, u*u, 0.).sum(1)
+    slope = (centered*u).sum(1) / np.maximum(support, 1e-30)
+    return dict(level=level, slope=slope, rms=np.sqrt((centered**2).sum(1)/safe),
+                centered=centered, count=count, valid=count >= 2)
+
+
+def state_dynamic_metrics(target, predicted, mask, rate, training_variance, thresholds):
+    """Orthogonal level/shape errors and fixed 2/6 s dynamics; no input transform.
+
+    thresholds are frozen from nonoverlapping training targets, by dataset,
+    component and color. Near-flat patches remain in all absolute errors.
+    """
+    target=np.asarray(target,float); predicted=np.asarray(predicted,float);mask=np.asarray(mask,bool)
+    truth=state_patch_features(target,mask,rate);estimate=state_patch_features(predicted,mask,rate)
+    count=truth['count'];den=np.maximum(mask.sum(0),1);variance=np.asarray(training_variance)
+    patch_squared=np.where(mask,(predicted-target)**2,0.).reshape(truth['centered'].shape).sum(1)
+    patch_level=count*(estimate['level']-truth['level'])**2
+    patch_shape=((estimate['centered']-truth['centered'])**2).sum(1)
+    patch_closure=np.abs(patch_squared-patch_level-patch_shape)/np.maximum(patch_squared,1.)
+    if np.max(patch_closure)>1e-10:raise AssertionError('per-patch level/shape decomposition did not close')
+    squared=patch_squared.sum(0);level=patch_level.sum(0);shape=patch_shape.sum(0)
+    closure=np.abs(squared-level-shape)/np.maximum(squared,1.)
+    if np.max(closure)>1e-10:raise AssertionError('level/shape orthogonal decomposition did not close')
+    channels=[]
+    for c in range(target.shape[1]):
+        dynamic=truth['valid'][:,c]&(truth['rms'][:,c]>thresholds['rms'][c])
+        e=((estimate['centered'][:,:,c]-truth['centered'][:,:,c])**2).sum(1)
+        energy=(truth['centered'][:,:,c]**2).sum(1)
+        channels.append(dict(NMSE=float(squared[c]/den[c]/variance[c]),
+            level_nmse=float(level[c]/den[c]/variance[c]),shape_nmse=float(shape[c]/den[c]/variance[c]),
+            closure_relative=float(closure[c]),patches=int(truth['valid'][:,c].sum()),
+            dynamic_patches=int(dynamic.sum()),near_zero_patches=int((truth['valid'][:,c]&~dynamic).sum()),
+            D_shape=float(1-e[dynamic].sum()/energy[dynamic].sum()) if energy[dynamic].sum()>0 else None,
+            shape_error_energy=float(e[dynamic].sum()),target_centered_energy=float(energy[dynamic].sum())))
+    slopes={}
+    for seconds in (2,6):
+        a=truth if seconds==2 else state_patch_features(target,mask,rate,seconds)
+        b=estimate if seconds==2 else state_patch_features(predicted,mask,rate,seconds)
+        out=[]
+        for c in range(target.shape[1]):
+            valid=a['valid'][:,c];t=a['slope'][valid,c];p=b['slope'][valid,c]
+            threshold=thresholds['slope_'+str(seconds)][c]
+            direction=lambda z: np.where(z>threshold,1,np.where(z < -threshold,-1,0))
+            actual,guess=direction(t),direction(p);dynamic=actual!=0
+            confusion=np.zeros((3,3),int)
+            np.add.at(confusion,(actual+1,guess+1),1)
+            energy=float(np.sum(t[dynamic]**2))
+            out.append(dict(patches=len(t),dynamic_patches=int(dynamic.sum()),near_zero_patches=int((~dynamic).sum()),
+                mse=float(np.mean((p-t)**2)),dynamic_error_energy=float(np.sum((p[dynamic]-t[dynamic])**2)),
+                target_slope_energy=energy,
+                dynamic_nmse=float(np.sum((p[dynamic]-t[dynamic])**2)/energy) if energy>0 else None,
+                signed_gain=float(np.sum(p[dynamic]*t[dynamic])/energy) if energy>0 else None,
+                amplitude_gain=float(np.sqrt(np.sum(p[dynamic]**2)/energy)) if energy>0 else None,
+                direction_accuracy=float(np.mean(guess[dynamic]==actual[dynamic])) if dynamic.any() else None,
+                false_dynamic=int(np.sum((actual==0)&(guess!=0))),confusion_down_flat_up=confusion.tolist()))
+        slopes[str(seconds)]=out
+    pair=mask[1:]&mask[:-1];boundary=(np.arange(1,len(target))%(2*rate)==0)[:,None]&pair
+    dt=np.diff(target,axis=0);dp=np.diff(predicted,axis=0);diff=[]
+    for c in range(target.shape[1]):
+        masks={'within':pair[:,c]&~boundary[:,c],'boundary':boundary[:,c]}
+        item={}
+        for name,m in masks.items():
+            item[name+'_pairs']=int(m.sum())
+            item[name+'_mse']=float(np.mean((dp[m,c]-dt[m,c])**2)) if m.any() else None
+        for name,d in [('target',dt),('prediction',dp)]:
+            energy=np.sum(d[pair[:,c],c]**2)
+            item[name+'_boundary_energy_fraction']=float(np.sum(d[boundary[:,c],c]**2)/energy) if energy>0 else None
+        diff.append(item)
+    return dict(channels=channels,slopes=slopes,differences=diff,
+        patch_decomposition=dict(total_energy=patch_squared.tolist(),level_energy=patch_level.tolist(),
+            shape_energy=patch_shape.tolist(),relative_closure=patch_closure.tolist(),valid_samples=count.tolist(),
+            target_slope_per_s=truth['slope'].tolist(),prediction_slope_per_s=estimate['slope'].tolist(),
+            target_centered_rms=truth['rms'].tolist(),prediction_centered_rms=estimate['rms'].tolist()))
+
+
 def render_state_reconstruction_case(export, key):
     import resource
     import matplotlib
@@ -489,8 +589,7 @@ def render_state_reconstruction_case(export, key):
         target=arrays[component];hard=arrays['hard_'+component];continuous=arrays['continuous_'+component]
         title={'s':'S target / reconstruction','o':'O target / reconstruction','x':'X / reconstructed S+O'}[component]
         if info['modality']=='hb':
-            finite=np.concatenate([a[np.isfinite(a)] for a in (target,hard,continuous)])
-            lo,hi=float(finite.min()),float(finite.max());pad=max(.06*(hi-lo),.01)
+            limits=state_curve_limits(target,hard,continuous,*([arrays['baseline_'+component]] if 'baseline_'+component in arrays else []))
         for j,ax in enumerate(axes[i]):
             channel=j if info['modality']=='hb' else 0
             begin,end=(14.,16.) if info['modality']=='eeg' and j else (0.,30.)
@@ -500,9 +599,10 @@ def render_state_reconstruction_case(export, key):
                     (hard,colors[1],'-',1.0,info.get('hard_label','Q-SO integer-ID decode')),
                     (continuous,colors[2],'--',.95,'Continuous S/O student')]
             if 'baseline_'+component in arrays:
-                linespec.append((arrays['baseline_'+component],'#8b58a0',':',1.,'Previous 500-step Q-SO K128'))
+                linespec.append((arrays['baseline_'+component],'#8b58a0',':',1.,info.get('baseline_label','Previous 500-step Q-SO K128')))
             for value,color,style,width,label in linespec:
-                lines.append(ax.plot(t[take],value[take,channel],color=color,ls=style,lw=width,label=label)[0])
+                shown=np.where(arrays['mask'][take,channel],value[take,channel],np.nan)
+                lines.append(ax.plot(t[take],shown,color=color,ls=style,lw=width,label=label)[0])
             if not handles:handles=lines
             invalid=~arrays['mask'][:,channel];edges=np.diff(np.r_[False,invalid,False].astype(int))
             for a,b in zip(np.flatnonzero(edges==1),np.flatnonzero(edges==-1)):
@@ -520,7 +620,7 @@ def render_state_reconstruction_case(export, key):
             pair='new/old' if comparator=='baseline' else 'hard/cont'
             ax.set_title(head+f"\n30 s NRMSE {pair}: {h['NRMSE']:.3f}/{c['NRMSE']:.3f}; r: {value(h['correlation'])}/{value(c['correlation'])}",fontsize=10)
             ax.set(xlabel='Time within visible input (s)',ylabel='Amplitude / training X scale',xlim=(begin,end))
-            if info['modality']=='hb':ax.set_ylim(lo-pad,hi+pad)
+            if info['modality']=='hb':ax.set_ylim(*limits)
             ax.grid(alpha=.17)
     handles.append(Patch(facecolor='#b9bfc6',alpha=.35,label='Unscored source / filter support'))
     fig.legend(handles=handles,loc='upper center',bbox_to_anchor=(.5,.924),ncol=3 if 'baseline' in info['metrics'] else 4,fontsize=9,frameon=False)
@@ -530,7 +630,7 @@ def render_state_reconstruction_case(export, key):
         'NRMSE使用对应分量/色团的冻结训练方差，r为相关；两者均按完整30秒有效掩码计算。灰区不计分。'
         +('EEG右列固定放大14–16秒并独立设置纵轴；放大图未重新拟合。' if info['modality']=='eeg' else 'HbO/HbR分列，同一分量共用纵轴。'))
     if 'baseline' in info['metrics']:
-        caption+='紫点线为上一轮500步K128；标题比较新/旧硬模型，橙线为新结构等曝光连续参照。'
+        caption+='紫点线为图例标注的父版本；标题比较新/旧硬模型，橙线为独立连续参照。'
     page=dict(figure=figure,title=f"{info['modality'].upper()} · {name} · {info['position']} · {','.join(info['selection_tags'])}",
               caption=caption,book=key,category='reconstruction')
     # Long supplement labels remain visible in the figure and case metadata; keep the PDF title compact.
@@ -2929,7 +3029,7 @@ def _csv(path, rows):
         path.write_text(''); return
     fields = list(dict.fromkeys(k for row in rows for k in row))
     with path.open('w', newline='') as stream:
-        writer = csv.DictWriter(stream, fields); writer.writeheader(); writer.writerows(rows)
+        writer = csv.DictWriter(stream, fields, lineterminator='\n'); writer.writeheader(); writer.writerows(rows)
 
 
 def _cache(run):
@@ -4454,3 +4554,432 @@ def summarize_eeg_o_run(run, output):
     fig.text(.075,.035,'Identical development subjects and targets; input support differs. Paired subject intervals and all source tables are retained in summary.json.',fontsize=10)
     fig.savefig(output/'eeg_o_comparison.png',dpi=250);plt.close(fig)
     return summary
+
+
+def render_state_hb_pattern_detail(folder, parent_folder, export):
+    """Separate chromophores using retained real assignments and paired decoded arrays."""
+    import html
+    import inspect
+    import shlex
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    folder, parent_folder, export = map(lambda p: Path(p).resolve(), (folder, parent_folder, export))
+    read = lambda p: json.loads(p.read_text())
+    provenance, parent_provenance = [read(p/'provenance.json') for p in (folder, parent_folder)]
+    metadata = read(folder/'samples.json')
+    if metadata != read(parent_folder/'samples.json'):
+        raise ValueError('paired pattern samples must have identical ordered identities')
+    for p in (provenance, parent_provenance):
+        if p['checkpoint_signature']['modality'] != 'hb' or p['rate'] != 10:
+            raise ValueError('retained 10 Hz Hb diagnostics required')
+        if p['config']['data']['scope'] != 'exact_parent_four_training_subjects_five_windows':
+            raise ValueError('retained four-subject development panel required')
+    if export.exists():
+        raise ValueError('fresh export required')
+    with np.load(folder/'patterns.npz', allow_pickle=False) as a:
+        arrays = {k: a[k] for k in a.files}
+    with np.load(parent_folder/'patterns.npz', allow_pickle=False) as a:
+        parent = {k: a[k] for k in a.files}
+    for key in ('x', 's', 'o', 'mask'):
+        if not np.array_equal(arrays[key], parent[key]):
+            raise ValueError('paired target, scale and mask identity required')
+    thresholds = read(folder/'thresholds.json')['values']
+    rate = provenance['rate']; hop = 2*rate
+    contexts, samples, colors = arrays['x'].shape
+    anchors = samples//hop
+    if colors != 2 or samples != 30*rate or len(metadata) != contexts:
+        raise ValueError('30-second paired-color contexts required')
+    roles = np.repeat([r['role'] for r in metadata], anchors)
+    datasets = np.repeat([r['dataset'] for r in metadata], anchors)
+    valid = arrays['mask'].reshape(-1, hop, colors).all((1, 2))
+    train = valid & (roles == 'train')
+    size = provenance['codebook_size']
+    config = provenance['config']; signature = provenance['checkpoint_signature']
+    candidate_label = f"R{config['round']}" if 'round' in config else signature['name']
+    shape_weight = config['architectures'][signature['name'].split('__')[0]].get('shape_weight', 0.)
+    selections, records, figures, payload = {}, [], [], {}
+    time_s = np.arange(hop)/rate
+    # All displayed and summarized patches have complete masks; partial patches stay
+    # in the owning full-waveform evaluation and are counted in this export.
+    def features(x):
+        return state_patch_features(x.reshape(-1, colors), np.ones((x.size//colors, colors), bool), rate)
+
+    export.mkdir(parents=True)
+    style = {'font.family': 'Noto Sans CJK JP', 'font.size': 11, 'axes.unicode_minus': False}
+    dataset_names = {'eeg_fnirs_single_trial': 'Single-Trial', 'refed': 'REFED',
+                     'simultaneous_eeg_nirs': 'Simultaneous', 'visual_cognitive_motivation': 'Visual'}
+    with plt.rc_context(style):
+        for branch in BRANCHES:
+            key = branch.lower(); ids = arrays['ids_'+branch].ravel()
+            if len(ids) != len(train) or np.any((ids < 0) | (ids >= size)):
+                raise ValueError('code IDs outside retained codebook')
+            target = arrays[key].reshape(-1, hop, colors).astype(float)
+            decoded = arrays['hat_'+key].reshape(-1, hop, colors).astype(float)
+            baseline = parent['hat_'+key].reshape(-1, hop, colors).astype(float)
+            if not all(np.isfinite(x[valid]).all() for x in (target, decoded, baseline)):
+                raise ValueError('nonfinite complete patch')
+            f, h, b = map(features, (target, decoded, baseline))
+            counts = np.bincount(ids[train], minlength=size)
+            medians = np.array([np.median(f['slope'][train & (ids == code)], axis=0)
+                                if counts[code] else [0., 0.] for code in range(size)])
+            choices = [('高频码', counts), ('HbO 上升', medians[:, 0]),
+                       ('HbO 下降', -medians[:, 0]), ('HbR 强趋势', abs(medians[:, 1]))]
+            selected = []
+            for reason, score in choices:
+                pool = [code for code in range(size) if counts[code] >= 30 and code not in selected]
+                if not pool:
+                    raise ValueError('insufficient supported distinct codes')
+                selected.append(max(pool, key=lambda code: score[code]))
+            selections[branch] = []
+            for code, (reason, _) in zip(selected, choices):
+                take = np.flatnonzero(train & (ids == code))
+                membership = []
+                for ix in take:
+                    context, patch = divmod(int(ix), anchors)
+                    membership.append(dict(flat_patch_index=int(ix), context_index=context, anchor_index=patch,
+                        patch_start_in_parent_s=metadata[context]['start_s']+patch*2, **metadata[context]))
+                ds_counts = {d: int(np.sum(datasets[take] == d)) for d in sorted(set(datasets))}
+                selections[branch].append(dict(code=code, reason=reason, n=len(take),
+                    datasets=ds_counts, median_target_slope=medians[code], patches=membership))
+                for c, color in enumerate(('HbO', 'HbR')):
+                    th = np.array([thresholds[d][key]['slope_2'][c] for d in datasets[take]])
+                    slopes = f['slope'][take, c]; up = int(np.sum(slopes > th)); down = int(np.sum(slopes < -th))
+                    item = dict(branch=branch, code=code, color=color, n=len(take),
+                        up=up, near_zero=len(take)-up-down, down=down,
+                        target_slope_mean=float(slopes.mean()), target_slope_median=float(np.median(slopes)),
+                        decoded_slope_mean=float(h['slope'][take, c].mean()),
+                        parent_slope_mean=float(b['slope'][take, c].mean()),
+                        cancellation=float(abs(slopes.mean())/max(np.mean(abs(slopes)), 1e-30)))
+                    for label, values, feat in [('target', target, f), ('decoded', decoded, h), ('parent', baseline, b)]:
+                        for suffix, z in [('raw', values[take, :, c]), ('centered', feat['centered'][take, :, c])]:
+                            payload[f'{branch}_{code}_{color}_{label}_{suffix}_mean'] = z.mean(0)
+                            payload[f'{branch}_{code}_{color}_{label}_{suffix}_p10_p90'] = np.quantile(z, [.1, .9], axis=0)
+                        payload[f'{branch}_{code}_{color}_{label}_slope'] = feat['slope'][take, c]
+                    records.append(item)
+            for kind, title in [('mean', '形态均值与离散范围'), ('centered', '全部片段的形态'),
+                                ('raw', '原幅度与水平'), ('slopes', '码内斜率分布')]:
+                fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+                fig.subplots_adjust(left=.07, right=.985, top=.77, bottom=.15, hspace=.55, wspace=.30)
+                for j, code in enumerate(selected):
+                    take = np.flatnonzero(train & (ids == code))
+                    info = selections[branch][j]
+                    for c, (color, ink) in enumerate([('HbO', '#bd3836'), ('HbR', '#2166ac')]):
+                        ax = axes[c, j]
+                        stat = next(r for r in records if (r['branch'], r['code'], r['color']) == (branch, code, color))
+                        if kind == 'slopes':
+                            z, zhat, zparent = f['slope'][take, c], h['slope'][take, c], b['slope'][take, c]
+                            lo, hi = min(z.min(), zhat.min(), zparent.min()), max(z.max(), zhat.max(), zparent.max())
+                            bins = np.linspace(lo-.02*(hi-lo+1e-12), hi+.02*(hi-lo+1e-12), 22)
+                            ax.hist(z, bins=bins, color=ink, alpha=.25)
+                            ax.hist(zhat, bins=bins, histtype='step', color=ink, linewidth=1.7)
+                            ax.hist(zparent, bins=bins, histtype='step', color='#666666', linestyle='--', linewidth=1.3)
+                            ax.axvline(0, color='black', lw=.6)
+                            ax.set(xlabel='2 秒 OLS 斜率（训练 X 尺度 / 秒）', ylabel='片段数')
+                            note = f"目标：上升 {stat['up']} / 近零 {stat['near_zero']} / 下降 {stat['down']}"
+                        else:
+                            values = [target, decoded, baseline] if kind == 'raw' else [f['centered'], h['centered'], b['centered']]
+                            actual, hat, old = [v[take, :, c] for v in values]
+                            if kind != 'mean': ax.plot(time_s, actual.T, color='#888888', alpha=.12, lw=.6)
+                            interval = np.quantile(actual, [.1, .9], axis=0)
+                            ax.fill_between(time_s, *interval, color=ink, alpha=.14)
+                            ax.plot(time_s, actual.mean(0), color='#151515', lw=2.1)
+                            ax.plot(time_s, hat.mean(0), color=ink, lw=2.0, ls='--')
+                            ax.plot(time_s, old.mean(0), color='#666666', lw=1.5, ls=':')
+                            if kind != 'raw': ax.axhline(0, color='black', lw=.5, alpha=.4)
+                            # The overview includes all real patches; the mean view shows
+                            # complete means and P10-P90 without drawing individual traces.
+                            support = interval.ravel() if kind == 'mean' else actual.ravel()
+                            limits = np.concatenate([support, actual.mean(0), hat.mean(0), old.mean(0)])
+                            low, high = limits.min(), limits.max(); pad = max((high-low)*.07, 1e-6)
+                            ax.set(ylim=(low-pad, high+pad), xlim=(0, 2), xlabel='片段内时间（秒）',
+                                   ylabel=color+' / 训练 X 尺度')
+                            note = f"目标斜率均值 {stat['target_slope_mean']:+.3f} / 秒"
+                        ax.set_title(f"Hb-{branch} · ID {code} · {color}\n{info['reason']} · n = {len(take)}", fontsize=12)
+                        ax.text(.5, -.32, note, transform=ax.transAxes, ha='center', fontsize=9)
+                        ax.grid(alpha=.16)
+                if kind == 'slopes':
+                    handles = [Patch(color='#777777', alpha=.25, label='目标片段'),
+                        Line2D([], [], color='#333333', label=candidate_label+' 整数重建'),
+                        Line2D([], [], color='#666666', ls='--', label='父版本整数重建')]
+                else:
+                    handles = [Line2D([], [], color='#888888', alpha=.45, label='每条灰线：一个真实目标片段'),
+                        Patch(color='#777777', alpha=.2, label='目标 P10–P90'),
+                        Line2D([], [], color='#151515', lw=2, label='目标条件均值'),
+                        Line2D([], [], color='#bd3836', ls='--', label=candidate_label+' 重建均值（HbO 红 / HbR 蓝）'),
+                        Line2D([], [], color='#666666', ls=':', label='父版本重建均值')]
+                    if kind == 'mean': handles = handles[1:]
+                fig.suptitle(f'Hb-{branch} token pattern｜{title}｜{candidate_label} · shape {shape_weight} · K{size} · latent {provenance["latent_dim"]}',
+                             x=.07, ha='left', y=.98, fontsize=19, fontweight='bold')
+                fig.text(.07, .925, '同列 HbO / HbR 共用一个 ID；分支完整 30 秒、15 个 ID 联合解码。父版本比较使用相同片段，不匹配数字 ID。', fontsize=11)
+                fig.legend(handles=handles, loc='upper left', bbox_to_anchor=(.063, .895), ncol=3, frameon=False, fontsize=10)
+                footer = ('逐片段、逐色团去均值；此页显示均值与 P10–P90，全部片段见形态总览。' if kind == 'mean' else
+                          '逐片段、逐色团减去自身时间均值，仅用于此形态图。' if kind == 'centered' else
+                          '保留训练尺度下的原幅度与偏置。' if kind == 'raw' else
+                          'OLS 使用真实秒数；近零阈值来自各库训练目标绝对斜率的 P10。')
+                fig.text(.07, .03, footer+' 各面板独立坐标；统计为码内片段等权，P10–P90 表示片段离散度。\n'
+                         '仅训练前缀、完整掩码、非重叠 30 秒上下文；片段/通道共享被试，n 为片段数。选码与各库组成见图册。', fontsize=10)
+                name = f'Hb_{branch}_{kind}.png'; fig.savefig(export/name, dpi=220); plt.close(fig)
+                figures.append(dict(path=name, branch=branch, view=kind, codes=selected,
+                    provenance='provenance.json', selection='selection.json', statistics='statistics.csv'))
+    _json(export/'selection.json', selections)
+    _csv(export/'statistics.csv', records)
+    np.savez_compressed(export/'pattern_statistics.npz', time_s=time_s, **payload)
+    _json(export/'figure_index.json', figures)
+    manifest = dict(status='completed', source_export=str(folder), parent_export=str(parent_folder),
+        candidate=provenance, parent=parent_provenance,
+        source_pair_check='ordered sample identities, x/s/o targets and masks exactly equal',
+        training_complete_patches=int(train.sum()), training_incomplete_patches=int(((roles == 'train') & ~valid).sum()),
+        heldout_patches_not_used_for_selection=int((roles != 'train').sum()),
+        selection_rule='sequential distinct codes with >=30 complete training patches: largest count, '
+            'largest median HbO slope, smallest median HbO slope, largest absolute median HbR slope; ties lowest ID',
+        weighting='equal patches conditional on each code; not dataset balanced or independent-subject statistics',
+        curve_sources=['conditional cached S/O target', 'complete candidate integer sequence decode',
+                      'complete parent integer sequence decode on identical samples'],
+        renderer=str(Path(__file__).resolve()),
+        renderer_sha256=hashlib.sha256(inspect.getsource(render_state_hb_pattern_detail).encode()).hexdigest())
+    _json(export/'provenance.json', manifest)
+    expression = ('from src.analysis.dual_component_tokenizer import render_state_hb_pattern_detail; '
+                  f'render_state_hb_pattern_detail({str(folder)!r}, {str(parent_folder)!r}, "FRESH_EXPORT_PATH")')
+    _json(export/'reproduce.json', dict(cwd=str(Path(__file__).resolve().parents[2]),
+        command='.venv/bin/python -c '+shlex.quote(expression), note='Replace FRESH_EXPORT_PATH with a new export path.'))
+    body = [f'<!doctype html><html lang="zh"><meta charset="utf-8"><title>{candidate_label} HbO/HbR token patterns</title>',
+        '<style>body{max-width:1500px;margin:35px auto;padding:0 24px;font:18px/1.6 sans-serif;color:#17242e}'
+        'img{width:100%}table{border-collapse:collapse}td,th{padding:7px 14px;border-bottom:1px solid #ddd}'
+        'a{color:#17659b}</style>'+f'<h1>{candidate_label}：HbO / HbR token pattern</h1>',
+        f'<p>选用形态损失权重 {shape_weight} 的终点模型（seed {signature["seed"]}）。每分支 K{size}、latent {provenance["latent_dim"]}，每 2 秒一个 ID；'
+        '同一 ID 同时表示 HbO/HbR。灰线是赋到此码的条件 S/O 目标片段；彩色虚线是完整整数序列解码后切出的片段均值。'
+        '它描述真实赋码条件下的形态分布，邻近 ID 也参与解码。</p>',
+        '<p>选码仅使用训练前缀，要求至少 30 个完整片段，依次选高频码、HbO 斜率中位数最大/最小码、'
+        '剩余码中 HbR 斜率中位数绝对值最大码。所有曲线均值及区间使用码内片段等权；'
+        '各数据集份额如下，不能把不同码的组成差异当作跨被试规律。两行独立纵轴避免色团幅度差异遮蔽细节。</p>',
+        '<p><a href="provenance.json">模型与来源</a> · <a href="selection.json">全部片段身份</a> · '
+        '<a href="statistics.csv">斜率统计</a> · <a href="pattern_statistics.npz">图中数值</a> · '
+        '<a href="reproduce.json">复现命令</a></p><table><tr><th>分支 / ID</th><th>选择依据</th><th>片段数</th>']
+    body.extend(f'<th>{label}</th>' for label in dataset_names.values()); body.append('</tr>')
+    for branch, choices in selections.items():
+        for item in choices:
+            body.append(f'<tr><td>{branch} / {item["code"]}</td><td>{item["reason"]}</td><td>{item["n"]}</td>'+''.join(
+                f'<td>{item["datasets"].get(ds, 0)}</td>' for ds in dataset_names)+'</tr>')
+    body.append('</table>')
+    for figure in figures:
+        name = html.escape(figure['path']); body.append(f'<p><a href="{name}">打开原分辨率图片</a></p><img src="{name}" alt="{name}">')
+    body.append('</html>'); (export/'index.html').write_text('\n'.join(body), encoding='utf-8')
+    return dict(status='completed', export=str(export), figures=len(figures), selected_codes={
+        branch: [r['code'] for r in items] for branch, items in selections.items()})
+
+
+def render_state_dynamic_patterns(folder, arrays, metadata, thresholds, provenance):
+    """Lightweight real-assignment atlas; no embedding fit or cross-model ID matching."""
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    folder=Path(folder);rate=provenance['rate'];channels=arrays['x'].shape[-1];hop=2*rate
+    roles=np.repeat([r['role'] for r in metadata],15);datasets=np.repeat([r['dataset'] for r in metadata],15)
+    masks=arrays['mask'].reshape(-1,hop,channels);valid=masks.all((1,2));train=(roles=='train')&valid
+    figures=[];all_stats=[]
+    def features(patches):
+        return state_patch_features(patches.reshape(-1,channels),np.ones((len(patches)*hop,channels),bool),rate)
+    for branch in ('S','O'):
+        key=branch.lower();ids=arrays['ids_'+branch].ravel();target=arrays[key].reshape(-1,hop,channels)
+        prediction=arrays['hat_'+key].reshape(-1,hop,channels);f=features(target);h=features(prediction)
+        size=provenance['codebook_size'];top=np.argsort(-np.bincount(ids[train],minlength=size),kind='stable')[:4]
+        for role in ('train','within_subject_holdout'):
+            for ds in ['pooled',*sorted(set(datasets))]:
+                select=valid&(roles==role)&((datasets==ds) if ds!='pooled' else True)
+                for code in range(size):
+                    take=select&(ids==code)
+                    for c in range(channels):
+                        item=dict(branch=branch,role=role,dataset=ds,code=code,color=c,n=int(take.sum()))
+                        if take.any():
+                            for label,values in [('target',f),('integer_decode',h)]:
+                                for stat in ('level','slope','rms'):
+                                    z=values[stat][take,c];item[label+'_'+stat+'_quantiles']=np.quantile(z,[0,.1,.5,.9,1]).tolist()
+                            slopes=f['slope'][take,c]
+                            th=np.array([thresholds[d][key]['slope_2'][c] for d in datasets[take]])
+                            up=slopes>th;down=slopes < -th
+                            item.update(up=int(up.sum()),down=int(down.sum()),near_zero=int((~up&~down).sum()),
+                                opposite_sign_mixing=float(2*min(up.sum(),down.sum())/max(up.sum()+down.sum(),1)),
+                                cancellation=float(abs(slopes.mean())/max(np.mean(abs(slopes)),1e-30)))
+                        all_stats.append(item)
+        fig,axes=plt.subplots(4,4,figsize=(16,12),constrained_layout=True)
+        t=np.arange(hop)/rate
+        for j,code in enumerate(top):
+            take=np.flatnonzero(train&(ids==code));show=take[np.linspace(0,len(take)-1,min(20,len(take))).round().astype(int)]
+            for c,col in enumerate(['#0072B2','#D55E00'][:channels]):
+                color_name=('HbO','HbR')[c] if channels==2 else 'Voltage'
+                for ix in show:
+                    axes[0,j].plot(t,target[ix,:,c],color=col,alpha=.13,lw=.6)
+                    axes[1,j].plot(t,f['centered'][ix,:,c],color=col,alpha=.13,lw=.6)
+                for row,actual,hat in [(0,target,prediction),(1,f['centered'],h['centered'])]:
+                    axes[row,j].plot(t,actual[take,:,c].mean(0),color=col,lw=2,label=color_name+' target')
+                    axes[row,j].plot(t,hat[take,:,c].mean(0),color=col,lw=1.5,ls='--',label=color_name+' integer decode')
+                    axes[row,j].fill_between(t,np.quantile(actual[take,:,c],.1,axis=0),np.quantile(actual[take,:,c],.9,axis=0),color=col,alpha=.08)
+                axes[2,j].hist(f['level'][take,c],bins=20,color=col,alpha=.45,label=color_name)
+                axes[3,j].hist(f['slope'][take,c],bins=20,color=col,alpha=.45,label=color_name)
+            axes[0,j].set_title(f'{branch} code {code} | n={len(take)} train patches')
+            axes[0,j].set(xlabel='Within patch (s)',ylabel='Original amplitude / training X scale')
+            axes[1,j].set(xlabel='Within patch (s)',ylabel='Patch-centered amplitude (display only)')
+            axes[2,j].set(xlabel='Target patch level',ylabel='Patches')
+            axes[3,j].set(xlabel='Target OLS slope (training X scale / s)',ylabel='Patches');axes[3,j].axvline(0,color='black',lw=.6)
+            for ax in axes[:,j]:ax.grid(alpha=.15)
+        axes[0,0].legend(fontsize=8);axes[1,0].legend(fontsize=8)
+        fig.suptitle(f"{folder.parent.parent.name} {folder.parent.name} {branch} | K={size}, latent={provenance['latent_dim']}\nReal assignments; nonoverlapping training contexts; mean, P10–P90, up to 20 real patches; each panel own y scale",fontsize=12)
+        path=folder/f'patterns_{branch}.png';fig.savefig(path,dpi=160);plt.close(fig);figures.append(str(path))
+    _json(folder/'code_pattern_statistics.json',all_stats)
+    _json(folder/'figure_index.json',[dict(path=p,provenance='provenance.json',samples='samples.json',statistics='code_pattern_statistics.json',curve_sources=['conditional target','full integer sequence decode']) for p in figures])
+    return figures
+
+
+def render_state_diagnostic_overview(export, summary, *, write_html=True):
+    import html
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    export=Path(export);records=summary['records']
+    fig,axes=plt.subplots(2,3,figsize=(16,8),constrained_layout=True)
+    for i,modality in enumerate(('eeg','hb')):
+        rs=[r for r in records if r['modality']==modality]
+        for j,field in enumerate(('NMSE','shape_nmse','slope_2_dynamic_nmse')):
+            ax=axes[i,j];x=np.arange(len(rs))
+            for off,key,color in [(-.25,'s','#0072B2'),(0,'o','#D55E00'),(.25,'x','#009E73')]:
+                vals=[r['metrics']['macro']['within_subject_holdout'][key][field] for r in rs]
+                ax.bar(x+off,vals,.25,label=key.upper(),color=color)
+            short={'dense_long':'dense long','waveform':'waveform','slow_encoder':'LR x0.1',
+                   'fast_ema':'EMA 0.95','low_commitment':'commit 0.05','shape_loss':'shape 0.2','shape_loss_stronger':'shape 0.5'}
+            ax.set(xticks=x,xticklabels=[short.get(r['architecture'],r['architecture'])+'\n'+r['candidate'] for r in rs],title=modality.upper()+' | '+field,ylabel='Error; lower is better')
+            ax.tick_params(axis='x',labelsize=8);ax.grid(axis='y',alpha=.15);ax.legend()
+    fig.suptitle('Frozen development panel | positions, records, then datasets equally | all original positions retained')
+    fig.savefig(export/'overview.png',dpi=180);plt.close(fig)
+    if not write_html:return
+    body=['<html><meta charset="utf-8"><title>Tokenizer dynamic diagnostics</title><style>body{font:16px sans-serif;max-width:1500px;margin:auto}img{max-width:100%}td,th{padding:8px;border:1px solid #ddd}table{border-collapse:collapse}</style>',
+        '<h1>固定开发面板：重建、动态与真实赋码</h1><p>四名训练被试、五父窗；此前查看过的时间留出。所有目标、尺度、mask保持。NMSE使用各分量冻结训练方差。D_shape仅在超过训练P10动态阈值的patch计算；完整分母和近零片段见dynamic_rows.json。pattern来自当前checkpoint的真实赋码，预测来自完整本分支整数序列。ID不跨模型对应。</p>',
+        '<img src="overview.png"><table><tr><th>Model</th><th>S/O/X NMSE</th><th>S/O/X D_shape</th><th>Health</th><th>Evidence</th></tr>']
+    for r in records:
+        folder=Path(r['folder']);relative=folder.relative_to(export);m=r['metrics']['macro']['within_subject_holdout']
+        body.append('<tr><td>'+html.escape(r['modality']+' '+r['architecture']+' '+r['candidate'])+'</td><td>'+ ' / '.join(f"{m[k]['NMSE']:.4f}" for k in ('s','o','x'))+'</td><td>'+ ' / '.join(f"{m[k]['D_shape']:.3f}" for k in ('s','o','x'))+f'</td><td>{r["code_health_pass"]}</td><td><a href="{relative}/diagnostics.json">metrics</a> · <a href="{relative}/provenance.json">provenance</a></td></tr>')
+    body.append('</table>')
+    for r in records:
+        for figure in r.get('figures',[]):
+            body.append('<h2>'+html.escape(r['modality']+' '+r['architecture']+' '+r['candidate'])+'</h2><img loading="lazy" src="'+str(Path(figure).relative_to(export))+'">')
+    body.append('</html>');(export/'index.html').write_text('\n'.join(body))
+
+
+def render_state_hb_dynamics(export,key):
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    export=Path(export);info=json.loads((export/(key+'.json')).read_text())
+    with np.load(export/(key+'.npz')) as f:a=dict(f)
+    fig,axes=plt.subplots(3,3,figsize=(16,10),constrained_layout=True);rate=info['rate'];t=np.arange(len(a['x']))/rate
+    for i,component in enumerate(('s','o','x')):
+        for label,prefix,col,style in [('Target','', '#343a40','-'),('Candidate','hard_','#0072B2','-'),('Parent','baseline_','#8b58a0',':'),('Continuous','continuous_','#D55E00','--')]:
+            for c in range(2):
+                y=a[prefix+component];f=state_patch_features(y,a['mask'],rate)
+                # Two colors have independent panels in full-amplitude page; here linestyle identifies color.
+                line=style if c==0 else (0,(1,2))
+                axes[i,0].plot(t,np.where(a['mask'][:,c],f['centered'][:,:,c].ravel(),np.nan),color=col,ls=line,lw=.8,label=label+(' HbO' if c==0 else ' HbR'))
+                for j,seconds in enumerate((2,6),1):
+                    q=state_patch_features(y,a['mask'],rate,seconds)
+                    axes[i,j].plot((np.arange(len(q['slope']))+.5)*seconds,q['slope'][:,c],color=col,ls=line,marker='.' if c==0 else 'x',ms=4,lw=.9)
+        for j,ax in enumerate(axes[i]):
+            ax.set(xlabel='Time in visible input (s)',ylabel='Training X scale'+(' / s' if j else ''),title=component.upper()+' | '+('2 s patch-centered shape' if j==0 else f'{[0,2,6][j]} s OLS slope'))
+            for boundary in np.arange(2,30,2):ax.axvline(boundary,color='#aaa',lw=.35,ls=':')
+            ax.axhline(0,color='black',lw=.5);ax.grid(alpha=.15)
+    axes[0,0].legend(ncol=2,fontsize=7)
+    fig.suptitle(f"{info['dataset']} {info['position']} | {info['hard_label']}\nPatch centering is diagnostic only; HbO solid/line, HbR dotted/x; full amplitude on adjacent page",fontsize=12)
+    name=key+'_dynamics.png';fig.savefig(export/name,dpi=170);plt.close(fig)
+    return dict(figure=name,title=info['dataset']+' '+info['position']+' 动态',caption='左列为每2秒片段减去该片段有效样本均值，仅用于形态展示；中右列为真实秒数的2秒/6秒OLS斜率。每条曲线来自完整30秒预测，未重拟合。HbO用原线型/点，HbR用点线/叉；所有曲线共用纵轴。')
+
+
+def render_state_training_history(job,record):
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    job=Path(job);h=json.loads((job/'summary.json').read_text())['history'];step=[r['step'] for r in h]
+    fig,axes=plt.subplots(2,2,figsize=(13,8),constrained_layout=True)
+    for k,col in [('s','#0072B2'),('o','#D55E00'),('x','#009E73')]:
+        axes[0,0].plot(step,[r['monitor'][k] for r in h],color=col,label=k.upper()+' hard')
+        axes[0,0].plot(step,[r['continuous_bypass_diagnostic'][k] for r in h],color=col,ls='--',label=k.upper()+' bypass diagnostic')
+    for b,col in [('S','#0072B2'),('O','#D55E00')]:
+        axes[0,1].plot(step,[r['monitor_code_usage'][b]['effective'] for r in h],label=b+' effective',color=col)
+        axes[1,0].plot(step,[r['monitor_code_usage'][b]['top1'] for r in h],label=b+' top1',color=col)
+        axes[1,1].plot(step,[r['revivals'][b] for r in h],label=b+' cumulative revivals',color=col)
+    for ax in axes.flat:ax.axvline(1500,color='black',ls=':',label='revival stop');ax.set_xlabel('Quantized continuation updates');ax.grid(alpha=.2);ax.legend(fontsize=8)
+    for ax,title in zip(axes.flat,['Fixed training probe NMSE','Effective codes (fixed probe)','Maximum occupancy (fixed probe)','Cumulative revival events']):ax.set_title(title)
+    fig.suptitle(record['modality']+' '+record['architecture']+' | final full-panel health is scored separately')
+    fig.savefig(job/'training.png',dpi=180);plt.close(fig)
+
+
+def state_diagnostic_synthetic_check(export):
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    export=Path(export);export.mkdir(parents=True,exist_ok=True);rate=10;t=np.arange(300)/rate
+    level=np.repeat(np.linspace(-2,2,15),20);ramp=t/5
+    stair=np.repeat(ramp.reshape(15,20).mean(1),20)
+    u=np.arange(20)/rate-.95;mixed=np.concatenate([u*(-1)**i for i in range(15)])
+    cases=[('level-only constants',level,level),('smooth ramp vs flat patches',ramp,stair),('staircase vs smooth ramp',stair,ramp),('same code: opposite slopes',mixed,np.zeros(300))]
+    fig,axes=plt.subplots(4,2,figsize=(13,10),constrained_layout=True);metrics=[]
+    for i,(name,y,p) in enumerate(cases):
+        m=np.ones((300,1),bool);th=dict(rms=[.001],slope_2=[.001],slope_6=[.001])
+        result=state_dynamic_metrics(y[:,None],p[:,None],m,rate,[1],th);metrics.append(dict(case=name,metrics=result))
+        axes[i,0].plot(t,y,label='Synthetic target');axes[i,0].plot(t,p,'--',label='Diagnostic prediction');axes[i,0].set(title=name,xlabel='s');axes[i,0].legend()
+        f=state_patch_features(y[:,None],m,rate)
+        for z in f['centered'][:,:,0]:axes[i,1].plot(np.arange(20)/rate,z,alpha=.2,color='#0072B2')
+        # The fourth case uses exactly equal signs for its mean demonstration.
+        shown=f['centered'][:14,:,0] if i==3 else f['centered'][:,:,0]
+        axes[i,1].plot(np.arange(20)/rate,shown.mean(0),color='black',lw=2,label='Equal-sign mean' if i==3 else 'Mean')
+        axes[i,1].set(title=f"patch-centered | boundary target energy fraction={result['differences'][0]['target_boundary_energy_fraction']:.3f}",xlabel='s');axes[i,1].legend()
+        if np.max(np.abs(shown))<.01:axes[i,1].set_ylim(-.01,.01)
+    assert metrics[0]['metrics']['channels'][0]['D_shape'] is None
+    assert abs(metrics[1]['metrics']['channels'][0]['D_shape'])<1e-10
+    assert abs(metrics[2]['metrics']['differences'][0]['target_boundary_energy_fraction']-1)<1e-12
+    assert abs(np.stack([u,-u]).mean(0)).max()==0
+    fig.suptitle('Synthetic tool checks only: levels, within-patch slopes, boundary steps, cancellation')
+    fig.savefig(export/'synthetic_dynamics.png',dpi=160);plt.close(fig)
+    _json(export/'synthetic_dynamics.json',dict(status='passed',measured_data=False,cases=metrics))
+    return dict(status='passed',figure='synthetic_dynamics.png',cases=4)
+
+
+def state_spectral_diagnostics(folder,rate=200):
+    """Frozen waveform spectral errors on the same contiguous valid support."""
+    folder=Path(folder);metadata=json.loads((folder/'samples.json').read_text())
+    with np.load(folder/'patterns.npz') as f:a=dict(f)
+    bands=[(0,1),(1,4),(4,8),(8,13),(13,30),(30,45),(45,100.0001)];records=[]
+    for i,meta in enumerate(metadata):
+        if meta['role']!='within_subject_holdout':continue
+        for key in ('s','o','x'):
+            mask=a['mask'][i,:,0];edges=np.diff(np.r_[False,mask,False].astype(int));starts=np.flatnonzero(edges==1);ends=np.flatnonzero(edges==-1)
+            longest=int(np.argmax(ends-starts));begin,end=int(starts[longest]),int(ends[longest])
+            y=a[key][i,begin:end,0].astype(float);p=a['hat_'+key][i,begin:end,0].astype(float)
+            weight=np.hanning(len(y));Y=np.fft.rfft((y-y.mean())*weight);P=np.fft.rfft((p-p.mean())*weight)
+            freq=np.fft.rfftfreq(len(y),1/rate);total=float(np.sum(abs(Y)**2));parts=[]
+            for low,high in bands:
+                take=(freq>=low)&(freq<high);target=float(np.sum(abs(Y[take])**2));prediction=float(np.sum(abs(P[take])**2));error=float(np.sum(abs(P[take]-Y[take])**2))
+                parts.append(dict(band_hz=[low,min(high,100)],target_energy=target,prediction_energy=prediction,
+                    amplitude_gain=float(np.sqrt(prediction/target)) if target>max(total*1e-8,1e-20) else None,
+                    error_over_total_target=error/max(total,1e-30),target_fraction=target/max(total,1e-30)))
+            records.append(dict(**meta,component=key,start_sample=begin,end_sample=end,bands=parts))
+    _json(folder/'spectral_diagnostics.json',dict(rate_hz=rate,rule='longest common contiguous scored support per position, Hann taper, mean removed for spectral diagnostic only; errors normalized by full target spectral energy',rows=records))
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    datasets=sorted({r['dataset'] for r in records});fig,axes=plt.subplots(3,len(datasets),figsize=(16,10),constrained_layout=True,squeeze=False)
+    for i,key in enumerate(('s','o','x')):
+        for j,ds in enumerate(datasets):
+            group=[r for r in records if r['dataset']==ds and r['component']==key]
+            record_names=sorted({r['record'] for r in group});values={}
+            for name in ('target_energy','prediction_energy'):
+                values[name]=np.mean([np.mean([[b[name] for b in r['bands']] for r in group if r['record']==record],axis=0) for record in record_names],axis=0)
+            denominator=values['target_energy'].sum();ax=axes[i,j];x=np.arange(len(bands))
+            ax.bar(x-.18,values['target_energy']/denominator,.36,label='Target',color='#343a40')
+            ax.bar(x+.18,values['prediction_energy']/denominator,.36,label='Prediction',color='#0072B2')
+            ax.set(xticks=x,xticklabels=['0–1','1–4','4–8','8–13','13–30','30–45','45–100'],xlabel='Hz',ylabel='Energy / total target energy',title=ds+' '+key.upper())
+            ax.tick_params(axis='x',labelsize=7);ax.legend(fontsize=8);ax.grid(axis='y',alpha=.15)
+    fig.suptitle(folder.parent.name+' EEG | fixed development support | unnormalized amplitudes preserved; each facet own y scale')
+    fig.savefig(folder/'spectrum.png',dpi=160);plt.close(fig)
+    return records

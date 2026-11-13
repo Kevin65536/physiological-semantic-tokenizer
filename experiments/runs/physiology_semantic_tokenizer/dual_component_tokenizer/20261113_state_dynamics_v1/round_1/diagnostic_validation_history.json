@@ -1,0 +1,17 @@
+{
+  "failures": [
+    {
+      "check": "monitor exact no-change test",
+      "error": "reference had grad enabled but monitor used no_grad optimized attention; squared drift 5.67e-15",
+      "resolution": "test reference now uses same no_grad path"
+    },
+    {
+      "check": "synthetic staircase energy fraction exact equality",
+      "error": "roundoff 1.0000000000000002",
+      "resolution": "explicit 1e-12 float tolerance"
+    }
+  ],
+  "visual_corrections": [
+    "shortened synthetic labels to 3 decimals to avoid clipping; constant shape plot uses +/-0.01 axis"
+  ]
+}

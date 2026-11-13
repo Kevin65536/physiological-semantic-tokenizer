@@ -875,6 +875,21 @@ Frozen re-evaluation and the fixed-example before/after atlas use
 `--stage state-refine-report --output <terminal-run> --analysis-output <fresh-child>`.
 Training failures remain in their original records; this stage never updates weights.
 
+The versioned bounded iteration contracts `dual_component_state_iteration_r1_v1.yaml`
+through `dual_component_state_iteration_r3_v1.yaml` use the same `check`, `synthetic`,
+supervised `state-refine` and controller-owned `state-refine-one` stages. Their
+explicit task lists determine the job count; retained waveform warmups supply
+initialization without changing the pilot or refinement contracts. `state-diagnose`
+exports frozen dense/waveform K128/K512 patterns, masked level/shape decomposition,
+2/6-second slopes and full health to a fresh `--analysis-output`. The bounded
+campaign index and independent retained-array audit use `state-iteration-summary`.
+`test_dual_component_state.py` covers the new schema, masked shape objective,
+frozen training monitors, synthetic dynamics and baseline-inclusive plotting limits.
+For a chromophore-separated reading atlas, the analysis owner's
+`render_state_hb_pattern_detail(candidate_export, parent_export, fresh_export)`
+reads retained diagnostic arrays, verifies paired sample/target identity and saves
+its reproduction command. Code selection uses only complete training patches.
+
 The 30-second global latent health pilot uses the same dual-component runner
 with [`dual_component_latent_health_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml).
 Run `--stage check`, `--stage synthetic --output <fresh-run>`, then supervised

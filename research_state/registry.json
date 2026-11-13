@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-13T10:26:20.214179+00:00",
+  "updated_at": "2026-11-13T11:59:45.635677+00:00",
   "tracks": [
     {
       "id": "main",
@@ -6561,6 +6561,78 @@
       "label": "Tokenizer重建改良：frozen_verification",
       "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_dynamics_contract",
+      "label": "Tokenizer有界迭代：contract",
+      "path": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r1_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_state_dynamics_baseline",
+      "label": "Tokenizer有界迭代：baseline",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_state_dynamics_baseline_figures",
+      "label": "Tokenizer有界迭代：baseline_figures",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline/index.html",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_dynamics_baseline_review",
+      "label": "Tokenizer有界迭代：baseline_review",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline/visual_review.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_dynamics_summary",
+      "label": "Tokenizer有界迭代：summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_state_dynamics_metrics",
+      "label": "Tokenizer有界迭代：metrics",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/metrics.csv",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_state_dynamics_health",
+      "label": "Tokenizer有界迭代：health",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/code_health.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_dynamics_verification",
+      "label": "Tokenizer有界迭代：verification",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_dynamics_figures",
+      "label": "Tokenizer有界迭代：figures",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/index.html",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_state_dynamics_reproduction",
+      "label": "Tokenizer有界迭代：reproduction",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/reproduce.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tk_state_dynamics_r2_contract",
+      "label": "Tokenizer有界迭代：R2 contract",
+      "path": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r2_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_state_dynamics_r3_contract",
+      "label": "Tokenizer有界迭代：R3 contract",
+      "path": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r3_v1.yaml",
+      "role": "protocol"
     }
   ],
   "records": [
@@ -16217,6 +16289,93 @@
       "headline": false,
       "updated_at": "2026-11-13T10:26:20.214179+00:00",
       "next_step": "固定矩阵结束。保留Hb waveform K128作为后续工程参照；EEG优先检验连续表示到离散码字的训练衔接与停止复活后的保留，保持200Hz和2秒单ID。Visual大幅慢漂移及REFED部分S/O分支偏差继续作为固定困难样例；不能把总波形改善当作全面分支通过。"
+    },
+    {
+      "state_id": "main.tk_state_dynamics_v1@2026-11-13.prepared",
+      "entity": "main.tk_state_dynamics_v1",
+      "label": "固定码率tokenizer动态与健康有界迭代",
+      "track": "main",
+      "order": 228,
+      "entity_kind": "experiment",
+      "execution": "planned",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "engineering",
+      "summary": "新有界任务保留原四训练被试/五父窗和27样例。第0轮复核12个冻结模型：Hb最新waveform平均pattern存在正负斜率抵消，完整波形仍有量化动态损失；EEG硬量化重建与健康未通过。首轮仅降低encoder学习率到0.1倍，固定原waveform预热、K128及损失；最多3轮6候选和2个确认作业，4小时内停止。",
+      "evidence_ids": [
+        "e.tk_state_dynamics_contract",
+        "e.tk_state_dynamics_baseline",
+        "e.tk_state_dynamics_baseline_figures",
+        "e.tk_state_dynamics_baseline_review"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.tk_state_reconstruction_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-13T11:22:15.700288+00:00",
+      "next_step": "执行两个首轮候选，冻结评价并实际查看固定图后决定下一单项修改。"
+    },
+    {
+      "state_id": "main.tk_state_dynamics_v1@2026-11-13.running",
+      "entity": "main.tk_state_dynamics_v1",
+      "label": "固定码率tokenizer动态与健康有界迭代",
+      "track": "main",
+      "order": 228,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "engineering",
+      "summary": "第0轮12模型冻结动态复算与固定图检查已完成。首轮两个K128候选由user-systemd在冻结源码快照下运行；唯一改动为encoder学习率乘0.1，复用原1000步waveform预热，固定3000步继续训练。30项相关测试、两模态整数接口合成及四类动态合成检查通过。",
+      "evidence_ids": [
+        "e.tk_state_dynamics_contract",
+        "e.tk_state_dynamics_baseline",
+        "e.tk_state_dynamics_baseline_figures",
+        "e.tk_state_dynamics_baseline_review"
+      ],
+      "supersedes": [
+        "main.tk_state_dynamics_v1@2026-11-13.prepared"
+      ],
+      "depends_on": [
+        "main.tk_state_reconstruction_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-13T11:27:34.008577+00:00",
+      "next_step": "执行两个首轮候选，冻结评价并实际查看固定图后决定下一单项修改。"
+    },
+    {
+      "state_id": "main.tk_state_dynamics_v1@2026-11-13.completed",
+      "entity": "main.tk_state_dynamics_v1",
+      "label": "固定码率tokenizer动态与健康有界迭代",
+      "track": "main",
+      "order": 228,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "engineering",
+      "summary": "三轮六个K128候选均完成固定3000步继续训练，复用原1000步waveform预热；没有候选同时满足预定重建、动态与健康晋级规则。R1降低encoder学习率使EEG完整健康通过，留出S/O有效码73.80/73.73，但综合重建误差增加1.79%。R2 Hb形态权重0.2的形态/2秒斜率误差分别改善5.99%/8.29%，未达10%；R3权重0.5改善8.88%/13.04%，但S/X NMSE恶化8.26%/6.19%。EEG加快EMA或降低commitment均未晋级。Hb保留原waveform K128参照；全部负结果、固定27样例、真实赋码和实际看图记录保留。独立核验18模型逐色团NMSE与每patch正交闭合通过；40项相关测试、3047项默认收集及最后4项诊断回归通过。一次GPU冻结复评OOM后CPU重放完成，原失败保留。按三轮上限停止，未触发补种子或状态解释确认。",
+      "evidence_ids": [
+        "e.tk_state_dynamics_contract",
+        "e.tk_state_dynamics_baseline",
+        "e.tk_state_dynamics_baseline_figures",
+        "e.tk_state_dynamics_baseline_review",
+        "e.tk_state_dynamics_summary",
+        "e.tk_state_dynamics_metrics",
+        "e.tk_state_dynamics_health",
+        "e.tk_state_dynamics_verification",
+        "e.tk_state_dynamics_figures",
+        "e.tk_state_dynamics_reproduction",
+        "e.tk_state_dynamics_r2_contract",
+        "e.tk_state_dynamics_r3_contract"
+      ],
+      "supersedes": [
+        "main.tk_state_dynamics_v1@2026-11-13.running"
+      ],
+      "depends_on": [
+        "main.tk_state_reconstruction_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-13T11:59:45.635677+00:00",
+      "next_step": "本次有界迭代结束，无新基线晋级。后续最有依据的是Hb在原损失下独立检验level/slope/residual解码路径；EEG先用保留连续latent做训练集拟合的低维量化几何诊断。新训练另定有界合同。"
     }
   ]
 }

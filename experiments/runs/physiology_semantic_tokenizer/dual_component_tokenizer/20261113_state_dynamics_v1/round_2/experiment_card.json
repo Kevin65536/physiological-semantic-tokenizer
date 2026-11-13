@@ -1,0 +1,52 @@
+{
+  "eeg": {
+    "observed_failure": "R1 slow encoder fixes code health but mean relative reconstruction error increases 1.8%; O/X underfit",
+    "evidence": "round_1/decision.json and full stop/final usage",
+    "hypothesis": "EMA lag can be reduced without slowing encoder learning, retaining fit capacity and vocabulary use",
+    "only_change": "EMA decay 0.99 -> 0.95 (effective memory about 100 -> 20 updates), encoder LR restored to original parent .0003",
+    "control": "original waveform vq128; all losses/width/K unchanged; same retained waveform warmup",
+    "fixed_budget": "1000 shared +3000 new hard updates",
+    "expected": "mean relative S/O/X NMSE <=.9",
+    "guardrails": {
+      "primary": {
+        "hb": "shape_nmse",
+        "eeg": "NMSE"
+      },
+      "minimum_relative_improvement": 0.1,
+      "maximum_component_nmse_regression": 0.05,
+      "maximum_dataset_component_nmse_regression": 0.25,
+      "hb_dynamic": "mean relative S/O/X shape error and 2 s slope error each <=0.90; 6 s and fixed figures checked",
+      "eeg_dynamic": "waveform and spectrum inspection; primary is macro mean relative S/O/X error because voltage oscillations are not characterized by OLS slopes",
+      "health": "all retained pooled and dataset rules on full train and holdout; report stop=1500 and final=3000",
+      "replay": "existing atol=2e-6 rtol=1e-5; finite every model",
+      "visual": "must inspect fixed overview, difficult cases and patterns; no new plateaus, false slopes or jitter",
+      "confirmation": "one extra seed per fully eligible modality; same rules against seed17 parent; shared warmup explicitly retained"
+    },
+    "stopping": "terminal 3000 updates; no extension"
+  },
+  "hb": {
+    "observed_failure": "both continuous and hard have substantial S/O shape error; R1 drift reduction worsens level reconstruction",
+    "evidence": "baseline dynamic metrics, REFED CH14 full/centered/slope figures, R1 failure",
+    "hypothesis": "absolute reconstruction underweights small within-patch trajectories; an explicit masked shape projection can improve slopes without removing level supervision",
+    "only_change": "add 0.2 times mean S/O/X centered 2-second error normalized by frozen training centered variance, floor=.01 times respective target variance; no input centering",
+    "control": "original waveform vq128; architecture, full LR and existing losses unchanged; original continuous reference retains original objective",
+    "fixed_budget": "1000 shared original-objective warmup +3000 new hard updates",
+    "expected": "mean relative S/O/X shape and 2-second slope NMSE <=.9",
+    "guardrails": {
+      "primary": {
+        "hb": "shape_nmse",
+        "eeg": "NMSE"
+      },
+      "minimum_relative_improvement": 0.1,
+      "maximum_component_nmse_regression": 0.05,
+      "maximum_dataset_component_nmse_regression": 0.25,
+      "hb_dynamic": "mean relative S/O/X shape error and 2 s slope error each <=0.90; 6 s and fixed figures checked",
+      "eeg_dynamic": "waveform and spectrum inspection; primary is macro mean relative S/O/X error because voltage oscillations are not characterized by OLS slopes",
+      "health": "all retained pooled and dataset rules on full train and holdout; report stop=1500 and final=3000",
+      "replay": "existing atol=2e-6 rtol=1e-5; finite every model",
+      "visual": "must inspect fixed overview, difficult cases and patterns; no new plateaus, false slopes or jitter",
+      "confirmation": "one extra seed per fully eligible modality; same rules against seed17 parent; shared warmup explicitly retained"
+    },
+    "stopping": "terminal 3000 updates; no extension"
+  }
+}

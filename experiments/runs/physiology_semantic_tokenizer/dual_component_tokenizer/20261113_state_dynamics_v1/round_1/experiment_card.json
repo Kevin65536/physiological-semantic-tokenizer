@@ -1,0 +1,11 @@
+{
+  "observed_failure": "quantization immediately degrades both modalities; final hard latent drift and hard/continuous dynamic gap",
+  "evidence": "baseline/quantization_transition_audit.json; baseline/summary.json; baseline/code_pattern_statistics.json via model folders",
+  "hypothesis": "reducing encoder drift relative to EMA codebook tracking preserves warmup geometry, improves hard reconstruction and retains code coverage after revival stops",
+  "only_change": "encoder input, transformer and to_latent optimizer learning rate multiplied by 0.1; decoder, K128, widths, all losses and data unchanged",
+  "comparison": "retained waveform vq128 and independently trained continuous; exact same original warmup initialization and exposure",
+  "fixed_budget": "1000 shared continuous + 3000 new hard updates, batch64, seed17",
+  "expected": "Hb shape and 2 s slopes >=10% mean relative improvement; EEG S/O/X mean relative NMSE >=10%",
+  "guardrails": "each component NMSE <=1.05 parent, each dataset/component <=1.25, all health and integer tests, actual fixed visual review",
+  "stop": "reject failing terminal candidate; choose next single change from evidence; no extension of steps"
+}

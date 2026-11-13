@@ -1,0 +1,28 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>R2 HbO/HbR token patterns</title>
+<style>body{max-width:1500px;margin:35px auto;padding:0 24px;font:18px/1.6 sans-serif;color:#17242e}img{width:100%}table{border-collapse:collapse}td,th{padding:7px 14px;border-bottom:1px solid #ddd}a{color:#17659b}</style><h1>R2：HbO / HbR token pattern</h1>
+<p>选用形态损失权重 0.2 的终点模型（seed 17）。每分支 K128、latent 64，每 2 秒一个 ID；同一 ID 同时表示 HbO/HbR。灰线是赋到此码的条件 S/O 目标片段；彩色虚线是完整整数序列解码后切出的片段均值。它描述真实赋码条件下的形态分布，邻近 ID 也参与解码。</p>
+<p>选码仅使用训练前缀，要求至少 30 个完整片段，依次选高频码、HbO 斜率中位数最大/最小码、剩余码中 HbR 斜率中位数绝对值最大码。所有曲线均值及区间使用码内片段等权；各数据集份额如下，不能把不同码的组成差异当作跨被试规律。两行独立纵轴避免色团幅度差异遮蔽细节。</p>
+<p><a href="provenance.json">模型与来源</a> · <a href="selection.json">全部片段身份</a> · <a href="statistics.csv">斜率统计</a> · <a href="pattern_statistics.npz">图中数值</a> · <a href="reproduce.json">复现命令</a></p><table><tr><th>分支 / ID</th><th>选择依据</th><th>片段数</th>
+<th>Single-Trial</th>
+<th>REFED</th>
+<th>Simultaneous</th>
+<th>Visual</th>
+</tr>
+<tr><td>S / 29</td><td>高频码</td><td>189</td><td>1</td><td>181</td><td>0</td><td>7</td></tr>
+<tr><td>S / 16</td><td>HbO 上升</td><td>33</td><td>0</td><td>16</td><td>17</td><td>0</td></tr>
+<tr><td>S / 59</td><td>HbO 下降</td><td>30</td><td>2</td><td>12</td><td>16</td><td>0</td></tr>
+<tr><td>S / 127</td><td>HbR 强趋势</td><td>40</td><td>1</td><td>16</td><td>22</td><td>1</td></tr>
+<tr><td>O / 112</td><td>高频码</td><td>102</td><td>15</td><td>48</td><td>19</td><td>20</td></tr>
+<tr><td>O / 16</td><td>HbO 上升</td><td>34</td><td>18</td><td>3</td><td>0</td><td>13</td></tr>
+<tr><td>O / 82</td><td>HbO 下降</td><td>38</td><td>1</td><td>35</td><td>0</td><td>2</td></tr>
+<tr><td>O / 3</td><td>HbR 强趋势</td><td>30</td><td>5</td><td>18</td><td>2</td><td>5</td></tr>
+</table>
+<p><a href="Hb_S_mean.png">打开原分辨率图片</a></p><img src="Hb_S_mean.png" alt="Hb_S_mean.png">
+<p><a href="Hb_S_centered.png">打开原分辨率图片</a></p><img src="Hb_S_centered.png" alt="Hb_S_centered.png">
+<p><a href="Hb_S_raw.png">打开原分辨率图片</a></p><img src="Hb_S_raw.png" alt="Hb_S_raw.png">
+<p><a href="Hb_S_slopes.png">打开原分辨率图片</a></p><img src="Hb_S_slopes.png" alt="Hb_S_slopes.png">
+<p><a href="Hb_O_mean.png">打开原分辨率图片</a></p><img src="Hb_O_mean.png" alt="Hb_O_mean.png">
+<p><a href="Hb_O_centered.png">打开原分辨率图片</a></p><img src="Hb_O_centered.png" alt="Hb_O_centered.png">
+<p><a href="Hb_O_raw.png">打开原分辨率图片</a></p><img src="Hb_O_raw.png" alt="Hb_O_raw.png">
+<p><a href="Hb_O_slopes.png">打开原分辨率图片</a></p><img src="Hb_O_slopes.png" alt="Hb_O_slopes.png">
+</html>

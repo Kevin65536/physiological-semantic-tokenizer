@@ -294,7 +294,7 @@ def test_reconstruction_metrics_preserve_masks_and_component_training_variance()
 
 
 @pytest.mark.parametrize('modality,rate,channels', [('eeg', 200, 1), ('hb', 10, 2)])
-def test_reconstruction_synthetic_curve_and_bitmap_atlas(tmp_path, modality, rate, channels):
+def test_reconstruction_synthetic_curve_and_bitmap_atlas(tmp_path, modality, rate, channels, monkeypatch):
     from src.analysis.dual_component_tokenizer import (
         state_reconstruction_metrics, render_state_reconstruction_case, assemble_state_reconstruction_atlas)
     t = np.arange(30*rate)/rate
@@ -309,6 +309,18 @@ def test_reconstruction_synthetic_curve_and_bitmap_atlas(tmp_path, modality, rat
             arrays[model+'_'+component] = arrays[component]*factor
             info['metrics'][model][component] = state_reconstruction_metrics(
                 arrays[component], arrays[model+'_'+component], mask, np.ones(channels))
+    if modality=='hb':
+        from matplotlib.figure import Figure
+        for component in ('s','o','x'):arrays['baseline_'+component]=arrays[component]*100
+        save=Figure.savefig
+        def verify_limits(fig,*args,**kwargs):
+            for ax in fig.axes:
+                for line in ax.lines:
+                    if line.get_label()=='Previous 500-step Q-SO K128':
+                        values=line.get_ydata();values=values[np.isfinite(values)];lo,hi=ax.get_ylim()
+                        assert lo <= values.min() and hi >= values.max()
+            return save(fig,*args,**kwargs)
+        monkeypatch.setattr(Figure,'savefig',verify_limits)
     runner.write_npz(tmp_path/'case.npz', **arrays); runner.write_json(tmp_path/'case.json', info)
     render = render_state_reconstruction_case(tmp_path, 'case')
     result = assemble_state_reconstruction_atlas(tmp_path, [render], {'rule':'synthetic fixture'})
@@ -381,3 +393,78 @@ def test_refinement_fixed_budgets_shared_warmup_and_completed_resume(tmp_path,mo
     assert fit['evaluation']['replay_max_abs']<2e-6
     assert runner.train_state_refinement(cfg,out,'hb','waveform__vq128','cpu')==fit
     with pytest.raises(ValueError,match='benchmark'):runner.train_state_refinement(cfg,out,'hb','waveform__vq128','cpu',200)
+
+
+def test_dynamic_diagnostics_distinguish_level_ramp_staircase_and_cancellation():
+    from src.analysis.dual_component_tokenizer import state_dynamic_metrics, state_patch_features, state_curve_limits
+    rate=10;t=np.arange(300)/rate;mask=np.ones((300,1),bool)
+    th=dict(rms=[.001],slope_2=[.001],slope_6=[.001])
+    constant=np.repeat(np.arange(15.),20)[:,None]
+    equal=state_dynamic_metrics(constant,constant,mask,rate,[1],th)
+    assert equal['channels'][0]['near_zero_patches']==15 and equal['channels'][0]['D_shape'] is None
+    assert equal['differences'][0]['target_boundary_energy_fraction']==1
+    ramp=t[:,None];flat=np.repeat(ramp.reshape(15,20,1).mean(1),20,axis=0)
+    result=state_dynamic_metrics(ramp,flat,mask,rate,[1],th)
+    assert result['channels'][0]['D_shape']==pytest.approx(0)
+    assert result['channels'][0]['level_nmse']==pytest.approx(0)
+    assert result['channels'][0]['closure_relative']<1e-12
+    assert result['slopes']['2'][0]['signed_gain']==pytest.approx(0)
+    assert result['slopes']['2'][0]['dynamic_nmse']==pytest.approx(1)
+    assert result['differences'][0]['prediction_boundary_energy_fraction']==pytest.approx(1)
+    np.testing.assert_allclose(state_patch_features(ramp,mask,rate,6)['slope'],1)
+    half=np.arange(20)/rate;mix=np.stack([half,-half])
+    f=state_patch_features(mix.reshape(-1,1),np.ones((40,1),bool),rate)
+    assert mix.mean(0).max()==0 and f['slope'][0,0]>0 and f['slope'][1,0]<0
+    m=mask.copy();m[:3]=False
+    masked=state_dynamic_metrics(ramp,ramp+3,m,rate,[1],th)
+    assert masked['channels'][0]['level_nmse']==pytest.approx(9)
+    assert masked['channels'][0]['shape_nmse']<1e-20
+    lo,hi=state_curve_limits(ramp,ramp*.5,np.array([[-100.],[200.],[np.nan]]))
+    assert lo < -100 and hi > 200
+
+
+def test_iteration_contract_tasks_and_frozen_scope(tmp_path,monkeypatch):
+    path=ROOT/'experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r1_v1.yaml'
+    cfg=runner.read_config(path)
+    assert len(cfg['tasks'])==2 and cfg['training']['continuation_steps']==3000
+    assert cfg['initialization']['steps']==1000 and cfg['confirmation_seed']==29
+    altered=deepcopy(cfg);altered['data']['allowed_splits']=['train','test']
+    bad=tmp_path/'bad.yaml'
+    import yaml
+    bad.write_text(yaml.safe_dump(altered))
+    with pytest.raises(ValueError,match='frozen versioned'):runner.read_config(bad)
+    assert cfg['architectures']['slow_encoder']['encoder_learning_rate_fraction']==.1
+
+
+def test_training_monitor_freezes_ema_and_records_actual_integer_health():
+    torch.set_num_threads(2)
+    cfg=runner.read_config(REFINEMENT);cfg['architectures']['waveform'].update(width=16,latent_dim=8,local_width=4)
+    model=runner._state_refinement_model(cfg,'waveform','hb','vq128');x=torch.randn(10,15,40)
+    model.initialize_codebooks(x);model.eval()
+    batch=dict(x=x,s=x*.7,o=x*.3,mask=torch.ones_like(x,dtype=torch.bool),vx=torch.ones_like(x),vs=torch.ones_like(x),vo=torch.ones_like(x),dvs=torch.ones(10,2),dvo=torch.ones(10,2),dvx=torch.ones(10,2))
+    before={k:v.clone() for k,v in model.state_dict().items()}
+    with torch.no_grad():lat=model.encode_continuous(x)
+    books={b:model.branches[b]['quantizer'].codebook.clone() for b in ('S','O')}
+    result=runner._state_training_monitor(model,batch,cfg['architectures']['waveform'],0,lat,books)
+    assert all(torch.equal(before[k],v) for k,v in model.state_dict().items())
+    assert result['drift']['S']['latent_mse']==0 and sum(result['monitor_code_usage']['S']['counts'])==150
+
+
+def test_shape_objective_is_masked_orthogonal_and_preserves_level_loss():
+    x=torch.zeros(1,15,40);mask=torch.ones_like(x,dtype=torch.bool)
+    batch=dict(x=x,s=x,o=x,mask=mask,vx=torch.ones_like(x),vs=torch.ones_like(x),vo=torch.ones_like(x),
+        dvs=torch.ones(1,2),dvo=torch.ones(1,2),dvx=torch.ones(1,2),svs=torch.ones(1,2),svo=torch.ones(1,2),svx=torch.ones(1,2))
+    s=torch.ones_like(x,requires_grad=True);r=dict(S=s,O=x,sum=s,commitment=torch.tensor(0.))
+    loss,terms=runner._state_refinement_loss(r,batch,dict(sum_weight=.5,derivative_weight=.1,shape_weight=.2))
+    assert terms['shape']==0 and loss>0
+    ramp=torch.arange(20,dtype=torch.float32)[None,None,:,None].expand(1,15,20,2).reshape(1,15,40).clone().requires_grad_()
+    r=dict(S=ramp,O=x,sum=ramp,commitment=torch.tensor(0.))
+    _,terms=runner._state_refinement_loss(r,batch,dict(sum_weight=.5,derivative_weight=.1,shape_weight=.2))
+    assert terms['shape']>0
+    terms['shape'].backward();assert ramp.grad.abs().sum()>0
+    changed=ramp.detach().clone();changed[0,0,0]=1e9;mask[0,0,0]=False
+    r=dict(S=changed,O=x,sum=changed,commitment=torch.tensor(0.))
+    a=runner._state_refinement_loss(r,batch,dict(sum_weight=.5,derivative_weight=.1,shape_weight=.2))[1]['shape']
+    changed[0,0,0]=0
+    b=runner._state_refinement_loss(r,batch,dict(sum_weight=.5,derivative_weight=.1,shape_weight=.2))[1]['shape']
+    assert a==b

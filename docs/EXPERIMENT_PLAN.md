@@ -514,6 +514,24 @@ A–F 完成检查与 A–F 科学通过分别记录。部分通过时明确已�
 - [ ] 固定复用上一图集的 27 个身份，展示改良前后及连续参照，保留完整曲线与 ID。
 - [ ] 报告主目标、同 K 比较、码率代价、全部负结果及下一步；这些同被试开发结果用于工程选择。
 
+### 有界动态与量化迭代：TK-STATE-DYNAMICS-v1（2026-11-13）
+
+本轮是原固定矩阵后的独立有界开发任务。三个版本化执行合同
+[`R1`](../experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r1_v1.yaml)、
+[`R2`](../experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r2_v1.yaml)、
+[`R3`](../experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r3_v1.yaml)
+分别冻结任务列表、单项假设、初始化、预算和晋级规则；历史合同与权重保持原身份。
+沿用四名训练被试、五父窗及原27个开发样例，K128、30秒上下文、每支2秒单ID、
+200 Hz EEG/10 Hz Hb和原目标/掩码/尺度均保持。原连续预热共享来源与新硬量化
+曝光分开记录。最多三轮修改、六候选与两个仅供晋级者使用的确认作业。
+
+冻结诊断把每个2秒patch的误差正交分为水平项与去均值形态项；2秒/6秒OLS
+斜率使用真实秒数，近零动态阈值仅由原训练前缀确定。去均值用于诊断或明确的
+损失投影，不改变输入幅度。完整波形、逐库/色团指标、停止复活前后的完整健康、
+真实赋码分布与实际图像检查共同决定接受/拒绝。独立连续模型与临时连续旁路
+诊断分别记录。状态解释检查仅在工程晋级后执行。运行结果和负结果通过
+[保留证据索引](../experiments/RESULTS_INDEX.md)及 registry 读取。
+
 ## 四库下游测量输入冻结（2026-11-04）
 
 用户确认保留现有90秒SSM拟合规则，并要求修复Visual、更新加载器和构建四库新版

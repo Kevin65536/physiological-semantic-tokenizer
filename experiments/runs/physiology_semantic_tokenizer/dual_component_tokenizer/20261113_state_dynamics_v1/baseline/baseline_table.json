@@ -1,0 +1,2622 @@
+{
+  "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/comparison.json",
+  "initial_failure_audit": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/integer_replay_failure_audit.json",
+  "records": [
+    {
+      "modality": "eeg",
+      "architecture": "dense_long",
+      "candidate": "continuous",
+      "seed": 17,
+      "macro": {
+        "s": 0.5132064965868198,
+        "o": 0.15495026773363307,
+        "x": 0.17232312806086686
+      },
+      "health_pass": null,
+      "nominal_bits_per_second": null,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/eeg/dense_long__continuous/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 0.0,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.12101227349567098,
+            "s_nmse": 0.29733898396081604,
+            "o_nmse": 0.08943621279916983,
+            "examples": 60,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.1878266175231262,
+            "s_nmse": 0.5489342286892789,
+            "o_nmse": 0.17553452111661988,
+            "examples": 30,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.32863950548770526,
+            "s_nmse": 0.6190017263182628,
+            "o_nmse": 0.2689282906401853,
+            "examples": 192,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.4077156026462892,
+            "s_nmse": 0.7303278287865405,
+            "o_nmse": 0.36643975726624484,
+            "examples": 128,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.008280066305635695,
+            "s_nmse": 0.146339768887309,
+            "o_nmse": 0.005823767179031126,
+            "examples": 56,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.00889875914410881,
+            "s_nmse": 0.24977112785563851,
+            "o_nmse": 0.006452346097576761,
+            "examples": 28,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.08278838888887889,
+            "s_nmse": 0.343322122646288,
+            "o_nmse": 0.05585327290673207,
+            "examples": 62,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.08485153292994328,
+            "s_nmse": 0.5237928010158216,
+            "o_nmse": 0.07137444645409084,
+            "examples": 31,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.29733898396081604
+            ],
+            "o": [
+              0.08943621279916983
+            ],
+            "x": [
+              0.12101227349567098
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.5489342286892789
+            ],
+            "o": [
+              0.17553452111661988
+            ],
+            "x": [
+              0.1878266175231262
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.6190017263182628
+            ],
+            "o": [
+              0.2689282906401853
+            ],
+            "x": [
+              0.32863950548770526
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.7303278287865405
+            ],
+            "o": [
+              0.36643975726624484
+            ],
+            "x": [
+              0.4077156026462892
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.146339768887309
+            ],
+            "o": [
+              0.005823767179031126
+            ],
+            "x": [
+              0.008280066305635695
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.24977112785563851
+            ],
+            "o": [
+              0.006452346097576761
+            ],
+            "x": [
+              0.00889875914410881
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.343322122646288
+            ],
+            "o": [
+              0.05585327290673207
+            ],
+            "x": [
+              0.08278838888887889
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.5237928010158216
+            ],
+            "o": [
+              0.07137444645409084
+            ],
+            "x": [
+              0.08485153292994328
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "eeg",
+      "architecture": "dense_long",
+      "candidate": "vq128",
+      "seed": 17,
+      "macro": {
+        "s": 0.7149799760641232,
+        "o": 0.3561796266532419,
+        "x": 0.38365160186722785
+      },
+      "health_pass": false,
+      "nominal_bits_per_second": 7,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/eeg/dense_long__vq128/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 1.430511474609375e-06,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.24157946832116942,
+            "s_nmse": 0.43425679147021806,
+            "o_nmse": 0.22190320324404122,
+            "examples": 60,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.47809869668980653,
+            "s_nmse": 0.8046950123426704,
+            "o_nmse": 0.4433817035366301,
+            "examples": 30,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.6300865137289587,
+            "s_nmse": 0.8559737668106282,
+            "o_nmse": 0.5935304378226276,
+            "examples": 192,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.7300006136883797,
+            "s_nmse": 0.8852179413675232,
+            "o_nmse": 0.7332553904216828,
+            "examples": 128,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.03867614651492295,
+            "s_nmse": 0.22813231470637313,
+            "o_nmse": 0.033382693030869194,
+            "examples": 56,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.055678273008721545,
+            "s_nmse": 0.378463453961674,
+            "o_nmse": 0.04521936464066044,
+            "examples": 28,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.1972451754907417,
+            "s_nmse": 0.4804540922177315,
+            "o_nmse": 0.17471137660278727,
+            "examples": 62,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.27082882408200376,
+            "s_nmse": 0.7915434965846254,
+            "o_nmse": 0.20286204801399424,
+            "examples": 31,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.43425679147021806
+            ],
+            "o": [
+              0.22190320324404122
+            ],
+            "x": [
+              0.24157946832116942
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.8046950123426704
+            ],
+            "o": [
+              0.4433817035366301
+            ],
+            "x": [
+              0.47809869668980653
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.8559737668106282
+            ],
+            "o": [
+              0.5935304378226276
+            ],
+            "x": [
+              0.6300865137289587
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.8852179413675232
+            ],
+            "o": [
+              0.7332553904216828
+            ],
+            "x": [
+              0.7300006136883797
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.22813231470637313
+            ],
+            "o": [
+              0.033382693030869194
+            ],
+            "x": [
+              0.03867614651492295
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.378463453961674
+            ],
+            "o": [
+              0.04521936464066044
+            ],
+            "x": [
+              0.055678273008721545
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.4804540922177315
+            ],
+            "o": [
+              0.17471137660278727
+            ],
+            "x": [
+              0.1972451754907417
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.7915434965846254
+            ],
+            "o": [
+              0.20286204801399424
+            ],
+            "x": [
+              0.27082882408200376
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "eeg",
+      "architecture": "dense_long",
+      "candidate": "vq512",
+      "seed": 17,
+      "macro": {
+        "s": 0.6876535153477484,
+        "o": 0.33292509768043477,
+        "x": 0.3506921375816608
+      },
+      "health_pass": false,
+      "nominal_bits_per_second": 9,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/eeg/dense_long__vq512/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 1.1920928955078125e-06,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.18293280113768268,
+            "s_nmse": 0.36288664914151764,
+            "o_nmse": 0.1621363938363043,
+            "examples": 60,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.4506693673639316,
+            "s_nmse": 0.7730614829590142,
+            "o_nmse": 0.44179146379470763,
+            "examples": 30,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.531029342595817,
+            "s_nmse": 0.7737248868635649,
+            "o_nmse": 0.4909485859250276,
+            "examples": 192,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.674912708259878,
+            "s_nmse": 0.8613069884064641,
+            "o_nmse": 0.6809131174039726,
+            "examples": 128,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.024715988242400573,
+            "s_nmse": 0.18771849362844634,
+            "o_nmse": 0.021839080740612714,
+            "examples": 56,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.0391366334517926,
+            "s_nmse": 0.36139268840612804,
+            "o_nmse": 0.033020160329267995,
+            "examples": 28,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.1436265587891119,
+            "s_nmse": 0.41434314169743025,
+            "o_nmse": 0.12111602764558435,
+            "examples": 62,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.23804984125104095,
+            "s_nmse": 0.7548529016193873,
+            "o_nmse": 0.1759756491937909,
+            "examples": 31,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.36288664914151764
+            ],
+            "o": [
+              0.1621363938363043
+            ],
+            "x": [
+              0.18293280113768268
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.7730614829590142
+            ],
+            "o": [
+              0.44179146379470763
+            ],
+            "x": [
+              0.4506693673639316
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.7737248868635649
+            ],
+            "o": [
+              0.4909485859250276
+            ],
+            "x": [
+              0.531029342595817
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.8613069884064641
+            ],
+            "o": [
+              0.6809131174039726
+            ],
+            "x": [
+              0.674912708259878
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.18771849362844634
+            ],
+            "o": [
+              0.021839080740612714
+            ],
+            "x": [
+              0.024715988242400573
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.36139268840612804
+            ],
+            "o": [
+              0.033020160329267995
+            ],
+            "x": [
+              0.0391366334517926
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.41434314169743025
+            ],
+            "o": [
+              0.12111602764558435
+            ],
+            "x": [
+              0.1436265587891119
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.7548529016193873
+            ],
+            "o": [
+              0.1759756491937909
+            ],
+            "x": [
+              0.23804984125104095
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "eeg",
+      "architecture": "waveform",
+      "candidate": "continuous",
+      "seed": 17,
+      "macro": {
+        "s": 0.48975189808227626,
+        "o": 0.14055254470296974,
+        "x": 0.16139452373928515
+      },
+      "health_pass": null,
+      "nominal_bits_per_second": null,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/eeg/waveform__continuous/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 0.0,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.11384723944249055,
+            "s_nmse": 0.26426149698833373,
+            "o_nmse": 0.10131977782009409,
+            "examples": 60,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.1944882208267381,
+            "s_nmse": 0.5728417979068373,
+            "o_nmse": 0.14989746819160746,
+            "examples": 30,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.2872165720475293,
+            "s_nmse": 0.43301828322328684,
+            "o_nmse": 0.323448229457422,
+            "examples": 192,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.36761380823936435,
+            "s_nmse": 0.6802399100797311,
+            "o_nmse": 0.35326088374106757,
+            "examples": 128,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.007779091733884477,
+            "s_nmse": 0.11676119971807337,
+            "o_nmse": 0.006220312365598133,
+            "examples": 56,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.007613803555433405,
+            "s_nmse": 0.21565825503089156,
+            "o_nmse": 0.006322795525448917,
+            "examples": 28,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.08366375919723402,
+            "s_nmse": 0.31871870413599407,
+            "o_nmse": 0.059579743934192755,
+            "examples": 62,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.07586226233560468,
+            "s_nmse": 0.4902676293116449,
+            "o_nmse": 0.052729031353755056,
+            "examples": 31,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.26426149698833373
+            ],
+            "o": [
+              0.10131977782009409
+            ],
+            "x": [
+              0.11384723944249055
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.5728417979068373
+            ],
+            "o": [
+              0.14989746819160746
+            ],
+            "x": [
+              0.1944882208267381
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.43301828322328684
+            ],
+            "o": [
+              0.323448229457422
+            ],
+            "x": [
+              0.2872165720475293
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.6802399100797311
+            ],
+            "o": [
+              0.35326088374106757
+            ],
+            "x": [
+              0.36761380823936435
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.11676119971807337
+            ],
+            "o": [
+              0.006220312365598133
+            ],
+            "x": [
+              0.007779091733884477
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.21565825503089156
+            ],
+            "o": [
+              0.006322795525448917
+            ],
+            "x": [
+              0.007613803555433405
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.31871870413599407
+            ],
+            "o": [
+              0.059579743934192755
+            ],
+            "x": [
+              0.08366375919723402
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.4902676293116449
+            ],
+            "o": [
+              0.052729031353755056
+            ],
+            "x": [
+              0.07586226233560468
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "eeg",
+      "architecture": "waveform",
+      "candidate": "vq128",
+      "seed": 17,
+      "macro": {
+        "s": 0.7641681673263555,
+        "o": 0.3797978337590717,
+        "x": 0.40327698206128726
+      },
+      "health_pass": false,
+      "nominal_bits_per_second": 7,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/eeg/waveform__vq128/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 0.0,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.1763735881044596,
+            "s_nmse": 0.3479129643014227,
+            "o_nmse": 0.17607157264628173,
+            "examples": 60,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.5418344829322518,
+            "s_nmse": 0.8448310182288931,
+            "o_nmse": 0.5203400607164048,
+            "examples": 30,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.509967811232507,
+            "s_nmse": 0.6811252627383277,
+            "o_nmse": 0.5289070653154503,
+            "examples": 192,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.7317382743054148,
+            "s_nmse": 0.9509689100009713,
+            "o_nmse": 0.7378020026154297,
+            "examples": 128,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.024919995305146842,
+            "s_nmse": 0.17058078325688492,
+            "o_nmse": 0.022824444450883625,
+            "examples": 56,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.049459173742977085,
+            "s_nmse": 0.41548718853289396,
+            "o_nmse": 0.038946256880422435,
+            "examples": 28,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.1412553761142471,
+            "s_nmse": 0.40253795946926324,
+            "o_nmse": 0.12896634830350096,
+            "examples": 62,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.2900759972645054,
+            "s_nmse": 0.8453855525426639,
+            "o_nmse": 0.22210301482403005,
+            "examples": 31,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.3479129643014227
+            ],
+            "o": [
+              0.17607157264628173
+            ],
+            "x": [
+              0.1763735881044596
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.8448310182288931
+            ],
+            "o": [
+              0.5203400607164048
+            ],
+            "x": [
+              0.5418344829322518
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.6811252627383277
+            ],
+            "o": [
+              0.5289070653154503
+            ],
+            "x": [
+              0.509967811232507
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.9509689100009713
+            ],
+            "o": [
+              0.7378020026154297
+            ],
+            "x": [
+              0.7317382743054148
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.17058078325688492
+            ],
+            "o": [
+              0.022824444450883625
+            ],
+            "x": [
+              0.024919995305146842
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.41548718853289396
+            ],
+            "o": [
+              0.038946256880422435
+            ],
+            "x": [
+              0.049459173742977085
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.40253795946926324
+            ],
+            "o": [
+              0.12896634830350096
+            ],
+            "x": [
+              0.1412553761142471
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.8453855525426639
+            ],
+            "o": [
+              0.22210301482403005
+            ],
+            "x": [
+              0.2900759972645054
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "eeg",
+      "architecture": "waveform",
+      "candidate": "vq512",
+      "seed": 17,
+      "macro": {
+        "s": 0.7172686907042966,
+        "o": 0.33589771094338494,
+        "x": 0.35996878038105584
+      },
+      "health_pass": false,
+      "nominal_bits_per_second": 9,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/eeg/waveform__vq512/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 0.0,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.14779463300783025,
+            "s_nmse": 0.3082354170089132,
+            "o_nmse": 0.14415522543936407,
+            "examples": 60,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.4826434231710605,
+            "s_nmse": 0.8064206565312053,
+            "o_nmse": 0.46419111708615773,
+            "examples": 30,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.440874288666967,
+            "s_nmse": 0.5916614882659057,
+            "o_nmse": 0.4692424505598778,
+            "examples": 192,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.6636939011857714,
+            "s_nmse": 0.9147620947494093,
+            "o_nmse": 0.6572418506393576,
+            "examples": 128,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.01792059645948733,
+            "s_nmse": 0.14740438768553094,
+            "o_nmse": 0.016475994970151595,
+            "examples": 56,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.04455802864158016,
+            "s_nmse": 0.35322150208108416,
+            "o_nmse": 0.034877936550609424,
+            "examples": 28,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.11819305546617007,
+            "s_nmse": 0.36454615833767384,
+            "o_nmse": 0.09950278424677825,
+            "examples": 62,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.24897976852581127,
+            "s_nmse": 0.7946705094554875,
+            "o_nmse": 0.18727993949741528,
+            "examples": 31,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.3082354170089132
+            ],
+            "o": [
+              0.14415522543936407
+            ],
+            "x": [
+              0.14779463300783025
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.8064206565312053
+            ],
+            "o": [
+              0.46419111708615773
+            ],
+            "x": [
+              0.4826434231710605
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.5916614882659057
+            ],
+            "o": [
+              0.4692424505598778
+            ],
+            "x": [
+              0.440874288666967
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.9147620947494093
+            ],
+            "o": [
+              0.6572418506393576
+            ],
+            "x": [
+              0.6636939011857714
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.14740438768553094
+            ],
+            "o": [
+              0.016475994970151595
+            ],
+            "x": [
+              0.01792059645948733
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.35322150208108416
+            ],
+            "o": [
+              0.034877936550609424
+            ],
+            "x": [
+              0.04455802864158016
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.36454615833767384
+            ],
+            "o": [
+              0.09950278424677825
+            ],
+            "x": [
+              0.11819305546617007
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.7946705094554875
+            ],
+            "o": [
+              0.18727993949741528
+            ],
+            "x": [
+              0.24897976852581127
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "hb",
+      "architecture": "dense_long",
+      "candidate": "continuous",
+      "seed": 17,
+      "macro": {
+        "s": 0.37798884599908766,
+        "o": 0.6302005134180287,
+        "x": 0.6179044426178035
+      },
+      "health_pass": null,
+      "nominal_bits_per_second": null,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/hb/dense_long__continuous/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 0.0,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.034813198245849046,
+            "s_nmse": 0.06964156684771211,
+            "o_nmse": 0.09289005476360417,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.0922674163150759,
+            "s_nmse": 0.1898850721653086,
+            "o_nmse": 0.2660960692311389,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.10576165936553455,
+            "s_nmse": 0.21785038899426434,
+            "o_nmse": 0.3343880239456324,
+            "examples": 153,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.11594747488778301,
+            "s_nmse": 0.3373975088990928,
+            "o_nmse": 0.46226938901300935,
+            "examples": 102,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.0255537584357907,
+            "s_nmse": 0.04434770795976358,
+            "o_nmse": 0.10191237715007091,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.09096964093968594,
+            "s_nmse": 0.2796743657184446,
+            "o_nmse": 1.1422463145550898,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.04680422875321593,
+            "s_nmse": 0.09959643971036417,
+            "o_nmse": 0.12261429844142462,
+            "examples": 58,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 2.172433238328669,
+            "s_nmse": 0.7049984372135045,
+            "o_nmse": 0.6501902808728768,
+            "examples": 29,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.07578734398918482,
+              0.06349578970623942
+            ],
+            "o": [
+              0.11641307070553257,
+              0.06936703882167589
+            ],
+            "x": [
+              0.029590953466004228,
+              0.04003544302569386
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.1501709470784287,
+              0.2295991972521884
+            ],
+            "o": [
+              0.24167549469112506,
+              0.2905166437711526
+            ],
+            "x": [
+              0.06770978906066588,
+              0.11682504356948598
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.2793805932761297,
+              0.156320184712399
+            ],
+            "o": [
+              0.5023732769520461,
+              0.1664027709392186
+            ],
+            "x": [
+              0.15684155628106017,
+              0.05468176245000897
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.4147212548587287,
+              0.2600737629394568
+            ],
+            "o": [
+              0.6864612649589583,
+              0.23807751306706015
+            ],
+            "x": [
+              0.12157288194375959,
+              0.11032206783180644
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.05070515657265783,
+              0.0379902593468693
+            ],
+            "o": [
+              0.10740482198990373,
+              0.09641993231023815
+            ],
+            "x": [
+              0.014350100196781259,
+              0.03675741667480014
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.39344378961030413,
+              0.16590494182658505
+            ],
+            "o": [
+              1.22619157597137,
+              1.0583010531388095
+            ],
+            "x": [
+              0.051372329736958794,
+              0.13056695214241315
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.10543452138476854,
+              0.09375835803595976
+            ],
+            "o": [
+              0.17451497024958845,
+              0.07071362663326083
+            ],
+            "x": [
+              0.038221712949074255,
+              0.0553867445573576
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.9304041904071486,
+              0.47959268401986027
+            ],
+            "o": [
+              0.4255516135395457,
+              0.8748289482062079
+            ],
+            "x": [
+              3.433306074031386,
+              0.9115604026259516
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "hb",
+      "architecture": "dense_long",
+      "candidate": "vq128",
+      "seed": 17,
+      "macro": {
+        "s": 0.3724467402231253,
+        "o": 0.6325583655821337,
+        "x": 0.747705965898421
+      },
+      "health_pass": true,
+      "nominal_bits_per_second": 7,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/hb/dense_long__vq128/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 2.1457672119140625e-06,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.06904076068175592,
+            "s_nmse": 0.12297526862356085,
+            "o_nmse": 0.15523933738172,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.17248788059350895,
+            "s_nmse": 0.18151607408593928,
+            "o_nmse": 0.3499268144008918,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.1836628571723865,
+            "s_nmse": 0.2806253703740724,
+            "o_nmse": 0.4661217747224648,
+            "examples": 153,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.21148086501073765,
+            "s_nmse": 0.37439356183581574,
+            "o_nmse": 0.48771805342277075,
+            "examples": 102,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.06834687065594841,
+            "s_nmse": 0.08502281086837016,
+            "o_nmse": 0.15758401032869934,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.2294473466442754,
+            "s_nmse": 0.25058415954749436,
+            "o_nmse": 0.9929281848317734,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.08958439741929772,
+            "s_nmse": 0.15011062842595047,
+            "o_nmse": 0.19353835020641647,
+            "examples": 58,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 2.377407771345162,
+            "s_nmse": 0.6832931654232517,
+            "o_nmse": 0.6996604096730993,
+            "examples": 29,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.12773083229298193,
+              0.11821970495413983
+            ],
+            "o": [
+              0.18415924208773587,
+              0.1263194326757041
+            ],
+            "x": [
+              0.05823111397437229,
+              0.07985040738913955
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.1722650526306654,
+              0.1907670955412131
+            ],
+            "o": [
+              0.3089310237653492,
+              0.3909226050364347
+            ],
+            "x": [
+              0.11780657002576914,
+              0.22716919116124876
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.34564826681329436,
+              0.2156024739348503
+            ],
+            "o": [
+              0.6952765025931662,
+              0.23696704685176315
+            ],
+            "x": [
+              0.2653795558723324,
+              0.10194615847244065
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.4834743791502645,
+              0.26531274452136683
+            ],
+            "o": [
+              0.726881099612132,
+              0.24855500723340945
+            ],
+            "x": [
+              0.2772103848257776,
+              0.1457513451956977
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.07967802950198359,
+              0.09036759223475672
+            ],
+            "o": [
+              0.13764973322108942,
+              0.17751828743630932
+            ],
+            "x": [
+              0.034959912335265436,
+              0.10173382897663139
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.29463386214373233,
+              0.20653445695125638
+            ],
+            "o": [
+              1.062685188181379,
+              0.9231711814821681
+            ],
+            "x": [
+              0.1015724476418823,
+              0.35732224564666853
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.15151584728468492,
+              0.14870540956721615
+            ],
+            "o": [
+              0.2545861742633638,
+              0.1324905261494692
+            ],
+            "x": [
+              0.07040989021880364,
+              0.10875890461979185
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.9992149155249618,
+              0.3673714153215414
+            ],
+            "o": [
+              0.4516576896911605,
+              0.9476631296550382
+            ],
+            "x": [
+              3.7228806830908314,
+              1.0319348595994922
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "hb",
+      "architecture": "dense_long",
+      "candidate": "vq512",
+      "seed": 17,
+      "macro": {
+        "s": 0.38719573000563756,
+        "o": 0.5896647785234554,
+        "x": 0.7127335490297212
+      },
+      "health_pass": true,
+      "nominal_bits_per_second": 9,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/hb/dense_long__vq512/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 1.9073486328125e-06,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.05734293901453756,
+            "s_nmse": 0.0943328432512991,
+            "o_nmse": 0.13399728917642528,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.13026859112324268,
+            "s_nmse": 0.21459595067966997,
+            "o_nmse": 0.2591782352579972,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.13595847167899758,
+            "s_nmse": 0.2667374972294827,
+            "o_nmse": 0.39925678662409525,
+            "examples": 153,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.18835526716485806,
+            "s_nmse": 0.4080632376681556,
+            "o_nmse": 0.48748830631873125,
+            "examples": 102,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.06789286207220437,
+            "s_nmse": 0.07311680176554439,
+            "o_nmse": 0.14047265794968544,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.15332210954041053,
+            "s_nmse": 0.19675647293675488,
+            "o_nmse": 0.9163282369937783,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.0784238887563123,
+            "s_nmse": 0.1316643770636715,
+            "o_nmse": 0.16159841717623302,
+            "examples": 58,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 2.3789882282903734,
+            "s_nmse": 0.7293672587379697,
+            "o_nmse": 0.695664335523315,
+            "examples": 29,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.1071875191178023,
+              0.0814781673847959
+            ],
+            "o": [
+              0.15908647243230378,
+              0.10890810592054673
+            ],
+            "x": [
+              0.056224749348470854,
+              0.05846112868060428
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.19240284122615098,
+              0.2367890601331889
+            ],
+            "o": [
+              0.23816412692966107,
+              0.2801923435863334
+            ],
+            "x": [
+              0.09895602623962883,
+              0.16158115600685655
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.342615023688097,
+              0.19085997077086825
+            ],
+            "o": [
+              0.592883354372449,
+              0.20563021887574143
+            ],
+            "x": [
+              0.19470794548786263,
+              0.07720899787013255
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.539639892455191,
+              0.27648658288112027
+            ],
+            "o": [
+              0.7267257699101195,
+              0.24825084272734305
+            ],
+            "x": [
+              0.24675195310781406,
+              0.1299585812219021
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.06761825978991476,
+              0.07861534374117402
+            ],
+            "o": [
+              0.12407256244935932,
+              0.15687275345001156
+            ],
+            "x": [
+              0.02844014801034569,
+              0.10734557613406305
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.2521201948126051,
+              0.14139275106090465
+            ],
+            "o": [
+              1.012264890592506,
+              0.8203915833950507
+            ],
+            "x": [
+              0.09012595684288609,
+              0.21651826223793497
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.1423155422784228,
+              0.12101321184892014
+            ],
+            "o": [
+              0.22182719196811412,
+              0.10136964238435198
+            ],
+            "x": [
+              0.0683105618955503,
+              0.08853721561707431
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              1.0208316492176774,
+              0.4379028682582619
+            ],
+            "o": [
+              0.4619297968707176,
+              0.9293988741759129
+            ],
+            "x": [
+              3.839620606133637,
+              0.9183558504471101
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "hb",
+      "architecture": "waveform",
+      "candidate": "continuous",
+      "seed": 17,
+      "macro": {
+        "s": 0.36519048666015563,
+        "o": 0.46374443461732984,
+        "x": 0.6944660377516416
+      },
+      "health_pass": null,
+      "nominal_bits_per_second": null,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/hb/waveform__continuous/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 0.0,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.011476549414263923,
+            "s_nmse": 0.04069498205228845,
+            "o_nmse": 0.03424875898997079,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.04538037626062645,
+            "s_nmse": 0.17554460466537633,
+            "o_nmse": 0.1451931576703317,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.02787047801066017,
+            "s_nmse": 0.17295492326212064,
+            "o_nmse": 0.2298618359812098,
+            "examples": 153,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.07808175355371351,
+            "s_nmse": 0.3225103698597955,
+            "o_nmse": 0.4770166085783102,
+            "examples": 102,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.012873722379954674,
+            "s_nmse": 0.0259193418892987,
+            "o_nmse": 0.03361587793930233,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.04852260229721136,
+            "s_nmse": 0.28542709650166265,
+            "o_nmse": 0.5060689756932566,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.016608869406726852,
+            "s_nmse": 0.05229521257668863,
+            "o_nmse": 0.053060208713732605,
+            "examples": 58,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 2.605879418895015,
+            "s_nmse": 0.6772798756137881,
+            "o_nmse": 0.726698996527421,
+            "examples": 29,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.04749023899703128,
+              0.033899725107545624
+            ],
+            "o": [
+              0.045420006112910825,
+              0.02307751186703079
+            ],
+            "x": [
+              0.010689784410780473,
+              0.01226331441774737
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.14592886309178768,
+              0.20516034623896495
+            ],
+            "o": [
+              0.1786721292347302,
+              0.1117141861059332
+            ],
+            "x": [
+              0.046092935029905205,
+              0.04466781749134771
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.22250063865864247,
+              0.12340920786559878
+            ],
+            "o": [
+              0.35614274896331105,
+              0.10358092299910834
+            ],
+            "x": [
+              0.03703297830672011,
+              0.018707977714600227
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.39561429032182494,
+              0.24940644939776607
+            ],
+            "o": [
+              0.7247106452754698,
+              0.2293225718811504
+            ],
+            "x": [
+              0.10038221469661728,
+              0.055781292410809744
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.030746074654619617,
+              0.021092609123977778
+            ],
+            "o": [
+              0.03553093231676172,
+              0.03170082356184293
+            ],
+            "x": [
+              0.01032314522914931,
+              0.01542429953076003
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.3612186700856622,
+              0.20963552291766302
+            ],
+            "o": [
+              0.660323101679092,
+              0.3518148497074209
+            ],
+            "x": [
+              0.026359523531879234,
+              0.0706856810625435
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.06517050189196369,
+              0.03941992326141352
+            ],
+            "o": [
+              0.08081321112724871,
+              0.025307206300216503
+            ],
+            "x": [
+              0.011786739118569972,
+              0.021430999694883733
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.9515998306575466,
+              0.4029599205700293
+            ],
+            "o": [
+              0.47745192985091334,
+              0.975946063203929
+            ],
+            "x": [
+              4.246183851190998,
+              0.9655749865990289
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "hb",
+      "architecture": "waveform",
+      "candidate": "vq128",
+      "seed": 17,
+      "macro": {
+        "s": 0.36172102380507487,
+        "o": 0.4772116206888861,
+        "x": 0.6886215357711625
+      },
+      "health_pass": true,
+      "nominal_bits_per_second": 7,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/hb/waveform__vq128/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 0.0,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.033722335857469976,
+            "s_nmse": 0.08183683324818009,
+            "o_nmse": 0.09595945016260637,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.11623033424594126,
+            "s_nmse": 0.19066296153409537,
+            "o_nmse": 0.22868797642105543,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.057544079991476975,
+            "s_nmse": 0.24250546614086183,
+            "o_nmse": 0.34380993751192895,
+            "examples": 153,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.16724587086026035,
+            "s_nmse": 0.3663344456963166,
+            "o_nmse": 0.452482564498194,
+            "examples": 102,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.04358847356549836,
+            "s_nmse": 0.0610019014616146,
+            "o_nmse": 0.09850721622397432,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.09364347525280817,
+            "s_nmse": 0.2418750140939531,
+            "o_nmse": 0.4492433861341863,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.04201467854547749,
+            "s_nmse": 0.0935847512590116,
+            "o_nmse": 0.1264499793661434,
+            "examples": 58,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 2.37736646272564,
+            "s_nmse": 0.6480116738959345,
+            "o_nmse": 0.7784325557021087,
+            "examples": 29,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.0875994213567434,
+              0.07607424513961675
+            ],
+            "o": [
+              0.11035138444254135,
+              0.08156751588267142
+            ],
+            "x": [
+              0.02929530951611499,
+              0.03814936219882494
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.1630480150241654,
+              0.2182779080440253
+            ],
+            "o": [
+              0.26828093171643064,
+              0.18909502112568027
+            ],
+            "x": [
+              0.07714978843058064,
+              0.1553108800613018
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.3028383420366447,
+              0.18217259024507892
+            ],
+            "o": [
+              0.5090466607406915,
+              0.17857321428316664
+            ],
+            "x": [
+              0.07084103416206544,
+              0.04424712582088851
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.4654390098360258,
+              0.26722988155660743
+            ],
+            "o": [
+              0.6787234708591564,
+              0.22624165813723152
+            ],
+            "x": [
+              0.22046664561807094,
+              0.11402509610244975
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.06165703361748679,
+              0.06034676930574242
+            ],
+            "o": [
+              0.10343999845212776,
+              0.09357443399582085
+            ],
+            "x": [
+              0.026061625783784757,
+              0.061115321347211954
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.33612890926115857,
+              0.14762111892674773
+            ],
+            "o": [
+              0.5562114675284873,
+              0.3422753047398854
+            ],
+            "x": [
+              0.06003165039869269,
+              0.12725530010692362
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.10758127799512761,
+              0.07958822452289555
+            ],
+            "o": [
+              0.17986195644495154,
+              0.0730380022873353
+            ],
+            "x": [
+              0.034645639298992066,
+              0.04938371779196291
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.8733266580130725,
+              0.42269668977879654
+            ],
+            "o": [
+              0.519662025043101,
+              1.0372030863611161
+            ],
+            "x": [
+              3.5587519001046193,
+              1.1959810253466618
+            ]
+          }
+        }
+      }
+    },
+    {
+      "modality": "hb",
+      "architecture": "waveform",
+      "candidate": "vq512",
+      "seed": 17,
+      "macro": {
+        "s": 0.38223025417571554,
+        "o": 0.5032663882072258,
+        "x": 0.750990993174836
+      },
+      "health_pass": true,
+      "nominal_bits_per_second": 9,
+      "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/models/hb/waveform__vq512/seed_17/checkpoint.pt",
+      "training_budget": {
+        "shared_warmup": 1000,
+        "continuation": 3000
+      },
+      "source": {
+        "commit": "a4645a687793ccaec74b13738eced73b67c282f2",
+        "files": [
+          "experiments/scripts/run_dual_component_tokenizer.py",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+          "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+          "src/tokenizers/dual_component_tokenizer.py",
+          "src/tokenizers/ema_vector_quantizer.py",
+          "src/data/dual_component_tokenizer.py",
+          "src/analysis/dual_component_tokenizer.py"
+        ],
+        "training_parent": "20261112_state_pilot_v1"
+      },
+      "configuration": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/resolved_config.json",
+      "evaluation_verification": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/verification.json",
+      "integer_replay_max_abs": 0.0,
+      "by_dataset": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "x_nmse": 0.02933874882831929,
+            "s_nmse": 0.07747216750547731,
+            "o_nmse": 0.07141925376809691,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.111274416192749,
+            "s_nmse": 0.20857392702694033,
+            "o_nmse": 0.17534770460523297,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "refed": {
+          "train": {
+            "x_nmse": 0.05186465591865132,
+            "s_nmse": 0.21847338990547974,
+            "o_nmse": 0.31910650758904036,
+            "examples": 153,
+            "records": 2,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.13270078171171687,
+            "s_nmse": 0.3649618325954497,
+            "o_nmse": 0.45886593764746053,
+            "examples": 102,
+            "records": 2,
+            "subjects": 1
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "x_nmse": 0.030772006499390554,
+            "s_nmse": 0.048096877082570405,
+            "o_nmse": 0.07967920451568473,
+            "examples": 72,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 0.08972880849014628,
+            "s_nmse": 0.28987997376118657,
+            "o_nmse": 0.549984150409109,
+            "examples": 36,
+            "records": 1,
+            "subjects": 1
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "x_nmse": 0.038584156449611856,
+            "s_nmse": 0.08720982047336445,
+            "o_nmse": 0.10395111393474202,
+            "examples": 58,
+            "records": 1,
+            "subjects": 1
+          },
+          "within_subject_holdout": {
+            "x_nmse": 2.670259966304732,
+            "s_nmse": 0.6655052833192855,
+            "o_nmse": 0.8288677601671007,
+            "examples": 29,
+            "records": 1,
+            "subjects": 1
+          }
+        }
+      },
+      "per_color": {
+        "eeg_fnirs_single_trial": {
+          "train": {
+            "s": [
+              0.0839898622749929,
+              0.07095447273596166
+            ],
+            "o": [
+              0.08873901662706773,
+              0.05409949090912606
+            ],
+            "x": [
+              0.026223514148940044,
+              0.03245398350769853
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.15952392231172094,
+              0.25762393174215964
+            ],
+            "o": [
+              0.22848979493226299,
+              0.12220561427820284
+            ],
+            "x": [
+              0.06643458590218528,
+              0.15611424648331268
+            ]
+          }
+        },
+        "refed": {
+          "train": {
+            "s": [
+              0.27445976742453987,
+              0.16248701238641963
+            ],
+            "o": [
+              0.4792332160778595,
+              0.15897979910022125
+            ],
+            "x": [
+              0.06058598751721135,
+              0.04314332432009124
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.4538967725837159,
+              0.27602689260718355
+            ],
+            "o": [
+              0.6972960460310509,
+              0.22043582926386984
+            ],
+            "x": [
+              0.15916763432542885,
+              0.10623392909800494
+            ]
+          }
+        },
+        "simultaneous_eeg_nirs": {
+          "train": {
+            "s": [
+              0.05339386873389785,
+              0.04279988543124295
+            ],
+            "o": [
+              0.07773039897418808,
+              0.08162801005718141
+            ],
+            "x": [
+              0.021537024956298917,
+              0.04000698804248221
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.39201657150052666,
+              0.1877433760218465
+            ],
+            "o": [
+              0.6888947775920639,
+              0.411073523226154
+            ],
+            "x": [
+              0.0505624393774802,
+              0.12889517760281238
+            ]
+          }
+        },
+        "visual_cognitive_motivation": {
+          "train": {
+            "s": [
+              0.1004560842870976,
+              0.07396355665963128
+            ],
+            "o": [
+              0.14473190422866422,
+              0.06317032364081987
+            ],
+            "x": [
+              0.030252721491710755,
+              0.04691559140751296
+            ]
+          },
+          "within_subject_holdout": {
+            "s": [
+              0.9290064135642809,
+              0.4020041530742904
+            ],
+            "o": [
+              0.5502549159322773,
+              1.1074806044019243
+            ],
+            "x": [
+              4.072924438767445,
+              1.2675954938420193
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

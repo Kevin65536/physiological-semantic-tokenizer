@@ -44,7 +44,7 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'power-cap-plan', 'power-cap', 'power-cap-report', 'power-cap-method-report', 'power-cap-normalization',
           'so-plan','so-reference','so-pilot','so-produce','so-verify',
           'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize', 'state-reconstruction',
-          'state-refine', 'state-refine-one', 'state-refine-report',
+          'state-refine', 'state-refine-one', 'state-refine-report', 'state-diagnose', 'state-confirm', 'state-iteration-summary',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -87,6 +87,20 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_state_iteration_v1':
+        number=cfg.get('round')
+        if number not in (1,2,3):raise ValueError('bounded iteration round required')
+        owner=SOURCE/f'experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r{number}_v1.yaml'
+        if cfg != yaml.safe_load(owner.read_text()):raise ValueError('use the frozen versioned iteration contract')
+        if (cfg['data']['allowed_splits']!=['train'] or cfg['data']['test_access']!='forbidden'
+                or cfg['data']['protected_data']!='forbidden' or cfg['training']['warmup_steps']>1000
+                or cfg['training']['continuation_steps']>3000 or len(cfg['tasks'])>2):
+            raise ValueError('iteration data or training budget exceeds scope')
+        for task in cfg['tasks']:
+            if (task['modality'] not in ('eeg','hb') or task['candidate']!='vq128'
+                    or task['architecture'] not in cfg['architectures'] or task['seed'] not in cfg['training']['seeds']):
+                raise ValueError('task outside declared bounded matrix')
+        return cfg
     if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_state_refinement_v1':
         owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml'
         if cfg != yaml.safe_load(owner.read_text()):
@@ -1156,6 +1170,9 @@ def finalize_long_so_cache(out,cfg,plan,checks):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema'] == 'dual_component_state_iteration_v1':
+        print(json.dumps(serial(state_iteration_dispatch(args,cfg))))
+        return
     if cfg['schema'] == 'dual_component_state_refinement_v1':
         print(json.dumps(serial(state_refinement_dispatch(args,cfg))))
         return
@@ -5620,6 +5637,16 @@ def _state_refinement_cache(cfg, modality):
             var=np.where(dm,d*d,0.).sum(0)/np.maximum(count,1)-mean*mean
             floor=np.asarray(row['target_variance'][key])*cfg['training']['target_difference_variance_floor_fraction']
             row['difference_variance'][key]=np.maximum(var,floor).tolist()
+        if any(s.get('shape_weight',0)>0 for s in cfg['architectures'].values()):
+            from src.analysis.dual_component_tokenizer import state_patch_features
+            row['shape_variance']={}
+            for key in ('s','o','x'):
+                values=[]
+                for position in range(len(row['positions'])):
+                    f=state_patch_features(a[key][:stop,position],mask[:,position],row['rate'])
+                    variance=(f['centered']**2).sum((0,1))/np.maximum(f['count'].sum(0),1)
+                    values.append(np.maximum(variance,np.asarray(row['target_variance'][key][position])*.01))
+                row['shape_variance'][key]=np.asarray(values).tolist()
     return base,manifest,rows,arrays
 
 
@@ -5627,7 +5654,8 @@ def _state_refinement_model(cfg, architecture, modality, candidate):
     from src.tokenizers.dual_component_tokenizer import GlobalLatentComponentTokenizer
     base=read_config(SOURCE/cfg['base_contract'])
     setting=dict(base['model'],**cfg['architectures'][architecture])
-    setting.update({k:cfg['training'][k] for k in ('ema_decay','dead_code_threshold','revival_stop_after_steps','max_revivals_per_event')})
+    setting.update({k:cfg['architectures'][architecture].get(k,cfg['training'][k])
+                    for k in ('ema_decay','dead_code_threshold','revival_stop_after_steps','max_revivals_per_event')})
     setting.update(input_dim=400 if modality=='eeg' else 40,channels=1 if modality=='eeg' else 2,
                    sample_strides=[5,4,5] if modality=='eeg' else [5])
     return GlobalLatentComponentTokenizer(setting,codebook_size=512 if candidate=='vq512' else 128,
@@ -5639,6 +5667,8 @@ def _state_refinement_batch(rows,arrays,examples,device):
     batch=_state_batch(rows,arrays,examples,device)
     for key in ('s','o','x'):
         batch['dv'+key]=torch.tensor([rows[i]['difference_variance'][key][p] for i,_,p in examples],device=device,dtype=torch.float32)
+        if 'shape_variance' in rows[0]:
+            batch['sv'+key]=torch.tensor([rows[i]['shape_variance'][key][p] for i,_,p in examples],device=device,dtype=torch.float32)
     return batch
 
 
@@ -5657,6 +5687,15 @@ def _state_refinement_loss(result,batch,spec):
             error=(result[output]-batch[key]).reshape(mask.shape[0],-1,channels)
             derivative=derivative+masked_mean(error.diff(dim=1).square()/batch['dv'+key][:,None,:],valid)/3
         loss=loss+spec['derivative_weight']*derivative
+    if spec.get('shape_weight',0):
+        m=mask.reshape(mask.shape[0],mask.shape[1],-1,channels)
+        shape=loss*0.
+        for output,key in [('S','s'),('O','o'),('sum','x')]:
+            error=(result[output]-batch[key]).reshape(m.shape)
+            level=torch.where(m,error,0.).sum(2,keepdim=True)/m.sum(2,keepdim=True).clamp_min(1)
+            shape=shape+masked_mean((error-level).square()/batch['sv'+key][:,None,None,:],m)/3
+        loss=loss+spec['shape_weight']*shape
+        terms['shape']=shape
     return loss,dict(terms,derivative=derivative)
 
 
@@ -5701,7 +5740,14 @@ def train_state_refinement(cfg,out,modality,name,device,benchmark_steps=None,see
                 torch.cuda.set_device(device);torch.cuda.set_per_process_memory_fraction(.16,device);torch.cuda.reset_peak_memory_stats(device)
             base,manifest,rows,arrays=_state_refinement_cache(cfg,modality)
             model=_state_refinement_model(cfg,architecture,modality,candidate).to(device)
-            optimizer=torch.optim.AdamW(model.parameters(),lr=training['learning_rate'],weight_decay=training['weight_decay'])
+            encoder_keys=('input','encoder','to_latent')
+            encoder=[p for b in model.branches.values() for key in encoder_keys for p in b[key].parameters()]
+            encoder_ids={id(p) for p in encoder}
+            optimizer=torch.optim.AdamW([
+                dict(params=encoder,lr=training['learning_rate']*spec.get('encoder_learning_rate_fraction',1.)),
+                dict(params=[p for p in model.parameters() if id(p) not in encoder_ids],lr=training['learning_rate'])],
+                weight_decay=training['weight_decay']) if cfg['schema']=='dual_component_state_iteration_v1' else torch.optim.AdamW(
+                    model.parameters(),lr=training['learning_rate'],weight_decay=training['weight_decay'])
             budget=benchmark_steps or training['warmup_steps' if candidate=='warmup' else 'continuation_steps']
             signature=dict(config=identity(cfg),parent=manifest['plan_identity'],name=name,modality=modality,seed=seed,budget=budget,benchmark=benchmark_steps is not None)
             path=job/'checkpoint.pt';history=[];start=0;rng=np.random.default_rng(seed+(0 if candidate=='warmup' else 1000))
@@ -5712,10 +5758,15 @@ def train_state_refinement(cfg,out,modality,name,device,benchmark_steps=None,see
                 start,history=saved['step'],saved['history'];rng.bit_generator.state=saved['numpy_rng'];torch.set_rng_state(saved['torch_rng'].cpu())
                 if device.startswith('cuda'):torch.cuda.set_rng_state(saved['cuda_rng'].cpu(),device)
             elif candidate!='warmup' and benchmark_steps is None:
-                warm=Path(out)/'models'/modality/(architecture+'__warmup')/f'seed_{seed}'
+                if cfg['schema']=='dual_component_state_iteration_v1':
+                    init=cfg['initialization'];warm=SOURCE/init['run']/'models'/modality/(init['architecture']+'__warmup')/f"seed_{init['seed']}"
+                    init_cfg=read_config(SOURCE/init['contract'])
+                else:
+                    warm=Path(out)/'models'/modality/(architecture+'__warmup')/f'seed_{seed}';init_cfg=cfg
                 if read_json(warm/'summary.json')['status']!='completed':raise ValueError('completed paired warmup required')
                 saved=torch.load(warm/'checkpoint.pt',map_location=device,weights_only=False)
-                if saved['signature']['config']!=identity(cfg) or saved['step']!=training['warmup_steps']:raise ValueError('warmup mismatch')
+                if (saved['signature']['config']!=identity(init_cfg) or saved['step']!=training['warmup_steps']
+                        or saved['signature']['parent']!=manifest['plan_identity']):raise ValueError('warmup mismatch')
                 loaded=model.load_state_dict({k:v for k,v in saved['model_state'].items() if '.quantizer.' not in k},strict=False)
                 if loaded.unexpected_keys or any('.quantizer.' not in k for k in loaded.missing_keys):raise ValueError('warmup architecture changed')
             if model.hard and not bool(model.branches['S']['quantizer'].initialized):
@@ -5723,6 +5774,19 @@ def train_state_refinement(cfg,out,modality,name,device,benchmark_steps=None,see
                 model.initialize_codebooks(_state_batch(rows,arrays,examples,device)['x'])
                 write_json(job/'initialization.json',dict(examples=examples,split='train',targets_used=False))
             monitor=_state_refinement_batch(rows,arrays,_state_sample(np.random.default_rng(seed+8000),rows,128),device)
+            if cfg['schema']=='dual_component_state_iteration_v1':
+                model.eval()
+                reference=job/'initial_monitor_reference.pt'
+                if reference.exists():
+                    initial=torch.load(reference,map_location=device,weights_only=False)
+                    initial_latents,initial_books=initial['latents'],initial['books']
+                else:
+                    with torch.no_grad():
+                        initial_latents={k:v.detach().clone() for k,v in model.encode_continuous(monitor['x']).items()}
+                        initial_books={b:model.branches[b]['quantizer'].codebook.clone() for b in ('S','O')}
+                    _torch_save(reference,dict(latents=initial_latents,books=initial_books))
+                if not history:
+                    history.append(_state_training_monitor(model,monitor,spec,0,initial_latents,initial_books))
             began=time.monotonic();model.train()
             for step in range(start,budget):
                 batch=_state_refinement_batch(rows,arrays,_state_sample(rng,rows,training['batch_size']),device)
@@ -5735,9 +5799,14 @@ def train_state_refinement(cfg,out,modality,name,device,benchmark_steps=None,see
                 if step==0 or (step+1)%training['checkpoint_every']==0 or step+1==budget:
                     model.eval()
                     with torch.no_grad():monitor_loss,monitor_terms=_state_refinement_loss(model(monitor['x']),monitor,spec)
-                    history.append(dict(step=step+1,loss=float(loss.detach()),monitor_loss=float(monitor_loss),
+                    entry=dict(step=step+1,loss=float(loss.detach()),monitor_loss=float(monitor_loss),
                         monitor={k:float(v) for k,v in monitor_terms.items()},gradient_norm=float(norm),seconds=time.monotonic()-began,
-                        revivals={b:int(model.branches[b]['quantizer'].revival_count) for b in ('S','O')}))
+                        revivals={b:int(model.branches[b]['quantizer'].revival_count) for b in ('S','O')})
+                    if cfg['schema']=='dual_component_state_iteration_v1':
+                        entry.update(_state_training_monitor(model,monitor,spec,step+1,initial_latents,initial_books))
+                        if step+1 in (1500,budget):
+                            write_json(job/f'code_usage_step_{step+1}.json',_state_health_rules(_state_refinement_usage(model,rows,arrays,device),cfg['evaluation']['health_screen']))
+                    history.append(entry)
                     model.train()
                     _torch_save(path,dict(signature=signature,step=step+1,model_state=model.state_dict(),optimizer_state=optimizer.state_dict(),history=history,
                         numpy_rng=rng.bit_generator.state,torch_rng=torch.get_rng_state(),cuda_rng=torch.cuda.get_rng_state(device) if device.startswith('cuda') else None))
@@ -5785,12 +5854,13 @@ def _state_refinement_jobs(cfg,args,jobs,workers,benchmark_name=None):
 
 
 def state_refinement_dispatch(args,cfg):
-    if args.stage not in ('check','synthetic','state-refine','state-refine-one','state-refine-report') or args.evaluation_split!='development':
+    if args.stage not in ('check','synthetic','state-refine','state-refine-one','state-refine-report','state-diagnose') or args.evaluation_split!='development':
         raise ValueError('bounded refinement stages and development only')
     if args.stage=='check':return dict(status='contract_valid',planned_final_models=12,measured_arrays_read=0)
     if args.output is None:raise ValueError('explicit versioned output required')
     out=args.output.resolve()
     if args.stage=='state-refine-report':return report_state_refinement(cfg,args)
+    if args.stage=='state-diagnose':return diagnose_state_refinement(cfg,args)
     if args.stage=='state-refine-one':
         if args.parent_pid is not None and os.getppid()!=args.parent_pid:raise ValueError('owning controller required')
         return train_state_refinement(cfg,out,args.modality,args.candidate,args.device,args.steps,args.seed)
@@ -5951,6 +6021,455 @@ def report_state_refinement(cfg,args):
     plan['model_comparison']=comparison
     result=assemble_state_reconstruction_atlas(export,results,plan);write_json(export/'export.json',result);write_json(export/'progress.json',dict(stage='completed',updated=now()))
     return result
+
+
+def _state_diagnostic_panel(rows, arrays):
+    from src.analysis.dual_component_tokenizer import state_patch_features
+    examples=[];metadata=[];threshold_samples=defaultdict(list)
+    for i,row in enumerate(rows):
+        for role,starts in [('train',row['train_starts_s']),('within_subject_holdout',row['holdout_starts_s'])]:
+            disjoint=[]
+            for start in starts:
+                if not disjoint or start>=disjoint[-1]+30:disjoint.append(start)
+            for start in disjoint:
+                for p in row['available_positions']:
+                    examples.append((i,start,p))
+                    metadata.append(dict(dataset=row['dataset'],subject=row['subject'],record=row['record'],parent=row['parent'],
+                        role=role,start_s=start,position=row['positions'][p],row=i,position_index=p))
+                    if role!='train':continue
+                    sl=slice(start*row['rate'],(start+30)*row['rate']);mask=arrays[i]['mask'][sl,p]
+                    for key in ('s','o','x'):
+                        for seconds in (2,6):
+                            f=state_patch_features(arrays[i][key][sl,p],mask,row['rate'],seconds)
+                            for c in range(row['channels']):
+                                for name in (['rms','slope'] if seconds==2 else ['slope']):
+                                    threshold_samples[(row['dataset'],key,name if name=='rms' else 'slope_'+str(seconds),c)].extend(np.abs(f[name][f['valid'][:,c],c]).tolist())
+    thresholds={}
+    for dataset in sorted({r['dataset'] for r in rows}):
+        thresholds[dataset]={}
+        for key in ('s','o','x'):
+            thresholds[dataset][key]={name:[max(float(np.quantile(threshold_samples[dataset,key,name,c],.1)),1e-12)
+                for c in range(rows[0]['channels'])] for name in ('rms','slope_2','slope_6')}
+    return examples,metadata,thresholds
+
+
+def _state_dynamic_aggregate(records):
+    """Positions -> record -> dataset -> macro, matching the retained NMSE order."""
+    datasets={}
+    for ds in sorted({r['dataset'] for r in records}):
+        datasets[ds]={}
+        for role in ('train','within_subject_holdout'):
+            subset=[r for r in records if r['dataset']==ds and r['role']==role]
+            if not subset:continue
+            values={}
+            for key in ('s','o','x'):
+                fields=defaultdict(list)
+                for record in sorted({r['record'] for r in subset}):
+                    rec=[r[key] for r in subset if r['record']==record]
+                    for field in ('NMSE','level_nmse','shape_nmse','D_shape'):
+                        valid=[c[field] for r in rec for c in r['channels'] if c[field] is not None]
+                        fields[field].append(float(np.mean(valid)) if valid else None)
+                    for seconds in ('2','6'):
+                        for field in ('dynamic_nmse','signed_gain','amplitude_gain','direction_accuracy'):
+                            valid=[c[field] for r in rec for c in r['slopes'][seconds] if c[field] is not None]
+                            fields['slope_'+seconds+'_'+field].append(float(np.mean(valid)) if valid else None)
+                    for field in ('within_mse','boundary_mse','target_boundary_energy_fraction','prediction_boundary_energy_fraction'):
+                        valid=[c[field] for r in rec for c in r['differences'] if c[field] is not None]
+                        fields[field].append(float(np.mean(valid)) if valid else None)
+                values[key]={k:float(np.mean([v for v in a if v is not None])) if any(v is not None for v in a) else None for k,a in fields.items()}
+            datasets[ds][role]=values
+    macro={}
+    for role in ('train','within_subject_holdout'):
+        macro[role]={k:{f:float(np.mean([d[role][k][f] for d in datasets.values() if role in d and d[role][k][f] is not None]))
+            for f in next(d[role][k] for d in datasets.values() if role in d)} for k in ('s','o','x')}
+    return dict(by_dataset=datasets,macro=macro,aggregation='color/position mean within record; records within dataset; datasets equally')
+
+
+def _state_health_rules(health, thresholds):
+    for h in health['summaries']:
+        k=h['codebook_size'];pooled=h['dataset']=='equal-dataset'
+        h['rules']=dict(effective=h['effective']/k>=thresholds['pooled_minimum_effective_fraction' if pooled else 'dataset_minimum_effective_fraction'],
+            top1=h['top1']<=thresholds['pooled_maximum_top1' if pooled else 'dataset_maximum_top1'])
+        if pooled:h['rules']['active']=h['active']/k>=thresholds['pooled_minimum_active_fraction']
+        h['passed']=all(h['rules'].values())
+    health['passed']=all(h['passed'] for h in health['summaries'])
+    return health
+
+
+def _state_loss_audit(model, rows, arrays, spec, device, seed=17):
+    """Frozen training probe: term values, decoder-output gradients, latent geometry."""
+    import torch
+    batch=_state_refinement_batch(rows,arrays,_state_sample(np.random.default_rng(seed+8000),rows,128),device)
+    model.eval();result=model(batch['x']);loss,terms=_state_refinement_loss(result,batch,spec)
+    terms=dict(terms,commitment=result['commitment']);gradients={}
+    for name,value in terms.items():
+        gs=torch.autograd.grad(value,[result['S'],result['O']],retain_graph=True,allow_unused=True) if value.requires_grad else []
+        gradients[name]=float(np.sqrt(sum(float(g.detach().square().sum()) for g in gs if g is not None)))
+    latent={}
+    for branch,z in result['latent'].items():
+        z=z.detach();flat=z.flatten(0,1);v=flat.var(0,unbiased=False);q=model.branches[branch]['quantizer']
+        entry=dict(mean=flat.mean(0).cpu().tolist(),variance=v.cpu().tolist(),top8_variance_fraction=float(v.topk(min(8,len(v))).values.sum()/v.sum()),
+            codebook_size=q.codebook_size,latent_dim=q.embedding_dim,revivals=int(q.revival_count))
+        if model.hard:
+            code=q.get_embedding(result['ids'][branch]);e=(z-code).square().mean((0,1))
+            entry.update(quantization_mse=float(e.mean()),per_dimension_distance=e.cpu().tolist(),
+                top8_distance_fraction=float(e.topk(min(8,len(e))).values.sum()/e.sum()))
+        latent[branch]=entry
+    return dict(terms={k:float(v.detach()) for k,v in terms.items()},output_gradient_L2=gradients,latent=latent,
+                probe='fixed 128 training examples seed+8000; eval mode; unweighted terms; no EMA updates')
+
+
+def _state_diagnose_model(cfg, run, export, modality, architecture, candidate, seed, device, cache=None):
+    import torch
+    from src.analysis.dual_component_tokenizer import state_dynamic_metrics, render_state_dynamic_patterns
+    torch.set_num_threads(cfg['resources']['torch_threads'])
+    torch.backends.cuda.matmul.allow_tf32=False
+    torch.backends.cudnn.allow_tf32=False
+    base,manifest,rows,arrays=cache or _state_refinement_cache(cfg,modality)
+    name=architecture+'__'+candidate;folder=Path(export)/'models'/modality/name/f'seed_{seed}'
+    if (folder/'diagnostics.json').exists():return read_json(folder/'diagnostics.json')
+    checkpoint=Path(run)/'models'/modality/name/f'seed_{seed}/checkpoint.pt'
+    saved=torch.load(checkpoint,map_location='cpu',weights_only=False);stamp=checkpoint.stat().st_mtime_ns
+    if saved['signature']['config']!=identity(cfg) or saved['signature']['parent']!=manifest['plan_identity'] or saved['step']!=cfg['training']['continuation_steps']:
+        raise ValueError('frozen diagnostic checkpoint/config/exposure mismatch')
+    model=_state_refinement_model(cfg,architecture,modality,candidate).to(device);model.load_state_dict(saved['model_state']);model.eval()
+    examples,metadata,thresholds=_state_diagnostic_panel(rows,arrays)
+    write_json(folder/'thresholds.json',dict(rule='training nonoverlapping targets absolute-feature P10, per dataset/component/color; minimum 1e-12',values=thresholds))
+    write_json(folder/'samples.json',metadata)
+    channels=rows[0]['channels'];k=model.branches['S']['quantizer'].codebook_size
+    values={key:[] for key in ('x','s','o','mask','hat_s','hat_o')}
+    if model.hard:values.update(ids_S=[],ids_O=[])
+    records=[];maximum=0.
+    for start in range(0,len(examples),32):
+        selected=examples[start:start+32];batch=_state_batch(rows,arrays,selected,device)
+        with torch.no_grad():
+            result=model(batch['x']);decoded=model.decode_ids(result['ids']) if model.hard else result
+            if model.hard:
+                for branch in ('S','O'):
+                    torch.testing.assert_close(result[branch],decoded[branch],atol=base['evaluation']['replay_atol'],rtol=base['evaluation']['replay_rtol'])
+                    maximum=max(maximum,float((result[branch]-decoded[branch]).abs().max()))
+                    values['ids_'+branch].append(result['ids'][branch].cpu().numpy())
+        for key in ('x','s','o','mask'):values[key].append(batch[key].cpu().numpy().reshape(len(selected),-1,channels))
+        for branch in ('S','O'):values['hat_'+branch.lower()].append(decoded[branch].cpu().numpy().reshape(len(selected),-1,channels))
+        for j,(i,t,p) in enumerate(selected):
+            r=rows[i];entry=dict(metadata[start+j]);m=values['mask'][-1][j]
+            for branch,key in [('S','s'),('O','o'),('sum','x')]:
+                y=decoded[branch][j].cpu().numpy().reshape(-1,channels)
+                entry[key]=state_dynamic_metrics(values[key][-1][j],y,m,r['rate'],r['target_variance'][key][p],thresholds[r['dataset']][key])
+            records.append(entry)
+    packed={key:np.concatenate(value) for key,value in values.items()}
+    packed['hat_x']=packed['hat_s']+packed['hat_o']
+    write_npz(folder/'patterns.npz',**packed)
+    write_json(folder/'dynamic_rows.json',records)
+    health=_state_health_rules(_state_refinement_usage(model,rows,arrays,device),cfg['evaluation']['health_screen']) if model.hard else None
+    if health:write_json(folder/'full_code_usage.json',health)
+    floor=[]
+    for row,a in zip(rows,arrays):
+        stop=min(row['holdout_starts_s'])*row['rate'];m=np.asarray(a['mask'][:stop]);dm=m[1:]&m[:-1]
+        for key in ('s','o','x'):
+            d=np.diff(np.asarray(a[key][:stop],float),axis=0);count=dm.sum(0);safe=np.maximum(count,1)
+            v=np.where(dm,d*d,0).sum(0)/safe-(np.where(dm,d,0).sum(0)/safe)**2
+            f=np.asarray(row['target_variance'][key])*cfg['training']['target_difference_variance_floor_fraction']
+            p=row['available_positions'];floor.append(dict(dataset=row['dataset'],parent=row['parent'],component=key,
+                positions=len(p),channels=row['channels'],triggered=int((v[p]<=f[p]).sum()),denominator=len(p)*row['channels'],
+                raw_variance=v[p].tolist(),floor=f[p].tolist(),effective_variance=row['difference_variance'][key]))
+    write_json(folder/'derivative_audit.json',dict(floor=floor,**_state_loss_audit(model,rows,arrays,cfg['architectures'][architecture],device,seed)))
+    provenance=dict(checkpoint=str(checkpoint),checkpoint_signature=saved['signature'],config=cfg,
+        source=read_json(Path(run)/'source_manifest.json') if (Path(run)/'source_manifest.json').exists() else None,
+        evaluation_source_head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=SOURCE,text=True).strip(),
+        evaluation_source_root=str(SOURCE),TF32=False,
+        dataset_partition='train subjects; training prefix and fixed development holdout',samples='samples.json',
+        codebook_size=k,latent_dim=model.branches['S']['quantizer'].embedding_dim,branches=['S','O'],
+        target='conditional cached S/O',observed='cache X',prediction='complete same-branch integer sequence decode' if model.hard else 'independently trained continuous student',
+        normalized_amplitude='frozen training X scale, no centering',rate=rows[0]['rate'])
+    write_json(folder/'provenance.json',provenance)
+    figures=render_state_dynamic_patterns(folder,packed,metadata,thresholds,provenance) if model.hard else []
+    if any(not torch.equal(v.cpu(),saved['model_state'][key]) for key,v in model.state_dict().items()):raise AssertionError('frozen diagnostics mutated model')
+    if checkpoint.stat().st_mtime_ns!=stamp:raise AssertionError('checkpoint changed')
+    result=dict(status='completed',modality=modality,architecture=architecture,candidate=candidate,seed=seed,
+        folder=str(folder),metrics=_state_dynamic_aggregate(records),code_health_pass=health['passed'] if health else None,
+        replay_max_abs=maximum,code_rate_bits_per_second=float(2*np.log2(k)/2) if model.hard else None,
+        checkpoint=str(checkpoint),training_exposure=cfg['training']['warmup_steps']+saved['step'],figures=figures,
+        frozen_state_unchanged=True,checkpoint_unchanged=True)
+    write_json(folder/'diagnostics.json',result)
+    return result
+
+
+def diagnose_state_refinement(cfg,args):
+    import torch
+    from src.analysis.dual_component_tokenizer import render_state_diagnostic_overview
+    run=args.output.resolve();export=args.analysis_output.resolve()
+    if read_json(run/'resolved_config.json')['config']!=serial(cfg):raise ValueError('exact resolved contract required')
+    if read_json(run/'summary.json')['status'] not in ('completed','completed_with_failures'):raise ValueError('terminal models required')
+    export.mkdir(parents=True,exist_ok=True);torch.set_num_threads(2)
+    torch.backends.cuda.matmul.allow_tf32=False;torch.backends.cudnn.allow_tf32=False
+    records=[]
+    jobs=([(t['modality'],t['architecture'],t['candidate'],t['seed']) for t in cfg['tasks']]
+          if cfg['schema']=='dual_component_state_iteration_v1' else
+          [(m,a,c,s) for m in cfg['training']['modalities'] for a in cfg['architectures'] for c in cfg['training']['candidates'] for s in cfg['training']['seeds']])
+    for m in cfg['training']['modalities']:
+        cache=_state_refinement_cache(cfg,m)
+        for modality,a,c,s in jobs:
+            if modality!=m:continue
+            record=_state_diagnose_model(cfg,run,export,m,a,c,s,args.device,cache);records.append(record)
+            write_json(export/'progress.json',dict(completed=len(records),planned=len(jobs),latest=[m,a,c,s],updated=now()))
+    result=dict(status='completed',records=records,source=str(run),new_training=False)
+    write_json(export/'summary.json',result);render_state_diagnostic_overview(export,result)
+    if cfg['schema']=='dual_component_state_iteration_v1':
+        baseline=SOURCE/cfg['baseline_diagnostics'];parents=read_json(baseline/'summary.json')['records']
+        decisions={r['modality']:_state_iteration_decision(cfg,r,next(p for p in parents if p['modality']==r['modality'] and p['architecture']=='waveform' and p['candidate']=='vq128')) for r in records}
+        write_json(export/'decision.json',decisions)
+        _state_fixed_diagnostic_cases(export,records,baseline,SOURCE/cfg['fixed_examples'])
+    return dict(status='completed',models=len(records),export=str(export))
+
+
+def _state_fixed_diagnostic_cases(export,records,baseline_export,selection_path):
+    from src.analysis.dual_component_tokenizer import state_reconstruction_metrics,render_state_reconstruction_case,render_state_hb_dynamics
+    export=Path(export);baseline_export=Path(baseline_export);pages=[]
+    selection=read_json(selection_path);by_modality={r['modality']:r for r in records}
+    for ordinal,case in enumerate(selection['examples']):
+        modality=case['modality']
+        if modality not in by_modality:continue
+        record=by_modality[modality];folder=Path(record['folder']);key=f'case_{ordinal+1:02d}_{modality}'
+        metadata=read_json(folder/'samples.json')
+        at=next(i for i,r in enumerate(metadata) if r['parent']==case['parent'] and r['position']==case['position'] and r['start_s']==case['start_s'] and r['role']=='within_subject_holdout')
+        sources=dict(hard=folder,baseline=baseline_export/'models'/modality/'waveform__vq128'/'seed_17',continuous=baseline_export/'models'/modality/'waveform__continuous'/'seed_17')
+        old_info=read_json(Path(selection_path).parent/(key+'.json'))
+        info=dict(old_info,metrics={},hard_label=record['architecture']+' '+record['candidate']+' integer decode',
+                  baseline_label='Parent waveform K128 (4000 steps)',baseline_exposure_steps=4000,new_exposure_steps=record['training_exposure'])
+        packed={}
+        for label,source in sources.items():
+            with np.load(source/'patterns.npz') as f:
+                identities=read_json(source/'samples.json');index=next(j for j,r in enumerate(identities) if all(r[k]==metadata[at][k] for k in ('parent','start_s','position','role')))
+                if label=='hard':packed.update({k:f[k][index] for k in ('x','s','o','mask')})
+                else:
+                    for k in ('x','s','o','mask'):np.testing.assert_array_equal(packed[k],f[k][index])
+                for k in ('s','o','x'):packed[label+'_'+k]=f['hat_'+k][index]
+                if label=='hard':
+                    for b in ('S','O'):packed['ids_'+b]=f['ids_'+b][index]
+            with np.load(Path(selection_path).parent/(key+'.npz')) as old:
+                info['metrics'][label]={}
+                for k in ('s','o','x'):
+                    packed['variance_'+k]=old['variance_'+k]
+                    info['metrics'][label][k]=state_reconstruction_metrics(packed[k],packed[label+'_'+k],packed['mask'],packed['variance_'+k])
+        packed['time_s']=np.arange(len(packed['x']))/info['rate']
+        write_npz(export/(key+'.npz'),**packed);write_json(export/(key+'.json'),dict(info,model_provenance={l:str(s/'provenance.json') for l,s in sources.items()}))
+        rendered=render_state_reconstruction_case(export,key);pages.append(rendered['page'])
+        if modality=='hb':pages.append(render_state_hb_dynamics(export,key))
+    write_json(export/'selection.json',selection);write_json(export/'fixed_figure_index.json',pages)
+    body='<html><meta charset="utf-8"><style>body{font:16px sans-serif;max-width:1500px;margin:auto}img{max-width:100%}</style><h1>固定27样例：同K父版本、当前候选与独立连续对照</h1><p>所有模型只读取本模态30秒X。灰区不计分，竖线为2秒token边界。各分量用自身冻结训练方差评分；原幅度图包含所有有限曲线。Hb动态页仅显示投影后的诊断量，不改变输入。</p>'
+    for p in pages:body+='<h2>'+p['title']+'</h2><img loading="lazy" src="'+p['figure']+'"><p>'+p['caption']+'</p>'
+    (export/'fixed_cases.html').write_text(body+'</html>')
+    return pages
+
+
+def _state_training_monitor(model,batch,spec,step,initial_latents,initial_books):
+    import torch
+    model.eval()
+    with torch.no_grad():
+        result=model(batch['x']);loss,terms=_state_refinement_loss(result,batch,spec)
+        continuous=model(batch['x'],quantize=False);_,ct=_state_refinement_loss(continuous,batch,spec)
+        health={};drift={}
+        for b in ('S','O'):
+            q=model.branches[b]['quantizer'];counts=torch.bincount(result['ids'][b].flatten(),minlength=q.codebook_size).float();p=counts/counts.sum();positive=p[p>0]
+            health[b]=dict(active=int((p>0).sum()),effective=float(torch.exp(-(positive*positive.log()).sum())),top1=float(p.max()),counts=counts.int().cpu().tolist())
+            drift[b]=dict(latent_mse=float((result['latent'][b]-initial_latents[b]).square().mean()),
+                codebook_mse=float((q.codebook-initial_books[b]).square().mean()))
+        return dict(step=step,monitor_loss=float(loss),monitor={k:float(v) for k,v in terms.items()},
+            continuous_bypass_diagnostic={k:float(v) for k,v in ct.items()},monitor_code_usage=health,drift=drift,
+            revivals={b:int(model.branches[b]['quantizer'].revival_count) for b in ('S','O')})
+
+
+def _state_iteration_decision(cfg,record,baseline):
+    m=record['metrics']['macro']['within_subject_holdout'];p=baseline['metrics']['macro']['within_subject_holdout']
+    ratio={k:{f:m[k][f]/p[k][f] for f in ('NMSE','shape_nmse','slope_2_dynamic_nmse','slope_6_dynamic_nmse')} for k in ('s','o','x')}
+    modality=record['modality'];primary=cfg['promotion']['primary'][modality]
+    relative=float(np.mean([ratio[k][primary] for k in ('s','o','x')]))
+    stable=all(ratio[k]['NMSE']<=1.05 for k in ('s','o','x'))
+    dynamic=all(float(np.mean([ratio[k][f] for k in ('s','o','x')]))<=.9 for f in ('shape_nmse','slope_2_dynamic_nmse')) if modality=='hb' else True
+    per_dataset={ds:{k:record['metrics']['by_dataset'][ds]['within_subject_holdout'][k]['NMSE']/base['within_subject_holdout'][k]['NMSE'] for k in ('s','o','x')}
+                 for ds,base in baseline['metrics']['by_dataset'].items()}
+    no_collapse=all(v<=1.25 for d in per_dataset.values() for v in d.values())
+    passed=relative<=.9 and stable and dynamic and no_collapse and record['code_health_pass']
+    return dict(primary=primary,primary_ratio=relative,relative_errors=ratio,reconstruction_noninferiority=stable,
+        dynamic_concurrence=dynamic,no_dataset_collapse=no_collapse,dataset_error_ratios=per_dataset,
+        full_code_health=record['code_health_pass'],integer_replay_max_abs=record['replay_max_abs'],
+        numeric_eligible=bool(passed),visual_review='pending',decision='requires_visual_review' if passed else 'rejected',
+        rules=cfg['promotion'])
+
+
+def state_iteration_dispatch(args,cfg):
+    from src.analysis.dual_component_tokenizer import render_state_diagnostic_overview,render_state_training_history
+    stages=('check','synthetic','state-refine','state-refine-one','state-diagnose','state-confirm','state-iteration-summary')
+    if args.stage not in stages or args.evaluation_split!='development':raise ValueError('bounded iteration stages and development only')
+    if args.stage=='check':return dict(status='contract_valid',planned_models=len(cfg['tasks']),measured_arrays_read=0)
+    out=args.output.resolve()
+    if args.stage=='state-iteration-summary':return summarize_state_iterations(cfg,args)
+    if args.stage=='synthetic':
+        result=state_refinement_dispatch(args,cfg)
+        from src.analysis.dual_component_tokenizer import state_diagnostic_synthetic_check
+        result['dynamic_checks']=state_diagnostic_synthetic_check(out)
+        write_json(out/'synthetic.json',result)
+        return result
+    if args.stage=='state-refine-one':
+        allowed=[(t['modality'],t['architecture']+'__'+t['candidate']) for t in cfg['tasks']]
+        if (args.modality,args.candidate) not in allowed or args.seed not in cfg['training']['seeds']:
+            raise ValueError('task outside iteration matrix')
+        if args.parent_pid is None or os.getppid()!=args.parent_pid:raise ValueError('owning iteration controller required')
+        return train_state_refinement(cfg,out,args.modality,args.candidate,args.device,None,args.seed)
+    if args.stage=='state-diagnose':return diagnose_state_refinement(cfg,args)
+    with owner_lock(out):
+        if read_json(out/'synthetic.json')['status']!='passed' or read_json(out/'software_validation.json')['status']!='passed':raise ValueError('synthetic and targeted tests required')
+        resolved=out/'resolved_config.json'
+        if resolved.exists() and read_json(resolved)['config']!=serial(cfg):raise ValueError('immutable iteration config changed')
+        if not resolved.exists():write_json(resolved,dict(config=cfg,created=now()))
+        confirmation=args.stage=='state-confirm'
+        tasks=[t for t in cfg['tasks'] if not confirmation or t['modality']==args.modality]
+        if confirmation:
+            decision=read_json(out/'decision.json')[args.modality]
+            if not decision['numeric_eligible'] or not decision.get('visual_pass'):raise ValueError('confirmation requires completed numeric and visual review')
+            if len(tasks)!=1:raise ValueError('one winning modality per confirmation')
+        seed=cfg['confirmation_seed'] if confirmation else None
+        jobs=[(t['modality'],t['architecture']+'__'+t['candidate'],seed if seed is not None else t['seed']) for t in tasks]
+        write_json(out/('confirmation_controller.json' if confirmation else 'controller.json'),dict(status='running',started=now(),jobs=jobs,round=cfg['round']))
+        trained=_state_refinement_jobs(cfg,args,jobs,cfg['resources']['workers_per_device'])
+        result=dict(status='completed' if all(r['status']=='completed' for r in trained['results']) else 'completed_with_failures',
+            models=trained['results'],planned_models=len(jobs),scope=cfg['data'],completed_at=now())
+        write_json(out/('confirmation_summary.json' if confirmation else 'summary.json'),result)
+        export=out/('confirmation_'+args.modality if confirmation else 'evaluation');records=[];decisions={}
+        baseline=SOURCE/cfg['baseline_diagnostics'];base_records=read_json(baseline/'summary.json')['records']
+        for task in tasks:
+            if not any(r['status']=='completed' and r['modality']==task['modality'] for r in trained['results']):continue
+            m=task['modality'];s=seed if seed is not None else task['seed']
+            record=_state_diagnose_model(cfg,out,export,m,task['architecture'],task['candidate'],s,args.device)
+            records.append(record);parent=next(r for r in base_records if r['modality']==m and r['architecture']=='waveform' and r['candidate']=='vq128')
+            decisions[m]=_state_iteration_decision(cfg,record,parent)
+            render_state_training_history(out/'models'/m/(task['architecture']+'__'+task['candidate'])/f'seed_{s}',record)
+        write_json(export/'summary.json',dict(status=result['status'],records=records,new_training=True))
+        write_json(out/('confirmation_decision_'+args.modality+'.json' if confirmation else 'decision.json'),decisions)
+        if records:
+            render_state_diagnostic_overview(export,dict(records=records))
+            _state_fixed_diagnostic_cases(export,records,baseline,SOURCE/cfg['fixed_examples'])
+        write_json(out/('confirmation_controller.json' if confirmation else 'controller.json'),dict(status=result['status'],completed=now(),jobs=jobs,round=cfg['round']))
+        return dict(status=result['status'],models=len(records),decisions=decisions)
+
+
+def summarize_state_iterations(cfg,args):
+    """Audit retained arrays and render the finite campaign's single result index."""
+    import csv,html
+    from src.analysis.dual_component_tokenizer import state_dynamic_metrics,state_patch_features,render_state_diagnostic_overview
+    campaign=args.output.resolve();baseline=read_json(campaign/'baseline/summary.json')['records']
+    parent=SOURCE/cfg['initialization']['run'];reuse=read_json(parent/'input_reuse.json')['modalities']
+    exports=[('baseline',campaign/'baseline',baseline)];decisions={};cards={};visual={}
+    for number in range(1,cfg['round']+1):
+        run=campaign/f'round_{number}';trained=read_json(run/'summary.json')
+        if trained['status'] not in ('completed','completed_with_failures'):raise ValueError('all planned rounds must be terminal')
+        export=next((run/v for v in ('evaluation_v3','evaluation_v2','evaluation') if (run/v/'summary.json').exists()),None)
+        if export is None:raise ValueError('frozen terminal evaluation missing')
+        result=read_json(export/'summary.json');exports.append((f'round_{number}',export,result['records']))
+        decisions[str(number)]=read_json(export/'decision.json' if (export/'decision.json').exists() else run/'decision.json')
+        visual[str(number)]=read_json(run/'visual_review.json');cards[str(number)]=read_json(run/'experiment_card.json')
+    rows=[];health_rows=[];checks=[];dataset_rows=[];figures=[]
+    for generation,export,records in exports:
+        for record in records:
+            folder=Path(record['folder']);metadata=read_json(folder/'samples.json');thresholds=read_json(folder/'thresholds.json')['values']
+            with np.load(folder/'patterns.npz') as f:arrays=dict(f)
+            source_rows={r['parent']:r for r in reuse[record['modality']]['rows']};direct=[];patch_arrays=defaultdict(list)
+            for i,meta in enumerate(metadata):
+                row=source_rows[meta['parent']];position=row['positions'].index(meta['position']);mask=arrays['mask'][i];entry=dict(meta)
+                for key in ('s','o','x'):
+                    y=arrays[key][i].astype(float);pred=arrays['hat_'+key][i].astype(float)
+                    if not np.isfinite(pred).all():raise AssertionError('nonfinite reconstruction')
+                    variance=np.asarray(row['target_variance'][key][position]);mse=np.where(mask,(pred-y)**2,0).sum(0)/mask.sum(0)
+                    entry[key]=(mse/variance).tolist()
+                    dynamic=state_dynamic_metrics(y,pred,mask,row['rate'],variance,thresholds[row['dataset']][key])
+                    for field,value in dynamic['patch_decomposition'].items():patch_arrays[key+'_'+field].append(value)
+                    for seconds in (2,6):
+                        for label,v in [('target',y),('prediction',pred)]:
+                            f=state_patch_features(v,mask,row['rate'],seconds)
+                            patch_arrays[f'{key}_{label}_slope_{seconds}s'].append(f['slope'])
+                direct.append(entry)
+            write_npz(folder/'patch_diagnostics.npz',**{k:np.asarray(v) for k,v in patch_arrays.items()})
+            maximum_difference=0.
+            for role in ('train','within_subject_holdout'):
+                for ds in sorted({r['dataset'] for r in metadata}):
+                    subset=[r for r in direct if r['role']==role and r['dataset']==ds]
+                    for key in ('s','o','x'):
+                        names=sorted({r['record'] for r in subset})
+                        value=np.mean([np.mean([r[key] for r in subset if r['record']==name],axis=0) for name in names],axis=0)
+                        old=record['metrics']['by_dataset'][ds][role][key]['NMSE']
+                        maximum_difference=max(maximum_difference,abs(float(value.mean())-old))
+                        for color,x in enumerate(value):dataset_rows.append(dict(generation=generation,modality=record['modality'],architecture=record['architecture'],candidate=record['candidate'],dataset=ds,role=role,component=key,color=color,NMSE=float(x),positions_contexts=len(subset),records=len(names),subjects=len({r['subject'] for r in subset})))
+            if maximum_difference>1e-9:raise AssertionError('independent per-color NMSE mismatch')
+            if record['code_health_pass'] is not None:
+                health=read_json(folder/'full_code_usage.json');k=health['summaries'][0]['codebook_size']
+                for h in health['summaries']:
+                    datasets=sorted({r['dataset'] for r in health['parent_counts']});prob=[]
+                    for ds in datasets:
+                        if h['dataset']!='equal-dataset' and ds!=h['dataset']:continue
+                        parts=[np.asarray(r['counts'],float) for r in health['parent_counts'] if r['dataset']==ds and r['role']==h['role'] and r['branch']==h['branch']]
+                        prob.append(np.mean([x/x.sum() for x in parts],axis=0))
+                    p=np.mean(prob,axis=0);q=p[p>0];effective=float(np.exp(-np.sum(q*np.log(q))))
+                    np.testing.assert_allclose([effective,p.max(),np.count_nonzero(p)],[h['effective'],h['top1'],h['active']],atol=1e-10,rtol=1e-10)
+                    health_rows.append(dict(generation=generation,modality=record['modality'],architecture=record['architecture'],candidate=record['candidate'],dataset=h['dataset'],role=h['role'],branch=h['branch'],K=k,active=h['active'],effective=h['effective'],top1=h['top1'],active_fraction=h['active']/k,effective_fraction=h['effective']/k,passed=h['passed'],rules=json.dumps(h['rules'])))
+            checks.append(dict(generation=generation,model=record['modality']+'/'+record['architecture']+'__'+record['candidate'],per_color_nmse_max_difference=maximum_difference,
+                per_patch_orthogonal_closure_max=max(float(np.max(v)) for k,v in patch_arrays.items() if k.endswith('relative_closure')),health_recomputed=True if record['code_health_pass'] is not None else None,
+                prediction_finite=True,integer_replay_max_abs=record['replay_max_abs']))
+            metric=record['metrics']['macro']['within_subject_holdout'];row=dict(generation=generation,modality=record['modality'],architecture=record['architecture'],candidate=record['candidate'],seed=record['seed'],health_pass=record['code_health_pass'],bits_per_second=record['code_rate_bits_per_second'],folder=str(folder.relative_to(campaign)),checkpoint=record['checkpoint'])
+            for key in ('s','o','x'):
+                for field in ('NMSE','shape_nmse','level_nmse','D_shape','slope_2_dynamic_nmse','slope_6_dynamic_nmse','prediction_boundary_energy_fraction','target_boundary_energy_fraction'):
+                    row[key+'_'+field]=metric[key][field]
+            if generation!='baseline':
+                decision=decisions[generation.split('_')[-1]][record['modality']]
+                row.update(primary_ratio=decision['primary_ratio'],numeric_eligible=decision['numeric_eligible'],decision='rejected' if not decision['numeric_eligible'] else decision['decision'])
+            rows.append(row)
+            figures.extend(dict(model=record['modality']+'/'+record['architecture']+'__'+record['candidate'],path=str(Path(f).relative_to(campaign)),provenance=str((folder/'provenance.json').relative_to(campaign))) for f in record['figures'])
+            write_json(folder/'patch_diagnostics_provenance.json',dict(source_arrays='patterns.npz',identities='samples.json',source_model='provenance.json',metrics='patch_diagnostics.npz',units='amplitude in frozen training X scale; slopes per second; no input transformation',closure_tolerance=1e-10))
+        if (export/'fixed_figure_index.json').exists():
+            figures.extend(dict(path=str((export/page['figure']).relative_to(campaign)),category='fixed_reconstruction',source=str((export/'selection.json').relative_to(campaign))) for page in read_json(export/'fixed_figure_index.json'))
+    def csv_write(name,data):
+        fields=list(dict.fromkeys(k for row in data for k in row))
+        with open(campaign/name,'w',newline='') as f:
+            writer=csv.DictWriter(f,fieldnames=fields,lineterminator="\n");writer.writeheader();writer.writerows(data)
+    csv_write('metrics.csv',rows);csv_write('code_health.csv',health_rows);csv_write('per_dataset_color_metrics.csv',dataset_rows)
+    outcome=dict(status='completed',experiment_id='TK-STATE-DYNAMICS-v1',completed_at=now(),stop_reason='three modification rounds exhausted',
+        budgets=dict(rounds=cfg['round'],candidate_configurations=sum(len(r) for _,_,r in exports[1:]),new_training_jobs=sum(len(read_json(campaign/f'round_{n}/summary.json')['models']) for n in range(1,cfg['round']+1)),confirmation_jobs=0,maximum_training_jobs=8),
+        scope='same four training subjects, five parents, fixed development time holdout and 27 examples; 30 s context, 2 s branch IDs, EEG 200 Hz/Hb 10 Hz, K128 7 bit/s per modality/location',
+        baseline_source=str(parent/'evaluation_export_v3/comparison.json'),records=rows,decisions=decisions,experiment_cards=cards,
+        selected_references=dict(hb='retained parent waveform K128; no replacement',eeg='retained dense_long K128 reconstruction reference; R1 slow_encoder is health-only diagnostic, not promoted'),
+        interpretation=dict(flat_patterns='Same-code opposite slopes cancel, and absolute levels hide within-patch dynamics. Full waveform has real dynamics; quantization still removes part of it. REFED branch trajectories and extreme Visual drift also fail in the independent continuous model.',
+            boundary='Latest Hb waveform target/predicted boundary energy fractions are close; dense_long has severe boundary concentration.',
+            state_explanation='Descriptive same-code level/slope distributions available; no candidate qualifies for the planned post-promotion state checks. No physiological advantage over matched ordinary quantization established.',
+            next_experiment='Hb: separately test level/slope/residual decoder paths at original objective and K128, retaining independent continuous control. EEG: training-fitted low-dimensional quantization-geometry diagnostic on retained continuous latent before another training campaign.'),
+        not_run=['no winning-candidate seed confirmation','no post-promotion state interpretation panel','no extra subjects, protected/test access, SSM/cache rebuild or masked pretraining'],
+        retained_failures=['round_1/evaluation_v2/failure.json','round_1/diagnostic_validation_history.json',str(parent/'integer_replay_failure_audit.json')],
+        verification='verification.json',visual_reviews={k:f'round_{k}/visual_review.json' for k in visual},figure_index='figure_index.json')
+    if any(r.get('numeric_eligible') for r in rows):raise ValueError('eligible candidate needs confirmation and review before this terminal summary')
+    write_json(campaign/'summary.json',outcome);write_json(campaign/'verification.json',dict(status='passed',checks=checks,models=len(checks),source_arrays_read_only=True,nonfinite_predictions=0))
+    write_json(campaign/'figure_index.json',figures)
+    commands=dict(baseline=read_json(campaign/'baseline_launch.json'),rounds={str(n):read_json(campaign/f'round_{n}/launch.json') for n in range(1,cfg['round']+1)},frozen_exports={str(n):read_json(campaign/f'round_{n}'/('evaluation_v3_launch.json' if n==1 else 'evaluation_v2_launch.json')) for n in (1,2)},summary_command=[sys.executable,str(Path(__file__).resolve()),'--config',str(args.config.resolve()),'--stage','state-iteration-summary','--output',str(campaign)],repeat='Use retained frozen source and a fresh versioned output for an independently authorized repeat; recorded argv are the actual executed commands.')
+    write_json(campaign/'reproduce.json',commands)
+    selected=[r for _,_,rs in exports for r in rs if r['candidate']=='vq128']
+    render_state_diagnostic_overview(campaign,dict(records=selected))
+    body=['<html><meta charset="utf-8"><title>Tokenizer bounded iteration</title><style>body{font:16px sans-serif;max-width:1450px;margin:30px auto;line-height:1.65}img{max-width:100%}table{border-collapse:collapse}td,th{padding:8px;border:1px solid #ddd}a{color:#005b8e}</style>',
+        '<h1>Tokenizer 有界迭代：三轮六候选均未晋级</h1><p>固定四名训练被试、五父窗与原27样例；复用原1000步连续预热，每候选新增3000步硬量化训练。K128保持双支合计7 bit/s。所有候选均完成；按三轮修改上限结束，保留负结果。</p>',
+        '<p>Hb继续保留原waveform K128。EEG的原dense_long K128重建较好但健康未通过；R1 slow_encoder解决本面板健康门槛，却未改善重建，仅保留为诊断候选。未启动补种子、额外被试或后续状态解释检查。</p>',
+        '<p><a href="summary.json">完整判断与实验卡</a> · <a href="metrics.csv">全部模型指标CSV</a> · <a href="per_dataset_color_metrics.csv">逐库/色团CSV</a> · <a href="code_health.csv">每条健康规则CSV</a> · <a href="verification.json">独立核验</a> · <a href="reproduce.json">精确执行命令</a></p>',
+        '<img src="overview.png"><table><tr><th>轮次/模型</th><th>S / O / X NMSE</th><th>S / O / X D_shape</th><th>完整健康</th><th>主要指标变化</th><th>判断</th></tr>']
+    for r in rows:
+        if r['generation']=='baseline' and (r['architecture']!='waveform' or r['candidate']!='vq128'):continue
+        body.append('<tr><td>'+html.escape(r['generation']+' '+r['modality']+' '+r['architecture'])+'</td><td>'+ ' / '.join(f'{r[k+"_NMSE"]:.5f}' for k in ('s','o','x'))+'</td><td>'+ ' / '.join(f'{r[k+"_D_shape"]:.3f}' for k in ('s','o','x'))+f'</td><td>{r["health_pass"]}</td><td>'+ (f'{(r["primary_ratio"]-1)*100:+.2f}%' if 'primary_ratio' in r else '父版本')+'</td><td>'+r.get('decision','参照')+'</td></tr>')
+    body+=['</table><p>NMSE按各分量冻结训练方差归一化，不能相加。先色团/位置，再记录，再数据集等权。主要指标变化：EEG为S/O/X相对NMSE之均值，Hb为相对形态误差之均值，负值表示改善。晋级需改善至少10%，每个分量NMSE恶化不超过5%，完整健康及整数重放同时通过。</p>',
+        '<h2>无斜率现象的定位</h2><p>真实赋码中同一码的正负斜率混合，使条件均值趋平；原幅度坐标进一步掩盖小动态。最新Hb waveform并非主要靠边界跳变：X的边界差分能量占比约5.25%，目标约4.72%；dense_long K128约65.3%。但量化损失真实存在：waveform连续与K128的X D_shape分别约0.915和0.778。REFED的S/O分量及Visual Probe1:CH23的大幅漂移在连续模型中也恢复不足。</p>',
+        '<p>D_shape = 1 − 片段去均值误差能量 / 目标去均值能量。近零阈值为训练目标特征P10，逐库/分量/色团冻结；近零片段仍进入完整NMSE。2秒/6秒OLS斜率使用真实秒数。每个patch的水平/形态能量与闭合核验位于模型目录patch_diagnostics.npz，样本身份见samples.json。</p>',
+        '<h2>固定图册与来源</h2><p>每轮固定图含原幅度S/O/X、独立连续参照、父版本及候选；Hb增加去均值形态和2/6秒斜率页。连续参照保持原objective，Hb形态损失候选并未另训匹配objective的连续模型。训练探针中的continuous bypass只是额外诊断，独立连续参照仍为原单独训练模型。</p>']
+    for generation,export,_ in exports:
+        relative=str(export.relative_to(campaign));body.append(f'<p>{generation}: <a href="{relative}/index.html">全部pattern/指标</a> · <a href="{relative}/fixed_cases.html">固定27样例与动态页</a>'+(f' · <a href="{generation}/visual_review.json">实际看图记录</a>' if generation!='baseline' else ' · <a href="baseline/visual_review.json">实际看图记录</a>')+'</p>')
+    body+=['<h2>结论与下一项实验</h2><p>形态损失展示了动态与绝对幅度的权衡；提高权重到0.5后2秒斜率改善约13%，形态改善仍不足10%，S/X原幅度误差超过5%退化线。单纯减慢encoder、加快EMA或降低commitment均未解决EEG重建与健康的联合目标。谱图显示硬量化明显压低振荡成分，不能把良好用码视为波形恢复。</p>',
+        '<p>下一步Hb优先独立检验level/slope/residual解码路径，保持原损失、K和宽度；EEG先在已有连续latent上做训练集拟合的低维量化几何诊断，再决定新训练。当前仅有开发面板的描述性level/slope组织，尚未进入跨裁窗、迁移或生理优势验证。</p>',
+        '<p>所有初始失败保留。R1的一次GPU冻结复评因竞争显存OOM退出，随后CPU复评完成；训练和checkpoint未变。最终来源为R1 evaluation_v3、R2 evaluation_v2、R3 evaluation；原导出均保留。</p></html>']
+    (campaign/'index.html').write_text('\n'.join(body))
+    return dict(status='completed',rounds=cfg['round'],new_training_jobs=outcome['budgets']['new_training_jobs'],promoted=0,verification_models=len(checks))
 
 
 if __name__ == '__main__':

@@ -32,6 +32,34 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## Bounded tokenizer dynamics iteration — 2026-11-13
+
+The [retained summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/summary.json)
+and [HTML atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/index.html)
+retain the three single-change rounds following the completed reconstruction matrix.
+The fixed four-subject development panel, original 27 examples, target/mask/scale
+contracts and K128 rate are preserved. All six candidates remain in the record;
+none satisfied joint reconstruction, dynamics and health promotion. The original
+Hb waveform K128 reference is retained; EEG slow-encoder training is a health-only
+diagnostic result, not a promoted reconstruction model.
+
+The compact reading package includes [all-model metrics](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/metrics.csv),
+[per-dataset/color results](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/per_dataset_color_metrics.csv),
+[complete health rules](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/code_health.csv),
+[figure identities](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/figure_index.json),
+[independent array audit](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/verification.json)
+and [actual reproduction commands](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/reproduce.json).
+The summary links each frozen evaluation, experiment card and actual visual review.
+Source snapshots, checkpoints, full arrays and every PNG remain local. Initial
+exports and the failed GPU re-evaluation are preserved alongside the completed
+CPU replay; the original reconstruction run and its integer-replay failure audit
+remain unchanged.
+
+The [R2 HbO/HbR pattern detail atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_2/token_patterns_hbo_hbr_20261113_v2/index.html)
+separates chromophores and retains conditional means, complete real-patch overlays,
+raw levels, slope distributions and the exact training-only code selection.
+Its parent comparison uses identical samples grouped by R2 assignments.
+
 ## State-tokenizer reconstruction refinement — 2026-11-13
 
 The [historical review and fixed design](../docs/EXPERIMENT_PLAN.md#tk-state-reconstruction-v1)

@@ -1,0 +1,150 @@
+{
+  "baseline": {
+    "command": [
+      "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline_source/experiments/scripts/run_dual_component_tokenizer.py",
+      "--config",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline_source/experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+      "--stage",
+      "state-diagnose",
+      "--output",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1",
+      "--analysis-output",
+      "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline",
+      "--device",
+      "cuda:0"
+    ],
+    "cwd": "/SSD_2/pid-mcm-implementation",
+    "supervisor": "tk-state-dynamics-baseline-20261113-v1.service",
+    "linger": true,
+    "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline_source",
+    "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline.log"
+  },
+  "rounds": {
+    "1": {
+      "command": [
+        "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_1/source/experiments/scripts/run_dual_component_tokenizer.py",
+        "--config",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_1/source/experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r1_v1.yaml",
+        "--stage",
+        "state-refine",
+        "--output",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_1",
+        "--device",
+        "cuda:0"
+      ],
+      "cwd": "/SSD_2/pid-mcm-implementation",
+      "supervisor": "tk-state-dynamics-r1-20261113-v1.service",
+      "linger": true,
+      "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_1/supervisor.log",
+      "environment": {
+        "PYTHONUNBUFFERED": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1"
+      }
+    },
+    "2": {
+      "command": [
+        "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_2/source/experiments/scripts/run_dual_component_tokenizer.py",
+        "--config",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_2/source/experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r2_v1.yaml",
+        "--stage",
+        "state-refine",
+        "--output",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_2",
+        "--device",
+        "cuda:0"
+      ],
+      "cwd": "/SSD_2/pid-mcm-implementation",
+      "supervisor": "tk-state-dynamics-r2-20261113-v1.service",
+      "linger": true,
+      "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_2/supervisor.log",
+      "environment": {
+        "PYTHONUNBUFFERED": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1"
+      }
+    },
+    "3": {
+      "command": [
+        "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3/source/experiments/scripts/run_dual_component_tokenizer.py",
+        "--config",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3/source/experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r3_v1.yaml",
+        "--stage",
+        "state-refine",
+        "--output",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3",
+        "--device",
+        "cuda:0"
+      ],
+      "cwd": "/SSD_2/pid-mcm-implementation",
+      "supervisor": "tk-state-dynamics-r3-20261113-v1.service",
+      "linger": true,
+      "log": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3/supervisor.log",
+      "environment": {
+        "PYTHONUNBUFFERED": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1"
+      }
+    }
+  },
+  "frozen_exports": {
+    "1": {
+      "command": [
+        "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3/source/experiments/scripts/run_dual_component_tokenizer.py",
+        "--config",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3/source/experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r1_v1.yaml",
+        "--stage",
+        "state-diagnose",
+        "--output",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_1",
+        "--analysis-output",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_1/evaluation_v3",
+        "--device",
+        "cpu"
+      ],
+      "cwd": "/SSD_2/pid-mcm-implementation",
+      "supervisor": "tk-state-dynamics-r1-frozen-v3-20261113.service",
+      "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3/source",
+      "reason": "CPU replay after retained GPU OOM; explicit TF32 off; no training"
+    },
+    "2": {
+      "command": [
+        "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3/source/experiments/scripts/run_dual_component_tokenizer.py",
+        "--config",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3/source/experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r2_v1.yaml",
+        "--stage",
+        "state-diagnose",
+        "--output",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_2",
+        "--analysis-output",
+        "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_2/evaluation_v2",
+        "--device",
+        "cuda:1"
+      ],
+      "cwd": "/SSD_2/pid-mcm-implementation",
+      "supervisor": "tk-state-dynamics-r2-frozen-v2-20261113.service",
+      "source": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_3/source",
+      "reason": "explicit TF32 off matching parent v3; masked lines broken; no training or checkpoint writes"
+    }
+  },
+  "summary_command": [
+    "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/final_source/experiments/scripts/run_dual_component_tokenizer.py",
+    "--config",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/final_source/experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r3_v1.yaml",
+    "--stage",
+    "state-iteration-summary",
+    "--output",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1"
+  ],
+  "repeat": "Use retained frozen source and a fresh versioned output for an independently authorized repeat; recorded argv are the actual executed commands."
+}

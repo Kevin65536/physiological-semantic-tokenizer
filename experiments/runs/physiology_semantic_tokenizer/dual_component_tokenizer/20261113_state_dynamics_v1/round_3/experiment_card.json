@@ -1,0 +1,52 @@
+{
+  "eeg": {
+    "observed_failure": "fast EMA preserves neither significant reconstruction gain nor full health; slow encoder improves health only",
+    "evidence": "round_1 and round_2 decisions; baseline/encoder_gradient_probe.json: O commitment gradient .026 vs weighted O reconstruction .0228",
+    "hypothesis": "commitment pressure restricts waveform-fitting directions; reducing its coefficient lets reconstruction gradients retain continuous-waveform structure",
+    "only_change": "commitment cost .25 -> .05 relative to original waveform parent; original .99 EMA and original full learning rate",
+    "control": "original waveform K128, dense_long K128 and independently trained waveform continuous; same warmup and training exposure",
+    "fixed_budget": "1000 shared +3000 new hard updates",
+    "expected": "mean relative S/O/X NMSE <=.9 without health collapse",
+    "guardrails": {
+      "primary": {
+        "hb": "shape_nmse",
+        "eeg": "NMSE"
+      },
+      "minimum_relative_improvement": 0.1,
+      "maximum_component_nmse_regression": 0.05,
+      "maximum_dataset_component_nmse_regression": 0.25,
+      "hb_dynamic": "mean relative S/O/X shape error and 2 s slope error each <=0.90; 6 s and fixed figures checked",
+      "eeg_dynamic": "waveform and spectrum inspection; primary is macro mean relative S/O/X error because voltage oscillations are not characterized by OLS slopes",
+      "health": "all retained pooled and dataset rules on full train and holdout; report stop=1500 and final=3000",
+      "replay": "existing atol=2e-6 rtol=1e-5; finite every model",
+      "visual": "must inspect fixed overview, difficult cases and patterns; no new plateaus, false slopes or jitter",
+      "confirmation": "one extra seed per fully eligible modality; same rules against seed17 parent; shared warmup explicitly retained"
+    },
+    "stopping": "last architecture/training round; no additional candidates"
+  },
+  "hb": {
+    "observed_failure": "shape_weight .2 yields 5.99% mean relative shape-error reduction and 8.29% 2 s slope-error reduction, below 10%; X NMSE +3.56%",
+    "evidence": "round_2/evaluation/summary.json and fixed curves",
+    "hypothesis": "increasing the same projected shape constraint can cross dynamic threshold while retaining absolute level reconstruction",
+    "only_change": "shape weight .5 versus original zero; same single loss family as R2 (.2), no structural or data changes",
+    "control": "original waveform K128 and R2 partial candidate; original continuous objective explicitly retained as reference",
+    "fixed_budget": "1000 shared +3000 new hard updates",
+    "expected": "shape and 2 s slope mean relative errors <=.9, each S/O/X NMSE <=1.05",
+    "guardrails": {
+      "primary": {
+        "hb": "shape_nmse",
+        "eeg": "NMSE"
+      },
+      "minimum_relative_improvement": 0.1,
+      "maximum_component_nmse_regression": 0.05,
+      "maximum_dataset_component_nmse_regression": 0.25,
+      "hb_dynamic": "mean relative S/O/X shape error and 2 s slope error each <=0.90; 6 s and fixed figures checked",
+      "eeg_dynamic": "waveform and spectrum inspection; primary is macro mean relative S/O/X error because voltage oscillations are not characterized by OLS slopes",
+      "health": "all retained pooled and dataset rules on full train and holdout; report stop=1500 and final=3000",
+      "replay": "existing atol=2e-6 rtol=1e-5; finite every model",
+      "visual": "must inspect fixed overview, difficult cases and patterns; no new plateaus, false slopes or jitter",
+      "confirmation": "one extra seed per fully eligible modality; same rules against seed17 parent; shared warmup explicitly retained"
+    },
+    "stopping": "last round; only fully passing candidate receives seed29 confirmation"
+  }
+}
