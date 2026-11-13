@@ -48,6 +48,18 @@ Source snapshots, supervised launch, throughput trials, individual checkpoints
 and per-position scores remain in the same run. No position is removed after
 viewing its error, and the native teacher cache remains unchanged.
 
+The [frozen-token figure index](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/token_patterns_20261112_v3/index.html)
+and [bitmap PDF atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/token_patterns_20261112_v3/TOKEN_PATTERN_ATLAS.pdf)
+provide per-code target/observed patterns, full occupancy, training-fitted PCA
+and two-seed t-SNE for both quantized controls. The
+[analysis contract](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/token_patterns_20261112_v3/analysis_config.json)
+distinguishes all-crop usage from nonoverlapping, fully scored pattern patches;
+holdout remains within the same training subjects. Numerical coordinates and
+per-book summaries accompany the PNGs. The
+[delivery check](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/token_patterns_20261112_v3/delivery_verification.json)
+reproduces the retained health statistics and checks bitmap embedding and
+searchable PDF captions. Earlier failed exports remain at their original paths.
+
 ## EEG spatial/temporal voltage separation — 2026-11-05
 
 The [versioned contract](configs/physiology_semantic_tokenizer/dual_component_voltage_separation_v1.yaml)
