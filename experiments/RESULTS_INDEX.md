@@ -60,6 +60,18 @@ per-book summaries accompany the PNGs. The
 reproduces the retained health statistics and checks bitmap embedding and
 searchable PDF captions. Earlier failed exports remain at their original paths.
 
+The [S/O reconstruction curve index](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/reconstruction_curves_20261113_v1/index.html)
+and [reconstruction PDF atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/reconstruction_curves_20261113_v1/SO_RECONSTRUCTION_ATLAS.pdf)
+compare conditional S/O targets with integer-sequence outputs, their sum with
+observed X, and the paired continuous student. The
+[selection record](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/reconstruction_curves_20261113_v1/selection.json)
+retains within-dataset error quantiles and named short-parent/high-error
+supplements from the same within-subject holdout. Each example keeps full curves,
+masks, latents, IDs and frozen-scale metrics. The
+[delivery verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1/reconstruction_curves_20261113_v1/delivery_verification.json)
+checks per-channel agreement with retained evaluations, exact branch additivity,
+unchanged model states, bitmap embedding and readable rendered pages.
+
 ## EEG spatial/temporal voltage separation — 2026-11-05
 
 The [versioned contract](configs/physiology_semantic_tokenizer/dual_component_voltage_separation_v1.yaml)
