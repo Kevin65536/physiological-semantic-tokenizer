@@ -563,7 +563,8 @@ def assemble_state_reconstruction_atlas(export, results, plan):
             model_rows.append('<tr><td>'+html.escape(r['modality']+' / '+r['architecture']+' / '+r['candidate'])+'</td>'+
                 ''.join(f'<td>{r["macro"][k]:.4f}</td>' for k in ('s','o','x'))+'<td>'+health+'</td></tr>')
         intro+='<table><tr><th>完整模型矩阵</th><th>S NMSE</th><th>O NMSE</th><th>X NMSE</th><th>健康筛查</th></tr>'+''.join(model_rows)+'</table>'
-        intro+='<p>按预定综合误差排序的EEG硬模型未通过健康筛查及20%总误差改善目标；Hb硬模型同时通过。曲线保留这一差异，不据排序自动批准模型。</p>'
+        for modality,r in plan['model_comparison']['selected'].items():
+            intro+=f'<p>{modality.upper()} 综合误差排序首位：{r["architecture"]} / {r["candidate"]}；重建目标'+('通过' if r['reconstruction_goal'] else '未通过')+'；健康筛查'+('通过' if r['health_pass'] else '未通过')+'。</p>'
     labels='新硬/旧硬/新连续' if plan.get('comparison') else '硬/连续'
     table_html='<table><tr><th>样例</th>'+''.join(f'<th>{c} NRMSE：{labels}</th>' for c in ('S','O','X'))+'</tr>'+''.join(table)+'</table>'
     table_html+=''.join(f'<h2>{html.escape(p["title"])}</h2><img src="{p["figure"]}"><p>{html.escape(p["caption"])}</p>' for p in plan.get('overview_pages',[]))
