@@ -556,6 +556,14 @@ def assemble_state_reconstruction_atlas(export, results, plan):
            '样例按每库每模态的Q-SO总X误差P10/P50/P90选取，另补充REFED短窗和Visual Probe1:CH23；排序单位是位置×窗口，选例用于解释。'
            'holdout为四名训练被试各父窗的留出时间块；完整候选分母保存在selection.json。')
     intro=plan.get('intro',intro)
+    if plan.get('model_comparison'):
+        model_rows=[]
+        for r in plan['model_comparison']['records']:
+            health='连续参照' if r['health_pass'] is None else ('通过' if r['health_pass'] else '未通过')
+            model_rows.append('<tr><td>'+html.escape(r['modality']+' / '+r['architecture']+' / '+r['candidate'])+'</td>'+
+                ''.join(f'<td>{r["macro"][k]:.4f}</td>' for k in ('s','o','x'))+'<td>'+health+'</td></tr>')
+        intro+='<table><tr><th>完整模型矩阵</th><th>S NMSE</th><th>O NMSE</th><th>X NMSE</th><th>健康筛查</th></tr>'+''.join(model_rows)+'</table>'
+        intro+='<p>按预定综合误差排序的EEG硬模型未通过健康筛查及20%总误差改善目标；Hb硬模型同时通过。曲线保留这一差异，不据排序自动批准模型。</p>'
     labels='新硬/旧硬/新连续' if plan.get('comparison') else '硬/连续'
     table_html='<table><tr><th>样例</th>'+''.join(f'<th>{c} NRMSE：{labels}</th>' for c in ('S','O','X'))+'</tr>'+''.join(table)+'</table>'
     table_html+=''.join(f'<h2>{html.escape(p["title"])}</h2><img src="{p["figure"]}"><p>{html.escape(p["caption"])}</p>' for p in plan.get('overview_pages',[]))
@@ -591,9 +599,14 @@ def render_state_refinement_overview(export, comparison):
             for k,(v,h) in enumerate(zip(actual,ratio)):ax.text(k,h+.025,f'{v:.3f}',ha='center',fontsize=9)
             ax.tick_params(axis='x',labelsize=9);ax.grid(axis='y',alpha=.2)
     fig.text(.5,.025,'Old: 500 steps; Dense/Wave: 4000 steps | K128: 7 bit/s; K512: 9 bit/s (both branches) | same training subjects, development time blocks',ha='center',fontsize=10)
+    verdicts=[]
+    for m in ('eeg','hb'):
+        r=comparison['selected'][m];change=100*(1-r['relative_error']['x']);status='pass' if r['health_pass'] else 'FAIL'
+        verdicts.append(f"{m.upper()} selected: {r['architecture']} {r['candidate']} | X error reduction {change:.1f}% | health {status}")
+    fig.text(.5,.49,'\n'.join(verdicts),ha='center',va='center',fontsize=11,color='#333333',linespacing=1.6)
     fig.savefig(export/'reconstruction_overview.png',dpi=220);plt.close(fig)
     return dict(figure='reconstruction_overview.png',title='固定开发面板：S、O与总重建的改良幅度',book='comparison',category='overview',
-        caption='每行一个模态、每列一个评分目标；柱高为四库等权NMSE相对上一轮K128之比，虚线1为原误差，越低越好。柱顶为实际NMSE。C为连续参照；Dense为原结构延长训练，Wave为卷积波形路径、增宽及损失改良组合。新模型均4000步，旧模型500步；K128/K512双支码率为7/9bit每秒。全部位置包含于主表，Visual高误差位置保留；本轮为四名训练被试的同被试时间留出开发比较。')
+        caption='每行一个模态、每列一个评分目标；柱高为四库等权NMSE相对上一轮K128之比，虚线1为原误差，越低越好。柱顶为实际NMSE。C为连续参照；Dense为原结构延长训练，Wave为卷积波形路径、增宽及损失改良组合。新模型均4000步，旧模型500步；K128/K512双支码率为7/9bit每秒。全部位置包含于主表，Visual高误差位置保留；本轮为四名训练被试的同被试时间留出开发比较。健康筛查与重建排序分别判断：中间文字保留两模态的通过/失败。')
 
 
 def separation_wave_metrics(x,s,o,scale,eog=None):

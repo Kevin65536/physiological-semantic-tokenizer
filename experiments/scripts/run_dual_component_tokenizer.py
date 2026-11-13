@@ -5948,6 +5948,7 @@ def report_state_refinement(cfg,args):
     results=[first,*_bounded_jobs(_state_reconstruction_figure,jobs[1:],workers,inflight=1)]
     if any(r.get('status')!='completed' for r in results):write_json(export/'render_failures.json',results);raise RuntimeError('figure rendering failed')
     plan=dict(selection,comparison=True,overview_pages=[overview],intro='本轮比较固定30秒输入、每支2秒单ID的重建改良。原结构延长训练与波形改良组合均为1000步预热加3000步继续训练；连续/K128/K512全部保留。蓝线为按预定S/O/X相对误差均值排序选出的硬模型，紫点线为上一轮500步K128，橙虚线为新结构等曝光连续参照。所有27个样例沿用上一图集身份，目标、掩码、训练尺度和200Hz EEG/10Hz Hb网格均不变；此前看过的四名训练被试留出时间块用于开发比较。NRMSE为原训练方差归一化MSE的平方根；Hb表值先对双色团NMSE等权再开方。完整12模型、分库结果与健康判断见 comparison.json。')
+    plan['model_comparison']=comparison
     result=assemble_state_reconstruction_atlas(export,results,plan);write_json(export/'export.json',result);write_json(export/'progress.json',dict(stage='completed',updated=now()))
     return result
 
