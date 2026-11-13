@@ -851,6 +851,16 @@ quantization control; its branches are named codebook 1/2. The local HTML index
 links PNG figures, numerical coordinates and a bitmap-only PDF figure atlas.
 This freezes model weights and uses only the retained pilot training population.
 
+The same completed run supports `--stage state-reconstruction` with a fresh
+`--analysis-output`: paired S/O targets and integer-sequence reconstructions,
+their sum against observed X, and the independent continuous S/O control.
+Each dataset/modality supplies fixed P10/P50/P90 total-error examples from
+within-subject holdout; REFED short parents and the retained Visual Hb error
+concentration are explicit supplements. Full 30-second curves, masks, IDs,
+latents and frozen-scale metrics accompany the PNG, HTML and bitmap PDF.
+The export checks exact predicted additivity, integer replay, unchanged model
+state and agreement with retained per-position evaluations before rendering.
+
 The 30-second global latent health pilot uses the same dual-component runner
 with [`dual_component_latent_health_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml).
 Run `--stage check`, `--stage synthetic --output <fresh-run>`, then supervised

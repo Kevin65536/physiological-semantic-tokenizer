@@ -43,7 +43,7 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'separation-plan', 'separation-pilot', 'separation', 'separation-report',
           'power-cap-plan', 'power-cap', 'power-cap-report', 'power-cap-method-report', 'power-cap-normalization',
           'so-plan','so-reference','so-pilot','so-produce','so-verify',
-          'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize',
+          'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize', 'state-reconstruction',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -5265,7 +5265,7 @@ def state_pilot_synthetic(cfg):
 
 def state_pilot_dispatch(args, cfg):
     from src.data.dual_component_tokenizer import state_pilot_plan
-    if args.stage not in ('check', 'synthetic', 'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize') or args.evaluation_split != 'development':
+    if args.stage not in ('check', 'synthetic', 'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize', 'state-reconstruction') or args.evaluation_split != 'development':
         raise ValueError('bounded state pilot cannot launch other stages or test evaluation')
     if args.stage == 'check':
         return dict(status='state_pilot_contract_valid', EEG_hz=200, measured_arrays_read=0)
@@ -5274,6 +5274,8 @@ def state_pilot_dispatch(args, cfg):
     out = args.output.resolve(); root = args.project_root.resolve()
     if args.stage == 'state-visualize':
         return visualize_state_pilot(cfg, args)
+    if args.stage == 'state-reconstruction':
+        return export_state_reconstructions(cfg, args)
     if args.stage == 'synthetic':
         result = state_pilot_synthetic(cfg); write_json(out / 'synthetic.json', result); return result
     if args.stage == 'state-one':
@@ -5459,6 +5461,125 @@ def visualize_state_pilot(cfg, args):
     result['seconds'] = time.monotonic() - started
     write_json(export / 'export.json', result)
     write_json(export / 'progress.json', dict(stage='completed', updated=now()))
+    return result
+
+
+def _state_reconstruction_figure(payload):
+    from src.analysis.dual_component_tokenizer import render_state_reconstruction_case
+    return render_state_reconstruction_case(*payload)
+
+
+def export_state_reconstructions(cfg, args):
+    """Paired 30-second S/O/sum curves from retained hard and continuous student checkpoints."""
+    import torch
+    from src.tokenizers.dual_component_tokenizer import GlobalLatentComponentTokenizer
+    from src.analysis.dual_component_tokenizer import (select_state_reconstruction_examples,
+        state_reconstruction_key, state_reconstruction_metrics, assemble_state_reconstruction_atlas)
+    run=args.output.resolve()
+    if args.analysis_output is None:raise ValueError('fresh --analysis-output required')
+    export=args.analysis_output.resolve()
+    if export.parent!=run or export.exists():raise ValueError('fresh direct-child reconstruction export required')
+    if (read_json(run/'summary.json')['status']!='completed'
+            or read_json(run/'resolved_config.json')['config']!=serial(cfg)
+            or cfg['data']['allowed_splits']!=['train']):
+        raise ValueError('completed exact training-only pilot required before arrays')
+    export.mkdir();torch.set_num_threads(2)
+    if args.device.startswith('cuda'):
+        torch.cuda.set_device(args.device);torch.cuda.set_per_process_memory_fraction(.15,args.device)
+    cache={};population=[];reference={}
+    for modality in cfg['training']['modalities']:
+        manifest,rows,arrays=_state_cache(cfg,run,modality);cache[modality]=(manifest,rows,arrays)
+        parents={r['parent']:r for r in rows}
+        for candidate in ('q_so','continuous'):
+            table=read_json(run/'models'/modality/candidate/'evaluation_rows.json')
+            for record in table:
+                record=dict(record,modality=modality)
+                reference[(candidate,state_reconstruction_key(record))]=record
+                if candidate=='q_so' and record['role']=='within_subject_holdout':
+                    if record['parent'] not in parents:raise ValueError('score table does not match admitted parent')
+                    population.append(dict(record,duration_s=parents[record['parent']]['duration_s']))
+    plan=select_state_reconstruction_examples(population)
+    analysis=dict(schema='state_reconstruction_figures_v1',source_run=str(run),models=['q_so','continuous'],
+        visible_input='same 30s modality observation',teacher='retained conditional S and O; score targets only',
+        hard_output='decode_ids only; independent S/O decoders',continuous_output='separately trained equal-exposure C-SO model',
+        display='frozen training X scale; no patch centering or amplitude sidecar; no visual smoothing',
+        EEG_hz=200,Hb_hz=10,EEG_detail_s=[14,16],selection=plan['rule'],new_training=False,bitmap_dpi=220)
+    write_json(export/'analysis_config.json',analysis);write_json(export/'selection.json',plan)
+    examples=plan['examples'];checks=[];jobs=[]
+    if not examples:raise ValueError('no scored holdout examples in retained evaluation')
+    for modality in cfg['training']['modalities']:
+        manifest,rows,arrays=cache[modality];models={};before={}
+        for candidate in ('q_so','continuous'):
+            saved=torch.load(run/'models'/modality/candidate/'checkpoint.pt',map_location='cpu',weights_only=False)
+            if (saved['signature']['source']!=manifest['plan_identity'] or saved['signature']['cfg']!=identity(cfg)
+                    or saved['step']!=cfg['training']['continuation_steps']):
+                raise ValueError('checkpoint source/config/exposure mismatch')
+            model=GlobalLatentComponentTokenizer(dict(cfg['model'],input_dim=400 if modality=='eeg' else 40),
+                codebook_size=cfg['model']['codebook_size'],hard=candidate=='q_so').to(args.device)
+            model.load_state_dict(saved['model_state']);model.eval();models[candidate]=model
+            before[candidate]={k:v.clone() for k,v in model.state_dict().items()}
+        for ordinal,case in enumerate(examples):
+            if case['modality']!=modality:continue
+            key=f'case_{ordinal+1:02d}_{modality}'
+            index=next(i for i,r in enumerate(rows) if r['parent']==case['parent']);row=rows[index]
+            position=row['positions'].index(case['position']);start=int(case['start_s'])
+            if position not in row['available_positions'] or start not in row['holdout_starts_s']:
+                raise ValueError('selected case is outside admitted holdout support')
+            batch=_state_batch(rows,arrays,[(index,start,position)],args.device)
+            sl=slice(start*row['rate'],(start+30)*row['rate'])
+            packed={k:np.array(arrays[index][k][sl,position]) for k in ('x','s','o','mask')}
+            packed.update(time_s=np.arange(row['rate']*30)/row['rate'],display_scale=np.array(row['scale'][position]))
+            info=dict(case,rate=row['rate'],normalization='frozen training X scale',metrics={},case_key=key,
+                source_parent=row['parent'],scoring='original observation/teacher/source masks; no scoring expansion',
+                component_training_variance={k:row['target_variance'][k][position] for k in ('x','s','o')})
+            replay_error=0.;metric_error=0.
+            for candidate,label in [('q_so','hard'),('continuous','continuous')]:
+                with torch.no_grad():
+                    result=models[candidate](batch['x'])
+                    output=models[candidate].decode_ids(result['ids']) if candidate=='q_so' else result
+                if candidate=='q_so':
+                    for b in ('S','O'):
+                        torch.testing.assert_close(output[b],result[b],atol=2e-6,rtol=1e-5)
+                        replay_error=max(replay_error,float((output[b]-result[b]).abs().max()))
+                        packed['ids_'+b]=result['ids'][b].cpu().numpy()[0]
+                info['metrics'][label]={}
+                recorded=reference[(candidate,state_reconstruction_key(case))]
+                for component,field in [('S','s'),('O','o'),('sum','x')]:
+                    predicted=output[component].cpu().numpy().reshape(-1,row['channels'])
+                    packed[label+'_'+field]=predicted
+                    variance=np.array(row['target_variance'][field][position]);packed['variance_'+field]=variance
+                    metric=state_reconstruction_metrics(packed[field],predicted,packed['mask'],variance)
+                    expected=recorded[field+'_nmse'];metric_error=max(metric_error,abs(metric['NMSE']-expected))
+                    if not np.isclose(metric['NMSE'],expected,atol=1e-5,rtol=1e-5):
+                        raise AssertionError('curve metrics do not reproduce retained evaluation')
+                    info['metrics'][label][field]=metric
+                for b in ('S','O'):packed[label+'_latent_'+b]=result['latent'][b].cpu().numpy()[0]
+                np.testing.assert_array_equal(packed[label+'_x'],packed[label+'_s']+packed[label+'_o'])
+            valid=packed['mask']
+            closure=float(np.max(np.abs(packed['x'][valid]-packed['s'][valid]-packed['o'][valid])))
+            if closure>1e-4:raise AssertionError('source target closure changed')
+            info['verification']=dict(integer_replay_max_abs=replay_error,retained_NMSE_max_abs_difference=metric_error,
+                target_closure_max_abs=closure,predicted_sum_exact=True,valid_samples_per_channel=valid.sum(0).tolist())
+            write_npz(export/(key+'.npz'),**packed);write_json(export/(key+'.json'),info)
+            jobs.append((str(export),key));checks.append(dict(case=key,**info['verification']))
+        for candidate,model in models.items():
+            if any(not torch.equal(before[candidate][k],v) for k,v in model.state_dict().items()):
+                raise AssertionError('reconstruction export changed frozen model state')
+        del models,before
+    write_json(export/'verification.json',dict(status='passed',cases=checks,frozen_model_states_unchanged=True))
+    first=_state_reconstruction_figure(jobs[0])
+    available_gib=os.sysconf('SC_AVPHYS_PAGES')*os.sysconf('SC_PAGE_SIZE')/2**30
+    per_worker_gib=max(first['peak_rss_kib']/2**20*1.5,1.)
+    workers=min(8,max(1,len(jobs)-1),len(os.sched_getaffinity(0)),max(1,int(min(available_gib,20)/per_worker_gib)))
+    if args.workers is not None:workers=min(workers,args.workers)
+    write_json(export/'render_resources.json',dict(pilot_seconds=first['seconds'],pilot_peak_rss_kib=first['peak_rss_kib'],
+        workers=workers,numerical_threads=1,reason='measured first figure; independent cases bounded by 20 GiB render budget and CPU affinity'))
+    def progress(value,count):write_json(export/'progress.json',dict(stage='render',completed=count+1,total=len(jobs),updated=now()))
+    results=[first,*_bounded_jobs(_state_reconstruction_figure,jobs[1:],workers,inflight=1,progress=progress)]
+    if any(r.get('status')!='completed' for r in results):
+        write_json(export/'failures.json',results);raise RuntimeError('retained reconstruction render failure')
+    result=assemble_state_reconstruction_atlas(export,results,plan)
+    write_json(export/'export.json',result);write_json(export/'progress.json',dict(stage='completed',updated=now()))
     return result
 
 

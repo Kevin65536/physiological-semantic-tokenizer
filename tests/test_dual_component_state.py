@@ -217,17 +217,19 @@ def test_pattern_psd_preserves_oscillation_when_average_waveform_cancels():
     assert result['mean_waveform_energy_fraction'] == 0
 
 
-def test_visualization_rejects_unfinished_parent_before_arrays(tmp_path, monkeypatch):
+@pytest.mark.parametrize('stage', ['state-visualize', 'state-reconstruction'])
+def test_visualization_rejects_unfinished_parent_before_arrays(tmp_path, monkeypatch, stage):
     cfg = runner.read_config(CONFIG)
     runner.write_json(tmp_path / 'summary.json', dict(status='running'))
     runner.write_json(tmp_path / 'resolved_config.json', dict(config=cfg))
     monkeypatch.setattr(np, 'load', lambda *a, **k: pytest.fail('unexpected measured-array read'))
     with pytest.raises(ValueError, match='completed exact'):
-        runner.main(['--config', str(CONFIG), '--stage', 'state-visualize', '--output', str(tmp_path),
+        runner.main(['--config', str(CONFIG), '--stage', stage, '--output', str(tmp_path),
                      '--analysis-output', str(tmp_path / 'fresh')])
 
 
-def test_visualization_uses_existing_canonical_config_serialization(tmp_path, monkeypatch):
+@pytest.mark.parametrize('stage', ['state-visualize', 'state-reconstruction'])
+def test_visualization_uses_existing_canonical_config_serialization(tmp_path, monkeypatch, stage):
     cfg = runner.read_config(CONFIG)
     runner.write_json(tmp_path / 'summary.json', dict(status='completed'))
     runner.write_json(tmp_path / 'resolved_config.json', dict(config=cfg))
@@ -235,7 +237,7 @@ def test_visualization_uses_existing_canonical_config_serialization(tmp_path, mo
         raise RuntimeError('fixture cache boundary reached')
     monkeypatch.setattr(runner, '_state_cache', reached_boundary)
     with pytest.raises(RuntimeError, match='fixture cache boundary reached'):
-        runner.main(['--config', str(CONFIG), '--stage', 'state-visualize', '--output', str(tmp_path),
+        runner.main(['--config', str(CONFIG), '--stage', stage, '--output', str(tmp_path),
                      '--analysis-output', str(tmp_path / 'fresh')])
 
 
@@ -253,3 +255,62 @@ def test_atlas_long_control_title_fits_with_bitmap_and_searchable_caption(tmp_pa
     assert result['pdf_pages'] == 1
     check = json.loads((tmp_path / 'pdf_verification.json').read_text())['pages'][0]
     assert check['images'] == 1 and check['vector_paths'] == 0 and check['searchable_characters'] > 40
+
+
+def test_reconstruction_selection_keeps_failure_denominator_and_named_supplements():
+    from src.analysis.dual_component_tokenizer import select_state_reconstruction_examples
+    base = dict(modality='hb', dataset='refed', subject='s', record='r', parent='p',
+                role='within_subject_holdout', start_s=60, duration_s=90)
+    rows = [dict(base, position=str(i), x_nmse=float(i)) for i in range(11)]
+    rows[3]['duration_s'] = 60
+    rows += [dict(base, position='failed', x_nmse=None),
+             dict(base, position='ignored', role='train', x_nmse=-10),
+             dict(base, dataset='visual_cognitive_motivation', position='Probe1:CH23', x_nmse=80.)]
+    result = select_state_reconstruction_examples(rows)
+    refed = [r for r in result['examples'] if r['dataset'] == 'refed']
+    assert [r['position'] for r in refed] == ['1', '5', '9', '3']
+    assert refed[-1]['selection_tags'] == ['short-parent']
+    assert result['denominators'][0] == dict(modality='hb', dataset='refed', planned=12, available=11, failed=1)
+    visual = result['examples'][-1]
+    assert visual['selection_tags'] == ['P10', 'P50', 'P90', 'retained-high-error-position']
+
+
+def test_reconstruction_metrics_preserve_masks_and_component_training_variance():
+    from src.analysis.dual_component_tokenizer import state_reconstruction_metrics
+    target = np.array([[0., 0.], [2., 4.], [np.nan, 8.]])
+    estimate = np.array([[2., 4.], [4., 4.], [1e9, 4.]])
+    mask = np.array([[True, True], [True, True], [False, True]])
+    result = state_reconstruction_metrics(target, estimate, mask, np.array([4., 16.]))
+    assert result['channels'][0]['valid_samples'] == 2
+    assert result['channels'][1]['valid_samples'] == 3
+    np.testing.assert_allclose([r['NMSE'] for r in result['channels']], [1., 2/3])
+    assert result['NMSE'] == pytest.approx(5/6)
+    assert result['NRMSE'] == pytest.approx(np.sqrt(5/6))
+    assert result['channels'][0]['correlation'] == pytest.approx(1.)
+    assert result['channels'][1]['correlation'] is None
+    with pytest.raises(ValueError, match='empty scored support'):
+        state_reconstruction_metrics(target, estimate, np.zeros_like(mask), np.ones(2))
+
+
+@pytest.mark.parametrize('modality,rate,channels', [('eeg', 200, 1), ('hb', 10, 2)])
+def test_reconstruction_synthetic_curve_and_bitmap_atlas(tmp_path, modality, rate, channels):
+    from src.analysis.dual_component_tokenizer import (
+        state_reconstruction_metrics, render_state_reconstruction_case, assemble_state_reconstruction_atlas)
+    t = np.arange(30*rate)/rate
+    x = np.sin(2*np.pi*.3*t)[:, None] * np.arange(1, channels+1)[None, :]
+    mask = np.ones_like(x, bool); mask[:3] = False
+    arrays = dict(x=x, s=x*.7, o=x*.3, mask=mask)
+    info = dict(modality=modality, rate=rate, dataset='refed', subject='synthetic', record='fixture',
+                position='channel', start_s=30, duration_s=60, selection_tags=['short-parent'], metrics={})
+    for model, factor in [('hard', .8), ('continuous', .9)]:
+        info['metrics'][model] = {}
+        for component in ('s', 'o', 'x'):
+            arrays[model+'_'+component] = arrays[component]*factor
+            info['metrics'][model][component] = state_reconstruction_metrics(
+                arrays[component], arrays[model+'_'+component], mask, np.ones(channels))
+    runner.write_npz(tmp_path/'case.npz', **arrays); runner.write_json(tmp_path/'case.json', info)
+    render = render_state_reconstruction_case(tmp_path, 'case')
+    result = assemble_state_reconstruction_atlas(tmp_path, [render], {'rule':'synthetic fixture'})
+    assert result['cases'] == result['pdf_pages'] == 1
+    assert (tmp_path/'case.png').stat().st_size > 10000
+    assert '30秒' in render['page']['caption']

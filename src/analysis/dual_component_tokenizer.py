@@ -350,16 +350,10 @@ def render_state_codebook_figures(export, modality, candidate, branch):
     return summary
 
 
-def assemble_state_token_atlas(export, results, analysis):
-    """PNG-only figures with searchable PDF captions and a local HTML figure index."""
-    import html
+def _state_bitmap_pdf(export, pages, filename):
+    """Shared bitmap-only figure atlas with searchable captions."""
     import fitz
     export = Path(export)
-    results = sorted(results, key=lambda r: (0 if '_q_so_' in r['key'] else 1, r['key']))
-    pages = [p for r in results for p in r['pages']]
-    intro = ('本图集分析已完成的200 Hz EEG / 10 Hz Hb tokenizer pilot，主模型四个S/O码本及普通量化四个码本均为K128。'
-             '只有四名训练被试；holdout为同被试父窗末段，所有图均未读取测试分区。码字由30秒上下文推断，锚点每2秒更新。'
-             '使用率覆盖全部允许滑窗；pattern仅采用不重叠输入中的完整评分片段；降维抽样及训练PCA拟合范围在相邻图注中说明。')
     doc = fitz.open()
     for index, page_info in enumerate(pages):
         page = doc.new_page(width=1000, height=850)
@@ -369,13 +363,26 @@ def assemble_state_token_atlas(export, results, analysis):
                 raise ValueError('figure atlas caption overflow')
         page.insert_image(fitz.Rect(30, 82, 970, 735), filename=str(export / page_info['figure']), keep_proportion=True)
         page.insert_text((30, 837), f"{index+1}/{len(pages)} | 4 training subjects; within-subject holdout | 200 Hz EEG; 30 s context / 2 s anchor | {page_info['book']}", fontsize=8)
-    doc.save(export / 'TOKEN_PATTERN_ATLAS.pdf', deflate=True, garbage=4); doc.close()
-    pdf = fitz.open(export / 'TOKEN_PATTERN_ATLAS.pdf')
+    doc.save(export / filename, deflate=True, garbage=4); doc.close()
+    pdf = fitz.open(export / filename)
     checks = [dict(page=i+1, images=len(page.get_images()), vector_paths=len(page.get_drawings()), searchable_characters=len(page.get_text()))
               for i, page in enumerate(pdf)]
     if any(c['images'] != 1 or c['vector_paths'] or c['searchable_characters'] < 40 for c in checks):
         raise AssertionError('atlas bitmap/searchable-caption contract failed')
     pdf.close(); _json(export / 'pdf_verification.json', dict(status='passed', pages=checks))
+    return checks
+
+
+def assemble_state_token_atlas(export, results, analysis):
+    """PNG-only figures with searchable PDF captions and a local HTML figure index."""
+    import html
+    export = Path(export)
+    results = sorted(results, key=lambda r: (0 if '_q_so_' in r['key'] else 1, r['key']))
+    pages = [p for r in results for p in r['pages']]
+    intro = ('本图集分析已完成的200 Hz EEG / 10 Hz Hb tokenizer pilot，主模型四个S/O码本及普通量化四个码本均为K128。'
+             '只有四名训练被试；holdout为同被试父窗末段，所有图均未读取测试分区。码字由30秒上下文推断，锚点每2秒更新。'
+             '使用率覆盖全部允许滑窗；pattern仅采用不重叠输入中的完整评分片段；降维抽样及训练PCA拟合范围在相邻图注中说明。')
+    checks = _state_bitmap_pdf(export, pages, 'TOKEN_PATTERN_ATLAS.pdf')
     blocks = []
     for record in results:
         links = ' · '.join(f'<a href="#{html.escape(p["book"]+"_"+Path(p["figure"]).stem)}">{html.escape(Path(p["figure"]).stem)}</a>' for p in record['pages'])
@@ -399,6 +406,153 @@ def assemble_state_token_atlas(export, results, analysis):
                 index='index.html', pdf='TOKEN_PATTERN_ATLAS.pdf', results=[{k:r[k] for k in
                 ('key','PCA_first_two_variance','latent_participation_rank','PC1_observed_RMS_correlation',
                  'PC1_observed_mean_correlation','code_dataset_MI_bits','code_slot_MI_bits','tsne')} for r in results])
+
+
+def state_reconstruction_key(row):
+    return tuple(row[k] for k in ('modality', 'dataset', 'subject', 'record', 'parent', 'role', 'start_s', 'position'))
+
+
+def select_state_reconstruction_examples(rows):
+    """Fixed within-dataset error quantiles, with declared short-window and outlier supplements."""
+    population = [r for r in rows if r['role'] == 'within_subject_holdout']
+    valid = [r for r in population if r.get('x_nmse') is not None and np.isfinite(r['x_nmse'])]
+    selected = {}; denominators = []
+    def add(row, tag):
+        key = state_reconstruction_key(row)
+        if key not in selected:
+            selected[key] = dict(row, selection_tags=[])
+        selected[key]['selection_tags'].append(tag)
+    for modality, dataset in sorted({(r['modality'], r['dataset']) for r in population}):
+        group = sorted([r for r in valid if r['modality'] == modality and r['dataset'] == dataset],
+                       key=lambda r: (r['x_nmse'], state_reconstruction_key(r)))
+        total = sum(r['modality'] == modality and r['dataset'] == dataset for r in population)
+        denominators.append(dict(modality=modality, dataset=dataset, planned=total, available=len(group), failed=total-len(group)))
+        if not group:
+            continue
+        for quantile in (.1, .5, .9):
+            add(group[int(np.floor(quantile * (len(group) - 1) + .5))], f'P{round(quantile*100)}')
+        if dataset == 'refed':
+            short = [r for r in group if r['duration_s'] < 90]
+            if short:
+                add(short[len(short)//2], 'short-parent')
+        if dataset == 'visual_cognitive_motivation' and modality == 'hb':
+            named = [r for r in group if r['position'] == 'Probe1:CH23']
+            if named:
+                add(max(named, key=lambda r:r['x_nmse']), 'retained-high-error-position')
+    return dict(denominators=denominators, examples=list(selected.values()),
+                rule='P10/P50/P90 of hard Q-SO total-X NMSE within dataset/modality; nearest rank; declared supplements; no replacement of failed rows')
+
+
+def state_reconstruction_metrics(target, predicted, mask, training_variance):
+    """Per-color/sample-supported errors in the frozen coordinates, with undefined correlations retained."""
+    y, estimate = np.asarray(target, float), np.asarray(predicted, float)
+    mask, variance = np.asarray(mask, bool), np.asarray(training_variance, float)
+    if y.ndim != 2 or y.shape != estimate.shape or mask.shape != y.shape or variance.shape != (y.shape[1],):
+        raise ValueError('aligned [time, channel] arrays and fixed channel variance required')
+    if np.any(variance <= 0) or not np.isfinite(variance).all() or not np.isfinite(y[mask]).all() or not np.isfinite(estimate[mask]).all():
+        raise ValueError('finite scored values and positive variance required')
+    per_channel = []
+    for c in range(y.shape[1]):
+        a, b = y[:, c][mask[:, c]], estimate[:, c][mask[:, c]]
+        if not len(a):
+            raise ValueError('empty scored support')
+        nmse = float(np.mean((b-a)**2)/variance[c])
+        correlation = float(np.corrcoef(a,b)[0,1]) if np.std(a)>0 and np.std(b)>0 else None
+        per_channel.append(dict(valid_samples=len(a), NMSE=nmse, NRMSE=float(np.sqrt(nmse)),
+            correlation=correlation, bias_in_training_SD=float(np.mean(b-a)/np.sqrt(variance[c]))))
+    return dict(channels=per_channel, NMSE=float(np.mean([x['NMSE'] for x in per_channel])),
+                NRMSE=float(np.sqrt(np.mean([x['NMSE'] for x in per_channel]))))
+
+
+def render_state_reconstruction_case(export, key):
+    import resource
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    from matplotlib.patches import Patch
+    from threadpoolctl import threadpool_limits
+    threadpool_limits(limits=1)
+    began=time.monotonic();export=Path(export)
+    info=json.loads((export/(key+'.json')).read_text())
+    with np.load(export/(key+'.npz')) as f:arrays=dict(f)
+    rate=info['rate'];t=np.arange(len(arrays['x']))/rate
+    short={'eeg_fnirs_single_trial':'Single-Trial','refed':'REFED','simultaneous_eeg_nirs':'Simultaneous','visual_cognitive_motivation':'Visual'}
+    name=short[info['dataset']];tags=', '.join(info['selection_tags'])
+    plt.rcParams.update({'font.size':10,'axes.labelsize':10,'xtick.labelsize':9,'ytick.labelsize':9})
+    fig,axes=plt.subplots(3,2,figsize=(14,10.4))
+    fig.subplots_adjust(left=.075,right=.985,bottom=.06,top=.84,hspace=.52,wspace=.22)
+    fig.suptitle(f"{info['modality'].upper()} | {name} | {info['subject']} | {info['record']} | {info['position']} | {tags}",fontsize=14,y=.985)
+    fig.text(.5,.947,f"Observed input: whole 0–30 s | parent interval [{info['start_s']},{info['start_s']+30}) s | "
+             f"{rate} Hz | amplitudes use frozen training X scale",ha='center',fontsize=10.5)
+    colors=['#343a40','#0072B2','#D55E00'];handles=[]
+    for i,component in enumerate(('s','o','x')):
+        target=arrays[component];hard=arrays['hard_'+component];continuous=arrays['continuous_'+component]
+        title={'s':'S target / reconstruction','o':'O target / reconstruction','x':'X / reconstructed S+O'}[component]
+        if info['modality']=='hb':
+            finite=np.concatenate([a[np.isfinite(a)] for a in (target,hard,continuous)])
+            lo,hi=float(finite.min()),float(finite.max());pad=max(.06*(hi-lo),.01)
+        for j,ax in enumerate(axes[i]):
+            channel=j if info['modality']=='hb' else 0
+            begin,end=(14.,16.) if info['modality']=='eeg' and j else (0.,30.)
+            take=(t>=begin)&(t<end)
+            lines=[]
+            for value,color,style,width,label in [(target,colors[0],'-',.85,'Target / observed X'),
+                    (hard,colors[1],'-',1.0,'Q-SO integer-ID decode'),
+                    (continuous,colors[2],'--',.95,'Continuous S/O student')]:
+                lines.append(ax.plot(t[take],value[take,channel],color=color,ls=style,lw=width,label=label)[0])
+            if not handles:handles=lines
+            invalid=~arrays['mask'][:,channel];edges=np.diff(np.r_[False,invalid,False].astype(int))
+            for a,b in zip(np.flatnonzero(edges==1),np.flatnonzero(edges==-1)):
+                ax.axvspan(a/rate,b/rate,color='#b9bfc6',alpha=.35,zorder=0)
+            for boundary in np.arange(2,30,2):
+                if begin<boundary<end:ax.axvline(boundary,color='#9da6ad',lw=.45,ls=':',alpha=.5)
+            ax.axhline(0,color='#777',lw=.5,alpha=.5)
+            h=info['metrics']['hard'][component]['channels'][channel]
+            c=info['metrics']['continuous'][component]['channels'][channel]
+            def value(x):return 'NA' if x is None else f'{x:.3f}'
+            if info['modality']=='eeg':
+                head=title+(' | full 30 s' if j==0 else ' | central 2 s, own y scale')
+            else:head=title+' | '+('HbO' if j==0 else 'HbR')
+            ax.set_title(head+f"\n30 s NRMSE hard/cont: {h['NRMSE']:.3f}/{c['NRMSE']:.3f}; r: {value(h['correlation'])}/{value(c['correlation'])}",fontsize=10)
+            ax.set(xlabel='Time within visible input (s)',ylabel='Amplitude / training X scale',xlim=(begin,end))
+            if info['modality']=='hb':ax.set_ylim(lo-pad,hi+pad)
+            ax.grid(alpha=.17)
+    handles.append(Patch(facecolor='#b9bfc6',alpha=.35,label='Unscored source / filter support'))
+    fig.legend(handles=handles,loc='upper center',bbox_to_anchor=(.5,.924),ncol=4,fontsize=9,frameon=False)
+    figure=key+'.png';fig.savefig(export/figure,dpi=220);plt.close(fig)
+    caption=(f"{name}，{info['subject']}，{info['record']}，{info['position']}；父窗{info['duration_s']:g}秒中的[{info['start_s']},{info['start_s']+30})秒。"
+        '黑线为缓存条件S/O目标或原始观测X，蓝线为完整15-ID序列解码，橙虚线为独立训练的连续学生；模型仅见本模态30秒X。'
+        'NRMSE使用对应分量/色团的冻结训练方差，r为相关；两者均按完整30秒有效掩码计算。灰区不计分。'
+        +('EEG右列固定放大14–16秒并独立设置纵轴；放大图未重新拟合。' if info['modality']=='eeg' else 'HbO/HbR分列，同一分量共用纵轴。'))
+    page=dict(figure=figure,title=f"{info['modality'].upper()} · {name} · {info['position']} · {','.join(info['selection_tags'])}",
+              caption=caption,book=key,category='reconstruction')
+    # Long supplement labels remain visible in the figure and case metadata; keep the PDF title compact.
+    if any(len(tag)>15 for tag in info['selection_tags']):page['title']=f"{info['modality'].upper()} · {name} · {info['position']} · 补充样例"
+    return dict(status='completed',key=key,page=page,seconds=time.monotonic()-began,
+                peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+
+
+def assemble_state_reconstruction_atlas(export, results, plan):
+    import html
+    export=Path(export);results=sorted(results,key=lambda r:r['key']);pages=[r['page'] for r in results]
+    checks=_state_bitmap_pdf(export,pages,'SO_RECONSTRUCTION_ATLAS.pdf')
+    blocks=[];table=[]
+    for r in results:
+        info=json.loads((export/(r['key']+'.json')).read_text());page=r['page']
+        identity=f"{info['modality'].upper()} / {info['dataset']} / {info['record']} / {info['position']} / {','.join(info['selection_tags'])}"
+        table.append('<tr><td><a href="#'+r['key']+'">'+html.escape(identity)+'</a></td>'+''.join(
+            f"<td>{info['metrics']['hard'][c]['NRMSE']:.3f} / {info['metrics']['continuous'][c]['NRMSE']:.3f}</td>" for c in ('s','o','x'))+'</tr>')
+        blocks.append(f'<section id="{r["key"]}"><h2>{html.escape(page["title"])}</h2><a href="{page["figure"]}"><img loading="lazy" src="{page["figure"]}"></a><p>{html.escape(page["caption"])}</p><p><a href="{r["key"]}.json">身份、误差与核验</a> · <a href="{r["key"]}.npz">完整曲线、latent、整数ID与掩码</a></p></section>')
+    intro=('本图集直接比较冻结tokenizer的S、O输出及两支之和。蓝线来自K128硬量化模型的整数ID解码；橙虚线来自独立训练、等曝光500步的连续S/O学生。'
+           '两者输入均为本模态完整30秒观测，绘图没有重新拟合、平滑或逐窗重新定标。S/O目标是缓存条件估计及残差；原始X采用统一200Hz EEG或10Hz Hb视图。'
+           '样例按每库每模态的Q-SO总X误差P10/P50/P90选取，另补充REFED短窗和Visual Probe1:CH23；排序单位是位置×窗口，选例用于解释。'
+           'holdout为四名训练被试各父窗的留出时间块；完整候选分母保存在selection.json。')
+    table_html='<table><tr><th>样例</th><th>S NRMSE：硬/连续</th><th>O NRMSE：硬/连续</th><th>X NRMSE：硬/连续</th></tr>'+''.join(table)+'</table>'
+    style='body{font:16px/1.7 system-ui,sans-serif;background:#edf1f5;color:#17283a;margin:0}main{max-width:1500px;margin:auto;padding:20px}section{background:white;margin:18px 0;padding:24px;border-radius:8px}img{width:100%;height:auto}a{color:#126da1}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:8px;border-bottom:1px solid #d5dce4;text-align:left}'
+    (export/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>S/O与总信号重建曲线</title><style>'+style+'</style><main><section><h1>S/O目标与双分支总重建：逐窗对比</h1><p>'+intro+'</p><p><a href="SO_RECONSTRUCTION_ATLAS.pdf">完整PDF图集</a> · <a href="selection.json">选例规则与分母</a></p>'+table_html+'</section>'+''.join(blocks)+'</main></html>',encoding='utf-8')
+    _json(export/'figure_index.json',dict(pages=pages,selection=plan['rule']))
+    return dict(status='completed',cases=len(results),figures=len(pages),pdf_pages=len(checks),
+                pdf='SO_RECONSTRUCTION_ATLAS.pdf',index='index.html',new_training=False)
 
 
 def separation_wave_metrics(x,s,o,scale,eog=None):
