@@ -32,6 +32,37 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## Matched Hb single-ID shape sequence — 2026-11-13
+
+The [retained summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/summary.json)
+records the E0/R2/continuous reference analysis and the matched E1/E3/E4 seed-17
+contrasts under the
+[versioned contract](configs/physiology_semantic_tokenizer/dual_component_hb_id_shape_v1.yaml).
+The package retains final checkpoints, training-only readout fits, all code groups,
+per-color reconstruction metrics, same-patch context comparisons, source snapshots,
+and the [independent numerical audit](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/verification.json).
+The fixed Hb example atlases for
+[E1](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/analysis/E1_seed_17/fixed_cases/fixed_cases.html),
+[E3](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/analysis/E3_seed_17/fixed_cases/fixed_cases.html), and
+[E4](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/analysis/E4_seed_17/fixed_cases/fixed_cases.html)
+preserve the parent example identities and compare full reconstructions with
+their centered shapes and slopes. Conditional E2 and repeat decisions are retained
+alongside the complete negative promotion results.
+
+On this four-subject development panel, E3 reduced the two-color Hb-S shape
+and slope errors by 3.82% and 3.63%, below the frozen 10% criterion. E4 reduced
+single-ID heldout real-shape prediction error by 27.58%, while HbR S and total
+signal NMSE increased by 17.90% and 21.00%; it did not qualify for promotion.
+E1 improved HbO shape/slope errors by 9.16%/8.17%, but increased HbO O-component
+NMSE by 10.47%, so E2 was not triggered. Neither joint candidate triggered seed
+repeats or unused-training-subject validation. The retained reference is E0.
+
+The Git reading package includes the summary, contract and launch identities,
+software/synthetic and independent numerical checks, final training summaries,
+code-health records, real-group figures and selected fixed-example panels.
+Full checkpoints, arrays, source snapshots and complete HTML atlases remain in
+the local run directory at their original paths.
+
 ## Bounded tokenizer dynamics iteration — 2026-11-13
 
 The [retained summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/summary.json)

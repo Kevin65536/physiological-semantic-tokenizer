@@ -30,7 +30,7 @@ STEPS = 900
 STUDENT = slice(300, 500)
 
 
-def state_pilot_plan(cache_root, spec, source_ssm):
+def state_pilot_plan(cache_root, spec, source_ssm, *, excluded_subjects=(), include_short_refed=True):
     """Metadata-first, training-only small panel from the completed S/O cache."""
     from .so_supervision_cache import SOSupervisionDataset
     root = Path(cache_root).resolve()
@@ -52,7 +52,8 @@ def state_pilot_plan(cache_root, spec, source_ssm):
     reader = SOSupervisionDataset(root, split='train')
     selected = []
     for dataset in spec['datasets']:
-        population = [r for r in reader.windows if r['dataset'] == dataset]
+        population = [r for r in reader.windows if r['dataset'] == dataset
+                      and (r['dataset'], r['subject']) not in excluded_subjects]
         if not population:
             raise ValueError('missing planned training dataset')
         subject = min(r['subject'] for r in population)
@@ -71,7 +72,7 @@ def state_pilot_plan(cache_root, spec, source_ssm):
         if not full:
             raise ValueError('selected training subject lacks a full source window')
         selected.append(dict(min(full, key=order), role='first_full'))
-        if dataset == 'refed':
+        if dataset == 'refed' and include_short_refed:
             short = [r for r in candidates if 30 <= r['metadata']['source']['duration_s'] < 90]
             if not short:
                 raise ValueError('selected REFED subject lacks short-window coverage')

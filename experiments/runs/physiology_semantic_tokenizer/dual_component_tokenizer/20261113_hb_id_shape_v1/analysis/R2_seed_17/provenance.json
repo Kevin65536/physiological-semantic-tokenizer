@@ -1,0 +1,444 @@
+{
+  "source_config": {
+    "schema": "dual_component_state_iteration_v1",
+    "experiment_id": "TK-STATE-DYNAMICS-v1-R2",
+    "base_contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+    "parent_run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1",
+    "data": {
+      "allowed_splits": [
+        "train"
+      ],
+      "scope": "exact_parent_four_training_subjects_five_windows",
+      "test_access": "forbidden",
+      "protected_data": "forbidden",
+      "teacher_refits": false,
+      "cache_reuse": "unchanged_200Hz_EEG_10Hz_Hb_arrays_scales_and_masks",
+      "evaluation": "same_within_subject_holdout_now_explicit_development_after_previous_inspection"
+    },
+    "architectures": {
+      "fast_ema": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "ema_decay": 0.95
+      },
+      "shape_loss": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "shape_weight": 0.2
+      }
+    },
+    "training": {
+      "seeds": [
+        17,
+        29
+      ],
+      "candidates": [
+        "vq128"
+      ],
+      "modalities": [
+        "eeg",
+        "hb"
+      ],
+      "warmup_steps": 1000,
+      "continuation_steps": 3000,
+      "checkpoint_every": 500,
+      "batch_size": 64,
+      "learning_rate": 0.0003,
+      "weight_decay": 0.0001,
+      "gradient_clip": 5.0,
+      "initialization_per_dataset": 64,
+      "ema_decay": 0.99,
+      "dead_code_threshold": 0.1,
+      "revival_stop_after_steps": 1500,
+      "max_revivals_per_event": 8,
+      "target_difference_variance_floor_fraction": 0.0001,
+      "stopping": "3000 hard updates from retained 1000-step waveform warmup; no checkpoint selection"
+    },
+    "evaluation": {
+      "primary": "paired_dataset_equal_X_S_O_NMSE_on_original_complete_holdout_panel",
+      "secondary": "per_color_correlation_amplitude_signed_boundary_error_and_delta_error",
+      "diagnostic": "train_holdout_gap_code_occupancy_effective_codes_revival_and_frozen_integer_replay",
+      "baseline": "retained_500step_pilot_and_equal_exposure_dense_long_same_K",
+      "None": "no_improvement_in_either_modality_or_component_degradation_or_health_collapse",
+      "engineering_goal": "at_least_20percent_lower_macro_X_NMSE_in_both_modalities_and_no_more_than_5percent_worse_macro_S_or_O",
+      "selection": "report_all_terminal_models_rank_by_mean_relative_S_O_X_error_within_modality_no_checkpoint_selection",
+      "examples": "exact_27_parent_reconstruction_examples_no_reselection_by_new_error",
+      "code_rate": "one_ID_per_branch_per_2s_K128_7bits_per_s_K512_9bits_per_s",
+      "health": "report_full_training_crop_and_holdout_counts_by_dataset_branch_no_threshold_changed_after_results",
+      "health_screen": {
+        "pooled_minimum_active_fraction": 0.8,
+        "pooled_minimum_effective_fraction": 0.5,
+        "pooled_maximum_top1": 0.15,
+        "dataset_minimum_effective_fraction": 0.1,
+        "dataset_maximum_top1": 0.35
+      },
+      "training_monitor": "fixed_128_training_examples_every_500_steps_with_EMA_frozen"
+    },
+    "resources": {
+      "devices": [
+        "cuda:0",
+        "cuda:1"
+      ],
+      "workers_per_device_candidates": [
+        1,
+        2
+      ],
+      "benchmark_steps": 100,
+      "torch_threads": 2,
+      "numerical_threads": 1,
+      "max_worker_gpu_memory_GiB": 4,
+      "supervisor": "user_systemd_linger",
+      "workers_per_device": 1,
+      "reason": "two independent unchanged-size models on separate GPUs; retained benchmark supports two per GPU but current free VRAM about 3 GiB/card and only two jobs ready"
+    },
+    "claim_limits": [
+      "engineering_development_on_previously_viewed_training_subject_holdout",
+      "waveforms_plus_width_plus_objective_form_one_package_not_single_factor_attribution",
+      "no_continuous_sidecars_or_raw_X_skip_into_hard_decoder",
+      "preserve_S_O_targets_masks_and_all_outlier_positions",
+      "no_new_independent_subject_or_physiology_acceptance"
+    ],
+    "round": 2,
+    "baseline_diagnostics": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline",
+    "fixed_examples": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/selection.json",
+    "initialization": {
+      "run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1",
+      "contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+      "architecture": "waveform",
+      "seed": 17,
+      "steps": 1000,
+      "optimizer": "fresh",
+      "exposure": "shared original continuous warmup; independent fixed 3000 hard updates"
+    },
+    "confirmation_seed": 29,
+    "budget": {
+      "max_rounds": 3,
+      "max_candidate_configs": 6,
+      "max_training_jobs": 8,
+      "max_job_steps": 4000,
+      "wall_hours": 4,
+      "started": "2026-11-13T11:07:59+00:00",
+      "reserved_confirmation_jobs": 2
+    },
+    "promotion": {
+      "primary": {
+        "hb": "shape_nmse",
+        "eeg": "NMSE"
+      },
+      "minimum_relative_improvement": 0.1,
+      "maximum_component_nmse_regression": 0.05,
+      "maximum_dataset_component_nmse_regression": 0.25,
+      "hb_dynamic": "mean relative S/O/X shape error and 2 s slope error each <=0.90; 6 s and fixed figures checked",
+      "eeg_dynamic": "waveform and spectrum inspection; primary is macro mean relative S/O/X error because voltage oscillations are not characterized by OLS slopes",
+      "health": "all retained pooled and dataset rules on full train and holdout; report stop=1500 and final=3000",
+      "replay": "existing atol=2e-6 rtol=1e-5; finite every model",
+      "visual": "must inspect fixed overview, difficult cases and patterns; no new plateaus, false slopes or jitter",
+      "confirmation": "one extra seed per fully eligible modality; same rules against seed17 parent; shared warmup explicitly retained"
+    },
+    "tasks": [
+      {
+        "modality": "eeg",
+        "architecture": "fast_ema",
+        "candidate": "vq128",
+        "seed": 17
+      },
+      {
+        "modality": "hb",
+        "architecture": "shape_loss",
+        "candidate": "vq128",
+        "seed": 17
+      }
+    ],
+    "experiment_card": {
+      "eeg": {
+        "observed_failure": "R1 slow encoder fixes code health but mean relative reconstruction error increases 1.8%; O/X underfit",
+        "evidence": "round_1/decision.json and full stop/final usage",
+        "hypothesis": "EMA lag can be reduced without slowing encoder learning, retaining fit capacity and vocabulary use",
+        "only_change": "EMA decay 0.99 -> 0.95 (effective memory about 100 -> 20 updates), encoder LR restored to original parent .0003",
+        "control": "original waveform vq128; all losses/width/K unchanged; same retained waveform warmup",
+        "fixed_budget": "1000 shared +3000 new hard updates",
+        "expected": "mean relative S/O/X NMSE <=.9",
+        "guardrails": {
+          "primary": {
+            "hb": "shape_nmse",
+            "eeg": "NMSE"
+          },
+          "minimum_relative_improvement": 0.1,
+          "maximum_component_nmse_regression": 0.05,
+          "maximum_dataset_component_nmse_regression": 0.25,
+          "hb_dynamic": "mean relative S/O/X shape error and 2 s slope error each <=0.90; 6 s and fixed figures checked",
+          "eeg_dynamic": "waveform and spectrum inspection; primary is macro mean relative S/O/X error because voltage oscillations are not characterized by OLS slopes",
+          "health": "all retained pooled and dataset rules on full train and holdout; report stop=1500 and final=3000",
+          "replay": "existing atol=2e-6 rtol=1e-5; finite every model",
+          "visual": "must inspect fixed overview, difficult cases and patterns; no new plateaus, false slopes or jitter",
+          "confirmation": "one extra seed per fully eligible modality; same rules against seed17 parent; shared warmup explicitly retained"
+        },
+        "stopping": "terminal 3000 updates; no extension"
+      },
+      "hb": {
+        "observed_failure": "both continuous and hard have substantial S/O shape error; R1 drift reduction worsens level reconstruction",
+        "evidence": "baseline dynamic metrics, REFED CH14 full/centered/slope figures, R1 failure",
+        "hypothesis": "absolute reconstruction underweights small within-patch trajectories; an explicit masked shape projection can improve slopes without removing level supervision",
+        "only_change": "add 0.2 times mean S/O/X centered 2-second error normalized by frozen training centered variance, floor=.01 times respective target variance; no input centering",
+        "control": "original waveform vq128; architecture, full LR and existing losses unchanged; original continuous reference retains original objective",
+        "fixed_budget": "1000 shared original-objective warmup +3000 new hard updates",
+        "expected": "mean relative S/O/X shape and 2-second slope NMSE <=.9",
+        "guardrails": {
+          "primary": {
+            "hb": "shape_nmse",
+            "eeg": "NMSE"
+          },
+          "minimum_relative_improvement": 0.1,
+          "maximum_component_nmse_regression": 0.05,
+          "maximum_dataset_component_nmse_regression": 0.25,
+          "hb_dynamic": "mean relative S/O/X shape error and 2 s slope error each <=0.90; 6 s and fixed figures checked",
+          "eeg_dynamic": "waveform and spectrum inspection; primary is macro mean relative S/O/X error because voltage oscillations are not characterized by OLS slopes",
+          "health": "all retained pooled and dataset rules on full train and holdout; report stop=1500 and final=3000",
+          "replay": "existing atol=2e-6 rtol=1e-5; finite every model",
+          "visual": "must inspect fixed overview, difficult cases and patterns; no new plateaus, false slopes or jitter",
+          "confirmation": "one extra seed per fully eligible modality; same rules against seed17 parent; shared warmup explicitly retained"
+        },
+        "stopping": "terminal 3000 updates; no extension"
+      }
+    }
+  },
+  "signature": {
+    "config": "a28edb232c3ba520cd9f2ca8",
+    "parent": "3450dcf84d89c6e80ae5d6dd",
+    "name": "shape_loss__vq128",
+    "modality": "hb",
+    "seed": 17,
+    "budget": 3000,
+    "benchmark": false
+  },
+  "analysis_config": {
+    "schema": "dual_component_hb_id_shape_v1",
+    "experiment_id": "TK-HB-ID-SHAPE-v1",
+    "base_contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml",
+    "parent_run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1",
+    "output_namespace": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer",
+    "data": {
+      "allowed_splits": [
+        "train"
+      ],
+      "scope": "exact_parent_four_training_subjects_five_windows",
+      "test_access": "forbidden",
+      "protected_data": "forbidden",
+      "teacher_refits": false,
+      "raw_reads": false,
+      "evaluation": "fixed_disjoint_development_block_in_same_training_subjects",
+      "cache_reuse": "unchanged_10Hz_Hb_X_S_O_masks_training_scales",
+      "eeg": "reuse_retained_models_no_training"
+    },
+    "architectures": {
+      "E0": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "shape_weight": 0.0
+      },
+      "E1": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "shape_weight": 0.0,
+        "supervision_color_weights": [
+          1.0,
+          0.0
+        ]
+      },
+      "E2": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "shape_weight": 0.0,
+        "supervision_color_weights": [
+          1.0,
+          0.0
+        ],
+        "input_color_weights": [
+          1.0,
+          0.0
+        ]
+      },
+      "E3": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "shape_weight": 0.0,
+        "hb_s_shape_weight": 0.06666666666666667,
+        "hb_s_shape_location": "main_decoder"
+      },
+      "E4": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "shape_weight": 0.0,
+        "hb_s_shape_weight": 0.06666666666666667,
+        "hb_s_shape_location": "single_id",
+        "code_shape_head": true
+      }
+    },
+    "training": {
+      "seeds": [
+        17,
+        29,
+        43
+      ],
+      "candidates": [
+        "vq128"
+      ],
+      "modalities": [
+        "hb"
+      ],
+      "warmup_steps": 1000,
+      "continuation_steps": 3000,
+      "checkpoint_every": 500,
+      "batch_size": 64,
+      "learning_rate": 0.0003,
+      "weight_decay": 0.0001,
+      "gradient_clip": 5.0,
+      "initialization_per_dataset": 64,
+      "ema_decay": 0.99,
+      "dead_code_threshold": 0.1,
+      "revival_stop_after_steps": 1500,
+      "max_revivals_per_event": 8,
+      "target_difference_variance_floor_fraction": 0.0001,
+      "stopping": "final_checkpoint_only_no_extension_or_retry_max_eight_new_full_training_tasks",
+      "sample_order": "same_seed_plus_1000_hard_sampler_and_seed_warmup_sampler"
+    },
+    "initialization": {
+      "run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1",
+      "contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml",
+      "architecture": "waveform",
+      "seed": 17,
+      "shared": "E0_E3_E4_original_warmup_shape_loss_only_in_hard_stage",
+      "ablations": "E1_E2_separate_matched_warmup_with_same_input_and_supervision_ablation",
+      "repeats": "fresh_initialization_and_full_warmup_per_seed_E0_shared_with_selected_joint_candidate"
+    },
+    "references": {
+      "E0": {
+        "architecture": "waveform",
+        "candidate": "vq128"
+      },
+      "continuous": {
+        "architecture": "waveform",
+        "candidate": "continuous"
+      },
+      "R2": {
+        "run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/round_2",
+        "contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r2_v1.yaml",
+        "architecture": "shape_loss",
+        "candidate": "vq128"
+      }
+    },
+    "fixed_examples": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1/evaluation_export_v3/selection.json",
+    "evaluation": {
+      "primary": "Hb_S_two_color_shape_and_2s_slope_and_train_prototype_single_ID_development_error",
+      "secondary": "each_color_S_O_X_NMSE_NRMSE_6s_trend_RMS_slope_gain_boundary_error",
+      "diagnostic": "real_code_groups_neighbor_and_full_sequence_readout_context_stability_seed_reproducibility",
+      "baseline": "original_waveform_K128_exact_checkpoint_reuse",
+      "None": "no_joint_reconstruction_and_single_ID_shape_improvement",
+      "aggregation": "positions_within_record_records_within_dataset_datasets_equal_colors_separate",
+      "shape_scale": "max_training_masked_centered_patch_second_moment_and_0.01_target_variance_per_position_color",
+      "slope_scale": "training_2s_or_6s_target_slope_second_moment_floor_0.01_target_variance_over_seconds_squared",
+      "readout": "train_nonoverlapping_contexts_fit_only_fixed_alpha_1_ridge_and_weighted_code_prototypes",
+      "low_support_train_patches": 20,
+      "selected_codes": "top_four_training_frequency_ties_ascending_ID_then_frozen_for_development",
+      "context_stability": "same_physical_patch_all_valid_2s_grid_training_contexts_no_cross_split",
+      "uncertainty": "descriptive_record_level_no_patch_as_independent_subject",
+      "health_screen": {
+        "pooled_minimum_active_fraction": 0.8,
+        "pooled_minimum_effective_fraction": 0.5,
+        "pooled_maximum_top1": 0.15,
+        "dataset_minimum_effective_fraction": 0.1,
+        "dataset_maximum_top1": 0.35
+      }
+    },
+    "sequence": {
+      "first_seed": 17,
+      "stage_A": "frozen_E0_R2_continuous_common_analysis_before_training",
+      "stage_B": [
+        "E1",
+        "E3",
+        "E4"
+      ],
+      "E2_trigger": {
+        "minimum_HbO_S_shape_and_slope_improvement": 0.1,
+        "maximum_HbO_component_NMSE_regression": 0.05,
+        "rule": "both_dynamic_metrics_and_all_three_reconstruction_guards"
+      },
+      "stage_C_seeds": [
+        29,
+        43
+      ],
+      "maximum_new_training_tasks": 8,
+      "promotion": {
+        "minimum_relative_improvement": 0.1,
+        "maximum_color_component_NMSE_regression": 0.05,
+        "maximum_dataset_color_component_NMSE_regression": 0.25,
+        "maximum_either_color_primary_regression": 0.0,
+        "minimum_improved_datasets": 3,
+        "maximum_boundary_energy_fraction_increase": 0.02,
+        "minimum_RMS_gain_ratio": 0.9,
+        "E4_minimum_extra_single_ID_improvement_over_E3": 0.05,
+        "E4_tie_rule": "prefer_E3_when_both_qualify_and_E4_extra_real_single_ID_gain_below_5percent",
+        "health": "all_retained_train_and_development_S_O_rules",
+        "replay": "atol_2e-6_rtol_1e-5"
+      },
+      "independent_training_subjects": {
+        "condition": "one_joint_candidate_passes_seed17_and_two_full_seed_repeats",
+        "selection": "first_lexical_completed_training_subject_per_dataset_excluding_original_panel_first_full_native_record_window",
+        "reference": "frozen_E0_and_selected_seed17_no_teacher_or_tokenizer_refit"
+      }
+    },
+    "resources": {
+      "devices": [
+        "cuda:0",
+        "cuda:1"
+      ],
+      "workers_per_device_candidates": [
+        1,
+        2
+      ],
+      "benchmark_steps": 100,
+      "torch_threads": 2,
+      "numerical_threads": 1,
+      "max_worker_gpu_memory_GiB": 4,
+      "supervisor": "user_systemd_linger",
+      "evaluation_device": "cpu"
+    },
+    "claim": "engineering_test_of_joint_local_shapes_with_30s_encoder_and_decoder_context"
+  },
+  "source_root": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/source",
+  "data_partition": "train subjects; disjoint development input block",
+  "metric_scale": "fixed training prefix; shape and slopes use separate training second moments",
+  "target": "conditional SSM-derived S/O; not measured latent truth",
+  "primary_counts": {
+    "subjects": 4,
+    "records": 5
+  }
+}

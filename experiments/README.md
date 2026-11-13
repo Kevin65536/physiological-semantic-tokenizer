@@ -890,6 +890,18 @@ For a chromophore-separated reading atlas, the analysis owner's
 reads retained diagnostic arrays, verifies paired sample/target identity and saves
 its reproduction command. Code selection uses only complete training patches.
 
+The matched Hb local-shape sequence uses
+[`dual_component_hb_id_shape_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_hb_id_shape_v1.yaml)
+with the existing runner: `--stage check`, `--stage synthetic --output <fresh-run>`,
+then supervised `--stage hb-shape-sequence --output <same-run>`. Its controller
+first analyzes the retained waveform K128, continuous and R2 references, measures
+worker throughput, and schedules the declared channel and shape-loss contrasts.
+The contract owns conditional E2/repeat selection and the training budget.
+Analysis keeps both colors separate and compares reconstruction, real ID groups,
+training-fitted ID/sequence readouts and same-patch context stability. Targeted
+coverage is in `test_dual_component_state.py`, including channel coefficients,
+input ablation, single-ID-only gradients, shared/fresh warmups and readout leakage.
+
 The 30-second global latent health pilot uses the same dual-component runner
 with [`dual_component_latent_health_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml).
 Run `--stage check`, `--stage synthetic --output <fresh-run>`, then supervised

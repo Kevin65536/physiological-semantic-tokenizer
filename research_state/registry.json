@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-13T11:59:45.635677+00:00",
+  "updated_at": "2026-11-13T14:45:51.433711+00:00",
   "tracks": [
     {
       "id": "main",
@@ -6633,6 +6633,66 @@
       "label": "Tokenizer有界迭代：R3 contract",
       "path": "experiments/configs/physiology_semantic_tokenizer/dual_component_state_iteration_r3_v1.yaml",
       "role": "protocol"
+    },
+    {
+      "id": "e.tk_hb_id_shape_contract",
+      "label": "Hb单ID联合形态实验合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/dual_component_hb_id_shape_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_hb_id_shape_launch",
+      "label": "Hb单ID实验后台启动",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tk_hb_id_shape_controller",
+      "label": "Hb单ID实验控制器",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/controller.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tk_hb_id_shape_software",
+      "label": "Hb单ID实验软件验证",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/software_validation.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_hb_id_shape_synthetic",
+      "label": "Hb单ID实验合成整数重放",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/synthetic.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_hb_id_shape_summary",
+      "label": "Hb单ID形态匹配实验结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_hb_id_shape_verification",
+      "label": "Hb单ID形态独立数值复核",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/verification.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_hb_id_shape_stage_a",
+      "label": "Hb基线统一分析",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/stage_A.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_hb_id_shape_figures",
+      "label": "Hb单ID形态E4固定样例",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/analysis/E4_seed_17/fixed_cases/fixed_cases.html",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_hb_id_shape_visual",
+      "label": "Hb单ID形态实际看图记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/visual_review.json",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -16376,6 +16436,65 @@
       "headline": false,
       "updated_at": "2026-11-13T11:59:45.635677+00:00",
       "next_step": "本次有界迭代结束，无新基线晋级。后续最有依据的是Hb在原损失下独立检验level/slope/residual解码路径；EEG先用保留连续latent做训练集拟合的低维量化几何诊断。新训练另定有界合同。"
+    },
+    {
+      "state_id": "main.tk_hb_id_shape_v1@2026-11-13.running",
+      "entity": "main.tk_hb_id_shape_v1",
+      "label": "30秒上下文下Hb单ID联合形态对照",
+      "track": "main",
+      "order": 229,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "engineering",
+      "summary": "用户启动匹配实验序列。冻结E0原始waveform K128、1000步共享预热与既有四训练被试开发面板；E1/E3/E4首轮seed17，E2及29/43完整复验按版本化合同触发。52项相关测试、3059项默认收集和五配置合成整数重放通过。独立user-systemd服务先并行复算E0/R2/连续参照，再实测并发并训练；EEG和teacher保持既有版本。",
+      "evidence_ids": [
+        "e.tk_hb_id_shape_contract",
+        "e.tk_hb_id_shape_launch",
+        "e.tk_hb_id_shape_controller",
+        "e.tk_hb_id_shape_software",
+        "e.tk_hb_id_shape_synthetic"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.tk_state_reconstruction_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-13T14:34:27.618854+00:00",
+      "next_step": "监控tk-hb-id-shape-20261113-v1.service，完成统一分析、seed17匹配训练与条件分支，并逐组报告实际数值。"
+    },
+    {
+      "state_id": "main.tk_hb_id_shape_v1@2026-11-13.completed",
+      "entity": "main.tk_hb_id_shape_v1",
+      "label": "30秒上下文下Hb单ID联合形态对照",
+      "track": "main",
+      "order": 229,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "engineering",
+      "summary": "E1/E3/E4均完成seed17固定1000+3000步；30秒encoder/decoder、四训练被试开发面板和原始E0保持。E3两色Hb-S形态/斜率误差改善3.82%/3.63%，单ID误差仅改善0.84%。E4单ID留出真实形态误差改善27.58%，但HbR S/X NMSE退化17.90%/21.00%，未晋级。E1 HbO形态/斜率改善9.16%/8.17%，O NMSE退化10.47%，未触发E2。三模型均通过健康和整数回放；未触发多种子或新增被试验证。52项相关测试、3059项默认收集、五配置合成与独立数组复算通过，140张固定样例图及10张真实码字图保留。",
+      "evidence_ids": [
+        "e.tk_hb_id_shape_contract",
+        "e.tk_hb_id_shape_launch",
+        "e.tk_hb_id_shape_controller",
+        "e.tk_hb_id_shape_software",
+        "e.tk_hb_id_shape_synthetic",
+        "e.tk_hb_id_shape_summary",
+        "e.tk_hb_id_shape_verification",
+        "e.tk_hb_id_shape_stage_a",
+        "e.tk_hb_id_shape_figures",
+        "e.tk_hb_id_shape_visual"
+      ],
+      "supersedes": [
+        "main.tk_hb_id_shape_v1@2026-11-13.running"
+      ],
+      "depends_on": [
+        "main.tk_state_reconstruction_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-13T14:45:51.433711+00:00",
+      "next_step": "本次条件序列已结束，保留原始E0基线。后续可单独降低E4辅助形态权重，检验能否保留单ID信息收益并恢复主重建；须在新的有界合同中固定该唯一改动。"
     }
   ]
 }

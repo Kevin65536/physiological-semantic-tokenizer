@@ -787,11 +787,25 @@ class GlobalLatentComponentTokenizer(nn.Module):
             for branch in self.branches.values():
                 branch['input']=WaveformPatchInput(channels,strides,width,int(cfg['local_width']),self.patches)
                 branch['output']=WaveformPatchOutput(channels,strides,width,int(cfg['local_width']),self.patches,self.input_dim)
+        self.input_color_weights = cfg.get('input_color_weights')
+        if self.input_color_weights is not None:
+            if int(cfg['channels']) != 2 or list(self.input_color_weights) != [1., 0.]:
+                raise ValueError('Hb input ablation must retain HbO and zero HbR')
+        self.code_shape_head = None
+        if cfg.get('code_shape_head', False) and self.hard:
+            if self.input_dim != 40 or int(cfg['channels']) != 2:
+                raise ValueError('single-ID shape head requires 20 paired Hb samples')
+            # The additional head must not perturb the matched codebook RNG.
+            with torch.random.fork_rng(devices=[]):
+                self.code_shape_head = nn.Linear(latent, self.input_dim)
 
     def encode_continuous(self, values: torch.Tensor) -> dict[str, torch.Tensor]:
         if (values.ndim != 3 or tuple(values.shape[1:]) != (self.patches, self.input_dim)
                 or not values.is_floating_point() or not bool(torch.isfinite(values).all())):
             raise ValueError('complete finite [batch, declared patches, patch features] observations required')
+        if self.input_color_weights is not None:
+            weights = values.new_tensor(self.input_color_weights).repeat(self.input_dim // 2)
+            values = values * weights
         return {c: b['to_latent'](b['encoder'](b['input'](values) + self.position))
                 for c, b in self.branches.items()}
 
@@ -820,6 +834,9 @@ class GlobalLatentComponentTokenizer(nn.Module):
             else:
                 value = latent
             result[component] = self._decode_component(component, value)
+            if component == 'S' and self.code_shape_head is not None and use_hard:
+                shape = self.code_shape_head(value).reshape(*value.shape[:2], 20, 2)
+                result['S_shape'] = (shape - shape.mean(dim=-2, keepdim=True)).flatten(-2)
         return dict(result, sum=result['S'] + result['O'], ids=ids, latent=latents,
                     health=health, commitment=commitment / len(COMPONENTS))
 

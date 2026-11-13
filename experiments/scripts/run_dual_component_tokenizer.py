@@ -45,6 +45,7 @@ STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark
           'so-plan','so-reference','so-pilot','so-produce','so-verify',
           'state-plan', 'state-prepare', 'state-benchmark', 'state-one', 'state-pilot', 'state-visualize', 'state-reconstruction',
           'state-refine', 'state-refine-one', 'state-refine-report', 'state-diagnose', 'state-confirm', 'state-iteration-summary',
+          'hb-shape-sequence',
           'latent-health-plan', 'latent-health-prepare', 'latent-health-benchmark', 'latent-health-one', 'latent-health')
 VARIANTS = ('continuous_student', 'hard_student', 'component_compression', 'smooth_hard', 'ordinary_hard')
 TERMINAL = ('completed', 'failed', 'unavailable')
@@ -87,6 +88,11 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_hb_id_shape_v1':
+        owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_hb_id_shape_v1.yaml'
+        if cfg != yaml.safe_load(owner.read_text()):
+            raise ValueError('use the frozen Hb single-ID shape contract')
+        return cfg
     if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_state_iteration_v1':
         number=cfg.get('round')
         if number not in (1,2,3):raise ValueError('bounded iteration round required')
@@ -1170,6 +1176,9 @@ def finalize_long_so_cache(out,cfg,plan,checks):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema'] == 'dual_component_hb_id_shape_v1':
+        print(json.dumps(serial(hb_shape_dispatch(args, cfg))))
+        return
     if cfg['schema'] == 'dual_component_state_iteration_v1':
         print(json.dumps(serial(state_iteration_dispatch(args,cfg))))
         return
@@ -5637,7 +5646,7 @@ def _state_refinement_cache(cfg, modality):
             var=np.where(dm,d*d,0.).sum(0)/np.maximum(count,1)-mean*mean
             floor=np.asarray(row['target_variance'][key])*cfg['training']['target_difference_variance_floor_fraction']
             row['difference_variance'][key]=np.maximum(var,floor).tolist()
-        if any(s.get('shape_weight',0)>0 for s in cfg['architectures'].values()):
+        if any(s.get('shape_weight',0)>0 or s.get('hb_s_shape_weight',0)>0 for s in cfg['architectures'].values()):
             from src.analysis.dual_component_tokenizer import state_patch_features
             row['shape_variance']={}
             for key in ('s','o','x'):
@@ -5676,6 +5685,10 @@ def _state_refinement_loss(result,batch,spec):
     import torch
     terms={};mask=batch['mask'];channels=batch['dvs'].shape[-1]
     def masked_mean(errors,valid):
+        if spec.get('supervision_color_weights') is not None:
+            weights=errors.new_tensor(spec['supervision_color_weights'])
+            weights=weights.repeat(errors.shape[-1]//channels)
+            errors=errors*weights
         return (torch.where(valid,errors,0.).flatten(1).sum(1)/valid.flatten(1).sum(1).clamp_min(1)).mean()
     for output,key in [('S','s'),('O','o'),('sum','x')]:
         terms[key]=masked_mean((result[output]-batch[key]).square()/batch['v'+key],mask)
@@ -5696,6 +5709,14 @@ def _state_refinement_loss(result,batch,spec):
             shape=shape+masked_mean((error-level).square()/batch['sv'+key][:,None,None,:],m)/3
         loss=loss+spec['shape_weight']*shape
         terms['shape']=shape
+    if spec.get('hb_s_shape_weight',0):
+        m=mask.reshape(mask.shape[0],mask.shape[1],-1,channels)
+        prediction=result['S_shape' if spec['hb_s_shape_location']=='single_id' else 'S']
+        error=(prediction-batch['s']).reshape(m.shape)
+        level=torch.where(m,error,0.).sum(2,keepdim=True)/m.sum(2,keepdim=True).clamp_min(1)
+        shape=masked_mean((error-level).square()/batch['svs'][:,None,None,:],m)
+        loss=loss+spec['hb_s_shape_weight']*shape
+        terms['hb_s_shape']=shape
     return loss,dict(terms,derivative=derivative)
 
 
@@ -5726,7 +5747,8 @@ def _state_refinement_usage(model,rows,arrays,device):
 
 def train_state_refinement(cfg,out,modality,name,device,benchmark_steps=None,seed=17):
     import torch
-    architecture,candidate=name.split('__');spec=cfg['architectures'][architecture];training=cfg['training']
+    architecture,candidate=name.split('__');spec=dict(cfg['architectures'][architecture]);training=cfg['training']
+    if candidate=='warmup':spec['hb_s_shape_weight']=0.
     if candidate not in ['warmup',*training['candidates']] or seed not in training['seeds']:
         raise ValueError('candidate or seed outside fixed matrix')
     if benchmark_steps is not None and benchmark_steps!=cfg['resources']['benchmark_steps']:
@@ -5758,7 +5780,9 @@ def train_state_refinement(cfg,out,modality,name,device,benchmark_steps=None,see
                 start,history=saved['step'],saved['history'];rng.bit_generator.state=saved['numpy_rng'];torch.set_rng_state(saved['torch_rng'].cpu())
                 if device.startswith('cuda'):torch.cuda.set_rng_state(saved['cuda_rng'].cpu(),device)
             elif candidate!='warmup' and benchmark_steps is None:
-                if cfg['schema']=='dual_component_state_iteration_v1':
+                if cfg['schema']=='dual_component_hb_id_shape_v1':
+                    warm,init_cfg=_hb_shape_warmup_source(cfg,out,architecture,seed)
+                elif cfg['schema']=='dual_component_state_iteration_v1':
                     init=cfg['initialization'];warm=SOURCE/init['run']/'models'/modality/(init['architecture']+'__warmup')/f"seed_{init['seed']}"
                     init_cfg=read_config(SOURCE/init['contract'])
                 else:
@@ -5768,7 +5792,9 @@ def train_state_refinement(cfg,out,modality,name,device,benchmark_steps=None,see
                 if (saved['signature']['config']!=identity(init_cfg) or saved['step']!=training['warmup_steps']
                         or saved['signature']['parent']!=manifest['plan_identity']):raise ValueError('warmup mismatch')
                 loaded=model.load_state_dict({k:v for k,v in saved['model_state'].items() if '.quantizer.' not in k},strict=False)
-                if loaded.unexpected_keys or any('.quantizer.' not in k for k in loaded.missing_keys):raise ValueError('warmup architecture changed')
+                if loaded.unexpected_keys or any('.quantizer.' not in k and not (
+                        cfg['schema']=='dual_component_hb_id_shape_v1' and k.startswith('code_shape_head.'))
+                        for k in loaded.missing_keys):raise ValueError('warmup architecture changed')
             if model.hard and not bool(model.branches['S']['quantizer'].initialized):
                 examples=_state_sample(np.random.default_rng(seed+9000),rows,4*training['initialization_per_dataset'])
                 model.initialize_codebooks(_state_batch(rows,arrays,examples,device)['x'])
@@ -5828,12 +5854,16 @@ def train_state_refinement(cfg,out,modality,name,device,benchmark_steps=None,see
             raise
 
 
-def _state_refinement_jobs(cfg,args,jobs,workers,benchmark_name=None):
+def _state_refinement_jobs(cfg,args,jobs,workers,benchmark_name=None,dependencies=None):
     out=args.output.resolve();destination=out/'benchmark'/benchmark_name if benchmark_name else out
     pending=list(jobs);active=[];results=[];began=time.monotonic();devices=cfg['resources']['devices']
+    dependencies=dependencies or {}
     while pending or active:
         while pending and len(active)<len(devices)*workers:
-            modality,name,seed=pending.pop(0)
+            eligible=next((i for i,job in enumerate(pending) if job not in dependencies or
+                (Path(dependencies[job]).exists() and read_json(dependencies[job])['status']=='completed')),None)
+            if eligible is None:break
+            modality,name,seed=pending.pop(eligible)
             device=min(devices,key=lambda d:sum(a['device']==d for a in active))
             job=destination/'models'/modality/name/f'seed_{seed}';job.mkdir(parents=True,exist_ok=True)
             command=[sys.executable,str(Path(__file__).resolve()),'--config',str(args.config.resolve()),'--output',str(destination),
@@ -5847,6 +5877,9 @@ def _state_refinement_jobs(cfg,args,jobs,workers,benchmark_name=None):
             if item['process'].returncode==0:result=read_json(item['job']/'summary.json')
             else:result=dict(status='failed',modality=item['modality'],name=item['name'],seed=item['seed'],log=str(item['job']/'worker.log'))
             results.append(result)
+        if pending and not active:
+            results.extend(dict(status='failed',modality=m,name=n,seed=s,reason='warmup_dependency_not_completed') for m,n,s in pending)
+            pending=[]
         write_json(out/'progress.json',dict(stage='benchmark' if benchmark_name else 'training',completed=len(results),pending=len(pending),
             active=[{k:v for k,v in a.items() if k in ('modality','name','seed','device')} for a in active],updated=now()))
         if active:time.sleep(1)
@@ -6470,6 +6503,394 @@ def summarize_state_iterations(cfg,args):
         '<p>所有初始失败保留。R1的一次GPU冻结复评因竞争显存OOM退出，随后CPU复评完成；训练和checkpoint未变。最终来源为R1 evaluation_v3、R2 evaluation_v2、R3 evaluation；原导出均保留。</p></html>']
     (campaign/'index.html').write_text('\n'.join(body))
     return dict(status='completed',rounds=cfg['round'],new_training_jobs=outcome['budgets']['new_training_jobs'],promoted=0,verification_models=len(checks))
+
+
+def _hb_shape_warmup_source(cfg, out, architecture, seed):
+    if architecture in ('E0', 'E3', 'E4'):
+        if seed == 17:
+            init = cfg['initialization']
+            return (SOURCE/init['run']/'models/hb'/f"{init['architecture']}__warmup"/'seed_17',
+                    read_config(SOURCE/init['contract']))
+        architecture = 'E0'
+    return Path(out)/'models/hb'/f'{architecture}__warmup'/f'seed_{seed}', cfg
+
+
+def _hb_shape_scales(rows, arrays):
+    from src.analysis.dual_component_tokenizer import state_patch_features
+    scales = []
+    for row, values in zip(rows, arrays):
+        end = min(row['holdout_starts_s'])*10
+        item = {}
+        for key in ('s', 'o', 'x'):
+            item[key] = {}
+            for seconds in (2, 6):
+                span = end//(seconds*10)*(seconds*10)
+                variances = []
+                for p in range(len(row['positions'])):
+                    f = state_patch_features(values[key][:span,p], values['mask'][:span,p], 10, seconds)
+                    moment = np.sum(np.where(f['valid'], f['slope']**2, 0), axis=0)/np.maximum(f['valid'].sum(0),1)
+                    floor = .01*np.asarray(row['target_variance'][key][p])/seconds**2
+                    variances.append(np.maximum(moment, floor))
+                item[key][str(seconds)] = np.asarray(variances)
+        scales.append(item)
+    return scales
+
+
+def _hb_shape_context_stability(model, rows, arrays, fits, scales, device):
+    import torch
+    from src.analysis.dual_component_tokenizer import state_patch_features, hb_shape_aggregate
+    if not model.hard:return dict(status='continuous_reference',physical_patches=0)
+    records=[];coverage=[]
+    for i,row in enumerate(rows):
+        starts=row['train_starts_s'];coverage.append(dict(dataset=row['dataset'],record=row['record'],
+            role='train',contexts=len(starts),development_contexts=len(row['holdout_starts_s'])))
+        groups=defaultdict(list)
+        examples=[(i,t,p) for t in starts for p in row['available_positions']]
+        for first in range(0,len(examples),32):
+            selected=examples[first:first+32];batch=_state_batch(rows,arrays,selected,device)
+            with torch.no_grad():result=model(batch['x'])
+            ids=result['ids']['S'].cpu().numpy()
+            predicted=result['S'].cpu().numpy().reshape(-1,20,2)
+            masks=batch['mask'].cpu().numpy().reshape(-1,20,2)
+            f=state_patch_features(predicted.reshape(-1,2),masks.reshape(-1,2),10)
+            for j,(_,t,p) in enumerate(selected):
+                for slot in range(15):
+                    n=j*15+slot
+                    if masks[n].all():groups[p,t+2*slot].append((int(ids[j,slot]),slot,f['centered'][n]))
+        for (p,t),versions in groups.items():
+            if len(versions)<2:continue
+            code=np.array([v[0] for v in versions]);slots=np.array([v[1] for v in versions])
+            prototype=fits['prototypes'][code];decoder=np.array([v[2] for v in versions])
+            a,b=np.triu_indices(len(versions),1)
+            slope=state_patch_features(prototype.reshape(-1,2),np.ones((len(prototype)*20,2),bool),10)['slope']
+            threshold=.1*np.sqrt(scales[i]['s']['2'][p])
+            active=(np.abs(slope[a])>threshold)&(np.abs(slope[b])>threshold)
+            flips=active&(slope[a]*slope[b]<0)
+            edge=(slots==0)|(slots==14);middle=(slots>=5)&(slots<=9)
+            for color in range(2):
+                var=row['shape_variance']['s'][p][color]
+                records.append(dict(dataset=row['dataset'],subject=row['subject'],record=row['record'],parent=row['parent'],
+                    role='train',component='context',color=color,position=row['positions'][p],patch_start_s=t,versions=len(versions),
+                    ID_change=float(np.mean(code[a]!=code[b])),
+                    semantic_change=float(np.mean((prototype[a,:,color]-prototype[b,:,color])**2)/var),
+                    decoder_change=float(np.mean((decoder[a,:,color]-decoder[b,:,color])**2)/var),
+                    opposite_slope_fraction=float(flips[:,color].sum()/max(active[:,color].sum(),1)),
+                    edge_middle_change=float(np.mean((decoder[edge,:,color].mean(0)-decoder[middle,:,color].mean(0))**2)/var)
+                    if edge.any() and middle.any() else None))
+    fields=('ID_change','semantic_change','decoder_change','opposite_slope_fraction','edge_middle_change')
+    return dict(status='completed',physical_patches=len(records)//2,coverage=coverage,records=records,
+        metrics=hb_shape_aggregate(records,fields) if records else None,
+        interpretation='all shifted contexts remain inside training blocks; development blocks have only one 30s context; physical patch is the unit')
+
+
+def _hb_shape_analyze(cfg, run, source_cfg, architecture, candidate, seed, label, out, cache):
+    import torch
+    from src.analysis.dual_component_tokenizer import (
+        hb_shape_reconstruction_metrics,hb_shape_readouts,render_hb_shape_patterns)
+    folder=Path(out)/'analysis'/f'{label}_seed_{seed}'
+    if (folder/'summary.json').exists():return read_json(folder/'summary.json')
+    base,manifest,rows,arrays=cache;device=cfg['resources']['evaluation_device']
+    torch.set_num_threads(cfg['resources']['torch_threads'])
+    job=Path(run)/'models/hb'/f'{architecture}__{candidate}'/f'seed_{seed}'
+    if read_json(job/'summary.json')['status']!='completed':raise ValueError('completed final model required')
+    checkpoint=job/'checkpoint.pt';stamp=checkpoint.stat().st_mtime_ns
+    saved=torch.load(checkpoint,map_location='cpu',weights_only=False)
+    if (saved['signature']['config']!=identity(source_cfg) or saved['signature']['parent']!=manifest['plan_identity']
+            or saved['step']!=3000):raise ValueError('exact checkpoint contract, parent and final exposure required')
+    model=_state_refinement_model(source_cfg,architecture,'hb',candidate).to(device)
+    model.load_state_dict(saved['model_state']);model.eval()
+    examples,metadata,_=_state_diagnostic_panel(rows,arrays)
+    packed={k:[] for k in ('x','s','o','mask','hat_s','hat_o','latent_S')}
+    if model.hard:packed.update(ids_S=[],ids_O=[])
+    if model.code_shape_head is not None:packed['auxiliary_shape']=[]
+    maximum=0.
+    for first in range(0,len(examples),32):
+        selected=examples[first:first+32];batch=_state_batch(rows,arrays,selected,device)
+        with torch.no_grad():
+            result=model(batch['x']);decoded=model.decode_ids(result['ids']) if model.hard else result
+            for b in ('S','O'):
+                if model.hard:
+                    torch.testing.assert_close(result[b],decoded[b],atol=2e-6,rtol=1e-5)
+                    maximum=max(maximum,float((result[b]-decoded[b]).abs().max()))
+                    packed['ids_'+b].append(result['ids'][b].cpu().numpy())
+                packed['hat_'+b.lower()].append(decoded[b].cpu().numpy().reshape(len(selected),300,2))
+            if 'auxiliary_shape' in packed:packed['auxiliary_shape'].append(result['S_shape'].cpu().numpy().reshape(len(selected),300,2))
+            packed['latent_S'].append(result['latent']['S'].cpu().numpy())
+        for key in ('x','s','o','mask'):packed[key].append(batch[key].cpu().numpy().reshape(len(selected),300,2))
+    packed={k:np.concatenate(v) for k,v in packed.items()};packed['hat_x']=packed['hat_s']+packed['hat_o']
+    write_npz(folder/'patterns.npz',**packed);write_json(folder/'samples.json',metadata)
+    scales=_hb_shape_scales(rows,arrays)
+    metric_rows,metrics=hb_shape_reconstruction_metrics(packed,metadata,rows,scales)
+    readouts,readout_rows,patterns,fits=hb_shape_readouts(packed,metadata,rows,cfg['evaluation']['low_support_train_patches'])
+    write_json(folder/'reconstruction_rows.json',metric_rows);write_json(folder/'readout_rows.json',readout_rows)
+    write_json(folder/'code_groups.json',patterns);write_npz(folder/'readout_fits.npz',**fits)
+    stability=_hb_shape_context_stability(model,rows,arrays,fits,scales,device)
+    write_json(folder/'context_stability.json',stability)
+    health=_state_health_rules(_state_refinement_usage(model,rows,arrays,device),cfg['evaluation']['health_screen']) if model.hard else None
+    if health:write_json(folder/'code_health.json',health)
+    figures=render_hb_shape_patterns(folder,packed,metadata,readouts,patterns,label)
+    if any(not torch.equal(value.cpu(),saved['model_state'][key]) for key,value in model.state_dict().items()):
+        raise AssertionError('frozen evaluation mutated model')
+    if checkpoint.stat().st_mtime_ns!=stamp:raise AssertionError('retained checkpoint changed')
+    result=dict(status='completed',label=label,seed=seed,architecture=architecture,candidate=candidate,modality='hb',
+        folder=str(folder),checkpoint=str(checkpoint),training_exposure=4000,metrics=metrics,readouts=readouts,
+        code_health_pass=health['passed'] if health else None,replay_max_abs=maximum,
+        context_stability={k:v for k,v in stability.items() if k!='records'},figures=figures,
+        frozen_state_unchanged=True,checkpoint_unchanged=True)
+    write_json(folder/'provenance.json',dict(source_config=source_cfg,signature=saved['signature'],
+        analysis_config=cfg,source_root=str(SOURCE),data_partition='train subjects; disjoint development input block',
+        metric_scale='fixed training prefix; shape and slopes use separate training second moments',
+        target='conditional SSM-derived S/O; not measured latent truth',primary_counts=dict(subjects=4,records=5)))
+    write_json(folder/'summary.json',result)
+    return result
+
+
+def _hb_shape_decision(cfg, candidate, baseline):
+    rules=cfg['sequence']['promotion'];role='within_subject_holdout'
+    current=candidate['metrics']['macro'][role];parent=baseline['metrics']['macro'][role]
+    ratios={key:[current[key][c]['NMSE']/parent[key][c]['NMSE'] for c in range(2)] for key in ('s','o','x')}
+    primary={field:[current['s'][c][field]/parent['s'][c][field] for c in range(2)]
+             for field in ('shape_train_nmse','slope_2_train_nmse')}
+    cr=candidate['readouts']['macro'][role]['single_ID_prototype'];br=baseline['readouts']['macro'][role]['single_ID_prototype']
+    primary['single_ID_error']=[cr[c]['error']/br[c]['error'] for c in range(2)]
+    ds_ratios={};improved=0
+    for ds,values in candidate['metrics']['by_dataset'][role].items():
+        old=baseline['metrics']['by_dataset'][role][ds]
+        ds_ratios[ds]={key:[values[key][c]['NMSE']/old[key][c]['NMSE'] for c in range(2)] for key in ('s','o','x')}
+        gains=[np.mean([values['s'][c][f]/old['s'][c][f] for c in range(2)]) for f in ('shape_train_nmse','slope_2_train_nmse')]
+        aa=candidate['readouts']['by_dataset'][role][ds]['single_ID_prototype'];bb=baseline['readouts']['by_dataset'][role][ds]['single_ID_prototype']
+        gains.append(np.mean([aa[c]['error']/bb[c]['error'] for c in range(2)]))
+        improved+=all(g<1 for g in gains)
+    checks=dict(reconstruction=all(r<=1+rules['maximum_color_component_NMSE_regression'] for v in ratios.values() for r in v),
+        no_dataset_collapse=all(r<=1+rules['maximum_dataset_color_component_NMSE_regression'] for d in ds_ratios.values() for v in d.values() for r in v),
+        primary=all(np.mean(v)<=1-rules['minimum_relative_improvement'] for v in primary.values()),
+        both_colors=all(r<=1+rules['maximum_either_color_primary_regression'] for v in primary.values() for r in v),
+        datasets=improved>=rules['minimum_improved_datasets'],health=bool(candidate['code_health_pass']),
+        integer_replay=candidate['replay_max_abs']<=2e-6,
+        boundary=all(current[key][c]['prediction_boundary_energy_fraction']<=parent[key][c]['prediction_boundary_energy_fraction']+rules['maximum_boundary_energy_fraction_increase']
+                     for key in ('s','o','x') for c in range(2)),
+        amplitude=all(current[key][c]['centered_RMS_gain']>=rules['minimum_RMS_gain_ratio']*parent[key][c]['centered_RMS_gain']
+                      for key in ('s','o','x') for c in range(2)))
+    return dict(numeric_eligible=all(checks.values()),checks=checks,primary_ratios=primary,
+        reconstruction_ratios=ratios,dataset_NMSE_ratios=ds_ratios,improved_datasets=improved)
+
+
+def _hb_shape_e2_trigger(cfg, candidate, baseline):
+    role='within_subject_holdout';r=cfg['sequence']['E2_trigger']
+    a=candidate['metrics']['macro'][role];b=baseline['metrics']['macro'][role]
+    ratios={f:a['s'][0][f]/b['s'][0][f] for f in ('shape_train_nmse','slope_2_train_nmse')}
+    nmse={k:a[k][0]['NMSE']/b[k][0]['NMSE'] for k in ('s','o','x')}
+    return dict(triggered=all(v<=1-r['minimum_HbO_S_shape_and_slope_improvement'] for v in ratios.values())
+                and all(v<=1+r['maximum_HbO_component_NMSE_regression'] for v in nmse.values()),
+                HbO_dynamic_ratios=ratios,HbO_NMSE_ratios=nmse)
+
+
+def _hb_shape_seed_agreement(out,label,seeds):
+    from scipy.optimize import linear_sum_assignment
+    from sklearn.metrics import adjusted_rand_score
+    folder=Path(out)/'analysis'/f'{label}_seed_17'
+    meta=read_json(folder/'samples.json')
+    with np.load(folder/'patterns.npz') as f:
+        ids=f['ids_S'].ravel();complete=f['mask'].reshape(-1,20,2).all((1,2))
+    with np.load(folder/'readout_fits.npz') as f:
+        prototypes=f['prototypes'];counts=f['training_counts'];variance=f['shape_variance'].mean(0)
+    roles=np.repeat([m['role'] for m in meta],15);records=[]
+    for seed in seeds:
+        other=Path(out)/'analysis'/f'{label}_seed_{seed}'
+        if read_json(other/'samples.json')!=meta:raise ValueError('seed comparison sample identities changed')
+        with np.load(other/'patterns.npz') as f:alternative=f['ids_S'].ravel()
+        with np.load(other/'readout_fits.npz') as f:
+            p=f['prototypes'];n=f['training_counts']
+        a=np.flatnonzero(counts>=20);b=np.flatnonzero(n>=20)
+        cost=np.mean((prototypes[a,None]-p[None,b])**2/variance,axis=(2,3))
+        aa,bb=linear_sum_assignment(cost)
+        item=dict(seed=seed,reference_seed=17,paired_supported_codes=len(aa),
+            unmatched_reference_codes=len(a)-len(aa),unmatched_candidate_codes=len(b)-len(bb),
+            matched_shape_error=float(cost[aa,bb].mean()) if len(aa) else None,
+            matches=[dict(reference_ID=int(a[x]),candidate_ID=int(b[y]),error=float(cost[x,y])) for x,y in zip(aa,bb)],
+            grouping_ARI={role:float(adjusted_rand_score(ids[(roles==role)&complete],alternative[(roles==role)&complete]))
+                          for role in ('train','within_subject_holdout')})
+        records.append(item)
+    result=dict(label=label,records=records,matching='training-supported prototypes; Hungarian minimum training-scale shape error; numeric IDs never aligned directly')
+    write_json(Path(out)/'seed_agreement'/f'{label}.json',result)
+    return result
+
+
+def _hb_shape_independent_validation(cfg,out,chosen,cache):
+    """One frozen comparison on metadata-selected, unused TRAIN subjects."""
+    import torch
+    from src.data.dual_component_tokenizer import state_pilot_plan,state_pilot_window,state_pilot_coordinates
+    from src.analysis.dual_component_tokenizer import hb_shape_reconstruction_metrics,hb_shape_aggregate,state_patch_features
+    base,_,old_rows,old_arrays=cache;spec=base['data'];root=SOURCE/spec['cache']
+    excluded={(r['dataset'],r['subject']) for r in old_rows}
+    plan=state_pilot_plan(root,spec,SOURCE/spec['source_ssm'],excluded_subjects=excluded,include_short_refed=False)
+    export=Path(out)/'independent_training_subjects';write_json(export/'plan.json',plan)
+    reference_scales=_hb_shape_scales(old_rows,old_arrays);rows=[];arrays=[];scales=[]
+    for selected in plan['windows']:
+        record=state_pilot_window(root,selected,spec)
+        row,unused=state_pilot_coordinates(record['metadata'],record['arrays'],'hb',base['training']['target_variance_floor'])
+        if (row['dataset'],row['subject']) in excluded:raise ValueError('independent training subject overlaps selection panel')
+        reference_index=next(i for i,r in enumerate(old_rows) if r['dataset']==row['dataset'] and r['duration_s']==90)
+        reference=old_rows[reference_index]
+        mapping=[reference['positions'].index(name) for name in row['positions']]
+        frozen=np.asarray(reference['scale'])[mapping]
+        values={key:np.asarray(record['arrays']['fnirs_'+key]/frozen,dtype=np.float32) for key in ('x','s','o')}
+        values['mask']=unused['mask'];arrays.append(values)
+        row.update(scale=frozen.tolist(),target_variance={k:np.asarray(v)[mapping].tolist() for k,v in reference['target_variance'].items()},
+            shape_variance={k:np.asarray(v)[mapping].tolist() for k,v in reference['shape_variance'].items()},
+            train_starts_s=[],holdout_starts_s=list(range(0,int(row['duration_s'])-29,30)),
+            frozen_scale_source=reference['parent'])
+        row['available_positions']=[p for p in row['available_positions'] if mapping[p] in reference['available_positions']]
+        rows.append(row);scales.append({k:{s:np.asarray(v)[mapping] for s,v in vv.items()} for k,vv in reference_scales[reference_index].items()})
+    examples=[];metadata=[]
+    for i,row in enumerate(rows):
+        for start in row['holdout_starts_s']:
+            for p in row['available_positions']:
+                examples.append((i,start,p));metadata.append(dict(dataset=row['dataset'],subject=row['subject'],record=row['record'],parent=row['parent'],
+                    role='independent_training_subject',row=i,position_index=p,position=row['positions'][p],start_s=start))
+    comparisons={}
+    for label in ('E0',chosen):
+        if label=='E0':
+            init=cfg['initialization'];source_cfg=read_config(SOURCE/init['contract']);architecture=init['architecture'];run=SOURCE/init['run']
+        else:source_cfg=cfg;architecture=chosen;run=Path(out)
+        saved=torch.load(run/'models/hb'/f'{architecture}__vq128'/'seed_17/checkpoint.pt',map_location='cpu',weights_only=False)
+        model=_state_refinement_model(source_cfg,architecture,'hb','vq128');model.load_state_dict(saved['model_state']);model.eval()
+        packed={k:[] for k in ('x','s','o','mask','hat_s','hat_o','ids_S')}
+        for first in range(0,len(examples),32):
+            selected=examples[first:first+32];batch=_state_batch(rows,arrays,selected,'cpu')
+            with torch.no_grad():result=model(batch['x']);replay=model.decode_ids(result['ids'])
+            torch.testing.assert_close(result['sum'],replay['sum'],atol=2e-6,rtol=1e-5)
+            for k in ('x','s','o','mask'):packed[k].append(batch[k].numpy().reshape(len(selected),300,2))
+            for b in ('S','O'):packed['hat_'+b.lower()].append(replay[b].numpy().reshape(len(selected),300,2))
+            packed['ids_S'].append(result['ids']['S'].numpy())
+        packed={k:np.concatenate(v) for k,v in packed.items()};packed['hat_x']=packed['hat_s']+packed['hat_o']
+        metrics,summary=hb_shape_reconstruction_metrics(packed,metadata,rows,scales)
+        with np.load(Path(out)/'analysis'/f'{label}_seed_17/readout_fits.npz') as f:prototypes=f['prototypes']
+        patches=packed['s'].reshape(-1,20,2);mask=packed['mask'].reshape(patches.shape)
+        truth=state_patch_features(patches.reshape(-1,2),mask.reshape(-1,2),10)['centered']
+        predictions=prototypes[packed['ids_S'].ravel()];complete=mask.all((1,2));readout=[]
+        for i,meta in enumerate(metadata):
+            valid=complete[i*15:(i+1)*15]
+            for c in range(2):
+                error=(predictions[i*15:(i+1)*15,:,c]-truth[i*15:(i+1)*15,:,c])**2
+                readout.append(dict(meta,component='single_ID_prototype',color=c,n=int(valid.sum()),error=float(error[valid].mean()/rows[meta['row']]['shape_variance']['s'][meta['position_index']][c]) if valid.any() else None))
+        write_npz(export/label/'patterns.npz',**packed);write_json(export/label/'reconstruction_rows.json',metrics)
+        write_json(export/label/'readout_rows.json',readout)
+        comparisons[label]=dict(metrics=summary,readouts=hb_shape_aggregate(readout,['error']))
+    result=dict(status='completed',subjects=[dict(dataset=r['dataset'],subject=r['subject'],parent=r['parent']) for r in rows],
+        records=comparisons,normalization='frozen original-panel per-dataset position scales and target denominators',model_refits=0)
+    write_json(export/'samples.json',metadata);write_json(export/'summary.json',result)
+    return result
+
+
+def hb_shape_dispatch(args,cfg):
+    stages=('check','synthetic','hb-shape-sequence','state-refine-one')
+    if args.stage not in stages or args.evaluation_split!='development':raise ValueError('bounded Hb shape development stages required')
+    if args.stage=='check':return dict(status='contract_valid',measured_arrays_read=0,maximum_new_training_tasks=8)
+    if args.output is None:raise ValueError('explicit versioned output required')
+    out=args.output.resolve()
+    if args.stage=='synthetic':return state_refinement_dispatch(args,cfg)
+    if args.stage=='state-refine-one':
+        if args.modality!='hb' or args.parent_pid is None or os.getppid()!=args.parent_pid:
+            raise ValueError('owning Hb sequence controller required')
+        return train_state_refinement(cfg,out,'hb',args.candidate,args.device,args.steps,args.seed)
+    if not os.environ.get('SSM_SYSTEMD_UNIT') or not os.environ.get('INVOCATION_ID'):
+        raise ValueError('durable supervisor required for Hb sequence')
+    with owner_lock(out):
+        if (out/'summary.json').exists():return read_json(out/'summary.json')
+        if (read_json(out/'synthetic.json')['status']!='passed' or read_json(out/'software_validation.json')['status']!='passed'):
+            raise ValueError('synthetic and targeted tests required before measured reads')
+        resolved=out/'resolved_config.json'
+        if resolved.exists() and read_json(resolved)['config']!=serial(cfg):raise ValueError('immutable Hb contract changed')
+        if not resolved.exists():write_json(resolved,dict(config=cfg,created=now()))
+        state=dict(status='running',started=now(),unit=os.environ['SSM_SYSTEMD_UNIT'],stage='A_frozen_analysis')
+        write_json(out/'controller.json',state)
+        try:
+            cache=_state_refinement_cache(cfg,'hb');write_json(out/'input_reuse.json',dict(parent=cfg['parent_run'],rows=cache[2],parent_identity=cache[1]['plan_identity']))
+            records={};init=cfg['initialization'];original=read_config(SOURCE/init['contract'])
+            with ProcessPoolExecutor(max_workers=3,mp_context=multiprocessing.get_context('spawn')) as pool:
+                futures={}
+                for label in ('E0','continuous','R2'):
+                    ref=cfg['references'][label];source_cfg=read_config(SOURCE/ref['contract']) if 'contract' in ref else original
+                    run=SOURCE/ref.get('run',init['run'])
+                    future=pool.submit(_hb_shape_analyze,cfg,run,source_cfg,ref['architecture'],ref['candidate'],17,label,out,cache)
+                    futures[future]=label
+                while futures:
+                    done,_=wait(futures,return_when=FIRST_COMPLETED)
+                    for future in done:
+                        label=futures.pop(future);records[label]=future.result()
+                        write_json(out/'stage_A.json',dict(status='completed' if len(records)==3 else 'running',records=records))
+                        print(json.dumps(dict(event='stage_A_model_completed',label=label,summary=records[label]['folder'])),flush=True)
+            state.update(stage='throughput_benchmark',updated=now());write_json(out/'controller.json',state)
+            bench=out/'benchmark.json'
+            if bench.exists():benchmark=read_json(bench)
+            else:
+                trials=[]
+                for workers in cfg['resources']['workers_per_device_candidates']:
+                    jobs=[('hb',a+'__vq128',17) for a in ('E0','E1','E3','E4')]
+                    trial=_state_refinement_jobs(cfg,args,jobs,workers,'workers_'+str(workers))
+                    if any(r['status']!='completed' for r in trial['results']):raise RuntimeError('throughput benchmark failed; retained worker evidence')
+                    trials.append(dict(workers_per_device=workers,throughput=400/trial['wall_seconds'],**trial))
+                best=max(trials,key=lambda t:t['throughput'])
+                benchmark=dict(status='completed',workers_per_device=best['workers_per_device'],trials=trials,
+                    reason='measured aggregate throughput of four same-size Hb workers; 2 CPU threads and 4 GiB GPU cap per worker')
+                write_json(bench,benchmark)
+            workers=benchmark['workers_per_device']
+            # E1 warmup and E3/E4 hard continuations are independent, and start together.
+            state.update(stage='B_seed17',updated=now());write_json(out/'controller.json',state)
+            initial=_state_refinement_jobs(cfg,args,[('hb','E1__warmup',17),('hb','E3__vq128',17),('hb','E4__vq128',17),('hb','E1__vq128',17)],workers,
+                dependencies={('hb','E1__vq128',17):out/'models/hb/E1__warmup/seed_17/summary.json'})
+            if any(r['status']!='completed' for r in initial['results']):raise RuntimeError('first-stage training failed')
+            for label in ('E1','E3','E4'):
+                records[label]=_hb_shape_analyze(cfg,out,cfg,label,'vq128',17,label,out,cache)
+                write_json(out/'stage_B.json',dict(status='running',records=records))
+                print(json.dumps(dict(event='stage_B_model_completed',label=label,summary=records[label]['folder'])),flush=True)
+            e2=_hb_shape_e2_trigger(cfg,records['E1'],records['E0']);write_json(out/'E2_trigger.json',e2)
+            trained=3
+            if e2['triggered']:
+                for part in ('warmup','vq128'):
+                    trial=_state_refinement_jobs(cfg,args,[('hb','E2__'+part,17)],workers)
+                    if any(r['status']!='completed' for r in trial['results']):raise RuntimeError('conditional E2 failed')
+                records['E2']=_hb_shape_analyze(cfg,out,cfg,'E2','vq128',17,'E2',out,cache);trained+=1
+            decisions={label:_hb_shape_decision(cfg,records[label],records['E0']) for label in ('E3','E4')}
+            chosen='E3' if decisions['E3']['numeric_eligible'] else None
+            a=records['E4']['readouts']['macro']['within_subject_holdout']['single_ID_prototype']
+            b=records['E3']['readouts']['macro']['within_subject_holdout']['single_ID_prototype']
+            extra=float(np.mean([a[c]['error']/b[c]['error'] for c in range(2)]))
+            decisions['E4']['single_ID_ratio_to_E3']=extra
+            if decisions['E4']['numeric_eligible'] and extra<=1-cfg['sequence']['promotion']['E4_minimum_extra_single_ID_improvement_over_E3']:chosen='E4'
+            write_json(out/'stage_B.json',dict(status='completed',records=records,decisions=decisions,selected=chosen))
+            # Fixed waveform pages use the exact earlier example identities and parent arrays.
+            baseline_export=SOURCE/'experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/baseline'
+            for label in ('E0','R2','E1','E3','E4',*(['E2'] if 'E2' in records else [])):
+                destination=out/'analysis'/f'{label}_seed_17'/'fixed_cases'
+                _state_fixed_diagnostic_cases(destination,[records[label]],baseline_export,SOURCE/cfg['fixed_examples'])
+            repeats=[]
+            if chosen:
+                state.update(stage='C_full_seed_repeats',selected=chosen,updated=now());write_json(out/'controller.json',state)
+                warmups=_state_refinement_jobs(cfg,args,[('hb','E0__warmup',s) for s in cfg['sequence']['stage_C_seeds']],workers)
+                if any(r['status']!='completed' for r in warmups['results']):raise RuntimeError('repeat warmup failed')
+                jobs=[('hb',a+'__vq128',s) for s in cfg['sequence']['stage_C_seeds'] for a in ('E0',chosen)]
+                trial=_state_refinement_jobs(cfg,args,jobs,workers)
+                if any(r['status']!='completed' for r in trial['results']):raise RuntimeError('repeat continuation failed')
+                trained+=4
+                for seed in cfg['sequence']['stage_C_seeds']:
+                    base=_hb_shape_analyze(cfg,out,cfg,'E0','vq128',seed,'E0',out,cache)
+                    candidate=_hb_shape_analyze(cfg,out,cfg,chosen,'vq128',seed,chosen,out,cache)
+                    repeats.append(dict(seed=seed,baseline=base,candidate=candidate,decision=_hb_shape_decision(cfg,candidate,base)))
+                agreement={label:_hb_shape_seed_agreement(out,label,cfg['sequence']['stage_C_seeds']) for label in ('E0',chosen)}
+                write_json(out/'stage_C.json',dict(status='completed',selected=chosen,repeats=repeats,agreement=agreement))
+            outcome=dict(status='completed',experiment_id=cfg['experiment_id'],records=records,decisions=decisions,
+                selected=chosen,E2=e2,repeats=repeats,new_training_tasks=trained,completed=now(),
+                conclusion='no_joint_candidate_passed' if chosen is None else 'seed_repeats_completed')
+            if chosen and all(r['decision']['numeric_eligible'] for r in repeats):
+                outcome['independent_subject_validation']=_hb_shape_independent_validation(cfg,out,chosen,cache)
+            write_json(out/'summary.json',outcome)
+            state.update(status='completed',stage='terminal',completed=now());write_json(out/'controller.json',state)
+            return dict(status='completed',new_training_tasks=trained,selected=chosen)
+        except Exception:
+            state.update(status='failed',error=traceback.format_exc(),updated=now());write_json(out/'controller.json',state)
+            raise
 
 
 if __name__ == '__main__':

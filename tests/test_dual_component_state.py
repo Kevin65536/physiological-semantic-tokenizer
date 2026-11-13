@@ -18,6 +18,7 @@ runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
 CONFIG = ROOT / 'experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml'
 REFINEMENT = ROOT / 'experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml'
+HB_SHAPE = ROOT / 'experiments/configs/physiology_semantic_tokenizer/dual_component_hb_id_shape_v1.yaml'
 
 
 def settings():
@@ -366,6 +367,180 @@ def test_refinement_delta_loss_uses_adjacent_valid_samples_and_both_colors():
     s[0,0,1]=1
     loss,terms=runner._state_refinement_loss(result,batch,dict(sum_weight=.5,derivative_weight=.1))
     assert loss>0 and terms['derivative']>0
+
+
+def hb_shape_batch():
+    torch.manual_seed(10)
+    x=torch.randn(2,15,40)
+    return dict(x=x,s=x*.7,o=x*.3,mask=torch.ones_like(x,dtype=torch.bool),
+        **{'v'+k:torch.ones_like(x) for k in ('s','o','x')},
+        **{prefix+k:torch.ones(2,2) for prefix in ('dv','sv') for k in ('s','o','x')})
+
+
+def test_hb_supervision_ablation_preserves_hbo_coefficient_all_four_terms():
+    batch=hb_shape_batch();s=torch.randn_like(batch['x'],requires_grad=True)
+    o=torch.randn_like(s,requires_grad=True);result=dict(S=s,O=o,sum=s+o,commitment=s.sum()*0+.25)
+    cfg=runner.read_config(HB_SHAPE)
+    full,terms=runner._state_refinement_loss(result,batch,cfg['architectures']['E0'])
+    g=torch.autograd.grad(full,(s,o),retain_graph=True)
+    partial,terms=runner._state_refinement_loss(result,batch,cfg['architectures']['E1'])
+    h=torch.autograd.grad(partial,(s,o),retain_graph=True)
+    for a,b in zip(g,h):
+        torch.testing.assert_close(a[...,0::2],b[...,0::2])
+        assert torch.count_nonzero(b[...,1::2])==0
+    for key in ('s','o','x'):batch[key][...,1::2]+=1e5
+    changed=runner._state_refinement_loss(result,batch,cfg['architectures']['E1'])[0]
+    torch.testing.assert_close(partial,changed)
+
+
+def test_hb_single_id_head_is_local_has_encoder_gradient_and_exact_extra_parameters():
+    torch.set_num_threads(2);cfg=runner.read_config(HB_SHAPE)
+    torch.manual_seed(17);base=runner._state_refinement_model(cfg,'E0','hb','vq128');rng=torch.get_rng_state()
+    torch.manual_seed(17);model=runner._state_refinement_model(cfg,'E4','hb','vq128')
+    assert torch.equal(rng,torch.get_rng_state())
+    assert sum(p.numel() for p in model.parameters())-sum(p.numel() for p in base.parameters())==2600
+    for key,value in base.state_dict().items():assert torch.equal(value,model.state_dict()[key])
+    x=torch.randn(10,15,40);model.initialize_codebooks(x);model.eval()
+    result=model(x);ids=result['ids']['S'];prototype=model.code_shape_head(model.branches['S']['quantizer'].codebook).reshape(128,20,2)
+    prototype=prototype-prototype.mean(1,keepdim=True)
+    torch.testing.assert_close(result['S_shape'].reshape(10,15,20,2),prototype[ids])
+    result['S_shape'].square().mean().backward()
+    # Evaluation dictionary lookup has no encoder gradient; training STE does.
+    model.zero_grad();model.train();result=model(x);result['S_shape'].square().mean().backward()
+    assert model.branches['S']['to_latent'].weight.grad.abs().sum()>0
+    assert model.branches['S']['decoder'].layers[0].linear1.weight.grad is None
+
+
+def test_hbo_input_ablation_and_unchanged_main_parameter_count():
+    torch.set_num_threads(2);cfg=runner.read_config(HB_SHAPE)
+    torch.manual_seed(17);model=runner._state_refinement_model(cfg,'E2','hb','warmup').eval()
+    x=torch.randn(2,15,40);altered=x.clone();altered[...,1::2]+=10000
+    with torch.no_grad():a=model(x);b=model(altered)
+    assert torch.equal(a['sum'],b['sum'])
+    base=runner._state_refinement_model(cfg,'E1','hb','warmup')
+    assert sum(p.numel() for p in base.parameters())==sum(p.numel() for p in model.parameters())
+
+
+def test_matched_hbs_shape_losses_mask_centering_and_no_o_shape_gradient():
+    cfg=runner.read_config(HB_SHAPE);batch=hb_shape_batch();prediction=torch.randn_like(batch['s'],requires_grad=True)
+    result=dict(S=prediction,O=batch['o'],sum=prediction+batch['o'],S_shape=prediction,commitment=prediction.sum()*0)
+    e3=runner._state_refinement_loss(result,batch,cfg['architectures']['E3'])[1]['hb_s_shape']
+    e4=runner._state_refinement_loss(result,batch,cfg['architectures']['E4'])[1]['hb_s_shape']
+    torch.testing.assert_close(e3,e4)
+    result['S_shape']=prediction+10
+    shifted=runner._state_refinement_loss(result,batch,cfg['architectures']['E4'])[1]['hb_s_shape']
+    torch.testing.assert_close(e4,shifted)
+    batch['mask'][...,0]=False;result['S_shape']=prediction.clone();result['S_shape'][...,0]=1e6
+    masked=runner._state_refinement_loss(result,batch,cfg['architectures']['E4'])[1]['hb_s_shape']
+    result['S_shape'][...,0]=0
+    torch.testing.assert_close(masked,runner._state_refinement_loss(result,batch,cfg['architectures']['E4'])[1]['hb_s_shape'])
+
+
+def test_hb_warmup_source_uses_matching_ablation_and_fresh_repeat(tmp_path):
+    cfg=runner.read_config(HB_SHAPE)
+    for name in ('E0','E3','E4'):
+        path,old=runner._hb_shape_warmup_source(cfg,tmp_path,name,17)
+        assert path.name=='seed_17' and path.parent.name=='waveform__warmup'
+        path,new=runner._hb_shape_warmup_source(cfg,tmp_path,name,29)
+        assert path==tmp_path/'models/hb/E0__warmup/seed_29' and new==cfg
+    for name in ('E1','E2'):
+        path,_=runner._hb_shape_warmup_source(cfg,tmp_path,name,17)
+        assert path==tmp_path/f'models/hb/{name}__warmup/seed_17'
+
+
+def test_hb_readout_fit_is_training_only_and_true_group_information_matters():
+    from src.analysis.dual_component_tokenizer import hb_shape_readouts
+    rng=np.random.default_rng(17);ids=rng.integers(0,2,(10,15));t=np.arange(20)/10-.95
+    patches=(ids[...,None,None]*2-1)*t[None,None,:,None]*np.array([1.,-1.])[None,None,None,:]
+    wave=patches.reshape(10,300,2);mask=np.ones_like(wave,bool)
+    a=dict(s=wave,x=wave,mask=mask,ids_S=ids,latent_S=rng.normal(size=(10,15,3)))
+    meta=[dict(role='train' if i<6 else 'within_subject_holdout',dataset='synthetic',subject='s',record='r',
+               parent='p',position='ch',row=0,position_index=0) for i in range(10)]
+    rows=[dict(shape_variance={'s':[[1.,1.]]})]
+    summary,_,_,fit=hb_shape_readouts(a,meta,rows)
+    m=summary['macro']['within_subject_holdout']
+    assert m['single_ID_prototype'][0]['error']<1e-20 and m['no_ID'][0]['error']>.1
+    altered={k:v.copy() for k,v in a.items()};altered['s'][6:]*=10
+    _,_,_,changed=hb_shape_readouts(altered,meta,rows)
+    np.testing.assert_array_equal(fit['prototypes'],changed['prototypes'])
+    collapsed=dict(a,ids_S=np.zeros_like(ids))
+    other=hb_shape_readouts(collapsed,meta,rows)[0]['macro']['within_subject_holdout']
+    assert other['single_ID_prototype'][0]['error']>.1
+
+
+def test_hb_contract_rejects_mutation_and_non_development_before_reads(tmp_path,monkeypatch):
+    import yaml
+    cfg=runner.read_config(HB_SHAPE);cfg['data']['allowed_splits'].append('test')
+    path=tmp_path/'bad.yaml';path.write_text(yaml.safe_dump(cfg))
+    with pytest.raises(ValueError,match='frozen Hb'):runner.read_config(path)
+    monkeypatch.setattr(np,'load',lambda *a,**k:pytest.fail('unexpected array read'))
+    with pytest.raises(ValueError,match='bounded Hb'):runner.main(['--config',str(HB_SHAPE),'--stage','all'])
+
+
+def test_context_stability_counts_physical_patches_once_and_keeps_training_support():
+    class Frozen:
+        hard=True
+        def __call__(self,x):
+            return dict(S=torch.zeros_like(x),ids={'S':torch.zeros(x.shape[:2],dtype=torch.long)})
+    row=dict(dataset='synthetic',subject='s',record='r',parent='p',positions=['ch'],available_positions=[0],
+             train_starts_s=[0,2,4],holdout_starts_s=[60],rate=10,shape_variance={'s':[[1.,1.]]},
+             target_variance={k:[[1.,1.]] for k in ('s','o','x')})
+    values={k:np.zeros((900,1,2)) for k in ('s','o','x')};values['mask']=np.ones((900,1,2),bool)
+    result=runner._hb_shape_context_stability(Frozen(),[row],[values],{'prototypes':np.zeros((128,20,2))},
+                                               [{'s':{'2':np.ones((1,2))}}],'cpu')
+    assert result['physical_patches']==15
+    assert all(2<=r['patch_start_s']<=30 for r in result['records'])
+    assert all(r['ID_change']==r['semantic_change']==r['decoder_change']==0 for r in result['records'])
+
+
+def test_unused_subject_plan_excludes_before_signal_reads(tmp_path,monkeypatch):
+    cfg=settings();root,source=fixture_cache(tmp_path,cfg)
+    monkeypatch.setattr(np,'load',lambda *a,**k:pytest.fail('unexpected arrays'))
+    with pytest.raises(ValueError,match='missing planned training dataset'):
+        state_pilot_plan(root,cfg['data'],source,excluded_subjects={(cfg['data']['datasets'][0],'subject')},include_short_refed=False)
+
+
+def test_hb_full_frozen_analysis_on_disposable_synthetic_checkpoint(tmp_path):
+    torch.set_num_threads(2);torch.manual_seed(17);cfg=runner.read_config(HB_SHAPE)
+    cfg['architectures']['E4'].update(width=16,latent_dim=8,local_width=4)
+    row=dict(dataset='synthetic',subject='s',record='r',parent='p',positions=['ch'],available_positions=[0],
+        train_starts_s=[0,30],holdout_starts_s=[60],rate=10,channels=2,
+        target_variance={k:[[1.,1.]] for k in ('s','o','x')},
+        shape_variance={k:[[.1,.1]] for k in ('s','o','x')})
+    t=np.arange(900)/10;x=np.stack((np.sin(t),np.cos(t)),axis=-1)[:,None,:].astype(np.float32)
+    values=dict(x=x,s=x*.7,o=x*.3,mask=np.ones_like(x,bool))
+    model=runner._state_refinement_model(cfg,'E4','hb','vq128');model.initialize_codebooks(torch.randn(10,15,40))
+    job=tmp_path/'models/hb/E4__vq128/seed_17'
+    runner.write_json(job/'summary.json',dict(status='completed'))
+    runner._torch_save(job/'checkpoint.pt',dict(signature=dict(config=runner.identity(cfg),parent='fixture'),step=3000,model_state=model.state_dict()))
+    cache=(runner.read_config(CONFIG),dict(plan_identity='fixture'),[row],[values])
+    result=runner._hb_shape_analyze(cfg,tmp_path,cfg,'E4','vq128',17,'E4',tmp_path,cache)
+    assert result['status']=='completed' and result['frozen_state_unchanged'] and result['replay_max_abs']==0
+    assert result['readouts']['complete_train_patches']==30
+    assert result['readouts']['complete_development_patches']==15
+    assert result['metrics']['macro']['within_subject_holdout']['s'][0]['shape_train_nmse']>=0
+    assert (Path(result['folder'])/'readout_fits.npz').exists()
+
+
+@pytest.mark.parametrize('warm_status',['completed','failed'])
+def test_refinement_scheduler_respects_warmup_dependencies(tmp_path,monkeypatch,warm_status):
+    from types import SimpleNamespace
+    cfg=runner.read_config(HB_SHAPE);cfg['resources']['devices']=['cpu']
+    args=SimpleNamespace(output=tmp_path,config=HB_SHAPE)
+    launched=[]
+    class Process:
+        def __init__(self,command,**kwargs):
+            name=command[command.index('--candidate')+1];launched.append(name)
+            self.returncode=1 if name.endswith('warmup') and warm_status=='failed' else 0
+            if not self.returncode:
+                runner.write_json(tmp_path/'models/hb'/name/'seed_17/summary.json',dict(status='completed'))
+        def poll(self):return self.returncode
+    monkeypatch.setattr(runner.subprocess,'Popen',Process);monkeypatch.setattr(runner.time,'sleep',lambda _:None)
+    trial=runner._state_refinement_jobs(cfg,args,[('hb','E1__vq128',17),('hb','E1__warmup',17)],2,
+        dependencies={('hb','E1__vq128',17):tmp_path/'models/hb/E1__warmup/seed_17/summary.json'})
+    assert launched[0]=='E1__warmup'
+    assert ('E1__vq128' in launched)==(warm_status=='completed')
+    assert len(trial['results'])==2
 
 
 def test_refinement_rejects_data_scope_before_array_reads(tmp_path,monkeypatch):

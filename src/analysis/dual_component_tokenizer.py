@@ -495,6 +495,214 @@ def state_patch_features(values, mask, rate, seconds=2):
                 centered=centered, count=count, valid=count >= 2)
 
 
+def hb_shape_aggregate(records, fields):
+    """Keep colors separate; positions -> record -> equally weighted datasets."""
+    grouped = {}
+    for role in sorted({r['role'] for r in records}):
+        grouped[role] = {}
+        for dataset in sorted({r['dataset'] for r in records if r['role'] == role}):
+            selected = [r for r in records if r['role'] == role and r['dataset'] == dataset]
+            grouped[role][dataset] = {}
+            for component in sorted({r['component'] for r in selected}):
+                colors = []
+                for color in range(2):
+                    rows = [r for r in selected if r['component'] == component and r['color'] == color]
+                    colors.append({f: float(np.mean([
+                        np.mean([r[f] for r in rows if r['record'] == record and r.get(f) is not None])
+                        for record in sorted({r['record'] for r in rows if r.get(f) is not None})]))
+                        if any(r.get(f) is not None for r in rows) else None for f in fields})
+                grouped[role][dataset][component] = colors
+    macro = {role: {component: [{f: float(np.mean([v[component][c][f] for v in datasets.values()
+                    if v[component][c][f] is not None])) if any(v[component][c][f] is not None for v in datasets.values())
+                    else None for f in fields} for c in range(2)]
+                    for component in next(iter(datasets.values()))} for role, datasets in grouped.items()}
+    return dict(by_dataset=grouped, macro=macro)
+
+
+def hb_shape_reconstruction_metrics(arrays, metadata, rows, scales):
+    """Full valid denominator, including weak dynamics and partially masked patches."""
+    records = []
+    for index, meta in enumerate(metadata):
+        row = rows[meta['row']]; p = meta['position_index']; mask = arrays['mask'][index]
+        for key in ('s', 'o', 'x'):
+            target, predicted = arrays[key][index], arrays['hat_' + key][index]
+            truth = state_patch_features(target, mask, 10)
+            estimate = state_patch_features(predicted, mask, 10)
+            th = dict(rms=[0., 0.], slope_2=[0., 0.], slope_6=[0., 0.])
+            metrics = state_dynamic_metrics(target, predicted, mask, 10, row['target_variance'][key][p], th)
+            for color in range(2):
+                item = dict(meta, component=key, color=color, **metrics['channels'][color])
+                item['NRMSE'] = float(np.sqrt(item['NMSE']))
+                n = max(mask[:, color].sum(), 1)
+                item['shape_train_nmse'] = float(np.sum((estimate['centered'][:, :, color] - truth['centered'][:, :, color])**2)
+                                                / n / row['shape_variance'][key][p][color])
+                item['centered_RMS_gain'] = float(np.sqrt(np.sum(estimate['centered'][:, :, color]**2)
+                                                / max(np.sum(truth['centered'][:, :, color]**2), 1e-30)))
+                for seconds in (2, 6):
+                    values = metrics['slopes'][str(seconds)][color]
+                    item[f'slope_{seconds}_train_nmse'] = values['mse'] / scales[meta['row']][key][str(seconds)][p][color]
+                    item[f'slope_{seconds}_gain'] = values['amplitude_gain']
+                item.update(metrics['differences'][color])
+                records.append(item)
+    fields = ('NMSE', 'NRMSE', 'shape_train_nmse', 'slope_2_train_nmse', 'slope_6_train_nmse',
+              'centered_RMS_gain', 'slope_2_gain', 'slope_6_gain', 'within_mse', 'boundary_mse',
+              'prediction_boundary_energy_fraction', 'target_boundary_energy_fraction')
+    return records, hb_shape_aggregate(records, fields)
+
+
+def hb_shape_id_design(sequences, offsets):
+    """Sparse additive categorical readout indexed by distance from the target ID."""
+    from scipy.sparse import coo_matrix
+    sequences = np.asarray(sequences, int)
+    n, length = sequences.shape
+    rr, cc = [], []
+    for slot in range(length):
+        for j, offset in enumerate(offsets):
+            at = slot + offset
+            if 0 <= at < length:
+                rr.extend((np.arange(n)*length + slot).tolist())
+                cc.extend((j*128 + sequences[:, at]).tolist())
+    return coo_matrix((np.ones(len(rr)), (rr, cc)), shape=(n*length, len(offsets)*128)).tocsr()
+
+
+def hb_shape_readouts(arrays, metadata, rows, low_support=20):
+    """Fit all shape readouts on training patches only; preserve full holdout count."""
+    from sklearn.linear_model import Ridge
+    channels = 2
+    shape = arrays['s'].reshape(-1, 20, channels)
+    mask = arrays['mask'].reshape(shape.shape)
+    feature = state_patch_features(shape.reshape(-1, 2), mask.reshape(-1, 2), 10)
+    target = feature['centered']; complete = mask.all((1, 2))
+    roles = np.repeat([r['role'] for r in metadata], 15)
+    datasets = np.repeat([r['dataset'] for r in metadata], 15)
+    parents = np.repeat([r['parent'] for r in metadata], 15)
+    train = (roles == 'train') & complete
+    development = (roles == 'within_subject_holdout') & complete
+    variance = np.repeat([rows[m['row']]['shape_variance']['s'][m['position_index']] for m in metadata], 15, axis=0)
+    weights = state_balanced_weights(datasets, parents, train)
+    global_mean = np.sum(target*weights[:, None, None]/variance[:, None, :], axis=0) / np.sum(weights[:, None]/variance, axis=0)
+    predictions = {'no_ID': np.broadcast_to(global_mean, target.shape).copy()}
+    fits = {'global_mean': global_mean, 'shape_variance': variance, 'complete': complete}
+    design = {}
+    x = arrays['x'].reshape(shape.shape)
+    nuisance = np.column_stack((x.mean(1), x.var(1), np.tile(np.eye(15), (len(metadata), 1))))
+    design['input_mean_variance_position'] = nuisance
+    design['target_level_oracle'] = feature['level']
+    design['continuous_latent'] = arrays['latent_S'].reshape(len(shape), -1)
+    counts = None; patterns = []
+    if 'ids_S' in arrays:
+        ids = arrays['ids_S'].ravel()
+        counts = np.bincount(ids[train], minlength=128)
+        prototype = np.broadcast_to(global_mean, (128, 20, 2)).copy()
+        for code in range(128):
+            use = train & (ids == code)
+            if use.any():
+                w = weights[use, None] / variance[use]
+                prototype[code] = np.sum(target[use]*w[:, None, :], axis=0)/w.sum(0)
+        predictions['single_ID_prototype'] = prototype[ids]
+        fits.update(prototypes=prototype, training_counts=counts)
+        for name, offsets in [('current_ID_ridge', [0]), ('neighbor_ID_ridge', [-1, 0, 1]),
+                              ('full_sequence_ridge', list(range(-14, 15)))]:
+            design[name] = hb_shape_id_design(arrays['ids_S'], offsets)
+        for role in ('train', 'within_subject_holdout'):
+            for code in range(128):
+                use = complete & (roles == role) & (ids == code)
+                item = dict(role=role, code=code, n=int(use.sum()), training_count=int(counts[code]),
+                            low_support=bool(counts[code] < low_support))
+                if use.any():
+                    mean = target[use].mean(0)
+                    slopes = feature['slope'][use]
+                    curvature = np.diff(target[use], n=2, axis=1).mean(1) * 100
+                    item.update(mean=mean.tolist(), p10=np.quantile(target[use], .1, axis=0).tolist(),
+                        p90=np.quantile(target[use], .9, axis=0).tolist(),
+                        within_shape_dispersion=float(np.mean((target[use]-mean)**2/variance[use, None, :])),
+                        slope_covariance=np.cov(slopes.T).tolist() if use.sum() > 1 else None,
+                        slope_mean=slopes.mean(0).tolist(), curvature_mean=curvature.mean(0).tolist(),
+                        datasets={str(k): int(v) for k, v in zip(*np.unique(datasets[use], return_counts=True))},
+                        subjects={str(k): int(v) for k, v in zip(*np.unique(np.repeat([m['subject'] for m in metadata], 15)[use], return_counts=True))},
+                        parents={str(k): int(v) for k, v in zip(*np.unique(parents[use], return_counts=True))},
+                        positions={str(k): int(v) for k, v in zip(*np.unique(np.repeat([m['position'] for m in metadata], 15)[use], return_counts=True))})
+                patterns.append(item)
+    for name, matrix in design.items():
+        predicted = np.zeros_like(target)
+        dense = isinstance(matrix, np.ndarray)
+        if dense:
+            mean = np.average(matrix[train], axis=0, weights=weights[train])
+            sd = np.sqrt(np.average((matrix[train]-mean)**2, axis=0, weights=weights[train])).clip(1e-8)
+            matrix = (matrix-mean)/sd
+            fits[name+'_input_mean'], fits[name+'_input_sd'] = mean, sd
+        for color in range(2):
+            w = weights[train]/variance[train, color]
+            w = w/w.mean()
+            fit = Ridge(alpha=1., solver='lsqr', tol=1e-6, max_iter=200)
+            fit.fit(matrix[train], target[train, :, color], sample_weight=w)
+            predicted[:, :, color] = fit.predict(matrix)
+            fits[name+f'_coef_{color}'], fits[name+f'_intercept_{color}'] = fit.coef_, fit.intercept_
+        predictions[name] = predicted
+    records = []
+    for name, predicted in predictions.items():
+        error = ((predicted-target)**2).mean(1)/variance
+        for i, meta in enumerate(metadata):
+            use = complete[i*15:(i+1)*15]
+            for color in range(2):
+                records.append(dict(meta, component=name, color=color, n=int(use.sum()),
+                                    error=float(error[i*15:(i+1)*15, color][use].mean()) if use.any() else None))
+    summary = hb_shape_aggregate(records, ['error'])
+    summary.update(planned_patches=len(shape), complete_train_patches=int(train.sum()),
+                   complete_development_patches=int(development.sum()), masked_patches=int((~complete).sum()),
+                   independent_units=len(set((m['dataset'], m['subject']) for m in metadata)))
+    if counts is not None:
+        summary['selected_codes'] = np.argsort(-counts, kind='stable')[:4].tolist()
+        summary['low_support_fraction'] = {role: float(np.mean(counts[ids[(roles == role)&complete]] < low_support))
+                                           for role in ('train', 'within_subject_holdout')}
+        summary['dispersion'] = {}
+        for role in ('train', 'within_subject_holdout'):
+            part = [p for p in patterns if p['role'] == role and p['n']]
+            summary['dispersion'][role] = dict(active_codes=len(part),
+                equal_active_code=float(np.mean([p['within_shape_dispersion'] for p in part])),
+                frequency_weighted=float(np.average([p['within_shape_dispersion'] for p in part], weights=[p['n'] for p in part])),
+                empty_codes=128-len(part))
+            means=np.asarray([p['mean'] for p in part]);frequency=np.asarray([p['n'] for p in part],float)
+            center=np.average(means,axis=0,weights=frequency)
+            between=np.mean((means-center)**2/variance[(roles==role)&complete].mean(0),axis=(1,2))
+            summary['dispersion'][role].update(between_equal_active_code=float(between.mean()),
+                between_frequency_weighted=float(np.average(between,weights=frequency)))
+    return summary, records, patterns, fits
+
+
+def render_hb_shape_patterns(folder, arrays, metadata, summary, patterns, label):
+    import matplotlib
+    matplotlib.use('Agg')
+    from matplotlib import pyplot as plt
+    folder=Path(folder); files=[]
+    if 'ids_S' not in arrays:return files
+    ids=arrays['ids_S'].ravel(); target=arrays['s'].reshape(-1,20,2)
+    mask=arrays['mask'].reshape(target.shape);f=state_patch_features(target.reshape(-1,2),mask.reshape(-1,2),10)
+    roles=np.repeat([m['role'] for m in metadata],15);t=np.arange(20)/10
+    for role in ('train','within_subject_holdout'):
+        fig,axes=plt.subplots(3,4,figsize=(16,9),constrained_layout=True)
+        for column,code in enumerate(summary['selected_codes']):
+            use=(ids==code)&(roles==role)&mask.all((1,2))
+            stat=next(p for p in patterns if p['role']==role and p['code']==code)
+            axes[0,column].set_title(f'ID {code} | {int(use.sum())} real patches')
+            if not use.any():
+                axes[0,column].text(.5,.5,'No complete patches',transform=axes[0,column].transAxes,ha='center');continue
+            for color,name,tone in [(0,'HbO','#0072B2'),(1,'HbR','#D55E00')]:
+                axes[0,column].plot(t,np.array(stat['mean'])[:,color],color=tone,label=name)
+                axes[0,column].fill_between(t,np.array(stat['p10'])[:,color],np.array(stat['p90'])[:,color],color=tone,alpha=.18)
+            axes[1,column].scatter(f['slope'][use,0],f['slope'][use,1],s=6,alpha=.3,color='#5a6370')
+            axes[1,column].axhline(0,color='black',lw=.5);axes[1,column].axvline(0,color='black',lw=.5)
+            axes[2,column].hist(np.mean(f['centered'][use]**2,axis=(1,2)),bins=20,color='#526e90')
+            axes[0,column].set(xlabel='Within patch (s)',ylabel='Centered target / training X SD')
+            axes[1,column].set(xlabel='HbO slope (training X SD / s)',ylabel='HbR slope (training X SD / s)')
+            axes[2,column].set(xlabel='Real centered mean square',ylabel='Patches')
+        from matplotlib.lines import Line2D
+        axes[0,0].legend(handles=[Line2D([],[],color='#0072B2',label='HbO'),Line2D([],[],color='#D55E00',label='HbR')])
+        fig.suptitle(f'{label}: Hb-S real target groups | {role}\nCodes fixed by training frequency; line=mean, band=P10-P90; each panel own axes; patches are dependent',fontsize=12)
+        path=folder/f'code_groups_{role}.png';fig.savefig(path,dpi=200);plt.close(fig);files.append(str(path))
+    return files
+
+
 def state_dynamic_metrics(target, predicted, mask, rate, training_variance, thresholds):
     """Orthogonal level/shape errors and fixed 2/6 s dynamics; no input transform.
 
