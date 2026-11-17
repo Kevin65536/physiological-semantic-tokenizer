@@ -1755,6 +1755,27 @@ masks and coordinates. Completion requires all planned windows to be terminal,
 with independent shape/closure checks and exact fNIRS/proxy source replay.
 The cache's manifest, summary and verification own counts and availability.
 
+### Frozen contextual-token pretraining consumer — 2026-11-13
+
+[`dual_component_masked_state_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_masked_state_v1.yaml)
+consumes only the completed v2 cache's public train/validation subjects through
+`SOSupervisionDataset`. The caller validates schema, exact paths, source identity
+and subject isolation before array access; test/protected inputs are excluded.
+Thirty-second inputs are greedily deduplicated by native record/sample support.
+EEG uses the existing 200 Hz antialias operator, Hb retains 10 Hz. Normalization
+reuses the chosen tokenizer's first full pilot training-parent scales per
+dataset/position. A native position absent from that pilot uses the median of
+its dataset/modality's frozen pilot training scales, with its identity recorded.
+The native-name union accommodates Visual's variable usable-channel coverage;
+absent positions remain invalid. Geometry uses a fixed training-record reference.
+No new per-window or validation statistics enter tokenization.
+Only observed X enters the frozen encoder. Observation validity and source scoring
+support remain distinct from teacher validity; unavailable inputs remain counted.
+Encoding retains the full 30-second context before fine-grained ID masks.
+Raw-observation physiological features are reserved for training-fitted frozen
+readouts, never added as pretraining inputs or labels. This consumer inherits the
+cache's offline reference/calibration support and makes no prospective claim.
+
 ### Tokenizer EEG supervision at 200 Hz — 2026-11-12
 
 The user fixes **200 Hz EEG supervision for every dataset** in the

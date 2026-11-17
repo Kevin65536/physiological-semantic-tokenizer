@@ -902,6 +902,27 @@ training-fitted ID/sequence readouts and same-patch context stability. Targeted
 coverage is in `test_dual_component_state.py`, including channel coefficients,
 input ablation, single-ID-only gradients, shared/fresh warmups and readout leakage.
 
+Completed masked-state numerical results can be independently audited and plotted
+with `scripts/analyze_masked_state_results.py --run <completed-run> --output <fresh-export>`.
+It reads retained numerical tables only, checks hierarchical subject aggregation,
+and produces PNG figures, a local HTML analysis and a bitmap-figure PDF with selectable text.
+
+The frozen-token masked-state suite uses the same runner with
+[`dual_component_masked_state_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_masked_state_v1.yaml):
+`--stage check`, `--stage synthetic --output <fresh-run>`, metadata-only
+`--stage masked-state-plan`, then supervised `--stage masked-state`.
+The controller owns export/throughput trials, checkpoint-resumable jobs and
+final subject-level analysis. `masked-state-export` and `masked-state-one` are
+controller children; `masked-state-report` reads completed job results.
+The 30-second tokenizer remains frozen while its 2-second S/O IDs are jointly
+masked. Public train/validation subjects retain their original partition;
+test/protected arrays are excluded before reads. The model owner is
+`src/foundation/dual_component_masked.py`; source adaptation is in
+`src/data/dual_component_tokenizer.py`. `test_dual_component_masked_state.py`
+covers hidden-ID isolation, temporal/spatial/modality interactions, matched
+mask exposure, read boundaries, support deduplication, training-only priors,
+subject aggregation and a temporary-data train/evaluate/resume integration.
+
 The 30-second global latent health pilot uses the same dual-component runner
 with [`dual_component_latent_health_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_latent_health_v1.yaml).
 Run `--stage check`, `--stage synthetic --output <fresh-run>`, then supervised

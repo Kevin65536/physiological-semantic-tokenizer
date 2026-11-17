@@ -37,6 +37,7 @@ import yaml
 
 DEFAULT_CONFIG = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml'
 STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark',
+          'masked-state', 'masked-state-plan', 'masked-state-export', 'masked-state-one', 'masked-state-report',
           'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all', 'refine', 'refine-one',
           'voltage', 'voltage-one', 'voltage-token-atlas', 'eeg-o', 'eeg-o-one',
           'voltage-teacher-plan', 'voltage-teacher-pilot', 'voltage-teacher', 'voltage-teacher-report',
@@ -88,6 +89,14 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 def read_config(path=DEFAULT_CONFIG):
     cfg = yaml.safe_load(Path(path).read_text())
+    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_masked_state_v1':
+        owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_masked_state_v1.yaml'
+        if cfg != yaml.safe_load(owner.read_text()):
+            raise ValueError('use the frozen masked-state contract')
+        if (cfg['data']['allowed_splits'] != ['train', 'validation'] or cfg['data']['test_access'] != 'forbidden'
+                or cfg['data']['protected_data'] != 'forbidden' or not cfg['tokenizer']['frozen']):
+            raise ValueError('frozen tokenizer and public development scope required')
+        return cfg
     if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_hb_id_shape_v1':
         owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_hb_id_shape_v1.yaml'
         if cfg != yaml.safe_load(owner.read_text()):
@@ -1176,6 +1185,9 @@ def finalize_long_so_cache(out,cfg,plan,checks):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
+    if cfg['schema'] == 'dual_component_masked_state_v1':
+        print(json.dumps(serial(masked_state_dispatch(args, cfg))))
+        return
     if cfg['schema'] == 'dual_component_hb_id_shape_v1':
         print(json.dumps(serial(hb_shape_dispatch(args, cfg))))
         return
@@ -6891,6 +6903,639 @@ def hb_shape_dispatch(args,cfg):
         except Exception:
             state.update(status='failed',error=traceback.format_exc(),updated=now());write_json(out/'controller.json',state)
             raise
+
+
+def masked_state_synthetic(cfg):
+    import torch
+    from src.foundation.dual_component_masked import SpatialTemporalMaskedModel, masked_code_loss, spatial_temporal_masks
+    torch.set_num_threads(2); torch.manual_seed(17); rng=np.random.default_rng(17)
+    model=SpatialTemporalMaskedModel(positions=4,vocab_size=8,width=16,layers=1,heads=2,dropout=0.)
+    modality=torch.zeros(4,dtype=torch.long); sensor=torch.arange(4); coords=torch.zeros(4,3)
+    def sample():
+        shared=torch.tensor(rng.integers(0,8,(16,1,15,2)),dtype=torch.long)
+        return shared.expand(-1,4,-1,-1).clone()
+    valid=torch.ones(16,4,15,dtype=torch.bool); visible=valid.clone();visible[:,0]=False;score=valid&~visible
+    optimizer=torch.optim.AdamW(model.parameters(),lr=.01); losses=[]
+    for step in range(100):
+        ids=sample(); logits=model(ids,visible,valid,modality,sensor,coords)
+        loss=masked_code_loss(logits,ids,score,modality)
+        optimizer.zero_grad();loss.backward();optimizer.step();losses.append(float(loss.detach()))
+    model.eval()
+    with torch.no_grad():
+        ids=sample(); logits=model(ids,visible,valid,modality,sensor,coords)
+        accuracy=float((logits.argmax(-1)[score]==ids[score]).float().mean())
+        altered=ids.clone();altered[~visible]=123456
+        isolation=float((logits-model(altered,visible,valid,modality,sensor,coords)).abs().max())
+        null=sample();chance=float((logits.argmax(-1)[score]==null[score]).float().mean())
+    if accuracy<.65 or isolation!=0 or np.mean(losses[-10:])>=np.mean(losses[:10]) or chance>.3:
+        raise AssertionError(f'masked known spatial relation/null failed: {accuracy} {isolation} {chance}')
+    counts={}
+    for task in cfg['evaluation']['tasks']:
+        _,s=spatial_temporal_masks(valid.numpy(),task,rng,cfg['training']['mask_ratio']);counts[task]=int(s.sum())
+    if len(set(counts.values()))!=1:raise AssertionError('mask exposure mismatch')
+    return dict(status='passed',known_spatial_accuracy=accuracy,independent_null_accuracy=chance,
+                hidden_ID_influence=isolation,masked_counts=counts,initial_loss=np.mean(losses[:10]),
+                final_loss=np.mean(losses[-10:]),measured_arrays_read=0)
+
+
+def _masked_references(cfg,root,plan):
+    """Freeze exact completed checkpoint identities and original training scales."""
+    parent=root/cfg['tokenizer']['run']; comparison=read_json(parent/'evaluation_export_v3/comparison.json')
+    if comparison['status']!='completed':raise ValueError('completed frozen tokenizer evaluation required')
+    source_cfg=read_json(parent/'resolved_config.json')['config']
+    configured=yaml.safe_load((root/cfg['tokenizer']['contract']).read_text())
+    if source_cfg!=serial(configured):raise ValueError('tokenizer source contract drift')
+    manifest=read_json(root/cfg['tokenizer']['normalization_run']/'cache/manifest.json')
+    if manifest['allowed_splits']!=['train'] or manifest['status']!='completed':raise ValueError('training-fitted tokenizer scale owner')
+    reference={}; models={}
+    for modality in ('eeg','hb'):
+        spec=cfg['tokenizer'][modality]
+        record=next(r for r in comparison['records'] if all(r[k]==v for k,v in dict(modality=modality,**spec).items()))
+        checkpoint=parent/'models'/modality/(spec['architecture']+'__'+spec['candidate'])/f"seed_{spec['seed']}"/'checkpoint.pt'
+        if Path(record['checkpoint']).resolve()!=checkpoint.resolve() or not checkpoint.is_file():raise ValueError('checkpoint identity')
+        models[modality]=dict(path=str(checkpoint),spec=spec,health_pass=record['health_pass'],macro=record['macro'],source_config=source_cfg)
+        reference[modality]={}
+        for dataset in cfg['data']['datasets']:
+            rows=sorted([r for r in manifest['rows'] if r['modality']==modality and r['dataset']==dataset
+                         and r['duration_s']==90],key=lambda r:(r['record'],r['native_start_sample']))
+            if not rows or rows[0]['split']!='train':raise ValueError('frozen training reference missing')
+            row=rows[0];reference[modality][dataset]=dict(scales=dict(zip(row['positions'],np.asarray(row['scale']).ravel())),
+                parent=row['parent'],subject=row['subject'],training_scale_end_s=row['training_scale_end_s'])
+    from src.data.dual_component_tokenizer import masked_state_geometry
+    layouts={}
+    for dataset in cfg['data']['datasets']:
+        population=[w['metadata'] for w in plan['windows'] if w['row']['dataset']==dataset]
+        meta=next(m for m in population if m['split']=='train' and m.get('EEG_channels'))
+        layouts[dataset]={}
+        for modality,key in [('eeg','EEG_channels'),('hb','fNIRS_positions')]:
+            names=list(dict.fromkeys(name for m in population for name in m.get(key,[])))
+            coords,geometry=masked_state_geometry(root,cfg['data'],meta,modality,names)
+            layouts[dataset][modality]=dict(positions=names,coordinates=coords,geometry=geometry,
+                geometry_reference=meta['key'],absent_sensor_semantics='false_validity_not_zero_measurement')
+            r=reference[modality][dataset];fallback=float(np.median(list(r['scales'].values())))
+            r['fallback_positions']=[name for name in names if name not in r['scales']]
+            r['fallback_training_median']=fallback
+            for name in r['fallback_positions']:r['scales'][name]=fallback
+    return dict(models=models,scales=reference,layouts=layouts,
+        normalization_manifest=str(root/cfg['tokenizer']['normalization_run']/'cache/manifest.json'))
+
+
+def _masked_device(cfg,device,seed):
+    import torch
+    torch.set_num_threads(cfg['resources']['torch_threads']);torch.manual_seed(seed)
+    if device.startswith('cuda'):
+        torch.cuda.set_device(device)
+        torch.cuda.set_per_process_memory_fraction(cfg['resources']['max_worker_gpu_memory_mib']*2**20 /
+            torch.cuda.get_device_properties(device).total_memory,device)
+    return torch
+
+
+def export_masked_state(cfg,args):
+    from src.data.dual_component_tokenizer import masked_state_window, masked_state_observations, masked_state_geometry
+    out=args.output.resolve(); plan=read_json(out/'plan.json');refs=read_json(out/'tokenizer_reference.json')
+    shard=int(args.candidate); count=args.workers
+    if count not in (2,4) or not 0<=shard<count:raise ValueError('bounded export shard')
+    torch=_masked_device(cfg,args.device,17)
+    models={}; frozen_states={}; replay_checks={}
+    for modality,r in refs['models'].items():
+        model=_state_refinement_model(r['source_config'],r['spec']['architecture'],modality,r['spec']['candidate'])
+        checkpoint=torch.load(r['path'],map_location='cpu',weights_only=False)
+        if checkpoint['step']!=r['source_config']['training']['continuation_steps']:raise ValueError('incomplete tokenizer')
+        model.load_state_dict(checkpoint['model_state']);model.eval().requires_grad_(False);models[modality]=model.to(args.device)
+        frozen_states[modality]={k:v.detach().cpu().clone() for k,v in model.state_dict().items()}
+    windows=plan['windows']
+    if args.pilot_output:
+        groups={d:[w for w in windows if w['row']['dataset']==d and w['row']['split']=='train'][:cfg['resources']['export_benchmark_windows_per_dataset']]
+                for d in cfg['data']['datasets']}
+        windows=[w for d in cfg['data']['datasets'] for w in groups[d]]
+    destination=args.pilot_output.resolve() if args.pilot_output else out/'tokens'
+    job=destination/f'shard_{shard}';job.mkdir(parents=True,exist_ok=True)
+    began=time.monotonic();results=[];total_bytes=0
+    for selected in windows[shard::count]:
+        folder=destination/'parents'/identity(selected['row']['key']);record_path=folder/'record.json'
+        if record_path.exists():results.append(read_json(record_path));continue
+        try:
+            data=masked_state_window(plan['cache_root'],selected,cfg['data']);meta=data['metadata'];arrays=data['arrays']
+            folder.mkdir(parents=True,exist_ok=True);by_modality={};metadata={};failures=[]
+            for modality in ('eeg','hb'):
+                try:
+                    names,values=masked_state_observations(meta,arrays,modality,refs['scales'][modality][meta['dataset']]['scales'],selected['starts_s'])
+                    metadata[modality]=refs['layouts'][meta['dataset']][modality]
+                    stacked=np.concatenate([v['x'] for v in values]);ids=[]
+                    with torch.inference_mode():
+                        for start in range(0,len(stacked),cfg['resources']['export_batch_size']):
+                            x=torch.tensor(stacked[start:start+cfg['resources']['export_batch_size']],device=args.device)
+                            latents=models[modality].encode_continuous(x)
+                            parts=[models[modality].branches[c]['quantizer'](latents[c]).hard_ids.cpu().numpy() for c in ('S','O')]
+                            ids.append(np.stack(parts,-1).astype(np.int16))
+                            if modality not in replay_checks:
+                                forward=models[modality](x[:1]);replay=models[modality].decode_ids(forward['ids'])
+                                for c in ('S','O'):torch.testing.assert_close(forward[c],replay[c],rtol=1e-5,atol=2e-6)
+                                replay_checks[modality]=max(float((forward[c]-replay[c]).abs().max()) for c in ('S','O'))
+                    target_names=metadata[modality]['positions'];mapping=[target_names.index(name) for name in names]
+                    padded_ids=np.zeros((len(values),len(target_names),15,2),np.int16)
+                    padded_valid=np.zeros(padded_ids.shape[:-1],bool)
+                    padded_features=np.full((*padded_valid.shape,8),np.nan,np.float32)
+                    padded_ids[:,mapping]=np.concatenate(ids).reshape(len(values),len(names),15,2)
+                    padded_valid[:,mapping]=np.stack([v['valid'] for v in values])
+                    padded_features[:,mapping]=np.stack([v['features'] for v in values])
+                    by_modality[modality]=dict(ids=padded_ids,valid=padded_valid,features=padded_features)
+                except (ValueError,KeyError) as exc:
+                    failures.append(dict(modality=modality,error=str(exc)))
+            if len(by_modality)!=2:
+                result=dict(status='unavailable',key=meta['key'],split=meta['split'],failures=failures,planned_inputs=len(selected['starts_s']))
+            else:
+                samples=[]
+                for i,start in enumerate(selected['starts_s']):
+                    # A sample needs some observed positions in each modality; absent channels stay explicit.
+                    ids=np.concatenate([by_modality[m]['ids'][i] for m in ('eeg','hb')]);valid=np.concatenate([by_modality[m]['valid'][i] for m in ('eeg','hb')])
+                    features=np.concatenate([by_modality[m]['features'][i] for m in ('eeg','hb')])
+                    path=folder/f'input_{start:03d}.npz'
+                    write_npz(path,ids=ids,valid=valid,features=features)
+                    samples.append(dict(path=str(path),dataset=meta['dataset'],subject=meta['subject'],split=meta['split'],
+                        record=meta['source']['native_record'],parent=meta['key'],start_s=start,
+                        absolute_start_sample=meta['source']['start_sample']+start*meta['source']['rate'],
+                        source_rate=meta['source']['rate'],positions_eeg=len(metadata['eeg']['positions']),
+                        valid_tokens=int(valid.sum()),source_metadata=selected['row']['metadata']))
+                result=dict(status='completed',key=meta['key'],samples=samples,metadata=metadata,source_failures=meta.get('source_failures',[]))
+            total_bytes+=Path(meta['array_file']).stat().st_size if meta.get('array_file') else 0
+        except Exception:
+            result=dict(status='failed',key=selected['row']['key'],error=traceback.format_exc(),planned_inputs=len(selected['starts_s']))
+        write_json(record_path,result);results.append(result)
+        write_json(job/'progress.json',dict(completed_parents=len(results),planned_parents=len(windows[shard::count]),
+            seconds=time.monotonic()-began,updated=now()))
+    for modality,model in models.items():
+        if any(not torch.equal(value.detach().cpu(),frozen_states[modality][key]) for key,value in model.state_dict().items()):
+            raise AssertionError('frozen tokenizer changed during export')
+    elapsed=time.monotonic()-began
+    summary=dict(status='completed' if not any(r['status']=='failed' for r in results) else 'failed',
+        records=results,parents=len(results),seconds=elapsed,source_bytes=total_bytes,read_MiB_s=total_bytes/2**20/max(elapsed,1e-9),
+        tokenizer_unchanged=True,integer_replay_max_abs=replay_checks,
+        peak_rss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+        peak_gpu_reserved_bytes=torch.cuda.max_memory_reserved(args.device) if args.device.startswith('cuda') else 0)
+    write_json(job/'summary.json',summary);return summary
+
+
+def _masked_pack(cfg,out,shards):
+    records=[]
+    for i in range(shards):records.extend(read_json(out/'tokens'/f'shard_{i}'/'summary.json')['records'])
+    if any(r['status']=='failed' for r in records):raise ValueError('token preparation failures retained; inspect before training')
+    samples=[];layouts={}
+    for r in records:
+        if r['status']!='completed':continue
+        for sample in r['samples']:
+            d=sample['dataset'];layout=r['metadata']
+            if d in layouts and serial(layout)!=serial(layouts[d]):
+                # Geometry provenance may vary by record; actual names/coordinates must agree.
+                for m in ('eeg','hb'):
+                    if layout[m]['positions']!=layouts[d][m]['positions'] or layout[m]['coordinates']!=layouts[d][m]['coordinates']:
+                        raise ValueError('dataset layout changed; require explicit layout grouping')
+            else:layouts[d]=layout
+            if sample['valid_tokens']:samples.append(sample)
+    samples.sort(key=lambda r:(r['dataset'],r['split'],r['subject'],r['record'],r['absolute_start_sample']))
+    offsets={};cursor=0
+    for d in cfg['data']['datasets']:
+        if d not in layouts:raise ValueError('planned dataset has no token inputs')
+        p=sum(len(layouts[d][m]['positions']) for m in ('eeg','hb'));offsets[d]=cursor;cursor+=p
+        for split in ('train','validation'):
+            if not any(s['dataset']==d and s['split']==split for s in samples):raise ValueError('missing dataset/split')
+    counts={}
+    for sample in samples:
+        with np.load(sample['path']) as a:
+            n=sample['positions_eeg']
+            for modality,sl in [('eeg',slice(0,n)),('hb',slice(n,None))]:
+                for branch,b in enumerate(('S','O')):
+                    key='/'.join((sample['dataset'],sample['split'],modality,b))
+                    c=counts.setdefault(key,np.zeros(128,np.int64))
+                    c+=np.bincount(a['ids'][sl,:,branch][a['valid'][sl]],minlength=128)
+    health={}
+    for key,c in counts.items():
+        p=c/max(int(c.sum()),1);nz=p>0
+        health[key]=dict(counts=c,valid_IDs=int(c.sum()),active_codes=int(nz.sum()),
+                         effective_codes=float(np.exp(-(p[nz]*np.log(p[nz])).sum())),maximum_probability=float(p.max()))
+    result=dict(status='completed',samples=samples,layouts=layouts,sensor_offsets=offsets,total_positions=cursor,
+        unavailable=[r for r in records if r['status']!='completed'],planned_inputs=read_json(out/'plan.json')['planned_inputs'],
+        available_inputs=len(samples),token_health=health,split_subjects={sp:sorted({(s['dataset'],s['subject']) for s in samples if s['split']==sp}) for sp in ('train','validation')})
+    write_json(out/'tokens/manifest.json',result);return result
+
+
+def _masked_load(out):
+    manifest=read_json(Path(out)/'tokens/manifest.json')
+    if manifest['status']!='completed' or any(s['split'] not in ('train','validation') for s in manifest['samples']):
+        raise ValueError('completed development token manifest required before arrays')
+    arrays=[]
+    for sample in manifest['samples']:
+        with np.load(sample['path']) as a:arrays.append(dict(a))
+    return manifest,arrays
+
+
+def _masked_layout(manifest,d,device):
+    import torch
+    layout=manifest['layouts'][d];n=len(layout['eeg']['positions']);p=n+len(layout['hb']['positions'])
+    return (torch.tensor([0]*n+[1]*(p-n),device=device),
+            torch.arange(manifest['sensor_offsets'][d],manifest['sensor_offsets'][d]+p,device=device),
+            torch.tensor(layout['eeg']['coordinates']+layout['hb']['coordinates'],device=device,dtype=torch.float32))
+
+
+def _masked_model(cfg,manifest,arm):
+    from src.foundation.dual_component_masked import SpatialTemporalMaskedModel
+    spec=cfg['arms'][arm]
+    return SpatialTemporalMaskedModel(positions=manifest['total_positions'],**cfg['model'],
+                                     interaction=spec['interaction'],geometry=spec['geometry'])
+
+
+def _masked_batch(arrays,indices,device):
+    import torch
+    ids=torch.tensor(np.stack([arrays[i]['ids'] for i in indices]),dtype=torch.long,device=device)
+    valid=torch.tensor(np.stack([arrays[i]['valid'] for i in indices]),dtype=torch.bool,device=device)
+    return ids,valid
+
+
+def _masked_sampling(samples):
+    nested={}
+    for i,s in enumerate(samples):
+        if s['split']=='train':nested.setdefault(s['dataset'],{}).setdefault(s['subject'],{}).setdefault(s['record'],[]).append(i)
+    return nested
+
+
+def _masked_indices(rng,nested,count):
+    d=str(rng.choice(sorted(nested)));indices=[]
+    for _ in range(count):
+        sub=str(rng.choice(sorted(nested[d])));rec=str(rng.choice(sorted(nested[d][sub])))
+        indices.append(int(rng.choice(nested[d][sub][rec])))
+    return d,indices
+
+
+def train_masked_state(cfg,args):
+    import math
+    from src.foundation.dual_component_masked import spatial_temporal_masks,masked_code_loss
+    torch=_masked_device(cfg,args.device,args.seed);out=args.output.resolve();arm=args.candidate
+    if arm not in cfg['arms'] or args.seed not in cfg['training']['seeds']:raise ValueError('job outside frozen matrix')
+    job=args.pilot_output.resolve() if args.pilot_output else out/'models'/arm/f'seed_{args.seed}'
+    job.mkdir(parents=True,exist_ok=True)
+    with owner_lock(job,'worker'):
+        if (job/'summary.json').exists():return read_json(job/'summary.json')
+        manifest,arrays=_masked_load(out);nested=_masked_sampling(manifest['samples']);rng=np.random.default_rng(args.seed)
+        model=_masked_model(cfg,manifest,arm).to(args.device)
+        optimizer=torch.optim.AdamW(model.parameters(),lr=cfg['training']['learning_rate'],weight_decay=cfg['training']['weight_decay'])
+        budget=cfg['resources']['benchmark_steps'] if args.pilot_output else cfg['training']['steps']
+        signature=dict(config=identity(cfg),arm=arm,seed=args.seed,budget=budget,manifest=identity(manifest))
+        checkpoint=job/'checkpoint.pt';start=0;history=[]
+        if checkpoint.exists():
+            saved=torch.load(checkpoint,map_location=args.device,weights_only=False)
+            if saved['signature']!=signature:raise ValueError('masked checkpoint contract drift')
+            model.load_state_dict(saved['model']);optimizer.load_state_dict(saved['optimizer']);start=saved['step'];history=saved['history']
+            rng.bit_generator.state=saved['numpy_rng'];torch.set_rng_state(saved['torch_rng'].cpu())
+            if args.device.startswith('cuda'):torch.cuda.set_rng_state(saved['cuda_rng'].cpu(),args.device)
+        began=time.monotonic();running_loss=0.;updates=0
+        try:
+            for step in range(start,budget):
+                model.train();d,indices=_masked_indices(rng,nested,cfg['training']['batch_size']);ids,valid=_masked_batch(arrays,indices,args.device)
+                task=cfg['arms'][arm]['masking']
+                if task=='mixed':task=str(rng.choice(cfg['evaluation']['tasks']))
+                visible,score=spatial_temporal_masks(valid.cpu().numpy(),task,rng,cfg['training']['mask_ratio'])
+                visible=torch.tensor(visible,device=args.device);score=torch.tensor(score,device=args.device);layout=_masked_layout(manifest,d,args.device)
+                warm=min(1.,(step+1)/cfg['training']['warmup_steps']);fraction=max(0,(step-cfg['training']['warmup_steps'])/max(1,budget-cfg['training']['warmup_steps']))
+                lr=cfg['training']['learning_rate']*warm*(.1+.9*.5*(1+math.cos(math.pi*fraction)))
+                for group in optimizer.param_groups:group['lr']=lr
+                with torch.autocast(device_type='cuda',dtype=torch.bfloat16,enabled=args.device.startswith('cuda')):
+                    logits=model(ids,visible,valid,*layout);loss=masked_code_loss(logits,ids,score,layout[0])
+                if not bool(torch.isfinite(loss)):raise FloatingPointError('nonfinite masked loss')
+                optimizer.zero_grad(set_to_none=True);loss.backward();norm=torch.nn.utils.clip_grad_norm_(model.parameters(),cfg['training']['gradient_clip'])
+                if not bool(torch.isfinite(norm)):raise FloatingPointError('nonfinite masked gradient')
+                optimizer.step();running_loss+=float(loss.detach());updates+=1
+                if step==0 or (step+1)%cfg['training']['checkpoint_every']==0 or step+1==budget:
+                    history.append(dict(step=step+1,mean_CE_nats=running_loss/updates,learning_rate=lr,seconds=time.monotonic()-began))
+                    running_loss=0.;updates=0
+                    _torch_save(checkpoint,dict(signature=signature,model=model.state_dict(),optimizer=optimizer.state_dict(),step=step+1,
+                        history=history,numpy_rng=rng.bit_generator.state,torch_rng=torch.get_rng_state(),
+                        cuda_rng=torch.cuda.get_rng_state(args.device) if args.device.startswith('cuda') else None))
+                    write_json(job/'progress.json',dict(status='training',completed_steps=step+1,budget=budget,updated=now(),history=history[-1:]))
+            elapsed=time.monotonic()-began
+            result=dict(status='completed',arm=arm,seed=args.seed,completed_steps=budget,training_seconds=elapsed,
+                steps_per_second=(budget-start)/max(elapsed,1e-9),history=history,checkpoint=str(checkpoint),
+                parameters=sum(p.numel() for p in model.parameters()),
+                peak_gpu_reserved_bytes=torch.cuda.max_memory_reserved(args.device) if args.device.startswith('cuda') else 0)
+            if not args.pilot_output:
+                result['evaluation']=evaluate_masked_state(cfg,out,job,model,manifest,arrays,args.device,args.seed,arm)
+            write_json(job/'summary.json',result);write_json(job/'progress.json',dict(status='completed',completed_steps=budget,updated=now()))
+            return result
+        except Exception:
+            write_json(job/'failure.json',dict(status='failed',arm=arm,seed=args.seed,error=traceback.format_exc(),updated=now()));raise
+
+
+def _masked_priors(manifest,arrays,k):
+    priors={}
+    for d in manifest['layouts']:
+        p=sum(len(manifest['layouts'][d][m]['positions']) for m in ('eeg','hb'))
+        counts=np.full((p,15,2,k),.5)
+        for s,a in zip(manifest['samples'],arrays):
+            if s['dataset']!=d or s['split']!='train':continue
+            pos,t=np.nonzero(a['valid'])
+            for branch in (0,1):np.add.at(counts,(pos,t,branch,a['ids'][pos,t,branch]),1.)
+        priors[d]=counts/counts.sum(-1,keepdims=True)
+    return priors
+
+
+def _masked_probe_indices(cfg,samples):
+    grouped=defaultdict(list)
+    for i,s in enumerate(samples):grouped[(s['dataset'],s['subject'],s['record'],s['split'])].append(i)
+    return [i for key in sorted(grouped) for i in grouped[key][:cfg['evaluation']['probes_windows_per_record']]]
+
+
+def evaluate_masked_state(cfg,out,job,model,manifest,arrays,device,seed,arm):
+    import torch
+    import torch.nn.functional as F
+    from src.foundation.dual_component_masked import spatial_temporal_masks
+    model.eval();priors=_masked_priors(manifest,arrays,cfg['model']['vocab_size']);rows=[];diagnostics=[]
+    probe_indices=set(_masked_probe_indices(cfg,manifest['samples']));samples=manifest['samples']
+    started=time.monotonic()
+    with torch.inference_mode():
+        for d in cfg['data']['datasets']:
+            layout=_masked_layout(manifest,d,device);mods=layout[0].cpu().numpy()
+            indices=[i for i,s in enumerate(samples) if s['dataset']==d and s['split']=='validation']
+            rng=np.random.default_rng(cfg['evaluation']['mask_seed'])
+            for task in cfg['evaluation']['tasks']:
+                for index in indices:
+                    ids,valid=_masked_batch(arrays,[index],device)
+                    visible,score=spatial_temporal_masks(valid.cpu().numpy(),task,rng,cfg['training']['mask_ratio'])
+                    vis=torch.tensor(visible,device=device);take=torch.tensor(score,device=device)
+                    logits=model(ids,vis,valid,*layout)
+                    ce=F.cross_entropy(logits.reshape(-1,128),ids.flatten(),reduction='none').reshape(ids.shape).cpu().numpy()/np.log(2)
+                    pred=logits.argmax(-1).cpu().numpy();truth=ids.cpu().numpy()
+                    base=-np.log2(np.take_along_axis(priors[d][None],truth[...,None],axis=-1)[...,0])
+                    s=samples[index]
+                    for m,mod in enumerate(('eeg','hb')):
+                        for branch,b in enumerate(('S','O')):
+                            keep=score[0] & (mods[:,None]==m);n=int(keep.sum())
+                            if not n:continue
+                            rows.append(dict(dataset=d,subject=s['subject'],record=s['record'],parent=s['parent'],start_s=s['start_s'],task=task,
+                                modality=mod,branch=b,masked_IDs=n,CE_bits=float(ce[0,:,:,branch][keep].mean()),
+                                prior_bits=float(base[0,:,:,branch][keep].mean()),
+                                gain_bits=float((base[0,:,:,branch][keep]-ce[0,:,:,branch][keep]).mean()),
+                                accuracy=float((pred[0,:,:,branch][keep]==truth[0,:,:,branch][keep]).mean())))
+                    if index in probe_indices and task=='random':
+                        # Never move originally hidden target IDs into visible input slots.
+                        for perturb in ('time_permutation','space_permutation','other_modality_removed'):
+                            for m,mod in enumerate(('eeg','hb')):
+                                changed=truth.copy();keep_vis=visible.copy();local=np.random.default_rng(cfg['evaluation']['mask_seed']+index)
+                                if perturb=='time_permutation':
+                                    for p in np.flatnonzero(mods==m):
+                                        t=np.flatnonzero(visible[0,p]);changed[0,p,t]=truth[0,p,local.permutation(t)]
+                                elif perturb=='space_permutation':
+                                    for t in range(15):
+                                        ps=np.flatnonzero(visible[0,:,t] & (mods==m));changed[0,ps,t]=truth[0,local.permutation(ps),t]
+                                else:keep_vis[:,mods!=m]=False
+                                z=model(torch.tensor(changed,device=device),torch.tensor(keep_vis,device=device),valid,*layout)
+                                err=F.cross_entropy(z.reshape(-1,128),ids.flatten(),reduction='none').reshape(ids.shape).cpu().numpy()/np.log(2)
+                                keep=score[0] & (mods[:,None]==m)
+                                if keep.any():diagnostics.append(dict(dataset=d,subject=s['subject'],record=s['record'],modality=mod,perturbation=perturb,
+                                    delta_bits=float((err[0][keep]-ce[0][keep]).mean()),samples=int(keep.sum())))
+            write_json(job/'evaluation_progress.json',dict(dataset=d,rows=len(rows),seconds=time.monotonic()-started,updated=now()))
+    write_json(job/'masked_rows.json',rows);write_json(job/'context_diagnostics.json',diagnostics)
+    probes=_masked_physiology_probes(cfg,job,model,manifest,arrays,device,seed,arm)
+    result=dict(status='completed',rows=len(rows),masked_scores=_masked_macro(rows,['task','modality','branch'],['CE_bits','prior_bits','gain_bits','accuracy']),
+        diagnostics=_masked_macro(diagnostics,['modality','perturbation'],['delta_bits']),physiology=probes,seconds=time.monotonic()-started)
+    write_json(job/'evaluation.json',result);return result
+
+
+def _masked_macro(rows,groups,fields):
+    """Window -> record -> subject -> dataset -> equal-dataset summaries."""
+    def groupmean(items,keys):
+        grouped=defaultdict(list)
+        for r in items:grouped[tuple(r[k] for k in keys)].append(r)
+        return [dict(zip(keys,key),**{f:float(np.mean([r[f] for r in values])) for f in fields}) for key,values in grouped.items()]
+    records=groupmean(rows,['dataset','subject','record',*groups])
+    subjects=groupmean(records,['dataset','subject',*groups]);datasets=groupmean(subjects,['dataset',*groups])
+    return dict(macro=groupmean(datasets,groups),datasets=datasets,subjects=subjects)
+
+
+def _masked_physiology_probes(cfg,job,model,manifest,arrays,device,seed,arm):
+    import torch
+    torch.manual_seed(seed);random_model=_masked_model(cfg,manifest,arm).to(device).eval()
+    selected=_masked_probe_indices(cfg,manifest['samples']);collected=defaultdict(list)
+    with torch.inference_mode():
+        for index in selected:
+            sample=manifest['samples'][index];d=sample['dataset'];layout=_masked_layout(manifest,d,device)
+            ids,valid=_masked_batch(arrays,[index],device)
+            learned=model(ids,valid,valid,*layout,features=True)[0].cpu().numpy()
+            random_features=random_model(ids,valid,valid,*layout,features=True)[0].cpu().numpy()
+            mods=layout[0].cpu().numpy();a=arrays[index]
+            for m,mod in enumerate(('eeg','hb')):
+                ps=np.flatnonzero((mods==m)&a['valid'].any(1))
+                # Deterministic geometry-spanning order selection, independent of signal scores.
+                if len(ps)>cfg['evaluation']['probes_positions_per_modality']:
+                    ps=ps[np.linspace(0,len(ps)-1,cfg['evaluation']['probes_positions_per_modality']).round().astype(int)]
+                for p in ps:
+                    ts=np.flatnonzero(a['valid'][p]);n=len(ts)
+                    if not n:continue
+                    onehot=np.eye(128,dtype=np.float32)[a['ids'][p,ts]].reshape(n,256)
+                    visible_ids=a['ids'][p,a['valid'][p]]
+                    bag=np.concatenate([np.bincount(visible_ids[:,b],minlength=128)/len(visible_ids) for b in (0,1)])
+                    position=np.eye(len(mods),dtype=np.float32)[p]
+                    collected[(d,mod)].append(dict(sample=sample,targets=a['features'][p,ts],
+                        features={k:np.concatenate([v,np.broadcast_to(position,(n,len(position)))],-1) for k,v in dict(
+                            pretrained=learned[p,ts],untrained=random_features[p,ts],ID=onehot,
+                            window_bag=np.broadcast_to(bag,(n,len(bag)))).items()}))
+    del random_model
+    rows=[];fits={}
+    for (d,mod),items in collected.items():
+        train=[r for r in items if r['sample']['split']=='train'];val=[r for r in items if r['sample']['split']=='validation']
+        if not train or not val:raise ValueError('probe split empty')
+        y=np.concatenate([r['targets'] for r in train]).astype(float);ym=y.mean(0);ys=np.maximum(y.std(0),1e-6);y=(y-ym)/ys
+        fits[d+'/'+mod]=dict(target_mean=ym,target_SD=ys,training_points=len(y),fit_split='train')
+        for name in ('pretrained','untrained','ID','window_bag'):
+            x=np.concatenate([r['features'][name] for r in train]).astype(float);xm=x.mean(0);xs=np.maximum(x.std(0),1e-6)
+            x=(x-xm)/xs
+            penalty=cfg['evaluation']['ridge_alpha']*len(x)
+            weights=np.linalg.solve(x.T@x+penalty*np.eye(x.shape[1]),x.T@y)
+            fits[d+'/'+mod][name]=dict(input_mean=xm,input_SD=xs,coefficients=weights,alpha=cfg['evaluation']['ridge_alpha'])
+            for item in val:
+                pred=(item['features'][name]-xm)/xs@weights;target=(item['targets']-ym)/ys
+                mse=((pred-target)**2).mean(0);s=item['sample']
+                for feature,error in enumerate(mse):rows.append(dict(dataset=d,subject=s['subject'],record=s['record'],
+                    modality=mod,reader=name,feature=feature,NMSE=float(error),points=len(pred)))
+    write_json(job/'physiology_probe_fits.json',fits);write_json(job/'physiology_probe_rows.json',rows)
+    result=_masked_macro(rows,['modality','reader','feature'],['NMSE'])
+    write_json(job/'physiology_probes.json',result);return result
+
+
+def summarize_masked_state(cfg,out):
+    import csv
+    import html
+    out=Path(out);models=[];failures=[];rows=[];probes=[]
+    for arm in cfg['arms']:
+        for seed in cfg['training']['seeds']:
+            job=out/'models'/arm/f'seed_{seed}'
+            if not (job/'summary.json').exists():
+                failures.append(dict(arm=arm,seed=seed,status='failed' if (job/'failure.json').exists() else 'incomplete'));continue
+            r=read_json(job/'summary.json');models.append(dict(arm=arm,seed=seed,status=r['status'],completed_steps=r['completed_steps'],
+                training_seconds=r['training_seconds'],checkpoint=r['checkpoint']))
+            rows.extend(dict(row,arm=arm,seed=seed) for row in r['evaluation']['masked_scores']['subjects'])
+            probes.extend(dict(row,arm=arm,seed=seed) for row in r['evaluation']['physiology']['subjects'])
+    def csvfile(name,values):
+        if not values:return
+        with (out/name).open('w',newline='') as f:
+            w=csv.DictWriter(f,fieldnames=list(values[0]));w.writeheader();w.writerows(values)
+    csvfile('masked_subjects.csv',rows);csvfile('physiology_subjects.csv',probes)
+    contrasts=[];rng=np.random.default_rng(17)
+    # Seeds are averaged within subjects; bootstrap independent subjects within datasets.
+    for treatment,control,label in [('spatial','temporal','spatial_interaction'),('spatial','anonymous','position'),
+        ('joint','spatial','cross_modal_interaction'),('spatial','spatial_random','mixed_vs_random'),
+        ('spatial','spatial_span','mixed_vs_span'),('spatial','spatial_space','mixed_vs_space')]:
+        for task in cfg['evaluation']['tasks']:
+            for modality in ('eeg','hb'):
+                groups=defaultdict(lambda:defaultdict(list))
+                for r in rows:
+                    if r['arm'] in (treatment,control) and r['task']==task and r['modality']==modality:
+                        groups[(r['dataset'],r['subject'])][r['arm']].append(r['CE_bits'])
+                by_dataset=defaultdict(list)
+                for (d,s),values in groups.items():
+                    if all(len(values[a])==2*len(cfg['training']['seeds']) for a in (treatment,control)):
+                        by_dataset[d].append(float(np.mean(values[control])-np.mean(values[treatment])))
+                if len(by_dataset)!=len(cfg['data']['datasets']):continue
+                mean=float(np.mean([np.mean(v) for v in by_dataset.values()]))
+                boot=np.mean([rng.choice(v,(cfg['evaluation']['bootstrap_subjects'],len(v)),replace=True).mean(1) for v in by_dataset.values()],axis=0)
+                contrasts.append(dict(contrast=label,task=task,modality=modality,gain_bits=mean,
+                    CI95_low=float(np.quantile(boot,.025)),CI95_high=float(np.quantile(boot,.975)),
+                    paired_subjects=sum(map(len,by_dataset.values())),inference='exploratory_pointwise_subject_bootstrap_no_multiplicity_claim'))
+    csvfile('paired_contrasts.csv',contrasts)
+    result=dict(status='completed' if not failures else 'completed_with_failures',planned_models=len(cfg['arms'])*len(cfg['training']['seeds']),
+        completed_models=len(models),models=models,failures=failures,contrasts=contrasts,
+        token_manifest='tokens/manifest.json',frozen_tokenizer='tokenizer_reference.json',claim=cfg['claim'],
+        interpretation='offline contextual ID completion and held-out-subject observed-feature readout; physiological mechanism requires separate evidence',
+        completed_at=now())
+    write_json(out/'summary.json',result)
+    table=''.join('<tr>'+''.join('<td>'+html.escape(str(r[k]))+'</td>' for k in ('contrast','task','modality','gain_bits','CI95_low','CI95_high','paired_subjects'))+'</tr>' for r in contrasts)
+    (out/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>TK-MASK-STATE-v1</title><style>body{font:16px sans-serif;max-width:1200px;margin:40px auto}td,th{padding:8px;border:1px solid #ddd}table{border-collapse:collapse}</style>'
+        '<h1>固定 tokenizer 的时空掩码预训练</h1><p>30 秒上下文化编码，每 2 秒一个 S/O ID；公开训练被试拟合，验证被试评价。正的 gain bits 表示处理臂交叉熵低于对照。按记录、被试、数据集依次等权，种子不作为独立被试。区间为探索性逐项被试 bootstrap。</p>'
+        f'<p>完成 {len(models)}/{result["planned_models"]} 个作业；失败或未完成 {len(failures)} 个。</p>'
+        '<p>EEG：5 个频带 log10 功率、log10 RMS、均值及斜率。Hb：HbO/HbR 的均值、SD、每秒斜率及末点减首点。读出 NMSE 分母为仅训练被试拟合的特征方差；原始观测特征不作预训练标签。S/O 为模型条件分量。</p>'
+        '<p><a href="summary.json">运行结果</a> · <a href="masked_subjects.csv">逐被试掩码结果</a> · <a href="physiology_subjects.csv">生理特征读出</a> · <a href="paired_contrasts.csv">配对比较</a></p>'
+        '<table><tr><th>比较</th><th>遮挡</th><th>模态</th><th>增益 bit/ID</th><th>95% 下界</th><th>95% 上界</th><th>被试数</th></tr>'+table+'</table>')
+    return result
+
+
+def _masked_register_terminal(root,out,result):
+    """Append only this registered campaign's terminal state; preserve other work."""
+    from src.utils.project_state import validate_registry, write_outputs
+    registry_path=root/'research_state/registry.json';registry=read_json(registry_path)
+    existing=[r for r in registry['records'] if r['entity']=='main.tk_mask_state_v1']
+    if not existing or existing[-1]['execution']!='running':return
+    old=existing[-1];timestamp=now();eid='e.tk_mask_state_results'
+    if not any(e['id']==eid for e in registry['evidence']):
+        registry['evidence'].append(dict(id=eid,label='固定词表掩码预训练全作业结果',path=str((out/'summary.json').relative_to(root)),role='result_summary'))
+    record=dict(old,state_id='main.tk_mask_state_v1@2026-11-13.completed',execution='completed',
+        scientific_verdict='inconclusive',supersedes=[old['state_id']],updated_at=timestamp,
+        evidence_ids=old['evidence_ids']+[eid],
+        summary=f"固定tokenizer的离线掩码套件已终态：{result['completed_models']}/{result['planned_models']}模型完成，其余失败或未完成按原记录保留。30秒编码保持、2秒S/O联合遮挡；被试级CE、原始观测特征读出和上下文扰动结果已自动汇总。科学解释待复核，test/protected未读取。",
+        next_step='复核summary.json、masked_subjects.csv、physiology_subjects.csv及配对区间；不自动追加训练。')
+    registry['records'].append(record);registry['updated_at']=timestamp
+    validate_registry(registry,repo_root=root);write_json(registry_path,registry)
+    write_outputs(registry,repo_root=root,status_path=root/'docs/PROJECT_STATUS.md',readme_path=root/'README.md')
+
+
+def _masked_jobs(cfg,args,jobs,workers,phase):
+    out=args.output.resolve();pending=list(jobs);active=[];results=[];began=time.monotonic();devices=cfg['resources']['devices']
+    while pending or active:
+        while pending and len(active)<len(devices)*workers:
+            spec=pending.pop(0);job=Path(spec['job']);job.mkdir(parents=True,exist_ok=True)
+            if (job/'summary.json').exists():results.append(read_json(job/'summary.json'));continue
+            if (job/'failure.json').exists():results.append(read_json(job/'failure.json'));continue
+            counts=Counter(a['device'] for a in active);device=next(d for d in devices if counts[d]<workers)
+            command=[sys.executable,str(Path(__file__).resolve()),'--config',str(args.config.resolve()),'--output',str(out),
+                '--project-root',str(args.project_root.resolve()),'--stage',spec['stage'],'--candidate',str(spec['candidate']),
+                '--seed',str(spec.get('seed',17)),'--device',device,'--parent-pid',str(os.getpid())]
+            if 'shards' in spec:command+=['--workers',str(spec['shards'])]
+            if 'pilot' in spec:command+=['--pilot-output',str(spec['pilot'])]
+            log=(job/'process.log').open('a');p=subprocess.Popen(command,cwd=SOURCE,stdout=log,stderr=subprocess.STDOUT)
+            write_json(job/'launch.json',dict(command=command,pid=p.pid,controller_pid=os.getpid(),device=device,launched_at=now()))
+            active.append(dict(process=p,log=log,job=job,device=device,candidate=spec['candidate'],seed=spec.get('seed',17)))
+        if not active:continue
+        time.sleep(.5)
+        for item in list(active):
+            code=item['process'].poll()
+            if code is None:continue
+            item['log'].close();active.remove(item);job=item['job']
+            result=read_json(job/'summary.json') if code==0 and (job/'summary.json').exists() else dict(status='failed',job=str(job),returncode=code)
+            if result['status']=='failed' and not (job/'failure.json').exists():write_json(job/'failure.json',result)
+            results.append(result)
+        write_json(out/'progress.json',dict(phase=phase,completed_jobs=len(results),planned_jobs=len(jobs),
+            active=[dict(pid=a['process'].pid,device=a['device'],candidate=a['candidate'],seed=a['seed'],job=str(a['job'])) for a in active],
+            seconds=time.monotonic()-began,updated=now()))
+    return dict(results=results,seconds=time.monotonic()-began)
+
+
+def masked_state_dispatch(args,cfg):
+    from src.data.dual_component_tokenizer import masked_state_plan
+    allowed=('check','synthetic','masked-state-plan','masked-state-export','masked-state-one','masked-state','masked-state-report')
+    if args.stage not in allowed or args.evaluation_split!='development':raise ValueError('masked-state development stages only')
+    if args.stage=='check':return dict(status='valid',planned_jobs=len(cfg['arms'])*len(cfg['training']['seeds']),measured_arrays_read=0)
+    if args.output is None:raise ValueError('explicit fresh output required')
+    out=args.output.resolve();root=args.project_root.resolve()
+    if args.stage=='synthetic':
+        result=masked_state_synthetic(cfg);write_json(out/'synthetic.json',result);return result
+    if args.stage in ('masked-state-one','masked-state-export'):
+        if args.parent_pid is None or os.getppid()!=args.parent_pid:raise ValueError('worker must belong to live controller')
+        result=train_masked_state(cfg,args) if args.stage=='masked-state-one' else export_masked_state(cfg,args)
+        return {k:v for k,v in result.items() if k in ('status','parents','completed_steps','arm','seed')}
+    if args.stage=='masked-state-report':return summarize_masked_state(cfg,out)
+    with owner_lock(out):
+        freeze_contract(out,cfg,root)
+        if not (out/'plan.json').exists():
+            plan=masked_state_plan(root/cfg['data']['cache'],cfg['data'],root/cfg['data']['source_ssm']);write_json(out/'plan.json',plan)
+        plan=read_json(out/'plan.json')
+        if not (out/'tokenizer_reference.json').exists():
+            write_json(out/'tokenizer_reference.json',_masked_references(cfg,root,plan))
+        if args.stage=='masked-state-plan':return dict(status='planned',parents=len(plan['windows']),inputs=plan['planned_inputs'])
+        if read_json(out/'synthetic.json')['status']!='passed' or read_json(out/'software_validation.json')['status']!='passed':
+            raise ValueError('software and synthetic validation before arrays')
+        state=dict(status='running',pid=os.getpid(),updated=now());write_json(out/'controller.json',state)
+        try:
+            if not (out/'export_benchmark.json').exists():
+                trials=[]
+                for workers in cfg['resources']['worker_candidates']:
+                    folder=out/'benchmark'/f'export_workers_{workers}';n=workers*len(cfg['resources']['devices'])
+                    jobs=[dict(stage='masked-state-export',candidate=i,shards=n,pilot=folder,job=folder/f'shard_{i}') for i in range(n)]
+                    result=_masked_jobs(cfg,args,jobs,workers,'export_benchmark')
+                    trials.append(dict(workers=workers,**result,parents_per_second=sum(r.get('parents',0) for r in result['results'])/result['seconds']))
+                good=[r for r in trials if all(x['status']=='completed' for x in r['results'])]
+                if not good:raise RuntimeError('export benchmark failed')
+                choice=max(good,key=lambda r:r['parents_per_second'])
+                write_json(out/'export_benchmark.json',dict(status='completed',trials=trials,workers_per_device=choice['workers'],
+                    reason='highest measured parent throughput including decompression and encoding',
+                    estimated_export_seconds=len(plan['windows'])/choice['parents_per_second']))
+            workers=read_json(out/'export_benchmark.json')['workers_per_device'];n=workers*len(cfg['resources']['devices'])
+            if not (out/'tokens/manifest.json').exists():
+                jobs=[dict(stage='masked-state-export',candidate=i,shards=n,job=out/'tokens'/f'shard_{i}') for i in range(n)]
+                result=_masked_jobs(cfg,args,jobs,workers,'token_export')
+                if any(r['status']!='completed' for r in result['results']):raise RuntimeError('export worker failed')
+                _masked_pack(cfg,out,n)
+            if not (out/'benchmark.json').exists():
+                trials=[]
+                for workers in cfg['resources']['worker_candidates']:
+                    jobs=[dict(stage='masked-state-one',candidate='joint',seed=17+i%3*12,
+                        pilot=out/'benchmark'/f'train_workers_{workers}'/f'worker_{i}',
+                        job=out/'benchmark'/f'train_workers_{workers}'/f'worker_{i}') for i in range(2*workers)]
+                    # Use declared seeds, also for performance trials.
+                    for i,j in enumerate(jobs):j['seed']=cfg['training']['seeds'][i%3]
+                    result=_masked_jobs(cfg,args,jobs,workers,'training_benchmark')
+                    trials.append(dict(workers=workers,**result,steps_per_second=sum(r.get('completed_steps',0) for r in result['results'])/result['seconds']))
+                good=[r for r in trials if all(x['status']=='completed' for x in r['results'])]
+                if not good:raise RuntimeError('training benchmark failed')
+                choice=max(good,key=lambda r:r['steps_per_second'])
+                write_json(out/'benchmark.json',dict(status='completed',trials=trials,workers_per_device=choice['workers'],
+                    reason='highest measured aggregate throughput within fixed memory limits',
+                    estimated_training_seconds=len(cfg['arms'])*len(cfg['training']['seeds'])*cfg['training']['steps']/choice['steps_per_second']))
+            workers=read_json(out/'benchmark.json')['workers_per_device']
+            jobs=[dict(stage='masked-state-one',candidate=arm,seed=seed,job=out/'models'/arm/f'seed_{seed}')
+                  for seed in cfg['training']['seeds'] for arm in cfg['arms']]
+            _masked_jobs(cfg,args,jobs,workers,'pretraining')
+            result=summarize_masked_state(cfg,out);state.update(status=result['status'],updated=now());write_json(out/'controller.json',state)
+            _masked_register_terminal(root,out,result)
+            return dict(status=result['status'],completed=result['completed_models'],planned=result['planned_models'])
+        except Exception:
+            state.update(status='failed',error=traceback.format_exc(),updated=now());write_json(out/'controller.json',state);raise
 
 
 if __name__ == '__main__':

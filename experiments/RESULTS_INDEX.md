@@ -63,6 +63,33 @@ code-health records, real-group figures and selected fixed-example panels.
 Full checkpoints, arrays, source snapshots and complete HTML atlases remain in
 the local run directory at their original paths.
 
+## Frozen contextual-token masked pretraining — 2026-11-13
+
+The [2026-11-16 visual analysis](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_masked_state_v3/analysis_20261116_v3/index.html)
+and [bitmap PDF](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_masked_state_v3/analysis_20261116_v3/RESULTS.pdf)
+explain masked completion, paired interaction contrasts, observed-feature readouts,
+dataset differences and context perturbations. Its
+[audit](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_masked_state_v3/analysis_20261116_v3/verification.json)
+independently recomputes retained per-window to per-subject aggregates and contrast
+point estimates. The original training and numerical results remain unchanged.
+Reproduction uses `scripts/analyze_masked_state_results.py --run <completed-run>
+--output <fresh-export>`; figures are PNG images inside the selectable-text PDF.
+
+The [execution contract](configs/physiology_semantic_tokenizer/dual_component_masked_state_v1.yaml)
+and [design](../docs/EXPERIMENT_PLAN.md#tk-mask-state-v1固定上下文化词表的离线掩码预训练2026-11-13)
+own the fixed-token temporal/spatial/multimodal comparison. The retained execution
+package is [20261113_masked_state_v3](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_masked_state_v3/):
+[launch](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_masked_state_v3/launch.json),
+[frozen source](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_masked_state_v3/source_manifest.json),
+[tokenizer and training-scale references](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_masked_state_v3/tokenizer_reference.json),
+[input reuse](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_masked_state_v3/input_reuse.json),
+and [software/GPU verification](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_masked_state_v3/software_validation.json).
+The controller writes per-job masked scores, raw-observation feature probes,
+context perturbations, subject-level tables and its final summary into this run.
+The first metadata-serialization preparation failure and the interrupted
+pretraining-free export generation remain at their original v1/v2 paths.
+Current execution is read from the research-state registry and owning service.
+
 ## Bounded tokenizer dynamics iteration — 2026-11-13
 
 The [retained summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_dynamics_v1/summary.json)

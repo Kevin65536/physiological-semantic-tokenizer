@@ -1,0 +1,83 @@
+schema: dual_component_masked_state_v1
+experiment_id: TK-MASK-STATE-v1
+tokenizer:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_state_reconstruction_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_state_refinement_v1.yaml
+  normalization_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1
+  eeg: {architecture: dense_long, candidate: vq128, seed: 17}
+  hb: {architecture: waveform, candidate: vq128, seed: 17}
+  frozen: true
+  selection: completed_same_7bit_per_second_K128_reconstruction_references_before_downstream_access
+  limitations: EEG_health_screen_failed_Hb_passed_both_trained_on_four_training_subjects
+data:
+  cache: data/cache/physiology_so_supervision_v2
+  source_ssm: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4
+  geometry_root: data/cache/physiology_semantic_clean_v6/channel_geometry
+  refed_geometry_root: experiments/runs/physiology_semantic_tokenizer/data_quality_audit/20261013_refed_graphical_registration_v1/channel_geometry
+  source_schema: physiology_so_supervision_v2
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+  datasets: [eeg_fnirs_single_trial, refed, simultaneous_eeg_nirs, visual_cognitive_motivation]
+  native_rate_hz: {eeg_fnirs_single_trial: 200, refed: 1000, simultaneous_eeg_nirs: 200, visual_cognitive_motivation: 500}
+  duration_s: 30
+  stride_s: 30
+  patches: 15
+  split_unit: source_subject_no_repartition
+  deduplication: greedy_nonoverlapping_native_record_support_earliest_parent_first
+  normalization: frozen_pilot_first_full_training_parent_per_dataset_position_no_new_sample_statistics
+  unseen_position_scale: median_of_frozen_pilot_training_position_scales_same_dataset_modality
+  layout: native_name_union_absent_positions_invalid_fixed_training_reference_geometry
+  features: observed_X_only_EEG_5_log_bandpowers_log_RMS_mean_slope_Hb_two_color_mean_SD_slope_delta
+  mask_semantics: offline_contextual_ID_completion_encoder_retains_full_30_seconds
+model: {width: 128, layers: 4, heads: 4, dropout: 0.1, vocab_size: 128}
+arms:
+  temporal: {interaction: temporal, geometry: true, masking: mixed}
+  anonymous: {interaction: spatial, geometry: false, masking: mixed}
+  spatial: {interaction: spatial, geometry: true, masking: mixed}
+  joint: {interaction: joint, geometry: true, masking: mixed}
+  spatial_random: {interaction: spatial, geometry: true, masking: random}
+  spatial_span: {interaction: spatial, geometry: true, masking: span}
+  spatial_space: {interaction: spatial, geometry: true, masking: space}
+training:
+  seeds: [17, 29, 43]
+  steps: 10000
+  batch_size: 8
+  learning_rate: 0.0003
+  weight_decay: 0.01
+  warmup_steps: 500
+  gradient_clip: 1.0
+  checkpoint_every: 500
+  mask_ratio: 0.5
+  sampling: equal_dataset_subject_record_then_window
+  precision: bfloat16_autocast_float32_parameters
+  stopping: fixed_terminal_checkpoint_all_21_jobs_no_result_dependent_extension
+evaluation:
+  tasks: [random, span, space]
+  mask_seed: 20261113
+  batch_size: 4
+  primary: validation_subject_macro_bits_per_masked_ID_gain_over_training_dataset_position_time_prior
+  secondary: frozen_training_ridge_observed_feature_NMSE_by_dataset_modality_feature
+  diagnostic: temporal_permutation_spatial_permutation_other_modality_removal_token_health
+  baseline: train_only_marginal_metadata_prior_untrained_reader_single_ID_onehot_window_bag
+  'null': no_gain_over_metadata_prior_or_no_improvement_over_untrained_and_ID_probes
+  probes_windows_per_record: 2
+  probes_positions_per_modality: 4
+  ridge_alpha: 0.01
+  bootstrap_subjects: 2000
+  aggregation: window_to_record_to_subject_then_dataset_equal_weight_seeds_not_subjects
+  selection: none_all_terminal_models_reported_validation_is_development_test_not_read
+resources:
+  devices: [cuda:0, cuda:1]
+  worker_candidates: [1, 2]
+  benchmark_steps: 100
+  export_benchmark_windows_per_dataset: 2
+  export_batch_size: 64
+  torch_threads: 2
+  numerical_threads: 1
+  max_worker_gpu_memory_mib: 10000
+  maximum_interrupt_restarts: 3
+  supervisor: user_systemd_linger
+claim: exploratory_frozen_token_spatiotemporal_structure_and_observed_physiology_readout

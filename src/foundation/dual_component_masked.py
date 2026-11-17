@@ -167,3 +167,112 @@ def nonwrapping_source_shift(ids, visible, source_modality, shift):
     keep[:, :shift, m] = False
     keep[:, shift:, m] &= visible[:, :-shift, m]
     return shifted, keep
+
+
+class SpatialTemporalMaskedModel(nn.Module):
+    """Frozen integer consumer; alternating time and sensor attention.
+
+    S/O are two categorical outputs at each sensor/time. They share visibility,
+    never a continuous sample sidecar. Modality-isolated attention is applied
+    separately, so neither pooling nor a CLS token bypasses the restriction.
+    """
+    def __init__(self, *, positions, vocab_size=128, patches=15, width=128,
+                 layers=4, heads=4, dropout=.1, interaction="spatial", geometry=True):
+        super().__init__()
+        if interaction not in ("temporal", "spatial", "joint"):
+            raise ValueError("unknown interaction")
+        self.interaction, self.geometry = interaction, geometry
+        self.vocab_size, self.patches = vocab_size, patches
+        self.books = nn.ModuleList([nn.Embedding(vocab_size + 1, width) for _ in range(4)])
+        self.modality = nn.Embedding(2, width)
+        self.sensor = nn.Embedding(positions, width)
+        self.coordinates = nn.Linear(3, width, bias=False)
+        self.time = nn.Embedding(patches, width)
+        def block():
+            return nn.TransformerEncoderLayer(width, heads, width * 2, dropout,
+                activation="gelu", batch_first=True, norm_first=True)
+        self.temporal = nn.ModuleList([block() for _ in range(layers)])
+        self.spatial = nn.ModuleList([block() for _ in range(layers)])
+        self.norm = nn.LayerNorm(width)
+        self.outputs = nn.ModuleList([nn.Linear(width, 2 * vocab_size) for _ in range(2)])
+
+    def forward(self, ids, visible, valid, modality, sensor, coordinates, *, features=False):
+        # [B,P,T,2], [B,P,T], [B,P,T]; geometry belongs to positions, not samples.
+        if ids.ndim != 4 or ids.shape[-2:] != (self.patches, 2):
+            raise ValueError("expected integer [batch,position,15,2]")
+        if ids.dtype != torch.long or visible.dtype != torch.bool or valid.dtype != torch.bool:
+            raise ValueError("integer IDs and boolean masks required")
+        if visible.shape != ids.shape[:-1] or valid.shape != visible.shape or (visible & ~valid).any():
+            raise ValueError("visibility outside valid support")
+        if ((ids < 0) | (ids >= self.vocab_size))[visible].any():
+            raise ValueError("visible IDs outside vocabulary")
+        clean = torch.where(visible[..., None], ids, self.vocab_size)
+        b, p, t, _ = ids.shape
+        x = self.time(torch.arange(t, device=ids.device))[None, None].expand(b, p, -1, -1).clone()
+        x = x + self.modality(modality)[None, :, None]
+        for m in (0, 1):
+            ix = modality == m
+            x[:, ix] = x[:, ix] + self.books[2*m](clean[:, ix, :, 0]) + self.books[2*m+1](clean[:, ix, :, 1])
+        if self.geometry:
+            x = x + (self.sensor(sensor) + self.coordinates(coordinates))[None, :, None]
+        # A valid query may be masked; only absent physical positions are padding.
+        # Safe sentinel prevents all-padding attention rows from producing NaNs.
+        def attend(layer, values, keep):
+            safe = keep.clone(); safe[:, 0] |= ~safe.any(1)
+            return layer(values, src_key_padding_mask=~safe) * keep[..., None]
+        for temporal, spatial in zip(self.temporal, self.spatial):
+            x = attend(temporal, x.reshape(b*p, t, -1), valid.reshape(b*p, t)).reshape(b, p, t, -1)
+            if self.interaction != "temporal":
+                groups = [torch.ones_like(modality, dtype=torch.bool)] if self.interaction == "joint" else [modality == m for m in (0, 1)]
+                for ix in groups:
+                    n = int(ix.sum())
+                    if not n: continue
+                    z = x[:, ix].transpose(1, 2).reshape(b*t, n, -1)
+                    keep = valid[:, ix].transpose(1, 2).reshape(b*t, n)
+                    x = x.clone()
+                    x[:, ix] = attend(spatial, z, keep).reshape(b, t, n, -1).transpose(1, 2)
+        h = self.norm(x)
+        if features: return h
+        logits = h.new_zeros(b, p, t, 2, self.vocab_size)
+        for m, head in enumerate(self.outputs):
+            ix = modality == m
+            logits[:, ix] = head(h[:, ix]).reshape(b, int(ix.sum()), t, 2, self.vocab_size).to(logits.dtype)
+        return logits
+
+
+def spatial_temporal_masks(valid, task, rng, ratio=.5):
+    """Matched mask counts within each example; both branches always hidden."""
+    valid = np.asarray(valid, bool)
+    if valid.ndim != 3 or task not in ("random", "span", "space") or not 0 < ratio < 1:
+        raise ValueError("valid [batch,position,time] and declared task required")
+    hidden = np.zeros_like(valid)
+    for b, support in enumerate(valid):
+        p, t = support.shape
+        # Random priorities within contiguous temporal or sensor blocks.
+        if task == "random": priority = rng.random((p, t))
+        elif task == "span":
+            start = int(rng.integers(t - int(np.ceil(t * ratio)) + 1))
+            priority = np.broadcast_to(np.abs(np.arange(t) - (start + (np.ceil(t*ratio)-1)/2)), (p, t)).copy()
+            priority += rng.random((p, t)) * .01
+        else:
+            priority = np.broadcast_to(rng.permutation(p)[:, None], (p, t)).astype(float).copy()
+            priority += rng.random((p, t)) * .01
+        available = np.flatnonzero(support)
+        if len(available) < 2: continue
+        count = min(len(available)-1, max(1, round(len(available)*ratio)))
+        chosen = available[np.argsort(priority.ravel()[available], kind="stable")[:count]]
+        hidden[b].flat[chosen] = True
+    return valid & ~hidden, hidden
+
+
+def masked_code_loss(logits, ids, score, modality):
+    """Equal modality then branch means; absent targets do not become zeros."""
+    import torch.nn.functional as F
+    values = []
+    for m in (0, 1):
+        ix = modality == m
+        take = score[:, ix]
+        if take.any():
+            values.append(F.cross_entropy(logits[:, ix][take].flatten(0, 1), ids[:, ix][take].flatten()))
+    if not values: raise ValueError("no masked targets")
+    return torch.stack(values).mean()

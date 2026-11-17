@@ -30,6 +30,167 @@ STEPS = 900
 STUDENT = slice(300, 500)
 
 
+def masked_state_plan(cache_root, spec, source_ssm):
+    """Plan permitted train/validation inputs before opening any signal arrays."""
+    from .so_supervision_cache import SOSupervisionDataset
+    root = Path(cache_root).resolve()
+    if (spec['allowed_splits'] != ['train', 'validation'] or spec['test_access'] != 'forbidden'
+            or spec['protected_data'] != 'forbidden' or spec['raw_reads'] or spec['teacher_refits']):
+        raise ValueError('masked state public development boundary before reads')
+    manifest = json.loads((root / 'cache_manifest.json').read_text())
+    verification = json.loads((root / 'verification.json').read_text())
+    if (manifest['schema'] != spec['source_schema'] or manifest['status'] != 'completed'
+            or verification['status'] != 'passed'
+            or Path(manifest['source_ssm']).resolve() != Path(source_ssm).resolve()):
+        raise ValueError('completed verified source required')
+    subjects = {}
+    for row in manifest['windows']:
+        key = row['dataset'], row['subject']
+        if key in subjects and subjects[key] != row['split']:
+            raise ValueError('subject crosses splits')
+        subjects[key] = row['split']
+    candidates = []
+    for split in spec['allowed_splits']:
+        reader = SOSupervisionDataset(root, split=split)
+        for index, row in enumerate(reader.windows):
+            if row['dataset'] not in spec['datasets']: continue
+            path = (root / 'windows' / row['key']).with_suffix('.json').resolve()
+            if Path(row['metadata']).resolve() != path or not path.is_relative_to(root / 'windows'):
+                raise ValueError('metadata path escapes source')
+            meta = json.loads(path.read_text())
+            masked_state_identity(root, row, meta, spec)
+            for start in range(0, int(meta['source']['duration_s']) - 29, spec['stride_s']):
+                candidates.append(dict(row=row, metadata=meta, index=index, start_s=start,
+                    absolute_start=meta['source']['start_sample'] + start * meta['source']['rate']))
+    candidates.sort(key=lambda r: (r['row']['dataset'], r['row']['subject'],
+        r['metadata']['source']['native_record'], r['absolute_start'], r['row']['key']))
+    ends, selected, overlap = {}, [], []
+    for item in candidates:
+        row, src = item['row'], item['metadata']['source']
+        key = row['dataset'], row['subject'], src['native_record']
+        if item['absolute_start'] < ends.get(key, -1):
+            overlap.append(dict(key=row['key'], start_s=item['start_s'])); continue
+        ends[key] = item['absolute_start'] + 30 * src['rate']
+        selected.append(item)
+    # Group each physical parent read once; its children have nonoverlapping input support.
+    grouped = {}
+    for item in selected:
+        key = item['row']['key']
+        group = grouped.setdefault(key, {k: item[k] for k in ('row', 'metadata', 'index')})
+        group.setdefault('starts_s', []).append(item['start_s'])
+    return dict(schema='masked_state_plan_v1', cache_root=str(root), windows=list(grouped.values()),
+                planned_inputs=len(selected), overlapping_inputs_skipped=overlap,
+                allowed_splits=spec['allowed_splits'], source_ssm=str(Path(source_ssm).resolve()),
+                subjects=[dict(dataset=d, subject=s, split=sp) for (d,s),sp in subjects.items()
+                          if sp in spec['allowed_splits']], measured_arrays_read=0)
+
+
+def masked_state_identity(root, row, meta, spec):
+    if row['split'] not in spec['allowed_splits'] or row['split'] == 'test':
+        raise ValueError('development split required before arrays')
+    for key in ('key', 'dataset', 'subject', 'split'):
+        if meta[key] != row[key] or meta['source'][key] != row[key]:
+            raise ValueError('source identity mismatch')
+    if (meta['schema'] != spec['source_schema']
+            or meta['source']['rate'] != spec['native_rate_hz'][row['dataset']]):
+        raise ValueError('source schema/rate changed')
+    path = (Path(root) / 'windows' / row['key']).with_suffix('.npz').resolve()
+    if meta.get('array_file') and (Path(meta['array_file']).resolve() != path
+            or not path.is_relative_to(Path(root).resolve() / 'windows')):
+        raise ValueError('array path escapes source')
+
+
+def masked_state_window(cache_root, selected, spec):
+    """The existing unified S/O reader is the only numerical read path."""
+    from .so_supervision_cache import SOSupervisionDataset
+    if spec['allowed_splits'] != ['train', 'validation'] or spec['test_access'] != 'forbidden':
+        raise ValueError('development boundary before arrays')
+    row = selected['row']
+    if row['split'] not in spec['allowed_splits']: raise ValueError('forbidden split')
+    reader = SOSupervisionDataset(cache_root, split=row['split'])
+    if reader.windows[selected['index']] != row: raise ValueError('source plan changed')
+    meta = json.loads(Path(row['metadata']).read_text())
+    masked_state_identity(cache_root, row, meta, spec)
+    if meta != selected['metadata']: raise ValueError('source metadata changed')
+    return reader[selected['index']]
+
+
+def masked_observation_features(patches, modality, rate):
+    """Eight raw-observation descriptors per 2 s patch; no teacher state labels.
+
+    Units are inherited frozen-tokenizer input units, slope uses seconds. EEG
+    powers are log10(one-sided Hann periodogram integrated over disjoint bands).
+    """
+    from scipy.signal import periodogram
+    x = np.asarray(patches, dtype=np.float64)  # [P,15,samples,color]
+    time = (np.arange(x.shape[-2]) - (x.shape[-2]-1)/2) / rate
+    mean = x.mean(-2); sd = x.std(-2)
+    slope = (x * time[None,None,:,None]).sum(-2) / np.sum(time**2)
+    if modality == 'hb':
+        result = np.concatenate([mean, sd, slope, x[..., -1, :] - x[..., 0, :]], -1)
+    else:
+        f, power = periodogram(x[..., 0], fs=rate, window='hann', axis=-1, detrend='constant', scaling='density')
+        bands = [np.log10(np.maximum(power[..., (f >= lo) & (f < hi)].sum(-1) * (f[1]-f[0]), 1e-12)) for lo,hi in BANDS]
+        result = np.stack(bands + [np.log10(np.maximum(np.sqrt((x*x).mean(-2))[...,0],1e-12)), mean[...,0], slope[...,0]], -1)
+    return result.astype(np.float32)
+
+
+def masked_state_observations(meta, arrays, modality, reference, starts):
+    """Frozen training scales and actual 30 s inputs; do not fit on validation."""
+    prefix = 'eeg' if modality == 'eeg' else 'fnirs'
+    rate = int(meta['source']['rate']) if modality == 'eeg' else 10
+    names = meta['EEG_channels'] if modality == 'eeg' else meta['fNIRS_positions']
+    if not len(names) or prefix+'_x' not in arrays: raise ValueError('source modality unavailable')
+    x = np.asarray(arrays[prefix+'_x'])
+    observed = np.asarray(arrays[prefix+'_observation_valid'], bool) & np.isfinite(x)
+    if modality == 'eeg': x, observed = x[...,None], observed[...,None]
+    if x.ndim != 3 or x.shape[1] != len(names): raise ValueError('source channel shape')
+    expected = np.arange(len(x))/rate
+    np.testing.assert_allclose(arrays[prefix+'_time_s'], expected, atol=1e-10, rtol=0)
+    scales = np.array([reference[name] for name in names], float).reshape(len(names),1)
+    if not np.isfinite(scales).all() or not (scales > 0).all(): raise ValueError('invalid frozen scales')
+    score = np.asarray(arrays['eeg_source_scoring_mask' if modality=='eeg' else 'source_scoring_mask'], bool)
+    # Native support is transformed once. Offline parent preprocessing is inherited.
+    if modality == 'eeg' and rate != 200:
+        v = dict(x=x, s=x, o=np.zeros_like(x), observation_valid=observed, teacher_valid=observed)
+        v, score, _ = state_eeg_200hz(v, score, rate, len(x))
+        x, observed, rate = v['x'], v['observation_valid'], 200
+    result = []
+    for start in starts:
+        sl = slice(start*rate, (start+30)*rate)
+        patch = (x[sl]/scales).transpose(1,0,2).reshape(len(names),15,2*rate,-1)
+        input_valid = observed[sl].all(axis=(0,2))
+        scoring = (observed[sl] & score[sl,None,None]).transpose(1,0,2).reshape(patch.shape).all(axis=(-2,-1))
+        valid = scoring & input_valid[:,None]
+        clean = np.where(input_valid[:,None,None,None], patch, 0.)
+        if not np.isfinite(clean).all(): raise ValueError('nonfinite encoder input')
+        features = masked_observation_features(clean, modality, rate)
+        result.append(dict(x=clean.reshape(len(names),15,-1).astype('float32'), valid=valid, features=features))
+    return names, result
+
+
+def masked_state_geometry(project_root, spec, meta, modality, names):
+    from types import SimpleNamespace
+    from .unified_physiology import ChannelGeometryIndex
+    from .channel_geometry import project_head_topview
+    root = Path(project_root)
+    sidecar = spec['refed_geometry_root'] if meta['dataset']=='refed' else spec['geometry_root']
+    index = ChannelGeometryIndex(root, geometry_root=root/sidecar)
+    coordinates, sources = [], []
+    for name in names:
+        record = meta['source']['native_record']; lookup = name
+        if modality == 'hb' and meta['dataset']=='visual_cognitive_motivation':
+            probe, lookup = name.split(':'); record += '_'+probe
+        rec = SimpleNamespace(dataset_id=meta['dataset'], canonical_subject_id=meta['subject'], base_record_id=record)
+        row = index.for_channels(record=rec, modality='eeg' if modality=='eeg' else 'fnirs', channel_names=[lookup])[0]
+        try: xy=project_head_topview(row); coordinates.append([*xy,1.])
+        except ValueError: coordinates.append([0.,0.,0.])
+        sources.append(row)
+    values=np.asarray(coordinates,np.float32)
+    if len(values): values[:,:2] /= max(float(np.abs(values[:,:2]).max()),1e-12)
+    return values, sources
+
+
 def state_pilot_plan(cache_root, spec, source_ssm, *, excluded_subjects=(), include_short_refed=True):
     """Metadata-first, training-only small panel from the completed S/O cache."""
     from .so_supervision_cache import SOSupervisionDataset
