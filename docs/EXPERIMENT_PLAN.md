@@ -73,6 +73,7 @@ measured result exists.
 
 | Reading task | Sections |
 | --- | --- |
+| Finalize the base tokenizer through coverage, quantization, decoding and seed controls | [TK-BASE-v1：基础 tokenizer 定版实验组](#tk-base-v1) |
 | Arrange tokenizer training and check physiological-state acceptance item by item | [TK-STATE-v1：训练与验收安排](#tk-state-v1) |
 | Test the added value of physical structure beyond task accuracy | [Physical-model contribution and competing explanations](#物理模型独特贡献与非任务证据设计2026-11-04) |
 | Design EEG voltage separation and falsifiable source-token evidence | [Voltage separation with independent intervention anchors](#eeg-电压域分解与独立干预验证设计2026-11-03) |
@@ -91,6 +92,175 @@ measured result exists.
 | Qualification and tokenizer design | [P0](#p0-software-and-synthetic-qualification), [teacher selection](#t-physical-teacher-selection), [tokenizer](#bq-source-and-observation-tokenizer), [coupling prior](#c-coupling-prior-return) |
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
+
+<a id="tk-base-v1"></a>
+## TK-BASE-v1：基础 tokenizer 定版实验组（2026-11-17）
+
+本轮目标是确定 EEG 与 Hb 各自可复现的基础结构和训练日程，使四分支同时
+具备充分的波形重建、稳定的码本覆盖和清楚的真实 token pattern。
+按“扩大训练覆盖与校准预算 → EEG 量化与 Hb 主解码改进 → 多种子确认”递进。
+本节承接下方 TK-STATE-RECON-v1、TK-STATE-DYNAMICS-v1 和 TK-HB-ID-SHAPE-v1
+的设计与保留证据，规定新的基础定版矩阵；此前各版本的矩阵、阈值和结果保留原身份。
+更广泛的生理状态验收仍见 [TK-STATE-v1](#tk-state-v1)，耦合机制在基础定版后研究。
+
+### 1. 共同条件与管理落点
+
+每个 token 对应 2 秒，每个 30 秒窗口、每位置每分支输出 15 个 token；
+编码器与解码器均使用完整 30 秒上下文。保留 EEG-S、EEG-O、Hb-S、Hb-O，
+HbO/HbR 在相应 Hb 分支内联合表示；沿用 EEG 200 Hz、Hb 10 Hz 工作网格。
+模型输入本模态 X，缓存 S/O 用于监督与评分；离散重建只读取本分支整数 ID
+及固定接口元数据，水平恢复也由 ID 序列预测。
+
+本节持有实验组、依赖关系与检查要求；执行状态继续由
+[`research_state/registry.json`](../research_state/registry.json)持有并生成
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md)。实施时在既有
+[`run_dual_component_tokenizer.py`](../experiments/scripts/run_dual_component_tokenizer.py)
+及其库 owner 中扩展，配置写入 `experiments/configs/physiology_semantic_tokenizer/`
+下的新版本合同，运行产物写入
+`experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/<fresh_run>/`。
+入口、配置与测试对应关系继续由[实验入口索引](../experiments/README.md#semantic-and-tokenizer-development)持有。
+
+数据边界继承 [DATA_CONTRACT.md](DATA_CONTRACT.md) 和 TK-STATE-v1 的被试划分、
+掩码、时间支持与缓存身份要求。扩大覆盖使用允许的 train，固定被试留出开发面板
+使用允许的 validation；保留原四人时间留出面板作回归检查。训练前完成版本化
+配置、读取边界与合成检查。本文记录设计；实测 campaign 和受保护评价按各自
+执行范围及 owning protocol 开展。
+
+G0 的具体数据准备与选择合同为
+[`dual_component_base_g0_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml)：
+使用原 train/validation 完整人口，原五个回归时间块及其重叠输入从训练和尺度拟合中
+排除；以不重叠支持拟合训练尺度，按数据集、被试、记录逐层等权采样。
+新被试复用训练位置尺度，缺少训练尺度的位置明确记为不可用。
+checkpoint 按完整固定可用验证面板的 X/S/O、色团、窗口/位置、记录、被试、数据集
+逐层平均 NMSE 选择，精确平局取较早步；原回归面板单列，不参与选择。
+G0 完成范围为数据、尺度、采样和整数接口检查，G1 训练使用后续版本化执行合同。
+
+G1 采用 [`dual_component_base_g1_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v1.yaml)。
+五个 seed17 模型各执行总计 10,000 步；三组模态/结构各自预热 1,000 步，
+同结构连续/离散分支共享预热权重，继续训练时均重置优化器并使用相同身份抽样序列。
+学习率在总步数 4,000 前保持 3×10⁻⁴，之后按固定 10,000 步时钟余弦下降至
+3×10⁻⁵；不为较短检查点重设退火终点。4,000/7,000/10,000 步均保存权重，
+完整评价 G0 的训练评分、验证及原回归面板。训练曲线另使用固定 512 个训练抽样。
+共同预算取所有五模型的验证宏 NMSE 均距各自三检查点最优值不超过 2%、且各
+X/S/O 色团平均 NMSE 均距各自最优值不超过 5% 的最早检查点；无共同符合者时
+保留 10,000 步上限并报告混合或未稳定结论，不自动追加步数。任一模型失败时
+不作完整预算判定。该规则用于 G1 预算校准，后续结构晋级另按其版本合同。
+
+**2026-11-17 用户修订：取消整数重放比较，续跑 dense_long，同时启动 G2/G4。**
+本次执行以 [`dual_component_base_g124_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_base_g124_v1.yaml)
+为准：后续评价及合成检查取消前向与整数重放的数值比较，离散模型仍从实际整数 ID
+解码并评分；既有失败与冻结结果保留。dense_long 从原 7,000 步权重、优化器及随机数
+状态续跑到 10,000 步，在新运行中重新评价 7,000 步并完成余下 3,000 步，4,000 步
+结果按原身份引用。G2/G4 预算固定为总计 10,000 步，不等待 dense_long 结项；G2
+为 EEG 32 维连续/K128，G4 为 Hb 分职责解码连续/K128，各自共享新结构的 1,000 步
+预热。其余数据、尺度、抽样、损失与学习率时钟和 G1 相同，主比较使用匹配末态；
+所选 checkpoint 单列。G3 仍等待 G2 选维，不自动启动。
+
+G4 每片每色团约束上下文修正的 L2 范数（等价 RMS）不超过局部形状的 25%；
+两色团沿用同一 G0 输入尺度，各自去时间均值。局部形状只读当前 latent/ID 嵌入，
+不读位置或邻近 ID；水平与修正读取本分支 15 个槽位。零局部形状产生精确零修正，
+分母仅用 10⁻⁸ 防止除零。20 点片段直接拼接，约束后不再平滑，原全序列差分损失
+继续约束接缝；保存水平/局部/上下文分量及接缝跳变量误差。
+工程筛选固定连续宏误差最多退化 5%、硬模型各输出/色团最多退化 5%；G2 要求硬
+模型宏误差至少改善 10% 才选择32维，否则保留64维。G4 可按相同重建收益晋级，
+或在重建护栏内使 S/O 单 ID 真实形状读出平均改善至少10%，且各读出分量退化不
+超过5%、未支持比例不增加。未通过者保留基线，不自动调整约束、追加步数或启动新实验。
+
+**G3 的执行准备（2026-11-18）。**
+[`dual_component_base_g3_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_base_g3_v1.yaml)
+从已核验的 G2 选维和 G1 预算读取64维、10,000步，新增一个 seed17 waveform K128
+模型。精确复用 G1 同结构的1,000步预热权重，按原硬切换基线方式重置优化器、
+使用同一训练记录初始化码本并复用继续训练抽样序列。量化阶段第1至1,000次更新
+（总步数1,001至2,000）将主 decoder 输入的混合系数从0线性升至1，之后保持
+严格硬量化。只改变 decoder 输入，EMA、commitment 强度及其余优化参数不随系数变化。
+所有评价均使用实际整数 ID；此前取消的整数重放比较继续取消。
+
+过渡期每250步记录固定训练探针的硬量化/连续误差差及用码分布，保留2,000步
+过渡末态；4,000/7,000/10,000步使用完整原面板评价。匹配10,000步末态的工程
+筛选为：各输出误差最多退化5%，且宏误差改善至少10%；或宏误差差距不超过2%，
+S/O平均有效码数提高至少10%，两支有效码数及最大占用各不恶化超过5%。不通过则
+保留直接硬切换；单 ID pattern 与逐库结果同时报告，不自动启动 G5。
+本次完成实现、合同、合成及启动准备，正式训练仍通过既有 `base-train` 入口执行。
+随后用户明确启动 G3 并指定 GPU1：使用 `--devices cuda:1`，仅在该卡测量吞吐与
+显存并执行候选，不因核心占用改换设备；保留4 GiB进程显存上限。原准备包保留，
+此次设备选择写入新运行的计划和启动记录，数值合同不变。
+
+### 2. 递进实验组
+
+| 实验组 | 前置条件与模型数 | 改变什么、对照谁 | 重点检查 | 如何进入下一步 |
+| --- | --- | --- | --- | --- |
+| **G0：训练覆盖与评价面板** | 起点；数据准备 | 扩大 train 中的被试与记录；资源受限时可从每库约 8 名训练被试、多记录起步，允许时用完整训练缓存。按等数据集→等被试→等记录→时间窗/位置抽样；固定被试留出开发面板、共享训练尺度与 checkpoint 选择规则 | 入口是否真正读取扩大后的训练池；划分是否先于滑窗；独立被试数、记录数、去重时间支持与失败分母；码本初始化是否覆盖不同被试和记录 | 固定共同输入、变换与评价条件后进入 G1 |
+| **G1 / B：匹配基线与预算校准** | G0；**5 个模型** | EEG waveform 连续/K128、Hb waveform 连续/K128、EEG dense_long K128；总预算暂设 10,000 步，保存 4,000/7,000/10,000 步匹配结果 | 训练与开发曲线是否一起改善；EEG 连续—离散差距是否仍存在；Hb 水平/形状误差构成；数据覆盖与训练时长增加后的整体收益 | 共同下降则保留训练收益；训练下降而开发停滞/恶化则检查泛化与结构。确定共同预算后进入 G2/G4；两条模态路线可并行 |
+| **G2 / E-Q1：EEG 量化维度** | G1；**新增 2 个模型** | waveform latent 64→32；训练匹配连续/K128 版，对照 G1 的 64 维模型；width、前后端、损失与曝光一致 | 连续版损失多少重建能力，离散版回收多少量化损失；频谱细节与码本覆盖是否改善 | 连续能力基本保留且离散改善时采用 32 维，否则保留 64 维；选定配置进入 G3 |
+| **G3 / E-Q2：EEG 渐进量化** | G2 选定维度；**新增 1 个模型** | 对照相同配置的直接硬切换；量化阶段前 1,000 步使 decoder 输入由连续表示过渡到硬量化，之后严格硬量化；其余量化参数一致 | 实际主前向是否执行过渡；切换误差与用码变化；最终整数解码的重建、pattern 与健康收益 | 选择训练日程，筛出进入 G5 的 EEG 候选 |
+| **G4 / H-D1：Hb 主解码职责分配** | G1；**新增 2 个模型** | 新 decoder 连续/K128 版，对照 G1；输出由上下文水平项、当前 ID 的局部形状原型及受限上下文修正组成；Hb-S/Hb-O 同参数化，沿用原重建损失 | 单 ID 的真实形状读出与 HbO/HbR S/O/X 是否同时改善；水平/形状误差、patch 边界、RMS 增益和固定困难样例；连续版先检查结构代价 | 若连续版已明显受损，先调整约束；结构可行后判断量化收益，筛出 Hb 候选进入 G5 |
+| **D1：EEG 内部时间分辨率诊断** | 连续 EEG 仍缺失明显波形/频谱细节时触发；另计模型 | 每 2 秒内部时间点由 4 增至 8，配对修改编码与合成步幅；先比较连续版，有效后再做量化版；输出仍为 1 token/2 秒 | 更细内部表示是否恢复逐点波形与频谱细节 | 有效改动完成匹配量化验证后纳入候选；不凭内部点数直接推断可恢复的频率上限 |
+| **D2：目标自身输入压缩诊断** | 连续 S/O 重建仍明显不佳时触发；另计模型 | 相同结构输入已知 S 或 O 并重建自身，对照 X→S/O 连续模型；仅作定位对照 | 目标自身是否容易压缩；区分表示/解码能力不足与从 X 预测 teacher 分解的困难 | 若自身重建好而 X→S/O 差，后续检查分解预测与输入信息组织；诊断模型不进入部署候选 |
+| **G5：多种子确认与定版** | 首轮筛选及必要诊断完成；另计模型 | 少量候选及对应基线在 seeds 29、43 下完整重训，与 seed 17 一并判断；同时报告所选和末尾 checkpoint | 重建、真实 pattern 与码本覆盖收益是否跨被试、跨种子保持；各分量退化、失败与取舍 | 选择共同占优或取舍最小的简单模型，冻结结构、尺度、训练日程与选择规则；通过四分支波形和 pattern 验收后进入后续机制研究 |
+
+主依赖为 `G0 → G1 → {G2 → G3，G4} → G5`。D1/D2 按连续基线及后续结果
+触发，诊断带来的改动完成匹配验证后再进入 G5。首批为 **10 个 seed 17 模型**：
+G1 的 5 个＋G2 的 2 个＋G3 的 1 个＋G4 的 2 个；不含条件诊断与多种子确认。
+G1 的覆盖和预算变化相对原面板是组合改进；4,000/7,000/10,000 步轨迹用于
+同一新面板上的时长比较，不将新旧面板差异全部归因于数据覆盖。
+
+### 3. 两项结构对照的具体含义
+
+G3 的 decoder 实际输入为
+
+\[
+z_{\mathrm{decode}}=(1-\alpha)z+\alpha q_{\mathrm{STE}}(z),\qquad \alpha:0\to1.
+\]
+
+其中 z 为连续 latent，q 为使用直通梯度估计的量化表示。实现时检查主模型
+确实使用该混合表示；所有选型指标均在 \(\alpha=1\) 的整数解码下计算。
+纯日程对照复用同一 warmup checkpoint；不同结构各自完成匹配 warmup。
+
+G4 对每个 Hb 分支的第 i 个 2 秒片段采用
+
+\[
+\widehat y_i(t)=a_i(k_{1:15})+\overline{P(k_i)}(t)
+ +\overline{R_i(k_{1:15})}(t),\qquad
+\|\overline R_i\|\leq\rho\|\overline P_i\|.
+\]
+
+k 为该分支整数 ID；a 是由完整 30 秒序列预测的片段水平，P 是当前 ID 的
+局部形状，R 是上下文修正；每项均输出 HbO/HbR。横线表示每个 2 秒片段内
+按色团去均值，目标的幅度和水平仍完整重建。首轮暂取 \(\rho=0.25\)，
+不增加新 shape loss，使局部原型实际参与主重建。连续对照以对应连续 latent
+代替 ID 嵌入，保留相同职责分配。实施合同须明确范数、色团尺度、零原型处理
+和边界合成方式，再用合成与连续对照检查约束。
+
+### 4. 统一检查与候选筛选
+
+| 检查维度 | 每组共同要求 |
+| --- | --- |
+| 重建 | EEG、HbO、HbR 各报告 S/O/X，共九项输出；主排序采用冻结训练尺度的宏平均 NMSE，保留被试分布与固定样例。Hb 另分解水平/形状误差，EEG 检查频谱；NMSE 与先开方再平均的 NRMSE 分列 |
+| 真实 token pattern | 检查真实赋码片段、去均值形状及分位带、Hb 上升/下降/近零斜率组成、训练拟合的单 ID 原型在开发集上的误差、单 ID 与相邻三个 ID 读出差距，以及同一物理 patch 更换合法上下文后的形状与重建稳定性 |
+| EEG pattern 读法 | 同时检查逐片段频谱、波形分散度和代表片段，识别相位抵消造成的平坦平均波形；逐点电压重建要求保持 |
+| 码本健康 | 有效码数、最大占用、死码、量化误差及训练/开发差异；重点检查总体严重集中及新被试系统性落入少量码字，结合重建与 pattern 判断 |
+| 比较与统计单位 | 共同划分、尺度、抽样和 checkpoint 规则；先固定窗口/位置→记录→被试→数据集的聚合与配对规则。窗口和位置不充当独立被试；完整报告计划数、可用配对数与失败 |
+| 筛选 | 拟议重建筛选线为本模态各任务相对误差平均改善约 10%，且无分量明显恶化；pattern 候选要求单 ID 真实形状读出改善且重建退化受控；重建接近但健康明显改善者可进入确认。具体退化容差、接近范围、候选上限和平局规则在实施合同中预先固定 |
+| 定版 | 多被试、多种子下综合选择；实际同码样本仍混合明显相反形态时保留开发判定。工程筛选线与最终波形、pattern 验收分别报告 |
+
+### 5. 起始训练设置与实施前固定项
+
+以下是预算校准和匹配对照的起始设置，按 G1 结果确定后续共同预算。
+
+| 项目 | 起始设置 |
+| --- | --- |
+| waveform 主干 | Transformer width 128；encoder/decoder 各 2 层、4 heads；latent 64 作对照，EEG 优先测 32；dense_long 保留其参照结构 |
+| 量化 | 首轮 K128；EMA 0.99，commitment 0.25；初始化分层覆盖训练人口 |
+| 优化 | batch size 64；AdamW；初始学习率 3×10⁻⁴，weight decay 10⁻⁴，梯度裁剪 5；共同预定后段退火至约 3×10⁻⁵ |
+| 日程 | 连续 warmup 1,000 步；总上限暂为 10,000 步（含 warmup）；保存总步数 4,000/7,000/10,000 的结果；G3 过渡的 1,000 步指量化阶段内步数 |
+| 目标 | waveform 沿用 S/O 重建、权重 0.5 的总和重建及权重 0.1 的差分项；dense_long 按其原目标作为保留参照 |
+| 种子与选择 | 首轮 17，确认 29/43 完整重训；开发集选择规则一致，同时报告所选及末尾 checkpoint |
+
+实施前在新版本配置中固定人口与 split、评分聚合、checkpoint 选择、学习率
+日程、停止规则及筛选容差；配置解析、shape、整数重放和读取边界通过合成检查后，
+按项目持久监督与实测吞吐约定安排计算。K 扩容、额外 shape loss、EMA/commitment
+单参数搜索后置；K128 每位置每模态双分支名义码率为 7 bit/s，后续 K512 为
+9 bit/s，容量收益须连同码率变化报告。
 
 <a id="tk-state-v1"></a>
 ## TK-STATE-v1：Tokenizer 训练与生理状态验收安排（2026-11-12）

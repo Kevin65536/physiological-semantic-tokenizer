@@ -749,6 +749,7 @@ class GlobalLatentComponentTokenizer(nn.Module):
         self.input_dim = int(cfg['input_dim'])
         self.patches = int(cfg['patches'])
         self.hard = bool(hard)
+        self.decoder_quantization_blend = 1.0
         width, latent, heads = (int(cfg[k]) for k in ('width', 'latent_dim', 'heads'))
         if (self.input_dim < 1 or self.patches < 1 or width < 2 or width % 2
                 or latent < 1 or heads < 1 or width % heads or codebook_size < 2):
@@ -787,6 +788,17 @@ class GlobalLatentComponentTokenizer(nn.Module):
             for branch in self.branches.values():
                 branch['input']=WaveformPatchInput(channels,strides,width,int(cfg['local_width']),self.patches)
                 branch['output']=WaveformPatchOutput(channels,strides,width,int(cfg['local_width']),self.patches,self.input_dim)
+        self.hb_local_shape = bool(cfg.get('hb_local_shape', False))
+        if self.hb_local_shape:
+            if self.input_dim != 40 or int(cfg['channels']) != 2 or not self.waveform_io:
+                raise ValueError('Hb local-shape decoder requires paired 10 Hz waveform patches')
+            self.context_ratio = float(cfg['context_ratio'])
+            self.context_norm_epsilon = float(cfg['context_norm_epsilon'])
+            if not 0 < self.context_ratio < 1 or self.context_norm_epsilon <= 0:
+                raise ValueError('positive bounded Hb context parameters required')
+            for branch in self.branches.values():
+                branch['level'] = nn.Linear(width, 2)
+                branch['local_shape'] = nn.Linear(latent, self.input_dim)
         self.input_color_weights = cfg.get('input_color_weights')
         if self.input_color_weights is not None:
             if int(cfg['channels']) != 2 or list(self.input_color_weights) != [1., 0.]:
@@ -810,8 +822,33 @@ class GlobalLatentComponentTokenizer(nn.Module):
                 for c, b in self.branches.items()}
 
     def _decode_component(self, component: str, latent: torch.Tensor) -> torch.Tensor:
+        return self._decode_component_parts(component, latent)['full']
+
+    def set_decoder_quantization_blend(self, value: float) -> None:
+        """Training decoder schedule only; EMA and commitment strength stay fixed."""
+        if not 0 <= float(value) <= 1:
+            raise ValueError('decoder quantization blend must be in [0, 1]')
+        self.decoder_quantization_blend = float(value)
+
+    def _decode_component_parts(self, component: str, latent: torch.Tensor) -> dict:
         branch = self.branches[component]
-        return branch['output'](branch['decoder'](branch['from_latent'](latent) + self.position))
+        context = branch['decoder'](branch['from_latent'](latent) + self.position)
+        output = branch['output'](context)
+        if not self.hb_local_shape:
+            return dict(full=output)
+        local = branch['local_shape'](latent).reshape(*latent.shape[:2], 20, 2)
+        local = local - local.mean(-2, keepdim=True)
+        correction = output.reshape(local.shape)
+        correction = correction - correction.mean(-2, keepdim=True)
+        local_norm = torch.linalg.vector_norm(local, dim=-2, keepdim=True)
+        correction_norm = torch.linalg.vector_norm(correction, dim=-2, keepdim=True)
+        factor = (self.context_ratio * local_norm / correction_norm.clamp_min(self.context_norm_epsilon)).clamp(max=1.)
+        correction = correction * factor
+        level = branch['level'](context).unsqueeze(-2).expand_as(local)
+        # Concatenate complete 20-sample patches. No post-projection smoothing
+        # may move context shape into the single-ID term or violate its bound.
+        return dict(full=(level+local+correction).flatten(-2), level=level.flatten(-2),
+                    local=local.flatten(-2), context=correction.flatten(-2))
 
     def forward(self, values: torch.Tensor, *, quantize: bool | None = None) -> dict:
         use_hard = self.hard if quantize is None else bool(quantize)
@@ -829,11 +866,17 @@ class GlobalLatentComponentTokenizer(nn.Module):
                 # float32 cancellation can be amplified by the synthesis stack.
                 value = (quantizer.get_embedding(output.hard_ids)
                          if self.waveform_io and not self.training else output.quantized)
+                if self.training and self.decoder_quantization_blend < 1.:
+                    alpha = self.decoder_quantization_blend
+                    value = (1.-alpha)*latent + alpha*value
                 ids[component], health[component] = output.hard_ids, output.health
                 commitment = commitment + output.commitment_loss
             else:
                 value = latent
-            result[component] = self._decode_component(component, value)
+            decoded = self._decode_component_parts(component, value)
+            result[component] = decoded['full']
+            if self.hb_local_shape:
+                result[component+'_parts'] = {k:v for k,v in decoded.items() if k!='full'}
             if component == 'S' and self.code_shape_head is not None and use_hard:
                 shape = self.code_shape_head(value).reshape(*value.shape[:2], 20, 2)
                 result['S_shape'] = (shape - shape.mean(dim=-2, keepdim=True)).flatten(-2)
@@ -872,8 +915,11 @@ class GlobalLatentComponentTokenizer(nn.Module):
             if not bool(q.initialized) or bool((value < 0).any()) or bool((value >= q.codebook_size).any()):
                 raise ValueError('initialized vocabulary and in-range IDs required')
             shape = value.shape
-            result[component] = self._decode_component(component,
+            decoded = self._decode_component_parts(component,
                 q.get_embedding(value.to(device=q.codebook.device, dtype=torch.long)))
+            result[component] = decoded['full']
+            if self.hb_local_shape:
+                result[component+'_parts'] = {k:v for k,v in decoded.items() if k!='full'}
         return dict(result, sum=result['S'] + result['O'])
 
 

@@ -827,6 +827,66 @@ Tests: `test_model_compatibility.py`, `test_model_compatibility_runner.py`,
 
 ### Semantic and tokenizer development
 
+The [TK-BASE-v1 G0 design](../docs/EXPERIMENT_PLAN.md#tk-base-v1) uses
+[`dual_component_base_g0_v1.yaml`](configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml)
+through the same `scripts/run_dual_component_tokenizer.py`: `--stage check`,
+`--stage synthetic`, metadata-only `--stage base-plan`, then supervised
+`--stage base-prepare`; `--stage base-verify` rechecks the prepared interface.
+G0 prepares the full original train/validation population from the completed S/O
+v2 cache, with 200 Hz EEG and 10 Hz paired Hb. Original pilot regression intervals
+are excluded from every overlapping training/scale input and separately resampled.
+Each exact physical crop has one parent owner; scale/scoring blocks do not overlap.
+Per-position training moments weight records within subjects, then subjects equally;
+validation receives frozen scales. Missing training position scales remain unavailable.
+Sampling weights datasets, subjects and native records equally; codebook initialization
+covers every eligible training record. G0 stops after data/interface verification;
+it does not train models. `test_dual_component_base_g0.py` covers these boundaries,
+support accounting, masked targets, sampling, scales, resumption and integer replay.
+
+The [G1 five-model contract](configs/physiology_semantic_tokenizer/dual_component_base_g1_v1.yaml)
+consumes this exact completed G0 run through the same runner's `check`, `synthetic`,
+metadata-only `base-train-plan`, and supervised `base-train` stages; controller-owned
+`base-train-one` runs the declared children, and `base-train-report` summarizes them.
+Three modality/architecture warmups supply matched waveform continuous/K128 pairs
+and the EEG dense-long K128 reference. All five use seed 17 and 10,000 total updates,
+including 1,000 warmup updates. The learning-rate clock stays constant through step
+4,000, then follows a fixed cosine to step 10,000; 4,000/7,000/10,000 checkpoints use
+the complete G0 train-score, validation and regression panels. Integer reconstruction,
+per-color metrics, code health and training-fitted single-ID shape/X prototypes are
+retained with their actual ID sequences and fixed examples. Selection uses only the
+complete validation NMSE; regression is reported separately. Failed jobs remain in
+the five-model denominator. `test_dual_component_base_g1.py` covers boundary checks,
+masked gradients, equal-level aggregation, the bounded budget rule, mmap equivalence,
+matched warmup, exact interrupted continuation, and all five synthetic interfaces.
+
+The [dense continuation/G2/G4 contract](configs/physiology_semantic_tokenizer/dual_component_base_g124_v1.yaml)
+uses the same `check`, `synthetic`, `base-train-plan`, `base-train` and report stages.
+It preserves the original dense checkpoint/optimizer/RNG at step 7,000 in a fresh
+run, and references the completed 4,000-step evaluation without rewriting it.
+Its dependency-aware controller runs this continuation alongside the new EEG-32
+and Hb structured-decoder warmups, then launches their paired continuous/K128 arms.
+All runs stop at 10,000 total steps. At the user's request, this version disables
+forward/replay comparison in synthetic and measured evaluation; actual integer
+decoding remains the scoring path. Hb local shapes read the current code alone,
+while per-color context corrections are bounded at 25% of its norm. Zero local
+shape forces zero correction; the original difference loss acts on patch joins.
+`test_dual_component_base_followup.py` covers these structural constraints,
+the cancelled comparison, unchanged migrated continuation and the parallel schedule.
+
+The [G3 contract](configs/physiology_semantic_tokenizer/dual_component_base_g3_v1.yaml)
+uses the same `check`, `synthetic`, `base-train-plan`, and supervised `base-train`
+entrypoints. It validates the audited G2 dimension and closed G1 budget, then reuses
+the exact G1 EEG waveform-64 warmup and initialization identities. One seed-17 K128
+candidate makes 9,000 new updates. Total steps 1,001–2,000 blend the actual training
+decoder input from continuous to hard-quantized latents; EMA and commitment stay
+unchanged, and all evaluation remains integer-only without replay comparison.
+Transition probes, fixed milestones, optimizer/RNG state and the 2,000-step checkpoint
+are retained. Two independent device pilots choose one GPU for the single candidate.
+An explicit `--devices cuda:1` pins both the resource pilot and the formal candidate
+to GPU1; the requested device is retained in the run plan and no other GPU is piloted.
+`test_dual_component_base_g3.py` checks the main forward path, matched VQ controls,
+hard-only evaluation, immutable external warmup and exact mid-transition recovery.
+
 The [TK-STATE-v1 training/acceptance design](../docs/EXPERIMENT_PLAN.md#tk-state-v1)
 starts with the bounded [state pilot contract](configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml)
 in `scripts/run_dual_component_tokenizer.py`: `--stage check`, `--stage synthetic`,

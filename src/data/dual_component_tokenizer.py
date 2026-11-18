@@ -191,6 +191,298 @@ def masked_state_geometry(project_root, spec, meta, modality, names):
     return values, sources
 
 
+def base_tokenizer_plan(cache_root, spec, source_ssm, regression_rows):
+    """Freeze G0 population and physical support without reading signal arrays."""
+    from .so_supervision_cache import SOSupervisionDataset
+    root = Path(cache_root).resolve()
+    if (spec['allowed_splits'] != ['train', 'validation'] or spec['test_access'] != 'forbidden'
+            or spec['protected_data'] != 'forbidden' or spec['raw_reads'] or spec['teacher_refits']):
+        raise ValueError('G0 development boundary before reads')
+    manifest = json.loads((root / 'cache_manifest.json').read_text())
+    verification = json.loads((root / 'verification.json').read_text())
+    if (manifest['schema'] != spec['source_schema'] or manifest['status'] != 'completed'
+            or verification['status'] != 'passed'
+            or Path(manifest['source_ssm']).resolve() != Path(source_ssm).resolve()):
+        raise ValueError('completed verified exact S/O source required')
+    subjects = {}
+    for row in manifest['windows']:
+        key = row['dataset'], row['subject']
+        if key in subjects and subjects[key] != row['split']:
+            raise ValueError('subject crosses source partitions')
+        subjects[key] = row['split']
+    regression = defaultdict(list)
+    for r in regression_rows:
+        if r['modality'] != 'eeg':
+            continue
+        if r['split'] != 'train':
+            raise ValueError('original regression must belong to training subjects')
+        key = r['dataset'], r['subject'], r['record']
+        for start in r['holdout_starts_s']:
+            begin = r['native_start_sample'] + start * r['native_rate_hz']
+            regression[key].append(dict(begin=begin, end=begin + 30 * r['native_rate_hz'],
+                                        parent=r['parent'], start_s=start))
+    windows = []
+    for split in spec['allowed_splits']:
+        reader = SOSupervisionDataset(root, split=split)
+        for index, row in enumerate(reader.windows):
+            if row['dataset'] not in spec['datasets']:
+                continue
+            path = (root / 'windows' / row['key']).with_suffix('.json').resolve()
+            if Path(row['metadata']).resolve() != path or not path.is_relative_to(root / 'windows'):
+                raise ValueError('metadata path escapes source')
+            meta = json.loads(path.read_text())
+            masked_state_identity(root, row, meta, spec)
+            src = meta['source']
+            if src['samples'] != round(src['duration_s'] * src['rate']):
+                raise ValueError('native time grid changed')
+            windows.append(dict(row=row, metadata=meta, index=index, train_starts_s=[],
+                                score_starts_s=[], regression_starts_s=[], blocked_samples=[]))
+    windows.sort(key=lambda w: (w['row']['dataset'], w['row']['subject'],
+        w['metadata']['source']['native_record'], w['metadata']['source']['start_sample'], w['row']['key']))
+    candidates = defaultdict(list)
+    excluded_regression, duplicate_crops = 0, 0
+    seen = set()
+    for index, w in enumerate(windows):
+        row, src = w['row'], w['metadata']['source']
+        key = row['dataset'], row['subject'], src['native_record']
+        rate, origin, length = src['rate'], src['start_sample'], src['samples']
+        for r in regression[key]:
+            lo, hi = max(0, r['begin'] - origin), min(length, r['end'] - origin)
+            if hi > lo:
+                # Hb is already on its retained grid and is not filtered here.
+                # Only a new EEG resampler needs an integral output-grid cut.
+                if rate != 200 and ((lo * 200) % rate or (hi * 200) % rate):
+                    raise ValueError('regression boundary must align with the resampled EEG grid')
+                w['blocked_samples'].append([lo, hi])
+            if r['parent'] == row['key']:
+                w['regression_starts_s'].append(r['start_s'])
+        for start in range(0, int(src['duration_s']) - 29, spec['stride_s']):
+            begin, end = origin + start * rate, origin + (start + 30) * rate
+            if any(begin < r['end'] and end > r['begin'] for r in regression[key]):
+                excluded_regression += 1
+                continue
+            crop_key = (*key, begin, end)
+            if crop_key in seen:
+                duplicate_crops += 1
+                continue
+            seen.add(crop_key)
+            candidates[key].append((begin, end, index, start))
+            if row['split'] == 'train':
+                w['train_starts_s'].append(start)
+    for items in candidates.values():
+        end_previous = -1
+        for begin, end, index, start in sorted(items):
+            if begin >= end_previous:
+                windows[index]['score_starts_s'].append(start)
+                end_previous = end
+    found = sum(len(w['regression_starts_s']) for w in windows)
+    if found != sum(map(len, regression.values())):
+        raise ValueError('original regression inputs missing from source')
+    population = [dict(dataset=d, subject=s, split=sp) for (d,s),sp in sorted(subjects.items())
+                  if sp in spec['allowed_splits'] and d in spec['datasets']]
+    return dict(schema='dual_component_base_plan_v1', cache_root=str(root), windows=windows,
+                subjects=population, source_ssm=str(Path(source_ssm).resolve()),
+                allowed_splits=spec['allowed_splits'], measured_arrays_read=0,
+                regression_crops_excluded=excluded_regression, duplicate_training_crops_removed=duplicate_crops,
+                regression_inputs=found, selection='metadata_only_all_public_train_validation')
+
+
+def base_tokenizer_coordinates(meta, arrays, modality, selected):
+    """Adapt one parent without fitting scales; keep all three validity meanings."""
+    prefix = 'eeg' if modality == 'eeg' else 'fnirs'
+    rate = meta['source']['rate'] if modality == 'eeg' else 10
+    channels = 1 if modality == 'eeg' else 2
+    n = round(meta['source']['duration_s'] * rate)
+    names = meta['EEG_channels'] if modality == 'eeg' else meta['fNIRS_positions']
+    values = {}
+    for key in ('x', 's', 'o', 'observation_valid', 'teacher_valid'):
+        a = np.asarray(arrays[prefix + '_' + key])
+        values[key] = a[..., None] if modality == 'eeg' else a
+        if values[key].shape != (n, len(names), channels):
+            raise ValueError('native shape/channel identity mismatch')
+    score = np.asarray(arrays['eeg_source_scoring_mask' if modality == 'eeg' else 'source_scoring_mask'])
+    if score.shape != (n,) or score.dtype != np.bool_:
+        raise ValueError('explicit source scoring support required')
+    for key in ('observation_valid', 'teacher_valid'):
+        if values[key].dtype != np.bool_:
+            raise ValueError('explicit boolean validity required')
+    np.testing.assert_allclose(arrays[prefix + '_time_s'], np.arange(n) / rate, atol=1e-10, rtol=0)
+    resampling = dict(source_hz=rate, target_hz=rate, operator='identity')
+    if modality == 'eeg' and rate != 200:
+        bounds = sorted({0, n, *(v for pair in selected['blocked_samples'] for v in pair)})
+        chunks, scores = [], []
+        for lo, hi in zip(bounds[:-1], bounds[1:]):
+            transformed, scored, resampling = state_eeg_200hz(
+                {k: v[lo:hi] for k,v in values.items()}, score[lo:hi], rate, hi-lo)
+            chunks.append(transformed); scores.append(scored)
+        values = {k: np.concatenate([v[k] for v in chunks]) for k in values}
+        score = np.concatenate(scores)
+        resampling = dict(resampling, source_block_bounds=bounds)
+        rate = 200
+    mask = values['observation_valid'] & values['teacher_valid'] & score[:,None,None]
+    if not all(np.isfinite(values[k][mask]).all() for k in ('x','s','o')):
+        raise ValueError('nonfinite valid supervision')
+    np.testing.assert_allclose(values['x'][mask], (values['s'] + values['o'])[mask], rtol=1e-10, atol=1e-9)
+    packed = {k: np.asarray(v, np.float32) if k in ('x','s','o') else v for k,v in values.items()}
+    packed.update(mask=mask, source_scoring=score)
+    info = dict(dataset=meta['dataset'], subject=meta['subject'], split=meta['split'],
+                parent=meta['key'], record=meta['source']['native_record'], modality=modality,
+                positions=names, rate=rate, channels=channels, resampling=resampling,
+                native_start_sample=meta['source']['start_sample'], native_rate_hz=meta['source']['rate'],
+                source_status=meta['status'], source_unit=meta.get('EEG_unit' if modality=='eeg' else 'fNIRS_unit', 'unknown'),
+                inputs={}, unavailable_inputs={})
+    for role, starts in [('train', selected['train_starts_s']), ('score', selected['score_starts_s']),
+                         ('regression', selected['regression_starts_s'])]:
+        accepted, rejected = [], []
+        for start in starts:
+            sl = slice(start * rate, (start+30) * rate)
+            observed = (values['observation_valid'][sl] & np.isfinite(values['x'][sl])).all((0,2))
+            supervised = mask[sl].any(0).all(-1)
+            positions = np.flatnonzero(observed & supervised).tolist()
+            accepted.append(dict(start_s=start, positions=positions))
+            rejected.append(dict(start_s=start, input_invalid=int((~observed).sum()),
+                                 teacher_unavailable=int((observed & ~supervised).sum())))
+        info['inputs'][role] = accepted
+        info['unavailable_inputs'][role] = rejected
+    # Statistics use disjoint physical supports, and never the regression interval.
+    moments = {}
+    if meta['split'] == 'train':
+        for key in ('x','s','o'):
+            for difference in (False, True):
+                count = np.zeros((len(names), channels), np.int64)
+                total = np.zeros_like(count, dtype=float); square = total.copy()
+                for item in info['inputs']['score']:
+                    sl = slice(item['start_s']*rate, (item['start_s']+30)*rate)
+                    valid = mask[sl].copy()
+                    admitted = np.zeros(len(names), bool); admitted[item['positions']] = True
+                    valid &= admitted[None,:,None]
+                    a = np.asarray(values[key][sl], float)
+                    if difference:
+                        a = np.diff(a, axis=0); valid = valid[1:] & valid[:-1]
+                    a = np.where(valid, a, 0.)
+                    count += valid.sum(0); total += a.sum(0); square += (a*a).sum(0)
+                moments[('d' if difference else '') + key] = dict(count=count.tolist(), sum=total.tolist(), second=square.tolist())
+    info['moments'] = moments
+    return info, packed
+
+
+def base_tokenizer_scales(rows, spec):
+    """Pool sufficient statistics within record, then weight records/subjects equally."""
+    records = {}
+    for row in rows:
+        if row['split'] != 'train':
+            if row.get('moments'):
+                raise ValueError('validation cannot fit scales')
+            continue
+        for p, name in enumerate(row['positions']):
+            key = row['modality'], row['dataset'], name, row['subject'], row['record']
+            for field, values in row['moments'].items():
+                count = np.asarray(values['count'][p], float)
+                if not (count > 0).all():
+                    continue
+                bucket = records.setdefault(key, {}).setdefault(field, np.zeros((3, len(count))))
+                bucket += np.asarray([count, values['sum'][p], values['second'][p]])
+    subjects = defaultdict(lambda: defaultdict(list))
+    for key, fields in records.items():
+        for field, (count,total,square) in fields.items():
+            subjects[key[:-1]][field].append(np.stack([total/count, square/count]))
+    positions = defaultdict(lambda: defaultdict(list))
+    support = defaultdict(set)
+    for key, fields in subjects.items():
+        for field, values in fields.items():
+            positions[key[:-1]][field].append(np.mean(values, axis=0))
+        support[key[:-1]].add(key[-1])
+    result = {}
+    for (modality,dataset,name), fields in sorted(positions.items()):
+        if set(fields) != {'x','s','o','dx','ds','do'}:
+            raise ValueError('incomplete training moment support')
+        moments = {k: np.mean(v, axis=0) for k,v in fields.items()}
+        variance = {k: np.maximum(v[1] - v[0]**2, 0.) for k,v in moments.items()}
+        floor = max(float(np.mean(moments['x'][1])) * 1e-12, 1e-24)
+        scale2 = max(float(np.mean(variance['x'])), floor)
+        target = {k: np.maximum(variance[k]/scale2, spec['target_variance_floor']).tolist() for k in ('x','s','o')}
+        diff = {k: np.maximum(variance['d'+k]/scale2, np.asarray(target[k]) * spec['difference_variance_floor_fraction']).tolist() for k in target}
+        entry = dict(scale=float(np.sqrt(scale2)), target_variance=target, difference_variance=diff,
+                     training_subjects=len(support[(modality,dataset,name)]), low_variance=bool(np.mean(variance['x']) <= floor))
+        result.setdefault(modality, {}).setdefault(dataset, {})[name] = entry
+    return dict(schema='dual_component_base_scales_v1', fitting_split='train', positions=result)
+
+
+def base_tokenizer_sampling_index(rows, modality):
+    """Index actual eligible training crops, preserving dataset/subject/record hierarchy."""
+    groups = {}
+    for index, row in enumerate(rows):
+        if row['modality'] != modality or row['split'] != 'train':
+            continue
+        for item in row['inputs']['train']:
+            if item['positions']:
+                groups.setdefault(row['dataset'], {}).setdefault(row['subject'], {}).setdefault(row['record'], []).append(
+                    (index, item['start_s'], item['positions']))
+    return groups
+
+
+def base_tokenizer_sample(rng, groups, count, *, initialization=False):
+    """No record/window multiplicity changes dataset or subject sampling weight."""
+    def choose(values):
+        return values[int(rng.integers(len(values)))]
+    result = []
+    if initialization:
+        records = [records[r] for d in sorted(groups) for s,records in sorted(groups[d].items()) for r in sorted(records)]
+    else:
+        records = []
+        for _ in range(count):
+            subjects = groups[choose(sorted(groups))]
+            by_record = subjects[choose(sorted(subjects))]
+            records.append(by_record[choose(sorted(by_record))])
+    for crops in records:
+        row,start,positions = choose(crops)
+        result.append((row,start,int(choose(positions))))
+    return result
+
+
+def base_tokenizer_batch(rows, examples, scales, *, array_cache=None, cache_limit=256):
+    """G1-ready mmap batch: only frozen training scales, explicit same-branch targets."""
+    if array_cache is not None:
+        import resource
+        soft,_ = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft != resource.RLIM_INFINITY:
+            # Four maps per parent, plus temporary opens and mask views retained
+            # by this batch. User-systemd often starts with a 1024-file soft limit.
+            cache_limit = min(cache_limit,max(1,(soft-max(128,len(examples)+64))//4))
+    result = defaultdict(list)
+    for index,start,p in examples:
+        row = rows[index]
+        if row['split'] not in ('train','validation'):
+            raise ValueError('prepared development split required before arrays')
+        if not any(v['start_s']==start and p in v['positions'] for items in row['inputs'].values() for v in items):
+            raise ValueError('input outside frozen prepared support')
+        ref = scales['positions'][row['modality']][row['dataset']][row['positions'][p]]
+        rate = row['rate']; sl = slice(start*rate, (start+30)*rate)
+        folder = row['folder']
+        for key in ('x','s','o','mask'):
+            if (Path(folder)/(key+'.npy')).resolve().parent != Path(folder).resolve():
+                raise ValueError('prepared array escapes declared parent folder')
+        if array_cache is not None:
+            if folder not in array_cache:
+                while len(array_cache) >= cache_limit:
+                    array_cache.popitem(last=False)
+                array_cache[folder] = {k: np.load(Path(folder)/(k+'.npy'), mmap_mode='r')
+                                       for k in ('x','s','o','mask')}
+            array_cache.move_to_end(folder)
+            while len(array_cache) > cache_limit:
+                array_cache.popitem(last=False)
+        for key in ('x','s','o','mask'):
+            source = array_cache[folder][key] if array_cache is not None else np.load(Path(folder)/(key+'.npy'), mmap_mode='r')
+            a = source[sl,p]
+            if key != 'mask':
+                a = a/ref['scale']
+            result[key].append(a.reshape(15,-1))
+        for key in ('x','s','o'):
+            result['v'+key].append(np.tile(ref['target_variance'][key], (15,2*rate)))
+            result['dv'+key].append(np.tile(ref['difference_variance'][key], (15,2*rate)))
+    return {k: np.stack(v) for k,v in result.items()}
+
+
 def state_pilot_plan(cache_root, spec, source_ssm, *, excluded_subjects=(), include_short_refed=True):
     """Metadata-first, training-only small panel from the completed S/O cache."""
     from .so_supervision_cache import SOSupervisionDataset

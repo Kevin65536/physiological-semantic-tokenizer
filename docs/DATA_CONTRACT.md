@@ -1776,6 +1776,31 @@ Raw-observation physiological features are reserved for training-fitted frozen
 readouts, never added as pretraining inputs or labels. This consumer inherits the
 cache's offline reference/calibration support and makes no prospective claim.
 
+### Base-tokenizer population and coordinates — 2026-11-17
+
+The [G0 consumer](../experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml)
+uses all original train/validation subjects from the completed S/O v2 cache.
+Its metadata-only plan freezes native identities before arrays; test and protected
+inputs remain excluded. The original pilot's five time-holdout blocks remain a
+separate regression panel. Their physical support is removed from every overlapping
+training and scale-fitting crop, with independent resampling across these boundaries.
+Original 200 Hz EEG and 10 Hz Hb coordinates, masks, units and teacher targets are
+preserved; higher-rate EEG uses the paired X/S/O Kaiser-5 polyphase conversion.
+
+Exact duplicate 30-second crops use the earliest covering parent; nonoverlapping
+30-second blocks supply scoring and training moments. Overlapping parents retain
+their conditional-target identity. Training sampling is dataset-equal, subject-equal,
+native-record-equal, then uniform over admitted crops and their valid positions.
+Codebook initialization draws one seeded eligible crop/position per training record.
+Input scales are per-dataset/native-position X standard deviations: pool valid
+moments within records, average records within each subject, then subjects equally.
+Hb uses one positive scale shared by both colors. No input centering is applied.
+X/S/O and adjacent-difference scoring variances are fitted separately on the same
+training support and expressed in this input coordinate; their floors are frozen
+in the G0 contract. Validation/regression fit no statistics. A position without a
+training scale is explicitly unavailable. Preparation retains input, teacher and
+source-scoring masks separately, plus failed inputs and complete planned denominators.
+
 ### Tokenizer EEG supervision at 200 Hz — 2026-11-12
 
 The user fixes **200 Hz EEG supervision for every dataset** in the

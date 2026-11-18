@@ -1,0 +1,4041 @@
+{
+  "schema": "tk_base_g1_g4_results_v1",
+  "snapshot_at": "2026-11-18T07:50:01.554262+00:00",
+  "purpose": "Dated compact reading export; individual run records own measured evidence and research_state/registry.json owns current state.",
+  "suite": {
+    "experiment": "TK-BASE-v1",
+    "groups": [
+      "G1",
+      "G2",
+      "G3",
+      "G4"
+    ],
+    "planned_models": 10,
+    "completed_models": 10,
+    "seed": 17,
+    "matched_final_step": 10000,
+    "warmup_steps": 1000,
+    "milestones": [
+      4000,
+      7000,
+      10000
+    ],
+    "data_run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g0_v2",
+    "source_cache": "data/cache/physiology_so_supervision_v2",
+    "train_subjects": 60,
+    "train_records": 443,
+    "validation_subjects": 20,
+    "validation_records": 144,
+    "contracts": [
+      "experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml",
+      "experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v1.yaml",
+      "experiments/configs/physiology_semantic_tokenizer/dual_component_base_g124_v1.yaml",
+      "experiments/configs/physiology_semantic_tokenizer/dual_component_base_g3_v1.yaml"
+    ],
+    "entrypoint": "experiments/scripts/run_dual_component_tokenizer.py",
+    "target_definition": "cached model-conditional S/O supervision; input is modality X",
+    "metric": "training-scale-normalized squared error; equal positions within crop, crops within record, records within subject, subjects within dataset, datasets, X/S/O and Hb colors",
+    "component_order": [
+      "X",
+      "S",
+      "O"
+    ],
+    "hb_color_order": [
+      "HbO",
+      "HbR"
+    ],
+    "effective_codes": "exp(entropy) of record/subject/dataset-balanced ID probabilities",
+    "shape_readout": "train-fitted single-ID centered target prototype; validation scoring only",
+    "test_arrays_read": 0,
+    "teacher_refits": 0
+  },
+  "models": [
+    {
+      "id": "G1/eeg__waveform__continuous",
+      "group": "G1",
+      "task_id": "eeg__waveform__continuous",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2/models/eeg__waveform__continuous/summary.json",
+      "signature": {
+        "config": "ab4ef6e8fc1367876a7272ad",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "eeg",
+          "architecture": "waveform",
+          "candidate": "continuous"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 1290818,
+      "nominal_bits_per_location_second": null,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.3979024758892593,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.36103269586990816
+              ],
+              [
+                0.4665169159371123
+              ],
+              [
+                0.3661578158607574
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.28447739383848925,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.1927498836494531
+              ],
+              [
+                0.4481746798515842
+              ],
+              [
+                0.21250761801443038
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.24873501826335442,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.14100595830875412
+              ],
+              [
+                0.47730645431296254
+              ],
+              [
+                0.1278926421683466
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.37242599958596245,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3415263206046198
+              ],
+              [
+                0.4257879894810472
+              ],
+              [
+                0.34996368867222033
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.2606782508622202,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.17292089955363188
+              ],
+              [
+                0.41363279579501794
+              ],
+              [
+                0.1954810572380107
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.2251862705173923,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.12664533314489373
+              ],
+              [
+                0.43020237451393195
+              ],
+              [
+                0.11871110389335121
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.3632923699671646,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3321319331597419
+              ],
+              [
+                0.4201655659239598
+              ],
+              [
+                0.3375796108177919
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.25148409615396183,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.16295214495819393
+              ],
+              [
+                0.4096781482463853
+              ],
+              [
+                0.18182199525730622
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.22108175565625246,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.11873652015180079
+              ],
+              [
+                0.43375317307837125
+              ],
+              [
+                0.1107555737385854
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.01220971389406744
+            ],
+            [
+              0.1835643005632419
+            ],
+            [
+              0.009361853838380698
+            ]
+          ],
+          "refed": [
+            [
+              0.5519604930996672
+            ],
+            [
+              0.6780630318116715
+            ],
+            [
+              0.6462165005665604
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.04739316204864188
+            ],
+            [
+              0.4072212131642541
+            ],
+            [
+              0.033332321082350694
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.0402452107903992
+            ],
+            [
+              0.36986404744637397
+            ],
+            [
+              0.03837730554193296
+            ]
+          ]
+        },
+        "code_health": []
+      },
+      "comparison": {
+        "reference": null,
+        "relative_nmse_change": null,
+        "direction": "positive means higher error"
+      }
+    },
+    {
+      "id": "G1/eeg__waveform__vq128",
+      "group": "G1",
+      "task_id": "eeg__waveform__vq128",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2/models/eeg__waveform__vq128/summary.json",
+      "signature": {
+        "config": "ab4ef6e8fc1367876a7272ad",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "eeg",
+          "architecture": "waveform",
+          "candidate": "vq128"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 1290818,
+      "nominal_bits_per_location_second": 7,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.5274603900004982,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.4795492473095063
+              ],
+              [
+                0.6178526776941269
+              ],
+              [
+                0.48497924499786127
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.414885234790741,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.31499814024007616
+              ],
+              [
+                0.5878830793245324
+              ],
+              [
+                0.34177448480761446
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.3423341600240572,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.2182487331370052
+              ],
+              [
+                0.6150121849145381
+              ],
+              [
+                0.1937415620206282
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.5141165019053408,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.46863750979107055
+              ],
+              [
+                0.6027620996439578
+              ],
+              [
+                0.4709498962809938
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.4034830750530966,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.30508091286963673
+              ],
+              [
+                0.5766889573019492
+              ],
+              [
+                0.32867935498770384
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.33364139680294275,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.21698832662677234
+              ],
+              [
+                0.588465890348721
+              ],
+              [
+                0.19546997343333478
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.5089365170537348,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.4629550500962937
+              ],
+              [
+                0.5976953060500265
+              ],
+              [
+                0.466159195014884
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.3975209705465072,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.29759647469161027
+              ],
+              [
+                0.573079260304886
+              ],
+              [
+                0.3218871766430254
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.33067558962092664,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.21207558707830096
+              ],
+              [
+                0.5909670838463097
+              ],
+              [
+                0.18898409793816934
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.03170502728945842
+            ],
+            [
+              0.29210152917068954
+            ],
+            [
+              0.025609371614729204
+            ]
+          ],
+          "refed": [
+            [
+              0.9446065333966959
+            ],
+            [
+              0.9448314925346697
+            ],
+            [
+              1.08058143438775
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.10257169130296502
+            ],
+            [
+              0.5370028045964841
+            ],
+            [
+              0.08342220195145103
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.11150264677732173
+            ],
+            [
+              0.5183812149177004
+            ],
+            [
+              0.09793569861817135
+            ]
+          ]
+        },
+        "code_health": [
+          {
+            "branch": "S",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 107.82668552162878,
+            "top1": 0.03030032588437073
+          },
+          {
+            "branch": "O",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 51.882488507674,
+            "top1": 0.08296513287381438
+          }
+        ],
+        "single_ID_centered_readout": {
+          "macro": [
+            [
+              0.5676639352941663
+            ],
+            [
+              0.3320285872860998
+            ],
+            [
+              0.3179113418963652
+            ],
+            [
+              0.3243066580801035
+            ]
+          ],
+          "by_dataset": {
+            "eeg_fnirs_single_trial": [
+              [
+                0.3144292015878833
+              ],
+              [
+                0.048592518620967834
+              ],
+              [
+                0.020027514305640325
+              ],
+              [
+                0.03132737005632257
+              ]
+            ],
+            "refed": [
+              [
+                0.9533531405407465
+              ],
+              [
+                1.028799179515187
+              ],
+              [
+                1.0909997915302516
+              ],
+              [
+                1.0335177423519648
+              ]
+            ],
+            "simultaneous_eeg_nirs": [
+              [
+                0.5000934293423278
+              ],
+              [
+                0.12305003888892577
+              ],
+              [
+                0.07249449376328211
+              ],
+              [
+                0.10933937768716233
+              ]
+            ],
+            "visual_cognitive_motivation": [
+              [
+                0.5027799697057075
+              ],
+              [
+                0.12767261211931852
+              ],
+              [
+                0.08812356798628691
+              ],
+              [
+                0.12304214222496428
+              ]
+            ]
+          },
+          "component_order": [
+            "S_to_S",
+            "S_to_X",
+            "O_to_O",
+            "O_to_X"
+          ],
+          "nonfinite_entries": 0
+        },
+        "single_ID_unsupported_fraction": {
+          "S_s_unsupported_fraction": 0.0,
+          "S_x_unsupported_fraction": 0.0,
+          "O_o_unsupported_fraction": 0.0,
+          "O_x_unsupported_fraction": 0.0
+        }
+      },
+      "comparison": {
+        "reference": "G1/eeg__waveform__continuous",
+        "relative_nmse_change": 0.5807002376131956,
+        "direction": "positive means higher error"
+      }
+    },
+    {
+      "id": "G1/hb__waveform__continuous",
+      "group": "G1",
+      "task_id": "hb__waveform__continuous",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2/models/hb__waveform__continuous/summary.json",
+      "signature": {
+        "config": "ab4ef6e8fc1367876a7272ad",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "hb",
+          "architecture": "waveform",
+          "candidate": "continuous"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 1193284,
+      "nominal_bits_per_location_second": null,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.14865369427770028,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.010811652035498288,
+                0.01352630122866447
+              ],
+              [
+                0.07824218062226472,
+                0.08307765341495914
+              ],
+              [
+                0.4443579383925962,
+                0.26190643997221896
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.1772387129489209,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.022344935545084304,
+                0.029271249072301404
+              ],
+              [
+                0.07932206100373615,
+                0.11536466318676857
+              ],
+              [
+                0.48340012922447495,
+                0.33372923966116
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.37186378543458165,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.16612713488091108,
+                0.10169942330253905
+              ],
+              [
+                0.12516623124585488,
+                0.33061428331484993
+              ],
+              [
+                0.47517930781293555,
+                1.0323963320503995
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.1373278163253366,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.005282284233484429,
+                0.010568210455523934
+              ],
+              [
+                0.07187040612168794,
+                0.0739141458982299
+              ],
+              [
+                0.4134822942701799,
+                0.24884955697291347
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.16146798229966183,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.014821375630496368,
+                0.02123811979694683
+              ],
+              [
+                0.07050880223700151,
+                0.09760924658710805
+              ],
+              [
+                0.453327058167315,
+                0.3113032913791033
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.32053436373445926,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.10132176530167768,
+                0.05841481316880891
+              ],
+              [
+                0.09348898451292312,
+                0.4052911499933766
+              ],
+              [
+                0.337417233901563,
+                0.9272722355284061
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.12857543837318738,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.004340429899623539,
+                0.007655238563782958
+              ],
+              [
+                0.06870722902888474,
+                0.07027574881705964
+              ],
+              [
+                0.39720281330074625,
+                0.22327117062902724
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.1549821710981946,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.011672183252371215,
+                0.01803769773120365
+              ],
+              [
+                0.0661636232609436,
+                0.09510467888342909
+              ],
+              [
+                0.4333121395841266,
+                0.30560270387709343
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.32302604321945133,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.08018149652377332,
+                0.06304096183941721
+              ],
+              [
+                0.09845573157660728,
+                0.4088410456143428
+              ],
+              [
+                0.25237671858628447,
+                1.035260305176283
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.0035274728591656256,
+              0.004367421087260106
+            ],
+            [
+              0.07305566530152162,
+              0.08513816567924737
+            ],
+            [
+              0.23736300331037044,
+              0.2665700328894069
+            ]
+          ],
+          "refed": [
+            [
+              0.034464972778059356,
+              0.05572102627761464
+            ],
+            [
+              0.07535167673866348,
+              0.08786123717118044
+            ],
+            [
+              0.7722879124548988,
+              0.24936683319019373
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.003203046398051394,
+              0.009629363715758909
+            ],
+            [
+              0.0587871564947464,
+              0.12092500735363447
+            ],
+            [
+              0.1475498387204394,
+              0.5366265472492296
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.005493240974208488,
+              0.0024329798441809526
+            ],
+            [
+              0.05745999450884295,
+              0.08649430532965409
+            ],
+            [
+              0.5760478038507978,
+              0.1698474021795433
+            ]
+          ]
+        },
+        "code_health": []
+      },
+      "comparison": {
+        "reference": null,
+        "relative_nmse_change": null,
+        "direction": "positive means higher error"
+      }
+    },
+    {
+      "id": "G1/hb__waveform__vq128",
+      "group": "G1",
+      "task_id": "hb__waveform__vq128",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2/models/hb__waveform__vq128/summary.json",
+      "signature": {
+        "config": "ab4ef6e8fc1367876a7272ad",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "hb",
+          "architecture": "waveform",
+          "candidate": "vq128"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 1193284,
+      "nominal_bits_per_location_second": 7,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.17528395086342954,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.024993838815834436,
+                0.03263733717675668
+              ],
+              [
+                0.08943864229073036,
+                0.09478014581047811
+              ],
+              [
+                0.47290115318979015,
+                0.3369525878969876
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.21544544101053775,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.058971337027066556,
+                0.05822124353851827
+              ],
+              [
+                0.11005547722601168,
+                0.13703258054845072
+              ],
+              [
+                0.5099498362387491,
+                0.4184421714844302
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.43273637500116663,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.299340659954357,
+                0.2818736948260292
+              ],
+              [
+                0.2273651051527046,
+                0.1550457878969785
+              ],
+              [
+                0.42216937922247955,
+                1.210623622954451
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.16289172609290123,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.01708394757402973,
+                0.023603227353395928
+              ],
+              [
+                0.08328169656941142,
+                0.08638035208468889
+              ],
+              [
+                0.4592529109169332,
+                0.30774822205894825
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.19266414603113977,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.0399520667700599,
+                0.04088176054051344
+              ],
+              [
+                0.09272607428565101,
+                0.11714108882403415
+              ],
+              [
+                0.4984428334588641,
+                0.36684105230771585
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.41798724474294485,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.22402024429106163,
+                0.3131671475189555
+              ],
+              [
+                0.16401411457019685,
+                0.12320740215252568
+              ],
+              [
+                0.4502813210377293,
+                1.2332332388872
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.15139766078156167,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.015376568258837793,
+                0.020764170792181836
+              ],
+              [
+                0.07890666796037862,
+                0.08087908812405065
+              ],
+              [
+                0.44021454238707525,
+                0.2722449271668459
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.1851401048842237,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.03631929463315613,
+                0.037028292559604756
+              ],
+              [
+                0.08635240386450768,
+                0.11240309734623294
+              ],
+              [
+                0.48174082229139326,
+                0.3569967186104473
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.39039926214853904,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.19142171555378373,
+                0.2255775431578814
+              ],
+              [
+                0.1465408606608734,
+                0.19817385760741635
+              ],
+              [
+                0.3816619075326256,
+                1.199019688378654
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.013375018607639901,
+              0.019543830825590136
+            ],
+            [
+              0.08163635722613347,
+              0.09590252617293794
+            ],
+            [
+              0.2623644011665362,
+              0.30274830621454574
+            ]
+          ],
+          "refed": [
+            [
+              0.10102973175004115,
+              0.07791829898038438
+            ],
+            [
+              0.13192321046616526,
+              0.12608641581406796
+            ],
+            [
+              0.8600466522188546,
+              0.31845203436119623
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.012530547911617895,
+              0.04002018544622733
+            ],
+            [
+              0.06657264663187258,
+              0.13966278853419584
+            ],
+            [
+              0.16516071423303783,
+              0.6180026030486283
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.01834188026332555,
+              0.010630854986217178
+            ],
+            [
+              0.06527740113385941,
+              0.08796065886373
+            ],
+            [
+              0.6393915215471445,
+              0.18878393081741884
+            ]
+          ]
+        },
+        "code_health": [
+          {
+            "branch": "S",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 83.30927012764636,
+            "top1": 0.03373032375188653
+          },
+          {
+            "branch": "O",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 84.06287653601348,
+            "top1": 0.061198548340828156
+          }
+        ],
+        "single_ID_centered_readout": {
+          "macro": [
+            [
+              0.013314466973667389,
+              0.013665042533923475
+            ],
+            [
+              0.016091304421434735,
+              0.029445594265476365
+            ],
+            [
+              0.10506846879605848,
+              0.0630025061701021
+            ],
+            [
+              0.02048883063768362,
+              0.01908293793380064
+            ]
+          ],
+          "by_dataset": {
+            "eeg_fnirs_single_trial": [
+              [
+                0.0141770295734955,
+                0.014595333178960631
+              ],
+              [
+                0.019369713683194793,
+                0.030975019575173523
+              ],
+              [
+                0.04483694921833967,
+                0.05153941274352108
+              ],
+              [
+                0.026575395484720616,
+                0.019122887674959167
+              ]
+            ],
+            "refed": [
+              [
+                0.009546470535853037,
+                0.0024375203412086116
+              ],
+              [
+                0.0076685272965900456,
+                0.004196862750054739
+              ],
+              [
+                0.2510239470801902,
+                0.06248772740382075
+              ],
+              [
+                0.004832896038393783,
+                0.0031041035770536514
+              ]
+            ],
+            "simultaneous_eeg_nirs": [
+              [
+                0.015689835798303225,
+                0.030010664195773418
+              ],
+              [
+                0.017094260746665722,
+                0.06838755128326682
+              ],
+              [
+                0.03141169425806738,
+                0.11742017326914116
+              ],
+              [
+                0.02461512196387167,
+                0.045222243652751355
+              ]
+            ],
+            "visual_cognitive_motivation": [
+              [
+                0.013844531987017789,
+                0.007616652419751243
+              ],
+              [
+                0.020232715959288376,
+                0.01422294345341038
+              ],
+              [
+                0.0930012846276367,
+                0.020562711263925382
+              ],
+              [
+                0.025931909063748412,
+                0.008882516830438378
+              ]
+            ]
+          },
+          "component_order": [
+            "S_to_S",
+            "S_to_X",
+            "O_to_O",
+            "O_to_X"
+          ],
+          "nonfinite_entries": 0
+        },
+        "single_ID_unsupported_fraction": {
+          "S_s_unsupported_fraction": 0.0,
+          "S_x_unsupported_fraction": 0.0,
+          "O_o_unsupported_fraction": 0.0,
+          "O_x_unsupported_fraction": 0.0
+        }
+      },
+      "comparison": {
+        "reference": "G1/hb__waveform__continuous",
+        "relative_nmse_change": 0.19458969746217747,
+        "direction": "positive means higher error"
+      }
+    },
+    {
+      "id": "G1/eeg__dense_long__vq128",
+      "group": "G1",
+      "task_id": "eeg__dense_long__vq128",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/models/eeg__dense_long__vq128/summary.json",
+      "signature": {
+        "config": "19461c858ddfcf3c60d1eb99",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "eeg",
+          "architecture": "dense_long",
+          "candidate": "vq128"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 380000,
+      "nominal_bits_per_location_second": 7,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.412005170445546,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3117510989555852
+              ],
+              [
+                0.6208220243018049
+              ],
+              [
+                0.30344238807924795
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.413203980855205,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.31709607579326593
+              ],
+              [
+                0.5924616738419046
+              ],
+              [
+                0.3300541929304444
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.340602473040601,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.22161374054422708
+              ],
+              [
+                0.6136744251879593
+              ],
+              [
+                0.1865192533896164
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.38454775644859224,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.27833867372788057
+              ],
+              [
+                0.6096807830748449
+              ],
+              [
+                0.2656238125430513
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.4020566321009336,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3061039921185573
+              ],
+              [
+                0.5834223585334802
+              ],
+              [
+                0.31664354565076347
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.3398514089941334,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.2176113894178674
+              ],
+              [
+                0.616990283744341
+              ],
+              [
+                0.18495255382019202
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.3783889383359589,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.2703680936280799
+              ],
+              [
+                0.6079130551626347
+              ],
+              [
+                0.25688566621716213
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.3988557421907271,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3021698713173458
+              ],
+              [
+                0.5825284091243166
+              ],
+              [
+                0.31186894613051896
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.33570005140012577,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.2170794765929604
+              ],
+              [
+                0.6066363781556567
+              ],
+              [
+                0.18338429945175996
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.04160367709288707
+            ],
+            [
+              0.3133524586041493
+            ],
+            [
+              0.03771765464604581
+            ]
+          ],
+          "refed": [
+            [
+              0.9105077988046407
+            ],
+            [
+              0.9742142695021276
+            ],
+            [
+              0.983192308274945
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.1143997397469945
+            ],
+            [
+              0.5159641521093643
+            ],
+            [
+              0.10048815737731549
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.14216826962486093
+            ],
+            [
+              0.526582756281625
+            ],
+            [
+              0.12607766422376965
+            ]
+          ]
+        },
+        "code_health": [
+          {
+            "branch": "S",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 110.2722487859034,
+            "top1": 0.02999570122595821
+          },
+          {
+            "branch": "O",
+            "dataset": "macro",
+            "active": 123,
+            "dead": 5,
+            "effective": 41.22857145491718,
+            "top1": 0.11697842073021124
+          }
+        ],
+        "single_ID_centered_readout": {
+          "macro": [
+            [
+              0.5574110085767726
+            ],
+            [
+              0.34025717467062155
+            ],
+            [
+              0.2892524295800488
+            ],
+            [
+              0.2968310106795193
+            ]
+          ],
+          "by_dataset": {
+            "eeg_fnirs_single_trial": [
+              [
+                0.30218525739530616
+              ],
+              [
+                0.05592749895175888
+              ],
+              [
+                0.020169154796590923
+              ],
+              [
+                0.030950869898217447
+              ]
+            ],
+            "refed": [
+              [
+                0.9675020262186291
+              ],
+              [
+                1.0504130217868288
+              ],
+              [
+                0.9789671648251018
+              ],
+              [
+                0.9281903962771922
+              ]
+            ],
+            "simultaneous_eeg_nirs": [
+              [
+                0.4672267939499483
+              ],
+              [
+                0.1267298751144253
+              ],
+              [
+                0.07340407828227785
+              ],
+              [
+                0.10811714103175529
+              ]
+            ],
+            "visual_cognitive_motivation": [
+              [
+                0.492729956743207
+              ],
+              [
+                0.12795830282947335
+              ],
+              [
+                0.08446932041622486
+              ],
+              [
+                0.12006563551091198
+              ]
+            ]
+          },
+          "component_order": [
+            "S_to_S",
+            "S_to_X",
+            "O_to_O",
+            "O_to_X"
+          ],
+          "nonfinite_entries": 0
+        },
+        "single_ID_unsupported_fraction": {
+          "S_s_unsupported_fraction": 0.0,
+          "S_x_unsupported_fraction": 0.0,
+          "O_o_unsupported_fraction": 0.0,
+          "O_x_unsupported_fraction": 0.0
+        }
+      },
+      "comparison": {
+        "reference": "G1/eeg__waveform__vq128",
+        "relative_nmse_change": 0.0033577389449037653,
+        "direction": "positive means higher error"
+      }
+    },
+    {
+      "id": "G2/eeg__waveform32__continuous",
+      "group": "G2",
+      "task_id": "eeg__waveform32__continuous",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/models/eeg__waveform32__continuous/summary.json",
+      "signature": {
+        "config": "19461c858ddfcf3c60d1eb99",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "eeg",
+          "architecture": "waveform32",
+          "candidate": "continuous"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 1274370,
+      "nominal_bits_per_location_second": null,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.4090058751438212,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3716557531133939
+              ],
+              [
+                0.47282120539537914
+              ],
+              [
+                0.3825406669226906
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.29650480881642577,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.20415913637458308
+              ],
+              [
+                0.45423468261574906
+              ],
+              [
+                0.2311206074589453
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.26000826576261954,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.1482341804999978
+              ],
+              [
+                0.49204098127946305
+              ],
+              [
+                0.13974963550839772
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.3733018361496186,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.34219555331828216
+              ],
+              [
+                0.42724045846580483
+              ],
+              [
+                0.35046949666476884
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.2612543300921937,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.17338912465179815
+              ],
+              [
+                0.41458911461928744
+              ],
+              [
+                0.19578475100549547
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.22741623458000315,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.1268235199483364
+              ],
+              [
+                0.4349419721851527
+              ],
+              [
+                0.12048321160652033
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.37010414315238843,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3389781924411573
+              ],
+              [
+                0.4229017113252163
+              ],
+              [
+                0.3484325256907918
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.25864475128349856,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.17034279863271906
+              ],
+              [
+                0.4114847752962506
+              ],
+              [
+                0.1941066799215261
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.22774821807494772,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.12402981156438998
+              ],
+              [
+                0.44077130683401067
+              ],
+              [
+                0.1184435358264425
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.012544467387710014
+            ],
+            [
+              0.1809406789811235
+            ],
+            [
+              0.009714151908430486
+            ]
+          ],
+          "refed": [
+            [
+              0.5771233221349592
+            ],
+            [
+              0.6847533593311801
+            ],
+            [
+              0.6893862635491522
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.048921125463722334
+            ],
+            [
+              0.408007096420634
+            ],
+            [
+              0.034958587928409175
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.042782279544484714
+            ],
+            [
+              0.3722379664520647
+            ],
+            [
+              0.04236771630011251
+            ]
+          ]
+        },
+        "code_health": []
+      },
+      "comparison": {
+        "reference": "G1/eeg__waveform__continuous",
+        "relative_nmse_change": 0.02847359033452701,
+        "direction": "positive means higher error"
+      }
+    },
+    {
+      "id": "G2/eeg__waveform32__vq128",
+      "group": "G2",
+      "task_id": "eeg__waveform32__vq128",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/models/eeg__waveform32__vq128/summary.json",
+      "signature": {
+        "config": "19461c858ddfcf3c60d1eb99",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "eeg",
+          "architecture": "waveform32",
+          "candidate": "vq128"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 1274370,
+      "nominal_bits_per_location_second": 7,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.5231167464981049,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.4758744384161848
+              ],
+              [
+                0.6151776600908783
+              ],
+              [
+                0.47829814098725165
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.41201023807044423,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3126973862201978
+              ],
+              [
+                0.5869394723328252
+              ],
+              [
+                0.3363938556583098
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.3421326636765327,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.2179753606925445
+              ],
+              [
+                0.6143837490519456
+              ],
+              [
+                0.19403888128510802
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.5091001914381311,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.4632236307689196
+              ],
+              [
+                0.6011070127510578
+              ],
+              [
+                0.4629699307944161
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.3965299772009952,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.2979685190763269
+              ],
+              [
+                0.574409020949619
+              ],
+              [
+                0.31721239157703984
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.3258352579479548,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.21011449063893636
+              ],
+              [
+                0.584371166886339
+              ],
+              [
+                0.18302011631858897
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.5039232389422721,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.4578911122820505
+              ],
+              [
+                0.5967415865061827
+              ],
+              [
+                0.4571370180385829
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.39099267233386786,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.2915882647801259
+              ],
+              [
+                0.5710885530443033
+              ],
+              [
+                0.3103011991771744
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.3285134195118837,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.20786482147656715
+              ],
+              [
+                0.5969180350183211
+              ],
+              [
+                0.18075740204076268
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.030317587832805196
+            ],
+            [
+              0.29115573420124247
+            ],
+            [
+              0.02405585628864802
+            ]
+          ],
+          "refed": [
+            [
+              0.9246861650672762
+            ],
+            [
+              0.9426855786241154
+            ],
+            [
+              1.0408369713885766
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.09928742171663188
+            ],
+            [
+              0.5367955039998858
+            ],
+            [
+              0.07837443176395667
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.11206188450379016
+            ],
+            [
+              0.5137173953519694
+            ],
+            [
+              0.09793753726751649
+            ]
+          ]
+        },
+        "code_health": [
+          {
+            "branch": "S",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 108.6233524863312,
+            "top1": 0.02744438411379146
+          },
+          {
+            "branch": "O",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 56.71886645013243,
+            "top1": 0.06955379783652949
+          }
+        ],
+        "single_ID_centered_readout": {
+          "macro": [
+            [
+              0.5666012454937257
+            ],
+            [
+              0.33235143277013873
+            ],
+            [
+              0.3158004946869331
+            ],
+            [
+              0.3221321791514392
+            ]
+          ],
+          "by_dataset": {
+            "eeg_fnirs_single_trial": [
+              [
+                0.3141685722079633
+              ],
+              [
+                0.04815480438390177
+              ],
+              [
+                0.022014978539372686
+              ],
+              [
+                0.03363029898387208
+              ]
+            ],
+            "refed": [
+              [
+                0.9539514604798197
+              ],
+              [
+                1.0296570011177832
+              ],
+              [
+                1.0704212114962008
+              ],
+              [
+                1.0109473887400247
+              ]
+            ],
+            "simultaneous_eeg_nirs": [
+              [
+                0.4995482816436175
+              ],
+              [
+                0.12276038495318042
+              ],
+              [
+                0.07776403584828387
+              ],
+              [
+                0.11510110541848806
+              ]
+            ],
+            "visual_cognitive_motivation": [
+              [
+                0.4987366676435024
+              ],
+              [
+                0.1288335406256895
+              ],
+              [
+                0.09300175286387513
+              ],
+              [
+                0.12884992346337198
+              ]
+            ]
+          },
+          "component_order": [
+            "S_to_S",
+            "S_to_X",
+            "O_to_O",
+            "O_to_X"
+          ],
+          "nonfinite_entries": 0
+        },
+        "single_ID_unsupported_fraction": {
+          "S_s_unsupported_fraction": 0.0,
+          "S_x_unsupported_fraction": 0.0,
+          "O_o_unsupported_fraction": 0.0,
+          "O_x_unsupported_fraction": 0.0
+        }
+      },
+      "comparison": {
+        "reference": "G1/eeg__waveform__vq128",
+        "relative_nmse_change": -0.016422525341655114,
+        "direction": "positive means higher error"
+      }
+    },
+    {
+      "id": "G3/eeg__waveform__vq128",
+      "group": "G3",
+      "task_id": "eeg__waveform__vq128",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_base_g3_gpu1_v1/models/eeg__waveform__vq128/summary.json",
+      "signature": {
+        "config": "c73cc677bc62534ec02671b6",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "eeg",
+          "architecture": "waveform",
+          "candidate": "vq128"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 1290818,
+      "nominal_bits_per_location_second": 7,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.5292647305853968,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.48353972768586895
+              ],
+              [
+                0.6156139063575312
+              ],
+              [
+                0.4886405577127901
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.41616790380588214,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.31786322685831897
+              ],
+              [
+                0.5866983363238858
+              ],
+              [
+                0.3439421482354416
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.3430302123690461,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.21820079019110322
+              ],
+              [
+                0.6144982717717232
+              ],
+              [
+                0.19639157514431183
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.517273161546477,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.47228980190193365
+              ],
+              [
+                0.603946476004089
+              ],
+              [
+                0.47558320673340815
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.40614196600928815,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.30838107995189384
+              ],
+              [
+                0.5772561559228923
+              ],
+              [
+                0.33278866215307823
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.3355447591534991,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.2171016267199989
+              ],
+              [
+                0.5978356943388513
+              ],
+              [
+                0.19169695640164705
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.5105711764806592,
+            "inputs": 202712,
+            "windows": 5874,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.4644456217505036
+              ],
+              [
+                0.5999014658930796
+              ],
+              [
+                0.4673664417983945
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.40044892241596397,
+            "inputs": 65909,
+            "windows": 1920,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3011267306120441
+              ],
+              [
+                0.5745121555716033
+              ],
+              [
+                0.3257078810642445
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.33726472904378874,
+            "inputs": 217,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.21360447176145186
+              ],
+              [
+                0.6068815928854095
+              ],
+              [
+                0.1913081224845048
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.033432904605659876
+            ],
+            [
+              0.2952533930822652
+            ],
+            [
+              0.027536659623691267
+            ]
+          ],
+          "refed": [
+            [
+              0.9521857624909401
+            ],
+            [
+              0.9478569405096425
+            ],
+            [
+              1.088846609997279
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.102040544876648
+            ],
+            [
+              0.5361082997566669
+            ],
+            [
+              0.08302861016827924
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.11684771047492831
+            ],
+            [
+              0.5188299889378384
+            ],
+            [
+              0.1034196444677284
+            ]
+          ]
+        },
+        "code_health": [
+          {
+            "branch": "S",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 108.61005198185926,
+            "top1": 0.028165274167244216
+          },
+          {
+            "branch": "O",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 52.70967828298677,
+            "top1": 0.08078854641221085
+          }
+        ],
+        "single_ID_centered_readout": {
+          "macro": [
+            [
+              0.5644232179998078
+            ],
+            [
+              0.32901286527706924
+            ],
+            [
+              0.31884300647916974
+            ],
+            [
+              0.32505703580323925
+            ]
+          ],
+          "by_dataset": {
+            "eeg_fnirs_single_trial": [
+              [
+                0.31011307803414456
+              ],
+              [
+                0.047558153125024816
+              ],
+              [
+                0.019817002852217113
+              ],
+              [
+                0.03110041240396018
+              ]
+            ],
+            "refed": [
+              [
+                0.9509483742714774
+              ],
+              [
+                1.0228582204012027
+              ],
+              [
+                1.0932721266848227
+              ],
+              [
+                1.0361012817524722
+              ]
+            ],
+            "simultaneous_eeg_nirs": [
+              [
+                0.49786737272886994
+              ],
+              [
+                0.12118970785565412
+              ],
+              [
+                0.07372417621299171
+              ],
+              [
+                0.10991289437964806
+              ]
+            ],
+            "visual_cognitive_motivation": [
+              [
+                0.4987640469647392
+              ],
+              [
+                0.12444537972639529
+              ],
+              [
+                0.08855872016664766
+              ],
+              [
+                0.12311355467687646
+              ]
+            ]
+          },
+          "component_order": [
+            "S_to_S",
+            "S_to_X",
+            "O_to_O",
+            "O_to_X"
+          ],
+          "nonfinite_entries": 0
+        },
+        "single_ID_unsupported_fraction": {
+          "S_s_unsupported_fraction": 0.0,
+          "S_x_unsupported_fraction": 0.0,
+          "O_o_unsupported_fraction": 0.0,
+          "O_x_unsupported_fraction": 0.0
+        }
+      },
+      "comparison": {
+        "reference": "G1/eeg__waveform__vq128",
+        "relative_nmse_change": 0.0073655280762456865,
+        "direction": "positive means higher error"
+      }
+    },
+    {
+      "id": "G4/hb__local_shape__continuous",
+      "group": "G4",
+      "task_id": "hb__local_shape__continuous",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/models/hb__local_shape__continuous/summary.json",
+      "signature": {
+        "config": "19461c858ddfcf3c60d1eb99",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "hb",
+          "architecture": "local_shape",
+          "candidate": "continuous"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 1199000,
+      "nominal_bits_per_location_second": null,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.16654239987279398,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.010711585456525792,
+                0.013814905363043146
+              ],
+              [
+                0.08561713870414733,
+                0.08745999981258559
+              ],
+              [
+                0.4780828260192939,
+                0.3235679438811682
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.1950563500766925,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.033480775067379544,
+                0.03512096053447186
+              ],
+              [
+                0.0916178455226126,
+                0.12492203487802486
+              ],
+              [
+                0.5091645705003023,
+                0.3760319139573639
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.3122529294223552,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.23363493628901644,
+                0.07144361410272675
+              ],
+              [
+                0.20545893396480866,
+                0.24162903116630308
+              ],
+              [
+                0.3465446350804511,
+                0.7748064259308254
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.14814035956730331,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.006192187939728429,
+                0.008286975850168356
+              ],
+              [
+                0.07820471666454999,
+                0.07939968357805455
+              ],
+              [
+                0.4402367049714872,
+                0.27652188839983133
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.17403050124365652,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.02405429401197114,
+                0.025680534466630975
+              ],
+              [
+                0.08072014216524709,
+                0.11066086588436215
+              ],
+              [
+                0.47352679759154576,
+                0.329540373342182
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.3005194419373935,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.15248247792647204,
+                0.07224410639959968
+              ],
+              [
+                0.1330992059361462,
+                0.28949962990911887
+              ],
+              [
+                0.32315202042875535,
+                0.832639211024269
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.13952925519637585,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.005668463732569046,
+                0.007769215148239889
+              ],
+              [
+                0.0743552056126214,
+                0.07584271527165011
+              ],
+              [
+                0.42312427401213765,
+                0.2504156574010369
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.16930452282596398,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.0218097287358707,
+                0.02348070937256959
+              ],
+              [
+                0.07683231246533316,
+                0.10933011726045405
+              ],
+              [
+                0.45741683632503993,
+                0.32695743279651657
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.33375059667743684,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.15858224813764096,
+                0.06944272662667159
+              ],
+              [
+                0.1393133887609465,
+                0.33889470670430555
+              ],
+              [
+                0.3282160910429399,
+                0.9680544187921167
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.0039218488052873346,
+              0.004191292600948527
+            ],
+            [
+              0.07629360777881077,
+              0.08911809785629181
+            ],
+            [
+              0.2520972147658698,
+              0.2780495131172281
+            ]
+          ],
+          "refed": [
+            [
+              0.07384135522595184,
+              0.07893696948385093
+            ],
+            [
+              0.11486117730411566,
+              0.1331808471310813
+            ],
+            [
+              0.8244503807833855,
+              0.29812491292674026
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.003595834712018226,
+              0.008576635738691076
+            ],
+            [
+              0.060295443051549644,
+              0.12650515566478865
+            ],
+            [
+              0.157568636560319,
+              0.554348557790923
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.005879876200225411,
+              0.002217939666787819
+            ],
+            [
+              0.05587902172685655,
+              0.08851636838965445
+            ],
+            [
+              0.5955511131905853,
+              0.177306747351175
+            ]
+          ]
+        },
+        "code_health": []
+      },
+      "comparison": {
+        "reference": "G1/hb__waveform__continuous",
+        "relative_nmse_change": 0.09241289902110705,
+        "direction": "positive means higher error"
+      }
+    },
+    {
+      "id": "G4/hb__local_shape__vq128",
+      "group": "G4",
+      "task_id": "hb__local_shape__vq128",
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/models/hb__local_shape__vq128/summary.json",
+      "signature": {
+        "config": "19461c858ddfcf3c60d1eb99",
+        "input": "37319917430f3aa11e3eaf39",
+        "scales": "d8b6634e55fa73bbc1243650",
+        "task": {
+          "modality": "hb",
+          "architecture": "local_shape",
+          "candidate": "vq128"
+        },
+        "benchmark": false
+      },
+      "completed_step": 10000,
+      "selected_step": 10000,
+      "parameters": 1199000,
+      "nominal_bits_per_location_second": 7,
+      "milestones": {
+        "4000": {
+          "train": {
+            "selection_score": 0.21487470995849942,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.059185257576275185,
+                0.06934651587526136
+              ],
+              [
+                0.12071005726015019,
+                0.12601111385565614
+              ],
+              [
+                0.5082115754481007,
+                0.4057837397355529
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.2547291892408558,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.09900581769207561,
+                0.1062838126129673
+              ],
+              [
+                0.14416545493136473,
+                0.17913450826398408
+              ],
+              [
+                0.5495332107189277,
+                0.4502523312258153
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.6120850306895086,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.5764728363894982,
+                0.41695696902085255
+              ],
+              [
+                0.39241923931597006,
+                0.12399915104583371
+              ],
+              [
+                0.7147738216634963,
+                1.4478881667014003
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "7000": {
+          "train": {
+            "selection_score": 0.18778506369461798,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.041043601690862935,
+                0.0505497579821193
+              ],
+              [
+                0.10350476988521962,
+                0.11034818389328827
+              ],
+              [
+                0.47317031224310546,
+                0.34809375647311236
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.2236236054983327,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.07194680590422806,
+                0.07808405885518327
+              ],
+              [
+                0.1174089055585683,
+                0.15359838416245356
+              ],
+              [
+                0.5160349755327979,
+                0.4046685029767652
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.47163780789998094,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.36892626247220994,
+                0.3144833112659564
+              ],
+              [
+                0.25737871617101965,
+                0.12103502093071968
+              ],
+              [
+                0.5646824752085065,
+                1.2033210613514735
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        },
+        "10000": {
+          "train": {
+            "selection_score": 0.1775748371265998,
+            "inputs": 216208,
+            "windows": 5883,
+            "records": 443,
+            "subjects": 60,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.03530263825003668,
+                0.0454759641577801
+              ],
+              [
+                0.09785810468769635,
+                0.1033436386538126
+              ],
+              [
+                0.4577361643180343,
+                0.3257325126922386
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "validation": {
+            "selection_score": 0.21564666669512045,
+            "inputs": 70972,
+            "windows": 1923,
+            "records": 144,
+            "subjects": 20,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.06534406444133857,
+                0.07456743790610951
+              ],
+              [
+                0.1120075834668315,
+                0.15050508476333657
+              ],
+              [
+                0.4983669751675811,
+                0.39308885442552544
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          },
+          "regression": {
+            "selection_score": 0.4278451380122692,
+            "inputs": 203,
+            "windows": 5,
+            "records": 5,
+            "subjects": 4,
+            "component_order": [
+              "X",
+              "S",
+              "O"
+            ],
+            "nmse": [
+              [
+                0.3713905274605424,
+                0.2408179978349875
+              ],
+              [
+                0.26529644522759827,
+                0.13780629205702782
+              ],
+              [
+                0.5263870934170211,
+                1.0253724720764386
+              ]
+            ],
+            "nonfinite_nmse_entries": 0
+          }
+        }
+      },
+      "final_validation_details": {
+        "nmse_by_dataset": {
+          "eeg_fnirs_single_trial": [
+            [
+              0.029129241049498423,
+              0.04245968389728078
+            ],
+            [
+              0.09520568092673881,
+              0.11540055772166946
+            ],
+            [
+              0.27536746451936017,
+              0.3273600611876819
+            ]
+          ],
+          "refed": [
+            [
+              0.16059849235043314,
+              0.1362386569844048
+            ],
+            [
+              0.18443097094032668,
+              0.1973199163420005
+            ],
+            [
+              0.8830152969336796,
+              0.38179352510773085
+            ]
+          ],
+          "simultaneous_eeg_nirs": [
+            [
+              0.028414182681523174,
+              0.09447238508299236
+            ],
+            [
+              0.08414498241289438,
+              0.18499937957579488
+            ],
+            [
+              0.17508192590928778,
+              0.6638985319010086
+            ]
+          ],
+          "visual_cognitive_motivation": [
+            [
+              0.04323434168389951,
+              0.025099025659760087
+            ],
+            [
+              0.08424869958736615,
+              0.10430048541388139
+            ],
+            [
+              0.6600032133079968,
+              0.19930329950568026
+            ]
+          ]
+        },
+        "code_health": [
+          {
+            "branch": "S",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 88.83236845929929,
+            "top1": 0.05450812088368148
+          },
+          {
+            "branch": "O",
+            "dataset": "macro",
+            "active": 128,
+            "dead": 0,
+            "effective": 93.53698935985857,
+            "top1": 0.06611669209330999
+          }
+        ],
+        "single_ID_centered_readout": {
+          "macro": [
+            [
+              0.006841378136895549,
+              0.0072057388128542055
+            ],
+            [
+              0.007989369042363465,
+              0.02112010239941766
+            ],
+            [
+              0.07446943416125883,
+              0.053616596838290176
+            ],
+            [
+              0.008619934720607706,
+              0.013156075687081836
+            ]
+          ],
+          "by_dataset": {
+            "eeg_fnirs_single_trial": [
+              [
+                0.0067517142551183915,
+                0.007952240171308404
+              ],
+              [
+                0.009685684346837045,
+                0.022731910244344507
+              ],
+              [
+                0.020345356180875906,
+                0.03847887998626066
+              ],
+              [
+                0.00914774686464249,
+                0.013032447352749318
+              ]
+            ],
+            "refed": [
+              [
+                0.007716785671147187,
+                0.0026528676876925567
+              ],
+              [
+                0.0038176597059637126,
+                0.003568489584385918
+              ],
+              [
+                0.20637329896983747,
+                0.0719878001455156
+              ],
+              [
+                0.004253258811629358,
+                0.0027814789058089335
+              ]
+            ],
+            "simultaneous_eeg_nirs": [
+              [
+                0.00670817005145911,
+                0.014784237627086935
+              ],
+              [
+                0.008122118209191214,
+                0.04743872013231406
+              ],
+              [
+                0.014766914677435957,
+                0.09034543187733375
+              ],
+              [
+                0.009565857116781267,
+                0.030386962313041627
+              ]
+            ],
+            "visual_cognitive_motivation": [
+              [
+                0.006188842569857508,
+                0.0034336097653289246
+              ],
+              [
+                0.01033201390746189,
+                0.01074128963662615
+              ],
+              [
+                0.05639216681688595,
+                0.013654275344050662
+              ],
+              [
+                0.01151287608937771,
+                0.006423414176727472
+              ]
+            ]
+          },
+          "component_order": [
+            "S_to_S",
+            "S_to_X",
+            "O_to_O",
+            "O_to_X"
+          ],
+          "nonfinite_entries": 0
+        },
+        "single_ID_unsupported_fraction": {
+          "S_s_unsupported_fraction": 0.0,
+          "S_x_unsupported_fraction": 0.0,
+          "O_o_unsupported_fraction": 0.0,
+          "O_x_unsupported_fraction": 0.0
+        }
+      },
+      "comparison": {
+        "reference": "G1/hb__waveform__vq128",
+        "relative_nmse_change": 0.16477554568727215,
+        "direction": "positive means higher error"
+      }
+    }
+  ],
+  "decisions": {
+    "G1": {
+      "status": "selected",
+      "budget": 10000,
+      "comparisons": [
+        {
+          "step": 4000,
+          "checks": [
+            {
+              "model": "eeg__waveform__continuous",
+              "passes": false
+            },
+            {
+              "model": "eeg__waveform__vq128",
+              "passes": false
+            },
+            {
+              "model": "hb__waveform__continuous",
+              "passes": false
+            },
+            {
+              "model": "hb__waveform__vq128",
+              "passes": false
+            },
+            {
+              "model": "eeg__dense_long__vq128",
+              "passes": false
+            }
+          ]
+        },
+        {
+          "step": 7000,
+          "checks": [
+            {
+              "model": "eeg__waveform__continuous",
+              "passes": false
+            },
+            {
+              "model": "eeg__waveform__vq128",
+              "passes": true
+            },
+            {
+              "model": "hb__waveform__continuous",
+              "passes": false
+            },
+            {
+              "model": "hb__waveform__vq128",
+              "passes": false
+            },
+            {
+              "model": "eeg__dense_long__vq128",
+              "passes": true
+            }
+          ]
+        },
+        {
+          "step": 10000,
+          "checks": [
+            {
+              "model": "eeg__waveform__continuous",
+              "passes": true
+            },
+            {
+              "model": "eeg__waveform__vq128",
+              "passes": true
+            },
+            {
+              "model": "hb__waveform__continuous",
+              "passes": true
+            },
+            {
+              "model": "hb__waveform__vq128",
+              "passes": true
+            },
+            {
+              "model": "eeg__dense_long__vq128",
+              "passes": true
+            }
+          ]
+        }
+      ],
+      "no_automatic_extension": true
+    },
+    "G2": {
+      "status": "evaluated",
+      "step": 10000,
+      "continuous_macro_nmse": 0.25864475128349856,
+      "baseline_continuous_macro_nmse": 0.25148409615396183,
+      "hard_macro_nmse": 0.39099267233386786,
+      "baseline_hard_macro_nmse": 0.3975209705465072,
+      "hard_relative_improvement": 0.016422525341655114,
+      "continuous_guard": true,
+      "component_color_guard": true,
+      "reconstruction_screen_pass": false,
+      "selected_latent_dim": 64,
+      "next_stage_started": false
+    },
+    "G3": {
+      "status": "evaluated",
+      "step": 10000,
+      "macro_nmse": 0.40044892241596397,
+      "baseline_macro_nmse": 0.3975209705465072,
+      "relative_improvement": -0.0073655280762456865,
+      "component_guard": true,
+      "effective_code_relative_improvement": 0.010084306335763626,
+      "health_branch_guard": true,
+      "reconstruction_screen_pass": false,
+      "health_screen_pass": false,
+      "selected_schedule": "direct_hard",
+      "next_stage_started": false
+    },
+    "G4": {
+      "status": "evaluated",
+      "step": 10000,
+      "continuous_macro_nmse": 0.16930452282596398,
+      "baseline_continuous_macro_nmse": 0.1549821710981946,
+      "hard_macro_nmse": 0.21564666669512045,
+      "baseline_hard_macro_nmse": 0.1851401048842237,
+      "hard_relative_improvement": -0.16477554568727215,
+      "continuous_guard": false,
+      "component_color_guard": false,
+      "reconstruction_screen_pass": false,
+      "pattern_relative_improvement": 0.2713007182075159,
+      "pattern_component_guard": true,
+      "pattern_coverage_guard": true,
+      "pattern_screen_pass": false,
+      "engineering_candidate": false,
+      "next_stage_started": false
+    }
+  },
+  "retained_failures": [
+    {
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2/models/eeg__dense_long__vq128/failure.json",
+      "stage": "G1 dense_long 7000-step evaluation",
+      "reason": "integer replay comparison: 1 / 384000 entries exceeded tolerance; max absolute difference 2.193264663219452e-6",
+      "resolution": "user cancelled integer replay comparison; exact checkpoint/optimizer/RNG continued under versioned G124 contract",
+      "continuation": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/models/eeg__dense_long__vq128/resumption.json"
+    },
+    {
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v1/benchmark_failure_1.json",
+      "stage": "resource pilot before formal warmup",
+      "reason": "process file-descriptor limit",
+      "resolution": "bounded mmap cache and raised supervisor descriptor limit in successor"
+    }
+  ],
+  "reviews": [
+    {
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/completion_review_20261118_v1.json",
+      "status": "passed"
+    },
+    {
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/shape_readout_review_20261118_v1.json",
+      "status": "passed"
+    },
+    {
+      "source": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_base_g3_gpu1_v1/completion_review_20261118_v1.json",
+      "status": "passed"
+    }
+  ],
+  "qualification": {
+    "targeted_tests": 108,
+    "status": "passed",
+    "test_modules": [
+      "test_dual_component_base_g0.py",
+      "test_dual_component_base_g1.py",
+      "test_dual_component_base_followup.py",
+      "test_dual_component_base_g3.py",
+      "test_dual_component_state.py",
+      "test_project_state.py"
+    ],
+    "default_tests_collected": 3116,
+    "default_tests_deselected": 11,
+    "compact_export_check": "10 models, 30 milestones, 90 role rows match individual summaries; CSV exact match",
+    "project_state_validation": "passed",
+    "generated_state_views": "current"
+  },
+  "conclusion": "Retain EEG waveform latent64 K128 direct-hard schedule and original Hb waveform K128; common 10000-step budget. G2/G3/G4 failed their prespecified engineering promotion screens. Single seed screening; G5 is not executed."
+}

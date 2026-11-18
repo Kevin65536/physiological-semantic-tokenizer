@@ -1,0 +1,49 @@
+schema: dual_component_base_g0_v1
+experiment_id: TK-BASE-v1-G0
+data:
+  cache: data/cache/physiology_so_supervision_v2
+  source_ssm: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4
+  regression_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261112_state_pilot_v1
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+  source_schema: physiology_so_supervision_v2
+  datasets: [eeg_fnirs_single_trial, refed, simultaneous_eeg_nirs, visual_cognitive_motivation]
+  native_rate_hz: {eeg_fnirs_single_trial: 200, refed: 1000, simultaneous_eeg_nirs: 200, visual_cognitive_motivation: 500}
+  population: all_original_train_and_validation_subjects
+  seconds: 30
+  stride_s: 2
+  eeg_rate_hz: 200
+  hb_rate_hz: 10
+  regression: exclude_original_pilot_holdout_support_from_all_training_and_scale_windows
+  overlap: earliest_parent_for_identical_30s_input_nonoverlapping_30s_scoring_and_scale_support
+  resampling: inherited_kaiser5_polyphase_separately_across_regression_boundaries
+normalization:
+  fitting: train_only_nonoverlapping_support_record_then_subject_equal_moments_per_dataset_position
+  input: positive_X_SD_no_centering_joint_Hb_color_scale
+  targets: separate_X_S_O_and_adjacent_difference_variances_in_same_input_coordinate
+  target_variance_floor: 0.01
+  difference_variance_floor_fraction: 0.0001
+  unseen_position: unavailable_without_training_scale_no_validation_fit
+sampling:
+  order: equal_dataset_subject_native_record_then_uniform_unique_crop_then_position
+  seed: 17
+  audit_draws: 100000
+  initialization: one_seeded_eligible_crop_position_per_training_native_record
+evaluation:
+  primary: validation_NMSE_mean_X_S_O_then_color_window_position_record_subject_dataset
+  checkpoint_selection: lowest_finite_validation_macro_NMSE_earliest_step_on_exact_tie
+  checkpoint_eligibility: complete_frozen_validation_panel_and_integer_only_replay
+  regression: original_five_time_blocks_report_separately_excluded_from_checkpoint_selection
+  null: missing_dataset_subject_record_coverage_or_leakage_or_invalid_integer_interface
+  stopping: preparation_verification_and_sampling_audit_only_no_model_training
+resources:
+  worker_candidates: [1, 4, 8, 16, 32]
+  benchmark_parents_per_dataset: 16
+  memory_budget_gib: 64
+  torch_threads: 2
+  numerical_threads: 1
+  max_in_flight_per_worker: 1
+  supervisor: user_systemd_linger

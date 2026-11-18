@@ -28,6 +28,159 @@ MODALITIES = ('eeg', 'hb')
 BRANCHES = ('S', 'O')
 
 
+def base_training_metrics(predictions, batch, channels):
+    """Per-input/color metrics in frozen training coordinates; no local normalization."""
+    shape = (len(batch['x']), -1, channels)
+    mask = np.asarray(batch['mask'], bool).reshape(shape)
+    count = mask.sum(1)
+    def mean(a):
+        return np.where(mask, a, 0.).sum(1) / np.maximum(count, 1)
+    results = defaultdict(list)
+    for output,key in [('sum','x'),('S','s'),('O','o')]:
+        y = np.asarray(batch[key], float).reshape(shape)
+        p = np.asarray(predictions[output], float).reshape(shape)
+        variance = np.asarray(batch['v'+key])[:,0,:channels]
+        error = p-y; mse = mean(error**2)
+        ymean,pmean = mean(y),mean(p)
+        yvar,pvar = mean((y-ymean[:,None])**2),mean((p-pmean[:,None])**2)
+        cov = mean((y-ymean[:,None])*(p-pmean[:,None]))
+        corr = np.divide(cov,np.sqrt(yvar*pvar),out=np.full_like(cov,np.nan),where=(yvar*pvar)>1e-20)
+        gain = np.sqrt(mean(p*p)/np.maximum(mean(y*y),1e-20))
+        patch_mask = mask.reshape(len(y),15,-1,channels)
+        patch_error = error.reshape(patch_mask.shape)
+        level = np.where(patch_mask,patch_error,0.).sum(2)/np.maximum(patch_mask.sum(2),1)
+        level_mse = (level**2*patch_mask.sum(2)).sum(1)/np.maximum(count,1)
+        metrics = dict(nmse=mse/variance,nrmse=np.sqrt(mse/variance),rmse=np.sqrt(mse),
+                       bias=mean(error),correlation=corr,rms_gain=gain,
+                       level_nmse=level_mse/variance,shape_nmse=(mse-level_mse)/variance)
+        bounds=np.arange(1,15)*(y.shape[1]//15)
+        valid_edges=mask[:,bounds]&mask[:,bounds-1]
+        edge_error=error[:,bounds]-error[:,bounds-1]
+        edge_count=valid_edges.sum(1)
+        metrics['boundary_jump_nmse']=np.divide(np.where(valid_edges,edge_error**2,0.).sum(1),
+            edge_count*variance,out=np.full_like(variance,np.nan),where=edge_count>0)
+        metrics['boundary_jump_bias']=np.divide(np.where(valid_edges,edge_error,0.).sum(1),
+            edge_count,out=np.full_like(variance,np.nan),where=edge_count>0)
+        if channels == 1:
+            window=np.hanning(y.shape[1])[None,:,None]
+            yp=np.abs(np.fft.rfft(np.where(mask,y-ymean[:,None],0.)*window,axis=1))**2
+            pp=np.abs(np.fft.rfft(np.where(mask,p-pmean[:,None],0.)*window,axis=1))**2
+            frequencies=np.fft.rfftfreq(y.shape[1],d=1/200)
+            for lo,hi in ((1,4),(4,8),(8,13),(13,30),(30,45)):
+                band=(frequencies>=lo)&(frequencies<hi)
+                metrics[f'band_{lo}_{hi}_log10_power_ratio']=np.log10(np.maximum(pp[:,band].sum(1),1e-20)/np.maximum(yp[:,band].sum(1),1e-20))
+        for name,value in metrics.items():results[name].append(value)
+    return {k:np.stack(v,axis=1) for k,v in results.items()}
+
+
+def base_training_aggregate(metrics, examples, rows):
+    """Positions -> physical crop -> record -> subject -> dataset, all equal within level."""
+    groups=defaultdict(list)
+    for n,(index,start,position) in enumerate(examples):
+        r=rows[index]
+        groups[(r['dataset'],r['subject'],r['record'],r['parent'],start)].append(n)
+    def average(values):
+        a=np.asarray(values,float);valid=np.isfinite(a)
+        return np.divide(np.where(valid,a,0.).sum(0),valid.sum(0),
+                         out=np.full(a.shape[1:],np.nan),where=valid.sum(0)>0)
+    result={}
+    for name,values in metrics.items():
+        records=defaultdict(list)
+        for key,indices in groups.items():records[key[:3]].append(average(values[indices]))
+        subjects=defaultdict(list)
+        for key,values_in_record in records.items():subjects[key[:2]].append(average(values_in_record))
+        datasets=defaultdict(list);subject_values=[]
+        for (d,s),values_in_subject in subjects.items():
+            value=average(values_in_subject);datasets[d].append(value)
+            subject_values.append(dict(dataset=d,subject=s,value=value.tolist()))
+        per_dataset={d:average(v) for d,v in sorted(datasets.items())}
+        result[name]=dict(macro=average(list(per_dataset.values())).tolist(),
+                          by_dataset={d:v.tolist() for d,v in per_dataset.items()},by_subject=subject_values,
+                          nonfinite_entries=int((~np.isfinite(metrics[name])).sum()))
+    return dict(metrics=result,selection_score=float(np.mean(result['nmse']['macro'])),
+                inputs=len(examples),windows=len(groups),records=len(records),subjects=len(subjects),
+                component_order=['X','S','O'],units='frozen_training_input_coordinate',
+                correlation_aggregation='finite_only_with_nonfinite_count_reported')
+
+
+def base_training_budget(models, steps, macro_tolerance, component_tolerance):
+    """A fixed bounded rule over all five model trajectories; failures never disappear."""
+    if len(models)!=5 or any(m.get('status')!='completed' for m in models):
+        return dict(status='incomplete',budget=None,reason='all five terminal trajectories required')
+    eligible=[]; comparisons=[]
+    for step in steps:
+        checks=[]
+        for model in models:
+            values=[np.asarray(model['milestones'][str(t)]['validation']['metrics']['nmse']['macro'],float) for t in steps]
+            current=values[steps.index(step)]
+            best_macro=min(float(a.mean()) for a in values)
+            best_component=np.min([a.mean(-1) for a in values],axis=0)
+            ok=bool(np.isfinite(current).all() and current.mean()<=(1+macro_tolerance)*best_macro
+                    and np.all(current.mean(-1)<=(1+component_tolerance)*best_component))
+            checks.append(dict(model=model['task_id'],passes=ok))
+        comparisons.append(dict(step=step,checks=checks))
+        if all(c['passes'] for c in checks):eligible.append(step)
+    return dict(status='selected' if eligible else 'mixed_or_unsettled',budget=min(eligible) if eligible else max(steps),
+                comparisons=comparisons,no_automatic_extension=True)
+
+
+def base_followup_decisions(models, baselines, screen, step):
+    """Matched fixed-step engineering decisions; no automatic next-stage launch."""
+    lookup={m['task_id']:m for m in models};result={}
+    for group,modality,architecture in [('G2','eeg','waveform32'),('G4','hb','local_shape')]:
+        members=[lookup[modality+'__'+architecture+'__'+c] for c in ('continuous','vq128')]
+        if any(m['status']!='completed' for m in members):
+            result[group]=dict(status='incomplete',planned_models=2,completed_models=sum(m['status']=='completed' for m in members))
+            continue
+        c,q=[m['milestones'][str(step)]['validation'] for m in members]
+        bc,bq=[baselines[modality+'__waveform__'+v]['milestones'][str(step)]['validation'] for v in ('continuous','vq128')]
+        values=[np.asarray(v['metrics']['nmse']['macro'],float) for v in (c,q,bc,bq)]
+        continuous,hard,base_c,base_q=values
+        continuous_guard=bool(np.isfinite(continuous).all() and continuous.mean()<=(1+screen['continuous_macro_degradation_max'])*base_c.mean())
+        components_guard=bool(np.isfinite(hard).all() and np.all(hard<=(1+screen['component_color_degradation_max'])*base_q))
+        improvement=float(1-hard.mean()/max(float(base_q.mean()),1e-12))
+        reconstruction_pass=continuous_guard and components_guard and improvement>=screen['hard_macro_improvement_min']
+        record=dict(status='evaluated',step=step,continuous_macro_nmse=float(continuous.mean()),
+            baseline_continuous_macro_nmse=float(base_c.mean()),hard_macro_nmse=float(hard.mean()),
+            baseline_hard_macro_nmse=float(base_q.mean()),hard_relative_improvement=improvement,
+            continuous_guard=continuous_guard,component_color_guard=components_guard,reconstruction_screen_pass=reconstruction_pass)
+        if group=='G2':record.update(selected_latent_dim=32 if reconstruction_pass else 64,next_stage_started=False)
+        else:
+            patterns=[np.asarray(v['single_ID_centered_readout']['macro'],float)[[0,2]] for v in (q,bq)]
+            pattern_gain=float(1-patterns[0].mean()/max(float(patterns[1].mean()),1e-12))
+            coverage=all(q['single_ID_unsupported_fraction'][k]<=v+1e-12 for k,v in bq['single_ID_unsupported_fraction'].items())
+            pattern_guard=bool(np.isfinite(patterns[0]).all() and np.all(patterns[0]<=(1+screen['component_color_degradation_max'])*patterns[1]))
+            pattern_pass=(continuous_guard and components_guard and pattern_guard and coverage
+                          and hard.mean()<=(1+screen['pattern_reconstruction_degradation_max'])*base_q.mean()
+                          and pattern_gain>=screen['pattern_relative_improvement_min'])
+            record.update(pattern_relative_improvement=pattern_gain,pattern_component_guard=pattern_guard,
+                pattern_coverage_guard=coverage,pattern_screen_pass=bool(pattern_pass),
+                engineering_candidate=bool(reconstruction_pass or pattern_pass),next_stage_started=False)
+        result[group]=record
+    return result
+
+
+def base_g3_decision(model, baseline, screen, step):
+    """Fixed-exposure schedule comparison; reconstruction and near-equal health routes."""
+    if model.get('status')!='completed':return dict(status='incomplete',next_stage_started=False)
+    candidate=model['milestones'][str(step)]['validation'];reference=baseline['milestones'][str(step)]['validation']
+    c=np.asarray(candidate['metrics']['nmse']['macro'],float);r=np.asarray(reference['metrics']['nmse']['macro'],float)
+    improvement=float(1-c.mean()/max(float(r.mean()),1e-12))
+    guard=bool(np.isfinite(c).all() and np.all(c<=(1+screen['component_degradation_max'])*r))
+    ch={v['branch']:v for v in candidate['code_health'] if v['dataset']=='macro'}
+    rh={v['branch']:v for v in reference['code_health'] if v['dataset']=='macro'}
+    gain=float(np.mean([ch[b]['effective'] for b in ('S','O')])/np.mean([rh[b]['effective'] for b in ('S','O')])-1)
+    health_guard=all(ch[b]['effective']>=(1-screen['health_branch_degradation_max'])*rh[b]['effective']
+        and ch[b]['top1']<=(1+screen['health_branch_degradation_max'])*rh[b]['top1'] for b in ('S','O'))
+    reconstruction_pass=guard and improvement>=screen['reconstruction_improvement_min']
+    health_pass=guard and c.mean()<=(1+screen['reconstruction_close_relative'])*r.mean() and health_guard and gain>=screen['effective_code_improvement_min']
+    return dict(status='evaluated',step=step,macro_nmse=float(c.mean()),baseline_macro_nmse=float(r.mean()),
+                relative_improvement=improvement,component_guard=guard,effective_code_relative_improvement=gain,
+                health_branch_guard=bool(health_guard),reconstruction_screen_pass=bool(reconstruction_pass),
+                health_screen_pass=bool(health_pass),selected_schedule='gradual' if reconstruction_pass or health_pass else 'direct_hard',
+                next_stage_started=False)
+
+
 def state_balanced_weights(dataset, parent, selected):
     """Equal datasets, equal parents within dataset, equal selected anchors within parent."""
     dataset, parent, selected = np.asarray(dataset), np.asarray(parent), np.asarray(selected, bool)

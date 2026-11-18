@@ -32,6 +32,118 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## G1–G4 compact reading package — 2026-11-18
+
+The dated [10-model CSV](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_base_g3_gpu1_v1/g1_g4_results_20261118_v1.csv)
+and [compact JSON](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_base_g3_gpu1_v1/g1_g4_results_20261118_v1.json)
+are retained in Git alongside the implementation, four executable contracts and
+targeted tests. CSV gives final train/validation/regression scores, selected steps
+and explicit comparison references. JSON additionally preserves all three milestone
+scores, population denominators, X/S/O and Hb-color errors, per-dataset validation
+errors, code health, single-ID readouts, decisions and source paths. They are dated
+exports of the owning run records; current state remains in the registry.
+
+All ten seed-17 models completed 10,000 total steps, including 1,000 warmup steps;
+the selected checkpoint is also 10,000 for every model. Training uses 60 subjects /
+443 native records and validation uses 20 subjects / 144 records from the original
+development splits. Input is modality X; S/O are cached model-conditional teacher
+targets. No test arrays or new teacher fits enter these experiments. NMSE uses frozen
+training scales and equal aggregation over positions, windows, records, subjects,
+datasets and X/S/O (plus Hb colors). Lower is better. The table uses the matched
+10,000-step validation endpoint; changes are relative to the named reference.
+
+| Group | Model | Validation NMSE | Matched reference / change |
+| --- | --- | ---: | --- |
+| G1 | EEG waveform-64 continuous | 0.251484 | continuous reference |
+| G1 | EEG waveform-64 K128 | 0.397521 | continuous: +58.07% |
+| G1 | EEG dense_long K128 | 0.398856 | waveform-64 K128: +0.34% |
+| G1 | Hb waveform continuous | 0.154982 | continuous reference |
+| G1 | Hb waveform K128 | 0.185140 | continuous: +19.46% |
+| G2 | EEG waveform-32 continuous | 0.258645 | waveform-64 continuous: +2.85% |
+| G2 | EEG waveform-32 K128 | 0.390993 | waveform-64 K128: −1.64% |
+| G3 | EEG waveform-64 K128, gradual | 0.400449 | direct-hard K128: +0.74% |
+| G4 | Hb local-shape continuous | 0.169305 | waveform continuous: +9.24% |
+| G4 | Hb local-shape K128 | 0.215647 | waveform K128: +16.48% |
+
+**Conclusions at this snapshot.** G1 selects the common 10,000-step budget; the EEG
+continuous-to-discrete error gap remains larger than the Hb gap. G2's 1.64% discrete
+gain falls below the 10% promotion threshold, so retain latent dimension 64. G3's
+mean effective code count rises only 1.01%, below its 10% health threshold, while
+reconstruction slightly worsens; retain direct-hard training. G4 improves the
+validation S/O single-ID centered shape readout by 27.13%, but fails both the
+continuous and hard reconstruction guards; retain the original Hb waveform decoder.
+These are single-seed engineering screens. They support the simple baseline choices
+for subsequent multi-seed confirmation; G5 was not executed in this package.
+
+**Retained failures and checks.** The original G1 resource pilot hit the process
+file-descriptor limit; its successor bounds mmap handles. Dense_long stopped at
+7,000-step evaluation because one of 384,000 replay entries exceeded the tolerance
+(maximum difference 2.1933e−6). After the user's cancellation of replay comparison,
+the versioned continuation restored weights, optimizer and RNG and completed the
+fixed budget. Both failures remain linked in the JSON. Actual integer IDs still
+drive discrete evaluation. The linked G124 and G3 completion reviews verify retained
+panels and decisions; the G4 shape review independently verifies the readout gain.
+No failed model is removed from the ten-model denominator.
+
+## G3 gradual quantization evidence — 2026-11-18
+
+The [G3 contract](configs/physiology_semantic_tokenizer/dual_component_base_g3_v1.yaml)
+and [prepared run](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_base_g3_v1/)
+retain the audited dimension/budget selection, exact G1 warmup and initialization
+references, executable source, synthetic checks, tests and concrete supervisor command.
+The existing `base-train` entry performs device pilots and trains one schedule candidate.
+The user-selected [GPU1 execution](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_base_g3_gpu1_v1/)
+retains the original preparation and uses the same numerical contract. Its plan and
+launch record pin both resource measurement and the single candidate to `cuda:1`;
+source, logs, controller, runtime and checkpoints share this execution directory.
+Its [completion review](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_base_g3_gpu1_v1/completion_review_20261118_v1.json)
+checks three milestones / nine role panels, recorded NMSE, actual-ID code health,
+decoder transition coefficients and the fixed-endpoint decision.
+
+## Dense continuation, G2 and G4 — 2026-11-17
+
+The [versioned contract](configs/physiology_semantic_tokenizer/dual_component_base_g124_v1.yaml)
+and [run package](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/)
+retain the user-requested removal of replay comparison, exact dense optimizer/RNG
+continuation, the EEG latent-32 pair and the Hb local-shape/context pair. The dense
+`resumption.json` identifies the unchanged source checkpoint/failure and read-only
+reference to the completed 4,000-step evaluation. Other models use their own matched
+new-structure warmups. Per-model evaluations retain IDs, reconstruction and shape
+readouts, signed patch-boundary metrics, and fixed examples including G4 level/local/
+context components. The same controller owns all five terminal tasks; the terminal
+summary reports G2/G4 screens and recomputes G1 budget after dense completion.
+The [completion review](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/completion_review_20261118_v1.json)
+independently checks complete checkpoint state, migrated optimizer/RNG, paired inputs,
+retained metrics, decoder components and frozen decisions. The
+[shape-readout review](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1/shape_readout_review_20261118_v1.json)
+reaggregates the final Hb candidate and baseline single-ID errors.
+
+## Base-tokenizer G1 matched baselines — 2026-11-17
+
+The [G1 contract](configs/physiology_semantic_tokenizer/dual_component_base_g1_v1.yaml)
+and [run package](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2/)
+retain the exact G0 references, five-model matrix, shared warmups, source snapshot,
+supervised launch and measured concurrency trials. Per-model directories retain
+resumable optimizer/RNG state and 4,000/7,000/10,000-step checkpoints, complete
+train-score/validation/regression metrics and IDs, training-fitted local prototypes,
+and fixed waveform examples. `controller.json` and `runtime.json` own process
+progress; terminal model records and `summary.json` own outcomes and budget selection.
+The [first resource-pilot failure](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v1/benchmark_failure_1.json)
+retains the systemd file-limit issue before formal warmup; the successor keeps the
+same numerical contract and bounds mmap handles against the actual process limit.
+
+## Base-tokenizer G0 population and preparation — 2026-11-17
+
+The [G0 contract](configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml)
+owns population, normalization, sampling and checkpoint-selection rules. The
+[run package](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g0_v2/)
+retains its metadata-only `plan.json`, per-parent adaptation records, mmap inputs,
+training-only `scales.json`, `sampling_audit.json`, complete `summary.json` and
+`verification.json`, plus supervised launch, measured resources and frozen source.
+The [initial planning failure](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g0_v1/planning_failure.json)
+preserves the one-native-sample boundary finding before any measured-array read.
+Prepared inputs support subsequent G1 training; this package has no trained models.
+
 ## Matched Hb single-ID shape sequence — 2026-11-13
 
 The [retained summary](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261113_hb_id_shape_v1/summary.json)
