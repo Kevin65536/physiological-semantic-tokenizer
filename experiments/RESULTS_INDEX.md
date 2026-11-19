@@ -32,6 +32,24 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## D0/D1/H1/E1 development results — 2026-11-19
+
+The [six-page phase report](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261119_e1_waveform8_v1/phase_review_v1/D0_D1_H1_E1_results.pdf)
+includes the E1 matched checkpoint and spectrum figures and the original four diagnostic pages.
+The [compact results](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261119_e1_waveform8_v1/phase_review_v1/phase_results.json)
+retain all five formal models' validation milestones, all six D0 statuses, D1 dataset results,
+H1 paired contrasts, and the G1/E1 subject, dataset, component and frequency-band comparisons.
+The E1 endpoints were recomputed from both 10,000-step validation arrays after checking input identity.
+
+## D0/D1/H1 development review — 2026-11-19
+
+The [completion review](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_d0_d1_h1_v1/review_20261119_v1/completion_review.json)
+links the fixed-step outcomes, assignment checks and paired validation contrasts.
+The [illustrated Chinese report](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_d0_d1_h1_v1/review_20261119_v1/D0_D1_H1_results_20261119_v1.pdf)
+uses the completed D0 outputs and G1/D1/H1 validation evaluations. The original
+D0 service exception remains in `base-d0.log`; the two G1 Hb recovery files
+in D0 record agreement against the original per-input NMSE.
+
 ## G1–G4 compact reading package — 2026-11-18
 
 The dated [10-model CSV](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_base_g3_gpu1_v1/g1_g4_results_20261118_v1.csv)

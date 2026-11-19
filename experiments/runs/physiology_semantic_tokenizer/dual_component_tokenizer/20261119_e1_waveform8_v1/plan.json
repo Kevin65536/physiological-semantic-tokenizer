@@ -1,0 +1,472 @@
+{
+  "schema": "dual_component_base_training_plan_v1",
+  "G0_run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g0_v2",
+  "manifest_identity": "37319917430f3aa11e3eaf39",
+  "scales_identity": "d8b6634e55fa73bbc1243650",
+  "tasks": [
+    {
+      "modality": "eeg",
+      "architecture": "waveform8",
+      "candidate": "continuous"
+    }
+  ],
+  "warmups": [
+    {
+      "modality": "eeg",
+      "architecture": "waveform8",
+      "candidate": "warmup"
+    }
+  ],
+  "input_counts": {
+    "eeg/eeg_fnirs_single_trial/validation": {
+      "subjects": 6,
+      "records": 36,
+      "parents": 349,
+      "train_crops": 0,
+      "score_crops": 709,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 21270,
+      "input_invalid": 0,
+      "teacher_unavailable": 0,
+      "unique_scoring_seconds": 21270
+    },
+    "eeg/eeg_fnirs_single_trial/train": {
+      "subjects": 17,
+      "records": 102,
+      "parents": 1019,
+      "train_crops": 30755,
+      "score_crops": 2002,
+      "regression_crops": 1,
+      "train_position_inputs": 922650,
+      "score_position_inputs": 60060,
+      "input_invalid": 0,
+      "teacher_unavailable": 0,
+      "unique_scoring_seconds": 60060
+    },
+    "eeg/refed/train": {
+      "subjects": 19,
+      "records": 285,
+      "parents": 475,
+      "train_crops": 12667,
+      "score_crops": 872,
+      "regression_crops": 2,
+      "train_position_inputs": 810688,
+      "score_position_inputs": 55808,
+      "input_invalid": 0,
+      "teacher_unavailable": 0,
+      "unique_scoring_seconds": 26160
+    },
+    "eeg/refed/validation": {
+      "subjects": 6,
+      "records": 90,
+      "parents": 120,
+      "train_crops": 0,
+      "score_crops": 276,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 17664,
+      "input_invalid": 0,
+      "teacher_unavailable": 0,
+      "unique_scoring_seconds": 8280
+    },
+    "eeg/simultaneous_eeg_nirs/train": {
+      "subjects": 15,
+      "records": 40,
+      "parents": 1059,
+      "train_crops": 31954,
+      "score_crops": 2052,
+      "regression_crops": 1,
+      "train_position_inputs": 894712,
+      "score_position_inputs": 57456,
+      "input_invalid": 0,
+      "teacher_unavailable": 0,
+      "unique_scoring_seconds": 61560
+    },
+    "eeg/simultaneous_eeg_nirs/validation": {
+      "subjects": 5,
+      "records": 13,
+      "parents": 325,
+      "train_crops": 0,
+      "score_crops": 670,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 18760,
+      "input_invalid": 0,
+      "teacher_unavailable": 0,
+      "unique_scoring_seconds": 20100
+    },
+    "eeg/visual_cognitive_motivation/train": {
+      "subjects": 9,
+      "records": 16,
+      "parents": 481,
+      "train_crops": 14435,
+      "score_crops": 948,
+      "regression_crops": 1,
+      "train_position_inputs": 447485,
+      "score_position_inputs": 29388,
+      "input_invalid": 0,
+      "teacher_unavailable": 0,
+      "unique_scoring_seconds": 28440
+    },
+    "eeg/visual_cognitive_motivation/validation": {
+      "subjects": 3,
+      "records": 5,
+      "parents": 130,
+      "train_crops": 0,
+      "score_crops": 265,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 8215,
+      "input_invalid": 0,
+      "teacher_unavailable": 0,
+      "unique_scoring_seconds": 7950
+    },
+    "hb/eeg_fnirs_single_trial/validation": {
+      "subjects": 6,
+      "records": 36,
+      "parents": 349,
+      "train_crops": 0,
+      "score_crops": 709,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 25220,
+      "input_invalid": 236,
+      "teacher_unavailable": 68,
+      "unique_scoring_seconds": 21270
+    },
+    "hb/eeg_fnirs_single_trial/train": {
+      "subjects": 17,
+      "records": 102,
+      "parents": 1020,
+      "train_crops": 30785,
+      "score_crops": 2004,
+      "regression_crops": 1,
+      "train_position_inputs": 1104853,
+      "score_position_inputs": 71925,
+      "input_invalid": 0,
+      "teacher_unavailable": 219,
+      "unique_scoring_seconds": 60120
+    },
+    "hb/refed/train": {
+      "subjects": 19,
+      "records": 285,
+      "parents": 475,
+      "train_crops": 12667,
+      "score_crops": 872,
+      "regression_crops": 2,
+      "train_position_inputs": 645876,
+      "score_position_inputs": 44457,
+      "input_invalid": 0,
+      "teacher_unavailable": 15,
+      "unique_scoring_seconds": 26160
+    },
+    "hb/refed/validation": {
+      "subjects": 6,
+      "records": 90,
+      "parents": 120,
+      "train_crops": 0,
+      "score_crops": 276,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 14073,
+      "input_invalid": 0,
+      "teacher_unavailable": 3,
+      "unique_scoring_seconds": 8280
+    },
+    "hb/simultaneous_eeg_nirs/train": {
+      "subjects": 15,
+      "records": 40,
+      "parents": 1060,
+      "train_crops": 31984,
+      "score_crops": 2054,
+      "regression_crops": 1,
+      "train_position_inputs": 1146306,
+      "score_position_inputs": 73649,
+      "input_invalid": 0,
+      "teacher_unavailable": 295,
+      "unique_scoring_seconds": 61620
+    },
+    "hb/simultaneous_eeg_nirs/validation": {
+      "subjects": 5,
+      "records": 13,
+      "parents": 326,
+      "train_crops": 0,
+      "score_crops": 673,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 24179,
+      "input_invalid": 0,
+      "teacher_unavailable": 49,
+      "unique_scoring_seconds": 20190
+    },
+    "hb/visual_cognitive_motivation/train": {
+      "subjects": 9,
+      "records": 16,
+      "parents": 484,
+      "train_crops": 14526,
+      "score_crops": 953,
+      "regression_crops": 1,
+      "train_position_inputs": 398940,
+      "score_position_inputs": 26177,
+      "input_invalid": 0,
+      "teacher_unavailable": 135,
+      "unique_scoring_seconds": 28590
+    },
+    "hb/visual_cognitive_motivation/validation": {
+      "subjects": 3,
+      "records": 5,
+      "parents": 130,
+      "train_crops": 0,
+      "score_crops": 265,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 7500,
+      "input_invalid": 0,
+      "teacher_unavailable": 26,
+      "unique_scoring_seconds": 7950
+    }
+  },
+  "planned_counts": {
+    "eeg/eeg_fnirs_single_trial/validation": {
+      "parents": 360,
+      "subjects": 6,
+      "records": 36,
+      "train_crops": 0,
+      "score_crops": 709,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 21270
+    },
+    "hb/eeg_fnirs_single_trial/validation": {
+      "parents": 360,
+      "subjects": 6,
+      "records": 36,
+      "train_crops": 0,
+      "score_crops": 709,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 25524
+    },
+    "eeg/eeg_fnirs_single_trial/train": {
+      "parents": 1020,
+      "subjects": 17,
+      "records": 102,
+      "train_crops": 30785,
+      "score_crops": 2004,
+      "regression_crops": 1,
+      "train_position_inputs": 923550,
+      "score_position_inputs": 60120
+    },
+    "hb/eeg_fnirs_single_trial/train": {
+      "parents": 1020,
+      "subjects": 17,
+      "records": 102,
+      "train_crops": 30785,
+      "score_crops": 2004,
+      "regression_crops": 1,
+      "train_position_inputs": 1108260,
+      "score_position_inputs": 72144
+    },
+    "eeg/refed/train": {
+      "parents": 475,
+      "subjects": 19,
+      "records": 285,
+      "train_crops": 12667,
+      "score_crops": 872,
+      "regression_crops": 2,
+      "train_position_inputs": 810688,
+      "score_position_inputs": 55808
+    },
+    "hb/refed/train": {
+      "parents": 475,
+      "subjects": 19,
+      "records": 285,
+      "train_crops": 12667,
+      "score_crops": 872,
+      "regression_crops": 2,
+      "train_position_inputs": 646017,
+      "score_position_inputs": 44472
+    },
+    "eeg/refed/validation": {
+      "parents": 150,
+      "subjects": 6,
+      "records": 90,
+      "train_crops": 0,
+      "score_crops": 276,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 17664
+    },
+    "hb/refed/validation": {
+      "parents": 150,
+      "subjects": 6,
+      "records": 90,
+      "train_crops": 0,
+      "score_crops": 276,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 14076
+    },
+    "eeg/simultaneous_eeg_nirs/train": {
+      "parents": 1060,
+      "subjects": 15,
+      "records": 40,
+      "train_crops": 31984,
+      "score_crops": 2054,
+      "regression_crops": 1,
+      "train_position_inputs": 895552,
+      "score_position_inputs": 57512
+    },
+    "hb/simultaneous_eeg_nirs/train": {
+      "parents": 1060,
+      "subjects": 15,
+      "records": 40,
+      "train_crops": 31984,
+      "score_crops": 2054,
+      "regression_crops": 1,
+      "train_position_inputs": 1151424,
+      "score_position_inputs": 73944
+    },
+    "eeg/simultaneous_eeg_nirs/validation": {
+      "parents": 347,
+      "subjects": 5,
+      "records": 13,
+      "train_crops": 0,
+      "score_crops": 673,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 18844
+    },
+    "hb/simultaneous_eeg_nirs/validation": {
+      "parents": 347,
+      "subjects": 5,
+      "records": 13,
+      "train_crops": 0,
+      "score_crops": 673,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 24228
+    },
+    "eeg/visual_cognitive_motivation/train": {
+      "parents": 484,
+      "subjects": 9,
+      "records": 16,
+      "train_crops": 14526,
+      "score_crops": 953,
+      "regression_crops": 1,
+      "train_position_inputs": 450306,
+      "score_position_inputs": 29543
+    },
+    "hb/visual_cognitive_motivation/train": {
+      "parents": 484,
+      "subjects": 9,
+      "records": 16,
+      "train_crops": 14526,
+      "score_crops": 953,
+      "regression_crops": 1,
+      "train_position_inputs": 401047,
+      "score_position_inputs": 26312
+    },
+    "eeg/visual_cognitive_motivation/validation": {
+      "parents": 135,
+      "subjects": 3,
+      "records": 5,
+      "train_crops": 0,
+      "score_crops": 265,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 8215
+    },
+    "hb/visual_cognitive_motivation/validation": {
+      "parents": 135,
+      "subjects": 3,
+      "records": 5,
+      "train_crops": 0,
+      "score_crops": 265,
+      "regression_crops": 0,
+      "train_position_inputs": 0,
+      "score_position_inputs": 7526
+    }
+  },
+  "source_failures": [
+    {
+      "parent": "eeg_fnirs_single_trial/subject_24/session_05/e0000048013_n0018000",
+      "modality": "eeg",
+      "reason": "retained_source_EEG_failure",
+      "metadata": "/SSD_2/pid-mcm-implementation/data/cache/physiology_so_supervision_v2/windows/eeg_fnirs_single_trial/subject_24/session_05/e0000048013_n0018000.json"
+    },
+    {
+      "parent": "simultaneous_eeg_nirs/VP005/cnt_nback/e0000265409_n0018000",
+      "modality": "eeg",
+      "reason": "retained_source_EEG_failure",
+      "metadata": "/SSD_2/pid-mcm-implementation/data/cache/physiology_so_supervision_v2/windows/simultaneous_eeg_nirs/VP005/cnt_nback/e0000265409_n0018000.json"
+    },
+    {
+      "parent": "simultaneous_eeg_nirs/VP015/cnt_wg/e0000036019_n0018000",
+      "modality": "eeg",
+      "reason": "retained_source_EEG_failure",
+      "metadata": "/SSD_2/pid-mcm-implementation/data/cache/physiology_so_supervision_v2/windows/simultaneous_eeg_nirs/VP015/cnt_wg/e0000036019_n0018000.json"
+    },
+    {
+      "parent": "visual_cognitive_motivation/S07/S07/e0001470042_n0045000",
+      "modality": "eeg",
+      "reason": "retained_source_EEG_failure",
+      "metadata": "/SSD_2/pid-mcm-implementation/data/cache/physiology_so_supervision_v2/windows/visual_cognitive_motivation/S07/S07/e0001470042_n0045000.json"
+    },
+    {
+      "parent": "visual_cognitive_motivation/S07/S07/e0001500042_n0045000",
+      "modality": "eeg",
+      "reason": "retained_source_EEG_failure",
+      "metadata": "/SSD_2/pid-mcm-implementation/data/cache/physiology_so_supervision_v2/windows/visual_cognitive_motivation/S07/S07/e0001500042_n0045000.json"
+    },
+    {
+      "parent": "visual_cognitive_motivation/S07/S07/e0001550092_n0045000",
+      "modality": "eeg",
+      "reason": "retained_source_EEG_failure",
+      "metadata": "/SSD_2/pid-mcm-implementation/data/cache/physiology_so_supervision_v2/windows/visual_cognitive_motivation/S07/S07/e0001550092_n0045000.json"
+    }
+  ],
+  "sampling_reference": "G0/sampling_audit.json",
+  "seed": 17,
+  "selection": {
+    "steps": [
+      4000,
+      7000,
+      10000
+    ],
+    "batch_size": 64,
+    "roles": [
+      "train",
+      "validation",
+      "regression"
+    ],
+    "support": "all_G0_nonoverlapping_score_inputs_and_original_five_regression_blocks",
+    "primary": "X_S_O_and_color_equal_then_position_window_record_subject_dataset_equal_NMSE",
+    "secondary": "REFED X 13-30 and 30-45 Hz signed log power ratios and distance to zero; all original EEG diagnostics",
+    "checkpoint_selection": "lowest_complete_validation_macro_NMSE_earliest_step_on_exact_tie",
+    "baseline": "retained matched G1 EEG waveform64 continuous at 10000 steps",
+    "null_hypothesis": "no joint full-panel reconstruction and REFED high-band fidelity gain",
+    "failed_models": "retain single planned arm and failed status",
+    "fixed_examples": "first_validation_parent_per_dataset_first_middle_last_available_position_plus_all_regression_inputs",
+    "budget_rule": "fixed matched final 10000 steps",
+    "integer_replay_check": "disabled_by_user"
+  },
+  "measured_arrays_read": 0,
+  "baseline_job": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2/models/eeg__waveform__continuous",
+  "comparison": {
+    "baseline": {
+      "run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2",
+      "contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v1.yaml",
+      "architecture": "waveform"
+    },
+    "decision_run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_d0_d1_h1_v1",
+    "review": "review_20261119_v1/completion_review.json",
+    "spectrum_bands": [
+      "13_30",
+      "30_45"
+    ],
+    "comparison": "paired exact G0 validation support; compare final 10000-step X-input continuous models; signed differences candidate minus G1",
+    "joint_direction": "lower full-panel macro NMSE and lower absolute REFED X mean log-power-ratio in both bands; descriptive single-seed screen"
+  }
+}

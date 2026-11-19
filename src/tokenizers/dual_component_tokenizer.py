@@ -699,38 +699,39 @@ class ProjectionGainResidualPredictor(nn.Module):
 
 class WaveformPatchInput(nn.Module):
     """Sampled-waveform encoder with exactly fifteen temporal output anchors."""
-    def __init__(self, channels, strides, width, local_width, patches):
+    def __init__(self, channels, strides, width, local_width, patches, internal_steps=4, kernel_strides=None):
         super().__init__()
-        self.channels, self.patches = channels, patches
+        self.channels, self.patches, self.internal_steps = channels, patches, internal_steps
         layers=[]; incoming=channels
-        for stride in strides:
-            layers += [nn.Conv1d(incoming, local_width, 2*stride+1, stride=stride, padding=stride), nn.GELU()]
+        for stride, radius in zip(strides, kernel_strides or strides, strict=True):
+            layers += [nn.Conv1d(incoming, local_width, 2*radius+1, stride=stride, padding=radius), nn.GELU()]
             incoming=local_width
         self.features=nn.Sequential(*layers)
-        self.project=nn.Linear(local_width*4, width)
+        self.project=nn.Linear(local_width*internal_steps, width)
 
     def forward(self, x):
         h=self.features(x.reshape(x.shape[0],-1,self.channels).transpose(1,2))
-        if h.shape[-1] != self.patches*4:raise ValueError('four internal samples per declared anchor required')
+        if h.shape[-1] != self.patches*self.internal_steps:raise ValueError('internal temporal grid does not match declared anchors')
         return self.project(h.transpose(1,2).reshape(x.shape[0],self.patches,-1))
 
 
 class WaveformPatchOutput(nn.Module):
     """Synthesize the full waveform from same-branch decoded anchor features."""
-    def __init__(self, channels, strides, width, local_width, patches, input_dim):
+    def __init__(self, channels, strides, width, local_width, patches, input_dim, internal_steps=4, kernel_strides=None):
         super().__init__()
         self.patches, self.input_dim, self.local_width=patches,input_dim,local_width
-        self.project=nn.Linear(width,local_width*4)
+        self.internal_steps=internal_steps
+        self.project=nn.Linear(width,local_width*internal_steps)
         layers=[]
-        for stride in reversed(strides):
-            layers += [nn.ConvTranspose1d(local_width,local_width,2*stride,stride=stride,
-                         padding=(stride+1)//2,output_padding=stride%2),nn.GELU(),
+        for stride, radius in zip(reversed(strides), reversed(kernel_strides or strides), strict=True):
+            layers += [nn.ConvTranspose1d(local_width,local_width,2*radius,stride=stride,
+                         padding=radius-stride//2,output_padding=stride%2),nn.GELU(),
                        nn.Conv1d(local_width,local_width,5,padding=2),nn.GELU()]
         layers += [nn.Conv1d(local_width,channels,7,padding=3)]
         self.synthesis=nn.Sequential(*layers)
 
     def forward(self, x):
-        h=self.project(x).reshape(x.shape[0],self.patches*4,self.local_width).transpose(1,2)
+        h=self.project(x).reshape(x.shape[0],self.patches*self.internal_steps,self.local_width).transpose(1,2)
         return self.synthesis(h).transpose(1,2).reshape(x.shape[0],self.patches,self.input_dim)
 
 
@@ -783,11 +784,13 @@ class GlobalLatentComponentTokenizer(nn.Module):
         self.waveform_io = cfg.get('waveform_io', False)
         if self.waveform_io:
             channels=int(cfg['channels']); strides=tuple(cfg['sample_strides'])
-            if self.input_dim != channels*4*math.prod(strides):
+            steps = int(cfg.get('internal_steps',4))
+            kernels = cfg.get('kernel_strides',strides)
+            if steps < 1 or self.input_dim != channels*steps*math.prod(strides):
                 raise ValueError('waveform strides must preserve the declared sample grid')
             for branch in self.branches.values():
-                branch['input']=WaveformPatchInput(channels,strides,width,int(cfg['local_width']),self.patches)
-                branch['output']=WaveformPatchOutput(channels,strides,width,int(cfg['local_width']),self.patches,self.input_dim)
+                branch['input']=WaveformPatchInput(channels,strides,width,int(cfg['local_width']),self.patches,steps,kernels)
+                branch['output']=WaveformPatchOutput(channels,strides,width,int(cfg['local_width']),self.patches,self.input_dim,steps,kernels)
         self.hb_local_shape = bool(cfg.get('hb_local_shape', False))
         if self.hb_local_shape:
             if self.input_dim != 40 or int(cfg['channels']) != 2 or not self.waveform_io:
@@ -812,14 +815,48 @@ class GlobalLatentComponentTokenizer(nn.Module):
                 self.code_shape_head = nn.Linear(latent, self.input_dim)
 
     def encode_continuous(self, values: torch.Tensor) -> dict[str, torch.Tensor]:
+        return {c: self._encode_branch(c, values) for c in COMPONENTS}
+
+    def _encode_branch(self, component, values):
         if (values.ndim != 3 or tuple(values.shape[1:]) != (self.patches, self.input_dim)
                 or not values.is_floating_point() or not bool(torch.isfinite(values).all())):
             raise ValueError('complete finite [batch, declared patches, patch features] observations required')
         if self.input_color_weights is not None:
             weights = values.new_tensor(self.input_color_weights).repeat(self.input_dim // 2)
             values = values * weights
-        return {c: b['to_latent'](b['encoder'](b['input'](values) + self.position))
-                for c, b in self.branches.items()}
+        branch = self.branches[component]
+        return branch['to_latent'](branch['encoder'](branch['input'](values) + self.position))
+
+    def forward_components(self, physical, remaining):
+        """Continuous diagnostic. Each branch sees only its own target waveform."""
+        if self.hard or physical.shape != remaining.shape:
+            raise ValueError('matched continuous S and O inputs required')
+        latents = {c: self._encode_branch(c, y) for c, y in [('S', physical), ('O', remaining)]}
+        result = {c: self._decode_component(c, z) for c, z in latents.items()}
+        return dict(result, sum=result['S'] + result['O'], latent=latents,
+                    commitment=physical.new_zeros(()), ids={}, health={})
+
+    def freeze_assignments(self, source):
+        """Copy only the source modules that determine the integer IDs."""
+        if not self.hard or not source.hard:
+            raise ValueError('two hard models required')
+        for component, branch in self.branches.items():
+            for name in ('input', 'encoder', 'to_latent', 'quantizer'):
+                module = branch[name]
+                module.load_state_dict(source.branches[component][name].state_dict())
+                module.requires_grad_(False)
+            if not bool(branch['quantizer'].initialized):
+                raise ValueError('frozen assignments require an initialized dictionary')
+        self.position.copy_(source.position)
+
+    def forward_frozen_ids(self, values):
+        with torch.no_grad():
+            for branch in self.branches.values():
+                for name in ('input', 'encoder', 'to_latent', 'quantizer'):
+                    branch[name].eval()
+            ids = {c: self.branches[c]['quantizer'](z).hard_ids
+                   for c, z in self.encode_continuous(values).items()}
+        return dict(self.decode_ids(ids), ids=ids, commitment=values.new_zeros(()))
 
     def _decode_component(self, component: str, latent: torch.Tensor) -> torch.Tensor:
         return self._decode_component_parts(component, latent)['full']

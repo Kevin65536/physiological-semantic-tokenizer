@@ -1,0 +1,191 @@
+{
+  "config": {
+    "schema": "dual_component_base_diagnostics_v1",
+    "experiment_id": "TK-BASE-D0-D1-H1-v1",
+    "data": {
+      "run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g0_v2",
+      "contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml",
+      "allowed_splits": [
+        "train",
+        "validation"
+      ],
+      "test_access": "forbidden",
+      "protected_data": "forbidden",
+      "teacher_refits": false,
+      "raw_reads": false,
+      "coordinates": "exact_completed_G0_arrays_masks_scales_and_population"
+    },
+    "model": {
+      "codebook_size": 128,
+      "patches": 15,
+      "heads": 4,
+      "encoder_layers": 2,
+      "decoder_layers": 2,
+      "dropout": 0.0,
+      "kmeans_iters": 20,
+      "ema_decay": 0.99,
+      "commitment_cost": 0.25,
+      "dead_code_threshold": 0.1,
+      "revival_warmup_steps": 100,
+      "revival_interval": 50,
+      "revival_stop_after_steps": 1500,
+      "max_revivals_per_event": 8
+    },
+    "architectures": {
+      "target_input": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "target_input": true
+      },
+      "frozen_g1": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "frozen_source": "G1"
+      },
+      "frozen_g4": {
+        "width": 128,
+        "latent_dim": 64,
+        "waveform_io": true,
+        "local_width": 32,
+        "sum_weight": 0.5,
+        "derivative_weight": 0.1,
+        "frozen_source": "G4"
+      }
+    },
+    "tasks": [
+      {
+        "modality": "eeg",
+        "architecture": "target_input",
+        "candidate": "continuous"
+      },
+      {
+        "modality": "hb",
+        "architecture": "target_input",
+        "candidate": "continuous"
+      },
+      {
+        "modality": "hb",
+        "architecture": "frozen_g1",
+        "candidate": "vq128"
+      },
+      {
+        "modality": "hb",
+        "architecture": "frozen_g4",
+        "candidate": "vq128"
+      }
+    ],
+    "training": {
+      "seed": 17,
+      "warmup_steps": 1000,
+      "total_steps": 10000,
+      "batch_size": 64,
+      "learning_rate": 0.0003,
+      "final_learning_rate": 3e-05,
+      "decay_start_step": 4000,
+      "learning_rate_schedule": "constant_then_cosine_on_absolute_10000_step_clock",
+      "weight_decay": 0.0001,
+      "gradient_clip": 5.0,
+      "checkpoint_every": 500,
+      "monitor_examples": 512,
+      "monitoring": "fixed_training_draws_seed_8017_not_validation_selection",
+      "warmup_sharing": "D1 uses branch-target inputs throughout; H1 starts at zero with frozen assignments",
+      "optimizer_at_branch": "reset_for_both_continuous_and_quantized_continuations",
+      "initialization": "exact_G0_one_crop_position_per_training_record_encode_in_batches_then_initialize_once",
+      "stopping": "D1 matched 1000+9000; H1 two identical fresh waveform decoders for 10000 updates; seed17 only"
+    },
+    "evaluation": {
+      "steps": [
+        4000,
+        7000,
+        10000
+      ],
+      "batch_size": 64,
+      "roles": [
+        "train",
+        "validation",
+        "regression"
+      ],
+      "support": "all_G0_nonoverlapping_score_inputs_and_original_five_regression_blocks",
+      "primary": "X_S_O_and_color_equal_then_position_window_record_subject_dataset_equal_NMSE",
+      "secondary": "NRMSE_RMSE_bias_correlation_RMS_gain_level_shape_and_EEG_band_power",
+      "health": "actual_ID_counts_train_validation_per_subject_dataset_branch",
+      "patterns": "training_fitted_single_ID_centered_target_and_X_prototypes_validation_readout",
+      "checkpoint_selection": "complete validation only; compare at matched final step",
+      "replay_atol": 2e-06,
+      "replay_rtol": 1e-05,
+      "baseline": "G1 matched 10000-step X-input models; paired H1 frozen G1 decoder",
+      "null_hypothesis": "target-input access does not reduce compression error; frozen G4 IDs do not improve joint pattern and reconstruction",
+      "failed_models": "retain all four outcomes",
+      "fixed_examples": "first_validation_parent_per_dataset_first_middle_last_available_position_plus_all_regression_inputs",
+      "budget_rule": "fixed_10000",
+      "budget_macro_relative_tolerance": 0.02,
+      "budget_component_relative_tolerance": 0.05,
+      "budget_fallback": "10000_and_mixed_or_unsettled_no_automatic_additional_steps",
+      "integer_replay_check": "disabled_by_user",
+      "E1": "review D0 spectra and D1 component gaps before selecting at most one EEG capacity or continuous-frontend arm; no automatic training"
+    },
+    "resources": {
+      "devices": [
+        "cuda:0",
+        "cuda:1"
+      ],
+      "visible_gpu_uuids": [
+        "GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7",
+        "GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735"
+      ],
+      "workers_per_device_candidates": [
+        1,
+        2
+      ],
+      "benchmark_steps": 40,
+      "benchmark_evaluation_examples": 256,
+      "benchmark_tasks": [
+        "eeg_target_input",
+        "hb_target_input",
+        "hb_frozen_g1",
+        "hb_frozen_g4"
+      ],
+      "torch_threads": 2,
+      "numerical_threads": 1,
+      "mmap_parent_cache": 256,
+      "gpu_memory_limit_gib": 4,
+      "supervisor_memory_gib": 96,
+      "supervisor": "user_systemd_linger"
+    },
+    "sources": {
+      "G1": {
+        "run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2",
+        "contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v1.yaml",
+        "architecture": "waveform"
+      },
+      "G4": {
+        "run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1",
+        "contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_base_g124_v1.yaml",
+        "architecture": "local_shape"
+      }
+    },
+    "diagnostics": {
+      "reference_step": 10000,
+      "pattern_baselines": [
+        "zero_centered_shape",
+        "train_dataset_position_mean_shape"
+      ],
+      "pattern_weighting": [
+        "pooled_patches",
+        "hierarchical"
+      ],
+      "pattern_display": "deterministic uniform sample of up to 64 validation patches per ID, complete mask only",
+      "context_hit_relative_tolerance": 1e-05
+    }
+  },
+  "project_root": "/SSD_2/pid-mcm-implementation",
+  "source_root": "/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_d0_d1_h1_v1/source"
+}

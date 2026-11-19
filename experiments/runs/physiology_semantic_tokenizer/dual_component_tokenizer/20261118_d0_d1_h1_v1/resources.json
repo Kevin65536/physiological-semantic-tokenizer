@@ -1,0 +1,98 @@
+{
+  "workers_per_device": 2,
+  "selected_devices": [
+    "cuda:0",
+    "cuda:1"
+  ],
+  "reason": "best observed end-to-end four-job throughput under concurrent existing GPU jobs; fixed 4 GiB per worker",
+  "benchmark_throughput": 0.8161675201380163,
+  "planned_new_training_steps": 40000,
+  "estimated_training_only_seconds": 40591.969086250174,
+  "note": "full-panel evaluation adds time; per-job progress records own measured training rates",
+  "estimating_method": "longest per-arm pilot training time or total work/available slots, whichever is greater",
+  "previous_pooled_rate_estimate_seconds": 1884.8900850068926,
+  "per_arm_estimates": [
+    {
+      "task": {
+        "modality": "eeg",
+        "architecture": "target_input",
+        "candidate": "continuous"
+      },
+      "train_seconds": 40591.969086250174,
+      "evaluation_seconds": 4683.93237937952,
+      "full_inputs_per_milestone": [
+        202712,
+        65909,
+        217
+      ],
+      "pilot_inputs": [
+        256,
+        256,
+        217
+      ],
+      "total_seconds": 45275.90146562969
+    },
+    {
+      "task": {
+        "modality": "hb",
+        "architecture": "target_input",
+        "candidate": "continuous"
+      },
+      "train_seconds": 1301.396200491581,
+      "evaluation_seconds": 1024.2033830117236,
+      "full_inputs_per_milestone": [
+        216208,
+        70972,
+        203
+      ],
+      "pilot_inputs": [
+        256,
+        256,
+        203
+      ],
+      "total_seconds": 2325.5995835033045
+    },
+    {
+      "task": {
+        "modality": "hb",
+        "architecture": "frozen_g1",
+        "candidate": "vq128"
+      },
+      "train_seconds": 1285.373995993723,
+      "evaluation_seconds": 1875.3897147486055,
+      "full_inputs_per_milestone": [
+        216208,
+        70972,
+        203
+      ],
+      "pilot_inputs": [
+        256,
+        256,
+        203
+      ],
+      "total_seconds": 3160.7637107423284
+    },
+    {
+      "task": {
+        "modality": "hb",
+        "architecture": "frozen_g4",
+        "candidate": "vq128"
+      },
+      "train_seconds": 1814.503144240007,
+      "evaluation_seconds": 3535.732347972116,
+      "full_inputs_per_milestone": [
+        216208,
+        70972,
+        203
+      ],
+      "pilot_inputs": [
+        256,
+        256,
+        203
+      ],
+      "total_seconds": 5350.235492212123
+    }
+  ],
+  "estimated_training_plus_evaluation_seconds": 45275.90146562969,
+  "uncertainty": "40 pilot steps; temperature of HDD file cache and write cost of bounded evaluation differ from production. D0 timing separate."
+}

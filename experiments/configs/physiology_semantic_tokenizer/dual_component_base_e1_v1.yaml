@@ -1,0 +1,124 @@
+schema: dual_component_base_e1_v1
+experiment_id: TK-BASE-E1-EEG-CONTINUOUS-8-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g0_v2
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  teacher_refits: false
+  raw_reads: false
+  coordinates: exact_completed_G0_arrays_masks_scales_and_population
+model:
+  codebook_size: 128
+  patches: 15
+  heads: 4
+  encoder_layers: 2
+  decoder_layers: 2
+  dropout: 0.0
+  kmeans_iters: 20
+  ema_decay: 0.99
+  commitment_cost: 0.25
+  dead_code_threshold: 0.1
+  revival_warmup_steps: 100
+  revival_interval: 50
+  revival_stop_after_steps: 1500
+  max_revivals_per_event: 8
+architectures:
+  waveform8:
+    width: 128
+    latent_dim: 64
+    waveform_io: true
+    local_width: 32
+    sum_weight: 0.5
+    derivative_weight: 0.1
+    internal_steps: 8
+    sample_strides:
+    - 5
+    - 2
+    - 5
+    kernel_strides:
+    - 5
+    - 4
+    - 5
+tasks:
+- modality: eeg
+  architecture: waveform8
+  candidate: continuous
+training:
+  seed: 17
+  warmup_steps: 1000
+  total_steps: 10000
+  batch_size: 64
+  learning_rate: 0.0003
+  final_learning_rate: 3.0e-05
+  decay_start_step: 4000
+  learning_rate_schedule: constant_then_cosine_on_absolute_10000_step_clock
+  weight_decay: 0.0001
+  gradient_clip: 5.0
+  checkpoint_every: 500
+  monitor_examples: 512
+  monitoring: fixed_training_draws_seed_8017_not_validation_selection
+  warmup_sharing: one_per_modality_architecture_same_weights_and_exposure_for_both_candidates
+  optimizer_at_branch: reset_for_both_continuous_and_quantized_continuations
+  initialization: exact_G0_one_crop_position_per_training_record_encode_in_batches_then_initialize_once
+  stopping: 'single seed17 EEG continuous arm: own 1000 updates plus 9000 continuation;
+    no automatic hard arm'
+evaluation:
+  steps:
+  - 4000
+  - 7000
+  - 10000
+  batch_size: 64
+  roles:
+  - train
+  - validation
+  - regression
+  support: all_G0_nonoverlapping_score_inputs_and_original_five_regression_blocks
+  primary: X_S_O_and_color_equal_then_position_window_record_subject_dataset_equal_NMSE
+  secondary: REFED X 13-30 and 30-45 Hz signed log power ratios and distance to zero;
+    all original EEG diagnostics
+  checkpoint_selection: lowest_complete_validation_macro_NMSE_earliest_step_on_exact_tie
+  baseline: retained matched G1 EEG waveform64 continuous at 10000 steps
+  null_hypothesis: no joint full-panel reconstruction and REFED high-band fidelity
+    gain
+  failed_models: retain single planned arm and failed status
+  fixed_examples: first_validation_parent_per_dataset_first_middle_last_available_position_plus_all_regression_inputs
+  budget_rule: fixed matched final 10000 steps
+  integer_replay_check: disabled_by_user
+resources:
+  devices:
+  - cuda:0
+  - cuda:1
+  workers_per_device_candidates:
+  - 1
+  benchmark_steps: 40
+  benchmark_evaluation_examples: 256
+  benchmark_tasks:
+  - eeg_waveform8
+  - eeg_waveform8
+  torch_threads: 2
+  numerical_threads: 1
+  mmap_parent_cache: 256
+  gpu_memory_limit_gib: 4
+  supervisor_memory_gib: 96
+  supervisor: user_systemd_linger
+  visible_gpu_uuids:
+  - GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7
+  - GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735
+e1:
+  baseline:
+    run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g1_v2
+    contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v1.yaml
+    architecture: waveform
+  decision_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_d0_d1_h1_v1
+  review: review_20261119_v1/completion_review.json
+  spectrum_bands:
+  - '13_30'
+  - '30_45'
+  comparison: paired exact G0 validation support; compare final 10000-step X-input
+    continuous models; signed differences candidate minus G1
+  joint_direction: lower full-panel macro NMSE and lower absolute REFED X mean log-power-ratio
+    in both bands; descriptive single-seed screen

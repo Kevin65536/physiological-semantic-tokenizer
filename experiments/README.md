@@ -887,6 +887,28 @@ to GPU1; the requested device is retained in the run plan and no other GPU is pi
 `test_dual_component_base_g3.py` checks the main forward path, matched VQ controls,
 hard-only evaluation, immutable external warmup and exact mid-transition recovery.
 
+The [D0/D1/H1 contract](configs/physiology_semantic_tokenizer/dual_component_base_diagnostics_v1.yaml)
+uses the same runner. The `base-d0` stage reads the matched G1 and G4 final evaluations,
+training moments, IDs and checkpoints. It exports REFED subject/position statistics,
+zero and training-mean controls, native-unit Hb errors by dataset, the signed S/O error
+cross term, G4 cap frequencies, and held-out ID examples and shape readouts.
+The readouts compare training-fitted pooled and hierarchically weighted ID templates
+against zero and dataset/position mean shapes on common valid support.
+The figures show deterministic samples of up to 64 complete validation patches per ID.
+The `base-train` stage runs two continuous target-input diagnostics and two
+decoder-only Hb fits. The exact source checkpoint and G0 identities govern H1.
+Use the allowlisted GPU UUIDs in the contract for both the resource pilot and training.
+The [targeted tests](../tests/test_dual_component_base_diagnostics.py) cover branch
+isolation, fixed assignments and EMA, matched decoder initialization, and shape controls.
+
+The [E1 contract](configs/physiology_semantic_tokenizer/dual_component_base_e1_v1.yaml)
+uses `base-train` for one continuous EEG waveform model with eight internal positions
+per two-second anchor. It compares the matched G1 four-position baseline at 10,000
+steps, using full validation NMSE and REFED high-band power ratios. The resource pilot
+uses the two permitted GPUs and selects one for the fresh warmup and continuation.
+[Targeted tests](../tests/test_dual_component_base_e1.py) cover the time grid, kernel
+sizes, matched support and the two-band comparison.
+
 The [TK-STATE-v1 training/acceptance design](../docs/EXPERIMENT_PLAN.md#tk-state-v1)
 starts with the bounded [state pilot contract](configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml)
 in `scripts/run_dual_component_tokenizer.py`: `--stage check`, `--stage synthetic`,
