@@ -1,0 +1,44 @@
+{
+  "schema": "observation_detail_allocation_v1",
+  "experiment_id": "TK-OBS-ALLOCATION-v1",
+  "parent": "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3",
+  "scope": "identical_parent_train_validation_X_and_training_draw_order_no_new_data_no_S_O_no_labels_no_test",
+  "fixed": "parent_seed17_pattern_and_waveform_assignment_dictionaries_all_patch_and_scale_identities",
+  "comparisons": [
+    "adaptive_pattern",
+    "adaptive_blind",
+    "independent_tail",
+    "flat",
+    "full",
+    "blind_full",
+    "legacy_hard"
+  ],
+  "rates": {
+    "eeg": [
+      14,
+      256,
+      512,
+      1024
+    ],
+    "hb": [
+      14,
+      32,
+      64
+    ]
+  },
+  "detail_rule": "both_routed_and_global_scalar_ranges_and_greedy_train_variance_bit_allocation_as_parent_flat",
+  "transmission": "fixed_B_per_two_seconds_per_site_including_four_pattern_bits_no_missing_ID_or_float_side_channel",
+  "fit_selection": "no_assignment_refits_for_adaptive_arms_no_validation_scale_or_task_selection",
+  "controls": "identical_allocation_algorithm_blind_ID_and_independent_tail_ID_not_used_for_decoding_full_rate_flat_has_four_extra_detail_bits",
+  "null_hypothesis": "adaptive_pattern_does_not_improve_the_rate_distortion_tradeoff_over_equal_budget_controls",
+  "selection": "smallest_adaptive_pattern_rate_passing_X_NMSE_le_0.10_centered_cosine_ge_0.80_and_EEG_abs_30_45_dB_le_3_complex_cosine_ge_0.70_else_last_mark_missed",
+  "secondary": "per_dataset_and_subject_deltas_spectrum_and_original_parent_operating_point_reproduction",
+  "stability": "frozen_three_seed_pattern_stability_in_parent_no_repetition_of_unchanged_event_classification_scores",
+  "resources": {
+    "workers": 2,
+    "numerical_threads": 1,
+    "memory_limit_gib": 20,
+    "supervisor": "user_systemd_linger"
+  },
+  "stopping": "seven_fixed_cells_report_all_results_and_no_further_grid_expansion_on_this_panel"
+}

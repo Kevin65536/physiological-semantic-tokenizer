@@ -93,6 +93,15 @@ measured result exists.
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
 
+<a id="tk-obs-factor-v1"></a>
+## TK-OBS-FACTOR-v1：分开检验观测模式与波形保真（2026-11-20）
+
+这是独立的探索基线，并非旧 S/O teacher 资格的下一阶段。[合同](../experiments/configs/physiology_semantic_tokenizer/factorized_observation_v1.yaml)取消了“一个两秒单码同时表达生理分量并恢复精确波形”的要求。EEG 以相对频谱、Hb 以两色团的水平与斜率学习一个局部 4-bit 词；可选整数细节负责相位、幅度与快速变化。不给解码器当前窗口的实值统计。只读 G0 训练与开发验证观测；不重新拟合 teacher，不打开测试或受保护信号。
+
+同一批完整观测比较全码率平铺变换、同 K 盲波形路由、旧 14-bit 双 K128 及无界连续模型。重建按 X 单独评分，不和旧 X/S/O 宏分数混比；预先设定工程工作点，任务标签不用于选率。另检验局部和下一片属性在库/位置/幅值背景上的增益、三个训练种子的分配一致性，以及冻结整数 ID 能否在留出被试上读出 Single-Trial 的真实心算/基线试次。属性不等于已发现的生理状态；强对照或下游结果不利也保留。
+
+**同一开发面板的定位补充。** [TK-OBS-ALLOCATION-v1](../experiments/configs/physiology_semantic_tokenizer/observation_detail_allocation_v1.yaml)固定上面 4-bit 模式词，以相同的训练方差逐系数分配方法比较模式条件、盲波形条件、携带 ID 但忽略它的压缩器，以及把所有位数用于波形的 flat。逐被试重放父运行后才准入；补充扫描含一个标明为扩展的 EEG 高位率。将 30–45 Hz 复谱余弦与功率偏差分开，保留 EEG 绝对偏差未过线时的回退标志。观察到小振幅片可能受固定步长影响后，另作一次[仅 EEG 的固定原预算增益/形状消融](../experiments/configs/physiology_semantic_tokenizer/observation_gain_shape_v1.yaml)；不更改历史阈值，也不把再次使用的验证人群称为独立确认。
+
 <a id="tk-base-v1"></a>
 ## TK-BASE-v1：基础 tokenizer 定版实验组（2026-11-17）
 

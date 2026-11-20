@@ -1,0 +1,552 @@
+{
+  "schema": "observation_tokenizer_development_decision_v1",
+  "status": "offline_engineering_baseline_only",
+  "scientific_scope": "Four already-examined public datasets; no test or protected evaluation. IDs describe observations; gain/shape uses these IDs without changing them. Not prospective zero-shot, source separation, task superiority or causal validation.",
+  "selected": {
+    "eeg": {
+      "bit_rate_per_2s": 512,
+      "pattern_only_bits": 4,
+      "macro": {
+        "x_nmse": 0.0332675727246405,
+        "centered_cosine": 0.9636403917050194,
+        "band_30_45_db": -1.149588051731829,
+        "band_30_45_cosine": 0.8094738387663165
+      },
+      "datasets": {
+        "eeg_fnirs_single_trial": {
+          "x_nmse": 0.024217523628712,
+          "centered_cosine": 0.9568257578381596,
+          "band_30_45_db": -0.7844149198846679,
+          "band_30_45_cosine": 0.7954056634959475
+        },
+        "refed": {
+          "x_nmse": 0.0901857482401542,
+          "centered_cosine": 0.9656615998957272,
+          "band_30_45_db": -1.6075388892496554,
+          "band_30_45_cosine": 0.8467125129995753
+        },
+        "simultaneous_eeg_nirs": {
+          "x_nmse": 0.0090737298375865,
+          "centered_cosine": 0.9664183020764692,
+          "band_30_45_db": -0.7074788482772709,
+          "band_30_45_cosine": 0.8025905158203921
+        },
+        "visual_cognitive_motivation": {
+          "x_nmse": 0.0095932891921095,
+          "centered_cosine": 0.9656559070097216,
+          "band_30_45_db": -1.4989195495157224,
+          "band_30_45_cosine": 0.793186662749351
+        }
+      },
+      "met_development_screen": true
+    },
+    "hb": {
+      "bit_rate_per_2s": 32,
+      "pattern_only_bits": 4,
+      "macro": {
+        "x_nmse": 0.0041203919730547,
+        "centered_cosine": 0.8734255893336432,
+        "level_nmse": 0.0028227449552711,
+        "shape_nmse": 0.0012976470177836,
+        "hbo_nmse": 0.0010371966232476,
+        "hbr_nmse": 0.0072035873228619
+      },
+      "datasets": {
+        "eeg_fnirs_single_trial": {
+          "x_nmse": 0.007179148611692,
+          "centered_cosine": 0.9108953570924532,
+          "level_nmse": 0.0059366715766092,
+          "shape_nmse": 0.0012424770350827,
+          "hbo_nmse": 0.0018789150818843,
+          "hbr_nmse": 0.0124793821414996
+        },
+        "refed": {
+          "x_nmse": 0.0002053143602859,
+          "centered_cosine": 0.805155368067677,
+          "level_nmse": 6.682178369445012e-05,
+          "shape_nmse": 0.0001384925765914,
+          "hbo_nmse": 0.0001782744698616,
+          "hbr_nmse": 0.0002323542507102
+        },
+        "simultaneous_eeg_nirs": {
+          "x_nmse": 0.0044417484250664,
+          "centered_cosine": 0.9053775023838944,
+          "level_nmse": 0.0012468028357267,
+          "shape_nmse": 0.0031949455893396,
+          "hbo_nmse": 0.0004121851188019,
+          "hbr_nmse": 0.0084713117313309
+        },
+        "visual_cognitive_motivation": {
+          "x_nmse": 0.0046553564951747,
+          "centered_cosine": 0.8722741297905485,
+          "level_nmse": 0.0040406836250542,
+          "shape_nmse": 0.0006146728701204,
+          "hbo_nmse": 0.0016794118224425,
+          "hbr_nmse": 0.0076313011679068
+        }
+      },
+      "met_development_screen": true
+    }
+  },
+  "subjects": {
+    "reconstruction": [
+      {
+        "modality": "eeg",
+        "split": "train",
+        "windows_sites": 948,
+        "available_patches": 13768,
+        "excluded_patches": 452,
+        "subjects": 60,
+        "records": 164
+      },
+      {
+        "modality": "eeg",
+        "split": "validation",
+        "windows_sites": 298,
+        "available_patches": 4322,
+        "excluded_patches": 148,
+        "subjects": 20,
+        "records": 54
+      },
+      {
+        "modality": "hb",
+        "split": "train",
+        "windows_sites": 948,
+        "available_patches": 13882,
+        "excluded_patches": 338,
+        "subjects": 60,
+        "records": 164
+      },
+      {
+        "modality": "hb",
+        "split": "validation",
+        "windows_sites": 298,
+        "available_patches": 4358,
+        "excluded_patches": 112,
+        "subjects": 20,
+        "records": 54
+      }
+    ],
+    "task": {
+      "train": {
+        "planned": 1020,
+        "retained": 727,
+        "rejected": 293,
+        "rejection_reasons": {
+          "no_single_registered_G0_score_crop_on_both_clocks": 288,
+          "incomplete_observed_or_source_scoring_support": 5
+        }
+      },
+      "validation": {
+        "planned": 360,
+        "retained": 264,
+        "rejected": 96,
+        "rejection_reasons": {
+          "no_single_registered_G0_score_crop_on_both_clocks": 95,
+          "incomplete_observed_or_source_scoring_support": 1
+        }
+      }
+    }
+  },
+  "attributes": {
+    "eeg": {
+      "gain_over_nuisance_by_lag": {
+        "0": {
+          "pattern_gain": 0.6009235768398054,
+          "wave_kmeans_gain": 0.0014584154696702,
+          "rolled_pattern_gain": -0.2729023650315549
+        },
+        "1": {
+          "pattern_gain": 0.1314755446722705,
+          "wave_kmeans_gain": -0.0101877396672891,
+          "rolled_pattern_gain": 0.1014414512588565
+        }
+      },
+      "validation_occupied_ids": 16,
+      "pairwise_three_seed_dataset_ARI_range": [
+        0.4592439339298198,
+        0.9368716287497529
+      ]
+    },
+    "hb": {
+      "gain_over_nuisance_by_lag": {
+        "0": {
+          "pattern_gain": 0.5359264595105135,
+          "wave_kmeans_gain": 0.0790998692132688,
+          "rolled_pattern_gain": -0.5320077939390873
+        },
+        "1": {
+          "pattern_gain": 0.0658128314859601,
+          "wave_kmeans_gain": 0.0033132575375504,
+          "rolled_pattern_gain": -0.0635105224784049
+        }
+      },
+      "validation_occupied_ids": 14,
+      "pairwise_three_seed_dataset_ARI_range": [
+        0.3585806599408373,
+        0.8729470119399637
+      ]
+    }
+  },
+  "task": {
+    "training_majority": 0.5,
+    "pattern_ids/eeg": 0.5490338164251208,
+    "pattern_ids_shuffled_train_labels/eeg": 0.5055586925152142,
+    "pattern_ids/hb": 0.5101951188907711,
+    "pattern_ids_shuffled_train_labels/hb": 0.4694001348892653,
+    "pattern_ids/fusion": 0.524221249764728,
+    "pattern_ids_shuffled_train_labels/fusion": 0.4883642323859716,
+    "continuous_attributes/eeg": 0.5471583066691762,
+    "continuous_attributes/hb": 0.4924171842650103,
+    "continuous_attributes/fusion": 0.5120467093293181,
+    "waveform_ids_same_k/eeg": 0.5609970042035258,
+    "waveform_ids_same_k/hb": 0.5326584948867558,
+    "waveform_ids_same_k/fusion": 0.5513226206160989,
+    "flat_to_attributes/eeg": 0.489036718112805,
+    "flat_to_attributes/hb": 0.45384630466152204,
+    "flat_to_attributes/fusion": 0.4870643547273981,
+    "flat_to_pattern_ids/eeg": 0.5253215383650166,
+    "flat_to_pattern_ids/hb": 0.5032773386034255,
+    "flat_to_pattern_ids/fusion": 0.5533922297509254
+  },
+  "same_rate_selected_reconstruction_contrasts": {
+    "eeg": [
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "x_nmse",
+        "reference": "adaptive_pattern",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": -0.010331579326099,
+        "ci95_low": -0.01661280916727,
+        "ci95_high": -0.001812161519313,
+        "n_subjects": 20,
+        "n_lower": 19
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "centered_cosine",
+        "reference": "adaptive_pattern",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": 0.09359848423597,
+        "ci95_low": 0.079307654930563,
+        "ci95_high": 0.108610629641449,
+        "n_subjects": 20,
+        "n_lower": 2
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "band_30_45_db",
+        "reference": "adaptive_pattern",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": -4.893085875604138,
+        "ci95_low": -5.798214565958596,
+        "ci95_high": -3.918119941291976,
+        "n_subjects": 20,
+        "n_lower": 13
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "band_30_45_cosine",
+        "reference": "adaptive_pattern",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": 0.022690190891192,
+        "ci95_low": 0.014096243402886,
+        "ci95_high": 0.031081797805347,
+        "n_subjects": 20,
+        "n_lower": 8
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "x_nmse",
+        "reference": "flat",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": -0.030157521574856,
+        "ci95_low": -0.040803288325766,
+        "ci95_high": -0.016138950106094,
+        "n_subjects": 20,
+        "n_lower": 19
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "centered_cosine",
+        "reference": "flat",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": 0.131994076416148,
+        "ci95_low": 0.1136478208018,
+        "ci95_high": 0.149121070240234,
+        "n_subjects": 20,
+        "n_lower": 0
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "band_30_45_db",
+        "reference": "flat",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": -7.691169328892762,
+        "ci95_low": -8.487393039595743,
+        "ci95_high": -6.811794392098192,
+        "n_subjects": 20,
+        "n_lower": 16
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "band_30_45_cosine",
+        "reference": "flat",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": -0.008993602267648,
+        "ci95_low": -0.017184938712025,
+        "ci95_high": -0.000408021912316,
+        "n_subjects": 20,
+        "n_lower": 9
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "x_nmse",
+        "reference": "gain_independent",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": -0.008336937517945,
+        "ci95_low": -0.012174294807121,
+        "ci95_high": -0.004951824341428,
+        "n_subjects": 20,
+        "n_lower": 20
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "centered_cosine",
+        "reference": "gain_independent",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": 0.008354017893363,
+        "ci95_low": 0.006595321220795,
+        "ci95_high": 0.010171383165674,
+        "n_subjects": 20,
+        "n_lower": 1
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "band_30_45_db",
+        "reference": "gain_independent",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": -1.295529719918989,
+        "ci95_low": -1.771826191072651,
+        "ci95_high": -0.795849162356439,
+        "n_subjects": 20,
+        "n_lower": 16
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "band_30_45_cosine",
+        "reference": "gain_independent",
+        "candidate": "gain_conditional",
+        "bits_per_patch": 512,
+        "delta": 0.006666925846773,
+        "ci95_low": 0.002634257083975,
+        "ci95_high": 0.011298691298058,
+        "n_subjects": 20,
+        "n_lower": 8
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "x_nmse",
+        "reference": "independent_tail",
+        "candidate": "gain_independent",
+        "bits_per_patch": 512,
+        "delta": -0.022710654961239,
+        "ci95_low": -0.033073290114651,
+        "ci95_high": -0.00912388952012,
+        "n_subjects": 20,
+        "n_lower": 19
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "centered_cosine",
+        "reference": "independent_tail",
+        "candidate": "gain_independent",
+        "bits_per_patch": 512,
+        "delta": 0.124599003076474,
+        "ci95_low": 0.105913431656168,
+        "ci95_high": 0.141739406768993,
+        "n_subjects": 20,
+        "n_lower": 0
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "band_30_45_db",
+        "reference": "independent_tail",
+        "candidate": "gain_independent",
+        "bits_per_patch": 512,
+        "delta": -6.395727408159855,
+        "ci95_low": -7.210227210310945,
+        "ci95_high": -5.442321395644059,
+        "n_subjects": 20,
+        "n_lower": 15
+      },
+      {
+        "dataset": "",
+        "level": "macro",
+        "metric": "band_30_45_cosine",
+        "reference": "independent_tail",
+        "candidate": "gain_independent",
+        "bits_per_patch": 512,
+        "delta": -0.015452147820875,
+        "ci95_low": -0.023900078202065,
+        "ci95_high": -0.006869665606351,
+        "n_subjects": 20,
+        "n_lower": 9
+      }
+    ],
+    "hb": [
+      {
+        "metric": "x_nmse",
+        "reference": [
+          "legacy_hard",
+          14
+        ],
+        "candidate": [
+          "adaptive_pattern",
+          14
+        ],
+        "candidate_minus_reference": 0.024334439662792896,
+        "ci95": [
+          0.013679004115081859,
+          0.03626817749084708
+        ],
+        "n_subjects": 20,
+        "n_lower": 3
+      },
+      {
+        "metric": "x_nmse",
+        "reference": [
+          "flat",
+          32
+        ],
+        "candidate": [
+          "adaptive_pattern",
+          32
+        ],
+        "candidate_minus_reference": -0.0016781364743115592,
+        "ci95": [
+          -0.0041550994542396595,
+          0.001469702946862069
+        ],
+        "n_subjects": 20,
+        "n_lower": 18
+      },
+      {
+        "metric": "x_nmse",
+        "reference": [
+          "adaptive_blind",
+          32
+        ],
+        "candidate": [
+          "adaptive_pattern",
+          32
+        ],
+        "candidate_minus_reference": -0.0013437685425144552,
+        "ci95": [
+          -0.002200023565475653,
+          -0.0005511698205702313
+        ],
+        "n_subjects": 20,
+        "n_lower": 18
+      },
+      {
+        "metric": "x_nmse",
+        "reference": [
+          "independent_tail",
+          32
+        ],
+        "candidate": [
+          "adaptive_pattern",
+          32
+        ],
+        "candidate_minus_reference": -0.007326256249654521,
+        "ci95": [
+          -0.00978552636773383,
+          -0.0041865033132596095
+        ],
+        "n_subjects": 20,
+        "n_lower": 18
+      },
+      {
+        "metric": "x_nmse",
+        "reference": [
+          "legacy_hard",
+          14
+        ],
+        "candidate": [
+          "adaptive_pattern",
+          32
+        ],
+        "candidate_minus_reference": -0.009985960523991389,
+        "ci95": [
+          -0.013521694872565873,
+          -0.007038975593434559
+        ],
+        "n_subjects": 20,
+        "n_lower": 20
+      }
+    ]
+  },
+  "frozen_ID_checks": {
+    "n_train": 13768,
+    "n_validation": 4322,
+    "mismatches": 0,
+    "not_refitted": true
+  },
+  "single_trial_same_rate_power": {
+    "signed_db": -0.7844149198846679,
+    "no_gain_signed_db": 13.870228150665097,
+    "complex_cosine": 0.7954056634959475,
+    "no_gain_complex_cosine": 0.6922043951480618,
+    "delta_abs_signed_db": -13.08581323078043,
+    "meets_local_band_checks_and_improves_abs_bias": true
+  },
+  "limits": [
+    "The legacy hard codec remains the low-14-bit X comparator; it uses 30 s context, while the new encoder sees one 2 s patch. The final operating points require more bits.",
+    "Study-defined waveforms are downstream of G0 preprocessing, including subject-local Hb calibration; not a raw prospective deployment.",
+    "Current-patch autocorrelation and Hb endpoint readouts are related mathematically to the named pattern features. Future patch/held-out task do not demonstrate a biological cause.",
+    "A six-subject classification comparison and development model selection do not establish generalizable task improvement; bootstrap intervals do not account for model selection or multiplicity."
+  ],
+  "sources": [
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3/summary.json",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3/attributes.csv",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3/atlas.csv",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3/paired_task_contrasts_v1.json",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_allocation_v1/summary.json",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_allocation_v1/allocation.csv",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_gain_v1/summary.json",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_gain_v1/gain_shape.csv",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_gain_v1/band_audit.csv",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_gain_v1/rms_bins.csv",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_gain_v1/paired_contrasts.csv",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_release_v1/release.json",
+    "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_release_v1/heldout_replay.json"
+  ],
+  "bundle_identity_sha256": "cb9ec5e58262aec2112dc4b613657750901d32e7fab4293f5648daa628731e73"
+}

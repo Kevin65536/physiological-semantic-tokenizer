@@ -1,0 +1,134 @@
+{
+  "schema": "observation_factor_screen_v1",
+  "experiment_id": "TK-OBS-FACTOR-v1",
+  "suite": "observation_factorization",
+  "data": {
+    "g0": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g0_v2",
+    "task_cache": "data/cache/physiology_downstream_v2",
+    "splits": [
+      "train",
+      "validation"
+    ],
+    "raw_reads": false,
+    "test_access": "forbidden",
+    "protected_access": "forbidden",
+    "targets": "observed_X_only_not_teacher_components",
+    "normalization": "frozen_G0_training_dataset_position_X_scale_no_window_centering_joint_Hb_scale",
+    "sample": "paired_G0_score_30s_crops_nonoverlapping_within_record_excluding_original_regression_support",
+    "scoring": "within_G0_time_support_and_training_scaled_sites_use_observation_complete_30s_then_complete_source_scored_2s_no_teacher_mask",
+    "panel": {
+      "subjects_per_split_dataset": 64,
+      "records_per_subject": 3,
+      "windows_per_record": 3,
+      "positions_per_window": 2
+    },
+    "smoke": {
+      "subjects_per_split_dataset": 2,
+      "records_per_subject": 1,
+      "windows_per_record": 1,
+      "positions_per_window": 1
+    },
+    "panel_seed": 29
+  },
+  "model": {
+    "k": 16,
+    "patch_seconds": 2,
+    "shapes": {
+      "eeg": [
+        1,
+        400
+      ],
+      "hb": [
+        2,
+        20
+      ]
+    },
+    "seeds": [
+      17,
+      73,
+      127
+    ],
+    "training_draws": 16384,
+    "training_draw_seed": 93,
+    "training_draw": "with_replacement_equal_dataset_subject_record_window_position_then_uniform_complete_patch",
+    "rates": {
+      "eeg": [
+        [
+          2,
+          5
+        ],
+        [
+          15,
+          4
+        ],
+        [
+          31,
+          4
+        ],
+        [
+          63,
+          4
+        ],
+        [
+          127,
+          4
+        ]
+      ],
+      "hb": [
+        [
+          2,
+          5
+        ],
+        [
+          7,
+          4
+        ],
+        [
+          15,
+          4
+        ]
+      ]
+    },
+    "stability": "two_independent_additional_fit_seeds_same_balanced_draw_and_held_out_patches",
+    "downstream_interface": "semantic_ID_only_or_semantic_ID_plus_optional_integer_detail_never_float_side_channel"
+  },
+  "controls": [
+    "same_bit_budget_flat_integer_transform_codec_with_freed_bits_reallocated",
+    "blind_waveform_K16_routing_same_residual_architecture_and_bit_budget",
+    "prototype_only_no_details",
+    "fixed_detail_wrong_pattern_within_window_rotation_routing_dependence_not_semantics",
+    "historical_X_only_dual_K128_14_bits_EEG_waveform8_and_Hb_G1_on_identical_validation_X",
+    "historical_continuous_X_reference_unmetered_not_a_codec"
+  ],
+  "endpoints": {
+    "primary": "validation_X_MSE_divided_by_frozen_per_position_color_training_variance_then_equal_color_patch_site_window_record_subject_dataset",
+    "secondary": "level_and_shape_NMSE_centered_cosine_EEG_2s_Hann_band_gain_and_complex_cosine",
+    "clarity": "train_fitted_ID_increment_over_dataset_site_and_RMS_background_for_observed_attributes_EEG_autocorrelations_or_Hb_endpoint_changes_current_and_next_patch",
+    "nuisance": "train_only_additive_onehot_site_RMS_bin_site_by_bin_logRMS_quadratic_and_Hb_signed_levels_plus_ridge_alpha_1",
+    "null_hypothesis": "no_benefit_over_rate_matched_flat_for_distortion_or_over_background_and_wrong_ID_for_readout",
+    "atlas": "actual_observation_attribute_conditional_quantiles_and_support_train_validation_separately",
+    "downstream": "frozen_ID_only_vs_unquantized_observation_attributes_and_within_record_label_permutation_single_trial_mental_arithmetic_on_event_time_G0_X",
+    "claims": "offline_observation_patterns_only_no_source_separation_causality_or_protected_generalization"
+  },
+  "selection": {
+    "primary_seed": 17,
+    "max_macro_x_nmse": 0.1,
+    "min_macro_centered_cosine": 0.8,
+    "eeg_max_abs_macro_30_45_db": 3.0,
+    "rule": "smallest_full_rate_passing_all_applicable_engineering_thresholds_else_last_rate_mark_missed",
+    "task_scores_for_selection": false,
+    "stopping": "all_eight_fixed_rates_and_controls_then_two_seed_stability_and_one_development_task_probe_no_test_tuning"
+  },
+  "resources": {
+    "supervisor": "user_systemd_linger",
+    "fit_parallelism": "isolated_processes_one_BLAS_OpenMP_thread_each",
+    "numerical_threads": 1,
+    "worker_candidates": [
+      1,
+      2,
+      4
+    ],
+    "memory_limit_gib": 20,
+    "device": "cpu"
+  }
+}

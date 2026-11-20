@@ -1,0 +1,24 @@
+schema: observation_gain_shape_v1
+experiment_id: TK-OBS-GAIN-SHAPE-v1
+parent: experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3
+allocation: experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_allocation_v1
+scope: exact_previously_examined_development_panel_train_validation_X_only_no_test_protected_raw_teacher_or_task
+panel: public_replay_panel_checks_parent_order_valid_bits_G0_scale_and_native_time; retain_EEG_only
+encoder: one_current_complete_2s_EEG_patch_in_frozen_G0_X_coordinates; no_context_or_validation_fitting
+model: {modality: eeg, patterns: 16, routing: pattern, seed: 17, training_draw_seed: 93, training_draws: 16384}
+rates: [256, 512, 1024]
+rate_units: fixed_bits_per_2s_EEG_position_excluding_shared_model_and_fixed_framing
+payload: {pattern_bits: 4, level_bits: 8, gain_bits: 6, detail: remainder_B_minus_18_no_real_side_channel}
+methods: [gain_conditional, gain_independent, adaptive_pattern, independent_tail, flat]
+null_hypothesis: equal_B_gain_shape_does_not_improve_over_no_gain_conditional_or_over_flat; compare_ID_conditional_and_ID_attached_independent
+operating_point: {x_nmse_max: 0.10, centered_cosine_min: 0.80, abs_db_30_45_max: 3.0, complex_cosine_30_45_min: 0.70}
+selection: smallest_gain_conditional_rate_passing_all_four_macro_checks_or_largest_flagged_as_missed
+# This does not change the macro operating-point rule. Test the failure site separately.
+single_trial_gate: at_same_B_abs_signed_dataset_db_within_3_and_strictly_closer_to_zero_than_no_gain_and_complex_cosine_ge_0.70
+rms_bins: {quantity: current_observed_X_demeaned_AC_RMS, unit: frozen_G0_training_X_scale, training: original_balanced_draw, quantiles: [0.25, 0.75], intervals: 'low < q25, mid [q25,q75), high >= q75'}
+score: owner_hierarchy_and_Hann_complex_rFFT_on_demeaned_2s_EEG; ratio_per_patch_then_dB_then_equal_position_window_record_subject_dataset
+band_audit: signed_dataset_mean_db_plus_between_subject_sample_SD; four_dataset_sample_SD_and_max_abs_dataset_mean_no_cancellation
+paired: {unit: subject_within_dataset, bootstrap: 4000, seed: 4801, interval: percentile_95_conditional_on_frozen_models_uncorrected}
+replay_tolerance: {atol: 1.0e-8, rtol: 1.0e-8}
+resources: {fit_processes: 2, threads_per_process: 1, supervisor: user_systemd_linger}
+stopping: all_three_fixed_budgets_then_one_selected_model_and_first_common_validation_example_per_dataset_no_followup_grid_or_task_retest

@@ -39,6 +39,14 @@ for commands. Shared computations belong in `src/`; data/replay roots are passed
 at their read boundaries rather than assigned to another runner's globals.
 Recorded command paths and frozen source snapshots retain their identities.
 
+## Optional observation-token interface (TK-OBS-FACTOR-v1)
+
+The [observation codec](../src/tokenizers/factorized_observation.py) accepts complete, frozen-training-scale 2 s blocks `[N,1,400]` (EEG) or `[N,2,20]` (HbO followed by HbR). Each location has its own clock and name; equally numbered IDs do not correspond across modalities. In `prototype` mode a consumer receives one K16 ID, not a phase-accurate EEG signal. EEG assignment uses relative, non-DC Fourier band energies; Hb assignment uses two signed levels and two signed slopes. The training dictionary can supply an attribute centroid, while the separate empirical atlas shows within-ID variation. In `full` mode the same ID routes bounded signed-transform residual symbols. The decoder consumes only these integers and the pre-shared frozen model. No test calibration or per-block real-valued side channel is added by the codec. `pack`/`unpack` account for the complete hard payload with only end-of-stream byte padding; existing upstream scales, clocks and channel metadata remain out of band.
+
+The matched [adaptive detail implementation](../src/tokenizers/adaptive_observation_detail.py) allocates a fixed budget per item but different widths per transform coefficient. The [gain/shape EEG implementation](../src/tokenizers/gain_shape_observation.py) keeps the identical ID on the original input, charges eight bits for the patch mean and six for the AC RMS (never a free per-item floating-point scale), then codes a normalized shape. Its `independent` control transmits the ID but reconstructs shape without routing on it. The [inference interface](../src/tokenizers/observation_baseline.py) loads the two selected, trusted frozen models, offers an ID-only packet and a full packet, and has no optimizer or dataset discovery.
+
+A downstream sequence module can take the **ID stream alone**, preserving site, patch time, and masks; the detail stream need only be fetched for reconstruction. Do not concatenate the EEG and Hb clocks or treat the IDs as validated neural/source states. The [versioned screen](EXPERIMENT_PLAN.md#tk-obs-factor-v1) separates this interface from historical S/O qualification and from the official downstream benchmark.
+
 ## Tak hemodynamic baseline
 
 The model choice is explained in

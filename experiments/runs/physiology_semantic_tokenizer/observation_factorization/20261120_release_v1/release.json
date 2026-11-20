@@ -1,0 +1,57 @@
+{
+  "created": "2026-11-20T12:55:20.539251+00:00",
+  "status": "verified",
+  "archive": "observation_baseline.zip",
+  "sha256": "cb9ec5e58262aec2112dc4b613657750901d32e7fab4293f5648daa628731e73",
+  "size_bytes": 313682,
+  "portable_demo": {
+    "status": "passed",
+    "synthetic_only": true,
+    "payload": {
+      "eeg": {
+        "ids": {
+          "bits_per_item": 4,
+          "batch_bytes": 4
+        },
+        "full": {
+          "bits_per_item": 512,
+          "batch_bytes": 448
+        },
+        "n_items": 7
+      },
+      "hb": {
+        "ids": {
+          "bits_per_item": 4,
+          "batch_bytes": 4
+        },
+        "full": {
+          "bits_per_item": 32,
+          "batch_bytes": 28
+        },
+        "n_items": 7
+      }
+    }
+  },
+  "modalities": {
+    "eeg": {
+      "router": "models/eeg_router.joblib",
+      "model": "models/eeg_gain_shape.joblib",
+      "mode": "conditional",
+      "pattern_bits_per_patch": 4,
+      "total_bits_per_patch": 512,
+      "passed_development_macro_screen": true,
+      "observed_x_nmse": 0.03326757272464059,
+      "centered_cosine": 0.9636403917050194
+    },
+    "hb": {
+      "router": "models/hb_router.joblib",
+      "model": "models/hb_adaptive.joblib",
+      "mode": "conditional",
+      "pattern_bits_per_patch": 4,
+      "total_bits_per_patch": 32,
+      "passed_development_macro_screen": true,
+      "observed_x_nmse": 0.004120391973054784,
+      "centered_cosine": 0.8734255893336432
+    }
+  }
+}

@@ -44,6 +44,10 @@ in the closest `src/` owner, with data and replay roots passed explicitly.
 
 ## Entrypoint, config and test map
 
+**Matched detail allocation.** [`run_observation_detail_allocation.py`](scripts/run_observation_detail_allocation.py) (`--stage synthetic`, then `screen`) replays the [fixed parent panel and budgets](configs/physiology_semantic_tokenizer/observation_detail_allocation_v1.yaml); [allocation tests](../tests/test_adaptive_observation_detail.py) and [replay tests](../tests/test_observation_allocation_screen.py). Its report separates the same 4-bit observation words from the train-only allocation of the remaining integer bits. The [final EEG gain/shape ablation](scripts/run_observation_gain_shape.py) ([contract](configs/physiology_semantic_tokenizer/observation_gain_shape_v1.yaml), [tests](../tests/test_observation_gain_shape_screen.py)) charges explicitly for the transmitted DC/AC levels at the same three full budgets. The [bundle exporter](scripts/export_observation_baseline.py) makes a portable CPU-only consumer from the frozen selected models, not a training launcher.
+
+**Independent observation-pattern baseline.** [`run_observation_factorization.py`](scripts/run_observation_factorization.py) with the [fixed versioned config](configs/physiology_semantic_tokenizer/factorized_observation_v1.yaml) runs `--stage synthetic`, `smoke`, then `screen` against the same fresh `--output` within `runs/physiology_semantic_tokenizer/observation_factorization/`. It freezes training dictionaries, retains paired rate–distortion and background-controlled attribute tables plus a genuine event readout; it does not modify the stopped or current dual-component launchers. Tests: [`codec`](../tests/test_factorized_observation.py), [`panel`](../tests/test_observation_tokenizer_panel.py), [`legacy replay`](../tests/test_observation_legacy_control.py), [`evaluation`](../tests/test_observation_factor_screen.py), [`task`](../tests/test_observation_task_probe.py).
+
 ### Cached Hb input migration
 
 New measured Hb preparation uses the already bandpassed v5/none cache through

@@ -1,0 +1,27 @@
+{
+  "command": [
+    "systemd-run",
+    "--user",
+    "--unit=obs-factor-alloc-20261120-v1",
+    "--property=MemoryMax=20G",
+    "--working-directory=/SSD_2/pid-mcm-implementation",
+    "/bin/bash",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_allocation_v1/launch.sh"
+  ],
+  "unit": "obs-factor-alloc-20261120-v1.service",
+  "working_directory": "/SSD_2/pid-mcm-implementation",
+  "interpreter": "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+  "time": "2026-11-20T12:42:58.282679+00:00",
+  "parent": "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3",
+  "benchmark": "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3/benchmark.json",
+  "resources": {
+    "n_jobs": 2,
+    "threads": 1,
+    "memory": "20G",
+    "device": "CPU",
+    "reason": "identical bounded train/validation population and transform cost; retain measured 2-process throughput winner"
+  },
+  "log": "process.log",
+  "user_linger": true,
+  "completion": "summary.json"
+}
