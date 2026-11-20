@@ -1,0 +1,77 @@
+{
+  "schema": "observation_word_relations_v1",
+  "experiment_id": "TK-OBS-RELATIONS-v1",
+  "parent_git": "b277a356e9f613063972878a115967dbe018a1c7",
+  "suite": "observation_factorization",
+  "parent": "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3",
+  "release": "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_release_v1",
+  "g0": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g0_v2",
+  "event_cache": "data/cache/physiology_downstream_v2",
+  "splits": [
+    "train",
+    "validation"
+  ],
+  "raw_reads": false,
+  "test_access": "forbidden",
+  "protected_access": "forbidden",
+  "teacher_reads": false,
+  "refit_tokenizer": false,
+  "patch_s": 2,
+  "modalities": {
+    "eeg": [
+      1,
+      400
+    ],
+    "hb": [
+      2,
+      20
+    ]
+  },
+  "k": 16,
+  "payload": "only_frozen_4bit_ID_per_native_position_per_patch_observation_continuous_controls_separate",
+  "expected_validation_cells": {
+    "eeg": 4322,
+    "hb": 4358
+  },
+  "identity": {
+    "parent_panel_sha256": "e1690928641b2642c877c57a8896522e2c95cabd499a6cf6dc3809e34a29a45b",
+    "release_sha256": "cb9ec5e58262aec2112dc4b613657750901d32e7fab4293f5648daa628731e73",
+    "eeg_router_sha256": "873278a67b5573bf3ecd5eaf64802bfcb404d9ac35436b63083ea7072a153cee",
+    "hb_router_sha256": "a2ad899c7c0f69ffaf5312a5d0d2ca7b04cfde6fbf07bcc4ea24e2aa12b4d8f1",
+    "eeg_blind_sha256": "c18c4a9a5768452e9eeb979447f3b5e801d7fd2b2a74affcec8653ad70275cfc",
+    "hb_blind_sha256": "8b02a7a40d80c9c49b2a6639cd663e39b1eff7444c8af8790e6c6e1d12e686ae"
+  },
+  "clocks": "both_native_member_origins_already_applied_in_G0_local_patch_index_is_shared_not_absolute_times_or_sensor_pairs",
+  "coupling_primary_datasets": [
+    "eeg_fnirs_single_trial",
+    "simultaneous_eeg_nirs"
+  ],
+  "coupling_sensitivity": "all_four_datasets_separately_identified_REFED_shared_segment_assumption_and_Visual_probe_specific_anchors",
+  "endpoints": {
+    "synthetic_limits": "same_band_different_frequency_or_phase_and_same_Hb_levels_slopes_opposite_detrended_color_correlation_not_prevalence",
+    "individual_words": "training_supported_semantic_representatives_validation_within_subject_site_common_support_matched_alpha_and_AC_RMS_or_Hb_levels_plus_actual_next_patch_opposition_high_frequency_line_screen",
+    "dynamics_primary": "conditional_next_ID_gain_in_bits_vs_train_site_occupancy_real_minus_exact_same_series_word_bag_order_null",
+    "dynamics_secondary": "conditional_on_switch_no_self_loops_and_training_selected_nonself_edges_heldout_support",
+    "coupling_primary": "six_second_start_to_start_EEG_ID_increment_for_standardized_two_color_Hb_level_change_over_own_history_base_and_strict_past_shift_same_cells",
+    "coupling_secondary": [
+      "four_and_eight_seconds",
+      "future_Hb_ID_Brier",
+      "blind_same_K",
+      "two_continuous_bands",
+      "per_dataset"
+    ],
+    "event_primary": "frozen_frontal_Hb_joint_HbO_rise_HbR_fall_word_occupancy_MA_minus_explicit_BL_subject_session_balanced_marker_plus2_to10_seconds",
+    "event_secondary": "source_X_joint_indicator_and_signed_slope_difference_posterior_EEG_alpha_and_frontal_theta_early_late_windows"
+  },
+  "null_hypothesis": "descriptive_assignments_may_reflect_artifact_or_stability_no_extra_sequence_event_or_crossmodal_information_above_matched_controls",
+  "statistics": "train_fitted_or_fixed_rules_only_validation_within_dataset_subject_level_paired_uncertainty_no_patchwise_pvalues_multiple_secondary_exploratory_no_test_confirmation",
+  "stopping": "one_frozen_panel_one_fixed_event_probe_report_all_estimable_and_unsupported_endpoints_no_tuning_on_results",
+  "resources": {
+    "supervisor": "user_systemd",
+    "io_workers": 4,
+    "outer_processes": 2,
+    "numerical_threads": 1,
+    "use_gpu": false,
+    "memory_max_gib": 12
+  }
+}

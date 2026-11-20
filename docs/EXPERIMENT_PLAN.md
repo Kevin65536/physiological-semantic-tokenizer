@@ -102,6 +102,11 @@ measured result exists.
 
 **同一开发面板的定位补充。** [TK-OBS-ALLOCATION-v1](../experiments/configs/physiology_semantic_tokenizer/observation_detail_allocation_v1.yaml)固定上面 4-bit 模式词，以相同的训练方差逐系数分配方法比较模式条件、盲波形条件、携带 ID 但忽略它的压缩器，以及把所有位数用于波形的 flat。逐被试重放父运行后才准入；补充扫描含一个标明为扩展的 EEG 高位率。将 30–45 Hz 复谱余弦与功率偏差分开，保留 EEG 绝对偏差未过线时的回退标志。观察到小振幅片可能受固定步长影响后，另作一次[仅 EEG 的固定原预算增益/形状消融](../experiments/configs/physiology_semantic_tokenizer/observation_gain_shape_v1.yaml)；不更改历史阈值，也不把再次使用的验证人群称为独立确认。
 
+<a id="tk-obs-relations-v1"></a>
+### TK-OBS-RELATIONS-v1：冻结观测词后的可解释性检验
+
+[独立合同](../experiments/configs/physiology_semantic_tokenizer/observation_relations_v1.yaml)只用已发布的 4-bit 词和既有开发支持；不重训、不读取 teacher 或测试。先按训练选词，在留出被试检验未用于分词的窄峰与下一片双色团方向；把真实词序和同窗同词袋的无序期望比较，另排除自转移。以同步标记库为主要跨模态检验，判断相同时间的 EEG 词能否比同位置 Hb 自身历史和错位 EEG 更好地预估 6 秒后的 Hb；另在真实心算/显式基线试次比较预定词的出现率。所有关系是观察性统计，不是来源、传播路径或干预。
+
 <a id="tk-base-v1"></a>
 ## TK-BASE-v1：基础 tokenizer 定版实验组（2026-11-17）
 

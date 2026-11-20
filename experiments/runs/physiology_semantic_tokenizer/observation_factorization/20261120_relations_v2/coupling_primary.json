@@ -1,0 +1,53 @@
+{
+  "status": "ok",
+  "protocol": {
+    "patch_s": 2,
+    "k": 16,
+    "primary_lag_s": 6,
+    "primary_endpoint": "hb_delta",
+    "lead": "target patch start minus visible patch start; at 6s the post-origin gap is 4s",
+    "association_only": true,
+    "colocation_assumed": false,
+    "native_clock_audit": "caller required",
+    "sites": "per modality/dataset: <=2 by training patch coverage; tie by name",
+    "base": "dataset, Hb site, EEG site mask, crop phase/phase^2, log EEG RMS per site at t and t-h; target-site Hb word, levels, slopes, log RMS at t/t-1/t-2",
+    "shifted": "same histogram moved from t to strictly past t-h, fit on wrong-time train inputs",
+    "continuous": "measured current alpha/beta mean and SD over the same EEG sites",
+    "delta": "target-site signed mean at t+h minus mean at t; train variance per color/lag",
+    "word": "future Hb pattern, independent ridge one-hot target, simplex projection, summed K-way Brier",
+    "effects": "pattern fit: unit EEG histogram minus weighted train mixture, base fixed, raw delta units",
+    "gain": "reference_loss - candidate_loss; positive favors candidate",
+    "ridge_penalty": 0.01,
+    "target_variance_floor": 1e-12,
+    "eeg_bits_per_site_patch": 4,
+    "rate_scope": "incremental EEG word bits per distinct origin x contributing EEG sites, not per Hb target; do not sum horizons. Common features and physical EEG attributes are side information, not a zero-rate end-to-end codec.",
+    "averaging": "equal sites/origin, origins/crop, crops/record, records/subject, subjects/dataset, datasets",
+    "ci": "paired 95% percentile; macro resamples datasets then subjects within each drawn copy; per-dataset resamples subjects; no window/position replicates or subject-level CI",
+    "bootstrap_draws": 2000,
+    "bootstrap_seed_base": 6803,
+    "ci_conditional_on": "frozen models and scored validation cohort",
+    "multiplicity": "6s joint delta prespecified: all three paired lower limits >0; other endpoints/contrasts descriptive"
+  },
+  "primary": {
+    "status": "not_demonstrated",
+    "references": [
+      "base",
+      "shifted",
+      "blind"
+    ],
+    "ci_by_reference": {
+      "base": [
+        -0.02048675412106105,
+        -0.004925560474430378
+      ],
+      "shifted": [
+        -0.01871473360620877,
+        0.0005199686026955189
+      ],
+      "blind": [
+        -0.013890519862015595,
+        0.0043945456703258405
+      ]
+    }
+  }
+}

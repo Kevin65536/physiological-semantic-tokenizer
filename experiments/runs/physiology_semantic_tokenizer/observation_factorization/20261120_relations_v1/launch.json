@@ -1,0 +1,53 @@
+{
+  "unit": "obs-physio-relations-20261120-v1.service",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--unit=obs-physio-relations-20261120-v1",
+    "--property=MemoryMax=12G",
+    "--working-directory=/SSD_2/pid-mcm-implementation",
+    "/bin/bash",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_relations_v1/launch.sh"
+  ],
+  "python": "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+  "working_directory": "/SSD_2/pid-mcm-implementation",
+  "script": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_relations_v1/launch.sh",
+  "created": "2026-11-20T14:12:23.955085+00:00",
+  "linger": "Linger=yes",
+  "clock": "Asia/Hong_Kong, evidence timestamps UTC",
+  "git_base": "b277a356e9f613063972878a115967dbe018a1c7",
+  "resources": {
+    "available_affinity": 104,
+    "physical_cores": 52,
+    "service_quota": "no CPU quota; hardware accelerator not required",
+    "free_disk_gib": 557,
+    "free_memory": "220Gi",
+    "concurrent": [
+      "tk-eeg-band-de-20261120-v1.service; untouched"
+    ],
+    "parent_benchmark": "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v3/benchmark.json",
+    "parent_measured_fit_throughput": {
+      "1": {
+        "seconds": 0.3081617059651762,
+        "fits_per_second": 25.96039626320098
+      },
+      "2": {
+        "seconds": 0.29590216709766537,
+        "fits_per_second": 27.03596286052046
+      },
+      "4": {
+        "seconds": 3.1711652380181476,
+        "fits_per_second": 2.5227319926727256
+      }
+    },
+    "choice": "five independent observational readouts, two isolated CPU processes, one numerical thread each, four bounded local I/O threads; prior same-panel measured 2 workers best; no GPU training"
+  },
+  "environment": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1"
+  },
+  "completion": "summary.json",
+  "on_failure": "preserve attempt and failure; no automatic retry"
+}
