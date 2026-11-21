@@ -1,0 +1,40 @@
+schema: observation_word_stability_v1
+experiment_id: TK-OBS-WORD-STABILITY-v1
+panel_contract: experiments/configs/physiology_semantic_tokenizer/observation_relations_v1.yaml
+splits: [train, validation]
+inputs: G0 observation X and its original training-only scales, identities and masks
+forbidden: [test, protected, raw, teacher, events]
+shapes: {eeg: [1, 400], hb: [2, 20]}
+validation_patches: {eeg: 4322, hb: 4358}
+subjects: {train: 60, validation: 20}
+word_bits: 4
+arms: [standard, rank]
+candidate: 257 empirical uniform quantiles per physical feature fitted on the same training draw, then original standardized K16 Lloyd dictionary
+baseline: released training draw and identical K16 Lloyd dictionary without quantile mapping
+seeds: [17, 73, 127]
+draw_size: 16384
+full_draw_seed: 93
+subject_bootstraps: 64
+bootstrap_seed: 60211
+sensitivity: omit one dataset from word fitting, score its validation subjects using existing G0 training scales
+primary: per-validation-subject adjusted Rand index vs each arm's own full seed-17 partition, mean over 64 training resamples and three fits per resample, then equal subjects within dataset and equal datasets
+secondary: full-cohort seed perturbations, omission of each training dataset, nonempty and supported words, effective vocabulary, constant-partition cases, training-only background plus word readouts at current and next patch
+controls: [background, same_K_blind_waveform, within_window_rotated_word, released_standard_word]
+uncertainty: fixed four datasets, paired validation subject percentile bootstrap within dataset, 4000 reps; conditional on development panel and fixed training perturbations
+selection:
+  min_mean_ari_gain: 0.03
+  min_ari_difference_lower_bound: 0.0
+  min_support_subjects: 3
+  min_support_datasets: 2
+  coverage: all 16 used and at least as many supported words as standard on validation
+  max_current_attribute_gain_loss: 0.05
+  attribute: current background-relative gain positive, within 5 percentage points of baseline, lower error than rotated IDs; blind and next-patch comparisons descriptive
+null_hypothesis: four-bit rank dictionary fails the joint stability, support or attribute-retention criteria
+stopping: complete all 828 fits on original public development panel, list all failures, decide separately by modality, no adaptive search or protected evaluation
+resources:
+  device: cpu
+  numerical_threads: 1
+  io_workers: 4
+  worker_candidates: [4, 8, 12, 16]
+  memory_limit_gib: 32
+  supervisor: user_systemd_linger
