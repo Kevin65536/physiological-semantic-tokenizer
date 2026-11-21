@@ -44,6 +44,10 @@ in the closest `src/` owner, with data and replay roots passed explicitly.
 
 ## Entrypoint, config and test map
 
+**Four-bit word stability.** [Nightly CPU suite](scripts/run_observation_word_stability.py) with its [fixed development contract](configs/physiology_semantic_tokenizer/observation_word_stability_v1.yaml) runs `--stage preflight`, then supervised `--stage screen` at the same fresh `--output` below the observation suite. Completed refit cells can be resumed. [Synthetic and contract tests](../tests/test_observation_word_stability.py) cover the shared draw, split boundary, integer interface and paired verdict.
+
+The [Hb coordinate simulation](scripts/run_hb_word_coordinate_simulation.py) isolates rank transformations of levels and slopes against known generated slopes. Pass a fresh `--output` ending in `_hb_coordinate_sim_vN` inside the observation suite. [Contract](configs/physiology_semantic_tokenizer/hb_word_coordinate_simulation_v1.yaml) · [synthetic tests](../tests/test_hb_word_coordinate_simulation.py).
+
 **Matched detail allocation.** [`run_observation_detail_allocation.py`](scripts/run_observation_detail_allocation.py) (`--stage synthetic`, then `screen`) replays the [fixed parent panel and budgets](configs/physiology_semantic_tokenizer/observation_detail_allocation_v1.yaml); [allocation tests](../tests/test_adaptive_observation_detail.py) and [replay tests](../tests/test_observation_allocation_screen.py). Its report separates the same 4-bit observation words from the train-only allocation of the remaining integer bits. The [final EEG gain/shape ablation](scripts/run_observation_gain_shape.py) ([contract](configs/physiology_semantic_tokenizer/observation_gain_shape_v1.yaml), [tests](../tests/test_observation_gain_shape_screen.py)) charges explicitly for the transmitted DC/AC levels at the same three full budgets. The [bundle exporter](scripts/export_observation_baseline.py) makes a portable CPU-only consumer from the frozen selected models, not a training launcher.
 
 **Independent observation-pattern baseline.** [`run_observation_factorization.py`](scripts/run_observation_factorization.py) with the [fixed versioned config](configs/physiology_semantic_tokenizer/factorized_observation_v1.yaml) runs `--stage synthetic`, `smoke`, then `screen` against the same fresh `--output` within `runs/physiology_semantic_tokenizer/observation_factorization/`. It freezes training dictionaries, retains paired rate–distortion and background-controlled attribute tables plus a genuine event readout; it does not modify the stopped or current dual-component launchers. Tests: [`codec`](../tests/test_factorized_observation.py), [`panel`](../tests/test_observation_tokenizer_panel.py), [`legacy replay`](../tests/test_observation_legacy_control.py), [`evaluation`](../tests/test_observation_factor_screen.py), [`task`](../tests/test_observation_task_probe.py).
@@ -916,6 +920,35 @@ steps, using full validation NMSE and REFED high-band power ratios. The resource
 uses the two permitted GPUs and selects one for the fresh warmup and continuation.
 [Targeted tests](../tests/test_dual_component_base_e1.py) cover the time grid, kernel
 sizes, matched support and the two-band comparison.
+
+The [phase A contract](configs/physiology_semantic_tokenizer/dual_component_base_pattern_a_v1.yaml)
+uses `check`, `synthetic`, then supervised `base-pattern-audit` on G1 EEG, G1 Hb and
+G4 Hb. It extends the retained D0 galleries with all-code support, conditional
+variances, held-out attribute readouts and real overlapping validation contexts.
+The [phase B contract](configs/physiology_semantic_tokenizer/dual_component_base_matrix_v1.yaml)
+uses `check`, `synthetic`, `base-train-plan` and supervised `base-train`.
+The H-TQ and E-Q continuations import the original matched warmups. E-TC and
+E-TQ share one new EEG target-input warmup. Both target-input encoders see their
+own branch target during fitting, dictionary initialization and scoring.
+[Phase A tests](../tests/test_dual_component_base_pattern_a.py) and
+[phase B tests](../tests/test_dual_component_base_matrix.py) exercise these paths
+on development fixtures. For the retained November 20 runs,
+[`render_base_pattern_matrix_review.py`](scripts/render_base_pattern_matrix_review.py)
+accepts `--output <fresh-export>` and rebuilds the paired validation review,
+searchable PDF with PNG figures and detailed workbook from the final evaluations.
+Use the same entry with `--phase-c --output <fresh-export>` for component/color
+contrasts and the paired single-ID versus sequence shape readouts.
+The [D/E contract](configs/physiology_semantic_tokenizer/dual_component_base_band_de_v1.yaml)
+uses `check`, `synthetic` and supervised `base-band-de` in the same training runner.
+It freezes training-record band scales, benchmarks both permitted devices and
+compares each eligible continuation against its matched baseline. The
+[loss and stopping tests](../tests/test_dual_component_band_de.py) cover phase,
+masking, scale boundaries and the joint screening rule. Once terminal,
+the same review exporter accepts `--phase-e --output <fresh-export>` for
+paired intervals, retained checkpoint trajectories and the decision report.
+For each measured X-K128 comparison, `base-band-atlas --seed <seed> --candidate
+baseline|balanced` applies the frozen A readouts to that actual checkpoint
+before final export; it reuses the G0 reader and the same real-patch gallery.
 
 The [TK-STATE-v1 training/acceptance design](../docs/EXPERIMENT_PLAN.md#tk-state-v1)
 starts with the bounded [state pilot contract](configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml)

@@ -1,0 +1,33 @@
+{
+  "unit": "obs-factor-dev-20261120-v2.service",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--unit=obs-factor-dev-20261120-v2",
+    "--property=MemoryMax=20G",
+    "--working-directory=/SSD_2/pid-mcm-implementation",
+    "/bin/bash",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v2/launch.sh"
+  ],
+  "working_directory": "/SSD_2/pid-mcm-implementation",
+  "interpreter": "/SSD_2/pid-mcm-implementation/.venv/bin/python",
+  "environment": {
+    "OMP_NUM_THREADS": 1,
+    "MKL_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "NUMEXPR_NUM_THREADS": 1
+  },
+  "versions": {
+    "numpy": "2.4.1",
+    "scipy": "1.17.0",
+    "sklearn": "1.8.0",
+    "torch": "2.10.0+cu128"
+  },
+  "git_head": "59adff8c15ad201488c89605faf2477793f0fe53",
+  "launch_prepared_at": "2026-11-20T12:33:04.942010+00:00",
+  "user_linger": true,
+  "completion_file": "summary.json",
+  "log": "process.log",
+  "resume": "same source/config only, run --stage screen under the same supervisor after inspecting failure; completed modalities reused, no automatic retries",
+  "previous_pre_signal_failure": "experiments/runs/physiology_semantic_tokenizer/observation_factorization/20261120_development_v1/controller.json"
+}

@@ -32,6 +32,15 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## Dual-component tokenizer A–E and four-bit word coordinates — 2026-11-20/21
+
+| Question | Retained reading package |
+| --- | --- |
+| What explains the reconstruction gap and what can an individual ID recover? | [A/B illustrated review](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1/phase_ab_review_v1/AB_review.pdf), [subject, dataset and code tables](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1/phase_ab_review_v1/AB_tables.xlsx), [phase C component/color contrasts](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1/phase_c_v1/phase_c.xlsx) |
+| Does the continuous EEG frequency gain survive K128? | [D/E review](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_eeg_band_de_v1/phase_e_review_v1/DE_review.pdf), [paired endpoints and atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_eeg_band_de_v1/phase_e_review_v1/DE_tables.xlsx), [stopping decision](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_eeg_band_de_v1/summary.json) |
+| Does ranking the measured features stabilize words while preserving their attributes? | [Stability and readout figure](runs/physiology_semantic_tokenizer/observation_factorization/20261120_word_stability_v2/word_stability.png), [per-modality decisions](runs/physiology_semantic_tokenizer/observation_factorization/20261120_word_stability_v2/summary.json), [subject-level agreement](runs/physiology_semantic_tokenizer/observation_factorization/20261120_word_stability_v2/subject_agreement.csv.gz), [pre-signal failure](runs/physiology_semantic_tokenizer/observation_factorization/20261120_word_stability_v1/controller.json) |
+| Which Hb coordinate transform preserves known slopes in simulation? | [Level-rank ablation figure](runs/physiology_semantic_tokenizer/observation_factorization/20261120_hb_coordinate_sim_v1/level_rank_contrasts.png), [all four coordinate arms](runs/physiology_semantic_tokenizer/observation_factorization/20261120_hb_coordinate_sim_v1/summary.json), [paired generator replicates](runs/physiology_semantic_tokenizer/observation_factorization/20261120_hb_coordinate_sim_v1/population_scores.csv.gz) |
+
 ## D0/D1/H1/E1 development results — 2026-11-19
 
 The [six-page phase report](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261119_e1_waveform8_v1/phase_review_v1/D0_D1_H1_E1_results.pdf)
