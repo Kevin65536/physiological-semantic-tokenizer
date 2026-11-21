@@ -1,0 +1,64 @@
+{
+  "schema": "hb_word_coordinate_simulation_v1",
+  "experiment_id": "TK-OBS-HB-COORD-SIM-v1",
+  "data": "generated_in_memory_only",
+  "modalities": {
+    "hb": [
+      2,
+      20
+    ]
+  },
+  "split": "two_independent_fitting_populations_and_a_third_shared_scoring_population",
+  "k": 16,
+  "word_bits": 4,
+  "arms": [
+    "standard",
+    "rank_levels",
+    "rank_slopes",
+    "rank_all"
+  ],
+  "regimes": [
+    "ordinary",
+    "level_tails",
+    "slope_tails",
+    "both_tails"
+  ],
+  "replicates": 256,
+  "generator_seed": 71209,
+  "fitting_seeds": [
+    17,
+    73,
+    127
+  ],
+  "training_subjects_per_population": 16,
+  "training_patches_per_subject": 512,
+  "scoring_subjects": 12,
+  "scoring_patches_per_subject": 128,
+  "generator": "two second windows at 10 Hz in arbitrary simulation units; correlated color levels and slopes, subject-specific offsets and gains, quadratic curvature, additive noise; level-tail condition multiplies offsets of 12% of subjects by 8, slope-tail condition multiplies 4% of patch slopes by 6",
+  "truth": "coefficient of the time-linear term for each color in the noise-free generating equation, units per second",
+  "readout": "train-only conditional mean of generated slopes by word, with training cohort mean fallback; error divided by each color's fitting-cohort slope variance then equal colors and scoring subjects",
+  "primary_candidate": "rank_levels",
+  "primary_reference": "standard",
+  "stability": "mean per-scoring-subject ARI for independent fitting cohorts with cyclically different seeds, then mean over three seed pairs",
+  "controls": "all four level-by-slope coordinate combinations, training population mean slope and observed continuous OLS slope",
+  "statistics": "paired generator replicate is the unit; average the four matched regimes inside each replicate for the main contrast; 4000 paired percentile resamples, plus each regime separately",
+  "selection": {
+    "min_stability_gain": 0.03,
+    "max_slope_nmse_increase": 0.05,
+    "rule": "mean ARI gain >=0.03 with positive lower 95% bound; upper 95% bound on slope NMSE increase <=0.05; candidate beats training-mean readout"
+  },
+  "null_hypothesis": "selective level ranks cannot improve stability while retaining slope accuracy across the four simulated regimes",
+  "stopping": "1024 complete replicate-regime cells, each with 24 fits; fixed candidate and controls; simulation verdict only",
+  "resources": {
+    "device": "cpu",
+    "worker_candidates": [
+      4,
+      8,
+      12,
+      16
+    ],
+    "benchmark_cells_per_arm": 16,
+    "numerical_threads": 1,
+    "memory_max_gib": 24
+  }
+}
