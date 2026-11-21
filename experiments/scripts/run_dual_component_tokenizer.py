@@ -38,7 +38,7 @@ import yaml
 DEFAULT_CONFIG = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml'
 STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark',
           'base-plan', 'base-prepare', 'base-verify',
-          'base-train-plan', 'base-train', 'base-train-one', 'base-train-report', 'base-d0', 'base-d0-finalize',
+          'base-train-plan', 'base-train', 'base-train-one', 'base-train-report', 'base-pattern-audit', 'base-band-de', 'base-band-atlas', 'base-d0', 'base-d0-finalize',
           'masked-state', 'masked-state-plan', 'masked-state-export', 'masked-state-one', 'masked-state-report',
           'train-one', 'masked-one', 'sensitivity', 'analyze', 'masked', 'all', 'refine', 'refine-one',
           'voltage', 'voltage-one', 'voltage-token-atlas', 'eeg-o', 'eeg-o-one',
@@ -95,6 +95,11 @@ def read_config(path=DEFAULT_CONFIG):
         owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_base_diagnostics_v1.yaml'
         if cfg != yaml.safe_load(owner.read_text()):
             raise ValueError('use the versioned D0/D1/H1 contract')
+        return cfg
+    if isinstance(cfg, dict) and cfg.get('schema') in ('dual_component_base_matrix_v1','dual_component_base_pattern_a_v1','dual_component_base_band_de_v1'):
+        owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer' / (cfg['schema']+'.yaml')
+        if cfg != yaml.safe_load(owner.read_text()):
+            raise ValueError('use the versioned A/B contract')
         return cfg
     if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_base_e1_v1':
         owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_base_e1_v1.yaml'
@@ -1217,8 +1222,14 @@ def finalize_long_so_cache(out,cfg,plan,checks):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
-    if cfg['schema'] in ('dual_component_base_g1_v1','dual_component_base_followup_v1','dual_component_base_g3_v1','dual_component_base_diagnostics_v1','dual_component_base_e1_v1'):
+    if cfg['schema'] in ('dual_component_base_g1_v1','dual_component_base_followup_v1','dual_component_base_g3_v1','dual_component_base_diagnostics_v1','dual_component_base_e1_v1','dual_component_base_matrix_v1'):
         print(json.dumps(serial(base_training_dispatch(args, cfg))))
+        return
+    if cfg['schema'] == 'dual_component_base_band_de_v1':
+        print(json.dumps(serial(band_de_dispatch(args,cfg))))
+        return
+    if cfg['schema'] == 'dual_component_base_pattern_a_v1':
+        print(json.dumps(serial(pattern_a_dispatch(args,cfg))))
         return
     if cfg['schema'] == 'dual_component_base_g0_v1':
         print(json.dumps(serial(base_tokenizer_dispatch(args, cfg))))
@@ -5031,6 +5042,12 @@ def _base_training_model(cfg, task):
     return model
 
 
+def _base_latents(model, batch):
+    if model.target_input:
+        return model.encode_components(batch['s'], batch['o'])
+    return model.encode_continuous(batch['x'])
+
+
 def _base_forward(model, batch):
     if model.target_input:
         return model.forward_components(batch['s'], batch['o'])
@@ -5145,7 +5162,7 @@ def _base_initialize(model, rows, examples, scales, device, cache, cfg):
     with torch.no_grad():
         for start in range(0,len(examples),cfg['training']['batch_size']):
             batch=_base_training_batch(rows,examples[start:start+cfg['training']['batch_size']],scales,device,cache,cfg)
-            for b,z in model.encode_continuous(batch['x']).items():latents[b].append(z.detach())
+            for b,z in _base_latents(model,batch).items():latents[b].append(z.detach())
         for b,parts in latents.items():
             q=model.branches[b]['quantizer']
             if bool(q.initialized):raise ValueError('codebook already initialized')
@@ -5203,7 +5220,7 @@ def evaluate_base_training(cfg, model, rows, scales, modality, device, destinati
             batch=_base_training_batch(rows,take,scales,device,cache,cfg)
             with torch.inference_mode():
                 if model.hard and not replay_check:
-                    latents=model.encode_continuous(batch['x'])
+                    latents=_base_latents(model,batch)
                     result=dict(ids={b:model.branches[b]['quantizer'](z).hard_ids for b,z in latents.items()})
                     prediction=model.decode_ids(result['ids'])
                 else:
@@ -5321,7 +5338,7 @@ def _base_migrate_resume(cfg, root, task_id, task, signature, job):
     _torch_save(job/'checkpoint.pt',saved)
 
 
-def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, destination=None):
+def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, destination=None, band_scales=None):
     from src.data.dual_component_tokenizer import base_tokenizer_sampling_index,base_tokenizer_sample
     import torch
     task_id='__'.join(task[k] for k in ('modality','architecture','candidate'))
@@ -5329,6 +5346,8 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
     with owner_lock(job):
         manifest,scales,audit,parent=_base_training_data(cfg,root)
         signature=dict(config=identity(cfg),input=identity(manifest),scales=identity(scales),task=task,benchmark=benchmark)
+        if band_scales is not None:
+            signature['band_scales']=identity(band_scales)
         if (job/'summary.json').exists():
             old=read_json(job/'summary.json')
             if old['signature']!=signature:raise ValueError('G1 completed task identity changed')
@@ -5341,6 +5360,8 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
                     cfg['resources']['gpu_memory_limit_gib']*2**30/torch.cuda.get_device_properties(device).total_memory,device)
                 torch.cuda.reset_peak_memory_stats(device)
             model=_base_training_model(cfg,task).to(device);spec=cfg['architectures'][task['architecture']]
+            if band_scales is not None:
+                spec=dict(spec,band_loss=cfg['band_de'],band_scales=torch.tensor(band_scales,device=device,dtype=torch.float32))
             t=cfg['training'];warm=task['candidate']=='warmup'
             if model.frozen_source:
                 source, source_job = _base_diagnostic_source(cfg, root, model.frozen_source, task['modality'],
@@ -5373,7 +5394,10 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
                 if previous['status']!='completed' or previous['completed_step']!=t['warmup_steps']:
                     raise ValueError('complete matched warmup required')
                 saved=torch.load(warm_job/'checkpoint.pt',map_location=device,weights_only=False)
-                if saved['signature']['input']!=signature['input'] or saved['signature']['config']!=source_config_identity:
+                warm_signature=dict(signature,task=dict(task,candidate='warmup'),config=source_config_identity)
+                warm_signature.pop('band_scales',None)
+                if (saved['signature'] != warm_signature
+                        or saved['step'] != t['warmup_steps']):
                     raise ValueError('matched warmup input/configuration drift')
                 loaded=model.load_state_dict({k:v for k,v in saved['model_state'].items() if '.quantizer.' not in k},strict=False)
                 if loaded.unexpected_keys or any('.quantizer.' not in k for k in loaded.missing_keys):raise ValueError('warmup structure mismatch')
@@ -5569,7 +5593,7 @@ def summarize_base_training(cfg, out, root=None):
         else:models.append(dict(status='pending',task_id=key))
     rule=cfg['evaluation']
     followup=cfg['schema']=='dual_component_base_followup_v1';g3=cfg['schema']=='dual_component_base_g3_v1'
-    budget=(dict(status='fixed_by_user' if followup else 'fixed_matched_budget',budget=cfg['training']['total_steps']) if followup or g3 or 'diagnostics' in cfg or 'e1' in cfg else
+    budget=(dict(status='fixed_by_user' if followup else 'fixed_matched_budget',budget=cfg['training']['total_steps']) if followup or g3 or 'diagnostics' in cfg or 'e1' in cfg or 'matrix' in cfg else
             base_training_budget(models,rule['steps'],rule['budget_macro_relative_tolerance'],rule['budget_component_relative_tolerance']))
     result=dict(status='completed' if all(m['status']=='completed' for m in models) else 'completed_with_failures',
         experiment_id=cfg['experiment_id'],planned_models=len(cfg['tasks']),completed_models=sum(m['status']=='completed' for m in models),
@@ -5594,6 +5618,15 @@ def summarize_base_training(cfg, out, root=None):
         baseline=read_json(sources['baseline'])
         result['G3']=base_g3_decision(models[0],baseline,cfg['evaluation']['screen'],cfg['training']['total_steps'])
         result['matched_sources']=sources;result['integer_replay_check']='disabled_by_user'
+    if 'matrix' in cfg:
+        step = str(cfg['training']['total_steps'])
+        paths = read_json(out/'plan.json')['matrix_controls']
+        cells = {name: read_json(Path(root)/path/'evaluation'/f'step_{int(step):05d}'/'validation.json')
+                 for name,path in paths.items()}
+        for name,model in zip(cfg['matrix']['new_cells'],models):
+            cells[name] = model['milestones'][step]['validation'] if model['status']=='completed' else model
+        result['matrix'] = {name: dict(macro_nmse=cell['selection_score'],metrics=cell['metrics'])
+                            if 'selection_score' in cell else cell for name,cell in cells.items()}
     if 'e1' in cfg and result['completed_models']==1:
         source = Path(root)/read_json(out/'plan.json')['baseline_job']
         candidate = out/'models'/models[0]['task_id']
@@ -5856,6 +5889,450 @@ def run_base_d0(cfg,args):
         return dict(status=status,models=len(jobs))
 
 
+def _pattern_a_model(cfg, root, out, name):
+    group, modality = name.split('_')
+    source = read_config(root/cfg['source_contract'])
+    manifest,scales,_,_ = _base_training_data(source,root)
+    rows = manifest['rows']
+    model,job = _base_diagnostic_source(source,root,group,modality,'vq128',identity(manifest),identity(scales))
+    evaluation = job/'evaluation'/f"step_{cfg['reference_step']:05d}"
+    d0 = root/cfg['d0_run']/'D0'/(name+'_vq128')
+    if read_json(d0/'summary.json')['source'] != str(evaluation) or not (d0/'validation_same_ID.npz').is_file():
+        raise ValueError('matched D0 full validation model and gallery required')
+    return _pattern_scores(cfg,source,rows,scales,model,job,out/name,modality,d0)
+
+
+def _pattern_scores(cfg,source,rows,scales,model,job,folder,modality,d0=None):
+    import torch
+    from src.analysis.dual_component_tokenizer import base_training_aggregate
+    from src.analysis.tokenizer_pattern_audit import PatternAudit, attributes, feature_means, match_training_patterns
+    from src.analysis.tokenizer_shape_diagnostics import ShapeReadout, shape_gallery
+
+    torch.set_num_threads(cfg['cpu_threads_per_worker'])
+    evaluation=job/'evaluation'/f"step_{cfg['reference_step']:05d}"
+    gallery=None if d0 is not None else ShapeReadout(cfg['codebook_size'],400,1)
+    folder.mkdir(parents=True,exist_ok=True)
+    sites = {(r['dataset'],p) for r in rows if r['modality']==modality and r['split']=='train' for p in r['positions']}
+    site_index = {site:n for n,site in enumerate(sorted(sites))}
+    datasets = sorted({r['dataset'] for r in rows if r['modality']==modality})
+    bins = np.asarray(cfg['rms_bin_edges'])
+    width = 400 if modality=='eeg' else 40
+    probe,fields = attributes(np.zeros((1,width)),modality)
+    k = cfg['codebook_size']
+    audits = {b:PatternAudit(k,(len(sites)+1)*(len(bins)+1),datasets,probe.shape[-1],fields) for b in 'SO'}
+    cache = OrderedDict()
+    errors = defaultdict(list)
+    coverage = {}
+    with torch.inference_mode():
+        for split in ('train','validation'):
+            examples = _base_training_examples(rows,modality,split)
+            with np.load(evaluation/(split+'.npz')) as archive:
+                np.testing.assert_array_equal(archive['examples'],examples)
+                codes = {b:archive['ids_'+b] for b in 'SO'}
+            complete = 0
+            for start in range(0,len(examples),cfg['batch_size']):
+                take = examples[start:start+cfg['batch_size']]
+                n = len(take)
+                batch = _base_training_batch(rows,take,scales,'cpu',cache,source)
+                ids = {b:code[start:start+n].astype(np.int64) for b,code in codes.items()}
+                if split=='validation':
+                    decoded = model.decode_ids({b:torch.from_numpy(v) for b,v in ids.items()})
+                valid = batch['mask'].all(-1).numpy()
+                complete += int(valid.sum())
+                units = [(rows[i]['dataset'],rows[i]['subject'],rows[i]['record']) for i,_,_ in take]
+                dataset = np.array([datasets.index(u[0]) for u in units])
+                loc = np.array([site_index.get((rows[i]['dataset'],rows[i]['positions'][p]),len(sites)) for i,_,p in take])
+                rms = np.sqrt(np.square(batch['x'].numpy()).mean(-1))
+                bg = loc[:,None]*(len(bins)+1)+np.searchsorted(bins,rms,side='right')
+                for b,audit in audits.items():
+                    if split=='validation' and gallery is not None:
+                        gallery.keep_examples('SO'.index(b),ids[b].ravel(),batch[b.lower()].numpy().reshape(-1,width,1),
+                                              valid.ravel(),np.asarray(take))
+                    valid_ids = ids[b][valid]
+                    target,_ = attributes(batch[b.lower()].numpy()[valid],modality)
+                    audit.support_batch(ids[b],valid,units,split)
+                    if split=='train':
+                        audit.fit(valid_ids,bg[valid],target)
+                    else:
+                        predicted,_ = attributes(decoded[b].numpy()[valid],modality)
+                        err = audit.score(valid_ids,bg[valid],np.broadcast_to(dataset[:,None],valid.shape)[valid],target,predicted)
+                        scores = np.zeros((n,15,*err.shape[1:]))
+                        scores[valid] = err
+                        mean = scores.sum(1)/valid.sum(1)[:,None,None].clip(1)
+                        mean[~valid.any(1)] = np.nan
+                        errors[b].append(mean)
+                if start % (100*cfg['batch_size'])==0 or start+n==len(examples):
+                    write_json(folder/'progress.json',dict(stage=split,inputs=start+n,planned=len(examples),updated=now()))
+            coverage[split] = dict(inputs=len(examples),planned_patches=len(examples)*15,complete_patches=complete,
+                                   excluded_partial_or_missing=len(examples)*15-complete)
+        write_json(folder/'progress.json',dict(stage='natural_context',updated=now()))
+        # Consecutive nonoverlap score crops prove the entire shifted input was
+        # admitted for the same parent and position without reading extra support.
+        lookup = {tuple(ex):n for n,ex in enumerate(examples)}
+        pairs = [(n,lookup[i,t+30,p]) for n,(i,t,p) in enumerate(examples) if (i,t+30,p) in lookup]
+        ctx = defaultdict(list)
+        valid_pairs = []
+        with torch.inference_mode():
+            for start in range(0,len(pairs),cfg['batch_size']):
+                left,right = np.asarray(pairs[start:start+cfg['batch_size']]).T
+                take = [examples[n] for n in left]
+                first = _base_training_batch(rows,take,scales,'cpu',cache,source)
+                following = _base_training_batch(rows,[examples[n] for n in right],scales,'cpu',cache,source)
+                x = first['x']
+                shifted = torch.cat((x[:,1:],following['x'][:,:1]),1)
+                valid = first['mask'][:,7].all(-1).numpy()
+                valid_pairs.extend(left[valid].tolist())
+                reference = model.encode_continuous(x)
+                alternate = model.encode_continuous(shifted)
+                for b,audit in audits.items():
+                    q = model.branches[b]['quantizer']
+                    old = q(reference[b]).hard_ids[:,7].numpy()[valid]
+                    new = q(alternate[b]).hard_ids[:,6].numpy()[valid]
+                    supported = (audit.local.count[old]>0)&(audit.local.count[new]>0)
+                    change = feature_means((audit.local.mean(old)-audit.local.mean(new))**2,fields)
+                    change[~supported] = np.nan
+                    ctx[b].append(np.column_stack([old,new,old!=new,old!=codes[b][left,7][valid],supported,change]))
+    summary = dict(status='completed',source_checkpoint=str(job/f"checkpoint_step_{cfg['reference_step']:05d}.pt"),
+                   d0_gallery=str(d0/'validation_same_ID.npz') if d0 else None,
+                   d0_readout=str(d0/'shape_readout.json') if d0 else None,
+                   attributes=list(fields),readouts=cfg['readouts'],coverage=coverage,
+                   natural_context=dict(planned_adjacent_pairs=len(pairs),complete_central_patches=len(valid_pairs),
+                       examples_without_adjacent_partner=len(examples)-len(pairs)),branches={})
+    if gallery is not None:
+        shape_gallery(gallery,folder,200)
+        summary['validation_gallery']=str(folder/'validation_same_ID.npz')
+    for b,audit in audits.items():
+        atlas = audit.atlas(datasets,cfg)
+        present = np.flatnonzero(~atlas['low_training_support'])
+        permutation = np.random.default_rng(cfg['seed']).permutation(present)
+        _,_,cost = match_training_patterns(audit.local.mean(present),audit.local.mean(permutation),fields) if len(present) else ([],[],np.array([]))
+        if not np.allclose(cost,0,rtol=0,atol=1e-12):
+            raise AssertionError('ID renumbering changed training morphology matching')
+        atlas['renumbering_audit'] = dict(matched_supported_codes=len(cost),total_shape_cost=cost.sum())
+        write_json(folder/(b+'_atlas.json'),dict(attribute_order=list(fields),code_order=list(range(k)),**atlas))
+        write_npz(folder/(b+'_training_prototypes.npz'),conditional_mean=audit.local.mean(np.arange(k)),
+                  count=audit.local.count,attribute_slices=np.asarray(list(fields.values())))
+        # Keep one score per original crop/site, then apply the G0 hierarchy.
+        metrics = base_training_aggregate(dict(nmse=np.concatenate(errors[b])),examples,rows)['metrics']['nmse']
+        vals = np.asarray(metrics['macro'])
+        gain = np.divide(vals[2],vals[0],out=np.full(len(fields),np.nan),where=vals[0]>0)
+        context = {}
+        if valid_pairs:
+            v = np.concatenate(ctx[b])
+            selected = [examples[i] for i in valid_pairs]
+            write_npz(folder/(b+'_natural_context.npz'),examples=np.asarray(selected),
+                      original_ID=v[:,0],shifted_ID=v[:,1],supported=v[:,4],attribute_squared_change=v[:,5:])
+            context = base_training_aggregate(dict(nmse=v[:,2:]),selected,rows)['metrics']['nmse']
+            context['column_order'] = ['ID_changed','CPU_reference_disagrees_with_saved_ID','both_IDs_train_supported',*fields]
+            changed = (v[:,2]>0) & (v[:,4]>0)
+            context['changed_supported_pairs'] = int(changed.sum())
+            context['mean_squared_attribute_change_given_switch_pooled'] = v[changed,5:].mean(0) if changed.any() else None
+        summary['branches'][b] = dict(attribute_mse=metrics,additional_ID_gain_over_background=1-gain,
+            sequence_minus_ID_attribute_mse=vals[3]-vals[1],natural_context=context,
+            low_support_validation_patches=atlas['low_support_validation_patches'])
+    write_json(folder/'summary.json',summary)
+    write_json(folder/'progress.json',dict(stage='completed',updated=now()))
+    return folder.name
+
+
+def pattern_a_dispatch(args,cfg):
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    if args.evaluation_split!='development' or args.stage not in ('check','synthetic','base-pattern-audit'):
+        raise ValueError('pattern A accepts only the frozen development audit')
+    if args.stage=='check':
+        return dict(status='passed',tasks=cfg['tasks'],measured_arrays_read=0)
+    out=args.output.resolve()
+    if args.stage=='synthetic':
+        from src.analysis.tokenizer_pattern_audit import PatternAudit,attributes
+        y,fields = attributes(np.arange(120.).reshape(3,40),'hb')
+        ids=np.array([0,1,0])
+        bg=np.array([0,1,1])
+        scores=[]
+        for labels in (ids,1-ids):
+            audit=PatternAudit(2,2,['fixture'],y.shape[-1],fields)
+            audit.fit(labels,bg,y)
+            scores.append(audit.score(labels,bg,0,y,y))
+        np.testing.assert_allclose(*scores)
+        result=dict(status='passed',relabel_invariant=True,measured_arrays_read=0)
+        write_json(out/'synthetic.json',result)
+        return result
+    with owner_lock(out):
+        freeze_contract(out,cfg,args.project_root)
+        if read_json(out/'synthetic.json')['status']!='passed' or read_json(out/'software_validation.json')['status']!='passed':
+            raise ValueError('pattern software and synthetic checks required')
+        status = dict(status='running',planned=cfg['tasks'],completed=[],failures={},started=now())
+        write_json(out/'controller.json',status)
+        with ProcessPoolExecutor(max_workers=len(cfg['tasks'])) as pool:
+            jobs={}
+            for name in cfg['tasks']:
+                path=out/name/'summary.json'
+                if path.is_file() and read_json(path)['status']=='completed':
+                    status['completed'].append(name)
+                else:
+                    jobs[pool.submit(_pattern_a_model,cfg,args.project_root.resolve(),out,name)] = name
+            for job in as_completed(jobs):
+                try:
+                    status['completed'].append(job.result())
+                except Exception:
+                    status['failures'][jobs[job]]=traceback.format_exc()
+                write_json(out/'controller.json',status)
+        status.update(status='completed_with_failures' if status['failures'] else 'completed',ended=now(),
+                      cross_seed=dict(status='unavailable',seeds=[17],reason=cfg['cross_seed']))
+        write_json(out/'controller.json',status)
+        write_json(out/'summary.json',status)
+        if status['failures']:
+            raise RuntimeError('pattern A worker failed; see controller.json')
+        return status
+
+
+def _de_scales(cfg,rows,examples,scales):
+    from src.analysis.dual_component_tokenizer import eeg_residual_band_energy
+    import torch
+    grouped=defaultdict(list)
+    support=[]
+    if any(rows[i]['split']!='train' or rows[i]['modality']!='eeg' for i,_,_ in examples):
+        raise ValueError('only the frozen EEG training record panel may determine band weights')
+    cache=OrderedDict()
+    seen=set()
+    for off in range(0,len(examples),64):
+        take=examples[off:off+64]
+        batch=_base_training_batch(rows,take,scales,'cpu',cache,cfg)
+        valid=batch['mask'].all(-1)
+        powers=torch.stack([eeg_residual_band_energy(batch[k],cfg['band_de']['bands_hz'])/
+                            batch['v'+k][:,0,0,None,None] for k in 'xso'],dim=1)
+        for n,(i,start,p) in enumerate(take):
+            r=rows[i]
+            key=(r['dataset'],r['subject'],r['record'])
+            if key in seen:raise ValueError('duplicate band calibration record')
+            seen.add(key)
+            count=int(valid[n].sum())
+            support.append(dict(row=i,start=start,position=p,complete=count))
+            if count:grouped[key[:2]].append(powers[n,:,valid[n],:].mean(1).numpy())
+    by_dataset=defaultdict(list)
+    for (dataset,subject),records in grouped.items():by_dataset[dataset].append(np.mean(records,axis=0))
+    if set(by_dataset)!={rows[i]['dataset'] for i,_,_ in examples}:raise ValueError('missing band calibration dataset')
+    powers=np.mean([np.mean(v,axis=0) for v in by_dataset.values()],axis=0)
+    if not np.isfinite(powers).all():raise ValueError('nonfinite EEG band scales')
+    return dict(scales=np.maximum(powers,cfg['band_de']['band_power_floor']).tolist(),unfloored=powers,
+                order=['X','S','O'],records=len(seen),support=support)
+
+
+def _de_endpoints(metrics):
+    components=np.array(metrics['nmse']['macro']).ravel()
+    return dict(refed_db=[10*metrics['band_'+b+'_log10_power_ratio']['by_dataset']['refed'][0][0]
+                          for b in ('13_30','30_45')],component_nmse=components,macro_nmse=components.mean(),
+                correlation=np.array(metrics['correlation']['macro']).ravel())
+
+
+def _de_gate(baseline,new,limits):
+    db_gain=np.abs(baseline['refed_db'])-np.abs(new['refed_db'])
+    nmse_ratio=np.asarray(new['component_nmse'])/baseline['component_nmse']-1
+    macro_ratio=new['macro_nmse']/baseline['macro_nmse']-1
+    corr_drop=np.asarray(baseline['correlation'])-new['correlation']
+    checks=dict(both_REFED_bands=bool(np.all(db_gain>limits['refed_abs_db_improvement_min'])),
+                macro_nmse=bool(macro_ratio<=limits['macro_nmse_relative_increase_max']),
+                component_nmse=bool(np.all(nmse_ratio<=limits['component_nmse_relative_increase_max'])),
+                correlation=bool(np.all(corr_drop<=limits['component_correlation_drop_max'])))
+    return dict(passed=all(checks.values()),checks=checks,refed_absolute_bias_gain_db=db_gain,
+                relative_component_nmse_change=nmse_ratio,relative_macro_nmse_change=macro_ratio,
+                correlation_drop=corr_drop)
+
+
+def _de_compare(cfg,base,job):
+    recs=[read_json(p/'summary.json') for p in (base,job)]
+    if any(r['status']!='completed' or r['completed_step']!=10000 for r in recs):
+        raise ValueError('both full fixed-budget endpoints required')
+    if any(recs[0]['signature'][k]!=recs[1]['signature'][k] for k in ('task','input','scales','benchmark')):
+        raise ValueError('mismatched evaluation signatures')
+    folders=[p/'evaluation/step_10000' for p in (base,job)]
+    for role in cfg['evaluation']['roles']:
+        with np.load(folders[0]/(role+'.npz')) as x,np.load(folders[1]/(role+'.npz')) as y:
+            np.testing.assert_array_equal(x['examples'],y['examples'])
+    vals=[read_json(p/'validation.json') for p in folders]
+    metrics=[v['metrics'] for v in vals]
+    endpoints=[_de_endpoints(m) for m in metrics]
+    absolute={k:[m[k] for m in metrics] for k in metrics[0] if k in metrics[1]}
+    paired={}
+    for k,(original,candidate) in absolute.items():
+        def indexed(m):return {(r['dataset'],r['subject']):np.array(r['value']) for r in m['by_subject']}
+        x,y=indexed(original),indexed(candidate)
+        if x.keys()!=y.keys():raise ValueError('unmatched subjects in paired endpoint')
+        by_dataset=defaultdict(list)
+        for key in sorted(x):by_dataset[key[0]].append(y[key]-x[key])
+        rng=np.random.default_rng(17)
+        boot=[]
+        for dataset,group in sorted(by_dataset.items()):
+            draws=rng.integers(len(group),size=(10000,len(group)))
+            boot.append(np.array(group)[draws].mean(1))
+        paired[k]=dict(delta=np.asarray(candidate['macro'])-original['macro'],
+                       interval95=np.quantile(np.mean(boot,axis=0),[.025,.975],axis=0),
+                       by_dataset={d:np.mean(g,axis=0) for d,g in by_dataset.items()},
+                       by_subject=[dict(dataset=d,subject=s,delta=y[d,s]-x[d,s]) for d,s in sorted(x)])
+        if k.startswith('band_'):
+            ref=np.array(by_dataset['refed'])*10
+            idx=rng.integers(len(ref),size=(10000,len(ref)))
+            paired[k]['refed_signed_delta_dB_95']=np.quantile(ref[idx].mean(1),[.025,.975],axis=0)
+    history=[[r['milestones'][str(step)]['validation']['selection_score'] for step in cfg['evaluation']['steps']] for r in recs]
+    return dict(baseline=str(base),candidate=str(job),baseline_endpoints=endpoints[0],candidate_endpoints=endpoints[1],
+                gate=_de_gate(*endpoints,cfg['band_de']['gate']),matched_inputs=vals[1]['inputs'],
+                records=vals[1]['records'],subjects=vals[1]['subjects'],macro_nmse_4k_7k_10k=history,
+                validation_metrics_baseline_candidate=absolute,paired=paired,
+                single_ID_shape=[v.get('single_ID_centered_readout') for v in vals],
+                code_health=[v.get('code_health') for v in vals])
+
+
+def _de_confirm(cfg,root,out,device,scales,seed):
+    local=deepcopy(cfg)
+    local['training']['seed']=seed
+    local.pop('external_warmups')
+    folder=out/f'seed_{seed}'
+    freeze_contract(folder,local,root)
+    task=local['tasks'][-1]
+    train_base_tokenizer(local,root,folder,dict(task,candidate='warmup'),device)
+    base=folder/'models/eeg__waveform8__vq128'
+    job=folder/'models/eeg__waveform8__vq128_balanced'
+    train_base_tokenizer(local,root,folder,task,device)
+    train_base_tokenizer(local,root,folder,task,device,destination=job,band_scales=scales)
+    result=_de_compare(local,base,job)
+    write_json(folder/'paired.json',result)
+    return result
+
+
+def _de_atlas(args,cfg):
+    import torch
+    if args.evaluation_split!='development' or args.candidate not in ('baseline','balanced'):
+        raise ValueError('use one declared completed EEG hard arm')
+    run=args.output.resolve();root=args.project_root.resolve()
+    if (read_json(run/'resolved_config.json')['config']!=cfg or
+            not read_json(run/'E_X_continuous.json')['gate']['passed']):
+        raise ValueError('matched D/E integer comparison required')
+    seed=args.seed
+    if seed not in [17,*cfg['band_de']['confirmation_seeds']]:raise ValueError('undeclared seed')
+    weighted=args.candidate=='balanced'
+    task=cfg['tasks'][-1]
+    source=deepcopy(cfg)
+    if seed==17:
+        ref=cfg['band_de']['baseline_runs'][-1]
+        job=run/'models/eeg__waveform8__vq128' if weighted else root/ref['run']/'models'/ref['task']
+        if not weighted:source=read_config(root/ref['contract'])
+    else:
+        if not read_json(run/'E_X_K128.json')['gate']['passed']:raise ValueError('extra seeds require qualifying hard arm')
+        source['training']['seed']=seed
+        source.pop('external_warmups')
+        job=run/f'seed_{seed}'/'models'/('eeg__waveform8__vq128_balanced' if weighted else 'eeg__waveform8__vq128')
+    out=run/'pattern_audit'/f'seed_{seed}'/args.candidate
+    with owner_lock(out):
+        if (out/'summary.json').is_file():return read_json(out/'summary.json')['status']
+        manifest,scales,_,_=_base_training_data(source,root)
+        expected=dict(config=identity(source),input=identity(manifest),scales=identity(scales),task=task,benchmark=False)
+        if weighted:expected['band_scales']=identity(read_json(run/'band_scales.json')['scales'])
+        record=read_json(job/'summary.json')
+        if record['status']!='completed' or record['completed_step']!=10000 or record['signature']!=expected:
+            raise ValueError('terminal matched full-budget hard model required')
+        saved=torch.load(job/'checkpoint_step_10000.pt',map_location='cpu',weights_only=False)
+        if saved['signature']!=expected or saved['step']!=10000:raise ValueError('atlas checkpoint identity mismatch')
+        model=_base_training_model(source,task)
+        model.load_state_dict(saved['model_state'])
+        pattern=read_config(SOURCE/'experiments/configs/physiology_semantic_tokenizer/dual_component_base_pattern_a_v1.yaml')
+        _pattern_scores(pattern,source,manifest['rows'],scales,model.eval(),job,out,'eeg')
+        return read_json(out/'summary.json')['status']
+
+
+def band_de_dispatch(args,cfg):
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+    import torch
+    if args.stage=='base-band-atlas':return _de_atlas(args,cfg)
+    if args.evaluation_split!='development' or args.seed!=17 or args.stage not in ('check','synthetic','base-band-de'):
+        raise ValueError('fixed phase D/E development contract required')
+    if args.stage=='check':return dict(status='passed',experiment_id=cfg['experiment_id'],measured_arrays_read=0)
+    out=args.output.resolve();root=args.project_root.resolve()
+    if args.stage=='synthetic':
+        from src.analysis.dual_component_tokenizer import eeg_balanced_distortion
+        result=base_training_synthetic(cfg)
+        t=torch.arange(400)/200
+        y=torch.sin(2*torch.pi*35*t).repeat(2,15,1)
+        pred=(-y).requires_grad_()
+        batch={k:y for k in 'xso'}
+        batch.update({k:torch.ones_like(y) for k in ['vx','vs','vo']},mask=torch.ones_like(y,dtype=torch.bool))
+        loss=eeg_balanced_distortion(dict(S=pred,O=pred,sum=pred),batch,cfg['band_de'],torch.ones(3,5))
+        loss.backward()
+        if loss.item()<=0 or not torch.isfinite(pred.grad).all():raise ValueError('phase reversal synthetic failure')
+        result['phase_reversal_loss']=loss.item()
+        write_json(out/'synthetic.json',result)
+        return result
+    if os.environ.get('CUDA_VISIBLE_DEVICES','').split(',')!=cfg['resources']['visible_gpu_uuids']:
+        raise ValueError('contracted phase D/E GPU list required')
+    with owner_lock(out):
+        freeze_contract(out,cfg,root)
+        if read_json(out/'synthetic.json')['status']!='passed' or read_json(out/'software_validation.json')['status']!='passed':
+            raise ValueError('software and synthetic checks precede measured execution')
+        if (out/'summary.json').exists():return read_json(out/'summary.json')['status']
+        state=dict(status='running',stage='calibration',started=now(),pid=os.getpid())
+        def stage(label):
+            state.update(stage=label,updated=now());write_json(out/'controller.json',state)
+        stage('calibration')
+        try:
+            manifest,scales,audit,_=_base_training_data(cfg,root)
+            input_id,scale_id=identity(manifest),identity(scales)
+            baselines=[]
+            for task,ref in zip(cfg['tasks'],cfg['band_de']['baseline_runs']):
+                contract=read_config(root/ref['contract']);parent=root/ref['run']
+                job=parent/'models'/ref['task']
+                record=read_json(job/'summary.json')
+                if (record['status']!='completed' or record['completed_step']!=10000 or
+                        record['signature']!=dict(config=identity(contract),input=input_id,scales=scale_id,task=task,benchmark=False)
+                        or read_json(parent/'resolved_config.json')['config']!=contract):
+                    raise ValueError('phase D/E baseline mismatch')
+                _base_external_warmup(cfg,root,task)
+                baselines.append(job)
+            path=out/'band_scales.json'
+            if not path.exists():
+                write_json(path,dict(_de_scales(cfg,manifest['rows'],audit['eeg']['initialization'],scales),
+                                     input_id=input_id,scale_id=scale_id))
+            calibration=read_json(path)
+            if (calibration['input_id'],calibration['scale_id'])!=(input_id,scale_id):raise ValueError('calibration drift')
+            band_scales=calibration['scales']
+            del manifest,scales,audit
+            devices=cfg['resources']['devices']
+            if not (out/'resources.json').exists():
+                stage('concurrent_device_pilots')
+                with ProcessPoolExecutor(max_workers=len(devices),mp_context=multiprocessing.get_context('spawn')) as pool:
+                    pilots=[pool.submit(train_base_tokenizer,cfg,root,out,cfg['tasks'][0],d,benchmark=True,
+                             destination=out/'benchmark'/str(i),band_scales=band_scales) for i,d in enumerate(devices)]
+                    results=[p.result() for p in pilots]
+                fastest=min(results,key=lambda r:r['training_seconds']+r['evaluation_seconds'])
+                write_json(out/'resources.json',dict(pilots=[{k:r[k] for k in ('device','training_seconds','evaluation_seconds','training_steps_per_second','peak_gpu_reserved_bytes')} for r in results],
+                           device=fastest['device'],reason='single serial discovery arm on fastest measured device; two independent confirmation seeds parallel on distinct GPUs'))
+            device=read_json(out/'resources.json')['device']
+            comparisons=[]
+            for phase,task,base in zip(['D_target_continuous','E_X_continuous','E_X_K128'],cfg['tasks'],baselines):
+                stage(phase)
+                train_base_tokenizer(cfg,root,out,task,device,band_scales=band_scales)
+                comparison=_de_compare(cfg,base,out/'models'/'__'.join(task.values()))
+                write_json(out/(phase+'.json'),comparison)
+                comparisons.append(dict(phase=phase,passed=comparison['gate']['passed']))
+                if not comparison['gate']['passed']:break
+            confirmed=[]
+            if len(comparisons)==3 and comparisons[-1]['passed']:
+                stage('E_two_independent_seed_pairs')
+                with ProcessPoolExecutor(max_workers=len(devices),mp_context=multiprocessing.get_context('spawn')) as pool:
+                    seeds=cfg['band_de']['confirmation_seeds']
+                    pairs=[pool.submit(_de_confirm,cfg,root,out,d,band_scales,s) for d,s in zip(devices,seeds)]
+                    for seed,pair in zip(seeds,pairs):
+                        confirmed.append(dict(seed=seed,passed=pair.result()['gate']['passed']))
+            result=dict(status='completed',experiment_id=cfg['experiment_id'],comparisons=comparisons,confirmation=confirmed,
+                        stop_reason=('three_seed_evaluation_complete' if confirmed else comparisons[-1]['phase']+'_joint_criterion_failed'),
+                        carried_evidence=cfg['band_de']['evidence_run'],phase_c=cfg['band_de']['phase_c'],
+                        interpretation='fixed-budget development comparison; repeated seeds never counted as subjects')
+            write_json(out/'summary.json',result)
+            state.update(status='completed');stage('terminal')
+            return result
+        except Exception:
+            state.update(status='failed',error=traceback.format_exc());write_json(out/'controller.json',state)
+            raise
+
+
 def base_training_synthetic(cfg):
     import torch
     torch.set_num_threads(2);torch.manual_seed(cfg['training']['seed']);cases=[]
@@ -5863,9 +6340,13 @@ def base_training_synthetic(cfg):
         model=_base_training_model(cfg,task)
         features=400 if task['modality']=='eeg' else 40;channels=1 if task['modality']=='eeg' else 2
         x=torch.randn(16,15,features);mask=torch.ones_like(x,dtype=torch.bool);mask[:,-1,-channels:]=False
-        if model.hard:model.initialize_codebooks(x)
         batch=dict(x=x,s=x*.7,o=x*.3,mask=mask,**{k:torch.ones_like(x) for k in ('vx','vs','vo')},
                    **{k:torch.ones(16,channels) for k in ('dvx','dvs','dvo')})
+        if model.hard:
+            model.eval()
+            with torch.no_grad():
+                for branch, latent in _base_latents(model,batch).items():
+                    model.branches[branch]['quantizer'].train()(latent)
         if model.frozen_source:
             source = deepcopy(model)
             model.freeze_assignments(source)
@@ -5875,7 +6356,7 @@ def base_training_synthetic(cfg):
         model.eval();error=None
         if model.hard and cfg['evaluation'].get('integer_replay_check','enabled')=='enabled':
             with torch.no_grad():
-                result=model(x);decoded=model.decode_ids(result['ids'])
+                result=_base_forward(model,batch);decoded=model.decode_ids(result['ids'])
                 for b in ('S','O'):torch.testing.assert_close(result[b],decoded[b],atol=cfg['evaluation']['replay_atol'],rtol=cfg['evaluation']['replay_rtol'])
                 error=max(float((result[b]-decoded[b]).abs().max()) for b in ('S','O'))
         transition_cases=[]
@@ -5892,7 +6373,7 @@ def base_training_synthetic(cfg):
 
 
 def base_training_dispatch(args, cfg):
-    if ('diagnostics' in cfg or 'e1' in cfg) and args.stage not in ('check','synthetic','base-train-plan','base-train-report'):
+    if ('diagnostics' in cfg or 'e1' in cfg or 'matrix' in cfg) and args.stage not in ('check','synthetic','base-train-plan','base-train-report'):
         if args.seed != cfg['training']['seed']:
             raise ValueError('diagnostics use only seed 17')
         if os.environ.get('CUDA_VISIBLE_DEVICES','').split(',') != cfg['resources']['visible_gpu_uuids']:
@@ -5953,6 +6434,21 @@ def base_training_dispatch(args, cfg):
                     or review['status']!='completed' or review['completed_D0']!=6):
                 raise ValueError('E1 requires completed diagnostics and exact G1 reference')
             plan.update(baseline_job=str(baseline),comparison=cfg['e1'],seed=cfg['training']['seed'])
+        if 'matrix' in cfg:
+            plan['matrix_controls'] = {}
+            for name,ref in cfg['matrix']['controls'].items():
+                contract = read_config(root/ref['contract'])
+                job = Path(ref['run'])/'models'/ref['task']
+                record = read_json(root/job/'summary.json')
+                expected = dict(config=identity(contract),input=plan['manifest_identity'],scales=plan['scales_identity'],
+                                benchmark=False,task=dict(zip(('modality','architecture','candidate'),ref['task'].split('__'))))
+                if (record['signature'] != expected or record['completed_step'] != cfg['training']['total_steps']
+                        or record['status'] != 'completed' or contract['data'] != cfg['data']):
+                    raise ValueError('matrix control exposure or input identity mismatch')
+                plan['matrix_controls'][name] = str(job)
+            for task in cfg['tasks']:
+                if task['modality']+'__'+task['architecture'] in cfg['external_warmups']:
+                    _base_external_warmup(cfg, root, task)
         if g3:plan['matched_sources']=_base_g3_sources(cfg,root,plan['manifest_identity'])
         if requested_devices:plan['requested_devices']=requested_devices
         if (out/'plan.json').exists() and read_json(out/'plan.json')!=serial(plan):raise ValueError('G1 frozen data plan changed')
@@ -6000,7 +6496,14 @@ def base_training_dispatch(args, cfg):
                     benchmark_throughput=best['throughput'],planned_new_training_steps=planned_updates,estimated_training_only_seconds=training_eta,
                     note='full-panel evaluation adds time; per-job progress records own measured training rates'))
             workers=read_json(out/'resources.json')['workers_per_device']
-            if 'diagnostics' in cfg:
+            if 'matrix' in cfg:
+                state.update(stage='input_quantization_matrix',updated=now())
+                write_json(out/'controller.json',state)
+                dependencies = {'__'.join(t.values()): '__'.join((w['modality'],w['architecture'],'warmup'))
+                                for w in warmups for t in cfg['tasks']
+                                if all(t[k]==w[k] for k in ('modality','architecture'))}
+                _base_training_jobs(cfg,args,[*warmups,*cfg['tasks']],workers,dependencies=dependencies)
+            elif 'diagnostics' in cfg:
                 dependencies = {'__'.join(t[k] for k in ('modality','architecture','candidate')):t['modality']+'__target_input__warmup'
                                 for t in cfg['tasks'] if t['architecture']=='target_input'}
                 state.update(stage='D1_H1',updated=now());write_json(out/'controller.json',state)
@@ -7086,6 +7589,10 @@ def _state_refinement_loss(result,batch,spec):
             error=(result[output]-batch[key]).reshape(mask.shape[0],-1,channels)
             derivative=derivative+masked_mean(error.diff(dim=1).square()/batch['dv'+key][:,None,:],valid)/3
         loss=loss+spec['derivative_weight']*derivative
+    if 'band_loss' in spec:
+        from src.analysis.dual_component_tokenizer import eeg_balanced_distortion
+        terms['spectral']=eeg_balanced_distortion(result,batch,spec['band_loss'],spec['band_scales'])
+        loss=loss+spec['band_loss']['loss_weight']*terms['spectral']
     if spec.get('shape_weight',0):
         m=mask.reshape(mask.shape[0],mask.shape[1],-1,channels)
         shape=loss*0.

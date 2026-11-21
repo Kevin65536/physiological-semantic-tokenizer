@@ -99,22 +99,26 @@ class ShapeReadout:
             for j,p in enumerate([0.,site_mean,*prototype]):
                 error = np.where(support,(centered.reshape(mask.shape)-p)**2,0).sum((1,2))
                 scores[:,b,j] = np.divide(error,den,out=np.full_like(error,np.nan),where=den>0)/batch['v'+key][:,0,:self.channels]
-            good = valid.all((1,2))
-            priority = self.rng.random(len(code))
-            for i in np.unique(code[good]):
-                indices = np.flatnonzero(good & (code==i))
-                self.frequency[b,i] += len(indices)
-                choose = indices[np.argsort(priority[indices])[:64]]
-                v = target.reshape(centered.shape)[choose]
-                info = np.column_stack([identities[choose//15],choose%15])
-                prev = self.samples.get((b,i))
-                values = (priority[choose],v,info)
-                if prev is not None:
-                    values = tuple(np.concatenate([a,c]) for a,c in zip(prev,values))
-                order = np.argsort(values[0])[:64]
-                self.samples[b,i] = tuple(a[order] for a in values)
+            self.keep_examples(b,code,target.reshape(centered.shape),valid.all((1,2)),identities)
         if weights is None:
             return scores, coverage
+
+
+    def keep_examples(self,b,code,waves,good,identities):
+        """Keep the 64 lowest independent random priorities in each code."""
+        priority = self.rng.random(len(code))
+        for i in np.unique(code[good]):
+            indices = np.flatnonzero(good & (code==i))
+            self.frequency[b,i] += len(indices)
+            choose = indices[np.argsort(priority[indices])[:64]]
+            v = waves[choose]
+            info = np.column_stack([identities[choose//15],choose%15])
+            prev = self.samples.get((b,i))
+            values = (priority[choose],v,info)
+            if prev is not None:
+                values = tuple(np.concatenate([a,c]) for a,c in zip(prev,values))
+            order = np.argsort(values[0])[:64]
+            self.samples[b,i] = tuple(a[order] for a in values)
 
 
 def shape_gallery(readout, folder, rate):

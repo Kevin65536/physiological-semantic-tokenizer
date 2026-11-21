@@ -1,0 +1,45 @@
+{
+  "config": {
+    "schema": "dual_component_base_pattern_a_v1",
+    "experiment_id": "TK-BASE-PATTERN-A-v1",
+    "source_contract": "experiments/configs/physiology_semantic_tokenizer/dual_component_base_diagnostics_v1.yaml",
+    "d0_run": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261118_d0_d1_h1_v1",
+    "tasks": [
+      "G1_eeg",
+      "G1_hb",
+      "G4_hb"
+    ],
+    "seed": 17,
+    "reference_step": 10000,
+    "codebook_size": 128,
+    "batch_size": 64,
+    "cpu_threads_per_worker": 2,
+    "score_support": "all G0 nonoverlap train and validation inputs; score complete two-second targets; report partial and missing",
+    "background": "dataset and native position crossed with local observed X RMS bins in frozen input SD",
+    "rms_bin_edges": [
+      0.5,
+      1.0,
+      2.0
+    ],
+    "readouts": [
+      "background",
+      "ID",
+      "background_ID",
+      "sequence_decoder"
+    ],
+    "training": "pooled training patch means; background_ID falls back to background; unseen background or ID uses training global mean",
+    "sequence_decoder": "frozen same-branch integer decoder, then identical attribute transform",
+    "minimum_train_subjects": 3,
+    "minimum_train_patches": 20,
+    "attributes": {
+      "eeg": "unaligned voltage, demeaned voltage, Hann one-sided integrated power in [1 4), [4 8), [8 13), [13 30), [30 45] Hz, eight 250-ms RMS envelope bins",
+      "hb": "paired waveform, per-color level, least-squares slope and second derivative from quadratic fit on 20 samples at 10 Hz"
+    },
+    "natural_context": "same validation parent and site; two adjacent admitted score inputs; offset first input by one real patch, compare its anchor 7 against shifted anchor 6 (zero-based)",
+    "None": "frozen ID adds no held-out attribute gain over background and changing real context preserves its training-conditional attribute",
+    "cross_seed": "compare only matched independent checkpoints for the same architecture/data/budget; retained G1/G4 have seed 17 only",
+    "stopping": "finish three frozen model audits, retain all failures and unsupported IDs, no tokenizer training"
+  },
+  "project_root": "/SSD_2/pid-mcm-implementation",
+  "source_root": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_pattern_a_v1/source"
+}

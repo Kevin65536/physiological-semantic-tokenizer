@@ -827,14 +827,14 @@ class GlobalLatentComponentTokenizer(nn.Module):
         branch = self.branches[component]
         return branch['to_latent'](branch['encoder'](branch['input'](values) + self.position))
 
+    def encode_components(self, physical, remaining):
+        if physical.shape != remaining.shape:
+            raise ValueError('matched S and O inputs required')
+        return {c: self._encode_branch(c, y) for c, y in [('S', physical), ('O', remaining)]}
+
     def forward_components(self, physical, remaining):
-        """Continuous diagnostic. Each branch sees only its own target waveform."""
-        if self.hard or physical.shape != remaining.shape:
-            raise ValueError('matched continuous S and O inputs required')
-        latents = {c: self._encode_branch(c, y) for c, y in [('S', physical), ('O', remaining)]}
-        result = {c: self._decode_component(c, z) for c, z in latents.items()}
-        return dict(result, sum=result['S'] + result['O'], latent=latents,
-                    commitment=physical.new_zeros(()), ids={}, health={})
+        """Privileged diagnostic. Each encoder sees only its own branch target."""
+        return self._from_latents(self.encode_components(physical, remaining), physical, self.hard)
 
     def freeze_assignments(self, source):
         """Copy only the source modules that determine the integer IDs."""
@@ -889,7 +889,9 @@ class GlobalLatentComponentTokenizer(nn.Module):
 
     def forward(self, values: torch.Tensor, *, quantize: bool | None = None) -> dict:
         use_hard = self.hard if quantize is None else bool(quantize)
-        latents = self.encode_continuous(values)
+        return self._from_latents(self.encode_continuous(values), values, use_hard)
+
+    def _from_latents(self, latents, values, use_hard):
         result, ids, health = {}, {}, {}
         commitment = values.sum() * 0.
         for component, latent in latents.items():

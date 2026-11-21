@@ -1,0 +1,29 @@
+{
+  "unit": "tk-input-quantization-b-20261120-v1.service",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--unit=tk-input-quantization-b-20261120-v1",
+    "-p",
+    "WorkingDirectory=/SSD_2/pid-mcm-implementation",
+    "-p",
+    "MemoryMax=96G",
+    "-p",
+    "LimitNOFILE=8192",
+    "-p",
+    "StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1/process.log",
+    "-p",
+    "StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1/process.log",
+    "--setenv=CUDA_VISIBLE_DEVICES=GPU-130bb706-1e2e-4523-d23e-6d98c8d9854c,GPU-55cf9000-4186-30c0-c608-8717ba93f3ca",
+    "--setenv=CUDA_DEVICE_ORDER=PCI_BUS_ID",
+    "--setenv=PYTHONUNBUFFERED=1",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1/launch.sh",
+    "base-train"
+  ],
+  "cwd": "/SSD_2/pid-mcm-implementation",
+  "environment": {
+    "CUDA_VISIBLE_DEVICES": "GPU-130bb706-1e2e-4523-d23e-6d98c8d9854c,GPU-55cf9000-4186-30c0-c608-8717ba93f3ca",
+    "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+    "PYTHONUNBUFFERED": "1"
+  }
+}

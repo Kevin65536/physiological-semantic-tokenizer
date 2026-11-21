@@ -1,0 +1,186 @@
+schema: dual_component_base_band_de_v1
+experiment_id: TK-BASE-EEG-BAND-DE-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g0_v2
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  teacher_refits: false
+  raw_reads: false
+  coordinates: exact_completed_G0_arrays_masks_scales_and_population
+model:
+  codebook_size: 128
+  patches: 15
+  heads: 4
+  encoder_layers: 2
+  decoder_layers: 2
+  dropout: 0.0
+  kmeans_iters: 20
+  ema_decay: 0.99
+  commitment_cost: 0.25
+  dead_code_threshold: 0.1
+  revival_warmup_steps: 100
+  revival_interval: 50
+  revival_stop_after_steps: 1500
+  max_revivals_per_event: 8
+architectures:
+  waveform8:
+    width: 128
+    latent_dim: 64
+    waveform_io: true
+    local_width: 32
+    sum_weight: 0.5
+    derivative_weight: 0.1
+    internal_steps: 8
+    sample_strides: &id001
+    - 5
+    - 2
+    - 5
+    kernel_strides: &id002
+    - 5
+    - 4
+    - 5
+  target8:
+    width: 128
+    latent_dim: 64
+    waveform_io: true
+    local_width: 32
+    sum_weight: 0.5
+    derivative_weight: 0.1
+    internal_steps: 8
+    sample_strides: *id001
+    kernel_strides: *id002
+    target_input: true
+tasks:
+- modality: eeg
+  architecture: target8
+  candidate: continuous
+- modality: eeg
+  architecture: waveform8
+  candidate: continuous
+- modality: eeg
+  architecture: waveform8
+  candidate: vq128
+training:
+  seed: 17
+  warmup_steps: 1000
+  total_steps: 10000
+  batch_size: 64
+  learning_rate: 0.0003
+  final_learning_rate: 3.0e-05
+  decay_start_step: 4000
+  learning_rate_schedule: constant_then_cosine_on_absolute_10000_step_clock
+  weight_decay: 0.0001
+  gradient_clip: 5.0
+  checkpoint_every: 500
+  monitor_examples: 512
+  monitoring: fixed_training_draws_seed_8017_not_validation_selection
+  warmup_sharing: one_per_modality_architecture_same_weights_and_exposure_for_both_candidates
+  optimizer_at_branch: reset_for_both_continuous_and_quantized_continuations
+  initialization: exact_G0_one_crop_position_per_training_record_encode_in_batches_then_initialize_once
+  stopping: original loss through 1000, 9000 continuation updates per arm; conditional
+    transfer and two paired seed checks
+evaluation:
+  steps:
+  - 4000
+  - 7000
+  - 10000
+  batch_size: 64
+  roles:
+  - train
+  - validation
+  - regression
+  support: all_G0_nonoverlapping_score_inputs_and_original_five_regression_blocks
+  primary: fixed 10000 REFED X absolute power bias in both 13–30 and 30–45 Hz; macro
+    and X/S/O time-domain guardrails
+  secondary: all four datasets, component/level/shape NMSE, correlations and five
+    frequency bands, paired subject percentile intervals
+  health: actual_ID_counts_train_validation_per_subject_dataset_branch
+  patterns: training_fitted_single_ID_centered_target_and_X_prototypes_validation_readout
+  checkpoint_selection: complete validation only; compare at matched final step
+  replay_atol: 2.0e-06
+  replay_rtol: 1.0e-05
+  baseline: same-input same-architecture unweighted seed-matched final checkpoint
+  null_hypothesis: frequency balancing fails the joint spectral and waveform criterion
+  failed_models: preserve failures, distinguish numerical failure from a scientific
+    stop
+  fixed_examples: first_validation_parent_per_dataset_first_middle_last_available_position_plus_all_regression_inputs
+  budget_rule: fixed 10000 seed-matched updates
+  budget_macro_relative_tolerance: 0.02
+  budget_component_relative_tolerance: 0.05
+  budget_fallback: 10000_and_mixed_or_unsettled_no_automatic_additional_steps
+  integer_replay_check: disabled_by_user
+resources:
+  devices:
+  - cuda:0
+  - cuda:1
+  visible_gpu_uuids:
+  - GPU-130bb706-1e2e-4523-d23e-6d98c8d9854c
+  - GPU-55cf9000-4186-30c0-c608-8717ba93f3ca
+  workers_per_device_candidates:
+  - 1
+  benchmark_steps: 40
+  benchmark_evaluation_examples: 256
+  benchmark_tasks:
+  - eeg_target8
+  - eeg_target8
+  torch_threads: 2
+  numerical_threads: 1
+  mmap_parent_cache: 256
+  gpu_memory_limit_gib: 4
+  supervisor_memory_gib: 96
+  supervisor: user_systemd_linger
+external_warmups:
+  eeg__waveform8:
+    run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261119_e1_waveform8_v1
+    contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_e1_v1.yaml
+    task_id: eeg__waveform8__warmup
+  eeg__target8:
+    run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1
+    contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_matrix_v1.yaml
+    task_id: eeg__target8__warmup
+band_de:
+  bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+  band_power_floor: 0.001
+  loss_weight: 0.1
+  calibration: G0 EEG initialization identities one per training record; complete
+    patches, per-input frozen target variance, record then subject then dataset equal
+  transform: demean each complete 2s patch, symmetric Hann, one-sided complex residual
+    energy in left-closed right-open bands
+  baseline_runs:
+  - run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1
+    contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_matrix_v1.yaml
+    task: eeg__target8__continuous
+  - run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261119_e1_waveform8_v1
+    contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_e1_v1.yaml
+    task: eeg__waveform8__continuous
+  - run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1
+    contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_matrix_v1.yaml
+    task: eeg__waveform8__vq128
+  gate:
+    refed_abs_db_improvement_min: 0.0
+    macro_nmse_relative_increase_max: 0.02
+    component_nmse_relative_increase_max: 0.05
+    component_correlation_drop_max: 0.01
+  confirmation_seeds:
+  - 29
+  - 43
+  confirmation: transfer target-continuous -> X-continuous -> X-K128 only on joint
+    screen pass; repeat promising X-K128 and matched baseline for 29 and 43 sharing
+    ordinary loss warmup per seed; report each seed and same-subject seed-averaged
+    estimates
+  evidence_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1/phase_ab_review_v1
+  phase_c: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_input_quantization_b_v1/phase_c_v1/phase_c.xlsx

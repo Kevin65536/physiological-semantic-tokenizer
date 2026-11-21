@@ -1,0 +1,35 @@
+{
+  "unit": "tk-eeg-band-de-20261120-v1.service",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--unit=tk-eeg-band-de-20261120-v1",
+    "-p",
+    "WorkingDirectory=/SSD_2/pid-mcm-implementation",
+    "-p",
+    "MemoryMax=96G",
+    "-p",
+    "LimitNOFILE=8192",
+    "-p",
+    "StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_eeg_band_de_v1/process.log",
+    "-p",
+    "StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_eeg_band_de_v1/process.log",
+    "--setenv=CUDA_VISIBLE_DEVICES=GPU-130bb706-1e2e-4523-d23e-6d98c8d9854c,GPU-55cf9000-4186-30c0-c608-8717ba93f3ca",
+    "--setenv=CUDA_DEVICE_ORDER=PCI_BUS_ID",
+    "--setenv=PYTHONUNBUFFERED=1",
+    "--setenv=OMP_NUM_THREADS=1",
+    "--setenv=MKL_NUM_THREADS=1",
+    "--setenv=OPENBLAS_NUM_THREADS=1",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_eeg_band_de_v1/launch.sh",
+    "base-band-de"
+  ],
+  "cwd": "/SSD_2/pid-mcm-implementation",
+  "environment": {
+    "CUDA_VISIBLE_DEVICES": "GPU-130bb706-1e2e-4523-d23e-6d98c8d9854c,GPU-55cf9000-4186-30c0-c608-8717ba93f3ca",
+    "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
+    "PYTHONUNBUFFERED": "1",
+    "OMP_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1"
+  }
+}

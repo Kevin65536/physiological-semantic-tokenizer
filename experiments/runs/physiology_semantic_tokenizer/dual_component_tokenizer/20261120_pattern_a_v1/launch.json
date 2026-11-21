@@ -1,0 +1,27 @@
+{
+  "unit": "tk-pattern-a-20261120-v1.service",
+  "cwd": "/SSD_2/pid-mcm-implementation",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--unit=tk-pattern-a-20261120-v1",
+    "-p",
+    "WorkingDirectory=/SSD_2/pid-mcm-implementation",
+    "-p",
+    "MemoryMax=48G",
+    "-p",
+    "LimitNOFILE=8192",
+    "-p",
+    "StandardOutput=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_pattern_a_v1/process.log",
+    "-p",
+    "StandardError=append:/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_pattern_a_v1/process.log",
+    "--setenv=PYTHONUNBUFFERED=1",
+    "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261120_pattern_a_v1/launch.sh",
+    "base-pattern-audit"
+  ],
+  "environment": {
+    "PYTHONUNBUFFERED": 1
+  },
+  "resources": "three independent retained models, two torch threads each; BLAS threads=1; CPU readouts alongside GPU training",
+  "host_inventory": "../20261120_input_quantization_b_v1/resource_inventory.json"
+}

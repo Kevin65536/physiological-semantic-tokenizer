@@ -5344,3 +5344,26 @@ def state_spectral_diagnostics(folder,rate=200):
     fig.suptitle(folder.parent.name+' EEG | fixed development support | unnormalized amplitudes preserved; each facet own y scale')
     fig.savefig(folder/'spectrum.png',dpi=160);plt.close(fig)
     return records
+
+
+def eeg_residual_band_energy(wave, bands):
+    """Integrated one-sided Hann-periodogram energy for each two-second EEG patch."""
+    if wave.shape[-1] != 400:
+        raise ValueError('EEG spectral loss requires 400 samples per two-second patch')
+    window = torch.hann_window(400, periodic=False, device=wave.device, dtype=wave.dtype)
+    centered = wave-wave.mean(dim=-1,keepdim=True)
+    spectrum = torch.fft.rfft(centered*window)
+    power = (spectrum.real.square()+spectrum.imag.square())*(2/(400*window.square().sum()))
+    return torch.stack([power[...,2*lo:2*hi].sum(-1) for lo,hi in bands],dim=-1)
+
+
+def eeg_balanced_distortion(prediction, batch, definition, scales):
+    """Phase-sensitive residual, normalized with frozen train-only spectral scales."""
+    error = torch.stack([prediction[k]-batch[t] for k,t in [('sum','x'),('S','s'),('O','o')]],dim=1)
+    variance = torch.stack([batch['v'+k][:,0,0] for k in 'xso'],dim=1)
+    energy = eeg_residual_band_energy(error,definition['bands_hz'])
+    normalized = energy / variance[:,:,None,None] / scales[None,:,None,:]
+    valid = batch['mask'].all(-1)
+    # Match the time loss's equal example weighting; partial patches contribute no spectral term.
+    per_example = (normalized*valid[:,None,:,None]).sum(2)/valid.sum(1)[:,None,None].clamp_min(1)
+    return per_example.mean()
