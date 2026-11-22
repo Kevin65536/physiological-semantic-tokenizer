@@ -418,6 +418,21 @@ owning user-systemd service. The earlier all-proxy v1 pilot remains failed
 evidence and owns the reused training-reference arrays. Tests:
 `test_so_supervision_cache.py`, `test_dual_component_power_cap.py`.
 
+The [full unified-grid S/O contract](configs/physiology_semantic_tokenizer/long_so_supervision_v3.yaml)
+uses the same long-window command with `--stage so-produce`. It owns training
+reference replay, the representative training pilot, resumable regional fits,
+window synthesis and independent verification in `data/cache/physiology_so_supervision_v3`.
+Use the original supervised launch script in that output root to resume the
+same generation. [Targeted tests](../tests/test_unified_so_production.py)
+cover split membership, short-parent clocks and qualified proxy selection.
+
+The [unified EEG S/O pilot](scripts/evaluate_unified_eeg_so_pilot.py) runs
+`synthetic`, `fit`, `targets`, then `report` with the
+[eight-subject paired contract](configs/physiology_semantic_tokenizer/unified_eeg_so_pilot_v1.yaml).
+It compares the retained native production baseline to 1–45 Hz/200 Hz EEG
+with the same Hb, individual PC, scales, three proxy sites, and known additions.
+[Paired clock and metric checks](../tests/test_unified_eeg_so_pilot.py) use synthetic voltage.
+
 The read-only [S/O synthesis audit](scripts/audit_so_supervision_synthesis.py)
 uses [its population/mechanism contract](configs/physiology_semantic_tokenizer/so_supervision_synthesis_audit_v1.yaml)
 with `--stage <plan|pilot|population|mechanism|summarize|render>` and the

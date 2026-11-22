@@ -1759,6 +1759,23 @@ The cache's manifest, summary and verification own counts and availability.
 
 [`dual_component_masked_state_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_masked_state_v1.yaml)
 consumes only the completed v2 cache's public train/validation subjects through
+### Full unified-EEG S/O target generation
+
+The [v3 contract](../experiments/configs/physiology_semantic_tokenizer/long_so_supervision_v3.yaml)
+uses exactly the registered public v2 windows and subject partitions. Within
+each window the source key and native sample support identify the original
+record, and the output-clock fields identify its nearest 200 Hz start and
+rounding offset. EEG comes from downstream-v2 whole-record 1–45 Hz voltage
+in the original unit coordinate. The Hb observations, reference, positions,
+teacher calibration and last-bin scoring support follow the v2 parent.
+Numerical seeds from reconstruction v4 initialize new 1:4:4 fits at every
+available region. Missing or unsuccessful warm starts use the standard solver.
+Reuse the accepted training-only unified voltage reference and the original
+proxy locations when still qualified; otherwise use the original QR criterion
+among newly qualified positions. Retain numerical failures and target masks.
+The public test partition is used solely for unlabelled teacher construction.
+Protected evaluations remain governed by their own protocols.
+
 `SOSupervisionDataset`. The caller validates schema, exact paths, source identity
 and subject isolation before array access; test/protected inputs are excluded.
 Thirty-second inputs are greedily deduplicated by native record/sample support.

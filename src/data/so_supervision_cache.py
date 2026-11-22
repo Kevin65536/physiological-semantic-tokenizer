@@ -20,8 +20,10 @@ from .registry import REGISTERED_DATASETS
 from .unified_physiology import load_native_eeg_record
 from .dual_component_tokenizer import voltage_power_cap_bank, voltage_power_cap_target
 
+DEFAULT_SO_CACHE_ROOT = "data/cache/physiology_so_supervision_v3"
+
 SCHEMA='physiology_so_supervision_v1'
-SCHEMAS={SCHEMA,'physiology_so_supervision_v2'}
+SCHEMAS={SCHEMA,'physiology_so_supervision_v2','physiology_so_supervision_v3'}
 
 
 def write_json(path,value):
@@ -308,7 +310,7 @@ def verify_worker(payload):
 
 class SOSupervisionDataset:
     """Explicit long-window cache reader; masks and original coordinates retained."""
-    def __init__(self,root,split=None):
+    def __init__(self, root=DEFAULT_SO_CACHE_ROOT, split=None):
         self.root=Path(root);manifest=json.loads((self.root/'cache_manifest.json').read_text())
         if manifest['schema'] not in SCHEMAS or manifest['status']!='completed':raise ValueError('Completed supervision cache required')
         self.windows=[w for w in manifest['windows'] if split is None or w['split']==split]

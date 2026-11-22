@@ -1,0 +1,33 @@
+schema: physiology_so_supervision_v3
+experiment_id: LONG-SO-UNIFIED-EEG-v3
+output: data/cache/physiology_so_supervision_v3
+source_cache: data/cache/physiology_so_supervision_v2
+source_ssm: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4
+downstream_input: data/cache/physiology_downstream_v2
+accepted_pilot: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261121_unified_eeg_so_pilot_v1
+boundary:
+  datasets: [eeg_fnirs_single_trial, simultaneous_eeg_nirs, refed, visual_cognitive_motivation]
+  splits: [train, validation, test]
+  source: exact_registered_public_unlabelled_teacher_windows_only
+  protected_data: forbidden
+  raw_reads: false
+  tokenizer_training: false
+windows: retain_original_absolute_support_and_key_nearest_full_record_200Hz_grid_keep_rounding_offset
+EEG: recorded_downstream_v2_whole_record_1_45Hz_200Hz_inverse_unit_factor_to_original_voltage_coordinate
+Hb: exact_v2_Hb_observations_masks_references_subject_factor_and_valid_Visual_positions
+fit: refit_driver_initial_state_tau_beta_at_every_declared_site_keep_v4_subject_PC_scales_weights_and_priors
+prior_fit: numerical_initialization_only_standard_multistart_if_missing_or_unqualified
+weights: [0.3333333333333333, 1.3333333333333333, 1.3333333333333333]
+reference: reproduce_accepted_unified_reference_on_original_348_train_only_records
+proxy_selection: reuse_v2_selected_positions_when_all_still_qualify_otherwise_covariance_QR_on_new_qualified_rows
+power_cap: 1.0
+validation: exact_window_and_ROI_denominators_200Hz_input_replay_Hb_source_identity_qualified_prediction_residual_masks_and_closure
+stopping: all_planned_identities_terminal_including_numerical_failures_then_independent_verification_before_manifest
+resources:
+  numerical_threads: 1
+  pilot_workers: 8
+  production_workers: 40
+  verification_workers: 12
+  max_in_flight_per_worker: 1
+  frame_batch_size: 8
+  supervisor: user_systemd_with_linger

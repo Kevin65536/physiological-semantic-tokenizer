@@ -163,7 +163,7 @@ def read_config(path=DEFAULT_CONFIG):
         if cfg != yaml.safe_load(owner.read_text()):
             raise ValueError('use the reviewed bounded state-pilot contract')
         return cfg
-    if isinstance(cfg,dict) and cfg.get('schema') in ('physiology_so_supervision_v1','physiology_so_supervision_v2'):
+    if isinstance(cfg,dict) and cfg.get('schema') in ('physiology_so_supervision_v1','physiology_so_supervision_v2','physiology_so_supervision_v3'):
         owner=SOURCE/'experiments/configs/physiology_semantic_tokenizer'/('long_so_supervision_'+cfg['schema'].rsplit('_',1)[-1]+'.yaml')
         if cfg!=yaml.safe_load(owner.read_text()):raise ValueError('Use reviewed long-window S/O contract')
         return cfg
@@ -1130,6 +1130,9 @@ def parse_args(argv=None):
 
 
 def run_long_so_cache(cfg,args):
+    if cfg['schema']=='physiology_so_supervision_v3':
+        from experiments.scripts.unified_so_production import run
+        return run(cfg,args)
     from src.data import so_supervision_cache as data
     root=args.project_root.resolve();out=(args.output or root/cfg['output']).resolve()
     if out!=(root/cfg['output']).resolve():raise ValueError('Use the versioned supervision cache root')
@@ -1217,7 +1220,7 @@ def finalize_long_so_cache(out,cfg,plan,checks):
     if issues:raise ValueError('Supervision cache verification failed')
     windows=[dict(key=g['key'],dataset=g['dataset'],subject=g['subject'],split=g['split'],metadata=str((out/'windows'/g['key']).with_suffix('.json').resolve())) for g in plan['groups']]
     write_json(out/'cache_manifest.json',dict(schema=cfg['schema'],status='completed',windows=windows,verification='verification.json',source_ssm=plan['source'],complete_population_includes_failures=True))
-    write_json(out/'summary.json',dict(result,counts=plan['counts'],SSM_refits=0,tokenizer_training_runs=0,storage='one_full_electrode_long_window_with_Hb_positions_and_masks'))
+    write_json(out/'summary.json',dict(result,counts=plan['counts'],SSM_refits=sum(r.get('refit_sites',0) for r in checks),tokenizer_training_runs=0,storage='one_full_electrode_long_window_with_Hb_positions_and_masks'))
 
 
 def main(argv=None):
@@ -1250,7 +1253,7 @@ def main(argv=None):
         result = state_pilot_dispatch(args, cfg)
         print(json.dumps(serial(result)))
         return
-    if cfg['schema'] in ('physiology_so_supervision_v1','physiology_so_supervision_v2'):
+    if cfg['schema'] in ('physiology_so_supervision_v1','physiology_so_supervision_v2','physiology_so_supervision_v3'):
         return run_long_so_cache(cfg,args)
     if cfg['schema']=='dual_component_voltage_power_cap_posterior_v1':
         if args.stage not in ('check','synthetic','power-cap-plan','power-cap','power-cap-report'):
