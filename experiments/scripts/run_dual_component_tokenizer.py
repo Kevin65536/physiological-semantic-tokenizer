@@ -106,8 +106,8 @@ def read_config(path=DEFAULT_CONFIG):
         if cfg != yaml.safe_load(owner.read_text()):
             raise ValueError('use the frozen E1 continuous EEG contract')
         return cfg
-    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_base_g1_v1':
-        owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v1.yaml'
+    if isinstance(cfg, dict) and cfg.get('schema') in ('dual_component_base_g1_v1', 'dual_component_base_g1_v2'):
+        owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer' / (cfg['schema'] + '.yaml')
         if cfg != yaml.safe_load(owner.read_text()):
             raise ValueError('use the versioned five-model G1 contract')
         return cfg
@@ -121,8 +121,8 @@ def read_config(path=DEFAULT_CONFIG):
         if cfg != yaml.safe_load(owner.read_text()):
             raise ValueError('use the versioned G3 gradual-quantization contract')
         return cfg
-    if isinstance(cfg, dict) and cfg.get('schema') == 'dual_component_base_g0_v1':
-        owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml'
+    if isinstance(cfg, dict) and cfg.get('schema') in ('dual_component_base_g0_v1', 'dual_component_base_g0_v2'):
+        owner = SOURCE / 'experiments/configs/physiology_semantic_tokenizer' / (cfg['schema'] + '.yaml')
         if cfg != yaml.safe_load(owner.read_text()):
             raise ValueError('use the versioned G0 population/preparation contract')
         return cfg
@@ -1225,7 +1225,7 @@ def finalize_long_so_cache(out,cfg,plan,checks):
 
 def main(argv=None):
     args = parse_args(argv); cfg = read_config(args.config)
-    if cfg['schema'] in ('dual_component_base_g1_v1','dual_component_base_followup_v1','dual_component_base_g3_v1','dual_component_base_diagnostics_v1','dual_component_base_e1_v1','dual_component_base_matrix_v1'):
+    if cfg['schema'] in ('dual_component_base_g1_v1','dual_component_base_g1_v2','dual_component_base_followup_v1','dual_component_base_g3_v1','dual_component_base_diagnostics_v1','dual_component_base_e1_v1','dual_component_base_matrix_v1'):
         print(json.dumps(serial(base_training_dispatch(args, cfg))))
         return
     if cfg['schema'] == 'dual_component_base_band_de_v1':
@@ -1234,7 +1234,7 @@ def main(argv=None):
     if cfg['schema'] == 'dual_component_base_pattern_a_v1':
         print(json.dumps(serial(pattern_a_dispatch(args,cfg))))
         return
-    if cfg['schema'] == 'dual_component_base_g0_v1':
+    if cfg['schema'] in ('dual_component_base_g0_v1','dual_component_base_g0_v2'):
         print(json.dumps(serial(base_tokenizer_dispatch(args, cfg))))
         return
     if cfg['schema'] == 'dual_component_masked_state_v1':
@@ -6665,7 +6665,9 @@ def verify_base_tokenizer(cfg, out, plan):
                 if item['start_s'] not in selected[{'train':'train_starts_s','score':'score_starts_s','regression':'regression_starts_s'}[role]]:
                     raise ValueError('prepared crop outside frozen plan')
                 if role != 'regression':
-                    lo=item['start_s']*row['native_rate_hz'];hi=lo+30*row['native_rate_hz']
+                    grid_rate = selected['metadata']['source']['rate']
+                    lo = item['start_s'] * grid_rate
+                    hi = lo + 30 * grid_rate
                     if any(lo < end and hi > begin for begin,end in selected['blocked_samples']):
                         raise ValueError('regression support leaked')
         for item in row['unavailable_inputs']['score']:

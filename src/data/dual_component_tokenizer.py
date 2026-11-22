@@ -91,9 +91,17 @@ def masked_state_identity(root, row, meta, spec):
     for key in ('key', 'dataset', 'subject', 'split'):
         if meta[key] != row[key] or meta['source'][key] != row[key]:
             raise ValueError('source identity mismatch')
-    if (meta['schema'] != spec['source_schema']
-            or meta['source']['rate'] != spec['native_rate_hz'][row['dataset']]):
+    source = meta['source']
+    native_rate = spec['native_rate_hz'][row['dataset']]
+    grid_rate = spec.get('source_grid_hz', native_rate)
+    if meta['schema'] != spec['source_schema'] or source['rate'] != grid_rate:
         raise ValueError('source schema/rate changed')
+    if 'source_grid_hz' in spec and (
+            source['native_rate_hz'] != native_rate or meta['EEG_native_rate_hz'] != native_rate
+            or meta['EEG_output_rate_hz'] != grid_rate
+            or source['native_samples'] != round(source['duration_s'] * native_rate)
+            or source['start_sample'] != round(source['native_start_sample'] * grid_rate / native_rate)):
+        raise ValueError('native support and unified EEG grid disagree')
     path = (Path(root) / 'windows' / row['key']).with_suffix('.npz').resolve()
     if meta.get('array_file') and (Path(meta['array_file']).resolve() != path
             or not path.is_relative_to(Path(root).resolve() / 'windows')):
@@ -218,8 +226,13 @@ def base_tokenizer_plan(cache_root, spec, source_ssm, regression_rows):
             raise ValueError('original regression must belong to training subjects')
         key = r['dataset'], r['subject'], r['record']
         for start in r['holdout_starts_s']:
-            begin = r['native_start_sample'] + start * r['native_rate_hz']
-            regression[key].append(dict(begin=begin, end=begin + 30 * r['native_rate_hz'],
+            native_rate = r['native_rate_hz']
+            if native_rate != spec['native_rate_hz'][r['dataset']]:
+                raise ValueError('original regression acquisition rate changed')
+            grid_rate = spec.get('source_grid_hz', native_rate)
+            origin = round(r['native_start_sample'] * grid_rate / native_rate)
+            begin = origin + start * grid_rate
+            regression[key].append(dict(begin=begin, end=begin + 30 * grid_rate,
                                         parent=r['parent'], start_s=start))
     windows = []
     for split in spec['allowed_splits']:
@@ -255,6 +268,8 @@ def base_tokenizer_plan(cache_root, spec, source_ssm, regression_rows):
                     raise ValueError('regression boundary must align with the resampled EEG grid')
                 w['blocked_samples'].append([lo, hi])
             if r['parent'] == row['key']:
+                if r['begin'] != origin + r['start_s'] * rate:
+                    raise ValueError('original regression parent start changed')
                 w['regression_starts_s'].append(r['start_s'])
         for start in range(0, int(src['duration_s']) - 29, spec['stride_s']):
             begin, end = origin + start * rate, origin + (start + 30) * rate
@@ -328,7 +343,8 @@ def base_tokenizer_coordinates(meta, arrays, modality, selected):
     info = dict(dataset=meta['dataset'], subject=meta['subject'], split=meta['split'],
                 parent=meta['key'], record=meta['source']['native_record'], modality=modality,
                 positions=names, rate=rate, channels=channels, resampling=resampling,
-                native_start_sample=meta['source']['start_sample'], native_rate_hz=meta['source']['rate'],
+                native_start_sample=meta['source'].get('native_start_sample', meta['source']['start_sample']),
+                native_rate_hz=meta['source'].get('native_rate_hz', meta['source']['rate']),
                 source_status=meta['status'], source_unit=meta.get('EEG_unit' if modality=='eeg' else 'fNIRS_unit', 'unknown'),
                 inputs={}, unavailable_inputs={})
     for role, starts in [('train', selected['train_starts_s']), ('score', selected['score_starts_s']),

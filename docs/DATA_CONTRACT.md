@@ -1822,6 +1822,15 @@ source-scoring masks separately, plus failed inputs and complete planned denomin
 
 The user fixes **200 Hz EEG supervision for every dataset** in the
 [TK-STATE-v1 consumer](EXPERIMENT_PLAN.md#tk-state-v1). Its model input X,
+The [unified-grid G0 consumer](../experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml)
+reads the v3 teacher's public train and validation partitions. It validates the
+acquisition rate and native sample support against the teacher's 200 Hz EEG
+grid, then uses the cached EEG and 10 Hz Hb samples directly. It maps each
+original regression parent start to the nearest 200 Hz sample before adding
+the within-parent holdout offset. Crop exclusion and overlap checks use that
+same grid. Training moments and codebook initialization use the new targets
+under the sampling and masking rules above.
+
 supervision S/O and decoded voltage all use that grid: 6,000 samples per
 30-second input and 400 per 2-second patch. The native cache above remains the
 unchanged source. The [consumer contract](../experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml)

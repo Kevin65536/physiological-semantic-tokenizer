@@ -886,6 +886,22 @@ the five-model denominator. `test_dual_component_base_g1.py` covers boundary che
 masked gradients, equal-level aggregation, the bounded budget rule, mmap equivalence,
 matched warmup, exact interrupted continuation, and all five synthetic interfaces.
 
+For unified 200 Hz S/O supervision, the versioned
+[G0 preparation contract](configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml)
+uses the v3 target grid directly and maps the five native pilot holdouts to that
+grid before excluding overlapping crops. The paired
+[G1 training contract](configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml)
+uses this G0 population, training scales and masks with the same five-model
+matrix, stages and targeted tests described above.
+
+For the matched 10,000-step waveform comparison, run
+[`compare_base_so_versions.py`](scripts/compare_base_so_versions.py) with
+`--output <fresh_child_of_unified_G1_run>`. It joins retained validation inputs
+by dataset, subject, record, parent window, crop start and position name. It
+checks single-ID prototype errors against the G0 validation targets, estimates
+the zero-shape baseline and compares assignments on mutually valid patches.
+The HTML export embeds reconstruction examples and training/validation token shapes.
+
 The [dense continuation/G2/G4 contract](configs/physiology_semantic_tokenizer/dual_component_base_g124_v1.yaml)
 uses the same `check`, `synthetic`, `base-train-plan`, `base-train` and report stages.
 It preserves the original dense checkpoint/optimizer/RNG at step 7,000 in a fresh

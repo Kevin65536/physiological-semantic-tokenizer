@@ -169,6 +169,11 @@ The [first resource-pilot failure](runs/physiology_semantic_tokenizer/dual_compo
 retains the systemd file-limit issue before formal warmup; the successor keeps the
 same numerical contract and bounds mmap handles against the actual process limit.
 
+The [unified EEG G1 run](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g1_v1/summary.json)
+owns the v3 terminal records. The [v2/v3 waveform and token comparison](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g1_v1/v2_comparison_20261122_v2/index.html)
+links matched validation reconstruction, single-ID shape performance, code usage
+and examples to the retained evaluations from both teacher versions.
+
 ## Base-tokenizer G0 population and preparation — 2026-11-17
 
 The [G0 contract](configs/physiology_semantic_tokenizer/dual_component_base_g0_v1.yaml)
@@ -499,16 +504,16 @@ at its existing location.
 
 ## Subject-calibrated τ/β reconstruction cache — 2026-11-04
 
-The [long-window S/O supervision plan](../data/cache/physiology_so_supervision_v2/plan.json)
-and [v2 contract](configs/physiology_semantic_tokenizer/long_so_supervision_v2.yaml)
-define full-electrode EEG voltage and all retained Hb-position targets from SSM
-v4. Its [pilot](../data/cache/physiology_so_supervision_v2/pilot_summary.json),
-[waveform diagnostics](../data/cache/physiology_so_supervision_v2/pilot_waveform_diagnostics.json)
 The [paired native vs unified EEG refit review](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261121_unified_eeg_so_pilot_v1/review.html)
 links subject-level reconstruction, injected changes, natural EOG associations
 and the retained voltage-target failure. [Verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261121_unified_eeg_so_pilot_v1/verification.json)
 checks the proxy/Hb scores and matched differences.
 
+The [long-window S/O supervision plan](../data/cache/physiology_so_supervision_v2/plan.json)
+and [v2 contract](configs/physiology_semantic_tokenizer/long_so_supervision_v2.yaml)
+define full-electrode EEG voltage and all retained Hb-position targets from SSM
+v4. Its [pilot](../data/cache/physiology_so_supervision_v2/pilot_summary.json),
+[waveform diagnostics](../data/cache/physiology_so_supervision_v2/pilot_waveform_diagnostics.json)
 and [execution](../data/cache/physiology_so_supervision_v2/execution.json) preserve
 numerical qualification separately from signal attenuation and post-synthesis
 power diagnostics. Completion is owned by the final [cache manifest](../data/cache/physiology_so_supervision_v2/cache_manifest.json),

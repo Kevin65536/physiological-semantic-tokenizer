@@ -75,6 +75,39 @@ def test_plan_is_array_free_preserves_split_and_excludes_overlapping_regression(
         base_tokenizer_plan(root,bad,source,regression)
 
 
+def test_unified_teacher_uses_output_clock_for_native_regression_exclusion(tmp_path):
+    cfg, root, source, regression = fixture(tmp_path)
+    spec = runner.read_config(CONFIG.with_name('dual_component_base_g0_v2.yaml'))['data']
+    manifest_path = root/'cache_manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['schema'] = spec['source_schema']
+    runner.write_json(manifest_path, manifest)
+    for row in manifest['windows']:
+        if row['split'] == 'test':
+            continue
+        path = Path(row['metadata'])
+        meta = json.loads(path.read_text())
+        src = meta['source']
+        native_start = src['start_sample'] + 3
+        src.update(native_rate_hz=1000, native_start_sample=native_start,
+                   native_samples=60000, start_sample=round(native_start/5), rate=200, samples=12000)
+        meta.update(schema=spec['source_schema'], EEG_native_rate_hz=1000, EEG_output_rate_hz=200)
+        runner.write_json(path, meta)
+    regression[0]['native_start_sample'] = 3
+    plan = base_tokenizer_plan(root, spec, source, regression)
+    parents = [w for w in plan['windows'] if w['row']['subject'] == 'a'
+               and w['metadata']['source']['native_record'] == 'r1']
+    assert [w['blocked_samples'] for w in parents] == [[[6000, 12000]], [[0, 6000]]]
+    assert [w['regression_starts_s'] for w in parents] == [[30], []]
+    assert [w['train_starts_s'] for w in parents] == [[0], [30]]
+    path = Path(parents[0]['row']['metadata'])
+    meta = json.loads(path.read_text())
+    meta['source']['start_sample'] += 1
+    runner.write_json(path, meta)
+    with pytest.raises(ValueError, match='unified EEG grid'):
+        base_tokenizer_plan(root, spec, source, regression)
+
+
 def test_duplicate_parent_inputs_have_one_owner_and_scoring_is_disjoint(tmp_path):
     cfg,root,source,_=fixture(tmp_path)
     plan=base_tokenizer_plan(root,cfg['data'],source,[])

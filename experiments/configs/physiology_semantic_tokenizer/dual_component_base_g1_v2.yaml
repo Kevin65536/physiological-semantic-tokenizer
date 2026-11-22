@@ -1,0 +1,85 @@
+schema: dual_component_base_g1_v2
+experiment_id: TK-BASE-UNIFIED-G1-v2
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  teacher_refits: false
+  raw_reads: false
+  coordinates: exact_completed_G0_arrays_masks_scales_and_population
+model:
+  codebook_size: 128
+  patches: 15
+  heads: 4
+  encoder_layers: 2
+  decoder_layers: 2
+  dropout: 0.0
+  kmeans_iters: 20
+  ema_decay: 0.99
+  commitment_cost: 0.25
+  dead_code_threshold: 0.1
+  revival_warmup_steps: 100
+  revival_interval: 50
+  revival_stop_after_steps: 1500
+  max_revivals_per_event: 8
+architectures:
+  waveform: {width: 128, latent_dim: 64, waveform_io: true, local_width: 32, sum_weight: 0.5, derivative_weight: 0.1}
+  dense_long: {width: 64, latent_dim: 32, waveform_io: false, sum_weight: 0.0, derivative_weight: 0.0}
+tasks:
+  - {modality: eeg, architecture: waveform, candidate: continuous}
+  - {modality: eeg, architecture: waveform, candidate: vq128}
+  - {modality: hb, architecture: waveform, candidate: continuous}
+  - {modality: hb, architecture: waveform, candidate: vq128}
+  - {modality: eeg, architecture: dense_long, candidate: vq128}
+training:
+  seed: 17
+  warmup_steps: 1000
+  total_steps: 10000
+  batch_size: 64
+  learning_rate: 0.0003
+  final_learning_rate: 0.00003
+  decay_start_step: 4000
+  learning_rate_schedule: constant_then_cosine_on_absolute_10000_step_clock
+  weight_decay: 0.0001
+  gradient_clip: 5.0
+  checkpoint_every: 500
+  monitor_examples: 512
+  monitoring: fixed_training_draws_seed_8017_not_validation_selection
+  warmup_sharing: one_per_modality_architecture_same_weights_and_exposure_for_both_candidates
+  optimizer_at_branch: reset_for_both_continuous_and_quantized_continuations
+  initialization: exact_G0_one_crop_position_per_training_record_encode_in_batches_then_initialize_once
+  stopping: all_five_tasks_terminal_at_10000_no_metric_dependent_extension
+evaluation:
+  steps: [4000, 7000, 10000]
+  batch_size: 64
+  roles: [train, validation, regression]
+  support: all_G0_nonoverlapping_score_inputs_and_original_five_regression_blocks
+  primary: X_S_O_and_color_equal_then_position_window_record_subject_dataset_equal_NMSE
+  secondary: NRMSE_RMSE_bias_correlation_RMS_gain_level_shape_and_EEG_band_power
+  health: actual_ID_counts_train_validation_per_subject_dataset_branch
+  patterns: training_fitted_single_ID_centered_target_and_X_prototypes_validation_readout
+  checkpoint_selection: lowest_complete_validation_macro_NMSE_earliest_step_on_exact_tie
+  replay_atol: 0.000002
+  replay_rtol: 0.00001
+  baseline: matched_continuous_and_hard_waveform_plus_EEG_dense_long
+  null_hypothesis: no_joint_training_and_validation_gain_or_persistent_quantization_loss
+  failed_models: retained_in_five_task_denominator_no_replacement
+  fixed_examples: first_validation_parent_per_dataset_first_middle_last_available_position_plus_all_regression_inputs
+  budget_rule: earliest_milestone_with_all_five_models_within_tolerances_of_their_own_three_milestone_minima
+  budget_macro_relative_tolerance: 0.02
+  budget_component_relative_tolerance: 0.05
+  budget_fallback: 10000_and_mixed_or_unsettled_no_automatic_additional_steps
+resources:
+  devices: [cuda:0, cuda:1]
+  workers_per_device_candidates: [1]  # Shared GPUs, one concurrent worker on each device.
+  benchmark_steps: 100
+  benchmark_evaluation_examples: 256
+  benchmark_tasks: [eeg_waveform, hb_waveform, eeg_dense_long, eeg_waveform]
+  torch_threads: 2
+  numerical_threads: 1
+  mmap_parent_cache: 256
+  gpu_memory_limit_gib: 4
+  supervisor_memory_gib: 96
+  supervisor: user_systemd_linger
