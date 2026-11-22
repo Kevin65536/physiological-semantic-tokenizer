@@ -504,6 +504,11 @@ and [v2 contract](configs/physiology_semantic_tokenizer/long_so_supervision_v2.y
 define full-electrode EEG voltage and all retained Hb-position targets from SSM
 v4. Its [pilot](../data/cache/physiology_so_supervision_v2/pilot_summary.json),
 [waveform diagnostics](../data/cache/physiology_so_supervision_v2/pilot_waveform_diagnostics.json)
+The [paired native vs unified EEG refit review](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261121_unified_eeg_so_pilot_v1/review.html)
+links subject-level reconstruction, injected changes, natural EOG associations
+and the retained voltage-target failure. [Verification](runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261121_unified_eeg_so_pilot_v1/verification.json)
+checks the proxy/Hb scores and matched differences.
+
 and [execution](../data/cache/physiology_so_supervision_v2/execution.json) preserve
 numerical qualification separately from signal attenuation and post-synthesis
 power diagnostics. Completion is owned by the final [cache manifest](../data/cache/physiology_so_supervision_v2/cache_manifest.json),

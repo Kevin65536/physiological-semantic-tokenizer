@@ -1,0 +1,56 @@
+{
+  "config": {
+    "schema": "unified_eeg_so_pilot_v1",
+    "experiment_id": "SSM-UNIFIED-EEG-SO-PILOT-v1",
+    "output_root": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261121_unified_eeg_so_pilot_v1",
+    "so": "data/cache/physiology_so_supervision_v2",
+    "fit": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4",
+    "panel": "experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261107_weight_so_v1/plan.json",
+    "downstream": "data/cache/physiology_downstream_v2",
+    "donor": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261105_voltage_separation_v1/ocular_single_channel_check_v1/power_cap_hb_weighted_v4/inputs.npz",
+    "selection": "exact_eight_validation_subjects_and_ninety_second_windows_from_historical_weight_panel_no_replacement",
+    "reference": "same_production_training_only_first_full_window_per_record_on_own_voltage_branch",
+    "fixed": "original_individual_PC_and_scales_Hb_and_three_retained_v2_proxy_rows_same_priors_and_1_4_4_weights",
+    "arms": [
+      "native",
+      "unified"
+    ],
+    "variants": [
+      "baseline",
+      "ocular05",
+      "ocular1",
+      "ocular2",
+      "muscle",
+      "hbo_noise",
+      "hbr_noise",
+      "neural10",
+      "neural35"
+    ],
+    "seed": 20261121,
+    "injection": "identical_native_delta_before_preprocessing_unified_delta_is_its_filtered_resampled_image_no_amplitude_restoration",
+    "score": "baseline_0_to_89p9_and_paired_change_30_to_50s_Hb_spillover_30_to_85s",
+    "primary": "EEG_S_leakage_and_O_delta_correlation_against_surviving_injection_Hb_S_leakage_for_Hb_noise",
+    "secondary": "signed_O_gain_input_transmission_fixed_SD_proxy_Hb_errors_correlations_and_cross_modality_changes",
+    "positive_control": "10_and_35Hz_neural_like_additions_Hb_fixed_only_injected_voltage_known",
+    "None": "no_better_absorption_than_baseline_for_each_paired_subject",
+    "historical_ocular_gate": [
+      0.3,
+      0.9
+    ],
+    "boundary": "public_train_reference_and_validation_cases_only_no_test_raw_reads_or_production_writes",
+    "stopping": "all_specified_cases_and_conditions_terminal_no_selection_or_grid_expansion"
+  },
+  "cases": [
+    "eeg_fnirs_single_trial/subject_01/session_00/e0000060014_n0018000",
+    "eeg_fnirs_single_trial/subject_25/session_00/e0000060006_n0018000",
+    "simultaneous_eeg_nirs/VP002/cnt_dsr/e0000131443_n0018000",
+    "simultaneous_eeg_nirs/VP019/cnt_nback/e0000183520_n0018000",
+    "refed/8/video_1/e0000044000_n0090000",
+    "refed/31/video_1/e0000044000_n0090000",
+    "visual_cognitive_motivation/S06/S06_Part2/e0000390038_n0045000",
+    "visual_cognitive_motivation/S14/S14_Part1/e0000390003_n0045000"
+  ],
+  "train_reference_windows": 348,
+  "workers": 8,
+  "planned_target_cells": 144
+}
