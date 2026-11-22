@@ -36,6 +36,7 @@ from .unified_physiology import (
 
 SCHEMA = "physiology_downstream_input_v1"
 SCHEMA_V2 = "physiology_downstream_input_v2"
+DEFAULT_DOWNSTREAM_CACHE_ROOT = "data/cache/physiology_downstream_v2"
 EEG_SCHEMA = "native_voltage_measurement_200hz_v1"
 VISUAL = "visual_cognitive_motivation"
 
@@ -407,7 +408,7 @@ def verify_cache(cache_root):
 
 class DownstreamInputDataset:
     """Read the frozen sample list and mmap measurements; never rebuild or refit."""
-    def __init__(self, cache_root, *, split=None, task=None):
+    def __init__(self, cache_root=DEFAULT_DOWNSTREAM_CACHE_ROOT, *, split=None, task=None):
         self.root = Path(cache_root)
         self.plan = json.loads((self.root/"input_plan.json").read_text())
         self.schema=self.plan.get('schema')

@@ -21,8 +21,8 @@ from .downstream_input_cache import DownstreamInputDataset
 
 from .clean_physiology_cache import (
     CleanPhysiologyCacheIndex,
-    DEFAULT_CLEAN_CACHE_ROOT,
     MEASUREMENT_CACHE_STORAGE,
+    V5_MEASUREMENT_CACHE_ROOT,
 )
 from .event_alignment import EVENT_ALIGNMENT_SCHEMA, window_within_alignment_support
 from .unified_physiology import (
@@ -277,7 +277,7 @@ def _recorded_sample_count(total: int, anchor_ms: float, offset_s: float,
     return max(0, min(stop, total) - max(start, 0))
 
 
-def build_inventory(cache_root: str | Path = DEFAULT_CLEAN_CACHE_ROOT, *,
+def build_inventory(cache_root: str | Path = V5_MEASUREMENT_CACHE_ROOT, *,
                     geometry_root: str | Path | None = None) -> dict[str, Any]:
     """Freeze the common seven-task denominator using permitted metadata only.
 

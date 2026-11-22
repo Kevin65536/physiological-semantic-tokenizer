@@ -16,6 +16,7 @@ for path in (REPO_ROOT, METHOD_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from efrm_pytorch.data import EFRMSyncPretrainDataset, collate_efrm_pairs
 from efrm_pytorch.model import EFRMSyncModel
 from efrm_pytorch.visualization import export_alignment_evidence, render_alignment_report
@@ -36,7 +37,7 @@ def _find_same_record_pair(dataset: EFRMSyncPretrainDataset) -> list[dict]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cache-root", default="data/cache/physiology_semantic_clean_v1")
+    parser.add_argument("--cache-root", default=DEFAULT_CLEAN_CACHE_ROOT)
     parser.add_argument("--dataset", default="eeg_fnirs_single_trial")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--device", default="cpu")

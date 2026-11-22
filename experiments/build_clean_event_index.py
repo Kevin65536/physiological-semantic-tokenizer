@@ -117,8 +117,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--datasets", nargs="+", default=list(DATA_ROOTS), choices=list(DATA_ROOTS))
     parser.add_argument("--subjects-per-dataset", type=int, default=1000)
     parser.add_argument("--records-per-subject", type=int, default=1000)
-    from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
-    parser.add_argument("--output-dir", default=f"{DEFAULT_CLEAN_CACHE_ROOT}/event_index")
+    from src.data.clean_physiology_cache import V5_MEASUREMENT_CACHE_ROOT
+    parser.add_argument("--output-dir", default=f"{V5_MEASUREMENT_CACHE_ROOT}/event_index")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 

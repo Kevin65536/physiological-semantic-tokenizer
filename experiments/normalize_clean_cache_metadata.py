@@ -16,13 +16,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data.clean_physiology_cache import with_canonical_fields, DEFAULT_CLEAN_CACHE_ROOT  # noqa: E402
+from src.data.clean_physiology_cache import with_canonical_fields, V5_MEASUREMENT_CACHE_ROOT  # noqa: E402
 from src.utils.io import write_json  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--cache-root", default=DEFAULT_CLEAN_CACHE_ROOT)
+    parser.add_argument("--cache-root", default=V5_MEASUREMENT_CACHE_ROOT)
     return parser.parse_args()
 
 

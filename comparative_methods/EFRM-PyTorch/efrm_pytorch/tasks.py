@@ -12,6 +12,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from src.data.unified_physiology import (
     REFEDContinuousSequenceDataset,
     UnifiedPhysiologyWindowDataset,
@@ -92,7 +93,7 @@ class EFRMUnifiedTaskDataset(Dataset):
     def __init__(
         self,
         spec: EFRMTaskSpec,
-        cache_root: str = "data/cache/physiology_semantic_clean_v1",
+        cache_root: str = DEFAULT_CLEAN_CACHE_ROOT,
         *,
         require_full_analysis_support: bool = False,
     ) -> None:

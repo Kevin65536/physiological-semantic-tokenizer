@@ -10764,7 +10764,7 @@ def tak_main(args):
 
 def tak_cache_config(path=None):
     folder=CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer'
-    default=folder/'shared_driver_tak_subject_cache_v3.yaml'
+    default=folder/'shared_driver_tak_subject_cache_v4.yaml'
     cfg=yaml.safe_load(Path(path or default).read_text())
     contracts={f'shared_driver_tak_subject_cache_v{v}':folder/f'shared_driver_tak_subject_cache_v{v}.yaml'
                for v in (1,2,3,4)}

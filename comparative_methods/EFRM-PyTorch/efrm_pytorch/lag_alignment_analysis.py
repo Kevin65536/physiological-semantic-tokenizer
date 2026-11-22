@@ -42,6 +42,8 @@ except ImportError:  # pragma: no cover - exercised only by direct execution
     sys.path.insert(0, str(_method_root))
     from efrm_pytorch.visualization import EVIDENCE_SCHEMA
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
+
 
 ANALYSIS_SCHEMA = "efrm_relative_crop_alignment_proxy_v1"
 CAPABILITY_SCHEMA = "efrm_lag_alignment_capability_v1"
@@ -687,7 +689,7 @@ def analyze_evidence(
     tolerance_s: float = DEFAULT_MATCH_TOLERANCE_S,
     null_permutations: int = DEFAULT_NULL_PERMUTATIONS,
     seed: int = DEFAULT_SEED,
-    raw_cache_root: str | Path = "data/cache/physiology_semantic_clean_v1",
+    raw_cache_root: str | Path = DEFAULT_CLEAN_CACHE_ROOT,
 ) -> dict[str, Any]:
     output = Path(output_dir).resolve()
     _assert_public_path(output)
@@ -846,7 +848,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", action="append", required=True, help="public full-validation evidence .npz; repeat for multiple runs")
     parser.add_argument("--output-root", default="comparative_methods/runs/performance_analysis/20260816_p0/efrm_lag")
-    parser.add_argument("--raw-cache-root", default="data/cache/physiology_semantic_clean_v1")
+    parser.add_argument("--raw-cache-root", default=DEFAULT_CLEAN_CACHE_ROOT)
     parser.add_argument("--lag-grid", type=_parse_lag_grid, default=DEFAULT_LAG_GRID_S)
     parser.add_argument("--crop-grid-s", type=float, default=DEFAULT_CROP_GRID_S)
     parser.add_argument("--tolerance", type=float, default=DEFAULT_MATCH_TOLERANCE_S)

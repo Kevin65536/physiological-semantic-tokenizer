@@ -23,6 +23,7 @@ for path in (REPO_ROOT, METHOD_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from efrm_pytorch.data import EFRMPairedWindowAdapter, EFRMSyncPretrainDataset
 from efrm_pytorch.tasks import EFRMUnifiedTaskDataset, TASK_SPECS
 
@@ -651,7 +652,7 @@ def main() -> None:
         default=str(METHOD_ROOT / f"runs/formal/{PROTOCOL_ID}"),
     )
     parser.add_argument(
-        "--cache-root", default="data/cache/physiology_semantic_clean_v1"
+        "--cache-root", default=DEFAULT_CLEAN_CACHE_ROOT
     )
     parser.add_argument("--stage", choices=("cohort", "folds"), required=True)
     parser.add_argument("--source-checkpoint")

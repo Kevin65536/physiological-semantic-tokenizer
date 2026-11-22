@@ -512,8 +512,8 @@ def test_warmstart_refuses_test_split_before_signal_read(tmp_path):
         runner._warmstart_prepare_worker(({},str(tmp_path),dict(split='test')))
 
 
-def test_v3_default_uses_individual_pca_new_weights_and_same_physiological_penalties():
-    cfg,core=runner.tak_cache_config()
+def test_v3_uses_individual_pca_new_weights_and_same_physiological_penalties():
+    cfg,core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v3.yaml')
     old,base=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v2.yaml')
     assert cfg['schema']=='shared_driver_tak_subject_cache_v3'
     assert cfg['calibration']==old['calibration'] and cfg['windows']==old['windows']
@@ -523,7 +523,7 @@ def test_v3_default_uses_individual_pca_new_weights_and_same_physiological_penal
 
 
 def test_v3_retains_failed_warm_attempt_and_refits_standard(tmp_path,monkeypatch):
-    cfg,core=runner.tak_cache_config();out=tmp_path/'new';source=tmp_path/'old';n=60
+    cfg,core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v3.yaml');out=tmp_path/'new';source=tmp_path/'old';n=60
     spec=dict(record_key='fixture/s/r',dataset='fixture',subject='s',split='train',window={'key':'w00000'},pair=dict(native_index=0,status='available',channel_sets={'nearest6':list(range(6))}))
     old=source/'tasks/fixture/s/r/w00000__p000.json'
     runner.write_json(old,dict(schema='old',identity=spec,qualified=True,fits={'tak_tau_beta':dict(tau=2.,beta=1.)}))
@@ -598,8 +598,9 @@ def test_v4_sparse_pair_warm_seed_and_target_use_different_indices(tmp_path,monk
 
 
 def test_v4_keeps_v3_model_and_explicit_visual_only_migration():
-    cfg,core=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v4.yaml')
-    old,base=runner.tak_cache_config()
+    cfg,core=runner.tak_cache_config()
+    assert cfg['schema']=='shared_driver_tak_subject_cache_v4'
+    old,base=runner.tak_cache_config(runner.CODE_ROOT/'experiments/configs/physiology_semantic_tokenizer/shared_driver_tak_subject_cache_v3.yaml')
     assert cfg['model']==old['model'] and cfg['windows']==old['windows']
     assert core['arms']==base['arms'] and core['solver']==base['solver']
     assert cfg['migration']['dataset']=='visual_cognitive_motivation'

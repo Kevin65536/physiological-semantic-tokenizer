@@ -35,7 +35,7 @@ from src.data.homer2_preprocessing import (  # noqa: E402
     homer2_compatibility_manifest,
 )
 from src.data.clean_physiology_cache import (CLEAN_CACHE_SCHEMA, require_current_cache_manifest,
-    with_canonical_fields, DEFAULT_CLEAN_CACHE_ROOT, MEASUREMENT_CACHE_STORAGE, CleanCacheRecord)  # noqa: E402
+    with_canonical_fields, V5_MEASUREMENT_CACHE_ROOT, MEASUREMENT_CACHE_STORAGE, CleanCacheRecord)  # noqa: E402
 from src.utils.io import save_npz, write_json  # noqa: E402
 
 
@@ -82,7 +82,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--records-per-subject", type=int, default=1000)
     parser.add_argument("--max-samples", type=int, default=0, help="Optional leading sample cap for smoke runs.")
     parser.add_argument("--include-refed-absorbance", action="store_true")
-    parser.add_argument("--output-dir", default=DEFAULT_CLEAN_CACHE_ROOT)
+    parser.add_argument("--output-dir", default=V5_MEASUREMENT_CACHE_ROOT)
     parser.add_argument("--storage", choices=[MEASUREMENT_CACHE_STORAGE, "legacy_npz"], default=MEASUREMENT_CACHE_STORAGE)
     parser.add_argument("--workers", type=int, default=4,
                         help="Independent record producers; size to measured CPU/memory/IO capacity. Use 1 for serial replay.")

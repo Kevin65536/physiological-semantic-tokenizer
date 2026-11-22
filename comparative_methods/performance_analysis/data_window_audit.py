@@ -35,6 +35,7 @@ if str(REPO_ROOT) not in sys.path:
 if str(EFRM_ROOT) not in sys.path:
     sys.path.insert(0, str(EFRM_ROOT))
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from efrm_pytorch.tasks import EFRMUnifiedTaskDataset, TASK_SPECS  # noqa: E402
 
 
@@ -69,7 +70,7 @@ DEFAULT_REGISTRY = (
     / "runs/formal/efrm_lodo_full_target_fivefold_v2/protocol"
     / "shared_full_target_fold_registry/registry_manifest.json"
 )
-DEFAULT_CACHE_ROOT = REPO_ROOT / "data/cache/physiology_semantic_clean_v1"
+DEFAULT_CACHE_ROOT = REPO_ROOT / DEFAULT_CLEAN_CACHE_ROOT
 DEFAULT_OUTPUT = (
     REPO_ROOT / "comparative_methods/runs/performance_analysis/20260816_p0/data_audit"
 )

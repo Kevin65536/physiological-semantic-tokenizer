@@ -46,6 +46,7 @@ for _import_root in (REPO_ROOT, EFRM_ROOT):
     if str(_import_root) not in sys.path:
         sys.path.insert(0, str(_import_root))
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from efrm_pytorch.tasks import EFRMUnifiedTaskDataset, TASK_SPECS  # noqa: E402
 
 
@@ -72,7 +73,7 @@ BANDS: tuple[tuple[str, float, float], ...] = (
     ("beta", 13.0, 30.0),
     ("gamma", 30.0, 45.0),
 )
-DEFAULT_CACHE_ROOT = REPO_ROOT / "data" / "cache" / "physiology_semantic_clean_v1"
+DEFAULT_CACHE_ROOT = REPO_ROOT / DEFAULT_CLEAN_CACHE_ROOT
 DEFAULT_SPLIT_ROOT = (
     EFRM_ROOT
     / "runs"

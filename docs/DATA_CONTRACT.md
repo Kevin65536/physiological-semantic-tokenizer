@@ -183,8 +183,12 @@ The storage schema stays `clean_eeg_fnirs_cache_v2`, and the inherited temporal
 processing identity stays `physiology_measurement_alignment_v5` / `none`:
 there is no new filter, resampling or MBLL pass. The new measurement generation,
 selection and normalization have separate explicit identities. Existing v5/v1
-arrays and old SSM generations remain unchanged. Historical default roots do
-not silently redirect; consumers select the new roots explicitly.
+arrays and old SSM generations remain unchanged.
+
+Generic readers now default to measurement v6 and downstream-input v2. The Tak
+reconstruction cache entry defaults to its v4 contract, and the long-window S/O
+reader defaults to verified v3. Explicit versioned inputs retain their original
+coordinates. The standalone v5 measurement producer still writes to its v5 root.
 
 `DownstreamInputDataset` accepts the v2 plan and returns compact channel names,
 geometry and the explicit normalization reference. Channel counts vary across
@@ -1755,10 +1759,6 @@ masks and coordinates. Completion requires all planned windows to be terminal,
 with independent shape/closure checks and exact fNIRS/proxy source replay.
 The cache's manifest, summary and verification own counts and availability.
 
-### Frozen contextual-token pretraining consumer — 2026-11-13
-
-[`dual_component_masked_state_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_masked_state_v1.yaml)
-consumes only the completed v2 cache's public train/validation subjects through
 ### Full unified-EEG S/O target generation
 
 The [v3 contract](../experiments/configs/physiology_semantic_tokenizer/long_so_supervision_v3.yaml)
@@ -1776,6 +1776,10 @@ among newly qualified positions. Retain numerical failures and target masks.
 The public test partition is used solely for unlabelled teacher construction.
 Protected evaluations remain governed by their own protocols.
 
+### Frozen contextual-token pretraining consumer — 2026-11-13
+
+[`dual_component_masked_state_v1.yaml`](../experiments/configs/physiology_semantic_tokenizer/dual_component_masked_state_v1.yaml)
+consumes only the completed v2 cache's public train/validation subjects through
 `SOSupervisionDataset`. The caller validates schema, exact paths, source identity
 and subject isolation before array access; test/protected inputs are excluded.
 Thirty-second inputs are greedily deduplicated by native record/sample support.
@@ -1818,10 +1822,6 @@ in the G0 contract. Validation/regression fit no statistics. A position without 
 training scale is explicitly unavailable. Preparation retains input, teacher and
 source-scoring masks separately, plus failed inputs and complete planned denominators.
 
-### Tokenizer EEG supervision at 200 Hz — 2026-11-12
-
-The user fixes **200 Hz EEG supervision for every dataset** in the
-[TK-STATE-v1 consumer](EXPERIMENT_PLAN.md#tk-state-v1). Its model input X,
 The [unified-grid G0 consumer](../experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml)
 reads the v3 teacher's public train and validation partitions. It validates the
 acquisition rate and native sample support against the teacher's 200 Hz EEG
@@ -1831,6 +1831,10 @@ the within-parent holdout offset. Crop exclusion and overlap checks use that
 same grid. Training moments and codebook initialization use the new targets
 under the sampling and masking rules above.
 
+### Tokenizer EEG supervision at 200 Hz — 2026-11-12
+
+The user fixes **200 Hz EEG supervision for every dataset** in the
+[TK-STATE-v1 consumer](EXPERIMENT_PLAN.md#tk-state-v1). Its model input X,
 supervision S/O and decoded voltage all use that grid: 6,000 samples per
 30-second input and 400 per 2-second patch. The native cache above remains the
 unchanged source. The [consumer contract](../experiments/configs/physiology_semantic_tokenizer/dual_component_state_v1.yaml)

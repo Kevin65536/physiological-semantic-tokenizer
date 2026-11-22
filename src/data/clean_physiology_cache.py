@@ -16,7 +16,9 @@ from .homer2_preprocessing import MEASUREMENT_ALIGNMENT_SCHEMAS, MEASUREMENT_ALI
 
 CLEAN_PHYSIOLOGY_CACHE_INDEX_SCHEMA = "clean_physiology_cache_index_v1"
 CLEAN_CACHE_SCHEMA = "clean_eeg_fnirs_cache_v2"
-DEFAULT_CLEAN_CACHE_ROOT = "data/cache/physiology_semantic_clean_v5"
+DEFAULT_CLEAN_CACHE_ROOT = "data/cache/physiology_semantic_clean_v6"
+# The generic measurement writer implements v5. Visual v6 has a separate migration producer.
+V5_MEASUREMENT_CACHE_ROOT = "data/cache/physiology_semantic_clean_v5"
 MEASUREMENT_CACHE_STORAGE = "measurement_npy_record_v1"
 # Immutable v1 artifacts remain historical evidence, not inputs to the v2 reader.
 DEPRECATED_CACHE_SCHEMAS = frozenset({"clean_eeg_fnirs_cache_v1"})

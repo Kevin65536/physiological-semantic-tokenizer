@@ -92,8 +92,8 @@ VISUAL_FNIRS_TEMPLATE_PROVENANCE = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--datasets", nargs="+", default=list(DATA_ROOTS), choices=list(DATA_ROOTS))
-    from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
-    parser.add_argument("--output-dir", default=f"{DEFAULT_CLEAN_CACHE_ROOT}/channel_geometry")
+    from src.data.clean_physiology_cache import V5_MEASUREMENT_CACHE_ROOT
+    parser.add_argument("--output-dir", default=f"{V5_MEASUREMENT_CACHE_ROOT}/channel_geometry")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--refed-geometry", choices=("standard_montage_v1", "paper_layout_v1"),
                         default="standard_montage_v1",

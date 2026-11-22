@@ -16,6 +16,7 @@ for path in (REPO_ROOT, METHOD_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from efrm_pytorch.data import EFRMSyncPretrainDataset
 from efrm_pytorch.protocol import PretrainingBoundary, role_counts, sha256_file
 
@@ -38,7 +39,7 @@ def _git_revision(path: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cache-root", default="data/cache/physiology_semantic_clean_v1")
+    parser.add_argument("--cache-root", default=DEFAULT_CLEAN_CACHE_ROOT)
     parser.add_argument("--split-manifest", action="append", default=[])
     parser.add_argument("--task", action="append", default=[])
     parser.add_argument("--mode", default="development_public_only")

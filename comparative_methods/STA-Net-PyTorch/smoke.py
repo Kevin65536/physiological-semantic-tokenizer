@@ -29,6 +29,7 @@ if str(REPO_ROOT) not in sys.path:
 if str(METHOD_ROOT) not in sys.path:
     sys.path.insert(0, str(METHOD_ROOT))
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from sta_net_pytorch import (
     STANetUnifiedTaskDataset,
     collate_sta_net,
@@ -207,7 +208,7 @@ def _run_task(
     smoke_config = config.get("smoke", {})
     model_config = config.get("model", {})
     training_config = config.get("training", {})
-    dataset = STANetUnifiedTaskDataset(spec, cache_root=str(data_config.get("cache_root", "data/cache/physiology_semantic_clean_v1")))
+    dataset = STANetUnifiedTaskDataset(spec, cache_root=str(data_config.get("cache_root", DEFAULT_CLEAN_CACHE_ROOT)))
     train_indices, validation_indices, split_manifest = _select_smoke_indices(
         dataset,
         train_subject_count=int(smoke_config.get("train_subject_count", 2)),

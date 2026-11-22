@@ -14,6 +14,7 @@ for path in (REPO_ROOT, METHOD_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from sta_net_pytorch.data import STANetUnifiedTaskDataset, get_sta_net_task_spec
 from sta_net_pytorch.splits import (
     build_cross_subject_registry,
@@ -25,7 +26,7 @@ from sta_net_pytorch.splits import (
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", default=str(METHOD_ROOT / "split_registry"))
-    parser.add_argument("--cache-root", default="data/cache/physiology_semantic_clean_v1")
+    parser.add_argument("--cache-root", default=DEFAULT_CLEAN_CACHE_ROOT)
     parser.add_argument("--tasks", nargs="+", default=[
         "motor_imagery", "mental_arithmetic", "wg", "nback", "dsr", "visual", "refed_regression"
     ])

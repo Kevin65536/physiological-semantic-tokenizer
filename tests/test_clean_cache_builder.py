@@ -5,6 +5,31 @@ import pytest
 from experiments.build_clean_eeg_fnirs_cache import _pair_single_trial_wavelengths
 
 
+def test_default_read_roots_and_v5_writer_destinations(monkeypatch, tmp_path):
+    import sys
+    from pathlib import Path
+    from experiments import build_clean_channel_geometry, build_clean_eeg_fnirs_cache, build_clean_event_index
+    from src.data.clean_physiology_cache import CleanPhysiologyCacheIndex
+    from src.data.downstream_input_cache import DownstreamInputDataset
+    from src.data.so_supervision_cache import SOSupervisionDataset
+
+    monkeypatch.chdir(tmp_path)
+    for reader, root, manifest in (
+        (CleanPhysiologyCacheIndex, "physiology_semantic_clean_v6", "cache_manifest.json"),
+        (DownstreamInputDataset, "physiology_downstream_v2", "input_plan.json"),
+        (SOSupervisionDataset, "physiology_so_supervision_v3", "cache_manifest.json"),
+    ):
+        with pytest.raises(FileNotFoundError) as missing:
+            reader()
+        assert Path(missing.value.filename) == Path("data/cache", root, manifest)
+
+    monkeypatch.setattr(sys, "argv", ["builder"])
+    v5 = Path("data/cache/physiology_semantic_clean_v5")
+    assert Path(build_clean_eeg_fnirs_cache.parse_args().output_dir) == v5
+    assert Path(build_clean_channel_geometry.parse_args().output_dir) == v5 / "channel_geometry"
+    assert Path(build_clean_event_index.parse_args().output_dir) == v5 / "event_index"
+
+
 def test_public_subjects_have_matching_signal_event_geometry_coverage(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from experiments import build_clean_eeg_fnirs_cache as signal

@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from src.data.unified_physiology import (
     RAW_DATASET_IDS,
     UnifiedPhysiologyWindowDataset,
@@ -232,7 +233,7 @@ class EFRMSyncPretrainDataset(Dataset):
 
     def __init__(
         self,
-        cache_root: str = "data/cache/physiology_semantic_clean_v1",
+        cache_root: str = DEFAULT_CLEAN_CACHE_ROOT,
         *,
         dataset_ids: Sequence[str] = RAW_DATASET_IDS,
         task_namespaces: Sequence[str] | None = None,

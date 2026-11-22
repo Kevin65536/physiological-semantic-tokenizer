@@ -28,6 +28,7 @@ for import_path in (REPO_ROOT, EFRM_ROOT):
     if str(import_path) not in sys.path:
         sys.path.insert(0, str(import_path))
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
 from efrm_pytorch.tasks import EFRMUnifiedTaskDataset, TASK_SPECS
 
 
@@ -403,7 +404,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--registry-manifest", type=Path, default=default_registry)
     parser.add_argument(
-        "--cache-root", type=Path, default=REPO_ROOT / "data/cache/physiology_semantic_clean_v1"
+        "--cache-root", type=Path, default=REPO_ROOT / DEFAULT_CLEAN_CACHE_ROOT
     )
     parser.add_argument("--outer-fold", type=int, default=0)
     parser.add_argument("--max-records-per-task", type=int, default=0)

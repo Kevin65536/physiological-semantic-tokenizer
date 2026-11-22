@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from src.data.clean_physiology_cache import DEFAULT_CLEAN_CACHE_ROOT
+
 from .data import EFRMSyncPretrainDataset
 from .tasks import EFRMUnifiedTaskDataset, get_task_spec
 
@@ -61,7 +63,7 @@ def load_public_split_subjects(
     path: str | Path,
     *,
     task: str | None = None,
-    cache_root: str = "data/cache/physiology_semantic_clean_v1",
+    cache_root: str = DEFAULT_CLEAN_CACHE_ROOT,
 ) -> PublicSplitSubjects:
     """Resolve train/validation subjects without ever reading protected files."""
 
@@ -151,7 +153,7 @@ class PretrainingBoundary:
         *,
         tasks: Sequence[str] | None = None,
         mode: str = "development_public_only",
-        cache_root: str = "data/cache/physiology_semantic_clean_v1",
+        cache_root: str = DEFAULT_CLEAN_CACHE_ROOT,
     ) -> "PretrainingBoundary":
         if tasks is not None and len(tasks) != len(paths):
             raise ValueError("tasks must be omitted or have one entry per manifest")
