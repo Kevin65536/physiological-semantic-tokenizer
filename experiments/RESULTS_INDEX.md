@@ -40,6 +40,10 @@ The [four terminal models](runs/physiology_semantic_tokenizer/single_vq_dynamic_
 
 The [member atlas and result tables](runs/physiology_semantic_tokenizer/single_vq_relations/20261125_v1/index.html) cover training-selected words, matched observations, failures, short sequences, paired event support and the independent measured-Hb screen. The [completion manifest](runs/physiology_semantic_tokenizer/single_vq_relations/20261125_v1/summary.json) identifies the populations and denominators.
 
+## EEG-S spectral loss placement review — 2026-11-25
+
+The [Chinese result report](runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1/review_20261125_v1/EEG-S_频谱损失位置_结果报告.pdf) covers the three-arm screen and paired second-seed comparison. The [figure and table package](runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1/review_20261125_v1/图表与配对数据.zip) includes the subject contrasts, actual word members and fixed waveform cases. The [renderer](scripts/render_single_vq_spectral_report.py) consumes retained development evidence and writes to a fresh versioned output directory.
+
 ## Frozen single-VQ attribute readouts — 2026-11-25
 
 The [development result](runs/physiology_semantic_tokenizer/single_vq_readout/20261125_v1/summary.json) links each branch and seed to its actual support. The [macro gain table](runs/physiology_semantic_tokenizer/single_vq_readout/20261125_v1/macro_gains.csv) compares conditional means, training-selected shrinkage, matched linear probes and decoded attributes. [Coverage](runs/physiology_semantic_tokenizer/single_vq_readout/20261125_v1/support.csv) counts valid patches within each dataset. [Paired contrasts](runs/physiology_semantic_tokenizer/single_vq_readout/20261125_v1/paired_differences.csv) use development subjects as the resampling unit. Each branch directory holds dataset and subject scores and the training-only fold selections. The parent [capacity scoreboard](runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/review_20261124_v1/tables/scoreboard.csv) retains the reconstruction comparisons.
