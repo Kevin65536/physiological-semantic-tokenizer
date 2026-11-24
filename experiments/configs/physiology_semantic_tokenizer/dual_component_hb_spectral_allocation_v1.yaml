@@ -1,0 +1,55 @@
+schema: hb_spectral_allocation_v1
+experiment_id: TK-HB-FROZEN111-WHOLE30S-SPECTRAL-TRANSFER-v1
+source:
+  pair_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_native_id_readout/pair_allocation_v1
+  original_training_bank: unchanged_original15360_60train_4subject_folds
+data:
+  allowed_splits: [train]
+  validation_access: after_original_training_numerical_and_actual_visual_verdict_is_reported
+  confirmation_access: forbidden
+  test_access: forbidden
+  raw_reads: false
+  target_changes: false
+model:
+  input: integer_decoded_S_HbO_S_HbR_O_HbO_O_HbR_only
+  context_seconds: 30
+  sample_rate_hz: 10
+  branch_vocabularies: {S: 129, O: 257}
+  groups_DCT_indices: [[0, 1], [1, 3], [3, 13]]
+  group_hz: [window_mean, 0.0166667_to_0.0333333, 0.05_to_0.2]
+  same_matrix_within_group: true
+  extra_high_frequency_correction: zero
+  inputs_per_group: 4
+  output_delta_colors: 2
+  preserve: O_plus_delta_S_minus_delta_exact_111_sum_quiet_all_outputs
+  normalization: fit_only_uncentered_feature_RMS_coefficient_unscaling_before_decode
+  unencoded_continuous_inputs: []
+  extra_integers: 0
+fitting:
+  scopes: [global, dataset]
+  ridge_fractions: [0.1, 1.0]
+  penalty: fraction_times_mean_standardized_Gram_diagonal_per_color
+  scalar_coefficients: {global: 24, dataset: 96}
+  intercept: false
+  objective: exact_original_mask_valid_time_count_G0_variance_hierarchy_joint_S_O
+  target_delta: same_exact_weighted_joint_optimum_as_original_pair_head
+  nesting: outer_111_head_k_on_both_fit_and_held_new_spectral_coefficients_fit_people_only
+selection:
+  relative_owner: pair_allocation_v1/resolved_config.json/config/selection
+  absolute_owner: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  gates: all_original_relative_waveform_gain_tail_S_peak_shape_plus_absolute_Hb_reconstruction
+  choose: eligible_minimum_joint_NMSE_then_fewer_coefficients_then_stronger_ridge
+  no_pass: stop_without_screen
+  promotion: report_original_training_numerical_and_actual_visual_verdict_before_new_screen
+diagnostics:
+  whole_window_level_vs_centered_error: report_on_original_mask_no_target_redefinition
+  group_ablations: frozen_model_remove_DC_slow_or_dynamic_no_refit_no_selection
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 1
+  numerical_threads: 2
+  threads_max: 4
+  memory_GiB: 12
+  process_CPU_limit_seconds: 1550
+  campaign_CPU_budget_seconds: 1800
+  batch_size: 256

@@ -1,0 +1,54 @@
+schema: transient_actual_word_information_v1
+experiment_id: TK-TRANSIENT-ACTUAL-WORD-INFORMATION-v1
+source:
+  hard_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_transient_as_v1.yaml
+  hard_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/hard_as_v1
+  output: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/hard_as_v1/local_information_v1
+data:
+  allowed_splits: [train]
+  original_crops: 400
+  original_subjects: 60
+  original_scoring_positions: 17040
+  folds: exact_anchored_four_subject_folds
+  full_X: same_float64_G0_joint_loader_as_root_hard_producer_no_float32_native_cache_substitution
+  targets_and_background: original_G0_training_coordinate_raw_voltage_and_mask
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+selection:
+  eligible: all_families_admitted_by_root_hard_training_waveform_verdict
+  neither_eligible: exactly_one_family_maximizing_mean_relative_S_and_O_NMSE_improvement
+  ties: original_contract_family_order
+  freeze: before_any_fit_source_prototype_encoding
+  mechanism_result_changes_waveform_rejection: false
+  additional_family: high
+  additional_family_role: separately_authorized_existing_flagship_mechanism_check_after_original_gain_band_local_RMS_ranges_reached_keep_original_rejection
+prototype:
+  fit_IDs: reencode_fit_subject_crops_with_exact_source_f_for_readout_fold_f
+  held_IDs: reuse_root_OOF_integers_with_same_source_f_no_full_held_reencoding
+  legacy_fit_IDs: reuse_root_legacy_native_arrays_once_across_all_four_folds
+  decoder_coordinates: frozen_family_PCA_atoms_roles_G0_scales_and_observation_availability
+  held_reencode_probes: first_crop_per_dataset_per_fold_transient_plus_first_crop_per_dataset_legacy
+  readout: original_unshrunk_background_and_background_plus_role_ID_conditional_means
+  background: dataset_native_site_and_full_X_local_RMS_bins_0.5_1_2
+  fields: [power_4_8, power_8_13, rms_envelope_8_quarter_second_values]
+  complete_patches: same_original_G0_mask_all_400_points
+acceptance:
+  source: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  primary: theta_and_alpha_positive_and_at_least_one_of_theta_alpha_or_RMS_gain_0.05_each_branch
+  people: theta_and_alpha_positive_in_at_least_half_60_held_training_subjects
+  support: at_least_0.90_held_mass_on_codes_with_8_complete_fit_patches_and_2_fit_subjects
+  summary_hierarchy: positions_then_crop_record_subject_dataset_equal
+  failures: retain_all_subjects_datasets_codes_and_original_windows
+  promotion: parent_only_after_original_waveform_and_original_raw_single_ID_tests_pass
+resources:
+  supervisor: user_systemd_linger
+  workers: 4
+  BLAS_threads: 1
+  inherited_fft_threads: 2
+  maximum_numerical_threads: 8
+  memory_gib: 20
+  total_CPU_budget_seconds: 5400
+  fit_CPU_stop_seconds: 4900
+  wall_seconds: 2700
+  GPU: []

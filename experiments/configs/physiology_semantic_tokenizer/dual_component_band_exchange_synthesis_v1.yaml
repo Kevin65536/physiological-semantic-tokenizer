@@ -1,0 +1,43 @@
+schema: band_exchange_synthesis_v1
+experiment_id: TK-EEG-FROZEN-WORD-MONTAGE-SYNTHESIS-v1
+joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+source: component_source_transfer/band_exchange_words_v1
+output: component_source_transfer/band_exchange_synthesis_v1
+population: component_source_transfer/hard_as_v1/local_information_v1/population.json
+data:
+  selection: original_400_native_arrays_17040_positions_60_train_people_same_four_subject_folds
+  validation: forbidden
+  confirmation: forbidden
+  test: forbidden
+model:
+  frozen: own_fold_exchange_balanced_paid_ids_books_spatial_decoder_energy_gains
+  candidates: [hard_montage, hard_same_site]
+  diagnostics: [continuous_montage, continuous_same_site]
+  control: original_hard_energy_and_original_continuous_exchange
+  inputs: two_decoded_streams_all_native_electrodes_or_same_electrode
+  frequency_groups_Hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  endpoints: lower_inclusive_upper_exclusive_except_final_45_inclusive
+  fit: complete_2s_target_patches_Hann400_complex_cross_spectra_orthonormal_FFT
+  inference: full_visible_30s_FFT_then_five_fixed_complex_matrices_iFFT200Hz
+  ridge_fraction: 0.05
+  ridge: fraction_times_FIT_input_power_diagonal_with_1e-6_mean_power_floor
+  intercept: none
+  target: original_S_and_O_separately_X_is_exact_sum
+  weights: equal_available_train_subject_record_crop_then_valid_patch_and_frequency_per_output_support_group
+  missing: paid_zero_and_original_observation_mask_unchanged_no_target_mask_in_encoder
+  bitrate: original_K5116_13bits_per_branch_site_2s_0_extra_integer_or_float
+evaluation:
+  denominator: frozen_G0_target_variance_original_mask_original_hierarchy_all_17040_positions
+  null: cross_electrode_head_has_no_held_person_advantage_over_two_stream_same_electrode
+  waveform_gates: original_high_transient_reference_X_ratio_1.05_S_O_and_each_dataset_ratio_1.10_RMS_0.75_1.25_theta_alpha_signed_and_absolute_dB_3.0103_corr_positive_envelope_corr_0.5
+  pattern: inherit_only_if_all_emitted_ID_arrays_and_original_background_examples_hash_identical
+  choice: qualified_lowest_macro_X_S_O_mean_then_same_site_for_exact_tie
+  stop: no_development_until_all_train_numeric_integer_replay_and_actual_visual_review_pass
+  replay: independent_load_of_saved_base_head_and_held_paid_IDs_only_then_score
+  baseline_assertion: same_fold_original_hard_and_continuous_metrics_reproduced_before_head_qualification
+resources:
+  workers: 4
+  numerical_threads: 1
+  memory_GiB: 14
+  CPU_minutes: 35
+  benchmark: two_fixed_cases_per_dataset_one_fit_one_held_fold0_forecast_with_2x_measured_margin

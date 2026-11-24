@@ -1,0 +1,37 @@
+schema: dual_component_joint_temporal_diagnostic_v1
+experiment_id: TK-JOINT-TIME-UNIT-DIAGNOSTIC-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/k1024.npz
+  training_support: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/training_examples.json
+model:
+  modality: eeg
+  context_s: 30
+  sample_rate_hz: 200
+  codebook_size: 1024
+  quantization_levels: 1
+  time_units_s: [0.5, 0.125]
+  reference_time_unit_s: 2
+  short_time_units_interface_eligible: false
+  pca_rank: min_128_and_atom_sample_count
+  front_end: exact_frozen_training_Wiener_from_reference_checkpoint
+training:
+  seed: 29
+  windows: exact_4096_reference_training_examples
+  kmeans_max_iter: 20
+  kmeans_batch_size: 2048
+  kmeans_n_init: 1
+  kmeans_max_no_improvement: 10
+  kmeans_reassignment_ratio: 0
+resources:
+  numerical_threads: 12
+  memory_gib: 32
+  supervisor: user_systemd_linger
+  stage_wall_budget_minutes: 30

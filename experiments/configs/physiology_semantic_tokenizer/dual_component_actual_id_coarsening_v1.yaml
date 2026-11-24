@@ -1,0 +1,59 @@
+schema: dual_component_actual_id_coarsening_v1
+experiment_id: TK-ACTUAL-AS-ID-COARSENING-v1
+data:
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  panel_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+  actual_ID_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/pattern/as_v1_actual_v1
+  encoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/v1/encoder.json
+  decoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/local_gain_v1/model.npz
+model:
+  context_seconds: 30
+  token_seconds: 2
+  sample_rate: 200
+  coarse_positive_atoms: [512, 1024]
+  reserved_missing_ID: 0
+  semantic_distance_fractions: [0.0, 0.25, 0.75]
+  representatives: fine_IDs_with_8_complete_train_patches_and_2_subjects_ranked_by_training_patch_count_then_ID
+  mapping: every_fine_ID_to_nearest_supported_representative_per_branch_and_fixed_band
+  carrier_coordinate: assigned_band_complex_DFT_coefficients_scaled_by_weighted_training_atom_RMS
+  semantic_coordinate: log_train_ID_mean_theta_power_alpha_power_mean_quarter_second_RMS_standardized_on_fit_subjects
+  unseen_fine_ID: phase_only_distance
+  decoder: fixed_representative_fine_ID_lookup_then_original_frozen_spatial_and_local_energy_decoder
+  decoder_inputs: coarse_S_O_sequences_dataset_and_fixed_native_layout_only
+training:
+  fitting_split: train
+  folds: 4
+  fold_assignment: per_dataset_SHA256_sorted_subject_round_robin
+  seed: 81173
+  mapping_fit_scope: outer_train_subjects_only
+  readout: original_background_dataset_position_X_RMS_bins_vs_background_plus_coarse_ID
+  waveform_probe: one_SHA_ranked_train_physical_crop_and_four_score_positions_per_held_subject
+  baseline: exact_source_local_gain_decode_on_same_held_train_crop_and_original_AS_IDs
+  original_model_exposure: original_Wiener_books_and_local_gain_have_seen_these_train_subjects_only_new_merge_and_categorical_readouts_are_crossfit
+selection:
+  minimum_training_support_mass: 0.9
+  primary_theta_alpha_gain_each_above: 0.0
+  primary_one_gain_min: 0.05
+  positive_subject_fraction_theta_alpha_min: 0.5
+  held_waveform_component_NMSE_max_ratio: 1.05
+  held_waveform_dataset_component_NMSE_max_ratio: 1.1
+  require_both_branches: true
+  among_eligible: minimum_macro_waveform_NMSE_then_smaller_vocabulary_then_lower_semantic_weight
+  none_eligible: retain_failure_and_do_not_open_screen
+evaluation:
+  original_contract: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  screen_if_train_eligible: fixed_476_position_windows_only
+  confirmation: forbidden
+resources:
+  supervisor: user_systemd_linger
+  numerical_threads: 4
+  CPU_budget_seconds: 3360
+  wall_budget_seconds: 3360
+  memory_gib: 16
+  gpu_devices: []

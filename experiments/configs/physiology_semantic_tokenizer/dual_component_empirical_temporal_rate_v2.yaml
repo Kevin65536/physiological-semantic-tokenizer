@@ -1,0 +1,83 @@
+schema: empirical_temporal_spatial_rate_v1
+experiment_id: TK-EMPIRICAL-TEMPORAL-SPATIAL-RATE-v2
+purpose: matched_train_only_effective_coordinate_dimension_curve_and_short_window_boundary_floor
+source:
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  Wiener: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  waveform_cache: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/learned_roles/v1
+  folds: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1/fold_subjects.json
+  transient_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/transient_gain_v1
+  matched_hard_reference: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/role_mixed_v2/waveform_v1
+data:
+  fitting_splits:
+  - train
+  scoring_splits:
+  - train
+  test_access: forbidden
+  confirmation_access: forbidden
+  validation_access: forbidden
+  native_crops: 400
+  scored_position_windows: 17040
+  subjects: 60
+  source_f: exact_existing_four_subject_folds_no_new_source_fit
+model:
+  context_s: 30
+  token_s: 2
+  sample_rate_hz: 200
+  eventual_interface: one_vector_unit_per_native_site_branch_2s_before_any_single_ID_quantization
+  integer_model: false
+  complex_coordinates_per_slot:
+  - 2
+  - 4
+  - 8
+  - 16
+  old_local_support: rFFT_indices_2_to_89_1_to_44p5Hz
+  boundary_complete_support: rFFT_indices_0_to_89_local_DC_and_0p5Hz_are_short_window_coordinates_only
+  final_output_support: full_30s_DFT_1_le_f_lt_45Hz
+  covariance: source_f_prediction_in_frozen_G0_branch_SD_equal_subject_record_crop_complete15patches
+  fitting: per_frequency_Hermitian_PCA_global_training_energy_order_with_DC_Parseval_weight1_and_positive_weight2
+  placement: Hungarian_energy_times_local_loading_exactly_m_complex_modes_per_physical_slot
+  missing: native_X_availability_only_zero_missing_input_and_assigned_coordinates_no_target_mask_at_encoder
+  full_projection_controls: both_local_frequency_supports_without_rank_reduction
+  continuous_payload: diagnostic_only_no_bits_or_discrete_success_claim
+selection:
+  null: fewer_than_or_equal_4_complex_coordinates_cannot_jointly_preserve_waveform_and_local_attribute_information
+  matched_reference_arm: s31_o31_gain_source
+  X_NMSE_ratio_max: 1.05
+  S_O_NMSE_ratio_max: 1.1
+  every_dataset_component_ratio_max: 1.1
+  RMS_gain_interval:
+  - 0.75
+  - 1.25
+  theta_alpha_signed_and_mean_absolute_dB_max: 3.0103
+  local_RMS_correlation_min: 0.5
+  coordinate_readout_ridge_trace_fraction: 0.01
+  background: original_native_site_cross_observed_X_RMS_bins_0p5_1_2
+  local_information: theta_alpha_positive_one_gain_ge0p05_half_people_positive_each_frequency
+  degree_interpretation: empirical_conditional_linear_transform_family_only_not_universal_rate_distortion_lower_bound
+  no_joint_support: retain_negative_do_not_quantize_or_read_screen
+  joint_support: report_smallest_supported_coordinate_count_before_separate_versioned_quantizer
+  training_only: no_screen_confirmation_or_test_even_if_continuous_passes
+figures:
+  waveform_panel: first_sorted_hash_random_seed17_and_nearest_P95_XSO_joint_error_per_dataset
+  views_s:
+  - - 0
+    - 30
+  - - 14
+    - 16
+  - - 13.7
+    - 14.3
+  y_axis: same_native_coordinate_for_targets_and_all_predictions_no_smoothing
+  diagnostic_events: retain_difficult_true_in_band_events_and_branch_errors_no_window_removal
+resources:
+  supervisor: user_systemd_linger
+  dataset_workers: 4
+  numerical_threads_per_worker: 1
+  CPU_quota_percent: 400
+  CPU_budget_seconds: 2400
+  wall_budget_seconds: 1800
+  memory_gib: 14
+  gpu_devices: []
+  prior_CPU_seconds: 225.11164
+  retained_attempt: frequency_spatial/temporal_rate_v1

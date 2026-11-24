@@ -1,0 +1,62 @@
+schema: hb_local_eeg_source_diagnostic_v1
+experiment_id: TK-HB-LOCAL-EEG-CONDITIONAL-SOURCE-v1
+source:
+  prior: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/multimodal_hb
+  g0_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_multimodal_hb_cv_v1.yaml
+  geometry_plan: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261110_visual_usable_cache_v4/plan.json
+  Hb_reference: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_native_id_readout/v1/native_readout.pt
+data:
+  allowed_splits: [train]
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+  panel: original_multimodal_772_synchronous_arrays_3088_Hb_position_windows_60_train_people_same3folds
+  EEG_rate_hz: 200
+  Hb_rate_hz: 10
+  context_seconds: 30
+geometry:
+  mapping: exact_unique_nearest6_channel_names_from_train_record_template_metadata
+  personal_PC_coordinates_weights_or_teacher_outputs: forbidden
+  cyclic: half_rotation_sorted_fixed_dataset_native_Hb_position_names
+  missing: zero_features_plus_observation_flags_keep_all_original_windows
+model:
+  reference: frozen_native111_Hb_integer_readout_common_to_all_arms
+  historical_exposure: frozen_tokenizer_and_native111_and_G0_scales_saw_original_training_people_and_inherited_historical_G1_validation_exposure_no_new_validation_reads
+  arms: [Hb_only,global_EEG,local_EEG,cyclic_EEG]
+  EEG_fields: five_mean_log1p_100ms_voltage_band_powers_plus_five_mean_instantaneous_band_energy_fractions
+  bands_hz: [[1,4],[4,8],[8,13],[13,30],[30,45]]
+  Hb_fields: both_observed_Hb_colors_and_frozen_decoded_S_O_both_colors
+  interaction: lagged_EEG_fields_times_current_observed_HbO_and_HbR
+  FIR_seconds: [-6,-3,0,3,6]
+  observation_indicators: one_per_modality_per_lag_no_signal_outside30s
+  output: one_paired_allocation_delta_per_color_O_plus_delta_S_minus_delta_total_exact
+  quiet: complete_original_reserved_pair_preserved_exactly
+  smoothing: fourth_order0.4Hz_zero_phase_filter_inside_feature_design_before_training
+  readout: per_dataset_shared_native_position_onehot_ridge_no_subject_record_inputs
+  ridge: 1.0
+  normalization: fit_subject_only_uncentered_weighted_feature_RMS
+  objective: all_original_mask_points_exact_S_O_variance_weighted_paired_allocation
+  weighting: valid_time_then_position_crop_record_subject_equal
+selection:
+  local_joint_SO_relative_gain_over_Hb_and_global_min: 0.05
+  both_color_joint_improve_over_Hb_and_global: true
+  improved_people_fraction_min: 0.60
+  datasets_both_colors_improve_min: 3
+  each_dataset_SO_color_max_ratio_to_Hb_and_global: 1.05
+  macro_each_SO_color_max_ratio_to_frozen_reference: 1.02
+  each_dataset_SO_color_max_ratio_to_frozen_reference: 1.05
+  bootstrap_lower_bound_joint_gain_min: 0.0
+  bootstrap: {replicates: 2000,seed: 73123,unit: subject_within_dataset_conditional_frozen_fits}
+  frozen_reference_difficulty: [0.90,0.99]
+  difficult_joint_error_and_true_S_peak_error_max_ratio_to_reference: 1.05
+  if_fail: stop_keep_difficult_windows_no_integer_stage_or_ridge_repeat
+  if_pass: actual_EEG_Hb_integer_features_recompute_same_crossfit_before_any_interface_claim
+resources:
+  supervisor: user_systemd_linger
+  workers: 4
+  numerical_threads_each: 1
+  maximum_threads: 4
+  memory_gib: 16
+  total_CPU_seconds: 2100
+  stop_CPU_seconds: 2000
+  wall_seconds: 1800

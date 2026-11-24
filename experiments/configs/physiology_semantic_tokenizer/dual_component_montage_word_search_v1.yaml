@@ -1,0 +1,16 @@
+experiment_id: TK-EEG-MONTAGE-WORD-SEARCH-v1
+run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+frozen: component_source_transfer/cross_branch_innovations_capacity_v2
+pilot: component_source_transfer/band_exchange_words_v1/books
+source: component_source_transfer/transient_gain_v1
+population: component_source_transfer/hard_as_v1/local_information_v1/population.json
+data: {fit: train, score: train_held_people, validation: forbidden, confirmation: forbidden, test: forbidden}
+arms: [frozen, semantic64, waveform]
+sweeps: 3
+semantics: 64_nearest_occupied_atoms_by_visible_full_source_theta_alpha_and_RMS_centers_plus_current_word
+objective: equally_weighted_observed_native_S_O_and_actual_X_in_frozen_training_variance_coordinates
+solver: majorize_exact_30s_1_to_45_Hz_projection_by_centered_unfiltered_square_error_then_alternating_coordinate_minimization_one_complete_sweep
+selection: same_frozen_waveform_and_actual_single_word_gates_as_primary_capacity_run
+seed: 197
+interface: {K: 15351, context_s: 30, slot_s: 2, bits_per_ID: 14, EEG_rate_Hz: 200}
+resources: {workers: 4, threads: 1, memory_GiB: 14, held_CPU_minutes: 60, fit_ID_CPU_minutes: 150}

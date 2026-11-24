@@ -1,0 +1,75 @@
+schema: stratified_source_atoms_experiment_v1
+experiment_id: TK-HARD-SOURCE-STRATIFIED-ATOMS-v1
+source:
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  base: experiments/configs/physiology_semantic_tokenizer/dual_component_anchored_carrier_v1.yaml
+  gain_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/transient_gain_v1
+  folds: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1/fold_subjects.json
+data:
+  allowed_splits: [train]
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+  support: exact_400_original_native_arrays_60_people_17040_position_windows_same4folds
+  source_exposure: old_Wiener_and_G0_scales_historically_all60_train_people_new_source_dictionary_and_readout_exclude_outer_held_fold
+model:
+  codebook_size: 512
+  missing_ID: 0
+  positive_atoms: 511
+  group_depth: 3
+  split_axes: [log_theta_energy,log_alpha_energy,log_full_patch_RMS]
+  grouping: train_only_median_thresholds_hard_binary_route_stop_if_fewer128_samples_or_child_fewer64_or_tied
+  group_capacities: balanced_integer_allocation_511_across_up_to8_leaves_64x7_plus63_if8
+  phase_clustering: separate_Euclidean_role_band_kmeans_in_each_hard_group_no_soft_semantic_weight
+  atom: immutable_mean_local_role_band_waveform_one_final_integer_direct_lookup
+  roles: dataset_native_position_index_modulo5_same_for_S_and_O
+  bands_hz: [[1,4],[4,8],[8,13],[13,30],[30,45]]
+  last_45Hz_included: true
+  role_analysis: local_2s_real_DFT_role_band_projection
+  synthesis: concatenated_atoms_30s_same_band_projection_then_frozen_dual_branch_native_spatial_linear_readout
+  readout_objective: actual_true_S_variance_weighted_plus_true_O_variance_weighted_plus_true_X_variance_weighted_sum_MSE
+  readout_ridge_trace_fraction: 0.01
+  side_information: fixed_dataset_native_position_role_and_G0_train_scale_only
+  context_seconds: 30
+  token_seconds: 2
+  EEG_rate_hz: 200
+training:
+  seed: 20261123
+  max_patches_per_fit_subject_branch_band: 256
+  samples: identical_complete_training_patch_identities_for_old_and_new_source
+  kmeans_max_iter: 10
+  kmeans_n_init: 1
+  fitting_weights: equal_subject_record_and_crop_within_record_complete_native_target_sites_only_partial_target_windows_remain_scored
+  arms: [wiener,transient]
+evaluation:
+  waveform: all_original17040_position_windows_original_masks_and_G0_denominators
+  contrasts: [raw_source,matched_role_continuous_with_refit_readout,hard_final_IDs_with_refit_readout]
+  single_ID: actual_role_book_plus_final_atomic_ID_never_coarse_group_ID
+  pattern_background: original_dataset_native_position_cross_X_RMS_bins_0.5_1_2
+  readout_train_support: all_complete_fit_patches_min8_patches_and2_people_per_actual_atomic_ID
+  integer_payload: fixed9bit_each_final_ID_pack_and_independent_frozen_decode_no_X_or_continuous_carrier
+  figures: same_original_fixed_hash_and_original_hard_windows_plus_new_hard_and_max_true_S_per_dataset
+selection:
+  support_mass_min: 0.9
+  theta_alpha_each_positive: true
+  one_gain_min: 0.05
+  positive_subject_fraction_theta_alpha_min: 0.5
+  waveform_component_max_ratio_to_matched_role_continuous: 1.35
+  waveform_dataset_component_max_ratio_to_matched_role_continuous: 1.5
+  paired_S_O_NMSE_max_ratio_to_wiener_arm: 1.0
+  paired_X_NMSE_max_ratio_to_wiener_arm: 1.05
+  component_rms_gain: [0.75,1.25]
+  theta_alpha_abs_db_max: 3.0103
+  local_RMS_correlation_min: 0.5
+  tails: report_all_dataset_S_O_P95_P99_and_true_S_high_peaks_no_deletion
+  visual: repeated_missing_event_or_band_or_wrong_component_attribution_blocks_promotion
+  if_jointly_pass: report_to_parent_for_original_screen_only_after_actual_visual_review
+  if_fail: retain_negative_pair_and_stop_no_validation_or_hyperparameter_repeat
+resources:
+  fold_workers: 2
+  numerical_threads_per_fold: 2
+  CPU_budget_seconds_per_fold: 900
+  CPU_budget_seconds_total: 4200
+  memory_gib: 24
+  CPU_quota_percent: 800
+  GPU: none

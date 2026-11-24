@@ -1,0 +1,53 @@
+schema: dual_component_spatial_temporal_v1
+experiment_id: TK-JOINT-SPATIAL-TEMPORAL-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+model:
+  context_s: 30
+  token_s: 2
+  slot_s: 0.5
+  sample_rate_hz: 200
+  input: observed_X_only
+  branches: [S, O]
+  source_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/temporal_diagnostic/unit_0p5_k1024.npz
+  namespace_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/band_dictionary_v2/model.npz
+  position_roles: fixed_native_electrode_index_modulo_four
+  decoder: frozen_slot_specific_zero_intercept_spatial_ridge
+  encoded_support_per_id_s: 0.5
+  integer_count_per_branch_position_window: 15
+  source_codebook_size: 1024
+  emitted_codebook_size: 1025
+  missing_id: 0
+  fixed_length_bits_per_id: 11
+  interface_eligible: false
+  diagnostic_deviation: each_ID_encodes_only_one_complementary_half_second_slot_of_its_two_second_interval
+training:
+  fitting_splits: [train]
+  spatial_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  spatial_ridge_fraction: 0.01
+  aggregation: equal_valid_crops_per_record_then_records_per_subject_then_subjects
+  controls: [continuous_Wiener_slots, quantized_Wiener_slots]
+  target: full_S_and_O_voltage_at_each_native_electrode
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  modes: [source_Wiener, continuous_slots, quantized_slots]
+  primary: same_G0_component_NMSE_theta_alpha_energy_and_boundary_metrics
+  additional_seams: every_half_second_and_interior_non_token_seams
+  null: complementary_slot_readout_fails_to_retain_theta_alpha_or_reduces_pointwise_error_insufficiently
+  comparison: retained_five_band_spatial_integer_model_on_identical_screen
+  selection: diagnostic_only_no_acceptance_threshold_changes
+resources:
+  supervisor: user_systemd_linger
+  dataset_workers: 4
+  numerical_threads_per_worker: 2
+  screen_threads: 4
+  memory_budget_gib: 8
+  wall_budget_minutes: 15
+  gpu_devices: []

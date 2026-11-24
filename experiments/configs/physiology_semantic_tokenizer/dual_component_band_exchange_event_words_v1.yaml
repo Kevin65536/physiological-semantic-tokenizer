@@ -1,0 +1,47 @@
+schema: band_exchange_event_words_v1
+experiment_id: TK-EEG-PAID-EVENT-WORDS-v1
+source:
+  joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+  capacity_diagnostic: component_source_transfer/band_exchange_event_slots_v1
+  original_words: component_source_transfer/band_exchange_words_v1
+data:
+  support: original_60_train_people_400_native_arrays_17040_position_windows_four_outer_subject_folds
+  allowed_splits: [train]
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+interface:
+  ordinary_words_including_missing: 5116
+  added_event_words_per_band: 2047
+  full_vocabulary_including_missing: 15351
+  fixed_bits_each_integer: 14
+  integers_per_native_position_30s_branch: 15
+  selection: exact_prior25percent_X_only_propagation_error_rule
+  event_integer: 5116_plus_role_times2047_plus_finite_prototype_index
+  event_decoder: full400point_frequency_waveform_single_lookup_frozen_covariance_and_hard1_45Hz_synthesis
+  original_ID_at_event_decoder: unavailable
+  unselected: original_exchange_balanced_energy_integer_and_atom
+training:
+  seed: 151
+  event_scope: same_outer_source_fold_encoded_fit_people_only
+  event_count_per_band: min2047_max1_floor_complete_fit_events_div8
+  fitting_weights: equal_dataset_subject_record_crop_and_observed_slots_with_training_target_variance_inverse_then_mean_weight_one
+  PCA_width: 4_times_bandwidth_plus8_max76_fitted_event_waveform_basis
+  ordinary: weighted_waveform_PCA_coordinates_MiniBatchKMeans
+  amplitude_shape: fit_weighted_RMS_quartiles_then_independent_unit_RMS_shape_PCA_and_MiniBatchKMeans
+  amplitude_shape_tier_count: min_equal_quarter_capacity_max1_floor_tier_examples_div8
+  kmeans: maxiter30_batch2048_no_improvement8_init_half_uniform_half_train_energy_no_reassignment
+  prototypes: weighted_full400point_mean
+  energy_control: fixed_train_RMS_correction_clipped1_to2
+  missing_reserved_prototype: frozen_zero_waveform_count0_never_selected_by_encoder
+diagnostics:
+  favorable_event_bank: nearest_complete_same_fold_fit_event_full400point_waveform_finite_high_rate_diagnostic
+  continuous_event_PCA: selected_event_projection_on_same_ordinary_fit_basis_no_quantization
+evaluation:
+  reference: original_high_transient_source_fixed_folds_and_original_denominators
+  waveforms: original_all_eight_guards
+  pattern: actual_entire_single_integer_original_background_and_word_vs_role_vs_role_event_control
+  visual: retain_all17_original_and_each_library_new_joint_S_worst
+  replay: 14bit_pack_unpack_saved_ids_then_frozen_decode_without_any_source_waveform
+  qualify: numerical_and_actual_single_ID_and_replay_and_visual_together_before_any_development
+resources: {workers: 4, numerical_threads: 1, memory_GiB: 16, CPU_seconds: 2400, supervisor: tokenizer-band-event-words-v1.service}

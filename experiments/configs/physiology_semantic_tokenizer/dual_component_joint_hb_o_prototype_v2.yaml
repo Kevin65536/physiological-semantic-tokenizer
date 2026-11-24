@@ -1,0 +1,67 @@
+schema: dual_component_joint_hb_o_prototype_v2
+experiment_id: TK-JOINT-HB-O-PROTOTYPE-K256-v2
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  teacher_refits: false
+  raw_reads: false
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g1_v1/models/hb__waveform__vq128/checkpoint_step_10000.pt
+  config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  step: 10000
+initialization:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_prototype/v1/initialization.pt
+  source: exact_pretraining_tokenizer_plus_train_only_ridge_prototypes_and_frozen_scales
+  new_codebook_seed: 81053
+  new_codebook_contexts: 4096
+  ridge_fraction: 0.001
+loss:
+  sum_weight: 0.5
+  derivative_weight: 0.1
+auxiliary:
+  control:
+    shape: 0.0
+    slope: 0.0
+  auxiliary:
+    shape: 0.1
+    slope: 0.1
+training:
+  seed: 53
+  steps: 4000
+  batch_size: 64
+  learning_rate: 0.0001
+  final_learning_rate: 1.0e-05
+  weight_decay: 0.0001
+  checkpoint_every: 500
+  milestones:
+  - 500
+  - 2000
+  - 4000
+  matching: same_original_G1_S_frozen_exactly_same_O_initialization_draws_optimizer_loss_and_4000_steps_only_O_HbO_auxiliary_weights_differ
+  stopping: fixed_4000_steps_per_arm
+  frozen_branches:
+  - S
+resources:
+  torch_threads: 4
+  numerical_threads: 1
+  mmap_parent_cache: 128
+  supervisor: user_systemd_linger
+  memory_gib_per_arm: 16
+  stage_wall_budget_minutes: 45
+gradient_calibration:
+  seed: 91053
+  batches: 16
+  batch_size: 32
+  encoder_gradient_fraction: 0.2
+  method: fixed_shape_and_slope_weights_each_use_at_most_one_tenth_main_O_encoder_gradient_RMS_at_initialization
+auxiliary_targets:
+  O:
+  - 0
+branch_codebook_sizes:
+  S: 128
+  O: 256

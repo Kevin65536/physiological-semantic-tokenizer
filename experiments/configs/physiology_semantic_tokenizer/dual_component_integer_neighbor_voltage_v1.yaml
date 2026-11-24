@@ -1,0 +1,60 @@
+schema: integer_neighbor_voltage_diagnostic_v1
+experiment_id: TK-INTEGER-NEIGHBOR-VOLTAGE-v1
+source:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+  gallery: component_source_transfer/integer_sum_source_v1/training_examples
+  frozen_decoders: component_source_transfer/integer_sum_source_v1/held_decoder_manifests
+  actual_IDs: component_source_transfer/hard_as_v1/high
+  pure_fit_IDs: component_source_transfer/hard_as_v1/local_information_v1/high
+  folds: anchored_carrier/v1/fold_subjects.json
+  g0: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+data:
+  allowed_splits: [train]
+  original_display_windows: 17
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+diagnostic:
+  target: same_raw_voltage_as_original_gallery_then_same_independent_2s_inclusive_1_to_45Hz_projection
+  selected_patch: greatest_absolute_original_decoded_X_inband_MSE_among_original_complete_patches
+  fitting: all_other_original_complete_2second_patches_in_the_same_30second_window
+  ridge: 0.01
+  normalization: fit_patch_RMS_per_predictor_with_1e-12_mean_square_floor
+  intercept: false
+  primary: other_integer_decoded_electrodes_only
+  matched_control: other_true_observed_X_electrodes
+  diagnostic_controls: [integer_all_electrodes, integer_self_only, same_patch_linear_oracle]
+  denominator: actual_selected_2second_target_mean_square
+  temporal_metrics: [voltage_absolute_peak_delay_s, quarter_second_RMS_peak_delay_s, local_RMS_correlation]
+  interpretation: target_assisted_mechanism_diagnostic_not_a_deployable_decoder
+admission:
+  required_candidate_max_datasets: 2
+  integer_neighbor_error_over_target_energy_max: 0.5
+  integer_neighbor_error_ratio_to_original_max: 0.75
+  RMS_gain_interval: [0.75, 1.25]
+  RMS_peak_delay_absolute_max_s: 0.25
+  all_17_error_ratio_to_original_max: 1.10
+  rationale: recover_at_least_half_event_energy_with_at_least25percent_error_reduction_and_original_amplitude_tolerance_in_multiple_libraries_retain_existing10percent_adverse_guard
+  controls_cannot_replace_primary: true
+  if_failed: stop_keep_every_original_example_and_failure_no_400crop_fit
+formal_if_admitted:
+  population: original_400_crops_60_people_17040_positions_four_exact_subject_folds
+  inputs: saved_pure_source_f_fit_integers_and_same_source_f_held_OOF_integers_only
+  correction: one_fixed_real_instantaneous_native_spatial_matrix_per_dataset_fold
+  objective: original_raw_X_voltage_residual_to_integer_total_on_original_G0_scoring_mask
+  regularization: normalized_ridge0.01_toward_identity_no_bias
+  scales: fixed_fit_subject_decoded_predictor_RMS_no_per_window_decoder_values
+  weights: equal_subject_record_crop_then_valid_time_per_target_native_position
+  output: corrected_integer_total_S_from_same_frozen_source_f_O_equals_corrected_total_minus_S
+  control: same_saved_integers_and_frozen_decoder_with_original_X_unchanged
+  retain: all_X_S_O_waveform_metrics_masks_finite_failures_subjects_datasets_and_difficult_examples
+resources:
+  supervisor: user_systemd_linger
+  workers: 4
+  numerical_threads_each: 1
+  maximum_threads: 4
+  memory_gib: 12
+  CPU_budget_seconds: 1800
+  stop_CPU_seconds: 1700
+  wall_seconds: 900
+  GPU: []

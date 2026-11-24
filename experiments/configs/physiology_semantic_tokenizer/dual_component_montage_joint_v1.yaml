@@ -1,0 +1,57 @@
+schema: dual_component_montage_joint_v1
+experiment_id: TK-JOINT-MONTAGE-ENDTOEND-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+model:
+  initialization: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/joint_phase_semantic_70_v1/model.npz
+  context_s: 30
+  token_s: 2
+  sample_rate_hz: 200
+  codebook_size: 512
+  top_m: 16
+  temperature: 0.05
+  encoder: frozen_train_Wiener_then_initial_top16_candidates_then_learned_hard_assignment
+  decoder: learned_full_30s_same_and_cross_branch_spatial_Fourier_synthesis_of_single_atomic_waveforms
+  decoder_inputs: [S_integer_sequence, O_integer_sequence, frozen_model, native_position]
+  continuous_decoder_inputs: []
+training:
+  seed: 23071
+  fitting_splits: [train]
+  plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  steps: 1200
+  milestones: [0, 300, 600, 1200]
+  sampling: equal_dataset_then_equal_subject_then_equal_record_then_crop_from_existing_train_plan
+  arms: [joint, decoder_control]
+  control: same_initialization_data_order_step_budget_and_losses_frozen_assignments_and_atoms
+  joint: train_atoms_assignment_centers_bias_single_ID_attributes_and_full_montage_synthesis
+  optimizer: Adam
+  learning_rate_atoms: 0.0005
+  learning_rate_assignment: 0.0001
+  learning_rate_synthesis: 0.001
+  learning_rate_attributes: 0.002
+  waveform_loss: mean_G0_variance_normalized_X_S_O_MSE_over_complete_training_positions
+  output_log_energy_weight: 0.05
+  output_log_energy: squared_log_theta_alpha_power_and_mean_quarter_second_RMS_error
+  single_ID_attribute_weight: 0.2
+  single_ID_attributes: train_standardized_log_theta_power_log_alpha_power_log_mean_quarter_second_RMS
+  initialization_l2_weight: 0.001
+  gradient_clip_norm: 5
+  straight_through: hard_forward_soft_topM_backward
+  checkpoint_selection: report_all_milestones_final_step_primary_no_confirmation_access
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  confirmation: forbidden
+resources:
+  supervisor: user_systemd_linger
+  numerical_threads: 4
+  memory_budget_gib: 16
+  wall_budget_minutes: 110
+  gpu_devices: []

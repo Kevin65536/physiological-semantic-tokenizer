@@ -1,0 +1,69 @@
+schema: dual_component_joint_neural_eeg_v1
+experiment_id: TK-JOINT-NEURAL-EEG-COMMIT-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/k8192.npz
+  use: frozen_training_fitted_Wiener_transfer_and_target_PCA_basis_only
+  source_training_seed: 29
+  source_training_windows: 4096
+  shared_initial_network: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/neural_eeg/initial_model.pt
+  reuse_full_initial_state: true
+model:
+  context_seconds: 30
+  patch_seconds: 2
+  patches: 15
+  input_dim: 400
+  latent_dim: 128
+  hidden_width: 256
+  codebook_size: 1024
+  ema_decay: 0.99
+  commitment_cost: 1.0
+  latent_scale_exponent: 0.5
+  decoder: full_400_sample_linear_plus_local_and_adjacent_token_residuals
+  encoder: train_Wiener_then_full_patch_projection_and_local_adjacent_token_residuals
+  quantizer: one_atomic_single_level_EMA_ID_per_branch_patch
+  unencoded_decoder_inputs: []
+training:
+  seed: 43
+  initialization_contexts: 4096
+  initialization_sampling: G0_dataset_subject_record_equal
+  initialization_kmeans_max_iter: 30
+  initialization_kmeans_batch: 4096
+  batch_size: 32
+  steps: 512
+  milestones:
+  - 256
+  - 512
+  learning_rate: 0.0002
+  final_learning_rate: 2.0e-05
+  weight_decay: 0.0001
+  gradient_clip: 5
+  monitor_examples: 64
+  loss_weights:
+    sum: 0.5
+    band: 0.2
+    envelope: 0.2
+  comparison: exact_full_initial_state_same_batch_clock_only_commitment_strength_changes
+  stopping: fixed_steps_no_validation_extension
+  selection: fixed_registered_screen_after_freeze
+  learning_rate_schedule_steps: 2048
+resources:
+  supervisor: user_systemd_linger
+  device: cpu
+  torch_threads: 4
+  benchmark_threads:
+  - 4
+  benchmark_steps: 10
+  numerical_threads: 4
+  mmap_parent_cache: 128
+  memory_gib: 16
+  wall_budget_seconds: 360

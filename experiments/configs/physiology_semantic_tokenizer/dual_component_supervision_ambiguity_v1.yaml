@@ -1,0 +1,52 @@
+schema: dual_component_supervision_ambiguity_v1
+experiment_id: TK-HB-SUPERVISION-AMBIGUITY-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+panel:
+  file: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: hb_screen
+population:
+  training: all_G0_Hb_train_score_position_windows
+  validation: exact_476_development_screen_examples
+  confirmation_reads: forbidden
+assumption:
+  visible: one_Hb_position_both_colors_full_30seconds_X
+  fixed_metadata: [dataset, native_position_name, G0_training_scale]
+  excluded_identity_inputs: [subject_id, record_id, absolute_crop_time, teacher_outputs]
+  scope: diagnostic_for_this_observation_condition_only
+matching:
+  input: exact_float64_G0_normalized_X_with_signed_zero_canonicalized
+  identity: dataset_native_position_and_exact_training_scale
+  verify: reread_all_hash_collision_members_and_compare_arrays_and_masks
+oracle:
+  targets: both_S_O_and_both_Hb_colors
+  denominator: same_G0_frozen_component_color_training_variance
+  optimum: weighted_per_scored_time_point_constant_for_identical_visible_inputs
+  aggregation: G0_equal_dataset_subject_record_physical_crop_position
+  partitions: [local_X, local_X_plus_subject, local_X_plus_subject_record]
+  role_oracles: [train, screen, equal_role_joint_diagnostic]
+  train_mean_screen: exact_match_train_fitted_pointwise_means_report_support
+source_audit:
+  so_cache: data/cache/physiology_so_supervision_v3
+  max_conflict_groups: 5
+  members_per_group: 4
+  required_zero_case: [refed, CH37]
+  screen_baseline_metrics: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/baseline_audit/hb/vq128/metrics_v2.npz
+  failure_model: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_shape_synthesis/step_04000/vq1024/checkpoint.pt
+  training_monitor_seed: 8031
+  training_monitor_examples: 64
+  failure_selection: worst_absolute_O_bias_and_worst_O_peak_timing_on_fixed_training_monitor
+resources:
+  worker_candidates: [1, 4, 8]
+  benchmark_examples: 1024
+  batch_size: 128
+  mmap_parents_per_worker: 64
+  numerical_threads: 1
+  memory_gib: 16
+  supervisor: user_systemd_linger

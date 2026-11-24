@@ -1,0 +1,33 @@
+schema: joint_hb_component_transfer_gain_v1
+experiment_id: TK-JOINT-HB-TRANSFER-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  teacher_refits: false
+  raw_reads: false
+source_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_o_prototype/v2_k256/auxiliary/checkpoint_step_02000.pt
+quiet_training_fit: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/silent_observation_v1/fit.json
+fit:
+  population: all_G0_Hb_train_inputs
+  gain_grid:
+  - 0.5
+  - 1.5
+  - 1001
+  macro_nmse_ratio_max: 1.05
+  dataset_nmse_ratio_max: 1.1
+  rms_gain_interval:
+  - 0.75
+  - 1.25
+  objective: equal_component_training_NMSE_S_plus_O
+  parsimony_objective_ratio: 1.01
+  selection: train_only_error_and_energy_constraints_then_minimum_objective_prefer_one_parameter_within_one_percent
+resources:
+  torch_threads: 4
+  numerical_threads: 1
+  batch_size: 128
+  supervisor: user_systemd_linger

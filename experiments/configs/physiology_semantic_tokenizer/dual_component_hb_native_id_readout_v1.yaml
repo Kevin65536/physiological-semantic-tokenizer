@@ -1,0 +1,88 @@
+schema: hb_native_id_readout_v1
+experiment_id: TK-HB-FROZEN-NATIVE-ID-X-READOUT-v1
+hypothesis:
+  null: strong_pattern_frozen_S129_O257_IDs_do_not_support_repeatable_real_X_HbO_residual_prediction
+  primary: held_train_subject_real_X_HbO_NMSE_on_full_fixed_pattern_train
+  matched_control: same_residual_targets_and_smooth_basis_using_only_current_decoded_waveforms
+source:
+  current: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_component_transfer/v2_energy/HbO_only/training_tail.pt
+  bank: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_parent_leaf/v1/training_bank.npz
+  bank_sha256: 0c2b36045b45fba7e69ca45c6562a9801ae8e96b4a37f9113e79054a41b73521
+  integers: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/development_audit/hb/component_transfer_v2/HbO_only/training_tail/integer_ids.npz
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  earlier_944_distillation: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_parent_distillation/v1/summary.json
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+training:
+  population: exact_15360_fixed_Hb_pattern_train_position_windows_all_60_train_subjects
+  folds: 4
+  fold_seed: Hb-native-ID-81407-v1
+  weighting: dataset_subject_record_crop_position_equal_then_15_patches_then_G0_X_HbO_training_variance
+  fit_support: complete_target_2s_patches_only_excluding_complete_quiet_pairs
+  score_support: every_original_real_mask_including_partial_and_difficult_windows
+  exposure: source_tokenizer_and_G0_scales_previously_saw_all_train_subjects_only_residual_heads_are_crossfit
+model:
+  visible_seconds: 30
+  emitted: unchanged_S129_O257_fifteen_each_per_position_30s
+  extra_integers: 0
+  extra_rate_bits_per_second: 0
+  families: [decoded_waveform, current_IDs, context_IDs]
+  ridge_equivalent_tokens: [512, 4096]
+  candidates: 6
+  residual_target: real_X_HbO_minus_current_integer_decoded_X_HbO
+  smooth_basis: three_fixed_20sample_DCT_columns_k0_k1_k2_unit_RMS
+  residual_lowpass: fixed_fourth_order_0.4Hz_10Hz_sosfiltfilt_on_30s_residual_only
+  decoded_waveform_control: current_and_edge_repeated_neighbor_patches_S_O_both_color_three_basis_coefficients_plus_intercept_37_predictors
+  current_IDs: additive_current_S129_O257_categories_plus_supported_sparse_SxO_pairs
+  context_IDs: current_IDs_plus_previous_next_S129_O257_categories
+  edge: fixed_S128_O256_context_padding_outside_30s
+  minimum_pair_patches: 128
+  minimum_pair_subjects: 4
+  maximum_pairs: 256
+  pair_penalty_multiplier: 4
+  output_scalar_coefficients_max: 4242
+  zero_residual: original_current_X
+  final_O: original_both_colors_exact
+  final_HbR: original_S_O_X_exact
+  final_S_HbO: new_X_HbO_minus_current_O_HbO
+  quiet: original_complete_reserved_pair_all_outputs_exact
+  decoder_inputs: same_emitted_integer_sequences_frozen_model_and_fixed_metadata_only
+selection:
+  minimum_macro_X_HbO_relative_improvement: 0.005
+  require_all_four_dataset_X_HbO_improvements: true
+  positive_macro_folds_min: 4
+  positive_folds_per_dataset_min: 3
+  improved_subject_fraction_min: 0.55
+  macro_SO_HbO_ratio_to_current_max: 1.02
+  dataset_SO_HbO_ratio_to_current_max: 1.05
+  macro_all_component_color_ratio_to_G1_max: 1.05
+  dataset_all_component_color_ratio_to_G1_max: 1.10
+  changed_X_S_HbO_RMS_interval: [0.75, 1.25]
+  changed_RMS_if_source_outside: distance_to_one_may_increase_by_at_most_0.01
+  changed_slope_correlation_drop_max: 0.02
+  changed_curvature_correlation_drop_max: 0.02
+  changed_boundary_nmse_max: maximum_of_4_and_1.05_times_source
+  unchanged_outputs_protection: exact_values_including_all_O_HbR_and_quiet
+  training_scope: protect_unchanged_source_outputs_exactly_and_changed_X_S_HbO_dynamics_then_apply_original_screen_gates
+  choose: eligible_minimum_macro_X_HbO_then_fewer_scalar_coefficients_then_stronger_ridge
+  no_eligible: retain_failure_no_screen_no_further_tuning
+  eligible: fit_once_on_train_then_one_original_476_screen
+  screen_pass: all_original_numerical_checks_then_original_ID_pattern_equivalence_and_visual_review
+  full_development: only_after_screen_all_checks_and_visual_review
+  confirmation: forbidden
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 2
+  numerical_threads: 1
+  CPU_quota_percent: 200
+  batch_size: 128
+  memory_gib: 16
+  CPU_budget_seconds: 2700
+  process_CPU_limit_seconds: 2400
+  wall_limit_seconds: 2700

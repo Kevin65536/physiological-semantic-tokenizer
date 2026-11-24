@@ -1,0 +1,56 @@
+schema: dual_component_joint_spectral_v1
+experiment_id: TK-JOINT-SPECTRAL-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  model: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/k1024.npz
+  support: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/training_examples.json
+model:
+  context_s: 30
+  token_s: 2
+  input: observed_X_only
+  modality: eeg
+  codebook_size: 1024
+  quantization_levels: 1
+  waveform_pca_dim: 32
+  feature_bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  local_rms_samples: 50
+  dynamics_weight: 1.0
+  waveform_weight: 2.0
+  feature_scale: per_feature_training_SD_with_group_weights_divided_by_sqrt_dimension
+  assignment: nearest_training_cluster_in_Wiener_prediction_feature_space
+  atoms: [conditional_target_mean, conditional_target_band_energy_calibrated_mean]
+  phase: training_conditional_mean_or_fixed_training_representative_when_mean_energy_below_1e-12
+  decoder: fixed_atom_lookup
+  unencoded_per_window_decoder_inputs: []
+training:
+  seed: 29
+  windows: 4096
+  support: exact_plain_dictionary_training_examples
+  kmeans_max_iter: 20
+  kmeans_batch_size: 2048
+  kmeans_max_no_improvement: 10
+  kmeans_n_init: 1
+  kmeans_reassignment_ratio: 0.0
+  validation_selection: forbidden_in_training_entry
+evaluation:
+  acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  panels: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  allowed_roles: [pattern_train, screen]
+  confirm: sealed_until_candidate_frozen
+  matched_comparison: plain_K1024_and_identical_Wiener_continuous_predictor
+  hypothesis: energy_features_and_training_energy_calibration_recover_theta_alpha_and_local_ID_information
+  failure: joint_reconstruction_or_pattern_gate_failure_retained
+resources:
+  supervisor: user_systemd_linger
+  branch_workers: 2
+  numerical_threads_per_worker: 4
+  mmap_parent_cache: 256
+  memory_gib: 32
+  wall_budget_seconds: 1200

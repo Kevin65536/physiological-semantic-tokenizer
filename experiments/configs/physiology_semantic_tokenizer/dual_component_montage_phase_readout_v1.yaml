@@ -1,0 +1,49 @@
+schema: dual_component_montage_phase_readout_v1
+experiment_id: TK-JOINT-MONTAGE-INTEGER-PHASE-READOUT-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/montage_joint_v1/global_analysis_k2048_v2/joint/checkpoint_step_6000.npz
+  screen_ids: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/integer_ids.npz
+  training_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/gain_v1/training_panel.json
+  pattern_evidence: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/pattern/attribute_summary.json
+training:
+  fitting_splits:
+  - train
+  bin_hz: 2
+  ridge_fractions:
+  - 0.01
+  - 0.1
+  - 1.0
+  smoothness_fractions:
+  - 0.1
+  - 1.0
+  objective: equal_X_S_O_G0_variance_NMSE_exact_masked_time_domain
+  normalization: position_crop_record_subject_dataset_equal_using_existing_aggregate_owner
+  prior: identity_2x2_integer_component_output
+  cross_validation: four_train_subject_folds_per_dataset_choose_regularization_no_screen_selection
+  decoder_inputs:
+  - unchanged_branch_integer_arrays
+  - frozen_original_model
+  - fixed_complex_readout
+  - native_position
+  codebook_updates: 0
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  confirmation: forbidden
+resources:
+  numerical_threads: 4
+  memory_budget_gib: 12
+  wall_budget_minutes: 20
+  gpu_devices: []
+  supervisor: user_systemd_linger

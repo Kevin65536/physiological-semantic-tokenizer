@@ -1,0 +1,55 @@
+schema: array_wise_union_vocabulary_v1
+experiment_id: TK-TRANSIENT-ARRAY-WISE-UNION-v1
+source:
+  hard_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_transient_as_v1.yaml
+  integer_sum_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/integer_sum_source_v1
+  word_audit: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/hard_as_v1/local_information_v1
+scope:
+  splits: [train]
+  crops: 400
+  subjects: 60
+  positions: 17040
+  validation_reads: forbidden
+  confirmation_reads: forbidden
+  test_reads: forbidden
+interface:
+  visible_context_seconds: 30
+  output_grid_Hz: 200
+  IDs_per_branch_native_position: 15
+  gate_unit: whole_native_30s_array_both_branches_same_family
+  low_nonzero_IDs: [1, 511]
+  high_nonzero_IDs: [512, 8702]
+  reserved_missing_ID: 0
+  union_K: 8703
+  fixed_width_bits: 14
+  source: same_frozen_source_fold_f_used_to_encode_both_fit_and_held_people
+  decoder: family_from_actual_ID_and_frozen_full_array_family_decoder_then_same_fold_source_on_integer_decoded_sum
+  encoder_inputs: X_30s_and_fixed_native_layout_observation_validity
+  side_information: fixed_train_scale_dataset_native_site_only
+stages:
+  necessary_relaxation:
+    choice: each_crop_independent_fraction_high_in_0_1
+    labels_allowed: diagnostic_oracle_only
+    metric: exact_saved_per_position_metrics_with_original_record_subject_dataset_hierarchy
+    waveform_reference: high_transient_source
+    limits: {X_NMSE_ratio: 1.05, S_O_NMSE_ratio: 1.10, dataset_component_ratio: 1.10, RMS_lower: 0.75, RMS_upper: 1.25, theta_alpha_abs_db_max: 3.0103, local_RMS_correlation_min: 0.5}
+    support_upper: each_branch_same_emitted_family_pure_readout_qualified_patch_mass_at_least_0.90
+    support_proof: selecting_fit_patches_can_only_reduce_the_number_and_subject_coverage_of_each_separate_family_ID
+    stop: relaxed_linear_program_infeasible_precludes_any_deterministic_whole_array_selector_with_unchanged_decoder_families
+  if_relaxed_feasible:
+    route: X_low_integer_reconstruction_band_error_global_thresholds
+    high_crop_quantiles: [0, 0.10, 0.25, 0.50, 0.75, 1]
+    threshold_fit: each_outer_fold_training_X_only_per_dataset_no_subject_ID
+    metric_model: each_arm_same_raw_background_plus_union_ID_categorical_means_refitted_from_actual_source_f_fit_integers
+    need: same_one_arm_waveform_and_both_branches_pattern_gates
+    no_development: parent_coordinates_only_if_joint_training_pass
+figures:
+  all_support_waveform_bound: complete_tradeoff_no_omitted_crop
+  examples: registered_first_random_and_hard_training_cases_if_candidate_exists
+resources:
+  supervisor: user_systemd_linger
+  workers: 4
+  numeric_threads: 1
+  CPU_budget_seconds: 2700
+  memory_GiB: 12
+  GPU: none

@@ -1,0 +1,41 @@
+schema: dual_component_hb_silent_atom_v1
+experiment_id: TK-HB-SILENT-ATOM-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/contextual/vq_source_v1/hb/k4096/model.pt
+  full_development_metrics: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/development_audit/hb/vq_source/metrics.npz
+panel:
+  file: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: hb_development
+fit:
+  population: all_G0_Hb_train_score_inputs
+  amplitude: full_30s_joint_HbO_HbR_RMS_in_frozen_G0_X_SD
+  tail_weighted_quantile: 0.001
+  outside_support_threshold: half_minimum_positive_training_RMS
+  selection: amplitude_below_frozen_threshold_and_zero_X_MSE_less_than_ordinary_integer_X_MSE
+  variants:
+    outside_support: zero_S_and_zero_O
+    training_tail: train_fitted_constant_S_level_O_equal_negative_S_minimizing_G0_S_O_NMSE
+  training_probe_seed: 43031
+  training_probe_random: 512
+interface:
+  context_s: 30
+  integer_count_per_branch: 15
+  reserved_pair: both_sequences_all_equal_base_K
+  ordinary_ids: original_indices_preserved
+  codebook: base_K_plus_one
+  decoder_inputs: integer_sequences_and_frozen_model_only
+  output_grid_hz: 10
+resources:
+  numerical_threads: 1
+  torch_threads: 4
+  batch_size: 64
+  memory_gib: 16
+  supervisor: user_systemd_linger

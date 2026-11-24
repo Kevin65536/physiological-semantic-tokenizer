@@ -1,0 +1,87 @@
+schema: hb_pair_allocation_v1
+experiment_id: TK-HB-FIXED-111-SUM-PAIRED-ALLOCATION-v1
+source:
+  native_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_native_id_readout/v1
+  current: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_native_id_readout/v1/native_readout.pt
+  bank: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_parent_leaf/v1/training_bank.npz
+  bank_sha256: 0c2b36045b45fba7e69ca45c6562a9801ae8e96b4a37f9113e79054a41b73521
+  integers: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/development_audit/hb/component_transfer_v2/HbO_only/training_tail/integer_ids.npz
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  selection_splits: [train]
+  test_access: forbidden
+  confirmation_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+training:
+  population: exact_15360_original_pattern_train_60_subjects
+  folds: 4
+  fold_seed: Hb-native-ID-81407-v1
+  frozen_111_head: decoded_waveform__ridge512
+  strict_nesting: head_k_on_both_fit_and_held_for_new_layer_fold_k_never_mix_other_OOF_heads_into_fit
+  exposure: original_tokenizer_G0_scales_and_calibration_saw_all_train;111_head_k_and_allocation_k_exclude_outer_held_subjects
+  objective: exact_joint_S_O_NMSE_all_original_mask_points_HbO_HbR_with_G0_variances_and_original_hierarchy
+  delta_target: (vs*(Otruth-O)+vo*(S-Struth))/(vs+vo)
+  point_weight: hierarchy_per_window_divided_by_valid_color_time_count_times_(1/vs+1/vo)
+  weight_scale: one_common_train_only_scalar_sets_average_color_weight_mass_to_nonquiet_token_count
+model:
+  context_seconds: 30
+  patch_seconds: 2
+  sample_rate_hz: 10
+  branch_vocabularies: {S: 129, O: 257}
+  families: [local, window]
+  ridge_equivalent_tokens: [512, 4096]
+  candidates: 4
+  local: same37_current_neighbor_decoded_S_O_both_color_DCT_features
+  window: local_plus12_full30s_level_trend_curvature_carriers_evaluated_at_token_centers
+  output: two_color_delta_O_plus_delta_S_minus_delta
+  output_basis: three_unit_RMS_DCT_columns_per2s_followed_by_fixed0.4Hz_fourth_order_zero_phase_filter
+  smoothing: inside_design_matrix_before_fitting
+  scalar_coefficients: {local: 222, window: 294}
+  total: frozen111_head_array_exact
+  quiet: all_three_outputs_exactly_preserved
+  unencoded_continuous_inputs: []
+  extra_integers: 0
+selection:
+  primary: macro_joint_S_O_NMSE_colors_equal
+  minimum_joint_relative_improvement: 0.01
+  minimum_each_color_joint_relative_improvement: 0.005
+  require_all_dataset_joint_improvements: true
+  positive_macro_folds_min: 3
+  positive_folds_per_dataset_min: 3
+  improved_subject_fraction_min: 0.55
+  macro_component_color_ratio_to_current_max: 1.02
+  dataset_component_color_ratio_to_current_max: 1.05
+  macro_component_color_ratio_to_G1_max: 1.05
+  dataset_component_color_ratio_to_G1_max: 1.10
+  overall_RMS_interval: [0.75, 1.25]
+  dataset_RMS_protection: retain_inside_interval_or_distance_to1_no_more_than_source_plus0.01
+  difficulty_quantiles: [0.9, 0.99]
+  difficulty_source_ratio_max: 1.05
+  difficulty_G1_ratio_max: 1.10
+  difficulty_preexisting_G1_failures: do_not_worsen_source
+  slope_curvature_correlation_drop_max: 0.02
+  boundary_NMSE_max: maximum_of4_and1.05_times_source
+  S_peak_abs_amplitude_error_ratio_max: 1.05
+  choose: eligible_minimum_joint_NMSE_then_fewer_coefficients_then_stronger_ridge
+  no_eligible: stop_route_without_screen
+  screen: one_original476_only_after_train_eligibility_then_original_pattern_and_visual_acceptance
+  screen_route_protection: positive_joint_gain_no_color_joint_worsening_and_same_current_G1_tail_peak_waveform_guards_without_train_repeat_tests
+  development: original_full_development_only_after_all_screen_checks
+  confirmation: forbidden
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 2
+  numerical_threads: 4
+  numerical_threads_max: 8
+  benchmark_threads: [1, 2, 4]
+  batch_size: 64
+  source_batch_size: 128
+  memory_gib: 16
+  CPU_budget_seconds: 3300
+  process_CPU_limit_seconds: 2500
+  wall_limit_seconds: 3300

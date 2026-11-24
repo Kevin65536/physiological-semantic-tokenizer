@@ -1,0 +1,43 @@
+schema: hb_spectral_protected_v1
+experiment_id: TK-HB-FROZEN111-WHOLE30S-SPECTRAL-PROTECTED-v1
+source:
+  spectral_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_native_id_readout/spectral_allocation_v1
+  candidate: dataset__ridge1
+data:
+  allowed_splits: [train]
+  validation_access: parent_coordinates_only_after_all_original_gates_and_actual_visual_audit
+  confirmation_access: forbidden
+  test_access: forbidden
+  raw_reads: false
+model:
+  groups_DCT_indices: [[0, 1], [1, 3], [3, 13]]
+  preserve: frozen111_sum_quiet_and_original_S129_O257_ids
+  unencoded_continuous_inputs: []
+  extra_integers: 0
+  inference_scalar_coefficients: 96
+fitting:
+  candidates: 1
+  base_operator: same_outer_fold_dataset_ridge1_fit_only_source
+  gain_scope: dataset_color_three_groups
+  gain_bounds: [0.0, 1.0]
+  target: original_exact_joint_S_O_variance_normalized_loss
+  optimizer: SLSQP_deterministic_zero_start_max120_ftol1e-10
+  feasible_iterate_tolerance: 1.0e-9
+  failure: retain_best_feasible_iterate_or_zero_no_retry
+  fit_only_RMS: inside_original_interval_preserve_interval_else_distance_to_one_increase_at_most_0.005
+  fit_only_derivative_correlation: slope_and_curvature_drop_at_most_0.01
+  finite_hierarchy: recomputed_on_exact_baseline_finite_fit_support_per_metric
+  nesting: each_outer111_and_spectral_operator_k_on_fit_and_held_gains_fit_people_only
+  held_selection: none
+selection:
+  rule: original_pair_allocation_relative_and_original_absolute_Hb_all_unchanged
+  visual_panel: union_original_G1_fixed_random_P90_worst_and_protected_worst_with_four_arm_previous17
+  no_pass: stop_route_no_further_training_or_screen
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 1
+  numerical_threads: 1
+  threads_max: 4
+  memory_GiB: 12
+  process_CPU_limit_seconds: 1350
+  campaign_CPU_budget_seconds: 1500

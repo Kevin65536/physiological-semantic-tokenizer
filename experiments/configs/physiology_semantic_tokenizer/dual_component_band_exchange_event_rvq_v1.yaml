@@ -1,0 +1,32 @@
+schema: band_exchange_event_rvq_v1
+experiment_id: TK-EEG-EVENT-RATE-RESIDUAL-DIAGNOSTIC-v1
+joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+source: component_source_transfer/band_exchange_event_words_v1
+data: {fit: same_source_fold_train_events_only, scoring: original_400_arrays_17040_positions_60people_four_folds, validation: forbidden, confirmation: forbidden, test: forbidden}
+model:
+  primary: frozen_ordinary_event_mean_word_K15351_paid14bits
+  event_selection: frozen_prior25percent_X_propagation_error_slots
+  extra_stages: 3
+  each_extra_stage: zero_plus_max255_full400point_residual_centroids_8bits
+  role: decoded_from_primary_paid_word
+  supported_capacity: min255_max1_floor_fit_events_div8
+  fit: fixed_primary_fit_source_minus_primary_actual_full_waveform_then_prior_actual_frozen_residual_lookup
+  training_coordinates: same_frozen_primary_event_waveform_PCA_basis
+  hard_encoding: nearest_full400point_residual_atom_including_exact_zero
+  centroid: weighted_fit_mean_full400point_source_residual
+  readout: primary_mean_plus_frozen_sum_of_0_1_or3_received_residual_atoms_then_original_spatial_covariance
+  conditions: [1, 2, 4]
+  extra_integer_emission: one_per_event_per_added_stage_including_zero
+  status: multi_ID_rate_diagnostic
+training:
+  seed: 173
+  kmeans: same_weighted_MiniBatch_maxiter30_batch2048_no_improvement8_no_reassignment
+  weights: inherited_equal_dataset_subject_record_crop_target_variance_weighted_fit_event_weights
+evaluation:
+  endpoints: original_high_transient_reference_all_eight_waveform_checks
+  controls: frozen_primary_wave_mean_and25percent_continuous_source_event
+  tuples: actual_complete_local_tuple_fit_count8_and_fit_people2_all_patches_and_event_only_no_parent_inheritance
+  replay: independent_saved14bit_primary_and_extra_uint8_bytes_decode_and_original_metrics_exact
+  report: first_observed_layer_passing_original_waveform_guards_or_four_layers_still_insufficient
+  stop: no_additional_prototypes_layers_rates_or_development_after_this_diagnostic
+resources: {workers: 4, numeric_threads: 1, memory_GiB: 12, CPU_seconds: 1200, supervisor: tokenizer-band-event-rvq-v1.service}

@@ -1,0 +1,71 @@
+schema: dual_component_joint_cross_decoder_v1
+experiment_id: TK-JOINT-HB-CROSS-DECODER-v1
+hypothesis:
+  null: foreign_branch_integers_do_not_improve_joint_X_S_O_reconstruction
+  baseline: capacity_matched_branch_only_decoder_on_identical_frozen_IDs
+  primary: existing_component_color_NMSE_amplitude_and_boundary_acceptance
+  secondary: paired_record_permutation_modal_ID_masking_and_branch_only_replay
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_shape/vq1024/checkpoint_step_02000.pt
+  config: experiments/configs/physiology_semantic_tokenizer/dual_component_joint_hb_shape_v1.yaml
+  step: 2000
+  reason: frozen_G4_indices_already_passed_local_pattern_screen
+model:
+  context_seconds: 30
+  patch_seconds: 2
+  codebook_size: 1024
+  routes: [branch_only, joint]
+  outputs: S_and_O_with_X_equal_to_their_sum
+  branch_only: each_output_reads_own_ID_in_both_equal_capacity_projection_slots
+  joint: each_output_reads_own_ID_and_other_branch_ID
+  added_modules: zero_initialized_cross_projection_and_unrestricted_waveform_head
+  frozen: [input, encoder, to_latent, quantizer, position]
+  unencoded_side_information: []
+preparation:
+  contexts: 4096
+  seed: 81047
+  embedding_scale_floor: 0.0001
+  fitting_split: train
+loss:
+  sum_weight: 2.0
+  derivative_weight: 0.5
+  boundary_weight: 0.1
+training:
+  seed: 47
+  optimizer: AdamW
+  steps: 512
+  batch_size: 64
+  learning_rate: 0.0002
+  final_learning_rate: 0.00002
+  weight_decay: 0.0001
+  gradient_clip: 5
+  milestones: [128, 512]
+  checkpoint_every: 128
+  matching: same_initial_state_ids_targets_draws_optimizer_loss_steps_and_parameter_count
+  stopping: fixed_small_512_step_fit_then_preregistered_screen
+  validation_arrays_read: 0
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  admission: existing_joint_tokenizer_acceptance_v1_all_component_color_gates
+  ablations: [S_train_modal, O_train_modal, S_record_permuted, O_record_permuted]
+  permutation: deterministic_within_dataset_cyclic_shift_avoiding_same_subject_record
+  branch_replay: branch_only_each_output_decoded_from_own_saved_ID_only
+  source_identity: exact_source_encoder_and_quantizer_state_before_after_and_screen_ID_equality
+resources:
+  preparation_threads: 4
+  benchmark_threads: [1, 2, 4, 8]
+  benchmark_steps: 20
+  training_threads: fastest_measured_candidate
+  numerical_threads: 1
+  memory_gib_per_arm: 12
+  supervisor: user_systemd_linger
+  stage_wall_budget_minutes: 15

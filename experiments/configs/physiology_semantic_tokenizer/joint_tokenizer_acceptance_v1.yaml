@@ -1,0 +1,82 @@
+schema: joint_tokenizer_acceptance_v1
+experiment_id: TK-JOINT-BASELINE-v1
+g0_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+historical_models: 20261122_unified_base_g1_v1/models/{modality}__waveform__{continuous,vq128}/checkpoint_step_10000.pt
+run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+selection:
+  panel: panels.npz
+  panel_sha256: a519af87dd927c4664637f3502d38c189c55e5e30cc7e60265da1d71d8045f45
+  screening: four_hash_ranked_eligible_position_windows_per_development_record
+  advancement: screen_on_identical_examples_then_full_development_if_jointly_promising
+  selection_population: all_eligible_nonoverlapping_G0_validation_examples_except_one_prefixed_subject_per_dataset
+  confirmation: designated_subject_per_dataset_after_freeze_plus_one_independent_model_fit
+  exposure: all_validation_subjects_were_previously_used_for_G1
+  baseline: v3_K128_and_continuous_10000_steps_paired_on_current_panel
+  exclusions: G0_masks_and_position_availability_only_report_all_planned_and_failed
+interface:
+  encoder_input: observed_X_30_seconds
+  branch_ids: [EEG-S, EEG-O, Hb-S, Hb-O]
+  integer_count_per_branch_position_window: 15
+  eeg_rate_hz: 200
+  hb_rate_hz: 10
+  hb_color_order: [HbO, HbR]
+  replay: separate_frozen_reload_with_saved_integer_arrays_and_fixed_training_coordinate_only
+  replay_atol: 0.000002
+  replay_rtol: 0.00001
+  side_information: fixed_model_deterministic_position_and_G0_train_scale
+  rate_reporting: integer_count_and_K_fixed_length_entropy_and_serialized_storage_bits_separately
+reconstruction:
+  hierarchy: valid_time_to_position_crop_record_subject_dataset_equal
+  denominator: G0_training_dataset_position_component_color_variance_in_input_SD_units
+  components: [X, S, O]
+  eeg_component_nmse_max: paired_K128_minus_0.5_times_positive_gap_to_paired_continuous
+  eeg_rationale: recover_at_least_half_the_measured_quantization_penalty_for_each_branch_and_sum
+  hb_component_color_nmse_max: 1.05_times_paired_K128
+  hb_rationale: historic_Hb_errors_stable_within_5_percent_and_local_shape_is_required_separately
+  dataset_component_max_vs_baseline_ratio: 1.10
+  rms_gain_interval: [0.75, 1.25]
+  rms_gain_reason: train_control_0.8_gain_reduces_all_band_energy_by_36_percent
+  correlation: report_by_subject_and_dataset_require_positive_macro_for_each_component_and_color
+  eeg:
+    component_band_abs_db_max: 3.0103
+    bands_for_gate_hz: [[4, 8], [8, 13]]
+    statistic: absolute_value_of_hierarchical_mean_signed_dB_and_hierarchical_mean_absolute_dB
+    remaining_bands_report_hz: [[1, 4], [13, 30], [30, 45]]
+    local_rms_correlation_min: 0.5
+    local_rms_definition: quarter_second_block_RMS_sequence_per_30s_input
+    rationale: factor_two_energy_error_and_at_least_moderate_tracking_of_oscillation_strength
+  hb:
+    slope_correlation_min: 0.5
+    curvature_correlation_min_exclusive: 0
+    derivative_definition: correlation_across_complete_two_second_patch_polynomial_coefficients
+    boundary_jump_difference_nmse_max: 4
+    boundary_denominator: G0_training_component_color_adjacent_difference_variance
+    peak_trough_timing: report_absolute_seconds_and_hard_examples
+    rationale: squared_jump_error_within_twice_typical_training_step_in_RMS_patch_mean_control_exceeds_160_on_HbS
+pattern:
+  training_panel: pattern_train_up_to_256_hash_ranked_score_inputs_per_train_subject
+  comparison: train_fitted_background_dataset_native_site_local_X_RMS_bin_vs_same_background_plus_single_ID
+  primary_gain: 1_minus_hierarchical_attribute_MSE_background_plus_ID_divided_by_MSE_background
+  eeg_each_branch: positive_gain_for_theta_and_alpha_and_at_least_0.05_for_one_of_them_or_local_RMS
+  hb_each_branch_color: at_least_0.10_gain_in_slope_and_positive_gain_in_centered_shape
+  reference: old_G1_had_weak_or_negative_high_band_gain_G4_Hb_slope_gain_0.48_to_0.62
+  cross_subject: positive_required_primary_attribute_gain_in_at_least_half_development_subjects_and_at_least_three_confirmation_datasets
+  natural_context: same_physical_patch_in_two_real_overlapping_30s_inputs
+  context_tolerance: mean_squared_shift_in_train_ID_attribute_predictions_below_one_quarter_train_attribute_variance_each_primary_attribute
+  support: at_least_90_percent_validation_mass_on_codes_with_8_complete_train_patches_and_2_train_subjects
+  coverage: report_every_code_including_dead_and_validation_only_rank_major_codes_to_90_percent_cumulative_training_mass
+  seed_check: same_gates_after_independent_fit_with_semantic_matching_or_permutation_invariant_statistics
+visual:
+  samples_per_dataset_modality: [first_sorted_G0_triple, rng_23017_on_sorted_triples, nearest_historical_K128_P90, historical_K128_worst, candidate_worst]
+  ranking: mean_over_XSO_and_colors_of_per_example_training_normalized_MSE
+  waveform: [full_30s, patch_14_to_16s, boundary_13.5_to_14.5s]
+  render: shared_target_prediction_axes_native_coordinates_mask_token_boundaries_no_smoothing
+  eeg_checks: event_amplitude_and_duration_theta_alpha_activity_and_local_RMS_against_voltage
+  hb_checks: both_colors_original_and_centered_patch_shape_turning_points_within_patches_and_artificial_boundary_jumps
+  atlas: training_prototypes_and_quantiles_held_out_real_members_and_representatives_n_subjects_mass_per_code_and_sequence_decode_separately
+  failure: repeated_loss_of_an_event_or_band_flat_patch_shape_or_staircase_across_two_independent_records_in_a_dataset_blocks_promotion
+  failure_tail: every_fixed_or_hard_example_kept_and_adjudicated_including_single_record_exceptions
+decision:
+  pass: all_interface_reconstruction_pattern_visual_checks_same_frozen_model_and_confirmation_replication
+  missing_evidence: unresolved_never_pass
+  iteration: diagnose_continuous_vs_hard_and_target_input_oracles_before_extending_compute

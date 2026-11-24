@@ -1,0 +1,23 @@
+schema: band_word_supervised_residual_v1
+experiment_id: TK-EEG-FROZEN-TAGGED-WORD-RESIDUAL-v1
+joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+frozen: component_source_transfer/band_exchange_words_v1
+eligibility: exchange_balanced_true_single_ID_S_and_O_passed_with_both_branches_below_waveform_criterion
+data: {fit: train_outer_subjects_only, score: four_original_train_outer_folds, test: forbidden, confirmation: forbidden, development: forbidden}
+model:
+  base: exchange_balanced_energy_frozen
+  target: true_S_O_minus_base_prediction_same_2s_400_samples_in_G0_input_coordinate
+  baseline: original_independent_source_centered_lookup_for_each_branch_only
+  expanded: same_center_then_other_branch_same_site_then_own_previous_and_next_then_other_previous_and_next
+  estimator: sequential_weighted_empirical_residual_mean_of_complete_2s_training_patches
+  subject_weighting: equal_dataset_subject_record_crop_then_equal_valid_position_patches_divide_by_target_train_variance_normalize_mean_weight_to_one
+  shrinkage: 16_mean_weight_patches_per_ID_fixed_before_experiment
+  local_dataset_adaptation: none
+  refit_or_time_alignment: none
+  coefficients: one_400_sample_residual_per_fitted_ID_predictor_and_output_held_site_global_shared_table
+  synthesis: original_200Hz_base_plus_frozen_residual_entire_30s_no_other_decoder_inputs
+  zero_or_out_of_context_ID: zero_contribution
+  comparison: base_center_expanded_on_same_integer_payloads
+  output: [X_equals_S_plus_O, S, O]
+evaluation: identical_all_400_arrays_17040_sites_all_original_per_dataset_waveform_and_dynamic_gates_and_preexisting_actual_ID_gates_then_original_gallery
+resources: {workers: 2, inner_threads: 1, memory_GiB: 16, CPU_minutes: 26}

@@ -1,0 +1,65 @@
+schema: dual_component_joint_hb_shape_v1
+experiment_id: TK-JOINT-HB-SHAPE-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261117_base_g124_v1
+  config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g124_v1.yaml
+  task: hb__local_shape__continuous
+  step: 10000
+  historical_validation_exposure: original_v2_validation_subjects_also_used_in_v3
+model:
+  codebook_size: 1024
+  patches: 15
+  heads: 4
+  encoder_layers: 2
+  decoder_layers: 2
+  dropout: 0
+  kmeans_iters: 20
+  ema_decay: 0.99
+  commitment_cost: 0.25
+  dead_code_threshold: 0.1
+  revival_warmup_steps: 100
+  revival_interval: 50
+  revival_stop_after_steps: 1500
+  max_revivals_per_event: 8
+architectures:
+  local_shape:
+    width: 128
+    latent_dim: 64
+    waveform_io: true
+    local_width: 32
+    hb_local_shape: true
+    context_ratio: 0.25
+    context_norm_epsilon: 0.00000001
+    sum_weight: 0.5
+    derivative_weight: 0.5
+training:
+  seed: 31
+  candidates: [continuous, vq1024]
+  total_steps: 4000
+  batch_size: 64
+  learning_rate: 0.0001
+  final_learning_rate: 0.00001
+  checkpoint_every: 500
+  gradient_clip: 5
+  weight_decay: 0.0001
+  quantization_transition_steps: 500
+  optimizer: reset_AdamW_for_both_matched_continuations
+  codebook_init: one_G0_training_crop_position_per_record
+  monitoring: fixed_64_training_draws_seed_8031
+resources:
+  torch_threads: 4
+  numerical_threads: 1
+  benchmark_threads: [1, 2, 4, 8]
+  benchmark_steps: 20
+  mmap_parent_cache: 256
+  supervisor: user_systemd_linger
+  memory_gib_per_arm: 16
+  stage_wall_budget_minutes: 60

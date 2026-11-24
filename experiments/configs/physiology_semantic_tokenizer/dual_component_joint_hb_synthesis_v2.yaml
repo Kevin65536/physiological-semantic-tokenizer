@@ -1,0 +1,16 @@
+schema: dual_component_joint_hb_synthesis_v1
+experiment_id: TK-JOINT-HB-SYNTHESIS-v2
+source_step: 4000
+source_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_shape
+synthesis:
+  decoder_lowpass_hz: 0.4
+  filter: scipy_butterworth_order4_sosfiltfilt_default_odd_padding
+  application: each_component_complete_30second_paired_Hb_array_then_recompute_sum
+  rationale: Hb_input_support_is_0.01_to_0.2Hz_fixed_0.4Hz_cutoff_has_negligible_inband_attenuation
+  side_information: frozen_filter_and_model_plus_integer_sequences_only
+calibration:
+  role: train_only_diagnostic_no_cutoff_fit
+  examples: same_64_training_monitor_examples_seed8031
+  matched_candidates: [continuous, vq1024]
+  source_weights_and_integer_assignments: frozen
+  validation_cutoff_selection: forbidden

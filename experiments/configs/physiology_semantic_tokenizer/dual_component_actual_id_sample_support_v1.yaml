@@ -1,0 +1,70 @@
+schema: dual_component_actual_id_sample_support_v1
+experiment_id: TK-ACTUAL-AS-SAMPLE-SUPPORT-v1
+purpose: fixed_training_subject_sample_size_mechanism_diagnostic_prompted_by_Hb_fit_expansion
+data:
+  allowed_splits: [train]
+  test_access: forbidden
+  protected_data: forbidden
+  validation_access: forbidden
+  raw_reads: false
+  AS_reencoding: forbidden
+source:
+  actual_ID_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/pattern/as_v1_actual_v1
+  original_bank: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_coarsening/v1/training_attributes.npz
+  original_population: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_coarsening/v1/training_population.json
+  original_CV: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_coarsening/v1/fine_ID_training_crossfit.json
+  encoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/v1/encoder.json
+  decoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/local_gain_v1/model.npz
+  vocabulary_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  G0_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+interface:
+  context_seconds: 30
+  EEG_Hz: 200
+  patch_seconds: 2
+  original_vocabulary: 8192
+  namespace: branch_fixed_native_frequency_role_ID
+  integers: exact_frozen_AS_native_train_arrays
+sampling:
+  original_per_subject: 256
+  expanded_max_per_subject: 1024
+  seed: 81217
+  original_inputs: all_original_15360_pattern_training_triples_are_preserved_as_paired_held_score_population
+  additional_inputs: other_G0_score_positions_in_same_5294_persisted_train_native_crops
+  order: choose_SHA_ranked_unseen_triples_per_subject_then_sort_triples_for_streaming
+  duplicates: exact_row_start_native_position_triples_forbidden
+crossfit:
+  subjects: exact_original_60_training_subjects
+  folds: exact_original_four_subject_folds
+  fit_256: original_positions_from_fit_subjects_only
+  fit_1024: original_and_added_positions_from_same_fit_subjects_only
+  held: original_256_positions_of_held_subjects_only_for_both_arms
+  model_exposure: base_Wiener_dictionary_AS_and_decoder_have_seen_all_60_train_subjects_only_readout_sample_counts_are_crossfit
+readout:
+  background: identical_dataset_native_position_cross_X_RMS_bins_0.5_1_2_in_frozen_G0_train_scale
+  conditional: raw_observed_group_mean_of_background_cross_fixed_band_ID
+  unseen_conditional: background_group_mean
+  unseen_background: training_global_attribute_mean
+  shrinkage: none
+  attributes: original_theta_power_alpha_power_eight_quarter_second_RMS_coordinates
+  gain: 1_minus_hierarchical_MSE_conditional_over_hierarchical_MSE_background_each_arm
+  hierarchy: positions_crop_record_subject_dataset_equal_weight_at_each_level
+  diagnostic: also_report_each_background_MSE_and_conditional_MSE_and_paired_raw_MSE_changes
+gates:
+  each_branch_theta_and_alpha_gain: positive
+  each_branch_any_theta_alpha_RMS_gain_min: 0.05
+  theta_alpha_positive_subject_fraction_min: 0.5
+  train_code_support: at_least_8_complete_patches_and_2_fit_subjects
+  held_support_mass_min: 0.9
+  stopping: one_fixed_paired_sample_size_diagnostic_stop_after_1024_either_outcome
+  escalation: report_if_both_branches_pass_no_validation_or_new_candidate_training
+resources:
+  supervisor: user_systemd_linger
+  numerical_threads: 4
+  readout_workers: 4
+  threads_per_readout_worker: 1
+  maximum_threads: 8
+  memory_gib: 16
+  CPU_budget_seconds: 2100
+  wall_budget_seconds: 2100
+  batch_size: 64
+  gpu_devices: []

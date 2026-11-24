@@ -1,0 +1,65 @@
+schema: hb_neighbor_readout_v1
+experiment_id: TK-HB-NEIGHBOR-INTEGER-READOUT-v1
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_component_transfer/v2_energy/HbO_only/training_tail.pt
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  earlier_same_site: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_x_residual/v1/summary.json
+  earlier_observation_mean: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/multimodal_hb/audit.json
+data:
+  allowed_splits: [train, validation]
+  fitting_split: train
+  protected_data: forbidden
+  test_access: forbidden
+  raw_reads: false
+  teacher_refits: false
+model:
+  context_seconds: 30
+  sample_rate_hz: 10
+  patch_seconds: 2
+  full_array_input: all_native_Hb_positions_per_record_in_G0_manifest_order
+  decoder_input: S_O_integer_arrays_dataset_and_native_position_order_only
+  predictors: frozen_S_O_HbO_HbR_integer_decode_each_native_position
+  missing: fully_incomplete_observation_position_uses_new_missing_S129_O257_pair_at_all_15_tokens_zero_contribution
+  quiet: original_S128_O256_pair_keeps_original_complete_window_output
+  emitted_branch_sizes: {S: 130, O: 258}
+  fixed_bits_per_second: {S: 4.0, O: 4.5}
+  cross_position_features: own_four_channels_plus_uncentered_train_PCA_of_all_other_available_position_channels
+  neighbor_ranks: [2, 4]
+  ridge_fractions: [0.1, 1.0, 10.0]
+  local_control: own_four_channels_same_fold_same_residual_objective_and_ridge
+  normalization: uncentered_train_feature_RMS_per_target_site_and_color_only
+  intercept: false
+  output: independent_S_O_residuals_with_exact_sum_closure
+  objective: G0_S_O_NMSE_plus_twice_X_NMSE
+  immutable_base: old_weights_and_assignments
+training:
+  seed: 81301
+  records_per_subject: 2
+  crops_per_record: 2
+  selection: SHA_ranked_G0_nonoverlapping_train_score_crops
+  score_positions: all_admitted_native_positions_in_selected_crop
+  folds: 5
+  folds_rule: dataset_stratified_SHA_subject_round_robin
+  covariance_weight: G0_dataset_subject_record_crop_position_equal_then_valid_time_equal
+  exposure: source_tokenizer_and_G0_scales_already_used_all_train_subjects_new_spatial_readout_only_is_crossfit
+selection:
+  cross_position_vs_local_macro_SO_relative_improvement_min: 0.03
+  cross_position_vs_frozen_macro_SO_relative_improvement_min: 0.01
+  minimum_improving_datasets_SO: 3
+  minimum_improving_subject_fraction: 0.60
+  maximum_any_component_color_NMSE_ratio_vs_frozen: 1.05
+  maximum_dataset_component_color_NMSE_ratio_vs_frozen: 1.10
+  maximum_X_color_NMSE_ratio_vs_local: 1.02
+  minimum_O_gain_vs_base_ratio: 0.95
+  quiet_output: bitwise_original
+  coarse_choice: among_eligible_minimum_macro_XSO_NMSE_then_fewer_components_then_stronger_ridge
+  if_ineligible: stop_and_keep_all_failures_without_screen
+  if_eligible: freeze_once_then_original_screen_all_gates_and_images_integer_replay
+  confirmation: forbidden
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 2
+  numerical_threads: 2
+  memory_gib: 24
+  CPU_limit_seconds: 2880
+  wall_limit_seconds: 2880

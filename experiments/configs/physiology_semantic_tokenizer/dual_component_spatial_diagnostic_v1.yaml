@@ -1,0 +1,31 @@
+schema: dual_component_spatial_diagnostic_v1
+experiment_id: TK-JOINT-SPATIAL-DIAGNOSTIC-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+diagnostic:
+  read_splits: [train]
+  folds: 5
+  windows_per_subject: 8
+  windows_per_record: 2
+  window_selection: sha256_metadata_nonoverlapping_G0_score_support
+  bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  ridge_fraction: 0.01
+  predictors: [local_X, other_electrodes_X, other_electrodes_same_branch_oracle]
+  exclude_target_electrode_from_neighbors: true
+  input_support: observation_valid_only
+  target_support: complete_30s_G0_scoring_mask_per_electrode
+  missing_input: zero_contribution_without_refitting
+  normalization: frozen_G0_training_scale_per_dataset_electrode
+resources:
+  supervisor: user_systemd_linger
+  dataset_workers: 4
+  numerical_threads_per_worker: 2
+  mmap_parent_cache: 8
+  wall_budget_minutes: 20
+  memory_budget_gib: 8

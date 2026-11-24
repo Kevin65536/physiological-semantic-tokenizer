@@ -1,0 +1,47 @@
+schema: dual_component_cross_branch_readout_v1
+experiment_id: TK-JOINT-CROSS-BRANCH-READOUT-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  model: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  integers: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/band_dictionary_v2/integer_ids.npz
+  training_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+readout:
+  input: same_position_band_voltage_decoded_from_frozen_S_and_O_integer_sequences
+  output: S_and_O_band_voltage
+  fitting_split: train
+  pseudo_inverse_relative_cutoff: 0.000001
+  intercept: false
+  source_spatial_ridge_fraction: 0.01
+  crossfit_folds: 5
+  crossfit: refit_spatial_W_and_2x2_readout_on_other_training_subjects
+  variants: [minimum_mse, train_energy]
+  energy_gain:
+    target: crossfitted_training_target_RMS_per_dataset_position_band_and_output
+    required_crossfit_correlation: 0.5
+    minimum_gain: 0.5
+    maximum_gain: 2.0
+    unsupported_gain: 1.0
+  codebooks: frozen
+  continuous_side_information: []
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  interventions: [same_branch, S_only, O_only, O_shift_14s, S_shift_14s, O_mask_alternating, S_mask_alternating]
+  shifted_IDs: circular_shift_seven_2s_positions_within_each_natural_context
+  masking: reserved_ID_zero_at_even_patch_indices_of_the_named_branch
+  selection: report_both_frozen_variants_without_validation_refitting
+resources:
+  supervisor: user_systemd_linger
+  dataset_workers: 4
+  screen_workers: 4
+  numerical_threads_per_worker: 2
+  memory_budget_gib: 8
+  wall_budget_minutes: 30
+  gpu_devices: []

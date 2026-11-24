@@ -1,0 +1,60 @@
+schema: eeg_low_integer_teacher_decoder_v1
+experiment_id: TK-EEG-LOW-INTEGER-TEACHER-v1
+run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+output: component_source_transfer/low_integer_teacher_v1
+source:
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_transient_as_v1.yaml
+  local_information: component_source_transfer/hard_as_v1/local_information_v1
+  oof_integers: component_source_transfer/hard_as_v1
+  integer_sum_decoder: component_source_transfer/integer_sum_source_v1/held_decoder_manifests
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+history: actual_id_coarsening_v1_already_rejected_six_phase_semantic_multitoone_maps_EEG_sequence_distillation_untried
+scope:
+  allowed_splits: [train]
+  original_crops: 400
+  original_subjects: 60
+  position_windows: 17040
+  folds: 4
+  validation_confirmation_test_reads: 0
+model:
+  transmitted_vocabulary: 512
+  teacher_vocabulary: 8192
+  bits_each: 9
+  integers_per_branch_position_30s: 15
+  inputs: actual_low_S_O_full_native_integer_arrays_dataset_fixed_layout_only
+  fields: [same_site_past, same_site_current, same_site_future, other_branch_current, same_branch_neighbor_1, same_branch_neighbor_2, other_branch_neighbor_1, other_branch_neighbor_2]
+  neighbors: top_two_cosine_similar_frozen_high_spatial_synthesis_weight_rows_same_band_excluding_self_stable_native_ties
+  context_boundary: private_sentinel_512_no_cross_window_state
+  target: assigned_band_complex_DFT_of_actual_high_teacher_atom_minus_low_atom
+  student: categorical_additive_ridge_backfit_then_hard_nearest_high_atom_internal_only
+  pseudo_count: 16.0
+  backfit_passes: 5
+  nearest_block: 128
+training:
+  seed: 83917
+  fit_integers: both_families_reencoded_under_same_source_f_on_fit_people_only_no_other_fold_OOF
+  weighting: equal_dataset_subject_record_crop_position_complete_patch_then_mean_weight_one_per_band
+  inherited_exposure: frozen_AS_books_Wiener_G0_scales_local_gain_saw_all_training_people_new_student_and_source_estimator_exclude_held_fold
+  AS_encodes: 0
+  hyperparameter_search: none
+  arms: [low_original, current_ID_student, neighborhood_student, actual_high_teacher, continuous_source_upper]
+evaluation:
+  waveform: original_joint_reconstruction_metrics_raw_voltage_G0_target_specific_train_variance_all_X_S_O_distribution_tails
+  semantic: original_raw_background_and_background_plus_single_transmitted_low_ID_unshrunk_same_fold_support_8_patches_2_people
+  original_acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  mechanism_admission: every_X_S_O_macro_student_NMSE_at_most_half_positive_low_to_true_high_gap_and_no_dataset_component_above_1.10_low
+  dynamic_admission: original_gain_0.75_to_1.25_theta_alpha_signed_and_absolute_dB_le_3.0103_local_RMS_corr_ge_0.5
+  pattern_admission: original_K512_raw_theta_alpha_positive_and_one_attribute_gain_ge_0.05_half_people_positive_and_support_ge_0.90_each_branch
+  mechanism_is_not_original_paired_K128_continuous_gate: true
+  development: only_parent_coordinates_after_joint_success
+  figures: first_sorted_and_rng_83917_position_each_dataset_plus_candidate_worst_and_nearest_P90_no_dropping_failures
+  replay: fresh_process_from_saved_low_payload_only_compare_exact_prediction_hashes_and_metrics
+resources:
+  workers: 4
+  numerical_threads: 1
+  cpu_quota_percent: 400
+  total_CPU_seconds: 2400
+  main_stop_CPU_seconds: 2100
+  memory_gib: 14
+  supervisor: user_systemd_linger
+  stop: one_fixed_candidate_no_adaptive_search_preserve_negative_or_partial_blocks

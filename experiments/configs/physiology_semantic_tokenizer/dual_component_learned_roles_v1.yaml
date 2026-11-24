@@ -1,0 +1,67 @@
+schema: dual_component_learned_roles_v1
+experiment_id: TK-JOINT-LEARNED-ROLES-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  raw_reads: false
+  teacher_refits: false
+  confirmation: forbidden
+  test_access: forbidden
+source:
+  model: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+hypothesis:
+  null: training_learned_balanced_electrode_band_roles_do_not_improve_held_subject_continuous_spatial_reconstruction
+  baseline: same_training_fold_fixed_modulo_roles_and_refitted_spatial_readout
+  primary: G0_target_variance_normalized_X_S_O_MSE_on_original_held_training_mask
+model:
+  context_s: 30
+  token_s: 2
+  EEG_Hz: 200
+  emitted_IDs_per_branch_position_30s: 15
+  codebook_size: 8192
+  input: X_only
+  roles: fixed_dataset_branch_native_position_to_band
+  band_capacity: exact_original_modulo_counts_each_dataset_and_branch
+  band_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  decoder_inputs: [S_integer_sequence, O_integer_sequence, frozen_model, native_dataset_position]
+training:
+  seed: 81181
+  splits: [train]
+  original_model_exposure: frozen_Wiener_and_atoms_have_seen_outer_held_training_subjects_only_new_roles_and_readout_are_crossfit
+  population: exact_existing_diagnostic_v3_plan_60_subjects_400_crops
+  folds: 4
+  fold_rule: dataset_SHA256_ranked_subject_round_robin
+  subject_statistics: position_masked_band_Gram_cross_and_energy_equal_crops_per_record_then_records_per_subject
+  target_filter: full_30s_DFT_band_then_original_score_mask
+  readout: zero_intercept_target_specific_Ridge
+  ridge_fraction: 0.01
+  role_selection: deterministic_best_pair_swap_of_two_different_roles_with_fixed_capacities
+  role_initialization: native_position_modulo_five
+  objective: mean_training_target_variance_normalized_band_MSE_over_S_or_O_and_native_positions
+  maximum_accepted_swaps_per_branch_dataset: 12
+  minimum_relative_training_objective_improvement_per_swap: 0.0001
+  held_metric_owner: joint_reconstruction_metrics_and_original_G0_hierarchy
+selection:
+  required_macro_S_NMSE_relative_improvement: 0.05
+  required_macro_X_O_NMSE_max_ratio: 1.05
+  required_dataset_count_S_improved: 3
+  maximum_dataset_S_NMSE_ratio: 1.05
+  required_subject_fraction_S_improved: 0.6
+  no_eligible: retain_continuous_failure_stop_without_screen
+  continuous_eligible: freeze_roles_fit_true_integer_readout_compare_same_capacity_fixed_roles_in_train_CV
+  hard_required_macro_S_NMSE_relative_improvement: 0.03
+  hard_required_macro_X_O_NMSE_max_ratio: 1.05
+  hard_required_subject_fraction_S_improved: 0.6
+  hard_eligible: evaluate_one_frozen_pair_on_original_screen_and_original_acceptance
+  screen_fail: retain_failure_and_stop_this_direction
+resources:
+  supervisor: user_systemd_linger
+  dataset_workers: 4
+  numerical_threads_per_worker: 1
+  CPU_quota_percent: 400
+  memory_gib: 20
+  wall_limit_seconds: 2700
+  total_CPU_limit_seconds: 2400
+  gpu_devices: []

@@ -1,0 +1,25 @@
+experiment_id: TK-EEG-NATIVE-EVENT-REPLACEMENT-v1
+run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+frozen: component_source_transfer/cross_branch_innovations_capacity_v2
+pilot: component_source_transfer/band_exchange_words_v1/books
+source: component_source_transfer/transient_gain_v1
+population: component_source_transfer/hard_as_v1/local_information_v1/population.json
+data: {fit: train, score: train_held_people, validation: forbidden, confirmation: forbidden, test: forbidden}
+warm_search: component_source_transfer/montage_word_search_v1
+arms: [frozen, semantic64_prior, semantic64_event, waveform_prior, waveform_event]
+event_cap: 0.10
+event_model: replace_ordinary_montage_anchor_with_direct_native_single_atom_at_this_branch_and_slot
+sinusoid: 1_to_45_Hz_in_0.5Hz_steps_8_phases_16_levels
+pulse: 100_centers_4_samples_apart_5_widths_3_6_12_24_48_samples_Ricker_or_Gaussian_derivative_both_polarities
+amplitude: 16_log_spaced_levels_between_1_over_16_and_64_times_own_branch_native_fitted_training_SD
+acceptance: at_most_10percent_of_observed_slots_per_branch_per_window_accept_only_source_loss_majorization_decreases
+transport: same_16bit_carrier_in_all_matched_controls_ordinary_words_use_smaller_subset
+
+sweeps: 3
+semantics: 64_nearest_occupied_atoms_by_visible_full_source_theta_alpha_and_RMS_centers_plus_current_word
+objective: equally_weighted_observed_native_S_O_and_actual_X_in_frozen_training_variance_coordinates
+solver: majorize_exact_30s_1_to_45_Hz_projection_by_centered_unfiltered_square_error_then_alternating_coordinate_minimization_one_complete_sweep
+selection: same_frozen_waveform_and_actual_single_word_gates_as_primary_capacity_run
+seed: 197
+interface: {K: 58743, context_s: 30, slot_s: 2, bits_per_ID: 16, EEG_rate_Hz: 200}
+resources: {workers: 4, threads: 1, memory_GiB: 14, held_CPU_minutes: 60, fit_ID_CPU_minutes: 150}

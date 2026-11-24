@@ -1,0 +1,58 @@
+schema: band_word_natural_context_v1
+experiment_id: TK-EEG-INNOVATION-CAPACITY-NATURAL-CONTEXT-v1
+source:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+  hard_words: component_source_transfer/cross_branch_innovations_capacity_v2
+  pilot_books: component_source_transfer/band_exchange_words_v1/books
+  population: component_source_transfer/hard_as_v1/local_information_v1/population.json
+  attributes: component_source_transfer/hard_as_v1/local_information_v1/training_attributes.npz
+  covariance: component_source_transfer/adaptive_band_v1
+  source_models: component_source_transfer/transient_gain_v1
+scope:
+  split: train
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+  original_native_crops: 400
+  original_subjects: 60
+  maximum_selected_context_pairs_per_subject: 2
+selection:
+  eligible: same_G0_parent_adjacent_admitted_30s_score_crop_with_nonempty_common_native_target_positions
+  direction: plus2s_if_following_30s_admitted_else_minus2s
+  order: sha256_of_seed_dataset_subject_row_start
+  seed: 230119
+  pair2: different_record_if_available_else_next_hash_ranked_crop
+  preserve: full_400_candidate_denominator_and_every_ineligible_reason
+identity:
+  sharing: original_center_patch7_equals_shifted_patch7minus_direction_every_X_point_and_observation_mask
+  real_context: verify_all28s_overlap_and_actual_introduced2s_from_parent_no_padding
+  input: identical_to_hard_producer_G0_observation_transform_then_float32
+encoding:
+  family: innovation
+  model: own_fold_X_only_checkerboard_pilot_and_2047_capacity_innovation
+  probes: use_portable_InnovationEEG_encode_for_every_original_and_shifted_context_compare_original_ids
+  saved_original: compare_full_native_original_reencoding_against_frozen_paid_IDs_keep_every_difference
+  primary_comparison: same_public_algorithm_original_and_shifted_contexts
+attributes:
+  fitted: original_raw_background_plus_actual_combined_ID_conditional_means_other_people_only_same_source_fold
+  background: dataset_native_site_X_local_RMS_bins0.5_1_2_of_same_physical_center
+  features: true_target_theta_alpha_power_and_eight_quarter_second_RMS
+  truths: same_original_center_teacher_S_O_masks_for_both_contexts
+  readout_replay: original_full_held_word_MSE_matches_saved_metrics_within_8_float64_eps_relative_no_absolute_tolerance_record_bitwise_and_raw_difference
+  gains: one_minus_hierarchical_error_joint_over_same_background_report_original_shifted_saved_original
+  hierarchy: native_position_physical_crop_record_subject_dataset_equal
+  change: squared_attribute_prediction_difference_averaged_within_field_divided_by_mean_fitted_attribute_variance_in_field
+  context_gate: mean_hierarchical_change_below0.25_each_theta_alpha_RMS_per_branch
+  diagnostic: also_report_dataset_fit_variance_change_and_both_context_code_support_8patches2people
+  subject_report: same_gains_deltas_and_ID_role_agreement_by_subject
+visuals:
+  summary: gain_original_shifted_and_attribute_change_and_ID_role_change_by_dataset
+  examples: first_hash_pair_native_position_first_and_largest_registered_attribute_change_per_dataset
+  meaning: actual_same_physical_2s_voltage_and_true_vs_background_plus_ID_attribute_predictions_not_sequence_decoding
+resources:
+  workers: 4
+  numerical_threads_per_worker: 1
+  memory_GiB: 14
+  total_CPU_seconds: 720
+  wall_seconds: 720
+  GPU: none

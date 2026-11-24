@@ -1,0 +1,72 @@
+schema: frequency_spatial_carrier_v1
+experiment_id: TK-FREQUENCY-SPATIAL-CARRIER-v1
+purpose: train_only_reachability_of_compact_frequency_spatial_coordinates_before_single_ID_quantization
+source:
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  Wiener: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  waveform_cache: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/learned_roles/v1
+  folds: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1/fold_subjects.json
+  anchored_models: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1
+  training_gate: experiments/configs/physiology_semantic_tokenizer/dual_component_anchored_dictionary_v1.yaml
+data:
+  fitting_splits: [train]
+  scoring_splits: [train]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+  validation: forbidden_in_reachability_stage
+model:
+  input: native_observed_X_30s_with_frozen_Wiener_and_G0_scales
+  sample_rate_hz: 200
+  patch_s: 2
+  context_s: 30
+  branch: [S, O]
+  slots: exactly_one_slot_per_native_position_per_2s_per_branch
+  complex_coordinates_per_slot: [1, 2, 4]
+  final_interface_candidates: [1, 2]
+  diagnostic_upper_bound: 4
+  transform: rectangular_400_sample_rFFT_divided_by_400
+  frequencies_hz: lower_inclusive_1_upper_exclusive_45_step_0.5
+  centering: no_unencoded_window_mean
+  coordinates: per_native_site_G0_branch_training_SD
+  covariance: per_frequency_complex_Hermitian_E_z_z_conjugate
+  fit_weight: equal_subject_then_record_then_crop_then_15_complete_observation_patches
+  basis: eigenvectors_ordered_by_descending_training_covariance_eigenvalue
+  selection: globally_largest_training_eigenvalues_over_all_frequency_mode_pairs_exact_C_times_coordinates_modes
+  assignment: Hungarian_maximum_training_eigenvalue_times_squared_local_loading_to_each_physical_site_repeated_exact_coordinates_times
+  missing: observed_native_X_zero_filled_then_all_coordinates_assigned_to_unobserved_physical_slot_set_zero
+  synthesis: sum_selected_complex_spatial_modes_per_frequency_then_irFFT_400_then_fixed_full_30s_real_DFT_projection_1_le_f_lt_45
+  decoder_inputs: continuous_complex_coordinates_and_fixed_training_model_only_for_diagnostic
+  quantizer_if_reachable: single_atomic_VQ_of_same_slot_2m_real_coordinates_plus_X_derived_theta_alpha_RMS
+  integer_interface_eligible_in_this_stage: false
+training:
+  population: exact_400_native_train_crops_60_subjects_17040_scored_position_windows
+  folds: exact_4_folds_of_anchored_carrier_v1
+  original_source_exposure: Wiener_and_G0_training_scales_previously_fit_all_these_train_subjects_only_frequency_covariance_and_spatial_basis_are_crossfit
+selection:
+  waveform_component_max_ratio_to_matched_anchored_continuous: 1.35
+  waveform_dataset_component_max_ratio_to_matched_anchored_continuous: 1.50
+  rationale: same_predeclared_training_quantization_gap_guard_as_anchored_dictionary_before_original_validation_gates
+  RMS_gain_interval: [0.75, 1.25]
+  positive_correlation_each_component: true
+  theta_alpha_signed_and_mean_absolute_dB_max: 3.0103
+  local_RMS_correlation_min: 0.5
+  local_attribute_diagnostic: train_fitted_background_vs_background_plus_same_slot_continuous_coordinates_on_complete_held_target_patches
+  background: dataset_native_position_cross_local_X_RMS_bins_0.5_1_2_in_frozen_input_SD
+  continuous_readout: weighted_Ridge_on_real_imag_squared_magnitude_coordinates_with_train_scales_only
+  coordinate_readout_ridge_trace_fraction: 0.01
+  local_attributes: true_target_theta_power_alpha_power_quarter_second_RMS
+  local_information_gate: theta_and_alpha_gains_positive_one_attribute_gain_at_least_0.05_and_half_subjects_positive_theta_alpha
+  no_reachable_1_or_2: retain_failure_stop_without_VQ_or_validation
+  reachable_1_or_2: freeze_smallest_eligible_coordinate_count_then_separate_versioned_single_ID_training
+resources:
+  supervisor: user_systemd_linger
+  dataset_workers: 4
+  numerical_threads_per_worker: 1
+  CPU_quota_percent: 400
+  memory_gib: 24
+  CPU_budget_seconds: 4200
+  wall_budget_seconds: 4200
+  gpu_devices: []

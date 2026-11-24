@@ -1,0 +1,35 @@
+schema: predictive_word_order_v1
+experiment_id: TK-EEG-LOSSLESS-PREDICTIVE-WORD-ORDER-v1
+source:
+  word_config: experiments/configs/physiology_semantic_tokenizer/dual_component_transient_word_information_v1.yaml
+  high_family: high
+  waveform: component_source_transfer/integer_sum_source_v1
+data:
+  allowed_splits: [train]
+  cases: 400
+  scored_positions: 17040
+  subjects: 60
+  test_access: forbidden
+  confirmation_access: forbidden
+model:
+  paid_K: 8192
+  missing: 0
+  previous_state: four_quartiles_of_predecessor_atom_RMS_at_same_site_and_branch_plus_reset
+  maps: [static, rank, semantic]
+  static: site_frequency_order_control_permutation_within_each_background
+  rank: site_and_previous_state_frequency_order
+  semantic: balanced_dictionary_halves_on_train_relative_theta_then_alpha_then_state_frequency_rank
+  property: training_target_band_power_divided_by_training_background_power_then_log1p
+  training_background: original_dataset_site_and_X_RMS_bins
+  pooling: eight_pseudopatches_for_role_to_site_to_state_attribute_mean_and_32_prior_count_mass_for_frequency
+  decoder: invert_each_word_using_prior_decoded_word_reset_every_30s_then_frozen_high_decoder
+  transmitted: original_15_single_integers_per_native_position_per_branch_no_state_carried
+evaluation:
+  primary_candidate: semantic
+  controls: original_static_rank
+  identity: recover_every_original_integer_on_every_held_native_array_and_replay_frozen_waveforms
+  original_info: original_unshrunk_background_vs_background_plus_full_transmitted_word
+  context_control: same_readout_conditioned_also_on_prior_state_report_extra_information
+  primary_gate: unchanged_joint_acceptance_word_gains_subject_support_and_no_evasion_of_original_visual_failure
+  next: only_actual_semantic_gate_success_merits_context_and_different_seed_checks
+resources: {dataset_or_fold_workers: 4, threads_per_worker: 1, CPU_minutes: 30, memory_GiB: 12, GPU: none}

@@ -1,0 +1,76 @@
+schema: staggered_time_carrier_v1
+experiment_id: TK-STAGGERED-TIME-CARRIER-v1
+purpose: train_subject_crossfit_real_time_samples_before_any_atomic_quantization
+hypothesis:
+  null: fixed_native_electrode_time_offsets_do_not_improve_sparse_carrier_reconstruction_over_same_count_aligned_samples
+  controlled_comparison: same_X_only_Wiener_same_real_sample_count_same_covariance_ridge_neighborhood_and_folds
+source:
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  Wiener: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  waveform_cache: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/learned_roles/v1
+  folds: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1/fold_subjects.json
+  anchored_models: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1
+data:
+  fitting_splits: [train]
+  scoring_splits: [train]
+  validation: forbidden
+  confirmation: forbidden
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+model:
+  context_s: 30
+  patch_s: 2
+  sample_rate_hz: 200
+  branches: [S, O]
+  samples_per_slot: [4, 16, 32]
+  layouts: [aligned, staggered]
+  indices: floor((j_plus_one_half)_times_400_divided_by_m)_plus_phase_modulo_400_then_sorted
+  phase: aligned_zero_staggered_floor(native_index_times_400_divided_by_m_times_native_count)
+  real_grid: integer_200Hz_samples_only_32_points_alternate_12_and_13_sample_spacing
+  missing: zero_entire_local_sample_vector_at_unobserved_position_no_decoder_availability_sidecar
+  coordinates: fixed_G0_per_site_branch_training_SD_no_window_mean_or_scale
+  interpolation: stationary_array_LMMSE_of_full_Wiener_carrier
+  source_features: two_preceding_and_two_following_encoded_samples_of_every_native_position
+  covariance: uncentered_full_30s_periodic_training_time_covariance
+  covariance_maximum_lag_samples: 400
+  covariance_weight: equal_subject_then_record_then_available_crop
+  ridge_trace_fraction: 0.001
+  edge: wrap_only_within_visible_30s_consistent_with_periodic_covariance_no_external_context
+  output: exact_200Hz_voltage_grid_S_O_and_their_sum_no_output_smoothing
+  local_attribute_basis: real_imag_and_squared_magnitude_of_sample_vector_rFFT
+  continuous_stage_integer_count: 0
+  interface_eligible_in_this_stage: false
+training:
+  population: same_400_native_arrays_17040_position_windows_60_train_subjects
+  folds: exact_4_anchored_carrier_subject_folds
+  exposure: Wiener_and_G0_scales_previously_saw_all_train_subjects_only_interpolation_and_attribute_readouts_are_crossfit
+selection:
+  phase_hypothesis_macro_XSO_relative_improvement_min: 0.05
+  phase_hypothesis_S_relative_improvement_min: 0.05
+  phase_hypothesis_improved_datasets_S_min: 3
+  phase_hypothesis_improved_folds_S_min: 3
+  phase_hypothesis_component_ratio_to_aligned_max: 1.05
+  waveform_component_max_ratio_to_matched_anchored: 1.35
+  waveform_dataset_component_max_ratio_to_matched_anchored: 1.50
+  source_RMS_retention_min: 0.90
+  absolute_RMS_gain_interval: [0.75, 1.25]
+  absolute_theta_alpha_signed_and_mean_absolute_dB_max: 3.0103
+  local_RMS_correlation_min: 0.5
+  local_information: positive_theta_and_alpha_one_gain_at_least_0.05_half_subjects_positive_each_branch
+  background: dataset_native_site_cross_X_RMS_bins_0.5_1_2
+  coordinate_readout_ridge_trace_fraction: 0.01
+  source_floor_reporting: source_Wiener_already_fails_absolute_S_alpha_error_no_source_reproduction_called_final_pass
+  integer_consideration: smallest_m_with_phase_hypothesis_absolute_waveform_and_local_information_pass_then_actual_visual_review
+  no_eligible: retain_continuous_negative_without_integer_training_or_validation
+resources:
+  supervisor: user_systemd_linger
+  dataset_workers: 4
+  numerical_threads_per_worker: 1
+  CPU_quota_percent: 400
+  memory_gib: 24
+  CPU_budget_seconds: 3600
+  wall_budget_seconds: 3600
+  gpu_devices: []

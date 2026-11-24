@@ -1,0 +1,67 @@
+schema: hb_event_source_v1
+experiment_id: TK-HB-NONLINEAR-CENTERED-EVENT-SOURCE-v1
+joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+source:
+  prepared: component_source_transfer/hb_array_source_v1
+  native: hb_native_id_readout/v1
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+population:
+  primary_arrays: 236
+  primary_windows: 9343
+  people: 60
+  folds: original111_four_person_folds
+  supplement: original17_whole_array_never_fit
+  input: visible30s_original_G0_train_Hb_X_plus_frozen_same_fold111_X_derived_prediction
+  target: unchanged_v3_SO_two_colors_original_G0_masks_variances_units
+  regression_exclusions: original_G0_unchanged
+boundary:
+  numerical_read_splits: [train]
+  validation: forbidden
+  confirmation: forbidden
+  test: forbidden
+  raw_reads: false
+  teacher_refit: false
+model:
+  arms: [linear_local, nonlinear_local, nonlinear_array]
+  lags_seconds: [-8,-4,-2,-1,0,1,2,4,8]
+  lag_boundary: nearest_visible_endpoint_and_explicit_availability_no_wrap
+  local_features: own_absolute_and_demeaned_two_color_X_and_same_fold111_S_O
+  array_features: other_observed_position_X_mean_median_RMS_per_color_absolute_and_demeaned
+  metadata: fixed_native_site_one_categorical_feature_no_person_record_task
+  target: negative_joint_optimal_delta_centered_per_window_over_original_scoring_mask
+  decode: add_centered_delta_to111_S_subtract_from111_O_keep111_sum
+  correction_projection: full30s_DCT_k1_through12_inclusive_0.2Hz_no_DC
+  quiet: exact_original_reserved_pair_128_256_outputs
+  sample_stride: 5
+  sample_phase: stable_identity_hash_mod5_all_fit_windows_retained
+  fit_weight: original_time_mean_position_crop_record_subject_equal_times_inverse_SO_G0_variance
+  scale: fit_people_weighted_feature_RMS_and_target_residual_SD_only
+  linear_ridge: 0.1
+  tree_iterations: 120
+  tree_learning_rate: 0.05
+  tree_max_leaves: 15
+  tree_min_samples_leaf: 128
+  tree_l2: 10
+  tree_early_stopping: false
+  seed: 230511
+selection:
+  macro_joint_gain_vs111_min: 0.05
+  macro_centered_joint_gain_vs111_min: 0.05
+  macro_each_SO_color_ratio_to111_max: 1.02
+  dataset_each_SO_color_ratio_to111_max: 1.05
+  improved_people_fraction_min: 0.60
+  datasets_all_SO_colors_improve_min: 3
+  tail_quantiles: [0.9,0.99]
+  tail_ratio_to111_max: 1.05
+  true_centered_S_peak_error_ratio_to111_max: 1.05
+  slope_curvature_correlation_drop_max: 0.02
+  boundary_error_ratio_to111_max: 1.05
+  visual: original17_plus_each_dataset_S_peak_error_and_joint_worst_all_colors_original_units_and_demeaned
+  stopping: one_frozen_configuration_all4folds_no_held_hyperparameter_selection_no_development
+resources:
+  workers: 4
+  numerical_threads_each: 1
+  memory_GiB: 12
+  CPU_budget_seconds: 2700
+  CPU_stop_seconds: 2550
+  supervisor: user_systemd_linger

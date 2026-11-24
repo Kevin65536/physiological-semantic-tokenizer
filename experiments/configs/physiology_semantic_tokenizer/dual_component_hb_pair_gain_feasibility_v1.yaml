@@ -1,0 +1,30 @@
+schema: hb_pair_gain_feasibility_v1
+experiment_id: TK-HB-FROZEN-PAIR-SIGNED-GAIN-FEASIBILITY-v1
+source:
+  pair_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_native_id_readout/pair_allocation_v1
+data:
+  allowed_splits: [train]
+  population: original_15360_windows_60_subjects_four_frozen_folds
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+  raw_reads: false
+  source_refits: false
+diagnostic:
+  range: [-1, 1]
+  direction: same_frozen_window_ridge4096_delta
+  degrees_of_freedom: one_signed_gain_per_dataset_and_color
+  target: original_weighted_S_O_joint_loss_with_exact_G0_variances_masks_hierarchy
+  controls: zero_is_frozen111_one_is_rejected_pair_head
+  primary: original_all_training_acceptance_rules_unchanged
+  oracle: diagnostic_only_never_deploy_or_select_a_model_using_held_targets
+  feasible_point_search_grid_step: 0.0005
+  empty_point_grid: not_an_infeasibility_proof
+  stopping: stop_if_any_dataset_has_no_possible_original_training_admission
+  next: only_if_feasible_new_contract_and_fit_gains_excluding_outer_held_subjects
+resources:
+  CPU_seconds: 1400
+  campaign_CPU_seconds_max: 1500
+  threads_max: 4
+  memory_GiB: 12
+  supervisor: user_systemd

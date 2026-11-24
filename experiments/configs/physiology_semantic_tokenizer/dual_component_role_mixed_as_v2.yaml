@@ -1,0 +1,104 @@
+schema: fixed_role_mixed_spatial_v1
+experiment_id: TK-TRANSIENT-FIXED-ROLE-MIX-v2
+source:
+  hard_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_transient_as_v1.yaml
+  hard_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/hard_as_v1
+  local_information: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/hard_as_v1/local_information_v1
+  integer_sum_reference: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/integer_sum_source_v1
+data:
+  allowed_splits:
+  - train
+  original_crops: 400
+  original_subjects: 60
+  original_scoring_positions: 17040
+  folds: exact_anchored_four_subject_folds
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+  new_codebook_fitting: forbidden
+interface:
+  context_s: 30
+  token_s: 2
+  EEG_Hz: 200
+  roles: fixed_native_index_modulo_5_per_branch
+  emitted_units: one_integer_per_branch_site_2s
+  dictionary_by_role: fixed_five_binary_choices_per_branch_high_K8192_or_semantic_K512
+  encoders: same_X_and_same_frozen_source_f_two_full_array_searches_then_keep_only_declared_role_ID
+  decoder: chosen_role_atoms_and_matching_spatial_weights_from_final_integer_sequence_only
+  prohibited: mixing_two_complete_family_decodes_using_unemitted_IDs
+  nominal_bits: high_13_low_9_per_integer_actual_role_counts_and_max_width_separately
+information:
+  estimator: exact_original_raw_background_plus_branch_role_ID_conditional_means
+  cached_extremes: original_17040_transient_errors_and_qualified_patch_support
+  exhaustive_sets: all_32_role_masks_per_branch_then_cartesian_product_1024_descriptive_only
+  checks: same_examples_fold_valid_background_and_extreme_metrics_support_exact
+  namespace: family_branch_fixed_role_ID_never_pool_different_roles
+  gains: theta_and_alpha_positive_one_of_theta_alpha_RMS_at_least_0.05
+  subjects: at_least_half_held_people_positive_theta_and_alpha
+  support: at_least_0.90_complete_held_patch_mass_on_8_fit_patches_2_fit_subject_codes
+  background_float64_tolerance:
+    rtol: 1.0e-12
+    atol: 1.0e-14
+    reason: different dictionary-order summation in global fallback for unseen background;
+      original targets and finite support exact
+selection:
+  algorithm: nested_four_outer_training_subject_folds
+  outer_fit_codes: saved_actual_source_f_fit_person_searches_excluding_outer_people
+  inner_folds: other_three_original_folds_readout_fit_excludes_outer_and_inner_held_people
+  source_exposure: source_f_may_fit_inner_people_but_never_outer_people_old_dictionaries_and_scales_previously_saw_all_train
+  admissible_masks: inner_complete_information_gates_per_branch
+  fixed_priority_high_roles:
+  - 0
+  - 3
+  - 4
+  - 1
+  - 2
+  choice: lexicographically_maximum_high_bits_in_fixed_priority_among_inner_admissible_masks_each_branch
+  no_inner_admissible: fixed_all_low_diagnostic_fallback_outer_model_not_eligible
+  full_OOF_exhaustive_results_choose_model: false
+  structural_secondary_masks:
+  - - 1
+    - 1
+  - - 0
+    - 1
+  - - 1
+    - 0
+  structural_secondary_use: only_cached_complete_OOF_information_passing_pairs_diagnostic_no_independent_selection_claim
+  maximum_secondary_pairs: 3
+decoders:
+  raw: exact_selected_atom_spatial_readout_with_1_45Hz_projection
+  gain: highK_frozen_local_energy_function_on_only_the_mixed_integer_decode
+  gain_source: gain_then_same_outer_source_f_on_only_its_integer_decoded_sum
+  controls: pure_high_raw_gain_gain_source_pure_low_original_raw_gain_gain_source_and_raw_source
+  pure_low_original_control: always_retained_separately_not_implicitly_replaced_by_highK_calibration
+  endpoint_replay: all_high_gain_equals_original_high_and_all_low_raw_equals_original_semantic
+waveform:
+  estimand: train_reachability_same_17040_mask_variance_hierarchy_not_final_paper_qualification
+  reference: same_source_high_K8192_gain_source_frozen_integer_frontier
+  X_NMSE_ratio_max: 1.05
+  S_O_NMSE_ratio_max: 1.1
+  every_dataset_component_ratio_max: 1.1
+  RMS_gain_interval:
+  - 0.75
+  - 1.25
+  theta_alpha_signed_and_mean_absolute_db_max: 3.0103
+  local_RMS_correlation_min: 0.5
+  correlation: positive_each_component_macro
+  final_original_acceptance: unchanged_new_screen_forbidden_before_parent_report
+  stopping: no_nested_joint_pass_no_full_source_freeze_or_validation_no_capacity_sweep
+figures:
+  native_voltage: first_sorted_random_seed17_and_predeclared_P95_joint_error_per_dataset
+  time_views: full_30s_fixed_14_16s_boundary_13.7_14.3s
+  attributes: full_ID_held_increment_and_support_by_branch_role_dataset_subject
+  frozen_windows: preserve_all_400_crops_17040_positions_and_failure_tails
+resources:
+  supervisor: user_systemd_linger
+  workers: 4
+  BLAS_threads: 1
+  inherited_fft_threads: 2
+  maximum_numerical_threads: 8
+  memory_gib: 24
+  total_CPU_budget_seconds: 4500
+  fit_CPU_stop_seconds: 4000
+  wall_seconds: 4500
+  GPU: []

@@ -1,0 +1,67 @@
+schema: hb_array_source_v1
+experiment_id: TK-HB-VISIBLE-ARRAY-SPACE-TIME-SOURCE-v1
+joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+source:
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  native_run: hb_native_id_readout/v1
+  neighbor_run: hb_neighbor_readout/v1
+  fixed17: hb_native_id_readout/spectral_protected_v1/waveforms/manifest.json
+  folds: hb_native_id_readout/phase_fit_v1/integer_replay_metadata.npz
+  teacher_owner: src/data/so_supervision_cache.py:supervision_worker
+  teacher: frozen_shared_driver_tak_subject_cache_v4_joint_full_90s_per_Hb_site
+  exposure: original_tokenizer_G0_scales_and_calibration_used_all60train_and_inherited_historical_validation_source_exposure_111_coefficients_exclude_outer_held_people
+population:
+  primary: exact_existing236_neighbor_train_arrays_60people_all9343_original_scoring_position_windows
+  supplement: original17_examples_whole_observed_arrays_diagnostic_only_never_add_to_fit
+  target: unchanged_v3_S_O_both_colors_original_G0_variance_masks_units_and_hierarchy
+  folds: original111_four_person_folds
+  regression: preserve_G0_original_regression_exclusions
+  key_examples: [[5330,0,19],[5469,60,39]]
+data:
+  numerical_read_splits: [train]
+  validation: forbidden
+  confirmation: forbidden
+  test: forbidden
+  raw_reads: false
+  teacher_refit: false
+model:
+  context_seconds: 30
+  sample_rate_hz: 10
+  arms: [local_X, array_X, array_ID]
+  raw_features: all_visible_native_HbO_HbR_X_plus_observation_indicators
+  integer_features: full_native_frozen111_S_O_HbO_HbR_plus_integer_missing_flags
+  lags_seconds: [-8,-4,-2,-1,0,1,2,4,8]
+  lag_boundary: zero_outside_visible30s_plus_availability_no_circular_wrap
+  supervised_subspace_rank: 8
+  subspace: SVD_of_fit_subject_ridge_preconditioned_feature_RMS_normalized_weighted_target_crosscovariance
+  local_control: same_lags_only_own_two_X_colors_no_other_site_inputs
+  output: exact_joint_optimal_paired_delta_S_plus_O_minus_fixed_same_fold111_sum
+  quiet: original_reserved_pair_outputs_exact
+  ridge: 0.01
+  candidates: one_per_registered_input_arm_no_sweep
+  fit_weight: original_mask_valid_time_mean_and_G0_inverse_S_O_variances_then_position_crop_record_subject_equal
+selection:
+  minimum_array_X_joint_relative_gain_over_local_X_and111: 0.05
+  both_colors_joint_improve: true
+  improved_people_fraction_min: 0.60
+  minimum_datasets_all_SO_colors_improve: 3
+  macro_each_SO_color_ratio_to111_max: 1.02
+  dataset_each_SO_color_ratio_to111_max: 1.05
+  overall_RMS_interval: [0.75,1.25]
+  preexisting_dataset_RMS_distance_to1_add_max: 0.01
+  slope_curvature_correlation_drop_max: 0.02
+  tail_quantiles: [0.90,0.99]
+  tail_ratio_to111_max: 1.05
+  true_S_peak_error_ratio_to111_max: 1.05
+  interpretation: information_source_diagnostic_not_final_integer_tokenizer
+  hardening: only_if_array_X_numerical_gains_and_original_key_events_visually_improve_without_original_waveform_guard_failure
+  frozen_ID_comparison: report_same_protocol_information_gap_no_extra_phase_or_amplitude_side_input
+  stop: preserve_all_failures_no_development_or_extra_hyperparameter_generation
+resources:
+  workers: 4
+  threads_each: 1
+  memory_GiB: 12
+  CPU_budget_seconds: 1800
+  CPU_stop_seconds: 1720
+  supervisor: user_systemd_linger
+  GPU: none

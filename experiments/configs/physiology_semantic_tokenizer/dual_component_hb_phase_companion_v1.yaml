@@ -1,0 +1,50 @@
+schema: hb_phase_companion_v1
+experiment_id: TK-HB-FROZEN-INTEGER-ODD-PHASE-REACHABILITY-v1
+source:
+  protected_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_native_id_readout/spectral_protected_v1
+  population: original15360_windows_60train_people_four_subject_folds
+  same_integer_sequences: true
+data:
+  allowed_splits: [train]
+  validation_access: forbidden_unless_actual_original_train_eligibility_later_registered
+  confirmation_access: forbidden
+  test_access: forbidden
+  raw_reads: false
+model:
+  context_seconds: 30
+  rate_hz: 10
+  groups_DCT_indices: [[1, 3], [3, 13]]
+  phase_companion: DCT_II_coefficients_to_same_frequency_sine_modes
+  sampled_coordinate: q_equals_arange300_plus_half
+  virtual_edges_q: [0, 300]
+  boundary_condition: sine_zero_at_both_virtual_edges_no_circular_roll
+  input: frozen_protected_integer_decoded_S_HbO_S_HbR_O_HbO_O_HbR
+  correction: S_plus_delta_O_minus_delta_sum_and_quiet_exact
+  phase_directions_per_color: 8
+  additional_integers_for_potential_fit_only_model: 0
+oracle:
+  role: target_informed_per_window_low_dimensional_reachability_only_not_deployable
+  spaces: [even, odd, even_plus_odd]
+  nominal_directions_per_color: {even: 8, odd: 8, even_plus_odd: 16}
+  fit: per_window_color_original_mask_unregularized_least_squares_of_exact_joint_optimal_delta
+  amplitude: no_bound_favorable_diagnostic
+  column_normalization: own_direction_RMS_only
+  numerical_rank_relative_cutoff: 1.0e-10
+  quiet: zero_correction
+  selection: none_all_three_reported
+  all_windows: 15360
+  visual_panel: original17_union_original_fixed_random23017_G1_P90_worst_and_each_oracle_worst
+selection:
+  numerical: original_relative_pair_and_absolute_Hb_contracts_unchanged
+  visual: original_two_independent_records_repeated_event_loss_blocks_promotion
+  stop: if_most_favorable_even_plus_odd_oracle_retains_repeated_event_failures_stop_at_upper_bound
+  next_only_if_reachable: one_fit_only_frozen_phase_correction_with_original_amp_dynamic_protection_no_held_search
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 1
+  numerical_threads: 1
+  threads_max: 4
+  memory_GiB: 12
+  process_CPU_limit_seconds: 1150
+  campaign_CPU_budget_seconds: 1320
+  batch_size: 128

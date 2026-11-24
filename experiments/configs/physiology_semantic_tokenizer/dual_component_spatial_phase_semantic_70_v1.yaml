@@ -1,0 +1,73 @@
+schema: dual_component_spatial_dictionary_v1
+experiment_id: TK-SPATIAL-PHASE-SEMANTIC-70
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+model:
+  context_s: 30
+  token_s: 2
+  eeg_rate_hz: 200
+  input: observed_X_only
+  branches:
+  - S
+  - O
+  codebook_size: 512
+  missing_id: 0
+  encoder: single_atomic_nearest_joint_role_band_complex_phase_and_whole_patch_theta_alpha_RMS
+  position_roles: native_electrodes_sorted_casefold_round_robin_five_bands
+  bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+  decoder: full_atoms_plus_training_fitted_spatial_band_replacement
+  decoder_inputs:
+  - branch_integer_sequences
+  - frozen_model
+  - dataset_native_electrode_order
+  missing_auxiliary: zero_contribution_and_independent_band_fallback_if_all_anchors_absent
+  output_projection_hz:
+  - 1
+  - 45
+  projection_operator: 30s_real_DFT_zero_phase_periodic_no_padding
+  semantic_distance_fraction: 0.7
+training:
+  seed: 53
+  initialization_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/k8192.npz
+  initialization_examples: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/training_examples.json
+  spatial_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  fitting_splits:
+  - train
+  kmeans_max_iter: 15
+  kmeans_batch_size: 4096
+  kmeans_max_no_improvement: 10
+  kmeans_reassignment_ratio: 0.0
+  spatial_ridge_fraction: 0.01
+  checkpoint: each_branch_band_then_final_spatial_model
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  paired_comparison: same_G0_support_source_Wiener_and_train_crops_K8192_vs_retrained_smaller_K_after_projection
+  selection: screening_diagnostic_only_original_joint_acceptance_unchanged
+  hypothesis: whole_patch_attributes_can_survive_carrier_quantization_in_same_ID
+resources:
+  supervisor: user_systemd_linger
+  dictionary_workers: 4
+  numerical_threads_per_worker: 1
+  numerical_threads_spatial: 4
+  memory_budget_gib: 10
+  wall_budget_minutes: 30
+  gpu_devices: []

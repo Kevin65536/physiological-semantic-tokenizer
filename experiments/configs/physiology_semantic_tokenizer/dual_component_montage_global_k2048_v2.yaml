@@ -1,0 +1,74 @@
+schema: dual_component_montage_joint_v1
+experiment_id: TK-JOINT-MONTAGE-GLOBAL-ANALYSIS-K2048-v2
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+model:
+  initialization: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/joint_phase_semantic_70_k2048_v1/model.npz
+  context_s: 30
+  token_s: 2
+  sample_rate_hz: 200
+  codebook_size: 2048
+  top_m: 16
+  temperature: 0.05
+  encoder: frozen_Wiener_learned_same_cross_branch_full_montage_analysis_dynamic_top16_hard_quantization
+  decoder: learned_full_30s_same_and_cross_branch_spatial_Fourier_synthesis_of_single_atomic_waveforms
+  decoder_inputs:
+  - S_integer_sequence
+  - O_integer_sequence
+  - frozen_model
+  - native_position
+  continuous_decoder_inputs: []
+  global_analysis: true
+training:
+  seed: 23071
+  fitting_splits:
+  - train
+  plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  steps: 6000
+  milestones:
+  - 0
+  - 1500
+  - 3000
+  - 6000
+  sampling: equal_dataset_then_equal_subject_then_equal_record_then_crop_from_existing_train_plan
+  arms:
+  - joint
+  - decoder_control
+  control: same_K2048_initialization_data_order_steps_losses_and_runtime_path_frozen_analysis_assignments_atoms
+  joint: jointly_train_global_spatial_analysis_atomic_waveforms_hard_assignments_single_ID_attributes_and_spatial_synthesis
+  optimizer: Adam
+  learning_rate_atoms: 0.0005
+  learning_rate_assignment: 0.0001
+  learning_rate_synthesis: 0.001
+  learning_rate_attributes: 0.002
+  waveform_loss: mean_G0_variance_normalized_X_S_O_MSE_over_complete_training_positions
+  output_log_energy_weight: 0.05
+  output_log_energy: squared_log_theta_alpha_power_and_mean_quarter_second_RMS_error
+  single_ID_attribute_weight: 1.0
+  single_ID_attributes: train_standardized_log_theta_power_log_alpha_power_log_mean_quarter_second_RMS
+  initialization_l2_weight: 0.001
+  gradient_clip_norm: 5
+  straight_through: hard_forward_soft_topM_backward
+  checkpoint_selection: report_all_milestones_final_step_primary_no_confirmation_access
+  learning_rate_analysis: 0.0005
+  revision_basis: K512_joint_1200_improves_matched_waveform_NMSE_but_O_theta_single_ID_gain_changes_0.207_to_minus_0.204;
+    jointly_learn_spatial_analysis_at_K2048_and_strengthen_same_ID_attribute_supervision_fivefold
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  confirmation: forbidden
+resources:
+  supervisor: user_systemd_linger
+  numerical_threads: 4
+  memory_budget_gib: 16
+  wall_budget_minutes: 90
+  gpu_devices: []

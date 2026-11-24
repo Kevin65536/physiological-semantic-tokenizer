@@ -1,0 +1,16 @@
+schema: native_event_independent_audit_v1
+experiment_id: TK-EEG-NATIVE-EVENT-REPLACEMENT-v2-INDEPENDENT-AUDIT-v1
+producer_config: experiments/configs/physiology_semantic_tokenizer/dual_component_native_event_replacement_v2.yaml
+run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+model: component_source_transfer/native_event_replacement_v2
+output: audit_v1
+data: {fit: original_train_other_people_attribute_means_only, score: original_train_outer_held_people, validation: forbidden, confirmation: forbidden, test: forbidden}
+population: component_source_transfer/hard_as_v1/local_information_v1/population.json
+attribute_bank: component_source_transfer/hard_as_v1/local_information_v1/training_attributes.npz
+ordinary_information_control: component_source_transfer/montage_word_search_v1/single_word_v1
+selection: all_original17_fixed_random_P90_and_hard_identities_including_P7_CP5_both_FC2_and_VisualF7_no_improvement_selection
+waveforms: full30s_fixed14to16s_original_X_peak_2s_and_nearest_boundary_same_coordinates
+single_word: entire_K58743_actual_ID_background_and_actual_type_role_controls_same_original_hierarchy
+support: at_least8_complete_fit_patches_and2_fit_people_same_ID
+event_groups: ordinary_sinusoid_Ricker_Gaussian_derivative_all_retained
+resources: {workers: 4, threads: 1, memory_GiB: 12, CPU_seconds: 1800, supervisor: tk-native-event-audit-v1.service}

@@ -1,0 +1,47 @@
+schema: dual_component_cross_branch_readout_control_v1
+experiment_id: TK-JOINT-CROSS-BRANCH-READOUT-CONTROL-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  model: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  integers: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/band_dictionary_v2/integer_ids.npz
+  training_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  training_statistics: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/cross_branch_readout_v1
+readout:
+  input: same_position_band_voltage_decoded_from_the_own_branch_integer_sequence
+  output: own_branch_band_voltage
+  fitting_split: train
+  pseudo_inverse_relative_cutoff: 0.000001
+  intercept: false
+  source_spatial_ridge_fraction: 0.01
+  crossfit_folds: 5
+  crossfit: refit_spatial_W_and_diagonal_readout_on_other_training_subjects
+  variants: [single_branch_minimum_mse, single_branch_train_energy]
+  energy_gain:
+    target: crossfitted_training_target_RMS_per_dataset_position_band_and_output
+    required_crossfit_correlation: 0.5
+    minimum_gain: 0.5
+    maximum_gain: 2.0
+    unsupported_gain: 1.0
+  codebooks: frozen
+  continuous_side_information: []
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  interventions: []
+  selection: report_both_frozen_variants_without_validation_refitting
+  comparison: previously_frozen_full_2x2_minimum_MSE_and_training_energy_variants
+resources:
+  supervisor: user_systemd_linger
+  dataset_workers: 4
+  screen_workers: 2
+  numerical_threads_per_worker: 2
+  memory_budget_gib: 4
+  wall_budget_minutes: 15
+  gpu_devices: []

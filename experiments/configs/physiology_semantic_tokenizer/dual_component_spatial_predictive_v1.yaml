@@ -1,0 +1,60 @@
+schema: spatial_predictive_dictionary_experiment_v1
+experiment_id: TK-CLOSED-LOOP-SPATIAL-INNOVATIONS-v1
+source:
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  base: experiments/configs/physiology_semantic_tokenizer/dual_component_anchored_carrier_v1.yaml
+  folds: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1/fold_subjects.json
+  gain_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/transient_gain_v1
+data:
+  allowed_splits: [train]
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+  support: original400_native_crops_60people_17040_positions_four_subject_folds
+model:
+  context_seconds: 30
+  token_seconds: 2
+  EEG_rate_hz: 200
+  vocabulary: 512
+  missing: 0
+  branch: [S, O]
+  source: same_outer_fold_frozen_X_only_transient_source
+  spectrum: source_and_final_output_projected_on_full30s_inclusive1_45Hz
+  tree: maximum_absolute_train_uncentered_source_correlation_Prim_root_largest_sum
+  parent_gain: train_scalar_least_squares_clip_minus1.5_to1.5
+  normalization: fixed_fit_source_residual_RMS_per_native_site_branch
+  direct: parent_none_fixed_fit_source_RMS_identical_book_capacity_and_sampling
+  innovation: source_current_minus_gain_times_already_reconstructed_parent
+  missing_parent: decoded_zero
+  decoder: tree_order_reconstruct_prefix_add_scaled_atom_final_30s_band_projection
+  quantizer: PCA64_Euclidean_nearest_511positive_atoms
+  atoms: complete400sample_training_conditional_means
+training:
+  seed: 81319
+  sample_per_fit_person: 480
+  maximum_book_samples: 8192
+  kmeans_max_iter: 16
+  kmeans_batch: 512
+  fit_rounds_predictive: true_source_prefix_initial_book_then_one_decoded_prefix_refit
+  exposure: frozen_G0_Wiener_historically_alltrain_new_source_tree_scales_books_exclude_outer_people
+selection:
+  stage: train_reachability_only
+  waveform_reference: high_transient_source_on_same400_arrays
+  X_NMSE_ratio_max: 1.05
+  S_O_NMSE_ratio_max: 1.10
+  dataset_component_ratio_max: 1.10
+  RMS_interval: [0.75, 1.25]
+  theta_alpha_abs_db_max: 3.0103
+  local_RMS_correlation_min: 0.5
+  pattern: original_background_vs_full_atomic_ID_theta_alpha_positive_one_gain0.05_half_people_positive_support0.90
+  no_eligible: stop_without_development
+figures:
+  examples: original_fixed_identity_then_candidate_P95_and_maximum_joint_error_per_dataset
+  displays: full30s_central2s_token_boundary_voltage_and_local_RMS
+resources:
+  supervisor: user_systemd_linger
+  workers: 4
+  numerical_threads: 1
+  memory_GiB: 14
+  CPU_budget_seconds: 2400
+  wall_seconds: 1800

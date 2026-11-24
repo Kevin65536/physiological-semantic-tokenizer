@@ -1,0 +1,11 @@
+experiment_id: TK-TRAIN-INNOVATION-SPECTRAL-READOUT-v1
+run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+source: component_source_transfer/cross_branch_innovations_capacity_v2
+population: component_source_transfer/hard_as_v1/local_information_v1/population.json
+pilot_books: component_source_transfer/band_exchange_words_v1/books
+data: {fit: original_train_fold_other_people, score: original_train_fold_held_people, validation: forbidden, confirmation: forbidden, test: forbidden}
+interface: {K: 15351, bits_per_ID: 14, seconds_per_ID: 2, seconds_per_context: 30}
+fit: {geometry: within_each_400_point_original_token, frequency_resolution_Hz: 0.5, sample_rate_Hz: 200, ridge_fraction_of_trace: 0.05, prior: identity, weight: original_hierarchy_times_complete_patch_over_valid_waveform_count_and_target_variance}
+controls: [frozen, positive_gain, complex_pair, oracle_magnitude, oracle_phase]
+decision: use_original_capacity_waveform_and_single_word_gates_without_reselection
+resources: {workers: 4, threads: 1, CPU_seconds: 1500, memory_GiB: 12}

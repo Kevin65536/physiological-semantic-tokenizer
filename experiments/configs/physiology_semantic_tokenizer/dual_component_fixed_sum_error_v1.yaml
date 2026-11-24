@@ -1,0 +1,14 @@
+experiment_id: TK-FROZEN-PAIR-FIXED-SUM-ERROR-v1
+run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+bundle: hb_native_id_readout/v1/four_branch_replay_v1/bundle.json
+g0: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+panel: panels.npz
+panel_identity: a519af87dd927c4664637f3502d38c189c55e5e30cc7e60265da1d71d8045f45
+eeg: development_audit/as_local_gain_v1/spatial
+hb: hb_native_id_readout/v1/development
+scope: preexisting_frozen_development_reference_only_no_refit_no_confirm_or_test
+labels: [S_NMSE, O_NMSE, S_plus_O_joint_loss, minimum_joint_loss_at_actual_component_sum, residual_allocation_loss, X_NMSE]
+oracle: pointwise_true_targets_at_fixed_sum_and_inverse_component_train_variance_diagnostic_only
+summary: aggregate_losses_over_original_masked_positions_crops_records_subjects_then_datasets_before_dividing
+validation: match_all_saved_X_S_O_NMSE_and_additive_identity_to_float64_precision
+resources: {workers: 5, threads: 1, memory_gib: 12, wall_s: 600}

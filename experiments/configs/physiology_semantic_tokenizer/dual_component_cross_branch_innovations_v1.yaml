@@ -1,0 +1,52 @@
+schema: cross_branch_innovations_v1
+experiment_id: TK-EEG-PAID-PILOT-CONDITIONAL-INNOVATION-v1
+joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+source:
+  sampling: component_source_transfer/cross_branch_sampling_v1
+  dictionaries: component_source_transfer/band_exchange_words_v1
+  source_estimators: component_source_transfer/transient_gain_v1
+  population: component_source_transfer/hard_as_v1/local_information_v1/population.json
+  reference: component_source_transfer/integer_sum_source_v1
+data: {fit: train_outer_people_only, score: original400_arrays_17040_positions_60people_four_folds, validation: forbidden, confirmation: forbidden, test: forbidden}
+interface:
+  per_branch_native_position: 15_single_integers_per30seconds
+  pilot: S_even_native_index_and_O_odd_native_index_use_original_staggered_balanced_ID
+  pilot_vocab_including_missing: 5116
+  second_vocab: five_roles_times1023_added_indices
+  K_including_missing: 10231
+  bits_each_ID: 14
+  extra_integers: 0
+  missing: zero
+  decoder_order: paid_pilots_then_paid_second_words_then_full_joint_posterior
+model:
+  pilot_measurement: original_staggered_gain_noise_and_joint_covariance
+  mean: conditional_LMMSE_from_actual_decoded_energy_pilot_atoms
+  conditional_covariance: joint_C_minus_pilot_conditioning_term
+  residual_scale: per_dataset_branch_native_site_band_fit_RMS_of_actual_source_minus_actual_pilot_mean
+  scale_fallback: sqrt_full_observed_conditional_variance_min1e8inverse_scale_bound
+  innovations: actual_source_band_minus_paid_pilot_mean_then_divide_fixed_fit_residual_scale
+  matched_direct: actual_source_band_divide_identical_fixed_fit_residual_scale
+  attributes: full_local_source_S_or_O_log1p_theta_alpha_and_RMS_never_residual_properties
+  assignment: same_weighted_waveform_PCA_group_and_three_source_attribute_SD_groups_in_two_matched_books
+  atom: weighted_full400point_mean_normalized_carrier
+  observation_controls: [mean, fit_energy_gain_clip1to2]
+  observation_calibration: fit_q_equals_gain_times_actual_residual_or_source_plus_uncorrelated_noise
+  posterior_innovation: mean_plus_conditional_covariance_update_from_residual_words
+  posterior_direct: mean_plus_conditional_covariance_update_from_direct_words_minus_fitted_gain_times_mean
+  data_at_decoder: paid_integer_sequences_and_frozen_state_and_fixed_native_identity_only
+training:
+  seed: 197
+  maximum_sample_patches_each_dataset_branch_role: 4096
+  sampling: equal_training_people_before_dataset_cap_identical_samples_for_direct_and_innovation
+  active_codes: min1023_max1_floor_sampled_fit_patches_div8
+  PCA_width: four_times_bandwidth_plus8_capped76
+  kmeans: weighted_MiniBatchKMeans_maxiter30_batch2048_noimprovement8_ninit1_no_reassignment
+  initialization: identical_training_sample_indices_in_both_books_half_uniform_half_source_waveform_energy
+  weighting: dataset_subject_record_crop_equal_then_observed_native_and2second_slots_equal
+evaluation:
+  waveform: all_original_high_transient_reference_guards_and_mask_denominators
+  pattern: actual_full_K10231_word_background_vs_background_plus_ID_role_and_type_controls
+  replay: freeze_saved14bit_words_decode_in_new_process_and_recompute_scores
+  visual: original17_fixed_random_P90_hard_examples_and_new_joint_S_worst_each_library
+  advance: same_payload_waveform_and_actual_ID_and_visual_and_replay_success_before_development
+resources: {CPU_seconds: 2100, workers: 4, numeric_threads: 1, memory_GiB: 16, supervisor: tokenizer-cross-branch-innovations-v1.service}

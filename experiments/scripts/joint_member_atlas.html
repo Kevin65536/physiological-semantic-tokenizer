@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>四分支单码图册</title>
+<style>
+body{font:16px system-ui,sans-serif;color:#183545;max-width:1160px;margin:32px auto;padding:0 24px}
+h1,h2{font-weight:650}
+p{line-height:1.55}
+select,button{font:inherit;margin:4px;padding:5px 9px}
+section{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+canvas{width:100%;height:auto;border:1px solid #ced9df}
+small{color:#49626d}
+#status{font-weight:600}
+.train{color:#155b82}
+.validation{color:#a44821}
+</style>
+<h1>四分支单码图册</h1><p>每个成员是一个完整评分的两秒片段，来自真实训练或开发观察。EEG 码义按分支、角色频带与 ID 解释。</p>
+<label>分支 <select id="branch"></select></label>
+<label>查看 <select id="filter"><option value="major">覆盖训练质量前 90% 的码</option>
+<option value="used">全部已见码</option>
+<option value="weak">稀有及支持不足的码</option>
+<option value="dead">训练死码</option>
+<option value="all">全部码</option></select></label>
+<button id="prev">上一个</button>
+<label>码 <select id="code"></select></label>
+<button id="next">下一个</button><p id="status"></p>
+<p><span class="train">蓝色为训练集</span>，<span class="validation">橙色为验证集</span>。粗线为平均，色带为全部成员逐点 P10–P90，细线为按固定种子均匀抽取的至多三个真实成员。每个面板内共用纵轴，不同码独立取刻度。显示的是给定单码的目标分布；完整 30 秒整数序列的解码另见波形图册。<a href="all_codes.csv">下载全部码的支持与覆盖表</a>。</p>
+<details><summary>评分输入来源</summary><p>{{profile_sources}}</p>
+</details>
+<section id="charts"></section><h2>代表成员身份</h2><div id="members"></div>
+<script src="atlas_index.js"></script><script>
+const el = n => document.getElementById(n),
+    bands = ['1–4', '4–8', '8–13', '13–30', '30–45'];
+let rows = [],
+    epoch = 0;
+Object.keys(atlasIndex).forEach(k => el('branch').add(new Option(k, k)));
+
+function list() {
+    const k = el('branch').value,
+        f = el('filter').value;
+    rows = atlasIndex[k].filter(r => f === 'all' || f === 'major' && r.major || f === 'weak' && r.low_support && r.train > 0 || f === 'dead' && r.train === 0 || f === 'used' && r.train > 0);
+    el('code').replaceChildren();
+    const frag = document.createDocumentFragment();
+    for (const r of rows) {
+        frag.append(new Option('#' + r.rank + ' · ID ' + r.ID + (k.startsWith('EEG') ? ' · ' + bands[r.band] + ' Hz' : ''), r.rank))
+    }
+    el('code').append(frag);
+    show()
+}
+
+function decode(panel) {
+    if (!panel) return [];
+    const bytes = Uint8Array.from(atob(panel.rows), c => c.charCodeAt(0));
+    let data = new Float32Array(bytes.buffer),
+        v = [];
+    for (let i = 0; i < data.length; i += panel.length) v.push(data.subarray(i, i + panel.length));
+    return v
+}
+
+function plot(canvas, title, xname, axis, train, val) {
+    let c = canvas.getContext('2d');
+    let x0 = 85,
+        y0 = 40,
+        w = 480,
+        h = 185;
+    let all = [...train, ...val];
+    let lo = Infinity,
+        hi = -Infinity;
+    for (const row of all) {
+        for (const v of row) {
+            lo = Math.min(lo, v);
+            hi = Math.max(hi, v)
+        }
+    }
+    if (!all.length) {
+        lo = -1;
+        hi = 1
+    }
+    if (hi === lo) {
+        lo -= .01;
+        hi += .01
+    }
+    const y = v => y0 + h - (v - lo) * h / (hi - lo);
+    c.fillStyle = '#183545';
+    c.font = '16px sans-serif';
+    c.fillText(title, 15, 23);
+    for (let n = 0; n < 4; n++) {
+        let v = lo + (hi - lo) * n / 3;
+        c.fillStyle = '#344e58';
+        c.font = '12px sans-serif';
+        c.fillText(v.toPrecision(3), 4, y(v) + 3);
+        c.strokeStyle = '#e0e8ec';
+        c.beginPath();
+        c.moveTo(x0, y(v));
+        c.lineTo(x0 + w, y(v));
+        c.stroke()
+    }
+    for (let j = 0; j < 5; j++) {
+        let xx = x0 + w * j / 4;
+        c.fillText((axis[0] + (axis[1] - axis[0]) * j / 4).toFixed(axis[1] < 3 ? 2 : 1), xx - 12, y0 + h + 18)
+    }
+    c.fillText(xname, x0 + w * .42, y0 + h + 37);
+
+    function line(arr, color, width, dash) {
+        if (!arr) return;
+        c.strokeStyle = color;
+        c.lineWidth = width;
+        c.setLineDash(dash);
+        c.beginPath();
+        arr.forEach((v, i) => {
+            let xx = x0 + w * i / (arr.length - 1);
+            if (i === 0) c.moveTo(xx, y(v));
+            else c.lineTo(xx, y(v))
+        });
+        c.stroke();
+        c.setLineDash([])
+    }
+    for (const [stack, tint, color, dash] of [
+            [train, '#2d78a424', '#155b82', []],
+            [val, '#bf5b2c24', '#a44821', [5, 3]]
+        ]) {
+        if (!stack.length) continue;
+        let a = stack[1],
+            b = stack[2];
+        c.fillStyle = tint;
+        c.beginPath();
+        a.forEach((v, i) => {
+            let xx = x0 + w * i / (a.length - 1);
+            if (i === 0) c.moveTo(xx, y(v));
+            else c.lineTo(xx, y(v))
+        });
+        for (let i = b.length - 1; i >= 0; i--) c.lineTo(x0 + w * i / (b.length - 1), y(b[i]));
+        c.closePath();
+        c.fill();
+        for (const member of stack.slice(3)) line(member, color + '85', .8, dash);
+        line(stack[0], color, 2.5, dash)
+    }
+}
+
+function show() {
+    const id = ++epoch,
+        k = el('branch').value,
+        r = rows[el('code').selectedIndex];
+    el('charts').replaceChildren();
+    el('members').replaceChildren();
+    if (!r) {
+        el('status').textContent = '此筛选没有码';
+        return
+    }
+    el('status').textContent = '训练 ' + r.train + ' 片 / ' + r.train_subjects + ' 人，验证 ' + r.validation + ' 片 / ' + r.validation_subjects + ' 人，占有率 ' + (100 * r.mass).toFixed(3) + '%，累计 ' + (100 * r.cumulative).toFixed(2) + '%' + (r.low_support ? '；训练支持不足' : '');
+    let s = document.createElement('script');
+    s.src = k + '/' + r.chunk + '.js';
+    s.onload = () => {
+        if (id !== epoch) {
+            s.remove();
+            return
+        }
+        const datum = window.atlasData[(r.rank - 1) % 32];
+        let eeg = k.startsWith('EEG');
+        let panels = eeg ? [
+            ['电压 / 训练 X 标准差', '秒', [0, 1.995]],
+            ['单片 Hann 功率谱（训练坐标²/Hz）', 'Hz', [1, 45]],
+            ['0.25 秒局部 RMS（训练坐标）', '块中心 / 秒', [.125, 1.875]]
+        ] : [
+            ['HbO 原幅度 / 训练 X 标准差', '秒', [0, 1.9]],
+            ['HbR 原幅度 / 训练 X 标准差', '秒', [0, 1.9]],
+            ['HbO 片内去均值', '秒', [0, 1.9]],
+            ['HbR 片内去均值', '秒', [0, 1.9]]
+        ];
+        panels.forEach(([name, unit, axis], i) => {
+            let can = document.createElement('canvas');
+            can.width = 590;
+            can.height = 273;
+            el('charts').append(can);
+            plot(can, name, unit, axis, decode(datum.train.panels[i]), decode(datum.validation.panels[i]))
+        });
+        for (let sp of ['train', 'validation']) {
+            let node = document.createElement('p');
+            node.textContent = (sp === 'train' ? '训练' : '验证') + '：' + (datum[sp].members.map(m => m.dataset + ' / ' + m.subject + ' / ' + m.record + ' / ' + m.position + ' / 父窗 ' + m.parent + ' / 裁片起点 ' + m.crop_s + 's / 第' + (m.patch + 1) + '片').join('；') || '无完整成员');
+            el('members').append(node)
+        }
+        s.remove()
+    };
+    document.body.append(s)
+}
+el('branch').onchange = list;
+el('filter').onchange = list;
+el('code').onchange = show;
+for (const [name, inc] of [
+        ['prev', -1],
+        ['next', 1]
+    ]) el(name).onclick = () => {
+    if (!rows.length) return;
+    el('code').selectedIndex = (el('code').selectedIndex + inc + rows.length) % rows.length;
+    show()
+};
+list()
+</script></html>

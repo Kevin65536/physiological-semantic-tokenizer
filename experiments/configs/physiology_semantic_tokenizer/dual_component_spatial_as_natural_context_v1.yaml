@@ -1,0 +1,62 @@
+schema: spatial_as_natural_context_v1
+experiment_id: TK-EEG-AS-NATURAL-CONTEXT-v1
+source:
+  encoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/v1/encoder.json
+  decoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/local_gain_v1/model.npz
+  actual_pattern: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/pattern/as_v1_actual_v1
+  training_bank: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_coarsening/v1/training_attributes.npz
+  panels: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+data:
+  model_fitting: forbidden
+  observation_scope: original_476_screen_and_same_row_record_site_adjacent_admitted_G0_score_crops_only
+  train: original_15360_pattern_attributes_for_frozen_variance_and_template_identity_only
+  confirmation: forbidden
+  reserved_four: forbidden
+  test: forbidden
+  native_units_masks_scales: unchanged_G0_v3
+pairing:
+  original_center_patch: 7
+  interval_s: 2
+  direction: prefer_score_crop_start_plus_30_at_same_site_else_start_minus_30_else_no_pair
+  shifted_start: original_start_plus_direction_times_2
+  shifted_center_patch: 7_minus_direction
+  array: full_native_montage_same_fixed_dataset_order
+  observation_mask: actual_observation_valid_and_finite_X_in_shifted_30s_not_supervised_target_mask
+  adjacent_piece: only_actual_added_2s_counts_not_whole_adjacent_parent_availability
+  same_physical_center: raw_normalized_X_and_observation_mask_array_equal_for_every_native_site
+inference:
+  original_IDs: exact_saved_full_array_AS_integers
+  original_reencoding: four_fixed_one_per_dataset_full_native_probes_must_match
+  shifted_IDs: original_frozen_AS_settings_no_modification
+  decoder: static_best_local_gain_decoder_ID_only
+  extra_integers: 0
+  extra_floating_side_information: 0
+attributes:
+  namespace: branch_fixed_frequency_band_ID
+  templates: exact_original_frozen_true_train_target_means
+  fields: [theta_power_4_8, alpha_power_8_13, eight_quarter_second_RMS]
+  variance: original_15360_full_complete_train_patches_pooled_population_variance_mean_over_eight_RMS_dimensions
+  metric: squared_template_change_hierarchical_MSE_divided_by_frozen_training_attribute_variance
+  hierarchy: positions_crop_record_subject_dataset_equal_each_level
+  missing: preserve_zero_ID_and_unseen_endpoint_counts_and_support_distributions
+  primary_support: both_nonzero_IDs_have_original_training_count_positive
+  unchanged_attribute_control: same_physical_true_patch_zero_change
+acceptance:
+  existing_natural_context_subgate: all_theta_alpha_RMS_ratios_less_than_0.25_per_branch
+  original_main_pattern_waveform_support_gates: unchanged_no_replacement_or_new_readout
+  ID_change_rate: descriptive_not_a_gate
+figures:
+  fixed: first_lexicographic_paired_valid_screen_example_each_dataset
+  random: minimum_SHA256_of_seed17_dataset_example
+  difficult: nearest_P95_sum_of_S_theta_alpha_normalized_template_change_each_dataset
+  waves: raw_target_original_and_shifted_integer_only_decode_common_28s_center_2s_boundary_zoom_native_units
+resources:
+  workers: 4
+  numerical_threads: 1
+  frozen_FFT_workers: 2
+  maximum_threads: 8
+  memory_gib: 24
+  CPU_budget_seconds: 1800
+  wall_budget_seconds: 1800
+  worker_CPU_seconds: 420
+  gpu: none

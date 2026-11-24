@@ -1,0 +1,70 @@
+schema: joint_hb_x_residual_v1
+experiment_id: TK-HB-X-RESIDUAL-v1
+scope: single_Hb_candidate_experiment
+hypothesis:
+  null_hypothesis: frozen_decoded_components_do_not_stably_predict_HbO_X_residual
+  primary: held_training_subject_X_HbO_NMSE_then_original_screen_and_development_gates
+  baseline: frozen_component_transfer_v2_energy_HbO_only_training_tail
+  duplicate_check: component_transfer_preserves_X_and_prior_G4_joint_decoder_used_different_IDs
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_component_transfer/v2_energy/HbO_only/training_tail.pt
+  integers: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/development_audit/hb/component_transfer_v2/HbO_only/training_tail/integer_ids.npz
+  independent_review: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/development_audit/hb/component_transfer_v2/HbO_only/training_tail/independent_panel_review_v1.json
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+training:
+  population: every_G0_train_Hb_subject
+  records_per_subject: 2
+  crops_per_record: 2
+  positions_per_crop: 4
+  selection: SHA_ranked_native_identity_from_G0_nonoverlapping_train_score_inputs
+  seed: 81061
+  folds: 5
+  fold_rule: dataset_stratified_SHA_ranked_subject_round_robin
+  scope: residual_layer_crossfit_only_base_tokenizer_already_trained_on_these_subjects
+  weighting: dataset_subject_record_crop_position_equal_then_valid_time_equal
+model:
+  corrected_output: X_HbO
+  allocation: all_X_HbO_residual_added_to_O_HbO_S_and_both_HbR_outputs_unchanged
+  intercept: false
+  quiet_pair: original_complete_reserved_pair_preserves_both_levels_and_exact_zero_X
+  feature_sets: [x_gain, same_color_so, paired_so, paired_so_context]
+  grouping: [global, dataset]
+  context_lag_samples: 5
+  context_feature: symmetric_lag_average_minus_current_with_edge_repetition
+  ridge_trace_fractions: [0.001, 0.01, 0.1]
+  normalization: training_uncentered_feature_RMS_only
+  maximum_free_coefficients: 32
+  decoder_inputs: original_integers_frozen_model_and_dataset_identity
+selection:
+  minimum_CV_X_HbO_relative_improvement: 0.005
+  minimum_improved_datasets: 3
+  require_Visual_CV_improvement: true
+  maximum_dataset_CV_X_degradation_ratio: 1.01
+  minimum_improved_subject_fraction: 0.5
+  maximum_CV_O_HbO_NMSE_ratio: 1.02
+  rms_gain_interval: [0.75, 1.25]
+  slope_correlation_min: 0.5
+  curvature_correlation_min_exclusive: 0
+  boundary_difference_nmse_max: 4
+  parsimony_X_objective_ratio: 1.01
+  tie_rule: fewest_coefficients_then_stronger_ridge_then_feature_name
+  no_eligible_candidate: stop_without_screen
+  eligible_candidate: freeze_once_then_run_one_screen
+  screen_pass: original_joint_tokenizer_acceptance_v1_all_checks
+  screen_fail: retain_failure_and_stop_this_experiment
+  screen_all_pass: full_development_saved_ID_replay_and_fixed_waveform_review
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 2
+  numerical_threads: 1
+  batch_size: 64
+  memory_gib: 16
+  process_CPU_limit_seconds: 2400
+  total_experiment_CPU_budget_seconds: 2700

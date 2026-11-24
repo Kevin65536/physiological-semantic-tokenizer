@@ -1,0 +1,51 @@
+schema: forward_gain_atomic_diagnostic_v1
+experiment_id: TK-FORWARD-PAID-ATOMIC-GAIN-v1
+source:
+  hard_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_transient_as_v1.yaml
+  hard_run: component_source_transfer/hard_as_v1
+  gallery: component_source_transfer/integer_sum_source_v1/training_examples/waveform_examples.json
+  family: semantic
+data:
+  allowed_splits: [train]
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+  support: original_400_arrays_60_people_4_folds_17040_position_windows
+diagnostic:
+  fixed_parent: saved_actual_transient_K512_IDs
+  X_gain: nonnegative_unbounded_local_2s_role_band_projection_LS_from_corresponding_fold_X_only_transient_source
+  target_gain: signed_unbounded_same_local_projection_LS_from_true_S_O_complete_patches_only_otherwise_gain1
+  oracle_scope: same_local_projection_objective_not_global_final_waveform_or_model_independent_bound
+  baseline: exact_gain1_original_decoder_endpoint
+  gain_objective: sum_400_role_band_squared_voltage_error
+  scoring: original_full_voltage_mask_and_G0_target_variances_original_hierarchy
+  contrasts: [gain1, X_continuous_gain, target_continuous_gain]
+  figures: all17_original_gallery_examples_keep_original_difficult_patch_and_full30s
+discrete_if_continuous_passes:
+  gain_nodes: gain1_plus_positive_X_projection_gain_quantiles_0.1_0.5_0.9_fitted_on_only_fit_people_same_source_f_per_branch_role
+  quantization: nearest_node_to_nonnegative_local_projection_gain
+  integer: zero_missing_otherwise_1_plus_4_times_parent_minus1_plus_gain_index_gain1_index0
+  K: 2045
+  bits_each: 11
+  pattern: full_gain_parent_composite_ID_separate_categories_original_background_and_8patch2people_support
+  prerequisite: every_X_continuous_gain_waveform_gate_and_actual_gallery_visual_pass
+admission:
+  reference: preexisting_high_K8192_transient_hard_model
+  X_NMSE_max_ratio: 1.05
+  S_O_NMSE_max_ratio: 1.10
+  each_dataset_component_NMSE_max_ratio: 1.10
+  RMS_gain: [0.75, 1.25]
+  theta_alpha_abs_signed_and_mean_abs_db_max: 3.0103
+  local_RMS_correlation_min: 0.5
+  correlation_positive: true
+  visual: repeated_missing_event_band_or_wrong_component_blocks
+  failure: stop_without_discrete_training_or_hyperparameter_repeat_keep_all_controls
+resources:
+  supervisor: user_systemd_linger
+  workers: 4
+  numerical_threads_each: 1
+  maximum_threads: 4
+  memory_gib: 16
+  CPU_budget_seconds: 2100
+  stop_CPU_seconds: 2000
+  wall_seconds: 1000

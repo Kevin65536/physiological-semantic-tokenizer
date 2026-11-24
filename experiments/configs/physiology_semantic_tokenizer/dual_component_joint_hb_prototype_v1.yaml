@@ -1,0 +1,53 @@
+schema: dual_component_joint_hb_prototype_v1
+experiment_id: TK-JOINT-HB-PROTOTYPE-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  teacher_refits: false
+  raw_reads: false
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g1_v1/models/hb__waveform__vq128/checkpoint_step_10000.pt
+  config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  step: 10000
+initialization:
+  contexts: 4096
+  seed: 81043
+  ridge_fraction: 0.001
+  scale_floor: 1.0e-06
+  normalization: train_complete_patch_centered_shape_mean_square_and_per_second_slope_mean_square
+loss:
+  sum_weight: 0.5
+  derivative_weight: 0.1
+auxiliary:
+  control:
+    shape: 0.0
+    slope: 0.0
+  auxiliary:
+    shape: 0.1
+    slope: 0.1
+training:
+  seed: 43
+  steps: 4000
+  batch_size: 64
+  learning_rate: 0.0001
+  final_learning_rate: 1.0e-05
+  weight_decay: 0.0001
+  checkpoint_every: 500
+  milestones:
+  - 500
+  - 2000
+  - 4000
+  matching: same_source_initialization_draws_optimizer_loss_and_budget_only_auxiliary_weights_differ
+  stopping: fixed_4000_steps_per_arm
+resources:
+  torch_threads: 4
+  numerical_threads: 1
+  mmap_parent_cache: 128
+  supervisor: user_systemd_linger
+  memory_gib_per_arm: 16
+  stage_wall_budget_minutes: 45

@@ -1,0 +1,45 @@
+schema: dual_component_spatial_as_gain_v1
+experiment_id: TK-JOINT-SPATIAL-AS-GAIN-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  encoder_bundle: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/v1/encoder.json
+  decoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  screen_ids: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/v1/integer_ids.npz
+  earlier_train_panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/v1/training_benchmark_panel.json
+training:
+  subjects_per_dataset: 8
+  records_per_subject: 2
+  crops_per_record: 1
+  sampling: SHA_metadata_ranked_subject_record_parent_score_crop_exclude_AS_budget_calibration_crops
+  parameters: independent_positive_gain_per_dataset_branch_and_five_bands_40_total
+  fitting: all_training_calibration_subjects_with_subject_record_crop_position_equal_weight
+  cross_validation: four_SHA_ranked_subject_folds_per_dataset_diagnostic_no_hyperparameter_selection
+  objective: X_NMSE_times_0.5_plus_S_NMSE_plus_O_NMSE
+  arms: [minimum_MSE, energy_constrained]
+  gain_bounds: [0.25, 4.0]
+  constrained_rms_gain: [0.75, 1.25]
+  constrained_theta_alpha_mean_abs_db_max: 3.0103
+  constrained_theta_alpha_abs_mean_signed_db_max: 3.0103
+  constrained_component_nmse_max_ratio_to_original_AS: 1.10
+  infeasible: retain_minimum_violation_solution_and_report_failure_without_relaxing_limits
+  optimizer: SLSQP_fixed_500_iterations_tolerance_1e-9
+  validation_statistics_fit: forbidden
+  test_access: forbidden
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  integers: exact_same_frozen_AS_IDs_for_both_calibration_arms
+  baseline: original_AS
+  selection: whole_arm_comparison_same_registered_limits_and_visual_review
+resources:
+  supervisor: user_systemd_linger
+  numerical_threads: 4
+  memory_gib: 20
+  wall_budget_seconds: 1800

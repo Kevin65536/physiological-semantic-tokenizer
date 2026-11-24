@@ -1,0 +1,33 @@
+experiment_id: TK-EEG-NATIVE-COMPONENT-TRANSFER-v1
+source:
+  base: experiments/configs/physiology_semantic_tokenizer/dual_component_anchored_carrier_v1.yaml
+  folds: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1/fold_subjects.json
+data:
+  allowed_splits: [train]
+  score: all_17040_original_masked_positions_in_400_crops_from_60_training_subjects
+  fit: complete_scored_30s_target_site_crops_only_partial_targets_still_scored_in_full
+  source_exposure: legacy_Wiener_and_scales_previously_fitted_all_original_training_subjects
+model:
+  formal_input: observed_30s_200Hz_native_EEG_X_only_missing_inputs_zeroed_by_existing_G0_loader
+  stage: continuous_component_separation_diagnostic_before_discrete_encoding
+  target: signed_residual_added_to_S_and_subtracted_from_O_minimizing_S_O_inverse_train_variance_weighted_MSE
+  contrast: legacy_frozen_shared_Wiener_then_dataset_site_band_specific_diagonal_or_full_montage_complex_ridge
+  bands_hz: [[1,4],[4,8],[8,13],[13,30],[30,45]]
+  ridge_fraction_of_input_diagonal: 0.1
+  variance_floor_ratio_to_mean: 0.000001
+  weighting: each_training_subject_equal_each_record_equal_each_crop_equal_within_record_skip_unscored_target_contribution
+  held_metrics: X_S_O_NMSE_RMSE_native_bias_native_rms_gain_correlation_envelope_and_five_bands
+selection:
+  choose: select_lowest_macro_of_local_or_full_that_passes_all_criteria_against_frozen_Wiener
+  S_and_O_relative_improvement_min: 0.05
+  min_improving_datasets_both_components: 3
+  min_improving_folds_both_components: 3
+  no_dataset_S_or_O_NMSE_ratio_above: 1.10
+  X_identity: float64_sum_conserved
+  if_pass: test_frozen_estimator_inside_actual_single_ID_assignment_with_matched_hard_control_on_train_before_development
+  if_fail: stop_source_calibration_without_validation
+resources:
+  dataset_workers: 4
+  numerical_threads_each: 1
+  wall_budget_seconds: 780
+  memory_gib: 20

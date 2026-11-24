@@ -1,0 +1,106 @@
+schema: hb_parent_leaf_v1
+experiment_id: TK-HB-G1-PARENT-LEAF-FIT1024-v1
+hypothesis:
+  null: X_predictable_supervised_children_of_frozen_O_parent_codes_do_not_improve_local_token_meaning_with_valid_component_reconstruction
+  baseline: exact_original_G1_K128_X_S_O_at_same_training_and_screen_support
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g1_v1/models/hb__waveform__vq128/checkpoint_step_10000.pt
+  config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g1_v1
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  quiet_fit: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/silent_observation_v1/fit.json
+  training_bank: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_parent_leaf/v1/training_bank.npz
+  training_bank_sha256: 0c2b36045b45fba7e69ca45c6562a9801ae8e96b4a37f9113e79054a41b73521
+data:
+  fitting_split: train
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+model:
+  visible_seconds: 30
+  sample_rate_hz: 10
+  patch_seconds: 2
+  emitted: S_parent_ID_and_one_atomic_O_leaf_ID_per_native_position_and_patch
+  S_parent_frozen: true
+  O_parent_lookup: static_leaf_to_original_G1_O_parent
+  original_decoder_frozen: true
+  tree_features: original_X_only_O_continuous_latent_local_X_wave_mean_RMS_slope_curvature
+  supervision: train_O_local_demeaned_shape_and_two_color_slopes
+  shape_normalization: each_outer_training_group_feature_SD_fitted_without_held_subjects
+  tree_workers: 4
+  max_leaf_options:
+  - 4
+  single_parent_leaf_control: same_gain_residual_objective_and_strength_without_parent_split
+  minimum_leaf_complete_training_patches: 256
+  minimum_leaf_training_subjects: 4
+  minimum_parent_supervised_impurity_reduction: 0.05
+  leaf_residual: mean_train_O_target_minus_original_O_sequence_decode_then_remove_each_leaf_color_mean
+  residual_strength_options:
+  - 0.25
+  residual_lowpass_hz: 0.4
+  decoder_color_gain: train_RMS_desired_projected_onto_grid_0.9_1.12_step0.005_with_same_macro_and_dataset_S_O_error_limits
+  output_O: frozen_parent_O_times_frozen_color_gain_plus_smoothed_leaf_shape_residual
+  output_S: exact_original_parent_sum_minus_new_O
+  output_sum: exact_original_parent_sum_for_ordinary_sequences
+  quiet: reuse_preexisting_train_tail_threshold_and_train_S_level_encoded_as_complete_reserved_S_O_pair
+  decode_inputs: declared_leaf_integer_sequences_frozen_weights_and_train_scales_only
+  matched_feature_modes:
+  - ridge
+  feature_mode: ridge
+  HbO_supervision_weight: 4.0
+  direction_ridge: 1.0
+  gain_projection: true
+training:
+  panel: fixed_hb_pattern_train
+  folds: 4
+  fold_seed: 81317
+  fold_rule: dataset_stratified_SHA_subject_round_robin
+  complete_patch_only_for_tree_and_readout: true
+  scoring: all_original_masked_position_windows_without_tail_filter
+  exposure: original_G1_and_G0_scales_previously_saw_training_subjects_only_leaf_split_and_readout_are_crossfit
+  expanded_fit:
+    maximum_windows_per_subject: 1024
+    evaluation_contexts: 15360
+    selection_seed: 81317
+    chunk_windows: 2048
+    source_role: existing_G0_hb_train_score_support
+    retained_original: every_original_window_as_prefix
+    selection: least_selected_record_then_seeded_SHA_of_original_identity
+    nonoverlap: 30s_absolute_native_interval_per_dataset_subject_record_physical_position
+    held: all_windows_of_held_subject_excluded_from_fitting
+    original_training_folds: hb_parent_leaf/v2_ridge/training_folds.json
+    fixed_hyperparameters: exact_v2_ridge_4leaf_shape0.25
+    sample_weighting: same_unweighted_complete_patches_for_tree_and_ridge_and_readout;
+      gain_uses_same_hierarchical_training_weights
+    amount_adaptation: same_train_fitted_SD_and_Gram_per_n_ridge_scaling; absolute_min256_leaf_patches_min4_subjects_unchanged;
+      max4_leaves_unchanged
+selection:
+  frozen_numeric_components_ratio_max: 1.05
+  frozen_dataset_components_ratio_max: 1.1
+  rms_gain_interval:
+  - 0.75
+  - 1.25
+  O_single_ID_slope_gain_min_each_color: 0.1
+  O_single_ID_centered_gain_min_exclusive: 0.0
+  primary_positive_subject_fraction_min: 0.5
+  validation_mass_on_8patch_2subject_leaf_min: 0.9
+  S_single_ID_same_original_parent: exact
+  choose: only_predeclared_ridge_4leaf_shape0.25; no_alternative_candidates
+  no_eligible: retain_training_negative_without_screen
+  eligible: freeze_then_one_original_screen_all_numeric_and_single_ID_pattern_visuals
+  screen_pass: full_development_same_model_integer_replay
+  confirmation: forbidden
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 2
+  numerical_threads: 1
+  memory_gib: 24
+  total_CPU_limit_seconds: 2700
+  wall_limit_seconds: 3600
+  collection_CPU_budget_seconds: 1400
+  fit_CPU_budget_seconds: 700
+  screen_and_review_CPU_budget_seconds: 600

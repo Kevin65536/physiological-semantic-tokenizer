@@ -1,0 +1,84 @@
+schema: hb_parent_distillation_v1
+experiment_id: TK-HB-FROZEN-ID-PARENT-DISTILLATION-v1
+hypothesis:
+  null: unchanged_semantic_S129_O257_integers_cannot_predict_the_G1_O128_parent_well_enough_to_repair_HbO_sum
+  primary: train_subject_crossfit_X_HbO_with_original_G1_matched_component_constraints
+  baseline: exact_current_training_tail_integer_decode
+  duplicate: new_parent_label_distillation_not_waveform_residual_parent_leaf_or_G4_cross_decoder
+source:
+  current: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_component_transfer/v2_energy/HbO_only/training_tail.pt
+  parent: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g1_v1/models/hb__waveform__vq128/checkpoint_step_10000.pt
+  parent_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  bank: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_x_residual/v1/training_bank.npz
+  bank_sha256: bb2f3c588ab1df63a3e94a51c6f1ffa27199944e6c1d52adbf2a0936f7a600e1
+  integers: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/development_audit/hb/component_transfer_v2/HbO_only/training_tail/integer_ids.npz
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+training:
+  population: frozen_existing_944_Hb_position_windows_all_60_train_subjects
+  bank_origin: Hb_X_residual_v1_SHA_ranked_train_record_crop_position_panel
+  folds: 5
+  fold_seed: Hb-X-residual-CV-v1
+  fold_rule: dataset_stratified_SHA_subject_round_robin
+  weighting: dataset_subject_record_crop_position_equal_then_masked_patch_fraction_equal
+  quiet_training: exclude_complete_reserved_pair_from_parent_label_fit_keep_all_for_scores
+  exposure: source_encoders_G1_decoder_and_G0_scales_already_saw_all_train_subjects_only_label_tables_are_crossfit
+model:
+  emitted_ids: unchanged_S129_and_O257_one_per_branch_position_2s_30s_context
+  teacher: original_G1_O128_assignment_from_train_X_only
+  inference_inputs: emitted_integers_and_frozen_weights_only
+  parent_S: same_emitted_ordinary_S128_ID_verified_exactly_against_G1
+  table: global_weighted_O256_to_G1_O128_conditional_counts_with_Dirichlet_global_prior
+  shrinkage_token_equivalents: [16, 64]
+  matched_families: [single_O_ID_table, same_S_and_previous_next_O_probability_context]
+  context_strengths: [0.0, 0.25, 0.5, 1.0]
+  context: current_S_likelihood_ratio_plus_half_previous_and_next_O_ratios
+  edge: fixed_sentinel_256_outside_the_current_30s_sequence
+  context_log_ratio_clip: 4.0
+  parent_modes: [hard, expected_embedding]
+  G1_decoder: static_original_S_and_O_decoders_with_original_fixed_position_encoding
+  alpha_HbO: [0.25, 0.5, 0.75, 1.0]
+  alpha_HbR: 0.0
+  final_sum: current_X_plus_alpha_times_predicted_parent_X_minus_current_X_for_HbO_only
+  final_O: original_current_O_exact_for_both_colors
+  final_S_HbO: final_X_HbO_minus_unchanged_current_O_HbO
+  final_S_HbR: current_S_HbR_exact
+  quiet: complete_reserved_pair_all_S_O_and_X_values_exactly_unchanged
+selection:
+  minimum_CV_X_HbO_relative_improvement: 0.005
+  minimum_improved_datasets: 3
+  require_Visual_CV_improvement: true
+  maximum_dataset_X_HbO_degradation_ratio: 1.01
+  minimum_improved_subject_fraction: 0.5
+  component_color_NMSE_ratio_to_G1_max: 1.05
+  dataset_component_color_NMSE_ratio_to_G1_max: 1.10
+  rms_gain_interval: [0.75, 1.25]
+  slope_correlation_min: 0.5
+  curvature_correlation_min_exclusive: 0.0
+  boundary_jump_difference_nmse_max: 4.0
+  positive_macro_correlations: true
+  parsimony_X_objective_ratio: 1.01
+  choose: eligible_within_1percent_best_X_then_no_context_then_stronger_shrinkage_then_smaller_alpha_then_hard
+  no_eligible: stop_without_screen
+  eligible: fit_frozen_train_tables_once_then_one_476_screen
+  screen: original_joint_acceptance_all_numeric_checks
+  screen_all_pass: full_development_saved_ID_replay_and_fixed_visual_review
+  screen_fail: retain_negative_and_stop
+  confirmation: forbidden
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 2
+  numerical_threads: 1
+  CPU_quota_percent: 200
+  batch_size: 64
+  memory_gib: 16
+  process_CPU_limit_seconds: 2400
+  total_experiment_CPU_budget_seconds: 2700
+  wall_limit_seconds: 2700

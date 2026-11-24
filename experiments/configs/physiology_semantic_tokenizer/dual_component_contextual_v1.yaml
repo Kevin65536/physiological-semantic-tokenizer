@@ -1,0 +1,46 @@
+schema: dual_component_contextual_v1
+experiment_id: TK-JOINT-CONTEXTUAL-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  teacher_refits: false
+  raw_reads: false
+source:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g1_v1
+  config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  checkpoint_step: 10000
+  checkpoint_rule: fixed_final_step_before_new_candidate_evaluation
+  historical_exposure: all_original_validation_subjects_were_evaluated_in_G1
+interface:
+  context_seconds: 30
+  patch_seconds: 2
+  patches: 15
+  channels: {eeg: 1, hb: 2}
+  input: X_only
+  decoding: integer_sequences_frozen_weights_and_G0_fixed_training_scales
+training:
+  seed: 23
+  codebook_sizes: [1024, 4096]
+  dictionary_contexts: 8192
+  dictionary_sampling: equal_dataset_subject_record_then_uniform_training_crop_position
+  kmeans_batch: 8192
+  kmeans_iterations: 80
+  decoder_steps: 256
+  batch_size: 16
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  checkpoint_every: 64
+  frozen_modules: [input, encoder, to_latent, quantizer]
+  loss: inherited_G1_branch_variance_normalized_MSE_plus_sum_0.5_and_derivative_0.1
+  stopping: fixed_256_steps_each_k_no_validation_extension
+resources:
+  torch_threads: 4
+  numerical_threads: 4
+  mmap_parent_cache: 128
+  supervisor: user_systemd_linger
+  device: cpu
+  memory_gib: 32
+  stage_wall_budget_seconds: 7200

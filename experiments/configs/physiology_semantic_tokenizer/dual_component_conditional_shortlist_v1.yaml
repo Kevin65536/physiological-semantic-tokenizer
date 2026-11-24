@@ -1,0 +1,27 @@
+schema: conditional_waveform_shortlist_v1
+experiment_id: TK-EEG-CLOSED-LOOP-SHORTLIST-v1
+source:
+  word_config: experiments/configs/physiology_semantic_tokenizer/dual_component_transient_word_information_v1.yaml
+  order_run: component_source_transfer/predictive_word_order_v1
+  waveform_run: component_source_transfer/integer_sum_source_v1
+data:
+  allowed_splits: [train]
+  confirmation_access: forbidden
+  test_access: forbidden
+model:
+  K: 512
+  representative_count: 511
+  zero: missing
+  arms: [static, rank, semantic]
+  training: previous_same_source_fold_train_only_rank_or_balanced_spectral_permutation_first_511_nonzero_indices
+  emission: keep_exact_high_word_if_in_dictionary_otherwise_nearest_high_atom_in_full_400_sample_squared_error
+  next_dictionary: predecessor_reconstructed_high_atom_RMS_quartile_at_that_site
+  decoder: closed_loop_compact_emitted_words_to_high_atoms_then_same_frozen_high_integer_sum_decoder
+  physical_rate: one_9bit_ID_per_branch_native_position_per_2s
+evaluation:
+  compare: original_transient_high_frozen_sum_source_and_matching_static_shortlist_and_original_semantic_K512
+  waveform_gates: frozen_dual_component_role_mixed_waveform_v1_relative_to_original_high_frontier
+  meaning: original_raw_conditional_readout_subject_support_gates_on_actual_K512
+  selection: all_waveform_and_true_single_ID_gates_required_then_visual_review_before_any_development
+  retained: 400_native_17040_positions_60_training_subjects_all_four_folds
+resources: {workers: 4, numerical_threads: 1, memory_GiB: 14, total_CPU_minutes: 30, wall_seconds_main: 375, GPU: none}

@@ -1,0 +1,74 @@
+schema: nonlinear_montage_experiment_v1
+experiment_id: TK-NONLINEAR-MONTAGE-v1
+output: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/nonlinear_montage/v1
+source:
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  waveform_dictionary: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  native_train_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+data:
+  fitting_splits: [train]
+  evaluation_splits: [train]
+  validation: unopened_until_original_waveform_and_pattern_gates_pass
+  test_access: forbidden
+  protected_data: forbidden
+  holdout_subjects_per_dataset: 2
+  holdout_rule: SHA256_of_JSON_dataset_subject_seed_82831_first_two
+  historical_exposure: frozen_Wiener_and_G0_scales_previously_fit_all_60_train_subjects_common_to_both_arms
+model:
+  vocabulary: 256
+  latent_dim: 128
+  hidden_width: 256
+  position_dim: 16
+  pool_heads: 4
+  ema_decay: 0.99
+  commitment_cost: 0.1
+  sample_rate_hz: 200
+  context_s: 30
+  patch_s: 2
+  output_grid: 400_voltage_samples_per_patch
+  fixed_frequency_roles: false
+  unencoded_decoder_inputs: []
+  missing_ID: 0
+  normal_IDs: 255
+  latent_scale_exponent: 0.5
+comparison:
+  arms: [local, field]
+  matched: identical_initial_weights_parameters_data_order_optimizer_steps_and_losses
+  local: nonlinear_rank_pool_over_15_patches_of_own_site_encoder_and_decoder
+  field: nonlinear_rank_pool_over_native_sites_at_same_patch_encoder_and_decoder
+  baseline: matched_local_continuous_model
+  'null': full_array_nonlinearity_does_not_improve_held_train_subject_waveforms
+training:
+  seed: 82831
+  continuous_steps: 512
+  batch_crops: 2
+  learning_rate: 0.0002
+  final_learning_rate: 0.00002
+  weight_decay: 0.0001
+  gradient_clip: 5.0
+  checkpoint_every: 64
+  pca_patches_per_fit_subject: 128
+  loss_weights: {sum: 0.5, band: 0.1, envelope: 0.1, attribute: 0.05}
+  attribute: own_latent_or_own_single_ID_linear_head_predicting_fit_standardized_log_theta_alpha_mean_quarter_second_RMS
+  sampling: equal_dataset_subject_record_then_crop_with_two_crops_from_same_dataset
+  stopping: fixed_steps_no_validation_extension_or_resource_budget
+evaluation:
+  primary: original_G0_target_specific_frozen_training_variance_NMSE_hierarchy
+  advancement:
+    held_macro_NMSE_relative_improvement_min: 0.05
+    held_S_NMSE_relative_improvement_min: 0.05
+    required_improving_datasets_S: 3
+    minimum_improving_subject_fraction_S: 0.5
+    maximum_any_component_NMSE_ratio_to_local: 1.05
+  final_acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  visual_selection: every_dataset_first_held_subject_first_hash_crop_then_median_and_hardest_position_by_local_S_NMSE
+  visual_pass: same_units_masks_full30s_2s_and_boundary_no_missing_theta_alpha_events_or_systematic_amplitude_collapse
+  if_continuous_fails: preserve_evidence_and_stop_without_hard_training_or_screen
+resources:
+  CPU_budget_seconds: 6000
+  maximum_numerical_threads_total: 12
+  memory_budget_gib: 24
+  benchmark_threads: [1, 2, 4]
+  benchmark_steps: 5
+  training_CPU_budget_seconds_each: 2300
+  preparation_CPU_budget_seconds: 900

@@ -1,0 +1,56 @@
+schema: dual_component_spatial_cross_role_v1
+experiment_id: TK-SPATIAL-CROSS-ROLE-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  S: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/joint_phase_semantic_70_v1/model.npz
+  O: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/joint_phase_semantic_25_v1/model.npz
+  training_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+model:
+  context_s: 30
+  token_s: 2
+  sample_rate_hz: 200
+  codebook_size: 512
+  fixed_length_bits_per_ID: 9
+  branches: [S, O]
+  branch_semantic_distance_fraction: {S: 0.7, O: 0.25}
+  variants:
+    same_role: {S: 0, O: 0}
+    offset_two: {S: 0, O: 2}
+  roles: fixed_canonical_native_position_index_plus_branch_offset_modulo_five
+  spatial_inputs: each_band_raw_integer_atom_voltages_from_both_branch_role_anchors
+  decoder: training_fitted_joint_spatial_ridge_to_both_components
+  missing_observation: reserved_ID_zero_and_zero_source_contribution
+  unencoded_decoder_inputs: []
+  output_support_hz: [1, 45]
+  output_projection: full_30s_DFT_zero_phase_periodic_no_padding_f_ge_1_and_f_lt_45
+training:
+  fitting_splits: [train]
+  codebooks: frozen
+  encoder: frozen_X_Wiener_then_original_nearest_centroid_per_branch_role
+  spatial_ridge_fraction: 0.01
+  aggregation: equal_subjects_then_equal_complete_crops_per_target_position
+  validation_fitting: forbidden
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  modes: [independent, spatial]
+  acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  comparison: same_frozen_S70_O25_books_same_total_joint_spatial_parameter_count_same_screen_and_full_native_layout_ID_budget
+  stopping: if_offset_does_not_materially_improve_S_preserve_structural_negative_and_stop_this_route
+  substantial_S_gain: at_least_0.02_absolute_hierarchical_S_NMSE_improvement_without_worse_S_theta_and_alpha_absolute_dB
+  threshold_purpose: paired_structural_screen_decision_only_original_joint_acceptance_is_unchanged
+resources:
+  supervisor: user_systemd_linger
+  dataset_workers: 4
+  screen_workers: 2
+  numerical_threads_per_worker: 2
+  memory_budget_gib: 8
+  wall_budget_minutes: 15
+  gpu_devices: []

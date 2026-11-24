@@ -1,0 +1,69 @@
+schema: phase_orbit_experiment_v1
+experiment_id: TK-PHASE-ORBIT-v1
+output: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/phase_orbit/v1
+source:
+  basis_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1
+  basis_config: experiments/configs/physiology_semantic_tokenizer/dual_component_anchored_carrier_v1.yaml
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  contract: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+data:
+  fitting_splits: [train]
+  evaluation_splits: [train]
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+  protected_data: forbidden
+  folds: exact_original_60_train_subject_four_folds
+  population: exact_source_400_crops_17040_position_windows
+model:
+  context_s: 30
+  token_s: 2
+  eeg_rate_hz: 200
+  parent_shapes: 31
+  shifts_per_parent: 16
+  polarities: [1, -1]
+  shift_step_samples_by_band: [5, 2, 1, 1, 1]
+  vocabulary_including_missing: 993
+  positive_atoms: 992
+  fixed_length_bits_per_ID: 10
+  input: X_only_frozen_corresponding_fold_Wiener_and_anchored_carrier
+  coordinate: same_fixed_2s_real_DFT_band_subspace_for_both_arms
+  distance: complete_400_point_Euclidean_MSE_equivalently_band_Fourier_distance_plus_common_query_residual
+  learned_amplitudes: native_carrier_Euclidean_mean_after_inverse_shift_and_sign_alignment
+  auxiliary_properties_in_assignment: none
+  continuous_decoder_side_information: []
+training:
+  seed: 83471
+  book_fit_max_patches_per_subject_branch_band: 256
+  sampling: same_frozen_random_complete_carrier_patches_per_fit_subject_and_band_both_arms
+  lloyd_iterations: 8
+  ordinary_initialization: MiniBatchKMeans_992_atoms_8_iterations_n_init1
+  orbit_initialization: orbit_distance_kmeans_plus_plus_31_training_patches
+  original_Wiener_exposure: all_60_train_subjects_historical_common_source
+  dictionary_and_basis_fitting: exclude_corresponding_held_subject_fold
+evaluation:
+  waveform_population: all_original_17040_position_windows
+  pattern_population: all_complete_original_scored_patches
+  denominator: original_G0_target_specific_train_variance_masks_and_hierarchy
+  background: dataset_native_position_crossed_with_X_RMS_bins_0.5_1_2
+  single_ID: fully_expanded_final_atom_ID_plus_fixed_band_book_identity_never_parent_ID
+  mechanism_primary: recovered_fraction_of_ordinary_quantization_excess_macro_NMSE_against_original_continuous
+  main_phase_cancellation_support: recover_at_least_half_excess_and_both_S_O_improve_and_3_datasets_improve
+  report_continuous: [original_30s_carrier, matched_2s_band_projected_carrier]
+  visual_selection: fold0_each_dataset_first_subject_first_hash_crop_median_and_hardest_ordinary_S_position_plus_overall_hardest
+selection:
+  support_mass_min: 0.9
+  theta_alpha_each_positive: true
+  one_gain_min: 0.05
+  positive_subject_fraction_theta_alpha_min: 0.5
+  waveform_component_max_ratio_to_matched_continuous: 1.35
+  waveform_dataset_component_max_ratio_to_matched_continuous: 1.50
+  no_eligible: preserve_failed_results_no_validation
+  final_acceptance: unchanged_joint_tokenizer_acceptance_v1
+resources:
+  CPU_budget_seconds: 4500
+  CPU_budget_seconds_per_fold: 900
+  numerical_threads_total_max: 8
+  numerical_threads_per_fold: 2
+  memory_gib: 24
+  GPU_devices: []

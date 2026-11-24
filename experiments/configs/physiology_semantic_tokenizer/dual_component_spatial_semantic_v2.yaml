@@ -1,0 +1,89 @@
+schema: dual_component_spatial_semantic_v1
+experiment_id: TK-JOINT-SPATIAL-SEMANTIC-v2
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+model:
+  context_s: 30
+  token_s: 2
+  slot_s: 0.25
+  sample_rate_hz: 200
+  input: observed_X_only
+  branches:
+  - S
+  - O
+  source_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/k1024.npz
+  namespace_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/band_dictionary_v2/model.npz
+  feature: full_2s_log_theta_power_log_alpha_power_log_mean_quarter_second_RMS_plus_assigned_quarter_second_waveform
+  source_codebook_size: 1024
+  emitted_codebook_size: 1025
+  missing_id: 0
+  fixed_length_bits_per_id: 11
+  integer_count_per_branch_position_window: 15
+  encoded_support_per_id_s: 2
+  prototype_samples: 400
+  position_roles: fixed_native_electrode_index_modulo_eight
+  decoder: complementary_atom_slots_then_frozen_spatial_ridge_then_local_ID_conditional_band_energy
+  calibration_gain_cap: 4
+  calibration_reason: bounded_integer_derived_amplitude_gain_covers_the_observed_9dB_energy_deficit
+  unencoded_decoder_inputs: []
+  interface_eligible: true
+training:
+  seed: 71
+  sampling_seed: 29
+  fitting_splits:
+  - train
+  dictionary_support: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/training_examples.json
+  dictionary_training: all_complete_2s_training_patches_pooled_across_positions_each_role_uses_its_fixed_feature_view
+  spatial_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  spatial_ridge_fraction: 0.01
+  aggregation: equal_valid_crops_per_record_then_records_per_subject_then_subjects
+  feature_scale: unit_train_SD_per_semantic_coordinate_and_one_train_RMS_scale_for_waveform_group_each_divided_by_sqrt_group_dimension
+  probe_subject_partition: fixed_SHA256_rank_one_fifth_train_subjects_per_dataset_held_out_for_feature_weight_only
+  probe_fit_patches: 8192
+  probe_holdout_patches: 2048
+  probe_K: 256
+  waveform_weights:
+  - 0.5
+  - 1.0
+  - 2.0
+  - 4.0
+  semantic_weight: 1.0
+  probe_objective: mean_of_three_target_log_attribute_normalized_MSE_and_assigned_quarter_second_voltage_normalized_MSE
+  final_codebook_positive_atoms: 1024
+  kmeans_max_iter: 20
+  probe_kmeans_max_iter: 12
+  kmeans_batch_size: 2048
+  kmeans_max_no_improvement: 8
+  kmeans_n_init: 1
+  kmeans_reassignment_ratio: 0
+  validation_selection: forbidden_in_training_entry
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  modes:
+  - source_Wiener
+  - continuous_slots
+  - quantized_slots
+  - calibrated_slots
+  comparison: same_ID_uncalibrated_vs_ID_calibrated_and_retained_subsegment_only_v1
+  primary: original_joint_acceptance_NMSE_theta_alpha_gain_and_full_2s_local_pattern
+  acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  confirmation: sealed_until_candidate_frozen
+resources:
+  supervisor: user_systemd_linger
+  dictionary_workers: 8
+  dictionary_threads_per_worker: 1
+  dataset_workers: 4
+  numerical_threads_per_worker: 2
+  screen_threads: 4
+  memory_budget_gib: 12
+  wall_budget_minutes: 25
+  gpu_devices: []

@@ -1,0 +1,36 @@
+experiment_id: TK-EEG-AS-ID-ROLE-ABSOLUTE-LOSS-v1
+data:
+  input: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_sample_support/v1/sample_support_bank.npz
+  sha256: 4ddffc51dd84f24f550c10cfcc3c991d0647c332722a34c6a3e0796a085efe05
+  matched_errors: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_sample_support/v1/sample_support_errors.npz
+  matched_sha256: 1485141eaf0f7f0abe2d3a1f616177802d4398cc5b877675c13fcc0d254a6c63
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  allowed_splits: [train]
+  original_score_windows: 15360
+  fit_bank_windows: 61440
+  subject_folds: 4
+  subjects: 60
+  vocabulary: 8192
+method:
+  estimand: held_subject_incremental_MSE_gain_for_one_actual_branch_role_ID_over_dataset_site_X_rms_background
+  matched_control: exact_previously_measured_raw_background_and_background_cross_ID_cell_means
+  loss: absolute
+  pooling: single_word_multiplier_fitted_by_absolute_attribute_squared_error_then_same_n_over_n_plus_8_shrinkage
+  comparator: previous_ratio_estimator_with_identical_data_8_pseudopatches_and_within_subject_background_permutation
+  reason: previous_O_theta_macro_loss_dominated_by_Visual_S04_under_relative_training_loss
+  retention: all_60_people_and_every_original_held_window_in_both_arms
+  prior_zero_residual_patches: 8
+  missing_ID_or_unseen_word: background
+  denominator_floor: 0.000001_times_global_training_attribute_mean
+  shuffle_null: permute_fitting_IDs_within_training_subject_and_original_background_fixed_seed
+  seed: 156371
+  outputs: [theta_power_4_8, alpha_power_8_13, eight_quarter_second_RMS]
+  strata: all_five_original_frequency_roles_and_all_positions_for_each_branch
+  eligibility: diagnostic_only_original_pattern_waveform_gates_unchanged
+  positive_criterion: both_branches_positive_theta_and_alpha_half_people_positive_and_at_least_one_of_theta_alpha_RMS_above_0.05
+  stopping: single_prespecified_estimator_and_one_shuffle_control_no_selection_no_validation
+resources:
+  dataset_fitting_workers: 4
+  threads_per_worker: 1
+  wall_seconds: 240
+  memory_gib: 10

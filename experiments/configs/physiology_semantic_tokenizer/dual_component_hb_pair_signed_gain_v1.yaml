@@ -1,0 +1,36 @@
+schema: hb_pair_signed_gain_v1
+experiment_id: TK-HB-FROZEN-PAIR-SIGNED-GAIN-v1
+source:
+  pair_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_native_id_readout/pair_allocation_v1
+  feasibility: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_native_id_readout/pair_gain_feasibility_v1/oracle_point_original_acceptance.json
+data:
+  allowed_splits: [train]
+  validation_access: forbidden_until_all_original_train_and_actual_visual_checks_pass
+  confirmation_access: forbidden
+  test_access: forbidden
+  raw_reads: false
+fitting:
+  scopes: [global, dataset]
+  range: [-1, 1]
+  parameters: {global: 2, dataset: 8}
+  objective: exact_original_mask_and_G0_target_variance_joint_S_O_loss
+  estimator: unpenalized_weighted_scalar_least_squares_then_clip_once
+  nesting: same_frozen_outer_111_k_and_delta_k_on_fit_and_held_gain_only_fit_people
+  family: one_comparison_no_hyperparameter_generations
+  total: immutable_frozen111_output
+  quiet: all_outputs_exact
+  decode_inputs: saved_S129_O257_integers_frozen_models_and_fixed_dataset_identity
+selection:
+  owner: pair_allocation_v1/resolved_config.json/config/selection
+  policy: every_original_training_rule_unchanged
+  choice: minimum_joint_NMSE_among_all_passes_then_fewer_gain_coefficients
+  no_pass: stop_without_screen
+  original_failure: immutable_pair_allocation_v1
+resources:
+  supervisor: user_systemd_linger
+  torch_threads: 1
+  numerical_threads: 2
+  threads_max: 4
+  memory_GiB: 12
+  process_CPU_limit_seconds: 1200
+  total_followup_CPU_budget_seconds: 1500

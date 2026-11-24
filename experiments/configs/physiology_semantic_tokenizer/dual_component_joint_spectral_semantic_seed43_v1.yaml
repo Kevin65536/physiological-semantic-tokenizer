@@ -1,0 +1,72 @@
+schema: dual_component_joint_spectral_v2
+experiment_id: TK-JOINT-SPECTRAL-SEMANTIC-SEED43-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  model: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spectral/semantic_seed43_v1/source_dictionary/eeg/k64.npz
+  support: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spectral/semantic_seed43_v1/source_dictionary/eeg/training_examples.json
+model:
+  context_s: 30
+  token_s: 2
+  input: observed_X_only
+  modality: eeg
+  codebook_size: 64
+  codebook_sizes_for_diagnostic:
+  - 64
+  quantization_levels: 1
+  feature_mode: theta_alpha_rms
+  waveform_pca_dim: 0
+  feature_bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+  local_rms_samples: 50
+  feature_scale: equal_weight_training_SD_of_log_theta_power_log_alpha_power_log_mean_quarter_second_RMS
+  assignment: nearest_training_cluster_of_three_semantic_coordinates_after_frozen_Wiener_X_only_prediction
+  atoms:
+  - conditional_target_mean
+  - conditional_target_band_energy_calibrated_mean
+  phase: fixed_training_conditional_mean
+  decoder: fixed_atom_lookup
+  unencoded_per_window_decoder_inputs: []
+training:
+  seed: 43
+  windows: 4096
+  support: exact_plain_dictionary_training_examples
+  kmeans_max_iter: 20
+  kmeans_batch_size: 2048
+  kmeans_max_no_improvement: 10
+  kmeans_n_init: 1
+  kmeans_reassignment_ratio: 0.0
+  validation_selection: forbidden_in_training_entry
+evaluation:
+  acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  allowed_roles:
+  - pattern_train
+  - screen
+  confirm: sealed_until_candidate_frozen
+  purpose: diagnose_semantic_allocation_and_background_by_ID_readout_variance_with_complete_waveform_atoms
+  comparison: ordinary_K1024_spectral_K1024_and_identical_continuous_predictor
+  failure: original_joint_reconstruction_and_pattern_gates_apply
+resources:
+  supervisor: user_systemd_linger
+  branch_workers: 2
+  numerical_threads_per_worker: 4
+  mmap_parent_cache: 256
+  memory_gib: 32
+  wall_budget_seconds: 1200

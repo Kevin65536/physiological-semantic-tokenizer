@@ -1,0 +1,35 @@
+schema: hb_semantic_analysis_synthesis_config_v1
+experiment_id: TK-JOINT-HB-O-AS-v2
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  teacher_refits: false
+  raw_reads: false
+source_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_o_prototype/v2_k256/auxiliary/checkpoint_step_02000.pt
+training_pattern: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/pattern/hb_o_prototype_k256_auxiliary_step2000_screen_v1
+panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+search_budgets:
+- 1
+- 2
+- 4
+- 8
+pilot_seed: 82053
+pilot_per_subject: 16
+gain_fraction_of_best: 0.9
+maximum_normalized_semantic_drift: 0.25
+maximum_normalized_level_distance: 1.0
+resources:
+  torch_threads: 4
+  batch_size: 16
+  supervisor: user_systemd_linger
+change_penalties:
+- 0.5
+- 2.0
+- 8.0
+- 32.0
+training_O_nmse_ratio_max: 1.0

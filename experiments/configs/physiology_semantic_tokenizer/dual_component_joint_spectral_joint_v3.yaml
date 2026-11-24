@@ -1,0 +1,91 @@
+schema: dual_component_joint_spectral_v2
+experiment_id: TK-JOINT-SPECTRAL-JOINT-v3
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  model: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/k1024.npz
+  support: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/training_examples.json
+model:
+  context_s: 30
+  token_s: 2
+  input: observed_X_only
+  modality: eeg
+  codebook_size: 256
+  codebook_sizes_for_diagnostic:
+  - 64
+  - 256
+  quantization_levels: 1
+  feature_mode: semantic_waveform
+  waveform_pca_dim: 16
+  feature_bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+  local_rms_samples: 50
+  feature_scale: equal_weight_training_SD_of_log_theta_power_log_alpha_power_log_mean_quarter_second_RMS
+  assignment: nearest_training_cluster_of_three_semantic_coordinates_after_frozen_Wiener_X_only_prediction
+  atoms:
+  - conditional_target_mean
+  - conditional_target_band_energy_calibrated_mean
+  phase: fixed_training_conditional_mean
+  decoder: fixed_atom_lookup
+  unencoded_per_window_decoder_inputs: []
+  dynamics_weight: 1.0
+  waveform_weight: 1.0
+training:
+  seed: 29
+  windows: 4096
+  support: exact_plain_dictionary_training_examples
+  kmeans_max_iter: 20
+  kmeans_batch_size: 2048
+  kmeans_max_no_improvement: 10
+  kmeans_n_init: 1
+  kmeans_reassignment_ratio: 0.0
+  validation_selection: forbidden_in_training_entry
+evaluation:
+  acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+  allowed_roles:
+  - pattern_train
+  - screen
+  confirm: sealed_until_candidate_frozen
+  purpose: diagnose_semantic_allocation_and_background_by_ID_readout_variance_with_complete_waveform_atoms
+  comparison: ordinary_K1024_spectral_K1024_and_identical_continuous_predictor
+  failure: original_joint_reconstruction_and_pattern_gates_apply
+resources:
+  supervisor: user_systemd_linger
+  branch_workers: 2
+  numerical_threads_per_worker: 4
+  mmap_parent_cache: 256
+  memory_gib: 32
+  wall_budget_seconds: 1200
+pareto:
+  codebook_sizes:
+  - 64
+  - 256
+  waveform_weights:
+  - 0.25
+  - 1.0
+  - 4.0
+  waveform_pca_dim: 16
+  fit_partition: four_fifths_of_original_training_subjects_by_fixed_hash
+  selection_partition: remaining_original_training_subjects_only
+  readout: training_background_plus_global_ID_residual_with_fixed_count_prior4
+  front_exposure: frozen_Wiener_was_fitted_on_all_original_training_subjects_component_CV_conditions_on_that_front
+  selection: lowest_XSO_macro_NMSE_among_cases_preserving_positive_theta_and_alpha_ID_gains_in_both_branches_and_one_gain_at_least0.05
+  promotion: only_if_at_least10percent_relative_component_CV_NMSE_improvement_vs_semantic_only_K64_then_screen_on_original_acceptance
+  confirm: sealed

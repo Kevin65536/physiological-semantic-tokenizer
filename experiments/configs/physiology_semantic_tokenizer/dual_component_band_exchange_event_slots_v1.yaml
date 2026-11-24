@@ -1,0 +1,37 @@
+schema: band_exchange_event_slots_v1
+experiment_id: TK-EEG-X-ONLY-SPARSE-CONTINUOUS-SLOTS-v1
+source:
+  joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+  words: component_source_transfer/band_exchange_words_v1
+  population: component_source_transfer/hard_as_v1/local_information_v1/population.json
+  covariance: component_source_transfer/adaptive_band_v1
+  continuous_reference: component_source_transfer/adaptive_band_exchange_v1
+  waveform_reference: component_source_transfer/integer_sum_source_v1
+data:
+  support: original_60_train_people_400_native_arrays_17040_position_windows_four_outer_subject_folds
+  validation_access: forbidden
+  confirmation_access: forbidden
+  test_access: forbidden
+diagnostic:
+  frozen_payload: exchange_balanced_S_O
+  frozen_decode: energy_atoms_and_original_covariance_then_30s_1_45Hz_projection
+  changed_fractions: [0.0, 0.1, 0.25, 1.0]
+  select: independently_per_branch_and_native_array_top_floor_fraction_of_observed_site_times_15_slots
+  score: squared_400point_X_only_continuous_band_minus_energy_atom_times_frozen_spatial_column_squared_norm_weighted_by_training_target_variance_inverse_on_observed_outputs
+  tie_break: native_site_then_time_index
+  replacement: exact_prepared_float32_X_only_continuous_400_sample_frequency_band_for_selected_slot
+  unselected: original_paid_ID_energy_atom
+  purpose: mechanism_specific_best_capacity_diagnostic_with_continuous_replacements_no_finite_word_claim
+  target_access_in_selector: none
+  model_fitting: none
+evaluation:
+  same_waveform_gates: original_high_transient_reference_total_1.05_components_1.10_each_dataset_1.10_RMS_0.75_to1.25_theta_alpha_3.0103dB_envelope0.5_positive_correlation
+  original_population: preserve_all_failed_and_difficult_windows
+  gate_decision: stop_when_both_sparse_arms_fail_waveform_guards_otherwise_request_parent_review_for_new_finite_dictionary
+  display: all17_original_predeclared_waveform_examples_plus_each_dataset_new25percent_joint_worst
+resources:
+  workers: 4
+  numerical_threads: 1
+  memory_GiB: 12
+  CPU_seconds: 1080
+  supervisor: tokenizer-band-event-slots-v1.service

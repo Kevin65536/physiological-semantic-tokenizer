@@ -1,0 +1,56 @@
+schema: hb_component_search_v1
+experiment_id: TK-HB-FROZEN-DICTIONARY-JOINT-ANALYSIS-SYNTHESIS-v1
+joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+source:
+  prepared: component_source_transfer/hb_array_source_v1
+  native: hb_native_id_readout/v1
+  old_review: qualification_review_v8.json
+  fixed17: component_source_transfer/hb_array_source_v1/review_v1/examples.json
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+scope:
+  split: train
+  validation: forbidden
+  confirmation: forbidden
+  test: forbidden
+  primary_arrays: 236
+  primary_positions: 9343
+  subjects: 60
+  fixed_examples: 17
+  raw_reads: false
+  teacher_refits: false
+model:
+  interface: same_frozen_S129_O257_single_ID_per_2s_paired_Hb_colors
+  visible_seconds: 30
+  sample_rate_hz: 10
+  input: X_only_same_native_position_both_colors
+  decoder: frozen_111_original_outer_fold_head_only_actual_integer_sequences
+  new_direction: joint_S_O_finite_dictionary_search_not_new_array_linear_readout
+  fixed_scale_probes: [0.5,1.0,2.0]
+  scale_recovery: fixed_model_gamma_inverts_both_components_no_window_sidecar
+  quiet: preserve_original_reserved_pair_and_outputs
+  source_controls: frozen_prequantization_component_prediction_and_original_integer_latent_assignment
+  oracle: true_opposite_component_given_only_as_privileged_diagnostic_never_formal_input
+  search_proposal: frozen_decoder_latent_gradient_ranked_actual_code_changes
+  exact_acceptance: frozen_integer_decoder_full30s_objective_only
+  objectives: [visible_X_only, visible_X_plus_continuous_component_source, true_opposite_component_oracle]
+  source_prior_weight: 1.0
+  per_coordinate_candidates: 4
+  sweeps: 1
+audit:
+  original111_metric_replay_rtol: 1.0e-10
+  original111_metric_replay_atol: 1.0e-12
+  original_integer_reencoding: bitwise_exact
+selection:
+  reference: original111_same_236_arrays_9343_positions_and_original_masks_variances_hierarchy
+  guards: original_acceptance_and_Hb_array_source_v1_component_RMS_dynamics_tail_true_peak_guards
+  scale_choice: if_explored_choose_on_other_three_fit_person_folds_only_never_held_targets
+  natural_context_and_seed: only_after_numerical_visual_single_word_and_integer_replay_pass
+  oracle_interpretation: achieved_feasible_oracle_search_not_certified_global_minimum
+  stopping: do_not_expand_if_source_and_oracle_show_no_actionable_gain_or_cost_exceeds_stage_budget
+resources:
+  workers: 4
+  threads_each: 1
+  memory_GiB: 12
+  CPU_seconds_per_stage: 2700
+  stop_CPU_seconds: 2600
+  GPU: none

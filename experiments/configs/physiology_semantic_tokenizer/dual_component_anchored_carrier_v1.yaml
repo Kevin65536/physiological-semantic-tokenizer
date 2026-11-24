@@ -1,0 +1,51 @@
+schema: anchored_spatial_carrier_v1
+experiment_id: TK-ANCHORED-SPATIAL-CARRIER-v1
+purpose: train_subject_crossfit_of_equal_capacity_continuous_spatial_coordinates_before_integer_learning
+source:
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  waveform_dictionary: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  native_train_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+data:
+  fitting_splits: [train]
+  evaluation_splits: [train]
+  ordinary_validation: unopened_in_this_stage
+  test_access: forbidden
+  protected_data: forbidden
+  target: same_v3_G0_S_O_and_sum
+model:
+  sample_rate_hz: 200
+  context_s: 30
+  slot_s: 2
+  branch: [S, O]
+  input: observed_full_montage_X_with_frozen_training_scales_and_observation_mask
+  bands_hz: [[1, 4], [4, 8], [8, 13], [13, 30], [30, 45]]
+  native_role_assignment: same_sorted_native_index_modulo_5
+  spatial_rank: number_of_native_electrodes_assigned_to_each_band
+  basis: PCA_of_Wiener_band_carriers_scaled_by_per_site_G0_branch_train_SD
+  orientation: train_covariance_orthogonal_Procrustes_to_same_band_assigned_physical_sites_then_match_their_train_RMS
+  missing: zero_fill_only_unobserved_inputs_and_zero_their_assigned_virtual_slot_before_synthesis
+  contrast: fixed_modulo_physical_band_slots_fitted_to_reconstruct_Wiener_carriers_on_identical_training_data
+  controlled_objective: both_spatial_models_reconstruct_continuous_Wiener_carrier_with_same_number_of_band_slots
+  baseline_ridge_trace_fraction: 0.001
+  diagnostic: unquantized_full_band_carrier_each_slot
+evaluation:
+  folds: 4
+  seed: 81211
+  folds_rule: within_dataset_hash_sorted_subject_round_robin
+  fit_weight: equal_subject_then_record_then_available_crop
+  primary: original_masked_G0_NMSE_for_X_S_O_hierarchy
+  local_carrier_alignment: per_complete_assigned_position_window_signed_Pearson_against_same_band_local_Wiener_on_scored_times_hierarchical_mean
+  advancement:
+    held_macro_NMSE_relative_improvement_min: 0.05
+    held_S_NMSE_relative_improvement_min: 0.05
+    required_improving_datasets_S: 3
+    required_improving_folds_S: 3
+    maximum_any_component_NMSE_ratio_to_physical: 1.05
+    minimum_local_carrier_correlation_each_branch: 0.5
+  if_eligible: freeze_train_only_basis_for_separate_single_ID_experiment
+  if_ineligible: stop_without_screen
+resources:
+  dataset_workers: 4
+  numerical_threads_each: 1
+  stage_wall_budget_s: 900
+  memory_budget_gib: 14

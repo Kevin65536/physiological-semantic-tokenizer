@@ -1,0 +1,65 @@
+schema: anchored_carrier_dictionary_config_v1
+experiment_id: TK-ANCHORED-SINGLE-ID-DICTIONARY-v1
+hypothesis:
+  null: anchored_virtual_band_carriers_do_not_preserve_both_waveform_and_local_attribute_information_in_one_ID
+  matched_control: same_virtual_carrier_basis_data_code_count_and_training_schedule_with_phase_distance_only
+source:
+  basis_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1
+  basis_config: experiments/configs/physiology_semantic_tokenizer/dual_component_anchored_carrier_v1.yaml
+  g0_config: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  contract: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+data:
+  fitting_splits: [train]
+  evaluation_splits: [train, validation]
+  validation_reads_before_train_eligibility: 0
+  confirmation_access: forbidden
+  test_access: forbidden
+  protected_data: forbidden
+model:
+  context_s: 30
+  token_s: 2
+  eeg_rate_hz: 200
+  emitted_positive_atoms: 1024
+  vocabulary_including_missing: 1025
+  semantic_distance_fractions: [0.0, 0.5]
+  integer_count_per_branch_position_context: 15
+  fixed_length_bits_per_ID: 11
+  features: virtual_band_complex_Fourier_coefficients_and_local_observed_X_Wiener_theta_alpha_mean_quarter_second_RMS
+  learned_atoms: mean_virtual_carrier_training_patches_assigned_to_each_center
+  decoder_inputs: both_integer_sequences_frozen_source_and_native_dataset_position_layout
+  continuous_decoder_side_information: []
+training:
+  seed: 81217
+  folds: exact_source_four_subject_folds
+  coordinate_fitting: fold_specific_train_only_carrier_basis_and_dictionary
+  book_fit_max_patches_per_subject_branch_band: 512
+  book_fit_sampling: at_most_512_complete_patches_per_training_subject_branch_band_hash_ranked
+  kmeans_max_iter: 15
+  kmeans_batch_size: 2048
+  kmeans_n_init: 1
+  kmeans_reassignment_ratio: 0.0
+  waveform_probe: one_hash_ranked_crop_per_held_subject_and_four_hash_ranked_scoring_positions
+  pattern_population: all_complete_scored_position_patches_in_source_400_train_crops
+  background: dataset_native_position_crossed_with_observed_X_RMS_bins_0.5_1_2
+  exposure: each_carrier_fold_dictionary_and_categorical_readout_exclude_held_subjects_frozen_Wiener_previously_fit_all_train
+selection:
+  require_both_branches: true
+  support_mass_min: 0.9
+  theta_alpha_each_positive: true
+  one_gain_min: 0.05
+  positive_subject_fraction_theta_alpha_min: 0.5
+  waveform_component_max_ratio_to_matched_continuous: 1.35
+  waveform_dataset_component_max_ratio_to_matched_continuous: 1.50
+  admission_rationale: preliminary_training_quantization_gap_guard_before_unchanged_development_acceptance
+  eligible_choice: minimum_waveform_macro_NMSE_then_lower_semantic_fraction
+  no_eligible: retain_failed_training_results_and_stop_without_validation
+  eligible: freeze_selected_full_train_model_once_then_original_screen
+  screen_qualification: exact_existing_joint_tokenizer_acceptance_v1_reconstruction_and_pattern
+resources:
+  supervisor: user_systemd_linger
+  numerical_threads: 4
+  CPU_budget_seconds: 4200
+  wall_budget_seconds: 4200
+  memory_gib: 32
+  gpu_devices: []

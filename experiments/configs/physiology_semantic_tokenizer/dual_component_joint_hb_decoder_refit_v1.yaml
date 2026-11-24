@@ -1,0 +1,53 @@
+schema: dual_component_joint_hb_decoder_refit_v1
+experiment_id: TK-JOINT-HB-FROZEN-DECODER-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_shape/vq1024/checkpoint_step_02000.pt
+  config: experiments/configs/physiology_semantic_tokenizer/dual_component_joint_hb_shape_v1.yaml
+  step: 2000
+  selection: fixed_G4_2000_step_indices_passed_preregistered_pattern_screen
+loss:
+  width: 128
+  latent_dim: 64
+  waveform_io: true
+  local_width: 32
+  hb_local_shape: true
+  context_ratio: 0.25
+  context_norm_epsilon: 1.0e-08
+  sum_weight: 0.5
+  derivative_weight: 0.5
+training:
+  seed: 37
+  steps: 2000
+  batch_size: 64
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  continuity_weight: 0.1
+  checkpoint_every: 250
+  milestones:
+  - 500
+  - 1000
+  - 2000
+  frozen:
+  - input
+  - encoder
+  - to_latent
+  - quantizer
+  matching: same_source_indices_optimizer_loss_draws_and_budget_bounded_vs_unrestricted_context
+  stopping: fixed_2000_steps_each_arm
+resources:
+  torch_threads: 4
+  numerical_threads: 1
+  mmap_parent_cache: 128
+  supervisor: user_systemd_linger
+  memory_gib: 16
+  stage_wall_budget_minutes: 30

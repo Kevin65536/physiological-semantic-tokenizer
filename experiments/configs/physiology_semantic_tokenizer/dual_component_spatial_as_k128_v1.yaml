@@ -1,0 +1,69 @@
+schema: dual_component_spatial_analysis_synthesis_v1
+experiment_id: TK-AS-SPATIAL-K128-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  decoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/compact_k128_v1/model.npz
+  baseline_metrics: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/compact_k128_v1/spatial_metrics.npz
+interface:
+  context_s: 30
+  token_s: 2
+  integer_count_per_branch_position: 15
+  codebook_size: 128
+  encoder_input: X_and_observation_only_availability
+  decoder: unchanged_frozen_source_weights_and_1_45Hz_projection
+  new_side_information: []
+search:
+  options:
+  - top_m: 4
+    branches:
+    - S
+    sweeps: 1
+  - top_m: 8
+    branches:
+    - S
+    sweeps: 1
+  - top_m: 8
+    branches:
+    - S
+    - O
+    sweeps: 1
+  sum_weight: 0.5
+  semantic_weight: 0.25
+  energy_ratio:
+  - 0.5
+  - 2.0
+  envelope_nrmse_squared_max: 0.5
+  distance_radius_factor: 2.0
+  relative_band_distance_floor: 0.5
+  proxy_targets: fixed_train_fitted_source_Wiener_S_O_and_observed_X
+  proxy_denominator: frozen_G0_train_component_variance_per_native_electrode
+  update: exact_Fourier_sequential_coordinate_accept_only_if_global_and_semantic_regularized_proxy_both_decrease
+  observation_support: complete_available_X_all_native_electrodes_independent_of_teacher_masks
+benchmark:
+  subjects_per_dataset: 2
+  crop_rule: SHA_ranked_train_subject_then_first_record_parent_nonoverlap_score_crop
+  budget_selection: fastest_option_with_at_least_90_percent_of_best_mean_train_proxy_reduction
+  maximum_screen_seconds_estimate: 1200
+  failure: no_screen_when_all_search_options_exceed_budget
+  confirmation_access: forbidden
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  hypothesis: decoder_aware_integer_assignment_recovers_spatially_shrunken_amplitude_under_local_attribute_guards
+  acceptance: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml
+resources:
+  supervisor: user_systemd_linger
+  numerical_threads: 4
+  fft_workers: 2
+  mmap_parent_cache: 8
+  memory_gib: 20
+  wall_budget_seconds: 1800

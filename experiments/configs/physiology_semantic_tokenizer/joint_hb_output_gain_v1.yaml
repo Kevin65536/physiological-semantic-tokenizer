@@ -1,0 +1,25 @@
+schema: joint_hb_output_gain_v1
+experiment_id: TK-JOINT-HB-O-GAIN-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  teacher_refits: false
+  raw_reads: false
+panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+source_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/hb_o_prototype/v1/auxiliary/checkpoint_step_04000.pt
+calibration:
+  branch: O
+  colors:
+  - HbO
+  - HbR
+  objective: hierarchical_training_O_NMSE_plus_X_NMSE_S_fixed
+  model: positive_scalar_gain_per_color_without_bias
+resources:
+  torch_threads: 2
+  batch_size: 64
+  supervisor: user_systemd_linger

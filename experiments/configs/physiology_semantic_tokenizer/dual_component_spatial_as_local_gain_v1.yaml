@@ -1,0 +1,54 @@
+schema: dual_component_spatial_as_local_gain_v1
+experiment_id: TK-JOINT-SPATIAL-AS-LOCAL-GAIN-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+source:
+  encoder_bundle: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/v1/encoder.json
+  decoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  screen_ids: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/v1/integer_ids.npz
+  fixed_gain_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/gain_v1
+training:
+  support: exact_existing_62_train_crops_32_subjects_and_saved_AS_IDs_from_fixed_gain_run
+  folds: exact_four_subject_folds_from_fixed_gain_training_subject_CV
+  target: log_target_theta_alpha_RMS_minus_log_fixed_gain_decoded_theta_alpha_RMS_per_2s_complete_patch
+  predictors: frozen_AS_decoded_own_S_O_five_band_RMS_previous_next_theta_alpha_RMS_field_medians_and_IQR_native_position
+  feature_scales: training_fold_weighted_mean_SD_only
+  regression: weighted_Ridge_separate_dataset_branch_theta_alpha
+  ridge_penalties: [10.0, 1000.0]
+  strengths: [0.25, 0.5, 1.0]
+  sample_weight: equal_subject_record_crop_position_then_complete_patch
+  final_fit: full_calibration_training_support_after_global_CV_choice
+  validation_fit: forbidden
+  phase_prediction: none
+synthesis:
+  corrected_bands_hz: [[4, 8], [8, 13]]
+  residual_gain_bounds: [0.5, 2.0]
+  total_gain_bounds: [0.25, 4.0]
+  interpolation: linear_log_gain_at_1_3_to_29_second_patch_centers_constant_end_extension
+  smoothing_sigma_s: 0.25
+  smoothing_boundary: nearest
+  output_projection_hz: [1, 45]
+  decoder_inputs: saved_S_O_IDs_frozen_source_and_fixed_native_metadata_only
+selection:
+  guard_S_NMSE_max_vs_matched_fixed_CV: 1.02
+  guard_X_O_NMSE_max_vs_matched_fixed_CV: 1.05
+  required_global_S_theta_alpha_mean_abs_dB_relative_improvement: 0.10
+  required_datasets_with_positive_S_energy_improvement: 3
+  required_folds_with_positive_S_energy_and_S_NMSE_guard: 3
+  S_RMS_distance_to_one: must_not_increase
+  choice: eligible_minimum_joint_S_RMS_theta_alpha_normalized_gate_violation_then_macro_NMSE
+  no_eligible: retain_all_CV_and_best_diagnostic_model_without_screen_access
+  calibration_screen_thresholds: existing_joint_tokenizer_acceptance_v1_unchanged
+resources:
+  supervisor: user_systemd_linger
+  numerical_threads: 4
+  memory_gib: 20
+  CPU_budget_seconds: 2700
+  CPU_soft_stop_seconds: 2600
+  wall_budget_seconds: 2700

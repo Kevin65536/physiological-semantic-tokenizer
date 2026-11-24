@@ -1,0 +1,51 @@
+experiment_id: TK-EEG-X-TRANSIENT-BOUNDED-GAIN-v1
+source:
+  base: experiments/configs/physiology_semantic_tokenizer/dual_component_anchored_carrier_v1.yaml
+  folds: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/anchored_carrier/v1/fold_subjects.json
+  linear_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/v1
+data:
+  allowed_splits: [train]
+  score: unchanged_400_native_arrays_60_people_17040_scored_positions_same_four_subject_folds
+  fit: complete_scored_target_sites_only_other_partial_sites_retained_in_evaluation
+  exposure: frozen_Wiener_and_G0_scales_previously_saw_all60_train_people_new_gain_and_background_exclude_fold_people
+model:
+  estimator: bounded_transient_gain_v1
+  input: X_30s_native_array_and_fixed_metadata_observation_availability_only
+  forbidden_inputs: teacher_reference_power_S_O_labels_record_subject_ID_hidden_synthesis_state
+  stage: continuous_source_estimation_before_integer_assignment
+  bands_hz: [[1,4],[4,8],[8,13],[13,30],[30,45]]
+  upper_45Hz_included: true
+  gain_frame_seconds: 0.1
+  gain_bounds: [0,3]
+  ridge_fraction: 0.1
+  coefficients: 13_per_dataset_native_site_band_no_parameter_search
+  features: bounded_log_amplitude_relative_to_window_and_train_and_array_background_positive_transient_square_broadband_common_mode_coherence_and_envelope_change
+  ablation: same_stored_13_coefficient_width_but_all_ten_transient_covariates_zero_only_constant_window_train_and_window_spatial_remain
+  objective: frame_energy_quadratic_inverse_G0_S_O_train_variance_weighted_surrogate_ridge_shrunk_to_unchanged_Wiener_S_gain1
+  fitting_weights: each_subject_equal_each_record_equal_each_crop_equal_within_record
+  emission: clipped_X_conditioned_gain_times_Wiener_S_band_then_same_band_projection_correction_added_S_subtracted_O
+  X_closure: exact_old_Wiener_sum_unchanged_old_sum_has_small_nonzero_X_error
+  distinction_from_previous_nonlinear_montage: no_PCA_no_quantization_no_learned_spatial_pooling_no_neural_encoder_fixed_analytic_X_transient_features
+selection:
+  choose: one_frozen_transient_model_with_background_ablation_no_held_hyperparameter_choice
+  S_and_O_relative_improvement_min: 0.05
+  min_improving_datasets_both_components: 3
+  min_improving_folds_both_components: 3
+  no_dataset_S_or_O_NMSE_ratio_above: 1.10
+  P95_P99_component_ratio_max: 1.05
+  true_high_S_ratio_max: 1.05
+  true_high_definition: scored_abs_true_S_at_least_2_times_frozen_G0_train_target_SD
+  S_band_macro_extra_abs_db_max: 0.25
+  S_band_dataset_extra_abs_db_max: 0.5
+  S_envelope_correlation_drop_max: 0.02
+  rationale: retain_original_source_5percent_threshold_add_tail_and_true_S_peak_protection_to_check_transient_extrapolation_not_generic_paper_threshold
+  if_pass: provide_frozen_X_source_entry_for_matched_actual_integer_assignment_train_only_by_parent
+  if_fail: retain_all_negative_evidence_and_stop_this_fixed_gain_family_without_validation
+resources:
+  dataset_workers: 4
+  numerical_threads_each: 1
+  per_worker_CPU_seconds: 540
+  total_CPU_budget_seconds: 2700
+  memory_gib: 20
+  CPU_quota_percent: 800
+  GPU: none

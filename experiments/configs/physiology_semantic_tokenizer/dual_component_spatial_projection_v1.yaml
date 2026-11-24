@@ -1,0 +1,71 @@
+schema: dual_component_spatial_dictionary_v1
+experiment_id: TK-JOINT-SPATIAL-PROJECTION-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits:
+  - train
+  - validation
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+model:
+  context_s: 30
+  token_s: 2
+  eeg_rate_hz: 200
+  input: observed_X_only
+  branches:
+  - S
+  - O
+  codebook_size: 8192
+  missing_id: 0
+  encoder: frozen_training_fitted_frequency_regression_then_band_nearest_atom
+  position_roles: native_electrodes_sorted_casefold_round_robin_five_bands
+  bands_hz:
+  - - 1
+    - 4
+  - - 4
+    - 8
+  - - 8
+    - 13
+  - - 13
+    - 30
+  - - 30
+    - 45
+  decoder: full_atoms_plus_training_fitted_spatial_band_replacement
+  decoder_inputs:
+  - branch_integer_sequences
+  - frozen_model
+  - dataset_native_electrode_order
+  missing_auxiliary: zero_contribution_and_independent_band_fallback_if_all_anchors_absent
+  output_projection_hz:
+  - 1
+  - 45
+  projection_operator: 30s_real_DFT_zero_phase_periodic_no_padding
+training:
+  seed: 53
+  initialization_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/k8192.npz
+  initialization_examples: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/dictionary/eeg/training_examples.json
+  spatial_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/diagnostic_v3/resolved_config.json
+  fitting_splits:
+  - train
+  kmeans_max_iter: 15
+  kmeans_batch_size: 4096
+  kmeans_max_no_improvement: 10
+  kmeans_reassignment_ratio: 0.0
+  spatial_ridge_fraction: 0.01
+  checkpoint: each_branch_band_then_final_spatial_model
+evaluation:
+  panel: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/panels.npz
+  role: screen
+  paired_comparison: identical_saved_IDs_before_and_after_actual_decoder_projection_plus_independent_vs_spatial
+  selection: screening_diagnostic_only_original_joint_acceptance_unchanged
+resources:
+  supervisor: user_systemd_linger
+  dictionary_workers: 4
+  numerical_threads_per_worker: 2
+  numerical_threads_spatial: 8
+  memory_budget_gib: 10
+  wall_budget_minutes: 20
+  gpu_devices: []

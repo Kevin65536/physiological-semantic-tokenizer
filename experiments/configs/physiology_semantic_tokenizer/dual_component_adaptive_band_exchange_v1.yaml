@@ -1,0 +1,19 @@
+schema: adaptive_band_exchange_v1
+experiment_id: TK-EEG-OBSERVED-SOURCE-BAND-EXCHANGE-v1
+source:
+  initial_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_adaptive_band_allocation_v1.yaml
+  initial_run: component_source_transfer/adaptive_band_v1
+  word_config: experiments/configs/physiology_semantic_tokenizer/dual_component_transient_word_information_v1.yaml
+  source_run: component_source_transfer/transient_gain_v1
+data: {allowed_splits: [train], validation_access: forbidden, confirmation_access: forbidden, test_access: forbidden}
+model:
+  covariance: exact_frozen_per_dataset_branch_outer_fit_arrays_from_initial_run_no_refit
+  tag_choice: compare_all_single_site_pair_exchanges_from_original_fixed_roles_and_all_disjoint_band_pairs
+  maximum_exchanges_per_two_second_patch: 2
+  objective: sum_over_bands_and_observed_sites_of_exact_spatial_interpolation_voltage_SSE_to_X_only_source_f_divided_by_fixed_G0_branch_target_variance
+  decoder: previous_frozen_spatial_interpolator_no_X
+  guarantee: nonincreasing_separate_band_source_SSE_before_final_projection_not_a_true_target_guarantee
+  controls: previous_fixed_energy_and_innovation_and_full_uncompressed_source
+  gates: inherit_original_continuous_vs_fixed_train_selection_all_hard_event_and_dynamic_guards
+  hard_stage: conditional_on_passing_use_role_paid_in_one_integer
+resources: {workers: 4, numerical_threads_each: 1, memory_GiB: 14, CPU_minutes: 30, wall_seconds: 450, GPU: none}

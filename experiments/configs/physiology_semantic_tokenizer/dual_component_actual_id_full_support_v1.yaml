@@ -1,0 +1,76 @@
+schema: dual_component_actual_id_full_support_v1
+experiment_id: TK-ACTUAL-AS-EXHAUSTIVE-SUPPORT-v1
+purpose: exhaustive_saved_native_training_support_and_disjoint_person_readout_reliability
+data:
+  allowed_splits: [train]
+  test_access: forbidden
+  protected_data: forbidden
+  validation_access: forbidden
+  raw_reads: false
+  AS_reencoding: forbidden
+source:
+  actual_ID_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/pattern/as_v1_actual_v1
+  initial_bank: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_sample_support/v1/sample_support_bank.npz
+  reference_summary: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_sample_support/v1/sample_support_summary.json
+  reference_errors: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_sample_support/v1/sample_support_errors.npz
+  original_bank: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_coarsening/v1/training_attributes.npz
+  original_population: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/actual_id_coarsening/v1/training_population.json
+  vocabulary_checkpoint: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial/projection_v1/model.npz
+  encoder: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/spatial_analysis_synthesis/v1/encoder.json
+  G0_contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+interface:
+  context_seconds: 30
+  EEG_Hz: 200
+  patch_seconds: 2
+  original_vocabulary: 8192
+  namespace: branch_fixed_native_frequency_role_ID
+  integers: exact_frozen_AS_native_train_arrays
+sampling:
+  original_score_inputs: 15360
+  score: original_256_positions_per_subject_no_change
+  full_fitting_positions: all_admitted_G0_score_positions_in_exact_5294_saved_native_train_crops
+  original_prefix: unchanged_61440_saved_attributes_backgrounds_masks_IDs_folds
+  duplicates: forbid_row_start_native_position_duplicates
+crossfit:
+  subjects: original_60_training_people
+  folds: original_four_subject_folds_from_coarsening_training_population
+  fit: every_available_position_from_other_three_folds
+  held: original_fixed_15360_positions_people_excluded_from_fit
+  exposure: original_Wiener_dictionary_AS_and_decoder_seen_all60_train_only_new_readout_samples_crossfit
+readout:
+  background: original_dataset_native_site_cross_X_RMS_bins_0.5_1_2_fixed_G0_scale
+  conditional: raw_background_cross_fixed_band_actual_ID_mean
+  fallback: original_background_mean_then_training_global_mean
+  shrinkage: none
+  attributes: theta_alpha_power_and_8_quarter_second_RMS_coordinates
+  gain: original_1_minus_hierarchical_MSE_joint_over_hierarchical_MSE_background
+  additional_comparison: joint_error_over_frozen_fit1024_background_error_and_paired_raw_error_change
+  hierarchy: position_crop_record_subject_dataset_equal
+replication:
+  units: subjects_only_no_overlap_per_outer_training_pool
+  seed: 198173
+  balancing: within_dataset_sort_by_seed_dataset_subject_hash_then_alternate_A_B
+  held: identical_original_outer_fold_people
+  estimators: original_raw_conditional_means_each_disjoint_group
+  primary: original_gains_and_support_each_group_diagnostic_only
+  profile: raw_conditional_and_background_residual_prediction_correlation_across_groups_on_same_held_patches
+  strong_cell: at_least8_fit_patches_and2_fit_people_in_each_group_background_ID_cell
+  drift: squared_A_B_attribute_prediction_difference_divided_by_full_fit_attribute_variance
+  report: complete_mass_both_joint_seen_and_both_strong_cell_no_subset_replaces_gate
+admission:
+  branch_theta_alpha_gain: positive
+  branch_any_gain_min: 0.05
+  theta_alpha_positive_subject_fraction_min: 0.5
+  qualified_ID: at_least8_complete_fit_patches_and2_fit_people
+  minimum_held_supported_mass: 0.9
+  stop: exhaustive_family_readout_ends_after_this_all_support_and_reliability_audit
+  validation: parent_coordinates_only_if_both_complete_branches_pass
+resources:
+  supervisor: user_systemd_linger
+  workers: 4
+  numerical_threads_per_worker: 1
+  MemoryMax_GiB: 16
+  CPU_budget_seconds: 3000
+  RuntimeMax_seconds: 3000
+  batch_size: 64
+  GPU: none

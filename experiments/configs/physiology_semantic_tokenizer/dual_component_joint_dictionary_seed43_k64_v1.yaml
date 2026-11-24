@@ -1,0 +1,43 @@
+schema: dual_component_joint_dictionary_v1
+experiment_id: TK-JOINT-DICTIONARY-SEED43-K64-v1
+data:
+  run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1
+  contract: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g0_v2.yaml
+  allowed_splits: [train, validation]
+  test_access: forbidden
+  protected_data: forbidden
+  raw_reads: false
+  teacher_refits: false
+  training_sampling: G0_equal_dataset_subject_record_crop_position
+model:
+  context_s: 30
+  token_s: 2
+  channels: {eeg: 1, hb: 2}
+  codebook_sizes: [64]
+  output_pca_dim: {eeg: 128, hb: 32}
+  continuous_predictor: training_fitted_complex_frequency_linear_regression
+  decoder: independently_index_frozen_two_second_waveform_atoms
+  quantizer: one_nearest_atom_per_branch_patch
+  frequency_ridge_fraction: 0.001
+  unencoded_per_window_decoder_inputs: []
+training:
+  seed: 43
+  windows_per_modality: 4096
+  kmeans_max_iter: 20
+  kmeans_batch_size: 2048
+  kmeans_n_init: 1
+  kmeans_max_no_improvement: 10
+  kmeans_reassignment_ratio: 0.0
+  checkpoint: after_each_completed_dictionary
+  validation_selection: forbidden_in_training_entry
+  target_dictionary: supervised_train_targets_only
+  codebook_initialization: train_only_kmeans_plus_plus
+  paper_reference: LaBraM_official_K8192_64d_1s_frequency_tokenizer
+  interpretation: waveform_atoms_are_a_new_local_diagnostic_not_a_replication
+resources:
+  supervisor: user_systemd_linger
+  numerical_threads: 12
+  mmap_parent_cache: 256
+  memory_gib: 32
+  first_stage_wall_budget_minutes: 40
+  gpu_devices: []

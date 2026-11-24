@@ -1,0 +1,28 @@
+schema: cross_branch_sampling_v1
+joint_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+experiment_id: TK-EEG-COMPLEMENTARY-SO-MONTAGE-SAMPLING-v1
+data: {fit: train, score: train_held_people, development: forbidden, confirmation: forbidden, test: forbidden}
+population: component_source_transfer/hard_as_v1/local_information_v1/population.json
+dictionaries: component_source_transfer/band_exchange_words_v1
+source: component_source_transfer/transient_gain_v1
+marginal_covariances: component_source_transfer/adaptive_band_v1
+waveform_reference: component_source_transfer/integer_sum_source_v1
+model:
+  interface: original_30s_EEG_S_and_O_separate_K5116_integer_per_site_per_2s
+  fixed_stem: original_X_only_source_f_then_same_fold_balanced_waveform_assignment_and_energy_atoms
+  compared_layouts: [aligned, staggered]
+  aligned: both_branches_same_native_modulo5_frequencies
+  staggered: keep_S_and_rotate_O_labels_two_places_in_observed_native_order_preserving_every_band_count
+  fit: paired_S_O_cross_spectrum_in_same_source_band_equal_subject_record_crop_with_pairwise_observation_support
+  cross_covariance: retain_marginals_whiten_cross_block_clip_singular_values_at_0.995_for_positive_definiteness
+  reconstruction: preinterpolation_joint_LMMSE_from_only_the_actual_emitted_S_O_band_anchors_at_200Hz
+  calibration: fit_a_per_branch_site_band_linear_observation_q_equals_gain_times_source_plus_uncorrelated_noise
+  comparison: [separate_continuous, joint_continuous, separate_hard, joint_hard, separate_calibrated, joint_calibrated]
+  fallbacks: no_training_calibration_uses_identity_measurement
+selection:
+  reference: high_transient_source_same_400_arrays
+  gates: original_high_reference_X_ratio1.05_components_and_each_dataset1.1_gain0.75_to1.25_theta_alpha_signed_and_absolute3.0103_envelope0.5_positive_correlation
+  word: original_raw_single_ID_gates_and_visual_gate_same_candidate
+  rule: no_new_development_until_all_joint_training_visual_and_integer_replay_pass
+  no_eligible: stop_this_cross_branch_layout_and_covariance_generation
+resources: {CPU_minutes: 32, workers: 4, threads_each: 1, memory_GiB: 14, GPU: none}
