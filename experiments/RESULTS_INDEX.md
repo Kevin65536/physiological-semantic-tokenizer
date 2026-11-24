@@ -2254,6 +2254,20 @@ These dated records explain which payloads are tracked, local, rebuildable or
 historically removed. They preserve the scope and identities of the original
 storage actions; they do not authorize another cleanup or define a new run queue.
 
+### Historical checkpoint removal — 2026-11-24
+
+The user requested removal of all 796 files in the [local checkpoint inventory](../.tmp/checkpoint_inventory_20261124.csv).
+The removed files occupied 177,152,806,912 allocated bytes (164.99 GiB): 265
+superseded or early trial files, 175 files from experiments that missed their
+development targets, and 356 intermediate or recovery files. The inventory
+identifies each path, its evidence and its allocated size.
+
+This removal includes the archived X3 pair, historical EFRM Stage A weights,
+70 STA-Net five-fold recovery files and the listed tokenizer replay inputs.
+Earlier retention counts describe their dated snapshots. Exact replay through a
+listed checkpoint path now requires restoring that file; the recorded metrics,
+predictions and selection decisions remain at their original paths.
+
 ### Git retention update — 2026-11-06
 
 This user-requested archive keeps a compact remote reading package and the full
