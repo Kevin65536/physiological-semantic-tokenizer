@@ -1,0 +1,69 @@
+{
+  "schema": "dual_component_integer_replay_root_cause_v1",
+  "status": "passed",
+  "checkpoint": "/SSD_2/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g1_v1/models/eeg__dense_long__vq128/checkpoint_step_07000.pt",
+  "step": 7000,
+  "device": "cuda:1",
+  "read_scope": "first 3648 train scoring examples from validated G0 manifest",
+  "root_cause": "dense_long eval used float32 STE subtraction/addition, while integer replay used dictionary lookup; roundoff was amplified by the O synthesis stack",
+  "reproduced_offset": 3584,
+  "reproduced_branch": "O",
+  "reproduced": {
+    "STE_lookup_max_abs": 4.76837158203125e-07,
+    "legacy_decode_max_abs": 5.7220458984375e-06,
+    "legacy_outside_tolerance": 3,
+    "legacy_mismatch_max_abs": 2.2491440176963806e-06,
+    "legacy_mismatch_indices": [
+      [
+        51,
+        1,
+        8
+      ],
+      [
+        51,
+        1,
+        34
+      ],
+      [
+        54,
+        1,
+        8
+      ]
+    ],
+    "values": 384000,
+    "current_forward_replay_max_abs": 0.0,
+    "legacy_forward_max_abs": 5.7220458984375e-06
+  },
+  "observed_full_batches": 57,
+  "observed_position_windows": 3648,
+  "fixed_forward_replay_max_abs": 0.0,
+  "independent_process_replay_max_abs": {
+    "S": 0.0,
+    "O": 0.0,
+    "sum": 0.0
+  },
+  "state_unchanged": true,
+  "inference_inputs": "frozen checkpoint and S/O integer ID sequences; stored decoded arrays used only as comparison targets",
+  "input_integer_count": 1920,
+  "integer_ids_per_branch": 960,
+  "legacy_evidence_preserved": "20261122_unified_base_g1_v1 checkpoint_step_07000.pt, failure.json and source_execution remain unchanged",
+  "existing_assertions": "evaluate_base_training integer replay assertions remain enabled at original atol=2e-6 and rtol=1e-5",
+  "tests": {
+    "before_fix": "two dense_long regression cases failed",
+    "after_fix": "15 passed, 41 deselected in 10.50s",
+    "log": "targeted_tests.log",
+    "collection": "3306/3317 collected, 11 deselected in 6.42s",
+    "diff_check": "passed"
+  },
+  "change": "all hard eval decoders use dictionary lookup; training STE uses the original path",
+  "commands": [
+    ".venv/bin/python experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_integer_replay_audit_v1/audit.py --label after_exact_failure --device cuda:1",
+    ".venv/bin/python experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_integer_replay_audit_v1/audit.py --label independent_decode --decode-only"
+  ],
+  "evidence": [
+    "before_exact_failure.json",
+    "after_exact_failure.json",
+    "integer_payload.npz",
+    "independent_decode.json"
+  ]
+}

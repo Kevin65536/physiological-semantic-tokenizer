@@ -1,0 +1,97 @@
+{
+  "recorded": "2026-11-23T01:11:41.012214+00:00",
+  "status": "not_qualified",
+  "goal": "active",
+  "records": [
+    {
+      "item": "历史现场与重放",
+      "status": "verified",
+      "sources": [
+        "history/AUDIT.md",
+        "history/reference_manifest.json",
+        "../20261123_integer_replay_audit_v1/summary.json"
+      ],
+      "finding": "逐例复现历史分母；修正dense-long硬评估查表，原失败点和检查强度保留。"
+    },
+    {
+      "item": "正式接口",
+      "status": "verified_for_reference",
+      "sources": [
+        "crossband_hbshape_replay_v1/verification.json",
+        "crossband_hbshape_replay_v1/portable_verification.json",
+        "atlas_pair_replay_v1/verification.json",
+        "atlas_pair_replay_v1/portable_verification.json"
+      ],
+      "finding": "图册对应的四支权重已独立打包。逐进程用原坐标示例编码、单独从整数解码均通过。"
+    },
+    {
+      "item": "文献与工程范围",
+      "status": "verified",
+      "sources": [
+        "../../../../../docs/reliable_survey/20261123_tokenizer_training_reference_v1.md"
+      ],
+      "finding": "原文、官方代码、默认值、启动值及可得权重元数据分别核对。"
+    },
+    {
+      "item": "预登记与不泄漏",
+      "status": "verified_on_retained_panels",
+      "sources": [
+        "resolved_config.json",
+        "panel.json",
+        "panel_exposure_review_v1.json",
+        "panel_exposure_review_v2.json"
+      ],
+      "finding": "已匹配保留指标档与固定身份。四名预留被试无本轮候选评分，曾参加历史G1验证。"
+    },
+    {
+      "item": "波形与动态",
+      "status": "failed_joint_gate",
+      "sources": [
+        "development_audit/spatial/reconstruction_decision_v1.json",
+        "development_audit/hb/vq_source/paired_review_0315.json",
+        "silent_observation_v1/development_comparison.json",
+        "montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/reconstruction_acceptance.json",
+        "affine_oracle_v1.json",
+        "development_audit/hb/component_transfer_v2/HbO_only/training_tail/independent_panel_review_v1.json",
+        "paired_gate_census_v2/summary.json"
+      ],
+      "finding": "Hb-O定向模型配合训练能量校正及静默ID，完整开发重建数值全部通过，固定筛查的总和HbO仍有两项误差超线。EEG失真仍阻止晋级。"
+    },
+    {
+      "item": "局部属性与稳定性",
+      "status": "positive_in_specific_models",
+      "sources": [
+        "spectral/matched_k64_seeds_v1/summary.json",
+        "montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/pattern/attribute_summary.json",
+        "montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/natural_context_v1/context_summary.json",
+        "pattern/hb_o_prototype_auxiliary_step4000_screen_v1/numerical_summary.json",
+        "four_branch_member_atlas_v1/all_codes.csv",
+        "four_branch_member_atlas_v1/browser_verification.json"
+      ],
+      "finding": "局部属性证据及训练覆盖可逐码复核，图册并列真实验证成员。完整阵列端到端候选在自然换窗时属性稳定。"
+    },
+    {
+      "item": "真实图像与困难样本",
+      "status": "failed_for_joint_promotion",
+      "sources": [
+        "development_audit/spatial/visual_audit_v1.json",
+        "waveforms/vq_source_visual_audit_v1.json",
+        "joint_tokenizer_development_audit_20261123_v1.pdf",
+        "montage_joint_v1/integer_phase_readout_v1/visual_audit.json",
+        "montage_joint_v1/cross_electrode_phase_v1/summary.json",
+        "joint_tokenizer_development_audit_20261123_v2.pdf"
+      ],
+      "finding": "波形与频带的难例在完整报告保留。K2048相位/语义模型的小矩阵读出及跨电极低秩补偿仍不能恢复实际S峰序。"
+    },
+    {
+      "item": "冻结定版与复审",
+      "status": "pending_no_eligible_candidate",
+      "sources": [
+        "decision_log.jsonl",
+        "crossband_hbshape_replay_v1/bundle.json",
+        "spectral/matched_k64_seeds_v1/summary.json"
+      ],
+      "finding": "已复核语义对照独立种子，未得到可授予论文主结果资格的四分支配对；预留被试独立复审仍需合格候选。"
+    }
+  ]
+}

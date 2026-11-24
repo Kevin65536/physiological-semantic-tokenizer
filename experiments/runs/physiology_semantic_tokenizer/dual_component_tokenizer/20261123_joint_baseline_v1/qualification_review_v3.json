@@ -1,0 +1,114 @@
+{
+  "recorded": "2026-11-23T02:56:48.391040+00:00",
+  "status": "not_qualified",
+  "goal": "active",
+  "records": [
+    {
+      "item": "历史现场与重放",
+      "status": "verified",
+      "sources": [
+        "history/AUDIT.md",
+        "history/reference_manifest.json",
+        "../20261123_integer_replay_audit_v1/summary.json"
+      ],
+      "finding": "逐例复现历史分母；修正dense-long硬评估查表，原失败点和检查强度保留。"
+    },
+    {
+      "item": "正式接口",
+      "status": "verified_for_reference",
+      "sources": [
+        "crossband_hbshape_replay_v1/verification.json",
+        "crossband_hbshape_replay_v1/portable_verification.json",
+        "atlas_pair_replay_v1/verification.json",
+        "atlas_pair_replay_v1/portable_verification.json",
+        "local_energy_pair_replay_v1/verification.json",
+        "local_energy_pair_replay_v1/portable_verification.json"
+      ],
+      "finding": "四支冻结权重对应最终开发波形与逐码图册，四库样例的四支整数及原坐标输出逐值重放。"
+    },
+    {
+      "item": "文献与工程范围",
+      "status": "verified",
+      "sources": [
+        "../../../../../docs/reliable_survey/20261123_tokenizer_training_reference_v1.md"
+      ],
+      "finding": "原文、官方代码、默认值、启动值及可得权重元数据分别核对。"
+    },
+    {
+      "item": "预登记与不泄漏",
+      "status": "verified_on_retained_panels",
+      "sources": [
+        "resolved_config.json",
+        "panel.json",
+        "panel_exposure_review_v1.json",
+        "panel_exposure_review_v2.json",
+        "panel_exposure_review_v3.json"
+      ],
+      "finding": "保留指标按三元组与冻结面板比对；四名历史验证被试未进入新候选开发评分。"
+    },
+    {
+      "item": "波形与动态",
+      "status": "failed_joint_gate",
+      "sources": [
+        "development_audit/spatial/reconstruction_decision_v1.json",
+        "development_audit/hb/vq_source/paired_review_0315.json",
+        "silent_observation_v1/development_comparison.json",
+        "montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/reconstruction_acceptance.json",
+        "affine_oracle_v1.json",
+        "development_audit/hb/component_transfer_v2/HbO_only/training_tail/independent_panel_review_v1.json",
+        "paired_gate_census_v2/summary.json",
+        "development_audit/as_local_gain_v1/spatial/summary.json",
+        "development_audit/as_local_gain_v1/spatial/paired_subjects_independent_v1.json",
+        "paired_gate_census_v4/summary.json"
+      ],
+      "finding": "完整开发中 EEG 的 X/S/O 及 θ/α 分项通过，S 幅度和高频仍衰减。Hb 完整开发数值通过，固定筛查 X-HbO 两项超限。"
+    },
+    {
+      "item": "局部属性与稳定性",
+      "status": "failed_on_EEG_passed_numeric_Hb",
+      "sources": [
+        "spectral/matched_k64_seeds_v1/summary.json",
+        "montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/pattern/attribute_summary.json",
+        "montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/natural_context_v1/context_summary.json",
+        "pattern/hb_o_prototype_auxiliary_step4000_screen_v1/numerical_summary.json",
+        "four_branch_member_atlas_v1/all_codes.csv",
+        "four_branch_member_atlas_v1/browser_verification.json",
+        "pattern/as_v1_actual_v1/final_fact_review.json",
+        "pattern/hb_component_transfer_v2_tail_screen_v1/numerical_summary.json",
+        "local_energy_pair_replay_v1/member_atlas/summary.json"
+      ],
+      "finding": "实际 AS 整数的 S/O 训练支持率为77.79%及70.90%，六项单码属性增量皆负。Hb 两支在支持、留人斜率/形态和自然换窗上通过。"
+    },
+    {
+      "item": "真实图像与困难样本",
+      "status": "failed_for_joint_promotion",
+      "sources": [
+        "development_audit/spatial/visual_audit_v1.json",
+        "waveforms/vq_source_visual_audit_v1.json",
+        "joint_tokenizer_development_audit_20261123_v1.pdf",
+        "montage_joint_v1/integer_phase_readout_v1/visual_audit.json",
+        "montage_joint_v1/cross_electrode_phase_v1/summary.json",
+        "joint_tokenizer_development_audit_20261123_v2.pdf",
+        "spatial_analysis_synthesis/local_gain_v1/visual_audit_v1/figures.json",
+        "waveforms/hb_component_transfer_v2_development/HbO_only/training_tail/visual_review_v1.json",
+        "joint_tokenizer_development_audit_20261123_v3.pdf"
+      ],
+      "finding": "已核对 EEG 困难事件衰减和 Hb 符号错配。Visual 的成分反转也出现在训练幅度范围内；REFED 极端幅度外推失败。"
+    },
+    {
+      "item": "冻结定版与复审",
+      "status": "pending_no_eligible_candidate",
+      "sources": [
+        "decision_log.jsonl",
+        "crossband_hbshape_replay_v1/bundle.json",
+        "spectral/matched_k64_seeds_v1/summary.json",
+        "local_energy_pair_replay_v1/bundle.json",
+        "hb_x_residual/v1/completion.json",
+        "pattern/as_v1_actual_v1/visual_audit.json"
+      ],
+      "finding": "两种子谱语义对照保留正增量但波形失败；已测四支配对均未晋级。四名预留被试及最终配对复训仍保留。"
+    }
+  ],
+  "stage": "tested_families_rejected",
+  "current_joint_reference": "local_energy_pair_replay_v1/bundle.json"
+}

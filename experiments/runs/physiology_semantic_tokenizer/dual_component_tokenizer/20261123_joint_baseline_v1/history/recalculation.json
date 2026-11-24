@@ -1,0 +1,112 @@
+{
+  "status": "passed",
+  "denominator": "per-position/color frozen train target variance after division by frozen train X SD, cast to float32 by retained evaluator",
+  "aggregation": "positions, crop, record, subject, dataset equal within each level; colors equal last",
+  "checks": [
+    {
+      "version": "v2",
+      "modality": "eeg",
+      "arm": "continuous",
+      "samples": 65909,
+      "max_denominator_identity_error": 7.105427357601002e-15,
+      "max_full_precision_reference_vs_saved_score_error": 2.9867219524248867e-06,
+      "fixed_examples": 12,
+      "max_saved_waveform_metric_error": 0.0
+    },
+    {
+      "version": "v2",
+      "modality": "eeg",
+      "arm": "vq128",
+      "samples": 65909,
+      "max_denominator_identity_error": 1.4210854715202004e-14,
+      "max_full_precision_reference_vs_saved_score_error": 3.936125253289902e-06,
+      "fixed_examples": 12,
+      "max_saved_waveform_metric_error": 0.0
+    },
+    {
+      "version": "v2",
+      "modality": "hb",
+      "arm": "continuous",
+      "samples": 70972,
+      "max_denominator_identity_error": 5.684341886080802e-14,
+      "max_full_precision_reference_vs_saved_score_error": 1.2548013728519436e-05,
+      "fixed_examples": 12,
+      "max_saved_waveform_metric_error": 0.0
+    },
+    {
+      "version": "v2",
+      "modality": "hb",
+      "arm": "vq128",
+      "samples": 70972,
+      "max_denominator_identity_error": 5.684341886080802e-14,
+      "max_full_precision_reference_vs_saved_score_error": 1.0955182858651824e-05,
+      "fixed_examples": 12,
+      "max_saved_waveform_metric_error": 0.0
+    },
+    {
+      "version": "v3",
+      "modality": "eeg",
+      "arm": "continuous",
+      "samples": 65993,
+      "max_denominator_identity_error": 1.4210854715202004e-14,
+      "max_full_precision_reference_vs_saved_score_error": 3.681788470544234e-06,
+      "fixed_examples": 12,
+      "max_saved_waveform_metric_error": 0.0
+    },
+    {
+      "version": "v3",
+      "modality": "eeg",
+      "arm": "vq128",
+      "samples": 65993,
+      "max_denominator_identity_error": 1.4210854715202004e-14,
+      "max_full_precision_reference_vs_saved_score_error": 3.77563635822753e-06,
+      "fixed_examples": 12,
+      "max_saved_waveform_metric_error": 0.0
+    },
+    {
+      "version": "v3",
+      "modality": "hb",
+      "arm": "continuous",
+      "samples": 70976,
+      "max_denominator_identity_error": 5.684341886080802e-14,
+      "max_full_precision_reference_vs_saved_score_error": 9.755409450917796e-06,
+      "fixed_examples": 12,
+      "max_saved_waveform_metric_error": 0.0
+    },
+    {
+      "version": "v3",
+      "modality": "hb",
+      "arm": "vq128",
+      "samples": 70976,
+      "max_denominator_identity_error": 5.684341886080802e-14,
+      "max_full_precision_reference_vs_saved_score_error": 1.4208542438609584e-05,
+      "fixed_examples": 12,
+      "max_saved_waveform_metric_error": 0.0
+    }
+  ],
+  "support": [
+    {
+      "modality": "eeg",
+      "old": 65909,
+      "new": 65993,
+      "paired": 65909,
+      "subjects": 20,
+      "full_patch_pairs": 955640,
+      "old_only": 0,
+      "new_only": 84
+    },
+    {
+      "modality": "hb",
+      "old": 70972,
+      "new": 70976,
+      "paired": 70958,
+      "subjects": 20,
+      "full_patch_pairs": 1034294,
+      "old_only": 14,
+      "new_only": 18
+    }
+  ],
+  "max_existing_comparison_nmse_error": 0.0,
+  "scope": "completed exact public train/validation G0 inputs and retained G1 scores; raw/test/protected reads zero",
+  "full_population_predictions": "retained scores verified algebraically against every frozen denominator; direct waveform recomputation uses all 12 saved examples per arm and modality"
+}

@@ -1,0 +1,232 @@
+{
+  "schema": "joint_tokenizer_qualification_review_v5",
+  "recorded": "2026-11-23T09:05:32.772121+00:00",
+  "status": "not_qualified",
+  "previous_qualification": "qualification_review_v4.json",
+  "current_joint_reference": "hb_native_id_readout/v1/four_branch_replay_v1/bundle.json",
+  "full_development_waveform_gallery": "hb_native_id_readout/v1/development/visual_v1",
+  "followup_evidence": [
+    {
+      "item": "连续空间波形上界与完整训练匹配",
+      "status": "improved_continuous_only",
+      "finding": "同60人17,040个位置窗，连续锚定宏0.35126对原空间0.40151。",
+      "sources": [
+        "anchored_carrier/v1/summary.json",
+        "anchored_carrier/v1/resolved_config.json",
+        "anchored_carrier/v1/launch.json",
+        "anchored_carrier/v1/fold_subjects.json",
+        "anchored_carrier/v1/paired_figures_v2/manifest.json",
+        "anchored_carrier/v1/independent_held_review_v1.json",
+        "anchored_carrier/v1/matched_train_references_v1/summary.json"
+      ]
+    },
+    {
+      "item": "固定频带外的误差贡献",
+      "status": "diagnostic",
+      "finding": "开发集53,694个位置窗，带限总宏误差范围0.01258–0.02145；极端Single-Trial个案需要分别解释。",
+      "sources": [
+        "development_audit/as_local_gain_v1/source_diagnostics_v1/projection_floor_v1/native_mask_review_v1.json",
+        "development_audit/as_local_gain_v1/source_diagnostics_v1/projection_floor_v1/matched_summary.json"
+      ]
+    },
+    {
+      "item": "空间载波的单整数",
+      "status": "training_rejected",
+      "finding": "两种单原子训练重放宏0.67587/0.72816，对应连续0.35126。",
+      "sources": [
+        "anchored_dictionary/v1/completion_v1.json",
+        "anchored_dictionary/v1/training_crossfit.json",
+        "anchored_dictionary/v1/resolved_config.json",
+        "anchored_dictionary/v1/implementation_notes_v1.json",
+        "anchored_dictionary/v1/full_training_review_v2/summary.json",
+        "anchored_dictionary/v1/full_training_review_v2/hard_waveforms_v2/visual_review_v1.json"
+      ]
+    },
+    {
+      "item": "以目标监督分配电极频带",
+      "status": "training_rejected",
+      "finding": "S相对改善4.80%，训练晋级需5%。",
+      "sources": [
+        "learned_roles/v1/completion.json",
+        "learned_roles/v1/independent_review.json",
+        "learned_roles/v1/visual_audit.json"
+      ]
+    },
+    {
+      "item": "低维复频点坐标",
+      "status": "continuous_rejected",
+      "finding": "每位置4个连续复数仍无法同时维持本地单码属性与幅度。",
+      "sources": [
+        "frequency_spatial/v1/completion.json",
+        "frequency_spatial/v1/summary.json",
+        "frequency_spatial/v1/visual_audit.json",
+        "frequency_spatial/v1/per_subject_metrics.csv"
+      ]
+    },
+    {
+      "item": "非线性全阵列连续网络",
+      "status": "continuous_rejected",
+      "finding": "等参数两臂各512步，S的留人误差0.35232/0.35398。",
+      "sources": [
+        "nonlinear_montage/v1/summary.json",
+        "nonlinear_montage/v1/execution.json",
+        "nonlinear_montage/v1/fit_context_diagnostic.json",
+        "nonlinear_montage/v1/waveforms/visual_review.json"
+      ]
+    },
+    {
+      "item": "实际EEG搜索码的拟合样本扩充",
+      "status": "fixed_readout_rejected",
+      "finding": "只增加原裁片内位置，每人256至1024，留人S/O合格码份额91.51%/90.28%，六项单码增量仍负。",
+      "sources": [
+        "actual_id_sample_support/v1/sample_population.json",
+        "actual_id_sample_support/v1/sample_support_summary.json",
+        "actual_id_sample_support/v1/independent_review.json",
+        "actual_id_sample_support/v1/visual_review.json",
+        "actual_id_sample_support/v1/sample_completion.json",
+        "actual_id_sample_support/v1/sample_support_summary.png",
+        "actual_id_sample_support/v1/dataset_subject_metrics.csv"
+      ]
+    },
+    {
+      "item": "Hb 邻位置读出与旧父码恢复",
+      "status": "training_rejected",
+      "finding": "加入跨位置读出或蒸馏原G1父码均未达到预定分量重建收益。",
+      "sources": [
+        "hb_neighbor_readout/v1/completion.json",
+        "hb_neighbor_readout/v1/visual_review_v1.json",
+        "hb_parent_distillation/v1/completion.json",
+        "hb_parent_distillation/v1/replay_review.json",
+        "hb_parent_distillation/v1/visual_audit.json",
+        "hb_parent_distillation/v1/audit_zh.md"
+      ]
+    },
+    {
+      "item": "Hb 父码分裂、观察路由与拟合密度",
+      "status": "mixed_training_evidence",
+      "finding": "固定同一留人支持，扩大路由/模板拟合使单码效应增加。采用真实发射输出拟合增益后，两库S误差比仍为1.10138和1.10423，超过1.10。",
+      "sources": [
+        "hb_parent_leaf/v1/summary.json",
+        "hb_parent_leaf/v2_axis/summary.json",
+        "hb_parent_leaf/v2_ridge/training_crossfit.json",
+        "hb_parent_leaf/v2_target_only/summary.json",
+        "hb_parent_leaf/v3_fit1024/expanded_fit_support.json",
+        "hb_parent_leaf/v3_fit1024/scale_readout_audit.json",
+        "hb_parent_leaf/v3_fit1024/training_crossfit.json",
+        "hb_parent_leaf/v4_emitted_gain/training_crossfit.json",
+        "hb_parent_leaf/v4_emitted_gain/summary.json",
+        "hb_parent_leaf/v4_emitted_gain/frozen_routes_independent_review.json",
+        "hb_parent_leaf/v4_emitted_gain/training_review_v2/visual_review.json",
+        "hb_parent_leaf/v4_emitted_gain/training_review_v2/integer_replay_review.json",
+        "hb_parent_leaf/v4_emitted_gain/resource_audit.json",
+        "hb_parent_leaf/v4_emitted_gain/emitted_gain_fit_0.json",
+        "hb_parent_leaf/v4_emitted_gain/emitted_gain_fit_1.json",
+        "hb_parent_leaf/v4_emitted_gain/emitted_gain_fit_2.json",
+        "hb_parent_leaf/v4_emitted_gain/emitted_gain_fit_3.json"
+      ]
+    },
+    {
+      "item": "真实 HbO 目标的固定整数波形读出",
+      "status": "screen_numeric_passed",
+      "finding": "60人4折、15360个训练窗。111个固定系数后，固定476窗X-HbO由0.011826降至0.009493，四库数值门槛全部通过。",
+      "sources": [
+        "hb_native_id_readout/v1/input_audit.json",
+        "hb_native_id_readout/v1/selected.json",
+        "hb_native_id_readout/v1/training_crossfit.json",
+        "hb_native_id_readout/v1/resolved_config.json",
+        "hb_native_id_readout/v1/screen/decision.json",
+        "hb_native_id_readout/v1/screen/paired_subject_comparison_v1.json",
+        "hb_native_id_readout/v1/screen/visual_audit.json",
+        "hb_native_id_readout/v1/screen/visual_v1/visual_maximum_native_check.json",
+        "hb_native_id_readout/v1/screen/visual_v1/visual_maximum_components.png"
+      ]
+    },
+    {
+      "item": "Hb 完整开发面板与图像",
+      "status": "numeric_passed_visual_failed",
+      "finding": "完整开发位置窗57,578，维持全部失败尾部。X-HbO相对前一读出的宏绝对改善为0.001116。",
+      "sources": [
+        "hb_native_id_readout/v1/development/summary.json",
+        "hb_native_id_readout/v1/development/decision.json",
+        "hb_native_id_readout/v1/development/paired_subject_comparison_v1.json",
+        "hb_native_id_readout/v1/development/paired_worst_degradation.json",
+        "hb_native_id_readout/v1/development/paired_worst_degradation.png",
+        "hb_native_id_readout/v1/development/paired_tail.py",
+        "hb_native_id_readout/v1/compare_subjects.py",
+        "hb_native_id_readout/v1/development/inheritance_exact.json",
+        "hb_native_id_readout/v1/development/visual_audit.json"
+      ]
+    },
+    {
+      "item": "冻结模型与单码图册归属",
+      "status": "verified_for_development_pair",
+      "finding": "原30秒X输入、四分支率与固定元数据相同。两次独立进程仅用可移植包恢复四支整数和原坐标，各项逐值相同。原型、真实成员及换窗证据按整数/目标同一性继承。",
+      "sources": [
+        "hb_native_id_readout/v1/pattern_inheritance.json",
+        "hb_native_id_readout/v1/pattern_inheritance_scope.json",
+        "hb_native_id_readout/v1/summary.json",
+        "hb_native_id_readout/v1/completion.json",
+        "hb_native_id_readout/v1/audit_zh.md",
+        "hb_native_id_readout/v1/distribution_quantiles.json",
+        "hb_native_id_readout/v1/per_subject_metrics.csv",
+        "hb_native_id_readout/v1/four_branch_replay_v1/bundle.json",
+        "hb_native_id_readout/v1/four_branch_replay_v1/verification.json",
+        "hb_native_id_readout/v1/four_branch_replay_v1/portable_verification_v2.json"
+      ]
+    }
+  ],
+  "original_preregistered_criteria": "experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml",
+  "history_and_early_results": [
+    {
+      "item": "历史现场与重放",
+      "status": "verified",
+      "sources": [
+        "history/AUDIT.md",
+        "history/reference_manifest.json",
+        "../20261123_integer_replay_audit_v1/summary.json"
+      ],
+      "finding": "逐例复现历史分母；修正dense-long硬评估查表，原失败点和检查强度保留。"
+    },
+    {
+      "item": "正式接口",
+      "status": "verified_for_reference",
+      "sources": [
+        "crossband_hbshape_replay_v1/verification.json",
+        "crossband_hbshape_replay_v1/portable_verification.json",
+        "atlas_pair_replay_v1/verification.json",
+        "atlas_pair_replay_v1/portable_verification.json",
+        "local_energy_pair_replay_v1/verification.json",
+        "local_energy_pair_replay_v1/portable_verification.json"
+      ],
+      "finding": "四支冻结权重对应最终开发波形与逐码图册，四库样例的四支整数及原坐标输出逐值重放。"
+    },
+    {
+      "item": "文献与工程范围",
+      "status": "verified",
+      "sources": [
+        "../../../../../docs/reliable_survey/20261123_tokenizer_training_reference_v1.md"
+      ],
+      "finding": "原文、官方代码、默认值、启动值及可得权重元数据分别核对。"
+    },
+    {
+      "item": "预登记与不泄漏",
+      "status": "verified_on_retained_panels",
+      "sources": [
+        "resolved_config.json",
+        "panel.json",
+        "panel_exposure_review_v1.json",
+        "panel_exposure_review_v2.json",
+        "panel_exposure_review_v3.json"
+      ],
+      "finding": "保留指标按三元组与冻结面板比对；四名历史验证被试未进入新候选开发评分。"
+    }
+  ],
+  "EEG_full_development": "development_audit/as_local_gain_v1/spatial/summary.json",
+  "token_atlas": "local_energy_pair_replay_v1/member_atlas/index.html",
+  "replay_entry": "experiments/scripts/apply_joint_tokenizer.py",
+  "replay_instructions": "Unzip the portable development reference and run the two commands in its README.zh.md. The included observations, IDs, checkpoints, scale table and implementation reproduce the four-branch samples.",
+  "stopping_evidence": "The frozen EEG AS model fails six held single-ID attributes even after a fourfold training-support expansion. Continuous anchored gains are lost in the tested single-atom hard model. The stronger Hb sum readout still misses large component events on independent records. No fixed pair passes all untouched thresholds.",
+  "final_independent_seed": "pending_no_eligible_four_branch_candidate; K64 semantic control has two matched seeds",
+  "designated_confirmation": "four historical G1-validation subjects remained outside all new model selection and scoring",
+  "scope": "X-only development baseline: joint EEG waveform and single-ID inference, and difficult Hb component attribution, remain unqualified. No protected or test data used."
+}

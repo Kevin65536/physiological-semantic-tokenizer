@@ -1,0 +1,87 @@
+{
+  "recorded": "2026-11-23T00:17:33.107812+00:00",
+  "status": "not_qualified",
+  "goal": "active",
+  "records": [
+    {
+      "item": "历史现场与重放",
+      "status": "verified",
+      "sources": [
+        "history/AUDIT.md",
+        "history/reference_manifest.json",
+        "../20261123_integer_replay_audit_v1/summary.json"
+      ],
+      "finding": "逐例复现历史分母；修正dense-long硬评估查表，原失败点和检查强度保留。"
+    },
+    {
+      "item": "正式接口",
+      "status": "verified_for_reference",
+      "sources": [
+        "crossband_hbshape_replay_v1/verification.json",
+        "crossband_hbshape_replay_v1/portable_verification.json"
+      ],
+      "finding": "可移植开发参考使用X、四支整数与固定坐标；不能据此授予联合基线资格。"
+    },
+    {
+      "item": "文献与工程范围",
+      "status": "verified",
+      "sources": [
+        "../../../../../docs/reliable_survey/20261123_tokenizer_training_reference_v1.md"
+      ],
+      "finding": "原文、官方代码、默认值、启动值及可得权重元数据分别核对。"
+    },
+    {
+      "item": "预登记与不泄漏",
+      "status": "verified_on_retained_panels",
+      "sources": [
+        "resolved_config.json",
+        "panel.json",
+        "panel_exposure_review_v1.json"
+      ],
+      "finding": "四库训练与验证边界保留；新候选复审仍未启动。"
+    },
+    {
+      "item": "波形与动态",
+      "status": "failed_joint_gate",
+      "sources": [
+        "development_audit/spatial/reconstruction_decision_v1.json",
+        "development_audit/hb/vq_source/paired_review_0315.json",
+        "silent_observation_v1/development_comparison.json",
+        "montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/reconstruction_acceptance.json",
+        "affine_oracle_v1.json"
+      ],
+      "finding": "不同候选分别通过不同分项；S电压时序或幅度仍有实质失真。"
+    },
+    {
+      "item": "局部属性与稳定性",
+      "status": "positive_in_specific_models",
+      "sources": [
+        "spectral/matched_k64_seeds_v1/summary.json",
+        "montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/pattern/attribute_summary.json",
+        "montage_joint_v1/global_analysis_k2048_v2/joint/screen_step_6000/natural_context_v1/context_summary.json",
+        "pattern/hb_o_prototype_auxiliary_step4000_screen_v1/numerical_summary.json"
+      ],
+      "finding": "原始背景对照、被试覆盖、真实成员及换窗核验支持部分模型的单码属性；无法补偿其波形误差。"
+    },
+    {
+      "item": "真实图像与困难样本",
+      "status": "failed_for_joint_promotion",
+      "sources": [
+        "development_audit/spatial/visual_audit_v1.json",
+        "waveforms/vq_source_visual_audit_v1.json",
+        "joint_tokenizer_development_audit_20261123_v1.pdf"
+      ],
+      "finding": "完整开发人群与各库困难例保留；大事件衰减、错时峰和S/O误差抵消均已实见。"
+    },
+    {
+      "item": "冻结定版与复审",
+      "status": "pending_no_eligible_candidate",
+      "sources": [
+        "decision_log.jsonl",
+        "crossband_hbshape_replay_v1/bundle.json",
+        "spectral/matched_k64_seeds_v1/summary.json"
+      ],
+      "finding": "已复核语义对照独立种子，未得到可授予论文主结果资格的四分支配对；预留被试独立复审仍需合格候选。"
+    }
+  ]
+}

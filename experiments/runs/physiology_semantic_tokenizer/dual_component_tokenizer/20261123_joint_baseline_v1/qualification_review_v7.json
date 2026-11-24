@@ -1,0 +1,206 @@
+{
+  "schema": "joint_tokenizer_qualification_review_v7",
+  "recorded": "2026-11-23T13:14:23.931496+00:00",
+  "status": "not_qualified",
+  "previous_review": "qualification_review_v6.json",
+  "decision_log": "decision_log.jsonl",
+  "report": "joint_tokenizer_development_audit_20261123_v7.pdf",
+  "interface": "30-s observed X; EEG S and O each reconstruct native 200-Hz voltage; Hb S and O each jointly reconstruct 10-Hz HbO/HbR. Each branch/site pays one ID every 2 s. Native physical coordinate uses the original fixed training scale. Four-branch decoding accepts the paid integers, frozen state and fixed montage information.",
+  "applicable_acceptance": "../../../../../experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_acceptance_v1.yaml",
+  "portable_development_and_waveform_references": "component_source_transfer/integer_sum_source_v1/full_train_replay_v1/four_branch_development_and_training_replay_v1.zip",
+  "portable_fold0_pattern_reference": "component_source_transfer/band_exchange_words_v1/fold0_four_branch_replay_v1/fold0_four_branch_research_reference.zip",
+  "complete_development_reference": "hb_native_id_readout/v1/four_branch_replay_v1/bundle.json",
+  "historical_scope": "four participants, one per library, excluded from this entire selection and new scoring, previously seen in historical G1 validation",
+  "frozen_scale_exposure": "The original G0 training scales and original Wiener prior used all 60 training subjects, including train people later held from these dictionary, gain, or readout fits. New word fits/readout evaluation are grouped by person. The 4 reserved people were previously seen in historical G1 validation only.",
+  "new_training_people": 60,
+  "new_selection_panel": "400 native EEG arrays, 17040 position-windows, 249675 complete local 2s EEG patches; 15360 Hb position-windows for spectral allocation; local EEG-to-Hb diagnostic has separate support.",
+  "results": {
+    "development": {
+      "EEG": "actual hard codes replay, waveform gain and raw single-ID/difficult-event requirements failed",
+      "Hb": "all original numeric checks passed on both retained development panels; difficult opposing-component amplitudes still fail",
+      "unselected_reserved_people": 4
+    },
+    "exchange_balanced_actual_words": "Both seed107/211 improve raw theta and alpha over the original dataset/site/input-energy background. Full unbalanced waveform words and a role-only label fail. Local envelope readout worsens. Site-, library-, member- and template-transfer failures are retained.",
+    "natural_context": "120 real pairs in 60 training subjects and 4850 valid physical position pairs. The six mean normalized attribute changes pass the prespecified tolerance; single-location tails and dataset-specific negative gains remain.",
+    "waveform": "Integer replacement of a matched finite-band continuous trajectory causes substantial additional error, especially EEG-S. Preselected CP5, FC2 and F7 voltage-event tails remain.",
+    "Hb_spectral": "Protected frozen-ID readout improves joint S/O NMSE from .214425 to .202280, 52 of 60 people improve. Crop-level peak timing remains wrong by 8.8 and 10.8 s in independent REFED records. Original visual rejection applies.",
+    "cross_seed_templates": "Seed107/211 fit-member one-to-one alignment, by frozen branch and frequency, agrees on 21.0%/26.4% of held S/O words vs about 0.1% chance. One direction loses S-alpha and O-theta. Half-fit controls show both decrease in cell support and additional transfer error.",
+    "event_coding": "Resolving the first quartile of X-visible spatially weighted quantization errors with continuous per-event waveforms passes the train waveform screen. Finite 14-bit words for those events do not: ordinary means X/S/O .611765/.715355/.677571. An exhaustive training-example nearest waveform, itself only a diagnostic, gives .578378/.684869/.639755.",
+    "multiple_ID_rate": "An additional three 8-bit residual words per selected event raise total EEG payload to 19.993 bit/s per native site. X/S/O .50304/.61587/.55735. S, per-dataset, RMS and frequency gates fail. Full tuple training support for events falls to 0% in S and 0.252% in O.",
+    "phase_readout": "Target-informed per-window even+odd low-frequency Hb correction can reach .021943 joint S/O NMSE. A fit-person-only frozen correction reaches .200840; Single-Trial S-HbO P99 .722366 exceeds .720568, and independent event examples remain poor.",
+    "fixed_integer_montage_synthesis": "The same balanced words with a full montage complex spectral decoder produce X/S/O .620800/.665468/.657010. The same-electrode two-stream control gives .651005/.695437/.684830. S RMS gain .5902 and waveform gates fail despite lower NMSE."
+  },
+  "public_exposure": "New experiments used the existing development-authorized training partition, with held training people for scoring. The prior completed four-branch development evaluation used 16 people. None of the four reserved people was used for any new fit, selection or score. Historical G1 validation already included them. No project-protected test data were read.",
+  "joint_confirmation": "No finite four-branch candidate cleared the joint waveform, single-ID and repeated-event visual gates. The second seed replicated the EEG tagged dictionary findings. The reserved confirmation panel remains unscored for this selection.",
+  "scope_of_negative_evidence": "Stop this generation of independent atomic waveform dictionaries, the tested sparse-event residual codes and fixed spectral allocation heads. The evidence establishes a persistent empirical failure across the specified frozen encoders, decoders, rates, panels and original thresholds. It does not establish a universal impossibility theorem.",
+  "evidence": {
+    "previous_full_development_and_history": [
+      "qualification_review_v6.json",
+      "history/AUDIT.md",
+      "history/reference_manifest.json",
+      "development_audit/as_local_gain_v1/spatial/summary.json",
+      "hb_native_id_readout/v1/development/summary.json",
+      "panel_exposure_review_v2.json"
+    ],
+    "exhaustive_historical_word_support": [
+      "actual_id_sample_support/full_native_v1/summary.json",
+      "actual_id_sample_support/full_native_v1/replication_full_fit_variance_v2.json",
+      "actual_id_sample_support/full_native_v1/visual_review.json",
+      "actual_id_sample_support/full_native_v1/audit_zh.md"
+    ],
+    "context_vocabulary_relabel": [
+      "component_source_transfer/predictive_word_order_v1/summary.json",
+      "component_source_transfer/predictive_word_order_v1/waveform_replay.json",
+      "component_source_transfer/predictive_word_order_v1/visual_review.json",
+      "component_source_transfer/predictive_word_order_v1/audit_zh.md"
+    ],
+    "limited_context_dictionary": [
+      "component_source_transfer/conditional_shortlist_v1/summary.json",
+      "component_source_transfer/conditional_shortlist_v1/independent_replay.json",
+      "component_source_transfer/conditional_shortlist_v1/visual_review.json",
+      "component_source_transfer/conditional_shortlist_v1/audit_zh.md"
+    ],
+    "low_IDs_for_high_atoms": [
+      "component_source_transfer/low_integer_teacher_v1/summary.json",
+      "component_source_transfer/low_integer_teacher_v1/direct_synthesis_v1/summary.json",
+      "component_source_transfer/low_integer_teacher_v1/audit_zh.md"
+    ],
+    "predictive_electrode_coding": [
+      "spatial_predictive/v1/summary.json",
+      "spatial_predictive/v1/matched_continuous_diagnostic.json",
+      "spatial_predictive/v1/visual_review_v2.json",
+      "spatial_predictive/v1/audit_zh.md"
+    ],
+    "dimension_and_temporal_support": [
+      "frequency_spatial/temporal_rate_v2/summary.json",
+      "frequency_spatial/temporal_rate_v2/hard_projection_removal_bounds.json",
+      "frequency_spatial/temporal_rate_v2/visual_audit.json",
+      "frequency_spatial/temporal_rate_v2/audit_zh.md",
+      "frequency_spatial/temporal_rate_v2/local_information_diagnosis_v1/same_position_high_frequency_allocation.json"
+    ],
+    "continuous_frequency_assignment": [
+      "component_source_transfer/adaptive_band_v1/summary.json",
+      "component_source_transfer/adaptive_band_exchange_v1/summary.json",
+      "component_source_transfer/adaptive_band_exchange_v1/review_v1/completion.json",
+      "component_source_transfer/adaptive_band_exchange_v1/review_v1/audit_zh.md"
+    ],
+    "actual_tagged_words": [
+      "component_source_transfer/band_exchange_words_v1/summary.json",
+      "component_source_transfer/band_exchange_words_v1/single_word_information.json",
+      "component_source_transfer/band_exchange_words_v1/paired_subject_uncertainty.json",
+      "component_source_transfer/band_exchange_words_v1/single_word_results.csv",
+      "component_source_transfer/band_exchange_words_v1/subject_scores.csv",
+      "component_source_transfer/band_exchange_words_v1/dataset_score_distributions.csv",
+      "component_source_transfer/band_exchange_words_v1/error_partition_v1/summary.json",
+      "component_source_transfer/band_exchange_words_v1/rate_model_compute.json"
+    ],
+    "independent_integer_wave_and_events": [
+      "component_source_transfer/band_exchange_words_v1/replay_review_v1/final_machine_audit.json",
+      "component_source_transfer/band_exchange_words_v1/replay_review_v1/审计报告_20261123.md",
+      "component_source_transfer/band_exchange_words_v1/visual_review_v1/audit_zh.md",
+      "component_source_transfer/band_exchange_words_v1/visual_review_v1/continuous_to_hard_loss.json"
+    ],
+    "complete_actual_words_atlas": [
+      "component_source_transfer/band_exchange_words_v1/word_atlas_v1/index_v3.html",
+      "component_source_transfer/band_exchange_words_v1/word_atlas_v1/completion.json",
+      "component_source_transfer/band_exchange_words_v1/word_atlas_v1/owning_usage_review.json",
+      "component_source_transfer/band_exchange_words_v1/word_atlas_v1/visual_review.json",
+      "component_source_transfer/band_exchange_words_v1/word_atlas_v1/audit_zh.md"
+    ],
+    "natural_context": [
+      "component_source_transfer/band_exchange_words_v1/natural_context_v1/summary.json",
+      "component_source_transfer/band_exchange_words_v1/natural_context_v1/completion.json",
+      "component_source_transfer/band_exchange_words_v1/natural_context_v1/visual_review.json",
+      "component_source_transfer/band_exchange_words_v1/natural_context_v1/audit_zh.md"
+    ],
+    "independent_dictionary_seed": [
+      "component_source_transfer/band_exchange_words_seed211_v1/summary.json",
+      "component_source_transfer/band_exchange_words_seed211_v1/seed_alignment.json",
+      "component_source_transfer/band_exchange_words_seed211_v1/visual_review.json",
+      "component_source_transfer/band_exchange_words_seed211_v1/audit_zh.md"
+    ],
+    "single_and_neighbor_supervised_table": [
+      "component_source_transfer/band_word_residual_v1/summary.json",
+      "component_source_transfer/band_word_residual_v1/independent_replay.json",
+      "component_source_transfer/band_word_residual_v1/fixed_hard_events.png",
+      "component_source_transfer/band_word_residual_v1/audit_zh.md"
+    ],
+    "continuous_event_slot_diagnostic": [
+      "component_source_transfer/band_exchange_event_slots_v1/summary.json",
+      "component_source_transfer/band_exchange_event_slots_v1/audit_zh.md",
+      "component_source_transfer/band_exchange_event_slots_v1/visual_review_v1/visual_review.json"
+    ],
+    "local_EEG_for_Hb": [
+      "multimodal_hb/local_geometry_v1/summary.json",
+      "multimodal_hb/local_geometry_v1/visual_review.json",
+      "multimodal_hb/local_geometry_v1/审计报告_20261123.md"
+    ],
+    "fixed_Hb_total_and_long_spectral_groups": [
+      "hb_native_id_readout/spectral_allocation_v1/summary.json",
+      "hb_native_id_readout/spectral_allocation_v1/audit_zh.md",
+      "hb_native_id_readout/spectral_protected_v1/summary.json",
+      "hb_native_id_readout/spectral_protected_v1/integer_replay.json",
+      "hb_native_id_readout/spectral_protected_v1/visual_diagnostic_numbers.json",
+      "hb_native_id_readout/spectral_protected_v1/audit_zh.md"
+    ],
+    "frozen_research_pair": [
+      "component_source_transfer/band_exchange_words_v1/fold0_four_branch_replay_v1/portable_verification_v2.json",
+      "component_source_transfer/band_exchange_words_v1/fold0_four_branch_replay_v1/source_origin_verification.json",
+      "component_source_transfer/band_exchange_words_v1/fold0_four_branch_replay_v1/审计报告_20261123.md"
+    ],
+    "finite_event_words": [
+      "component_source_transfer/band_exchange_event_words_v1/summary.json",
+      "component_source_transfer/band_exchange_event_words_v1/single_word_information.json",
+      "component_source_transfer/band_exchange_event_words_v1/integer_replay.json",
+      "component_source_transfer/band_exchange_event_words_v1/audit_zh.md",
+      "component_source_transfer/band_exchange_event_words_v1/visual_review_v1/figure_manifest.json"
+    ],
+    "event_rate_boundary": [
+      "component_source_transfer/band_exchange_event_rvq_v1/summary.json",
+      "component_source_transfer/band_exchange_event_rvq_v1/tuple_support.json",
+      "component_source_transfer/band_exchange_event_rvq_v1/integer_replay.json",
+      "component_source_transfer/band_exchange_event_rvq_v1/audit_zh.md",
+      "component_source_transfer/band_exchange_event_rvq_v1/rate_distortion_v2.png",
+      "component_source_transfer/band_exchange_event_rvq_v1/completion.json"
+    ],
+    "cross_seed_matched_support": [
+      "component_source_transfer/band_exchange_words_seed211_v1/half_fit_profiles.json",
+      "component_source_transfer/band_exchange_words_seed211_v1/completion_with_half_profiles.json"
+    ],
+    "phase_reachability": [
+      "hb_native_id_readout/phase_companion_v1/summary.json",
+      "hb_native_id_readout/phase_companion_v1/oracle_scores.json",
+      "hb_native_id_readout/phase_companion_v1/new_freedom_and_boundary.json",
+      "hb_native_id_readout/phase_companion_v1/visual_review.json",
+      "hb_native_id_readout/phase_companion_v1/audit_zh.md"
+    ],
+    "frozen_Hb_phase_head": [
+      "hb_native_id_readout/phase_fit_v1/summary.json",
+      "hb_native_id_readout/phase_fit_v1/training_crossfit.json",
+      "hb_native_id_readout/phase_fit_v1/integer_replay.json",
+      "hb_native_id_readout/phase_fit_v1/visual_review.json",
+      "hb_native_id_readout/phase_fit_v1/audit_zh.md",
+      "hb_native_id_readout/phase_fit_v1/visual_diagnostic_numbers.json",
+      "hb_native_id_readout/phase_fit_v1/tail_rejection.json",
+      "hb_native_id_readout/phase_fit_v1/rate_and_parameters.json",
+      "hb_native_id_readout/phase_fit_v1/verification.json",
+      "hb_native_id_readout/phase_fit_v1/interface_metadata_audit.json"
+    ],
+    "inference_compatibility": [
+      "component_source_transfer/band_exchange_words_v1/fold0_four_branch_replay_v1/previous_bundle_regression.json"
+    ],
+    "frozen_EEG_montage_synthesis": [
+      "component_source_transfer/band_exchange_synthesis_v1/summary.json",
+      "component_source_transfer/band_exchange_synthesis_v1/execution.json",
+      "component_source_transfer/band_exchange_synthesis_v1/independent_integer_replay.json",
+      "component_source_transfer/band_exchange_synthesis_v1/waveform_primary_table.csv",
+      "component_source_transfer/band_exchange_synthesis_v1/waveform_subjects.csv",
+      "component_source_transfer/band_exchange_synthesis_v1/paired_subjects.json",
+      "component_source_transfer/band_exchange_synthesis_v1/payload_and_parameters.json",
+      "component_source_transfer/band_exchange_synthesis_v1/visual_review_v2/visual_audit.json",
+      "component_source_transfer/band_exchange_synthesis_v1/review_completion.json",
+      "component_source_transfer/band_exchange_synthesis_v1/audit_zh.md"
+    ]
+  },
+  "restoration": "Start from either verified development/training inference bundle or from the new fold0 pattern reference. New investigations should compare to the immutable equal-support masks, scales, sample identities, event charts, raw single-word readouts and stored integer payloads in this index. Preserve all four libraries and hard windows."
+}
