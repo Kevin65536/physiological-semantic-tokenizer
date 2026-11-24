@@ -585,21 +585,27 @@ def base_tokenizer_batch(rows, examples, scales, *, array_cache=None, cache_limi
         ref = scales['positions'][row['modality']][row['dataset']][row['positions'][p]]
         rate = row['rate']; sl = slice(start*rate, (start+30)*rate)
         folder = row['folder']
-        for key in ('x','s','o','mask'):
-            if (Path(folder)/(key+'.npy')).resolve().parent != Path(folder).resolve():
-                raise ValueError('prepared array escapes declared parent folder')
-        if array_cache is not None:
-            if folder not in array_cache:
+        if array_cache is None or folder not in array_cache:
+            parent = Path(folder)
+            paths = {k: parent / (k + '.npy') for k in ('x','s','o','mask')}
+            # Plain files are direct children by construction. Resolve a link
+            # before opening it; a cached mapping keeps its original file.
+            for path in paths.values():
+                if path.is_symlink() and path.resolve().parent != parent.resolve():
+                    raise ValueError('prepared array escapes declared parent folder')
+            if array_cache is not None:
                 while len(array_cache) >= cache_limit:
                     array_cache.popitem(last=False)
-                array_cache[folder] = {k: np.load(Path(folder)/(k+'.npy'), mmap_mode='r')
-                                       for k in ('x','s','o','mask')}
+            arrays = {k: np.load(path, mmap_mode='r') for k,path in paths.items()}
+            if array_cache is not None:
+                array_cache[folder] = arrays
+        else:
+            arrays = array_cache[folder]
             array_cache.move_to_end(folder)
             while len(array_cache) > cache_limit:
                 array_cache.popitem(last=False)
         for key in ('x','s','o','mask'):
-            source = array_cache[folder][key] if array_cache is not None else np.load(Path(folder)/(key+'.npy'), mmap_mode='r')
-            a = source[sl,p]
+            a = arrays[key][sl,p]
             if key != 'mask':
                 a = a/ref['scale']
             result[key].append(a.reshape(15,-1))

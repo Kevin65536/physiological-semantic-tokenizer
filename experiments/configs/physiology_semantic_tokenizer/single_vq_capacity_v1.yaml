@@ -1,0 +1,22 @@
+schema: single_vq_capacity_v1
+experiment_id: TK-SINGLE-VQ-CAPACITY-v1
+run: experiments/runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1
+parent: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_full_qc_retrain_v1.yaml
+scope: {train_people: 60, development_people: 16, confirmation: forbidden, test: forbidden, raw_reads: false, teacher_refits: false}
+support: {qc: v3_window_exclusions_v1, eeg_positions: 53476, hb_positions: 57532}
+interface: {seconds: 30, patches: 15, eeg_patch: [400, 1], hb_patch: [20, 2], ids_per_branch_and_patch: 1}
+baseline: frozen G1 waveform K128 step 10000, frozen residual EEG and Hb111, free-search EEG fold0 on the identical previous QC panel
+seeds: [17, 43]
+width: 256
+eeg: {dimensions: [64, 128, 256], dimension_screen_K: 4096, sizes: [1024, 4096, 8192]}
+hb: {dimensions: [64, 128], sizes: [256, 1024]}
+training: {batch_size: 64, warmup_steps: 1000, total_steps: 10000, checkpoint_every: 250}
+objective: same G1 waveform X/S/O variance-normalized losses and adjacent differences in every arm; hard arms add commitment
+initialization: shared continuous warmup per modality, dimension and seed; train-only G0 records, repeated independently until adequate for largest K
+uniform_count_fraction: 0.1
+primary: X/S/O NMSE averaged over colors, positions within crop, crops within record, records within person and persons within dataset, then equal datasets
+secondary: matched single-ID gains beyond dataset, position and visible RMS bin for EEG theta/alpha/envelope and Hb slopes/centered shape
+diagnostic: native band energy, RMS and seams, Hb extrema and slope, per-person scores, continuous-to-hard gap, code occupancy and final codebook geometry
+selection: at fixed EEG K choose lowest final development macro NMSE, tie smaller d; for replication require lower NMSE than original K128 and positive mean designated ID gains on both branches, then lowest NMSE, smaller K and d
+null: no joint gain in reconstruction and actual ID attributes relative to the original single-level baseline
+stopping: final fixed step 10000; keep failures; second seed for at most one eligible configuration per modality; all selection exploratory, no freezing decision

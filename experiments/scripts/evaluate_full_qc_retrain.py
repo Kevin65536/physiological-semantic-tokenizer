@@ -97,8 +97,9 @@ def encode_dataset(task):
     return mod,ds
 
 
-def summarize(mod):
-    rows,scales=STATE['rows'],STATE['scales']
+def summarize(mod, state=None, code_sizes=None):
+    state = STATE if state is None else state
+    rows,scales=state['rows'],state['scales']
     labels=sorted({(r['dataset'],p) for r in rows if r['split']=='train' and r['modality']==mod for p in r['positions']})
     sites={k:i for i,k in enumerate(labels)}
     names=(['power_4_8','power_8_13','rms_envelope'] if mod=='eeg' else
@@ -108,12 +109,12 @@ def summarize(mod):
     columns=np.concatenate([np.arange(*fields[k]) for k in names])
     offsets=np.cumsum([0]+[fields[k][1]-fields[k][0] for k in names])
     ranges=dict(zip(names,zip(offsets[:-1],offsets[1:])))
-    codes={'eeg':{'S':15351,'O':15351},'hb':{'S':129,'O':257}}[mod]
-    audits={k:SparsePatternAudit(codes[k],4*(len(labels)+1),STATE['datasets'],len(columns),ranges) for k in 'SO'}
+    codes=code_sizes or {'eeg':{'S':15351,'O':15351},'hb':{'S':129,'O':257}}[mod]
+    audits={k:SparsePatternAudit(codes[k],4*(len(labels)+1),state['datasets'],len(columns),ranges) for k in 'SO'}
     cache=OrderedDict();examples=[];metrics=defaultdict(list)
     for role in ['train','validation']:
-        for ds in STATE['datasets']:
-            with np.load(STATE['out']/f'{mod}_{ds}_{role}.npz') as z:
+        for ds in state['datasets']:
+            with np.load(state['out']/f'{mod}_{ds}_{role}.npz') as z:
                 ex=z['examples'];words={b:z[b] for b in 'SO'}
                 for b in 'SO':
                     assert words[b].min()>=0 and words[b].max()<codes[b]
@@ -147,7 +148,7 @@ def summarize(mod):
     for b in 'SO':
         mse=np.array(full['metrics'][b+'_word']['macro'])
         full[b+'_single_word_gain']=dict(zip(names,(1-mse[1]/mse[0]).tolist()))
-    dump(STATE['out']/(mod+'_summary.json'),full)
+    dump(state['out']/(mod+'_summary.json'),full)
 
 
 def run(arm):

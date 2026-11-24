@@ -50,6 +50,7 @@ class EMAVectorQuantizer(nn.Module):
         revival_noise_std: float = 0.0,
         revival_strategy: str = "top_error",
         revival_count_prior: str = "threshold",
+        geometry_each_forward: bool = True,
     ) -> None:
         super().__init__()
         if codebook_size <= 0 or embedding_dim <= 0:
@@ -67,6 +68,7 @@ class EMAVectorQuantizer(nn.Module):
         self.eps = float(eps)
         self.commitment_cost = float(commitment_cost)
         self.temperature = float(temperature)
+        self.geometry_each_forward = geometry_each_forward
         self.assignment = assignment
         self.normalize_latents = bool(normalize_latents)
         self.kmeans_init = bool(kmeans_init)
@@ -299,6 +301,17 @@ class EMAVectorQuantizer(nn.Module):
         return revived
 
     @torch.no_grad()
+    def geometry(self):
+        normalized = F.normalize(self.codebook, dim=-1)
+        nearest = []
+        for start in range(0, self.codebook_size, 512):
+            block = normalized[start:start + 512] @ normalized.t()
+            block[:, start:start + len(block)].fill_diagonal_(-1.)
+            nearest.append(block.max(dim=1).values)
+        return {"effective_rank": torch.linalg.matrix_rank(self.codebook.float()).to(self.codebook.dtype),
+                "nearest_neighbor_cosine": torch.cat(nearest).mean()}
+
+    @torch.no_grad()
     def _health(self, hard_ids: torch.Tensor, drift: torch.Tensor, revived: torch.Tensor) -> Dict[str, torch.Tensor]:
         counts = torch.bincount(hard_ids, minlength=self.codebook_size).float()
         probabilities = counts / counts.sum().clamp_min(1.0)
@@ -306,18 +319,12 @@ class EMAVectorQuantizer(nn.Module):
         entropy = -(probabilities[nonzero] * probabilities[nonzero].log()).sum()
         effective_codes = entropy.exp()
 
-        normalized = F.normalize(self.codebook, dim=-1)
-        cosine = normalized @ normalized.t()
-        cosine.fill_diagonal_(-1.0)
-        nearest_cosine = cosine.max(dim=1).values.mean()
-        effective_rank = torch.linalg.matrix_rank(self.codebook.float()).to(self.codebook.dtype)
         return {
             "assignment_entropy": entropy,
             "effective_codes": effective_codes,
             "batch_active_codes": (counts > 0).sum().to(self.codebook.dtype),
             "ema_active_fraction": (self.ema_count >= self.dead_code_threshold).float().mean(),
-            "effective_rank": effective_rank,
-            "nearest_neighbor_cosine": nearest_cosine,
+            **(self.geometry() if self.geometry_each_forward else {}),
             "prototype_drift": drift,
             "initialized": self.initialized.to(self.codebook.dtype),
             "quantization_strength": self.quantization_strength.to(self.codebook.dtype),

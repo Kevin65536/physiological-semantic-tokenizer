@@ -44,6 +44,8 @@ in the closest `src/` owner, with data and replay roots passed explicitly.
 
 ## Entrypoint, config and test map
 
+The single-level VQ capacity [controller](scripts/run_single_vq_capacity.py) uses the [matched development contract](configs/physiology_semantic_tokenizer/single_vq_capacity_v1.yaml). It scores the frozen single VQ and montage baselines, trains width-256 continuous and hard arms, and schedules the codebook-size comparison and conditional seed repetitions. [Shape and replay tests](../tests/test_single_vq_capacity.py) cover both signal grids.
+
 **Four-bit word stability.** [Nightly CPU suite](scripts/run_observation_word_stability.py) with its [fixed development contract](configs/physiology_semantic_tokenizer/observation_word_stability_v1.yaml) runs `--stage preflight`, then supervised `--stage screen` at the same fresh `--output` below the observation suite. Completed refit cells can be resumed. [Synthetic and contract tests](../tests/test_observation_word_stability.py) cover the shared draw, split boundary, integer interface and paired verdict.
 
 The [Hb coordinate simulation](scripts/run_hb_word_coordinate_simulation.py) isolates rank transformations of levels and slopes against known generated slopes. Pass a fresh `--output` ending in `_hb_coordinate_sim_vN` inside the observation suite. [Contract](configs/physiology_semantic_tokenizer/hb_word_coordinate_simulation_v1.yaml) · [synthetic tests](../tests/test_hb_word_coordinate_simulation.py).
