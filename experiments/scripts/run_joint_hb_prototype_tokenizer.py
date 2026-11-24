@@ -159,7 +159,7 @@ def prepare(config,out,manifest,scales):
         input='X_only',context_seconds=30,patch_seconds=2,quantization_levels=1,
         integers_per_branch_position_context=15,bits_per_branch_position_per_second=3.5,
         source=str(SOURCE/config['source']['checkpoint']),source_step=10000,
-        source_historical_validation_exposure='all_original_validation_subjects',
+        source_historical_validation_exposure=config['source'].get('validation_exposure','all_original_validation_subjects'),
         parameter_count_inference=sum(p.numel() for p in model.parameters()))
     save(destination,dict(signature=signature,metadata=metadata,model_config=setting,
         model_state=model.state_dict(),auxiliary_scales=auxiliary))

@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-24T08:25:43.724690+00:00",
+  "updated_at": "2026-11-24T09:39:08.670723+00:00",
   "tracks": [
     {
       "id": "main",
@@ -8265,6 +8265,30 @@
       "label": "可解压重放的四支研究参照",
       "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/cross_branch_innovations_capacity_v2/portable_fold0_v1/unpacked_replay.json",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.tk_full_qc_retrain_contract",
+      "label": "质控后四分支从头训练合同",
+      "role": "protocol",
+      "path": "experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_full_qc_retrain_v1.yaml"
+    },
+    {
+      "id": "e.tk_full_qc_retrain_launch",
+      "label": "训练、重编码与评估服务",
+      "role": "run_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/launch.json"
+    },
+    {
+      "id": "e.tk_full_qc_retrain_pair",
+      "label": "质控开发集上新旧模型的逐人配对结果",
+      "role": "result_summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/paired_comparison.json"
+    },
+    {
+      "id": "e.tk_full_qc_retrain_check",
+      "label": "逐位置误差复算、被试区间与开发难例核验",
+      "role": "diagnostic",
+      "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/result_check_v1/verification.json"
     }
   ],
   "records": [
@@ -20089,6 +20113,56 @@
       "headline": false,
       "updated_at": "2026-11-24T08:25:43.724690+00:00",
       "next_step": "使用现有 v3 窗口供当前 tokenizer 训练。按原流程重建 v3 或复做与 v2 的逐窗对照时，需先恢复相应 v2 输入。"
+    },
+    {
+      "state_id": "main.tk_full_qc_retrain_v1@2026-11-24.training",
+      "entity": "main.tk_full_qc_retrain_v1",
+      "label": "窗口质控后 EEG 与双色 Hb 四分支完整重训",
+      "track": "main",
+      "order": 259,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "按质控标记重建训练支持，在固定 G0 尺度上从头拟合 EEG 的频域来源、两级词典和阵列读出，以及 Hb 两支编码器、形状词典和总和读出；同一普通开发面板重编码历史研究参照。",
+      "evidence_ids": [
+        "e.tk_full_qc_retrain_contract",
+        "e.tk_full_qc_retrain_launch"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.tk_joint_measurements_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-24T08:38:57.566339+00:00",
+      "next_step": "根据训练、整数重放和同一开发面板的配对波形与单码读出形成结论。"
+    },
+    {
+      "state_id": "main.tk_full_qc_retrain_v1@2026-11-24.development-review",
+      "entity": "main.tk_full_qc_retrain_v1",
+      "label": "窗口质控后 EEG 与双色 Hb 四分支完整重训",
+      "track": "main",
+      "order": 259,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "exploratory",
+      "summary": "四支完成训练和同一质控面板的整数评估。四库16名开发被试中，EEG宏NMSE从0.41484降至0.41237，O词的α功率读出增益从26.49%升至39.58%；S幅度比为0.639，α能量绝对误差为4.391 dB。Hb宏NMSE从0.19049变为0.19034，S词的HbO/HbR斜率增益为9.95%/5.99%。联合要求未达到，四名预留被试保持留出。",
+      "evidence_ids": [
+        "e.tk_full_qc_retrain_contract",
+        "e.tk_full_qc_retrain_launch",
+        "e.tk_full_qc_retrain_pair",
+        "e.tk_full_qc_retrain_check"
+      ],
+      "supersedes": [
+        "main.tk_full_qc_retrain_v1@2026-11-24.training"
+      ],
+      "depends_on": [
+        "main.tk_joint_measurements_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-24T09:39:08.670723+00:00",
+      "next_step": "保留重训整数模型作开发参照；后续优先检验EEG源分量幅度及Hb困难事件的分量归属。"
     }
   ]
 }

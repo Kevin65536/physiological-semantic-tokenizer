@@ -273,6 +273,13 @@ def base_tokenizer_training_data(cfg, root, *, historical_replay=False):
         for identity_field in ('cfg_identity', 'plan_identity'):
             manifest[identity_field] = _identity([manifest[identity_field], QC_VERSION])
         audit = base_sampling_audit(manifest['rows'], contract['sampling'])
+    if 'validation_subjects' in spec:
+        allowed = {tuple(v) for v in spec['validation_subjects']}
+        if not allowed or not allowed <= {key for key, split in subjects.items() if split == 'validation'}:
+            raise ValueError('validation subjects outside the G0 validation partition')
+        for row in manifest['rows']:
+            if row['split'] == 'validation' and (row['dataset'], row['subject']) not in allowed:
+                row['inputs'] = {role: [] for role in row['inputs']}
     return manifest, scales, audit, summary
 
 

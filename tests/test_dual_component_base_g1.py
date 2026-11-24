@@ -169,3 +169,28 @@ def test_interrupted_milestone_resumes_exact_updates(tmp_path,monkeypatch):
 
 def test_all_five_synthetic_integer_and_gradient_interfaces():
     assert runner.base_training_synthetic(runner.read_config(CONFIG))['status']=='passed'
+
+
+def test_development_subject_subset_removes_all_other_validation_inputs(tmp_path):
+    cfg, _ = prepared(tmp_path)
+    path = tmp_path/'g0/cache/manifest.json'
+    manifest = runner.read_json(path)
+    excluded = deepcopy(next(r for r in manifest['rows'] if r['split'] == 'validation'))
+    excluded['subject'] = 'reserved_synthetic_subject'
+    excluded['parent'] += '_reserved'
+    excluded['folder'] = str(path.parent/runner.identity(excluded['parent'])/excluded['modality'])
+    manifest['rows'].append(excluded)
+    runner.write_json(path, manifest)
+    full = runner._base_training_data(cfg, tmp_path)[0]['rows']
+    validation = sorted({(r['dataset'], r['subject']) for r in full if r['split'] == 'validation'})
+    assert len(validation) > 1
+    cfg['data']['validation_subjects'] = [list(validation[0])]
+    subset = runner._base_training_data(cfg, tmp_path)[0]['rows']
+    for original, restricted in zip(full, subset, strict=True):
+        if original['split'] == 'train' or (original['dataset'], original['subject']) == validation[0]:
+            assert restricted['inputs'] == original['inputs']
+        else:
+            assert not any(restricted['inputs'].values())
+    cfg['data']['validation_subjects'] = [['not-a-library', 'unregistered']]
+    with pytest.raises(ValueError, match='outside the G0 validation partition'):
+        runner._base_training_data(cfg, tmp_path)

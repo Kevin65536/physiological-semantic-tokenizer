@@ -1,0 +1,31 @@
+schema: joint_tokenizer_full_qc_retrain_v1
+experiment_id: TK-JOINT-FULL-QC-RETRAIN-v1
+run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1
+historical_run: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1
+g1: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+scope: {fit: train, scoring: ordinary_development_16_only, confirmation: forbidden, test: forbidden, raw_reads: false, teacher_refits: false}
+inputs: {window_exclusions: v3_window_exclusions_v1, train_scales: frozen_G0, seconds: 30, EEG_Hz: 200, paired_Hb_Hz: 10, seconds_per_integer: 2}
+eeg:
+  population: all_nonoverlapping_available_G0_training_crops
+  layout: staggered_native_pilot_and_conditional_innovation
+  bits_per_branch_slot: 14
+  seeds: [107, 197]
+  pilot_capacity: 1023
+  residual_capacity: 2047
+  sample_patches_per_dataset_role_branch: 4096
+  frequency_fit_sample: 8192
+  frequency_ridge_fraction: 0.001
+  source_ridge_fraction: 0.1
+hb:
+  population: G0_hierarchical_training_sampling
+  seed: 17
+  G1_steps: 10000
+  O_refinement_step: 2000
+  readout: decoded_waveform_ridge512_111_parameters
+  base_word_sizes: [128, 256]
+  final_word_sizes: [129, 257]
+primary: paired_clean_development_X_S_O_NMSE_equal_position_crop_record_subject_dataset
+secondary: RMS_gain_band_energy_or_Hb_shape_and_actual_ID_attribute_gains
+baseline: previous_frozen_four_branch_reference_reencoded_on_identical_clean_development_inputs
+null: no_improvement_or_waveform_and_actual_word_criteria_still_fail
+stopping: fixed_architecture_and_fixed_training_schedule_no_selection_on_confirmation
