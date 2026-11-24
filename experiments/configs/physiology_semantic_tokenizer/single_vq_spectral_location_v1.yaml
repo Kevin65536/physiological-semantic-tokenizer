@@ -1,0 +1,20 @@
+schema: single_vq_spectral_location_v1
+experiment_id: TK-SINGLE-VQ-SPECTRAL-LOCATION-v1
+run: experiments/runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1
+parent: experiments/configs/physiology_semantic_tokenizer/single_vq_capacity_v1.yaml
+recorded_root: /SSD_2/pid-mcm-implementation
+scope: {train_people: 60, development_people: 16, development_eeg_positions: 53476, test: forbidden, confirmation: forbidden, raw_reads: false, teacher_refits: false}
+interface: {dimension: 64, size: 8192, width: 256, context_seconds: 30, patches: 15, patch_samples: 400, rate_hz: 200}
+training: {batch_size: 64, warmup_steps: 1000, total_steps: 10000, first_seed: 17, repeat_seed: 43}
+arms: {A: waveform, B: decoded_spectrum, C: single_id_spectrum}
+weight: 0.01
+features: [log_theta_power, log_alpha_power, theta_fraction, alpha_fraction]
+spectrum: symmetric Hann after demeaning each complete 2s patch; integrated [4,8), [8,13), denominator [1,45) Hz. Natural log power in retained G0 voltage coordinates, floor 1e-12 in frozen input-scale squared coordinates before restoring native scale. Relative denominator has the same floor.
+calibration: per dataset feature mean and population SD across complete EEG-S patches on the frozen capacity training score panel. Keep separate native coordinates and share calibration across all arms and seeds.
+primary: relative MSE gain on standardized teacher S attributes above dataset/electrode/visible X RMS background, adding actual S ID via person-balanced cell means and fixed shrinkage of 4 training people. Report each feature and their equal mean.
+secondary: decoded S attribute errors and X/S/O waveform NMSE and correlation on identical examples. Equal patch, position, crop, record, subject, then dataset aggregation. Also report absolute ID-only readout, within-ID dispersion, supported fraction of vocabulary and development tokens, per-person scores, and retained median/difficult EEG windows.
+support: {min_train_patches: 10, min_train_people: 3}
+guardrails: {macro_nmse_relative_increase_max: 0.02, component_nmse_relative_increase_max: 0.05, component_correlation_drop_max: 0.01}
+'null': neither placement improves the four-feature mean held-out ID gain versus seed-matched A within the reconstruction guardrails
+selection: require strictly positive mean ID gain and improvement over A, all guardrails and complete finite primary scores. Among eligible choose lower macro NMSE, tie choose B. Record all three paired contrasts and coverage; sixteenth-person development panel is exploratory.
+stopping: fixed terminal checkpoint; failed planned arms remain visible. Repeat A and at most one eligible arm with seed 43 on same ordinary development panel. Hb uses retained d128 K1024 reference. End after replication decision.

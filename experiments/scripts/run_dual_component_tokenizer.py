@@ -5005,12 +5005,13 @@ def run_voltage_power_cap_posterior(cfg,out,root,workers,stage):
     return dict(status='completed',counts=summary['counts'],summary=str(out/'summary.json'))
 
 
-def _base_training_model(cfg, task):
+def _base_training_model(cfg, task, *, single_id_spectrum=False):
     from src.tokenizers.dual_component_tokenizer import GlobalLatentComponentTokenizer
     setting=dict(cfg['model'],**cfg['architectures'][task['architecture']])
     setting.update(input_dim=400 if task['modality']=='eeg' else 40,
                    channels=1 if task['modality']=='eeg' else 2)
     setting.setdefault('sample_strides',[5,4,5] if task['modality']=='eeg' else [5])
+    setting['single_id_spectrum'] = single_id_spectrum
     candidate = task['candidate']
     hard = candidate.startswith('vq') and candidate[2:].isdigit()
     if not hard and candidate not in ('warmup','continuous'):
@@ -5066,7 +5067,7 @@ def _base_diagnostic_source(cfg, root, group, modality, candidate, input_id, sca
     return model.eval(), job
 
 
-def _base_training_batch(rows, examples, scales, device, cache, cfg):
+def _base_training_batch(rows, examples, scales, device, cache, cfg, *, calibration=None):
     from src.data.dual_component_tokenizer import base_tokenizer_batch
     import torch
     limit = cfg['resources']['mmap_parent_cache']
@@ -5075,6 +5076,9 @@ def _base_training_batch(rows, examples, scales, device, cache, cfg):
         if limit < 1:
             raise ValueError('positive mmap cache capacity required')
     raw=base_tokenizer_batch(rows,examples,scales,array_cache=cache,cache_limit=limit)
+    if calibration is not None:
+        from src.data.dual_component_tokenizer import eeg_spectrum_coordinates
+        raw.update(eeg_spectrum_coordinates(rows, examples, scales, calibration))
     channels=rows[examples[0][0]]['channels']
     for key in ('x','s','o'):
         # Invalid targets may be NaN in G0. Zero only their arithmetic placeholder,
@@ -5322,14 +5326,19 @@ def _base_migrate_resume(cfg, root, task_id, task, signature, job):
     _torch_save(job/'checkpoint.pt',saved)
 
 
-def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, destination=None, band_scales=None):
+def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, destination=None, band_scales=None,
+                         recorded_root=None, spectral_objective=None):
     from src.data.dual_component_tokenizer import base_tokenizer_sampling_index,base_tokenizer_sample
     import torch
     task_id='__'.join(task[k] for k in ('modality','architecture','candidate'))
     job=Path(destination) if destination is not None else Path(out)/'models'/task_id
     with owner_lock(job):
-        manifest,scales,audit,parent=_base_training_data(cfg,root)
+        manifest,scales,audit,parent=_base_training_data(cfg,root,recorded_root=recorded_root)
         signature=dict(config=identity(cfg),input=identity(manifest),scales=identity(scales),task=task,benchmark=benchmark)
+        calibration = None
+        if spectral_objective is not None:
+            signature['spectral_objective'] = identity(spectral_objective)
+            calibration = spectral_objective['calibration']
         if band_scales is not None:
             signature['band_scales']=identity(band_scales)
         if (job/'summary.json').exists():
@@ -5343,7 +5352,11 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
                 torch.cuda.set_device(device);torch.cuda.set_per_process_memory_fraction(
                     cfg['resources']['gpu_memory_limit_gib']*2**30/torch.cuda.get_device_properties(device).total_memory,device)
                 torch.cuda.reset_peak_memory_stats(device)
-            model=_base_training_model(cfg,task).to(device);spec=cfg['architectures'][task['architecture']]
+            model=_base_training_model(cfg,task,single_id_spectrum=bool(spectral_objective and
+                spectral_objective['location']=='single_id_spectrum')).to(device)
+            spec=cfg['architectures'][task['architecture']]
+            if spectral_objective:
+                spec=dict(spec,spectral_objective=spectral_objective)
             if band_scales is not None:
                 spec=dict(spec,band_loss=cfg['band_de'],band_scales=torch.tensor(band_scales,device=device,dtype=torch.float32))
             t=cfg['training'];warm=task['candidate']=='warmup'
@@ -5383,11 +5396,15 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
                 saved=torch.load(warm_job/'checkpoint.pt',map_location=device,weights_only=False)
                 warm_signature=dict(signature,task=dict(task,candidate='warmup'),config=source_config_identity)
                 warm_signature.pop('band_scales',None)
+                warm_signature.pop('spectral_objective',None)
                 if (saved['signature'] != warm_signature
                         or saved['step'] != t['warmup_steps']):
                     raise ValueError('matched warmup input/configuration drift')
                 loaded=model.load_state_dict({k:v for k,v in saved['model_state'].items() if '.quantizer.' not in k},strict=False)
-                if loaded.unexpected_keys or any('.quantizer.' not in k for k in loaded.missing_keys):raise ValueError('warmup structure mismatch')
+                new_parameters = {'spectral_head.weight', 'spectral_head.bias'} if model.spectral_head is not None else set()
+                missing = {k for k in loaded.missing_keys if '.quantizer.' not in k}
+                if loaded.unexpected_keys or missing != new_parameters:
+                    raise ValueError('warmup structure mismatch')
                 torch.set_rng_state(saved['torch_rng'].cpu())
                 if pair in cfg.get('external_warmups',{}):
                     write_json(job/'warmup_reuse.json',dict(checkpoint=str(warm_job/'checkpoint.pt'),
@@ -5425,7 +5442,7 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
             for step in range(start,end):
                 tick=time.monotonic()
                 examples=base_tokenizer_sample(rng,groups,t['batch_size'])
-                batch=_base_training_batch(rows,examples,scales,device,cache,cfg)
+                batch=_base_training_batch(rows,examples,scales,device,cache,cfg,calibration=calibration)
                 for group in optimizer.param_groups:group['lr']=float(_base_learning_rate(cfg,step+1))
                 blend_step=step+1+(t['warmup_steps'] if benchmark else 0)
                 model.set_decoder_quantization_blend(_base_decoder_blend(cfg,blend_step) if model.hard else 1.)
@@ -5442,7 +5459,7 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
                     model.eval();monitor=[];continuous_monitor=[];usage={b:np.zeros(cfg['model']['codebook_size'],np.int64) for b in ('S','O')}
                     with torch.no_grad():
                         for offset in range(0,len(monitor_examples),t['batch_size']):
-                            b=_base_training_batch(rows,monitor_examples[offset:offset+t['batch_size']],scales,device,cache,cfg)
+                            b=_base_training_batch(rows,monitor_examples[offset:offset+t['batch_size']],scales,device,cache,cfg,calibration=calibration)
                             monitored=_base_forward(model,b);_,values=_state_refinement_loss(monitored,b,spec)
                             monitor.append({k:float(v) for k,v in values.items()})
                             if transition and model.hard:
@@ -7573,6 +7590,11 @@ def _state_refinement_loss(result,batch,spec):
             error=(result[output]-batch[key]).reshape(mask.shape[0],-1,channels)
             derivative=derivative+masked_mean(error.diff(dim=1).square()/batch['dv'+key][:,None,:],valid)/3
         loss=loss+spec['derivative_weight']*derivative
+    if 'spectral_objective' in spec:
+        from src.analysis.dual_component_tokenizer import eeg_spectrum_loss
+        auxiliary = spec['spectral_objective']
+        terms['spectral_attributes'] = eeg_spectrum_loss(result, batch, auxiliary['location'])
+        loss = loss + auxiliary['weight'] * terms['spectral_attributes']
     if 'band_loss' in spec:
         from src.analysis.dual_component_tokenizer import eeg_balanced_distortion
         terms['spectral']=eeg_balanced_distortion(result,batch,spec['band_loss'],spec['band_scales'])

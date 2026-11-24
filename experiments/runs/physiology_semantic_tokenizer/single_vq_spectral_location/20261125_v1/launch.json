@@ -1,0 +1,36 @@
+{
+  "experiment_id": "TK-SINGLE-VQ-SPECTRAL-LOCATION-v1",
+  "checked": "2026-11-24T16:34:27.529033+00:00",
+  "supervisor": "single-vq-spectral-location-20261125-v1.service",
+  "user_linger": true,
+  "supervisor_properties": [
+    "MainPID=3789263",
+    "ControlGroup=/user.slice/user-1008.slice/user@1008.service/app.slice/single-vq-spectral-location-20261125-v1.service",
+    "MemoryMax=107374182400",
+    "LimitNOFILE=131072",
+    "ActiveState=active",
+    "SubState=running"
+  ],
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "command": [
+    "/bin/bash",
+    "/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1/supervise.sh"
+  ],
+  "environment": "supervise.sh",
+  "log": "controller.log",
+  "workers": "A and C on PCI 4B:00.0; B on CA:00.0. Three independent first-seed arms. One numerical thread per worker. Batch 64.",
+  "resource_basis": "resources.log, pilot_A.json, pilot_B.json, pilot_C.json and the retained capacity optimization_v1/policy.json on the same GPU UUIDs",
+  "git_head": "7dedb2117984a04478337ff7b6973661a90143a2",
+  "source_snapshot": "source",
+  "stages": "stage.json",
+  "waveform_baseline": "fresh matched A per seed; historical d64 K8192 seed 17 comparison recorded separately",
+  "shared_warmup_step": 1000,
+  "verified_training_initialization_triples_equal": true,
+  "recovery": "First C startup rejected the two fresh linear head parameters during warmup transfer. Restricted the exception to those parameters and tested the full path. Also quoted the YAML null hypothesis key for lossless JSON recovery. A/B restored at step 1500; C started from the common warmup. Original failure and resolved config retained.",
+  "calibration_complete_patches": 222885,
+  "progress_at_check": {
+    "A": 2000,
+    "B": 2000,
+    "C": 1500
+  }
+}

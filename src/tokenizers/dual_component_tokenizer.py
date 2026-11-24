@@ -810,6 +810,12 @@ class GlobalLatentComponentTokenizer(nn.Module):
         if self.input_color_weights is not None:
             if int(cfg['channels']) != 2 or list(self.input_color_weights) != [1., 0.]:
                 raise ValueError('Hb input ablation must retain HbO and zero HbR')
+        self.spectral_head = None
+        if cfg.get('single_id_spectrum', False):
+            if not self.hard or self.input_dim != 400 or int(cfg['channels']) != 1:
+                raise ValueError('spectral readout requires single-level EEG codes')
+            with torch.random.fork_rng(devices=[]):
+                self.spectral_head = nn.Linear(latent, 4)
         self.code_shape_head = None
         if cfg.get('code_shape_head', False) and self.hard:
             if self.input_dim != 40 or int(cfg['channels']) != 2:
@@ -909,6 +915,8 @@ class GlobalLatentComponentTokenizer(nn.Module):
                 # float32 cancellation can be amplified by the synthesis stack.
                 value = (quantizer.get_embedding(output.hard_ids)
                          if not self.training else output.quantized)
+                if component == 'S' and self.spectral_head is not None:
+                    result['S_spectrum'] = self.spectral_head(value)
                 if self.training and self.decoder_quantization_blend < 1.:
                     alpha = self.decoder_quantization_blend
                     value = (1.-alpha)*latent + alpha*value

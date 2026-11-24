@@ -1,0 +1,21 @@
+schema: single_vq_dynamic_factorial_v1
+experiment_id: TK-SINGLE-VQ-DYNAMIC-FACTORIAL-v1
+run: experiments/runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1
+parent: experiments/configs/physiology_semantic_tokenizer/single_vq_spectral_location_v1.yaml
+arms: {continuous_wave: continuous, continuous_dynamic: continuous, hard_wave: A, hard_dynamic: B}
+scope: {train_people: 60, development_people: 16, development_eeg_positions: 53476, test: forbidden, confirmation: forbidden, raw_reads: false, teacher_refits: false}
+modality: eeg
+seed: 17
+width: 256
+latent_dimension: 64
+hard_codebook: 8192
+training: {warmup_steps: 1000, total_steps: 10000, batch_size: 64}
+objective: original X/S/O waveform and adjacent differences; dynamic adds 0.01 times parent four-feature standardized decoded S spectrum loss; hard additionally retains original commitment
+features: [log_theta_power, log_alpha_power, theta_fraction, alpha_fraction]
+primary: mean of four training-dataset standardized decoded-S feature MSEs, hierarchical equal complete patches, positions, crops, records, people and datasets
+secondary: individual spectral MSEs, X/S/O macro and component NMSE and correlations; compare actual hard-S-ID gain versus identical subject-balanced background with parent shrinkage
+contrast: benefit = waveform-only minus dynamic MSE; interaction = hard benefit minus continuous benefit, in standardized squared-error units
+'null': no reduction in decoded S spectral MSE in either representation; equal change in the two representations
+interval: 10000 paired person bootstraps within dataset, equal datasets, fixed models; descriptive percentile 95%, no multiple-testing adjustment
+guardrails: inherited spectral_location macro NMSE increase <=2%, each component NMSE increase <=5%, component correlation loss <=0.01
+stopping: one fixed-budget 2x2, seed 17; reuse exact terminal hard A/B; retain all outcomes

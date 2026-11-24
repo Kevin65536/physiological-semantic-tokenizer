@@ -1,0 +1,29 @@
+{
+  "unit": "single-vq-capacity-20261124.service",
+  "command": [
+    "systemd-run",
+    "--user",
+    "--unit=single-vq-capacity-20261124",
+    "--property=WorkingDirectory=/home/uais7/pid-mcm-implementation",
+    "--property=MemoryMax=168G",
+    "--property=LimitNOFILE=32768",
+    "--property=StandardOutput=append:/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/controller.log",
+    "--property=StandardError=append:/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/controller.log",
+    "/home/uais7/pid-mcm-implementation/run-project",
+    "/bin/bash",
+    "/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/optimization_v1/supervise.sh"
+  ],
+  "cwd": "/home/uais7/pid-mcm-implementation",
+  "project_path": "/SSD_2/pid-mcm-implementation",
+  "environment": "launch-env.sh",
+  "source_snapshot": "optimization_v1/source",
+  "git_parent": "101cec0bfd302659f1d66895b831b2d5e60b111f",
+  "linger": true,
+  "public_only": true,
+  "resource_decision": "optimization_v1/policy.json; one versus two workers measured separately for continuous and hard arms on both PCI-selected cards. Train-only paired input check and performance trials in optimization_v1. Up to three independent four-dataset CPU evaluations.",
+  "inputs": "G0 v3-derived QC, frozen scales; ordinary development identities from previous QC comparison",
+  "resume": "Reissue command when inactive. The dependency scheduler reuses completed warmups, training checkpoints and completed score files. Sampling, optimizer and RNG state resume from the atomic 250-step checkpoint.",
+  "progress": "stage.json; training/*/models/*/progress.json; evaluation/*/*.progress.json; logs/",
+  "scope": "exploratory development only",
+  "optimization_evidence": "optimization_v1"
+}

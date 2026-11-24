@@ -1,0 +1,25 @@
+schema: single_vq_readout_v1
+experiment_id: TK-SINGLE-VQ-READOUT-v1
+run: experiments/runs/physiology_semantic_tokenizer/single_vq_readout/20261125_v1
+parent: single_vq_capacity_v1.yaml
+recorded_root: /SSD_2/pid-mcm-implementation
+scope: {train_people: 60, development_people: 16, test: forbidden, confirmation: forbidden, raw_reads: false, teacher_refits: false}
+panel: same retained training examples and all ordinary development examples as parent; complete 2-second branch targets only
+models:
+  eeg: {dimension: 64, size: 8192, seeds: [17]}
+  hb: {dimension: 128, size: 1024, seeds: [17, 43]}
+continuous: independent matched dimension step-10000 seed 17 only
+attributes:
+  eeg: [power_4_8, power_8_13, rms_envelope, patch_rms]
+  hb: [HbO_slope, HbR_slope, HbO_centered, HbR_centered]
+baseline: historical pooled background, dataset and position with visible X RMS cut points [0.5,1,2]; global training fallback
+primary: relative MSE gain vs background for original categorical, shrunk categorical and subject-balanced shrunk categorical
+secondary: identical background-residual standardized linear ridge probes of independent continuous z, hard encoder z and retained integer codebook entry; direct attributes of the two decoded outputs
+'null': no lower held-out MSE than the corresponding training background
+aggregation: mean over feature coordinates, valid patches, positions, crops, records, subjects and datasets successively
+support: {min_train_patches: 10, min_train_people: 3}
+shrinkage_pseudocounts: [0, 1, 4, 16, 64, 256]
+ridge_penalties: [0.0001, 0.01, 0.1, 1]
+selection: dataset-stratified three folds of sorted training subjects round robin; minimize MSE per attribute with people equal within dataset and datasets equal; ties choose first
+balanced: average person-specific means within each cell and background; shrink joint toward balanced background with distinct people as effective count
+stopping: all frozen models and complete development panel; no tokenizer updates; keep failures and missing support

@@ -2,6 +2,7 @@
 from collections import OrderedDict
 from copy import deepcopy
 import importlib.util
+import json
 from pathlib import Path
 
 import numpy as np
@@ -57,6 +58,24 @@ def test_G0_scope_path_and_frozen_scale_rejected_before_arrays(tmp_path,monkeypa
     manifest['rows'][0]['folder']='/unapproved'
     runner.write_json(tmp_path/'g0/cache/manifest.json',manifest)
     with pytest.raises(ValueError,match='folder identity'):runner._base_training_data(cfg,tmp_path)
+
+
+def test_relocated_manifest_requires_exact_original_parent_and_modality(tmp_path):
+    cfg, _ = prepared(tmp_path)
+    path = tmp_path/'g0/cache/manifest.json'
+    manifest = json.loads(path.read_text())
+    recorded_root = Path('/original/project')
+    for row in manifest['rows']:
+        row['folder'] = str(recorded_root / Path(row['folder']).relative_to(tmp_path))
+    runner.write_json(path, manifest)
+    relocated, *_ = runner._base_training_data(cfg, tmp_path, recorded_root=recorded_root)
+    assert all(Path(r['folder']).is_relative_to(tmp_path/'g0/cache') for r in relocated['rows'])
+    with pytest.raises(ValueError, match='folder identity'):
+        runner._base_training_data(cfg, tmp_path)
+    manifest['rows'][0]['folder'] += '/other'
+    runner.write_json(path, manifest)
+    with pytest.raises(ValueError, match='folder identity'):
+        runner._base_training_data(cfg, tmp_path, recorded_root=recorded_root)
 
 
 def test_mmap_cache_matches_uncached_batches_and_rejects_escape(tmp_path):

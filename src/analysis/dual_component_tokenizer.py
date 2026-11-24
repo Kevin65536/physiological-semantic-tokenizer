@@ -5552,6 +5552,25 @@ def eeg_residual_band_energy(wave, bands):
     return torch.stack([power[...,2*lo:2*hi].sum(-1) for lo,hi in bands],dim=-1)
 
 
+def eeg_spectral_attributes(wave, input_scale):
+    """Local log absolute and relative theta/alpha power on the 200 Hz G0 grid."""
+    energy = eeg_residual_band_energy(wave, [(4, 8), (8, 13), (1, 45)])
+    bands = energy[..., :2]
+    log_power = bands.clamp_min(1e-12).log() + 2 * input_scale.log().reshape(-1, 1, 1)
+    return torch.cat((log_power, bands / energy[..., 2:].clamp_min(1e-12)), dim=-1)
+
+
+def eeg_spectrum_loss(result, batch, location):
+    valid = batch['mask'].all(-1)
+    def standardized(wave):
+        features = eeg_spectral_attributes(wave, batch['input_scale'])
+        return (features - batch['feature_mean']) / batch['feature_sd']
+    target = standardized(torch.where(batch['mask'], batch['s'], 0.))
+    prediction = standardized(result['S']) if location == 'decoded_spectrum' else result['S_spectrum']
+    error = (prediction - target).square().mean(-1)
+    return torch.where(valid, error, 0.).sum() / valid.sum().clamp_min(1)
+
+
 def eeg_balanced_distortion(prediction, batch, definition, scales):
     """Phase-sensitive residual, normalized with frozen train-only spectral scales."""
     error = torch.stack([prediction[k]-batch[t] for k,t in [('sum','x'),('S','s'),('O','o')]],dim=1)

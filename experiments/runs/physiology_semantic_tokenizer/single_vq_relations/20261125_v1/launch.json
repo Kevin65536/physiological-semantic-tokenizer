@@ -1,0 +1,41 @@
+{
+  "cwd": "/home/uais7/pid-mcm-implementation",
+  "python": ".venv/bin/python",
+  "script": "experiments/scripts/run_single_vq_relations.py",
+  "supervisor": "systemd --user; Linger=yes",
+  "stages": [
+    "pilot",
+    "extract --workers 12",
+    "relations --workers 3",
+    "events --workers 8",
+    "verify"
+  ],
+  "units": [
+    "single-vq-relations-pilot-1125.service",
+    "single-vq-relations-inputs-1125.service",
+    "single-vq-relations-analysis-1125.service",
+    "single-vq-relations-events-1125.service",
+    "single-vq-relations-verify-1125.service"
+  ],
+  "environment": {
+    "CUDA_VISIBLE_DEVICES": "",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1"
+  },
+  "resources": "64 physical cores; user CPU quota 48; existing job around 18 cores; 224 GiB available memory and 828 GiB free on rotational storage. Pilot 0.01-0.06s per 64 rows. Twelve bounded extraction workers share page cache, three independent model analyses and eight independent event-record workers; single numerical thread.",
+  "resume": "atomic per-shard inputs, per-model completion and per-record event products; retain failed service logs",
+  "logs": [
+    "pilot.log",
+    "extract.log",
+    "relations.log",
+    "events.log",
+    "verify.log"
+  ],
+  "supplemental_controls": {
+    "stage": "controls --workers 3",
+    "unit": "single-vq-relations-controls-1125.service",
+    "log": "controls.log",
+    "purpose": "Development diagnostics added after primary A/C results: separate nonlinear family main effects from supported pair interactions; compare identical history descriptors of measured X quartiles; compare training-derived Hb profiles across seeds on the same held-out members."
+  }
+}

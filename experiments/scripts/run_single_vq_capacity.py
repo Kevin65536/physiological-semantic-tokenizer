@@ -80,9 +80,9 @@ def train(mod, dim, size, seed, *, warmup_only=False):
         train_base_tokenizer(cfg,ROOT,base,model_task(mod,size),'cuda:0')
 
 
-def prepare_panel():
+def prepare_panel(*, recorded_root=None):
     cfg=configuration()
-    manifest,scales,_,_=base_tokenizer_training_data(cfg,ROOT)
+    manifest,scales,_,_=base_tokenizer_training_data(cfg,ROOT,recorded_root=recorded_root)
     if manifest.get('window_exclusions')!=PLAN['support']['qc']:
         raise ValueError('QC identity changed')
     rows=manifest['rows']

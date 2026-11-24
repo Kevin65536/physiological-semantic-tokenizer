@@ -200,7 +200,7 @@ def masked_state_geometry(project_root, spec, meta, modality, names):
     return values, sources
 
 
-def base_tokenizer_training_data(cfg, root, *, historical_replay=False):
+def base_tokenizer_training_data(cfg, root, *, historical_replay=False, recorded_root=None):
     """Validate the completed G0 development boundary before opening signal arrays."""
     import yaml
     from .observation_tokenizer_panel import _identity
@@ -247,6 +247,11 @@ def base_tokenizer_training_data(cfg, root, *, historical_replay=False):
             raise ValueError('G0 subject/split boundary before arrays')
         subjects[key] = row['split']
         expected = parent / 'cache' / _identity(serial(row['parent'])) / row['modality']
+        if recorded_root is not None:
+            # Relocate only the exact path derived from the original parent identity.
+            recorded = Path(recorded_root) / spec['run'] / expected.relative_to(parent)
+            if Path(row['folder']) == recorded:
+                row['folder'] = str(expected)
         if Path(row['folder']).resolve() != expected or not expected.is_relative_to(parent / 'cache'):
             raise ValueError('G0 prepared folder identity before arrays')
         if row['rate'] != (200 if row['modality'] == 'eeg' else 10):
@@ -564,6 +569,14 @@ def base_sampling_audit(rows, spec):
                                initialization=init, initialization_records=len(init),
                                training_subjects=sum(len(s) for s in groups.values()))
     return audit
+
+
+def eeg_spectrum_coordinates(rows, examples, scales, calibration):
+    datasets = [rows[i]['dataset'] for i, _, _ in examples]
+    input_scale = [scales['positions']['eeg'][ds][rows[i]['positions'][pos]]['scale']
+                   for ds, (i, _, pos) in zip(datasets, examples, strict=True)]
+    return dict(input_scale=np.asarray(input_scale), feature_mean=np.array([calibration[d]['mean'] for d in datasets])[:, None],
+                feature_sd=np.array([calibration[d]['sd'] for d in datasets])[:, None])
 
 
 def base_tokenizer_batch(rows, examples, scales, *, array_cache=None, cache_limit=256):

@@ -1,0 +1,122 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>冻结生理词与序列 · 开发集证据</title>
+<style>body{max-width:1050px;margin:36px auto;padding:0 18px;font:17px/1.65 system-ui;color:#172738}img{max-width:100%;height:auto}table{border-collapse:collapse}td,th{padding:.3em .7em;border:1px solid #c8d0da}a{color:#174e81}</style>
+<h1>冻结单层 VQ 的真实成员、事件与跨模态证据</h1>
+<p>EEG 用 d64/K8192，Hb 用 d128/K1024。两秒一个整数，编码上下文为 30 秒。四库读出使用 60 名训练被试和 16 名普通开发被试。心算实验使用 Single-Trial 中可与两套原始事件时钟对齐的子集。</p>
+<p>联合 S/O 比只用 S 预测实测 EEG α 占比的误差低 1.64%。HbO 斜率对应的误差降幅为 40.80% 和 37.29%。Hb-S 三词计数在同窗内相对一阶转移与停留模型的收益为 6.30% 和 13.27%，在下一不重叠窗口则为 -1.34% 和 +0.36%。</p><p>事件主对照纳入 122 个同会话成对条件试次，心算相对显式基线的提示后占用增量为 +8.51 个百分点，精确双侧 p=0.50。在 107 个可完成全部错配对照的开发试次上，加入 EEG 词后，实测 Hb 的双色宏 NMSE 从 0.18861 升至 0.20872。两项事件检验均只有 3 名独立开发被试。</p>
+<h2>真实成员覆盖</h2><p>属性为 EEG 的 8–13 Hz 功率占 1–45 Hz 的比例，或 HbO 两秒线性斜率。逐词预测相应 S/O 监督分量的属性。背景为库、位置和可见 X 幅度档。训练支持至少 20 片、3 人，逐词的背景残差按 16 片收缩。在至少 3 名开发被试出现、平均误差有改善且严格多数人改善时，计入覆盖。覆盖按实际片段数计算，属于本轮开发集描述。</p>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>model</th>
+      <th>branch</th>
+      <th>valid</th>
+      <th>readable_patches</th>
+      <th>readable_fraction</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>eeg_17</td>
+      <td>S</td>
+      <td>780210</td>
+      <td>351195</td>
+      <td>0.4501</td>
+    </tr>
+    <tr>
+      <td>eeg_17</td>
+      <td>O</td>
+      <td>780210</td>
+      <td>225813</td>
+      <td>0.2894</td>
+    </tr>
+    <tr>
+      <td>hb_17</td>
+      <td>S</td>
+      <td>838583</td>
+      <td>750915</td>
+      <td>0.8955</td>
+    </tr>
+    <tr>
+      <td>hb_17</td>
+      <td>O</td>
+      <td>838583</td>
+      <td>699366</td>
+      <td>0.8340</td>
+    </tr>
+    <tr>
+      <td>hb_43</td>
+      <td>S</td>
+      <td>838583</td>
+      <td>753451</td>
+      <td>0.8985</td>
+    </tr>
+    <tr>
+      <td>hb_43</td>
+      <td>O</td>
+      <td>838583</td>
+      <td>686404</td>
+      <td>0.8185</td>
+    </tr>
+  </tbody>
+</table>
+<p><a href="word_coverage.csv">分库覆盖与分母</a> · <a href="hb_seed_correspondence.csv">Hb 两个种子在同一片段上的属性排序与词族对应</a></p>
+<h2>实际成员与训练模板</h2><p>每张图从训练有支持的 ID 中按频数选择低、中、高三个代表。最后一行单列开发集上属性误差增大最多且支持足够的词。波形使用 G0 观测 X 与对应 S/O 目标，幅值采用各库各位置冻结的训练尺度。图中的时间从片段起点算起。细线为开发成员示例，实线为成员均值，虚线为冻结训练模板，点线为同人、同位置、同幅度档的开发对照。每个词、每个分区最多抽取 128 个成员。</p>
+<details><summary>EEG · 种子 17 · S 分支</summary><a href="eeg_17/S_members.png"><img loading="lazy" src="eeg_17/S_members.png" alt="真实成员及匹配背景波形"></a><p><a href="eeg_17/S_members.csv">样例与背景身份</a> · <a href="eeg_17/S_wave_template.csv">波形模板误差</a> · <a href="eeg_17/S_words.csv">全部 ID 的属性与支持</a></p></details>
+<details><summary>EEG · 种子 17 · O 分支</summary><a href="eeg_17/O_members.png"><img loading="lazy" src="eeg_17/O_members.png" alt="真实成员及匹配背景波形"></a><p><a href="eeg_17/O_members.csv">样例与背景身份</a> · <a href="eeg_17/O_wave_template.csv">波形模板误差</a> · <a href="eeg_17/O_words.csv">全部 ID 的属性与支持</a></p></details>
+<details><summary>HB · 种子 17 · S 分支</summary><a href="hb_17/S_members.png"><img loading="lazy" src="hb_17/S_members.png" alt="真实成员及匹配背景波形"></a><p><a href="hb_17/S_members.csv">样例与背景身份</a> · <a href="hb_17/S_wave_template.csv">波形模板误差</a> · <a href="hb_17/S_words.csv">全部 ID 的属性与支持</a></p></details>
+<details><summary>HB · 种子 17 · O 分支</summary><a href="hb_17/O_members.png"><img loading="lazy" src="hb_17/O_members.png" alt="真实成员及匹配背景波形"></a><p><a href="hb_17/O_members.csv">样例与背景身份</a> · <a href="hb_17/O_wave_template.csv">波形模板误差</a> · <a href="hb_17/O_words.csv">全部 ID 的属性与支持</a></p></details>
+<details><summary>HB · 种子 43 · S 分支</summary><a href="hb_43/S_members.png"><img loading="lazy" src="hb_43/S_members.png" alt="真实成员及匹配背景波形"></a><p><a href="hb_43/S_members.csv">样例与背景身份</a> · <a href="hb_43/S_wave_template.csv">波形模板误差</a> · <a href="hb_43/S_words.csv">全部 ID 的属性与支持</a></p></details>
+<details><summary>HB · 种子 43 · O 分支</summary><a href="hb_43/O_members.png"><img loading="lazy" src="hb_43/O_members.png" alt="真实成员及匹配背景波形"></a><p><a href="hb_43/O_members.csv">样例与背景身份</a> · <a href="hb_43/O_wave_template.csv">波形模板误差</a> · <a href="hb_43/O_words.csv">全部 ID 的属性与支持</a></p></details>
+<h2>S/O 条件增量和短序列</h2><p>逐位置比较背景、S、O 和联合读出。联合的条件增量与受支持词族的交互效应分别检验。G0 中 X=S+O，线性 HbO 斜率也满足这一恒等式，双分支联合读出具有明确的代数基础。顺序检验用前 14 个词族估计实测 X 属性，逐步加入一阶转移、停留和三词计数。额外对照保留词频、精确保留一阶转移、或同时保留逐词停留长度分布。另在同电极相邻的不重叠窗口上评分，以排查 30 秒双向上下文造成的收益。</p>
+<p><a href="conditional.csv">条件增量</a> · <a href="interaction.csv">控制词族主效应后的交互</a> · <a href="order.csv">顺序、替代序列与不重叠窗口</a></p>
+<h2>独立心算提示与实测 Hb</h2>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>b_primary_paired_trials</th>
+      <th>b_primary_paired_sessions</th>
+      <th>split</th>
+      <th>planned_people</th>
+      <th>planned_trials</th>
+      <th>upstream_excluded</th>
+      <th>b_valid_trials</th>
+      <th>b_valid_people</th>
+      <th>d_pre_pair</th>
+      <th>d_paired_trials</th>
+      <th>d_paired_people</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>674</td>
+      <td>37</td>
+      <td>train</td>
+      <td>17</td>
+      <td>1020</td>
+      <td>296</td>
+      <td>675</td>
+      <td>14</td>
+      <td>615</td>
+      <td>614</td>
+      <td>14</td>
+    </tr>
+    <tr>
+      <td>122</td>
+      <td>7</td>
+      <td>validation</td>
+      <td>5</td>
+      <td>300</td>
+      <td>168</td>
+      <td>124</td>
+      <td>3</td>
+      <td>109</td>
+      <td>107</td>
+      <td>3</td>
+    </tr>
+  </tbody>
+</table>
+<p>事件锁定使用心算和显式基线的配对标记，各自在 EEG 和 Hb 的原生时钟上取窗。主要比较为顶区 P3/P4 上 EEG-S 高 α 词族在提示后 2–10 秒相对提示前 4 秒的占用率变化，再比较条件差。其他区域、时段、转入转出率和相关系数均为探索性。</p>
+<img src="event_profile.png" alt="事件锁定轨迹"><p><a href="event_contrasts.csv">事件效应与精确检验</a> · <a href="event_associations.csv">同人试次关联</a> · <a href="event_support.csv">逐试次准入</a> · <a href="upstream_event_exclusions.csv">上游排除</a></p>
+<p>跨模态读出只用截至提示后 4 秒的 30 秒 EEG 上下文，目标为独立预处理的额前实测 HbO/HbR 相对末两秒的变化。基线含血流历史、条件、会话及试次顺序；增广模型加入同一 EEG 历史的 S/O 词族。跨试次错配固定人、会话、条件和相位；记录内移位 43 秒，排除了与提示重新对齐的窗口。各比较共用相同留出试次。全记录离线预处理限制对真实时间先后的解释。</p>
+<img src="coupling_people.png" alt="分被试血流误差"><p><a href="coupling_contrasts.csv">配对结果与区间</a> · <a href="coupling_pairs.csv">供体和时标</a> · <a href="coupling_predictions.csv">实际及估计变化</a> · <a href="events_summary.json">训练侧延迟选择</a></p>
+<p>误差差值为参照 MSE 减候选 MSE。描述性 95% 区间在各库内以人为单位配对重采样，再等权平均各库。除预定事件主对照的双侧精确符号翻转检验外，其他对照均未作多重比较校正。</p></html>

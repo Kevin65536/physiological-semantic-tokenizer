@@ -1,0 +1,63 @@
+{
+  "schema": "single_vq_relations_v1",
+  "experiment_id": "TK-SINGLE-VQ-RELATIONS-v1",
+  "run": "experiments/runs/physiology_semantic_tokenizer/single_vq_relations/20261125_v1",
+  "parent": "single_vq_readout_v1.yaml",
+  "scope": {
+    "train": 60,
+    "ordinary_development": 16,
+    "confirmation": "forbidden",
+    "test": "forbidden",
+    "raw_signal_reads": false,
+    "tokenizer_refit": false
+  },
+  "models": {
+    "eeg": {
+      "d": 64,
+      "K": 8192,
+      "seeds": [
+        17
+      ]
+    },
+    "hb": {
+      "d": 128,
+      "K": 1024,
+      "seeds": [
+        17,
+        43
+      ]
+    }
+  },
+  "A": {
+    "population": "same complete patches and actual assignments as frozen readout",
+    "attributes": "EEG Hann alpha power fraction of 1-45 Hz; HbO slope per second; separately on actual X and paired S/O",
+    "template": "training per-ID mean of branch attribute residual relative to dataset/site/visible RMS bin; shrink toward zero with 16 patches",
+    "coverage": "training >=20 patches and >=3 people; readable if >=3 development people and positive matched-background improvement in mean subject MSE and strict majority of people; descriptive on this development panel",
+    "members": "select by training frequency 10th/50th/90th percentiles among eligible IDs; additionally illustrate worst eligible supported held-out word as a labelled failure",
+    "waves": "deterministic up to 128 train and 128 held-out members per illustrated word; fitted training wave template and matching training backgrounds by dataset/site/RMS bin; raw and time-centered views in frozen training coordinates",
+    "families": "each ID assigned by quartile of its training mean branch attribute shrunk to global mean with 16 patches; thresholds weighted by training emissions; unseen maps to global mean"
+  },
+  "B": {
+    "task": "real paired mental arithmetic and explicit BL cues in Single-Trial",
+    "panel": "G0 admitted frontal F3/F4 and posterior P3/P4; separate electrode regions; prefrontal measured relative HbO/HbR from AF3Fp1 and AF4Fp2",
+    "context": "event -6 to +24 s; entire 30s bidirectional encoder offline; complete valid observation inputs inside QC admitted nonoverlapping G0 score crops",
+    "primary": "posterior EEG-S high-alpha family occupancy contrast MA vs BL in [2,10) relative to pre [-4,0)",
+    "secondary": "stage profiles and entry/exit; independent continuous EEG alpha fraction and measured Hb changes using native event clocks"
+  },
+  "C": {
+    "complement": "B; B plus frozen S or O code vector; additive both; additive plus one-hot interaction of training-defined S/O families; identical fixed ridge 0.01 in standardized residual coordinates, X/S/O same attribute",
+    "sequence": "predict final measured X attribute from first 14 full-window S-family or O-family IDs; compare four-family occupancy, added directed bigrams and dwell histogram, added trigrams; next disjoint crop first patch sensitivity",
+    "controls": "10 fixed surrogates per complete window, preserve bag, exact directed transition counts with endpoints, or exact run sequence and within-family run lengths"
+  },
+  "D": {
+    "panel": "Single-Trial MA/BL; simultaneous left/right frontal EEG channels paired in aggregate with prefrontal HbO/HbR; one regional panel",
+    "eeg": "crop [cue-26,cue+4); last three two-second patches of actual S/O code families and continuous theta/alpha/RMS from identical full EEG input",
+    "Hb": "independent downstream-v2 offline measured relative Hb; target two-second mean after cue+4+lag minus mean in [cue+2,cue+4)",
+    "baseline": "last three two-second two-color means before cue+4, condition, session, trial order; region fixed; same label and phase in all comparisons",
+    "selection": "lag 2/4/6 seconds by lowest grouped training-CV baseline normalized error; signs learned on training only; fixed standardized ridge 0.01",
+    "nulls": "same subject/session/condition/phase cross-trial EEG derangement with disjoint contexts; separate within-record EEG timeline shifted -43s with no cue realignment within 4s; identical complete support",
+    "interpretation": "offline conditional association; full-record preprocessing and 30s model context preclude causal lead inference"
+  },
+  "statistics": "report paired subject effects, average trials within condition and session for event tests; equal datasets for four-dataset summaries; label secondary endpoints exploratory; fixed primary event contrast exact subject sign-flip",
+  "stopping": "execute A-D once; keep exclusions, empty support and adverse results; no protected confirmation, tokenizer training or capacity search"
+}

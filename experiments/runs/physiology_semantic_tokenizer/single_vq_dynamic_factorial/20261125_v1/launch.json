@@ -1,0 +1,80 @@
+{
+  "experiment_id": "TK-SINGLE-VQ-DYNAMIC-FACTORIAL-v1",
+  "checked": "2026-11-24T16:47:41.484632+00:00",
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "supervisor": "systemd --user, one transient service per continuous arm",
+  "user_linger": true,
+  "hard_source": "experiments/runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1",
+  "warmup": "experiments/runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1/seed_17/models/eeg__waveform__warmup/checkpoint.pt",
+  "pilot_basis": [
+    "experiments/runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1/resources.log",
+    "experiments/runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1/pilot_A.json",
+    "experiments/runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1/pilot_B.json"
+  ],
+  "resources": "64 available physical cores, quota 48 CPU equivalents, over 218 GiB available RAM and 827 GiB free storage at launch. Two independent continuations share the two permitted 4090s with the existing hard study. One worker per arm, one numerical thread per worker. Batch 64. Evaluate only the ordinary development partition.",
+  "units": {
+    "continuous_wave": {
+      "unit": "single-vq-factorial-wave-20261125.service",
+      "launch_properties": [
+        "MainPID=3802655",
+        "ExecMainStartTimestamp=Wed 2026-11-25 00:45:20 CST",
+        "MemoryMax=51539607552",
+        "Environment=CUDA_VISIBLE_DEVICES=GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VQ_MMAP_PARENT_CACHE=4096",
+        "LimitNOFILE=131072",
+        "ActiveState=active",
+        "SubState=running"
+      ],
+      "command": [
+        "/home/uais7/pid-mcm-implementation/.venv/bin/python",
+        "-u",
+        "experiments/scripts/run_single_vq_dynamic_factorial.py",
+        "run",
+        "--arm",
+        "continuous_wave"
+      ],
+      "log": "continuous_wave.log",
+      "status": "continuous_wave_status.json",
+      "checkpoint": "continuous_wave/checkpoint.pt",
+      "completed_steps_at_check": 3000,
+      "training_steps_per_second": 16.92801098157961
+    },
+    "continuous_dynamic": {
+      "unit": "single-vq-factorial-dynamic-20261125.service",
+      "launch_properties": [
+        "MainPID=3802661",
+        "ExecMainStartTimestamp=Wed 2026-11-25 00:45:20 CST",
+        "MemoryMax=51539607552",
+        "Environment=CUDA_VISIBLE_DEVICES=GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VQ_MMAP_PARENT_CACHE=4096",
+        "LimitNOFILE=131072",
+        "ActiveState=active",
+        "SubState=running"
+      ],
+      "command": [
+        "/home/uais7/pid-mcm-implementation/.venv/bin/python",
+        "-u",
+        "experiments/scripts/run_single_vq_dynamic_factorial.py",
+        "run",
+        "--arm",
+        "continuous_dynamic"
+      ],
+      "log": "continuous_dynamic.log",
+      "status": "continuous_dynamic_status.json",
+      "checkpoint": "continuous_dynamic/checkpoint.pt",
+      "completed_steps_at_check": 3000,
+      "training_steps_per_second": 16.761893657579233
+    }
+  },
+  "aggregation": {
+    "unit": "single-vq-factorial-summary-v2-20261125.service",
+    "waits_for": [
+      "continuous_wave_status.json",
+      "continuous_dynamic_status.json"
+    ],
+    "command": ".venv/bin/python -u experiments/scripts/run_single_vq_dynamic_factorial.py summarize",
+    "log": "summarize.log",
+    "device": "CPU",
+    "terminal_artifact": "summary.json",
+    "wait_script": "aggregate_when_ready.py",
+    "startup_recovery": "First summary wait service exited before any scoring because its environment lacked jq. Replaced its waiting command with Python; training workers were independent."
+  }
+}

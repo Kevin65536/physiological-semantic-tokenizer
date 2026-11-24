@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-11-24; payload-pruning record retained from
+_Evidence surface updated 2026-11-25; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -31,6 +31,18 @@ while detailed replay uses the local archive. The
 scope, preserved evidence and pre-archive Git revision. The directory-level rules
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
+
+## Fixed-capacity EEG continuous and hard objective comparison — 2026-11-25
+
+The [four terminal models](runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1/factorial.csv) compare the original waveform objective with a decoded EEG-S spectral constraint. The [paired contrasts](runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1/contrasts.csv) include the difference in objective effects between representations. The [hard-ID gain](runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1/hard_id_gain.csv) measures the additional information in individual emitted integers. The [run summary](runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1/summary.json) records matched supports and waveform guardrails.
+
+## Single-VQ real members, sequence controls and measured Hb — 2026-11-25
+
+The [member atlas and result tables](runs/physiology_semantic_tokenizer/single_vq_relations/20261125_v1/index.html) cover training-selected words, matched observations, failures, short sequences, paired event support and the independent measured-Hb screen. The [completion manifest](runs/physiology_semantic_tokenizer/single_vq_relations/20261125_v1/summary.json) identifies the populations and denominators.
+
+## Frozen single-VQ attribute readouts — 2026-11-25
+
+The [development result](runs/physiology_semantic_tokenizer/single_vq_readout/20261125_v1/summary.json) links each branch and seed to its actual support. The [macro gain table](runs/physiology_semantic_tokenizer/single_vq_readout/20261125_v1/macro_gains.csv) compares conditional means, training-selected shrinkage, matched linear probes and decoded attributes. [Coverage](runs/physiology_semantic_tokenizer/single_vq_readout/20261125_v1/support.csv) counts valid patches within each dataset. [Paired contrasts](runs/physiology_semantic_tokenizer/single_vq_readout/20261125_v1/paired_differences.csv) use development subjects as the resampling unit. Each branch directory holds dataset and subject scores and the training-only fold selections. The parent [capacity scoreboard](runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/review_20261124_v1/tables/scoreboard.csv) retains the reconstruction comparisons.
 
 ## EEG word patterns compared with CodeBrain Figure 4 — 2026-11-24
 

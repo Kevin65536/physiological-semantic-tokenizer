@@ -1,0 +1,46 @@
+{
+  "unit": "single-vq-readout-extract-20261125.service",
+  "cpu_workers": 16,
+  "numerical_threads": 1,
+  "CUDA_VISIBLE_DEVICES": "",
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "command": [
+    ".venv/bin/python",
+    "-u",
+    "experiments/scripts/run_single_vq_readout.py",
+    "extract",
+    "--workers",
+    "16"
+  ],
+  "pilot_unit": "single-vq-readout-pilot-20261125.service",
+  "linger": "yes",
+  "quota_cores": 48,
+  "physical_cores": 64,
+  "available_memory_GiB": 225,
+  "available_disk_GiB": 834,
+  "reason": "Single-thread pilot replayed 64 rows per modality and split in 0.56-2.40s including initialization. Sixteen independent contiguous shards allow CPU parallelism while sharing page cache on one rotational disk; competing workload ~17 CPU cores. All GPUs hidden.",
+  "log": "extract.log",
+  "progress": "progress.json",
+  "resumption": "Atomic complete feature shards skipped on restart of same contract",
+  "scoring": {
+    "unit": "single-vq-readout-score-20261125.service",
+    "command": [
+      ".venv/bin/python",
+      "-u",
+      "experiments/scripts/run_single_vq_readout.py",
+      "run",
+      "--workers",
+      "6"
+    ],
+    "log": "readout.log",
+    "worker_limit": "six independent modality/seed/branch fits; 2 BLAS threads each",
+    "scope": "wait for extraction owner lock, resume incomplete shards, then fit and score all six readouts",
+    "environment": {
+      "CUDA_VISIBLE_DEVICES": "",
+      "OPENBLAS_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    }
+  }
+}
