@@ -980,6 +980,10 @@ The [full-QC codebook t-SNE atlas](scripts/render_full_qc_codebook_tsne.py)
 uses `geometry`, `profiles`, then `render` with the same fresh `--output` directory.
 It projects each assignment codebook separately and colors words by observed
 two-second development patches on the frozen pattern panels.
+The [CodeBrain Figure 4 comparison](scripts/render_full_qc_codebrain_comparison.py)
+uses `calculate` then `render` with the same fresh `--output` directory.
+It selects waveform, spectrum and same-electrode S/O pair examples on training
+subjects and plots their observed EEG on ordinary development subjects.
 The [readout-variance audit](scripts/audit_joint_tokenizer_readout_variance.py)
 fits and selects shrinkage on separate training subjects from a retained pattern
 audit (`--source --output`). The

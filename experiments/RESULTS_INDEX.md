@@ -32,6 +32,10 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## EEG word patterns compared with CodeBrain Figure 4 — 2026-11-24
+
+The [illustrated comparison](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/codebrain_figure4_v1/comparison.pdf) shows single-word waveforms and spectra alongside observed same-electrode S/O pairs. The [pair controls](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/codebrain_figure4_v1/pair_controls.csv) and [training-to-development contrasts](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/codebrain_figure4_v1/partner_span.csv) give the sample sizes and corresponding estimates.
+
 ## EEG and fNIRS codebook t-SNE after window QC — 2026-11-24
 
 The [PDF atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/atlas.pdf) and [HTML figures](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/index.html) show the fitted codebook centers, their observed two-second development patches and the frequency of word use. The [per-word table](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/word_map.csv.gz) links both projections to the physiological attributes. The [geometry checks](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/geometry_checks.csv) measure nearest-neighbor retention, and the [attribute checks](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/attribute_checks.csv) compare neighboring words and training–development agreement.

@@ -1,0 +1,67 @@
+{
+  "bundle": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/bundle.json",
+  "paper": "https://arxiv.org/html/2506.09110v1#S4.SS5",
+  "selection": "Top cross-person unshifted signed waveform correlation and top subject-balanced 8-13 Hz fraction on train, both branches; >=40 patches and >=8 people. Pairs in Simultaneous at one electrode: >=4 train occurrences and >=2 people per pair; choose 3 most frequent partners, maximize minimum then total count.",
+  "candidates": 2619,
+  "pair_search": {
+    "S": {
+      "eligible_pairs": 349,
+      "eligible_site_anchors": 29
+    },
+    "O": {
+      "eligible_pairs": 349,
+      "eligible_site_anchors": 40
+    }
+  },
+  "train_patches": 222885,
+  "dev_patches": 780210,
+  "complete_excluded": [
+    0,
+    0
+  ],
+  "singles": [
+    {
+      "panel": "a",
+      "branch": "S",
+      "ID": 971,
+      "train_patches": 52,
+      "train_people": 19,
+      "train_selection": 0.6876110516682828,
+      "patches": 186,
+      "people": 13,
+      "dev": 0.8403523564338684,
+      "matched": 186,
+      "matched_member": 0.8403523564338684,
+      "matched_background": -0.0017891182797029614,
+      "matched_difference": 0.8421414747135714,
+      "matched_unique_controls": 185,
+      "percentiles": [
+        0.7200582027435303,
+        0.8601043522357941,
+        0.930505245923996
+      ]
+    },
+    {
+      "panel": "b",
+      "branch": "O",
+      "ID": 3473,
+      "train_patches": 87,
+      "train_people": 10,
+      "train_selection": 63.43846888061229,
+      "patches": 576,
+      "people": 7,
+      "dev": 57.67695880787363,
+      "matched": 576,
+      "matched_member": 57.67695880787364,
+      "matched_background": 25.150974858810336,
+      "matched_difference": 32.5259839490633,
+      "matched_unique_controls": 547,
+      "percentiles": [
+        51.18873370338724,
+        67.00741083246561,
+        79.43434762711973
+      ]
+    }
+  ],
+  "resources": "4 concurrent dataset readers, 1 numeric thread each; G0 frozen pattern rows only; no fitting"
+}
