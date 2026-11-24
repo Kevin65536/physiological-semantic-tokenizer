@@ -194,3 +194,23 @@ def test_development_subject_subset_removes_all_other_validation_inputs(tmp_path
     cfg['data']['validation_subjects'] = [['not-a-library', 'unregistered']]
     with pytest.raises(ValueError, match='outside the G0 validation partition'):
         runner._base_training_data(cfg, tmp_path)
+
+
+def test_warm_mapping_uses_open_file_and_revalidates_on_reopen(tmp_path):
+    cfg,_ = prepared(tmp_path)
+    manifest,scales,audit,_ = runner._base_training_data(cfg,tmp_path)
+    rows = manifest['rows']
+    first = audit['eeg']['initialization'][:1]
+    cache = OrderedDict()
+    def read():
+        return base_tokenizer_batch(rows,first,scales,array_cache=cache,cache_limit=1)
+    original = read()
+    path = Path(rows[first[0][0]]['folder'])/'x.npy'
+    outside = tmp_path/'relocated.npy'
+    path.rename(outside)
+    path.symlink_to(outside)
+    for key, value in read().items():
+        np.testing.assert_array_equal(value,original[key])
+    cache.clear()
+    with pytest.raises(ValueError,match='escapes'):
+        read()

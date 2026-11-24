@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-24T09:39:08.670723+00:00",
+  "updated_at": "2026-11-24T12:59:46.094942+00:00",
   "tracks": [
     {
       "id": "main",
@@ -8289,6 +8289,42 @@
       "label": "逐位置误差复算、被试区间与开发难例核验",
       "role": "diagnostic",
       "path": "experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/result_check_v1/verification.json"
+    },
+    {
+      "id": "e.tk_single_vq_capacity_config",
+      "label": "单级神经 VQ 容量比较合同",
+      "role": "protocol",
+      "path": "experiments/configs/physiology_semantic_tokenizer/single_vq_capacity_v1.yaml"
+    },
+    {
+      "id": "e.tk_single_vq_capacity_launch",
+      "label": "本地持久服务、资源与恢复入口",
+      "role": "run_manifest",
+      "path": "experiments/runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/launch.json"
+    },
+    {
+      "id": "e.tk_single_vq_capacity_summary",
+      "label": "固定终点单级模型与复现结果",
+      "role": "result_summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/summary.json"
+    },
+    {
+      "id": "e.tk_single_vq_capacity_selection",
+      "label": "维度及复现资格选择",
+      "role": "diagnostic",
+      "path": "experiments/runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/selection.json"
+    },
+    {
+      "id": "e.tk_single_vq_capacity_review",
+      "label": "同一开发面板核验与逐模型结果",
+      "role": "diagnostic",
+      "path": "experiments/runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/review_20261124_v1/verification.json"
+    },
+    {
+      "id": "e.tk_single_vq_capacity_gains",
+      "label": "分库及跨库的单词条件属性增益",
+      "role": "diagnostic",
+      "path": "experiments/runs/physiology_semantic_tokenizer/single_vq_capacity/20261124_v1/review_20261124_v1/tables/id_gains.csv"
     }
   ],
   "records": [
@@ -20163,6 +20199,58 @@
       "headline": false,
       "updated_at": "2026-11-24T09:39:08.670723+00:00",
       "next_step": "保留重训整数模型作开发参照；后续优先检验EEG源分量幅度及Hb困难事件的分量归属。"
+    },
+    {
+      "state_id": "main.tk_single_vq_capacity_v1@2026-11-24.launch",
+      "entity": "main.tk_single_vq_capacity_v1",
+      "label": "单级神经 VQ 维度与词表规模比较",
+      "track": "main",
+      "order": 260,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "在质控后相同有效支持上重评冻结模型，以相同训练暴露比较连续对照和单级硬量化的维度及词表大小。开发评分限四库 16 名普通开发被试。",
+      "evidence_ids": [
+        "e.tk_single_vq_capacity_config",
+        "e.tk_single_vq_capacity_launch"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.tk_full_qc_retrain_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-24T10:53:04.027164+00:00",
+      "next_step": "完成配对评分后，按预先记录的规则选择 EEG 维度与各模态的独立种子复现候选。"
+    },
+    {
+      "state_id": "main.tk_single_vq_capacity_v1@2026-11-24.development-review",
+      "entity": "main.tk_single_vq_capacity_v1",
+      "label": "单级神经 VQ 维度与词表规模比较",
+      "track": "main",
+      "order": 260,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "15 个新候选完成训练。四库 16 名开发被试中，EEG d64 K8192 宏 NMSE 0.50602，优于原 K128 的 0.57376，但高于重训残差的 0.41237，单词频带增益未达复现门槛。Hb d128 K1024 两个种子为 0.17823、0.18084，均优于原 K128；S 和 O-HbR 读出有跨种子收益，O-HbO 斜率／形状增益接近零或为负。",
+      "evidence_ids": [
+        "e.tk_single_vq_capacity_config",
+        "e.tk_single_vq_capacity_launch",
+        "e.tk_single_vq_capacity_summary",
+        "e.tk_single_vq_capacity_selection",
+        "e.tk_single_vq_capacity_review",
+        "e.tk_single_vq_capacity_gains"
+      ],
+      "supersedes": [
+        "main.tk_single_vq_capacity_v1@2026-11-24.launch"
+      ],
+      "depends_on": [
+        "main.tk_full_qc_retrain_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-24T12:59:46.094942+00:00",
+      "next_step": "保留容量比较与开发集读出证据，机制解释与词表冻结资格仍待独立验证。"
     }
   ]
 }

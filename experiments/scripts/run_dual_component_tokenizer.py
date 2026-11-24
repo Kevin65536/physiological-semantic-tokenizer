@@ -5015,6 +5015,13 @@ def _base_training_model(cfg, task):
     hard = candidate.startswith('vq') and candidate[2:].isdigit()
     if not hard and candidate not in ('warmup','continuous'):
         raise ValueError('unknown base candidate')
+    if hard and 'capacity' in cfg:
+        size = int(candidate[2:])
+        if size not in cfg['capacity']['sizes']:
+            raise ValueError('capacity outside declared grid')
+        setting['codebook_size'] = size
+        setting['dead_code_threshold'] = (cfg['capacity']['uniform_count_fraction']
+                                          * cfg['training']['batch_size'] * setting['patches'] / size)
     model = GlobalLatentComponentTokenizer(setting,codebook_size=setting['codebook_size'],hard=hard)
     model.target_input = setting.get('target_input', False)
     model.frozen_source = setting.get('frozen_source')
@@ -5062,7 +5069,12 @@ def _base_diagnostic_source(cfg, root, group, modality, candidate, input_id, sca
 def _base_training_batch(rows, examples, scales, device, cache, cfg):
     from src.data.dual_component_tokenizer import base_tokenizer_batch
     import torch
-    raw=base_tokenizer_batch(rows,examples,scales,array_cache=cache,cache_limit=cfg['resources']['mmap_parent_cache'])
+    limit = cfg['resources']['mmap_parent_cache']
+    if 'capacity' in cfg:
+        limit = int(os.environ.get('VQ_MMAP_PARENT_CACHE', limit))
+        if limit < 1:
+            raise ValueError('positive mmap cache capacity required')
+    raw=base_tokenizer_batch(rows,examples,scales,array_cache=cache,cache_limit=limit)
     channels=rows[examples[0][0]]['channels']
     for key in ('x','s','o'):
         # Invalid targets may be NaN in G0. Zero only their arithmetic placeholder,
@@ -5355,6 +5367,9 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
                 start=saved['step'];history=saved['history'];rng.bit_generator.state=saved['numpy_rng']
                 torch.set_rng_state(saved['torch_rng'].cpu())
                 if device.startswith('cuda'):torch.cuda.set_rng_state(saved['cuda_rng'].cpu(),device)
+                if 'capacity' in cfg:
+                    write_json(job/f'resume_step_{start:05d}.json',dict(step=start,signature=signature,
+                               state='restored_model_optimizer_sampling_and_torch_rng',updated=now()))
             elif not warm and not benchmark and not model.frozen_source:
                 warm_id='__'.join((task['modality'],task['architecture'],'warmup'))
                 warm_job=Path(out)/'models'/warm_id
@@ -5379,9 +5394,13 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
                         signature=saved['signature'],step=saved['step'],optimizer='reset_as_in_matched_baseline',
                         sampling_rng_seed=seed+t['warmup_steps']))
             if model.hard and not bool(model.branches['S']['quantizer'].initialized):
-                examples=audit[task['modality']]['initialization']
+                examples=list(audit[task['modality']]['initialization'])
+                if 'capacity' in cfg:
+                    extra_rng=np.random.default_rng(seed+9900)
+                    while len(examples)*cfg['model']['patches'] < max(cfg['capacity']['sizes']):
+                        examples.extend(base_tokenizer_sample(extra_rng,groups,0,initialization=True))
                 _base_initialize(model,rows,examples,scales,device,cache,cfg)
-                write_json(job/'initialization.json',dict(examples=examples,records=len(examples),split='train'))
+                write_json(job/'initialization.json',dict(examples=examples,records=len(audit[task['modality']]['initialization']),split='train'))
             monitor_examples=base_tokenizer_sample(np.random.default_rng(seed+8000),groups,t['monitor_examples'])
             began=time.monotonic();train_seconds=0.;evaluation_seconds=0.
             def checkpoint(step):
@@ -5464,7 +5483,7 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
                             np.testing.assert_array_equal(current['ids_'+b],original['ids_'+b])
                             validation_ids[role][b]=int(current['ids_'+b].size)
                 write_json(job/'assignment_verification.json',dict(status='passed',identical_ids=validation_ids))
-            if not warm and not benchmark:
+            if not warm and not benchmark and cfg['evaluation']['steps']:
                 milestones={str(s):read_json(job/'evaluation'/f'step_{s:05d}'/'summary.json') for s in cfg['evaluation']['steps']}
                 selected=min(cfg['evaluation']['steps'],key=lambda s:(milestones[str(s)]['validation']['selection_score'],s))
             else:selected=None

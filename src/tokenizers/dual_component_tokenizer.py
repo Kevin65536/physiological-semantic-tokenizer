@@ -782,6 +782,7 @@ class GlobalLatentComponentTokenizer(nn.Module):
                     revival_interval=int(cfg.get('revival_interval', 50)),
                     revival_stop_after_steps=int(cfg.get('revival_stop_after_steps', 1500)),
                     max_revivals_per_event=int(cfg.get('max_revivals_per_event', 8)),
+                    geometry_each_forward=cfg.get('geometry_each_forward', True),
                     revival_strategy='diverse_farthest', revival_count_prior='uniform_batch')))
         # The retained dense default keeps identical names and behavior.
         self.waveform_io = cfg.get('waveform_io', False)
