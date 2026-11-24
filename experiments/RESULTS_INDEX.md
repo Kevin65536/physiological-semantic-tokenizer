@@ -1,6 +1,6 @@
 # Retained result index
 
-_Evidence surface updated 2026-11-23; payload-pruning record retained from
+_Evidence surface updated 2026-11-24; payload-pruning record retained from
 2026-07-30_
 
 This index identifies the experiment material kept for routine reading,
@@ -31,6 +31,10 @@ while detailed replay uses the local archive. The
 scope, preserved evidence and pre-archive Git revision. The directory-level rules
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
+
+## EEG and fNIRS codebook t-SNE after window QC — 2026-11-24
+
+The [PDF atlas](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/atlas.pdf) and [HTML figures](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/index.html) show the fitted codebook centers, their observed two-second development patches and the frequency of word use. The [per-word table](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/word_map.csv.gz) links both projections to the physiological attributes. The [geometry checks](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/geometry_checks.csv) measure nearest-neighbor retention, and the [attribute checks](runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_full_qc_retrain_v1/evaluation/physiology_tsne_v1/attribute_checks.csv) compare neighboring words and training–development agreement.
 
 ## Two-day tokenizer design review — 2026-11-22/23
 
