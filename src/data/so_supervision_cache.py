@@ -16,6 +16,7 @@ import traceback
 import numpy as np
 
 from .clean_physiology_cache import CleanPhysiologyCacheIndex
+from .window_exclusions import apply_to_so
 from .registry import REGISTERED_DATASETS
 from .unified_physiology import load_native_eeg_record
 from .dual_component_tokenizer import voltage_power_cap_bank, voltage_power_cap_target
@@ -310,9 +311,10 @@ def verify_worker(payload):
 
 class SOSupervisionDataset:
     """Explicit long-window cache reader; masks and original coordinates retained."""
-    def __init__(self, root=DEFAULT_SO_CACHE_ROOT, split=None):
+    def __init__(self, root=DEFAULT_SO_CACHE_ROOT, split=None, *, historical_replay=False):
         self.root=Path(root);manifest=json.loads((self.root/'cache_manifest.json').read_text())
         if manifest['schema'] not in SCHEMAS or manifest['status']!='completed':raise ValueError('Completed supervision cache required')
+        self.apply_qc = manifest['schema'] == 'physiology_so_supervision_v3' and not historical_replay
         self.windows=[w for w in manifest['windows'] if split is None or w['split']==split]
     def __len__(self):return len(self.windows)
     def __getitem__(self,index):
@@ -320,4 +322,6 @@ class SOSupervisionDataset:
         arrays={}
         if meta['array_file']:
             with np.load(meta['array_file']) as a:arrays=dict(a)
+            if self.apply_qc:
+                apply_to_so(meta, arrays)
         return dict(metadata=meta,arrays=arrays)

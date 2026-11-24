@@ -6557,7 +6557,7 @@ def _base_prepare_window(payload):
 
 
 def _base_finalize(cfg, out, plan, records):
-    from src.data.dual_component_tokenizer import base_tokenizer_scales, base_tokenizer_sampling_index, base_tokenizer_sample
+    from src.data.dual_component_tokenizer import base_tokenizer_scales, base_sampling_audit
     rows = sorted([r for record in records for r in record.get('rows', [])],
                   key=lambda r: (r['modality'],r['dataset'],r['subject'],r['record'],r['native_start_sample']))
     scales = base_tokenizer_scales(rows, cfg['normalization'])
@@ -6577,16 +6577,7 @@ def _base_finalize(cfg, out, plan, records):
     write_json(out / 'cache/manifest.json', dict(schema='dual_component_base_cache_v1', status='completed',
         cfg_identity=identity(cfg), plan_identity=identity(plan), scales_identity=identity(scales),
         allowed_splits=['train','validation'], rows=rows, missing_training_positions=missing))
-    audits = {}
-    for modality in ('eeg','hb'):
-        groups = base_tokenizer_sampling_index(rows, modality)
-        rng = np.random.default_rng(cfg['sampling']['seed'])
-        draws = base_tokenizer_sample(rng, groups, cfg['sampling']['audit_draws'])
-        init = base_tokenizer_sample(np.random.default_rng(cfg['sampling']['seed']), groups, 0, initialization=True)
-        counts = Counter((rows[i]['dataset'],rows[i]['subject'],rows[i]['record']) for i,_,_ in draws)
-        audits[modality] = dict(draws=len(draws), records=[dict(dataset=d,subject=s,record=r,count=n) for (d,s,r),n in sorted(counts.items())],
-                               initialization=init, initialization_records=len(init),
-                               training_subjects=sum(len(s) for s in groups.values()))
+    audits = base_sampling_audit(rows, cfg['sampling'])
     write_json(out / 'sampling_audit.json', audits)
     return rows, scales
 

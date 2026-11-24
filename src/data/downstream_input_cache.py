@@ -24,6 +24,7 @@ from .clean_physiology_cache import (
     require_measurement_producer,
 )
 from .event_alignment import ADMISSIBLE_ALIGNMENT_CASES, window_within_alignment_support
+from .window_exclusions import filter_synchronized_samples
 from .functional_tokenizer import subject_partitions
 from .registry import REGISTERED_DATASETS
 from .unified_physiology import (
@@ -408,7 +409,7 @@ def verify_cache(cache_root):
 
 class DownstreamInputDataset:
     """Read the frozen sample list and mmap measurements; never rebuild or refit."""
-    def __init__(self, cache_root=DEFAULT_DOWNSTREAM_CACHE_ROOT, *, split=None, task=None):
+    def __init__(self, cache_root=DEFAULT_DOWNSTREAM_CACHE_ROOT, *, split=None, task=None, historical_replay=False):
         self.root = Path(cache_root)
         self.plan = json.loads((self.root/"input_plan.json").read_text())
         self.schema=self.plan.get('schema')
@@ -434,6 +435,11 @@ class DownstreamInputDataset:
                 raise ValueError("Sample crosses its frozen subject partition")
             if sample["join_key"] not in self.records:
                 raise ValueError("Planned sample lacks a completed measurement record")
+
+        if self.schema == SCHEMA_V2 and not historical_replay:
+            native_records = {e['join_key']: e['native_group'].split('|', 2)[2]
+                              for e in self.plan['records']}
+            self.samples = filter_synchronized_samples(self.samples, native_records)
 
     def __len__(self):
         return len(self.samples)
@@ -727,7 +733,7 @@ def verify_visual_migration(cache_root):
     olddown=json.loads((root/cfg['source_downstream']/'cache_manifest.json').read_text())
     oldbase=json.loads((root/cfg['source_measurement']/'cache_manifest.json').read_text())
     original={r['join_key']:r for r in oldbase['records']};previous={r['join_key']:r for r in olddown['records']}
-    dataset=DownstreamInputDataset(out);lower=CleanPhysiologyCacheIndex(low);lm={r.join_key:r for r in lower.records}
+    dataset=DownstreamInputDataset(out, historical_replay=True);lower=CleanPhysiologyCacheIndex(low);lm={r.join_key:r for r in lower.records}
     oldplan=json.loads((root/cfg['source_downstream']/'input_plan.json').read_text())
     for key in ['samples','exclusions','subject_partitions','groups']:
         if dataset.plan[key]!=oldplan[key]:raise ValueError('Frozen '+key+' changed')

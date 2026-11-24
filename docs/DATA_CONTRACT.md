@@ -952,6 +952,51 @@ Keep these concepts separate:
 Zero, missing, censored, excluded, and padded values are not interchangeable.
 Every loss and metric must consume the mask that belongs to its tensor.
 
+For new clean-signal experiments consuming 200 Hz V3 EEG, flag a fully
+observed 30-second electrode window when 49–51 Hz (inclusive) contains more
+than half of its total voltage energy. Compute this on `eeg_x` before fitting
+scales or models, using the untapered, uncentered 6,000-point real FFT with
+one-sided power weights (one at DC/Nyquist, two elsewhere). Use the observation
+mask to determine completeness. Keep incomplete observations identifiable.
+The operational [V3 exclusion markers](../src/data/assets/v3_window_exclusions_v1.csv)
+cover the public training and ordinary validation census. Each interval is
+half-open, in integer 200 Hz ticks. The start/stop columns use the synchronized
+EEG clock; `native_start_200` gives the start on the affected modality's
+record clock in the same tick units. Consecutive windows with the same
+reason, position and clock offset are coalesced.
+
+Ordinary downstream-v2 inputs drop the entire synchronized sample when any
+EEG or Hb position intersects a marker on its native clock. Related Visual
+probe views leave together. V3 S/O uses position-local exclusion: on the
+same time support only the affected EEG electrode or Hb position loses X/S/O
+validity. Either Hb colour excludes its pair. Neighbouring electrodes and
+SSM spatial dependencies do not expand this mask. The prepared G0 reader
+excludes overlapping 30 s crops for that position from sampling and scoring
+and masks auxiliary input positions on read. Frozen G0 scales retain their
+original calibration. The default views apply this policy in memory;
+`historical_replay=True` at the corresponding reader restores the retained
+unfiltered-by-QC population for explicit historical replay.
+
+Record the excluded identities and denominators per split under the consuming
+protocol. The [existing training-panel flags](../experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/dynamic_band_roles_v1/visual_review_v1/p7_ssm_tokenizer_qc_v1/flagged_train_eeg.csv)
+index previously checked windows by native record, electrode and half-open
+200 Hz sample interval. The [P7 case audit](../experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261123_joint_baseline_v1/component_source_transfer/dynamic_band_roles_v1/visual_review_v1/p7_ssm_tokenizer_qc_v1/case_qc.json)
+records the original frozen models and the sensitivity of their scores to this
+exclusion. Historical full-denominator scores retain their original support.
+
+For new V3 dynamic-waveform analyses, a channel-window with no finite
+observation on valid support is unavailable. A fully observed 30-second
+channel-window whose maximum equals its minimum has no temporal variation.
+Keep these as separate QC reasons and exclude the affected waveform from
+clean dynamic-signal fitting and scoring. For Hb, check HbO and HbR
+individually and respect the consumer's paired-colour input requirement.
+The [four-dataset census](../experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_observation_qc_census_v1/index.html)
+lists identities and measured examples. The operational exclusions include Hb missingness,
+constant Hb, near-flat Hb (window SD below 0.0001 times the frozen position
+scale), and 50 Hz EEG dominance. Transient-dominance and large-slow-wave
+flags remain annotations.
+The [reader verification](../experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_observation_qc_census_v1/reader_exclusions_v1/verification.json) records exclusion and retention counts for both downstream sample views and G0 position windows.
+
 `cross masking` is not a named mask or frozen mechanism in this contract. It
 cannot be introduced by reusing zero, missingness, censoring, exclusion, or
 padding. Before the term is used as an architecture component, a versioned

@@ -1,0 +1,26 @@
+experiment_id: TK-V3-OBSERVATION-QC-CENSUS-v1
+source_plan: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1/plan.json
+source_cache: data/cache/physiology_so_supervision_v3
+output: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261124_observation_qc_census_v1
+allowed_splits: [train, validation]
+inputs: [eeg_x, eeg_observation_valid, fnirs_x, fnirs_observation_valid]
+support: all_planned_nonoverlapping_30s_score_starts_all_observed_positions_independent_of_teacher_success
+primary: per_modality_pattern_count_divided_by_planned_channel_windows
+secondary: unique_subjects_records_positions_and_split_dataset_breakdown
+diagnostic: frozen_K15351_training_panel_errors_by_QC_pattern_without_refit
+baseline: fully_observed_windows_with_no_screen_hit_in_same_frozen_panel
+null: descriptive_census_no_hypothesis_test
+stopping: all_planned_windows_terminal_and_denominators_reconciled
+test_access: forbidden
+raw_reads: false
+settings:
+  mains_fraction: 0.50
+  flat_patch_seconds: 2
+  rail_fraction: 0.20
+  sparse_levels_max: 4
+  brief_seconds: 0.5
+  brief_energy_fraction: 0.90
+  other_tone_bin_fraction: 0.90
+  near_flat_sd_over_training_sd: 0.0001
+  large_sd_over_training_sd: 10
+  high_or_slow_fraction: 0.80

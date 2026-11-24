@@ -15,6 +15,7 @@ import time
 import numpy as np
 
 from .functional_tokenizer import inventory, identity_digest
+from .window_exclusions import VERSION as QC_VERSION, local_spans, blocked_positions
 from .ssm_prepared import fit_feature_coordinate, EEG_PROXY_INPUT_SCHEMA
 from .unified_physiology import (
     CACHED_FNIRS_INPUT_SCHEMA, load_cached_fnirs_record, load_native_eeg_record,
@@ -199,7 +200,7 @@ def masked_state_geometry(project_root, spec, meta, modality, names):
     return values, sources
 
 
-def base_tokenizer_training_data(cfg, root):
+def base_tokenizer_training_data(cfg, root, *, historical_replay=False):
     """Validate the completed G0 development boundary before opening signal arrays."""
     import yaml
     from .observation_tokenizer_panel import _identity
@@ -250,7 +251,30 @@ def base_tokenizer_training_data(cfg, root):
             raise ValueError('G0 prepared folder identity before arrays')
         if row['rate'] != (200 if row['modality'] == 'eeg' else 10):
             raise ValueError('G0 sampling grid changed')
-    return manifest, scales, json.loads((parent / 'sampling_audit.json').read_text()), summary
+    audit = json.loads((parent / 'sampling_audit.json').read_text())
+    if contract['data'].get('source_schema') == 'physiology_so_supervision_v3' and not historical_replay:
+        for row in manifest['rows']:
+            # S/O batches use the original synchronized V3 grid, even for a 10 Hz Hb row.
+            origin = round(row['native_start_sample'] * 200 / row['native_rate_hz'])
+            end = max((item['start_s'] + 30 for group in row['inputs'].values() for item in group), default=0)
+            spans = local_spans(row['dataset'], row['split'], row['subject'], row['record'],
+                                row['modality'], row['positions'], origin, end * 200)
+            if spans:
+                row['qc_spans'] = spans
+                for role, group in row['inputs'].items():
+                    for item, unavailable in zip(group, row['unavailable_inputs'][role], strict=True):
+                        if item['start_s'] != unavailable['start_s']:
+                            raise ValueError('G0 inclusion and exclusion clocks differ')
+                        blocked = blocked_positions(spans, item['start_s'])
+                        kept = [i for i in item['positions'] if i not in blocked]
+                        unavailable['new_qc_exclusions'] = len(item['positions']) - len(kept)
+                        item['positions'] = kept
+        manifest['window_exclusions'] = QC_VERSION
+        for identity_field in ('cfg_identity', 'plan_identity'):
+            manifest[identity_field] = _identity([manifest[identity_field], QC_VERSION])
+        audit = base_sampling_audit(manifest['rows'], contract['sampling'])
+    return manifest, scales, audit, summary
+
 
 
 def base_tokenizer_examples(rows, modality, role):
@@ -519,6 +543,22 @@ def base_tokenizer_sample(rng, groups, count, *, initialization=False):
     return result
 
 
+def base_sampling_audit(rows, spec):
+    from collections import Counter
+    audit = {}
+    for modality in ('eeg', 'hb'):
+        groups = base_tokenizer_sampling_index(rows, modality)
+        draws = base_tokenizer_sample(np.random.default_rng(spec['seed']), groups, spec['audit_draws'])
+        init = base_tokenizer_sample(np.random.default_rng(spec['seed']), groups, 0, initialization=True)
+        counts = Counter((rows[i]['dataset'], rows[i]['subject'], rows[i]['record']) for i, _, _ in draws)
+        audit[modality] = dict(draws=len(draws),
+                               records=[dict(dataset=d, subject=s, record=r, count=n)
+                                        for (d,s,r),n in sorted(counts.items())],
+                               initialization=init, initialization_records=len(init),
+                               training_subjects=sum(len(s) for s in groups.values()))
+    return audit
+
+
 def base_tokenizer_batch(rows, examples, scales, *, array_cache=None, cache_limit=256):
     """G1-ready mmap batch: only frozen training scales, explicit same-branch targets."""
     if array_cache is not None:
@@ -576,9 +616,10 @@ def _base_joint_eeg_observations(row, start, scales, names):
     values = np.zeros((6000, len(names)), np.float64)
     valid = np.zeros(values.shape, bool)
     references = scales['positions']['eeg'][row['dataset']]
+    blocked = blocked_positions(row.get('qc_spans', ()), start)
     for position, name in enumerate(row['positions']):
         reference = references.get(name)
-        if reference is None:
+        if reference is None or position in blocked:
             continue
         native = lookup[name.upper()]
         valid[:, native] = observed[:, position] & np.isfinite(raw[:, position])
@@ -674,9 +715,10 @@ def base_tokenizer_joint_hb(rows, crop, scales, *, allowed_splits=('train',)):
     values = values.copy()
     observed = observed & np.isfinite(values)
     references = scales['positions']['hb'][row['dataset']]
+    blocked = blocked_positions(row.get('qc_spans', ()), start)
     for position, name in enumerate(row['positions']):
         reference = references.get(name)
-        if reference is None:
+        if reference is None or position in blocked:
             observed[:, position] = False
         else:
             values[:, position] /= reference['scale']

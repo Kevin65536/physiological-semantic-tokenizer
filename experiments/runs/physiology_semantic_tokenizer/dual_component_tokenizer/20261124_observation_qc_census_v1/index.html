@@ -1,0 +1,42 @@
+<meta charset=utf-8><style>body{font:16px/1.55 sans-serif;max-width:1050px;margin:3em auto}td,th{padding:5px 9px;border-bottom:1px solid #ddd}table{border-collapse:collapse}img{width:100%}a{color:#13677b}</style><title>V3 输入质量普查</title><h1>V3 tokenizer 输入质量普查</h1><p>四库 80 名公开训练／普通验证被试。按 G0 预先确定的 7,806 个非重叠 30 秒评分窗，读取 V3 观测及其观测掩码，保留原位置和原单位。每个 EEG 电极、Hb 位置的每个色团分别计数。分母包含缺测。短尾、专用回归窗、缓存在建时已排除的位置与未纳入此网格的记录不在分母内。多标签可重叠。</p><p>判定范围为缓存提供的处理后输入。尖峰、异常慢波和极低幅值的病因需要其它证据。滤波后的数据不能用于完整估计采集端削顶率。训练尺度沿用历史 G0 数据集／位置尺度，缺少尺度的轨迹只跳过依赖尺度的判据。频谱使用未加窗全窗单边功率，包含 DC 与 Nyquist。示例选每个检出库内最接近该类诊断量中位数的实际波形。</p><p><a href="counts.csv">分库分区频次与分母</a> · <a href="subjects_positions.csv">全部命中被试与位置（含分母）</a> · <a href="window_flags.csv">逐窗时间和原父窗</a> · <a href="frozen_tokenizer_overlap.csv">历史模型误差</a> · <a href="figure_examples.csv">图例溯源</a></p><table><tr><th>模式</th><th>EEG</th><th>HbO</th><th>HbR</th><th>处理与判据</th></tr><tr><td>整窗缺测</td><td>0</td><td>236</td><td>236</td><td>不可用。30 秒内有效且有限的观测点数为零。</td></tr><tr><td>整窗恒值</td><td>0</td><td>38</td><td>38</td><td>动态波形不可用。所有采样均有效，30 秒内最大值等于最小值。</td></tr><tr><td>50 Hz 工频占优</td><td>1700</td><td>—</td><td>—</td><td>按已有合同排除。EEG 的 49–51 Hz 能量超过未加窗、未去均值的全窗能量的 50%。</td></tr><tr><td>近乎平直</td><td>0</td><td>29</td><td>30</td><td>复核。非恒值，窗内 SD 低于该库该位置冻结训练尺度的万分之一。Hb 两色共用尺度。</td></tr><tr><td>瞬态主导</td><td>30</td><td>0</td><td>0</td><td>复核。减去全窗中位数后，最强的连续 0.5 秒占全窗平方和至少 90%。</td></tr><tr><td>大幅慢波</td><td>2</td><td>—</td><td>—</td><td>复核。EEG 窗内 SD 至少为该位置训练尺度的 10 倍，且 1–4 Hz 占全窗能量至少 80%。</td></tr><tr><td>部分缺测</td><td>0</td><td>0</td><td>0</td><td>支持不完整。部分观测掩码为假或数值非有限，其余点有效。</td></tr><tr><td>局部冻结</td><td>0</td><td>0</td><td>0</td><td>片段复核。非恒值窗口中至少连续 2 秒的样本完全相等。</td></tr><tr><td>疑似削顶平台</td><td>0</td><td>0</td><td>0</td><td>复核。非恒值窗口中至少 20% 的采样精确落在同一侧极值。</td></tr><tr><td>少数离散电平</td><td>0</td><td>0</td><td>0</td><td>复核。非恒值窗口全程仅有 2–4 种电压或 Hb 数值。</td></tr><tr><td>跨位置波形复制</td><td>0</td><td>0</td><td>0</td><td>空间身份复核。同窗、同模态（Hb 同色）两个不同位置非恒值且全程逐点相同或反号相同。两端均计数。</td></tr><tr><td>60 Hz 窄带占优</td><td>0</td><td>—</td><td>—</td><td>复核。EEG 的 59–61 Hz 能量占全窗能量超过一半。</td></tr><tr><td>其他单频占优</td><td>0</td><td>—</td><td>—</td><td>复核。≥1 Hz 且在两条工频带外，单一 FFT 频点占 EEG 全窗能量至少 90%。</td></tr><tr><td>大幅高频</td><td>0</td><td>—</td><td>—</td><td>复核。EEG 窗内 SD 至少为该位置训练尺度的 10 倍，且 30–45 Hz 占全窗能量至少 80%。</td></tr></table><p>EEG 分母 268,976；HbO、HbR 各 288,226。确定无动态信息与可疑形态分开解释。全窗缺测只能画掩码。未检出类别没有实测阳性图。</p><h2>整窗缺测</h2><img src="missing_all.png"><h2>整窗恒值</h2><img src="constant.png"><h2>50 Hz 工频占优</h2><img src="line50.png"><h2>近乎平直</h2><img src="near_flat.png"><h2>瞬态主导</h2><img src="transient.png"><h2>大幅慢波</h2><img src="large_slow.png"><h2>与历史 tokenizer 的交集</h2><p>按物理记录、电极或 Hb 位置及 200 Hz 起点匹配既有训练评分面板。EEG 为 K15351 训练人交叉验证，Hb 为冻结 Hb111 训练面板回放。表中逐位置窗口计算 X 的 MSE / 其冻结训练方差，再取窗口中位数，均值另见 CSV。无命中不表示编码成功。无标记组是同库同模态参照，组间暴露不匹配，不能推断因果。</p><table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>dataset</th>
+      <th>label</th>
+      <th>pattern</th>
+      <th>n</th>
+      <th>finite</th>
+      <th>median_X_NMSE</th>
+      <th>mean_X_NMSE</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>eeg_fnirs_single_trial</td>
+      <td>EEG</td>
+      <td>line50</td>
+      <td>111</td>
+      <td>111</td>
+      <td>53.541855</td>
+      <td>43.411753</td>
+    </tr>
+    <tr>
+      <td>simultaneous_eeg_nirs</td>
+      <td>EEG</td>
+      <td>line50</td>
+      <td>5</td>
+      <td>5</td>
+      <td>1.911204</td>
+      <td>2.573376</td>
+    </tr>
+    <tr>
+      <td>refed</td>
+      <td>EEG</td>
+      <td>transient</td>
+      <td>1</td>
+      <td>1</td>
+      <td>32.338150</td>
+      <td>32.338150</td>
+    </tr>
+  </tbody>
+</table>
