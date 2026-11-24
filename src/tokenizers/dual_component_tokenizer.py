@@ -760,6 +760,9 @@ class GlobalLatentComponentTokenizer(nn.Module):
         encoding = torch.zeros(1, self.patches, width)
         encoding[0, :, 0::2], encoding[0, :, 1::2] = torch.sin(position * frequency), torch.cos(position * frequency)
         self.register_buffer('position', encoding)
+        branch_sizes = cfg.get('branch_codebook_sizes', {key:codebook_size for key in COMPONENTS})
+        if set(branch_sizes) != set(COMPONENTS) or any(int(value)<2 for value in branch_sizes.values()):
+            raise ValueError('declared positive S/O vocabulary sizes required')
         self.branches = nn.ModuleDict()
         for component in COMPONENTS:
             def blocks(count):
@@ -771,7 +774,7 @@ class GlobalLatentComponentTokenizer(nn.Module):
                 encoder=blocks(cfg['encoder_layers']), to_latent=nn.Linear(width, latent),
                 from_latent=nn.Linear(latent, width), decoder=blocks(cfg['decoder_layers']),
                 output=nn.Linear(width, self.input_dim),
-                quantizer=EMAVectorQuantizer(codebook_size=codebook_size, embedding_dim=latent,
+                quantizer=EMAVectorQuantizer(codebook_size=int(branch_sizes[component]), embedding_dim=latent,
                     decay=float(cfg.get('ema_decay', .99)), commitment_cost=float(cfg.get('commitment_cost', .25)),
                     kmeans_init=True, kmeans_iters=int(cfg.get('kmeans_iters', 20)),
                     revive_dead_codes=True, dead_code_threshold=float(cfg.get('dead_code_threshold', .1)),
@@ -900,11 +903,11 @@ class GlobalLatentComponentTokenizer(nn.Module):
                 if not self.training and not bool(quantizer.initialized):
                     raise RuntimeError('training-only codebook initialization required')
                 output = quantizer(latent)
-                # The waveform consumer evaluates the actual dictionary entry.
+                # Evaluation consumes the actual dictionary entry.
                 # STE subtraction/addition is only needed while training; its
                 # float32 cancellation can be amplified by the synthesis stack.
                 value = (quantizer.get_embedding(output.hard_ids)
-                         if self.waveform_io and not self.training else output.quantized)
+                         if not self.training else output.quantized)
                 if self.training and self.decoder_quantization_blend < 1.:
                     alpha = self.decoder_quantization_blend
                     value = (1.-alpha)*latent + alpha*value

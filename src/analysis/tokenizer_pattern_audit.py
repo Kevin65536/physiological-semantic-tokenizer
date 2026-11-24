@@ -136,3 +136,52 @@ def match_training_patterns(left, right, fields):
             cost += cdist(x,y,'sqeuclidean') / ((b-a)*scale)
     i,j = linear_sum_assignment(cost)
     return i,j,cost[i,j]
+
+
+class SparseJointTotals:
+    """Store only observed background/ID combinations for larger codebooks."""
+    def __init__(self, width):
+        self.width = width
+        self.count = {}
+        self.total = {}
+
+    def add(self, keys, values):
+        order = np.argsort(keys)
+        labels, first, counts = np.unique(keys[order], return_index=True, return_counts=True)
+        totals = np.add.reduceat(values[order], first, axis=0, dtype=np.float64) if len(order) else []
+        for label, count, total in zip(labels, counts, totals):
+            key = int(label)
+            self.count[key] = self.count.get(key, 0) + int(count)
+            self.total[key] = self.total.get(key, 0.) + total
+
+    def lookup(self, keys, fallback):
+        result = fallback.copy()
+        for key in np.unique(keys):
+            group = int(key)
+            if group in self.count:
+                result[keys == key] = self.total[group] / self.count[group]
+        return result
+
+
+class SparsePatternAudit(PatternAudit):
+    """Identical categorical readouts with an observed-only background × ID table.
+
+    Training prototypes and held-out scoring retain PatternAudit's definitions.
+    The storage change keeps a large K from allocating every absent combination.
+    """
+    def __init__(self, codes, backgrounds, datasets, width, fields):
+        self.k, self.fields = codes, fields
+        self.local = GroupTotals(codes, width)
+        self.background = GroupTotals(backgrounds, width)
+        self.joint = SparseJointTotals(width)
+        self.valid = GroupTotals(len(datasets) * codes, width)
+        self.second = GroupTotals(len(datasets) * codes, len(fields))
+        self.id_error = GroupTotals(len(datasets) * codes, len(fields))
+        self.support = defaultdict(lambda: np.zeros(codes, dtype=np.int64))
+
+    def read(self, ids, bg):
+        global_mean = self.local.total.sum(0) / max(int(self.local.count.sum()), 1)
+        local = np.where(self.local.count[ids, None] > 0, self.local.mean(ids), global_mean)
+        background = np.where(self.background.count[bg, None] > 0, self.background.mean(bg), global_mean)
+        conditional = self.joint.lookup(bg * self.k + ids, background)
+        return background, local, conditional

@@ -1,11 +1,13 @@
 """Filesystem serialization helpers for experiment artifacts."""
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Union
 
 import numpy as np
 import yaml
+from tempfile import NamedTemporaryFile
 
 PathLike = Union[str, Path]
 
@@ -56,4 +58,25 @@ def save_npz(path: PathLike, **payload: Any) -> Path:
     return output_path
 
 
-__all__ = ['write_json', 'write_yaml', 'save_npz']
+def file_sha256(path: PathLike) -> str:
+    """Stream the checksum of a pinned inference asset or experiment contract."""
+    with Path(path).open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def save_npz_atomic(path: PathLike, **payload: Any) -> Path:
+    """Expose a compressed NumPy checkpoint only after all fields were written."""
+    dest = Path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with NamedTemporaryFile(dir=dest.parent, prefix=dest.name + '.', suffix='.pending', delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            np.savez_compressed(stream, **payload)
+            stream.flush()
+            temporary.replace(dest)
+        finally:
+            temporary.unlink(missing_ok=True)
+    return dest
+
+
+__all__ = ['write_json', 'write_yaml', 'save_npz', 'save_npz_atomic', 'file_sha256']

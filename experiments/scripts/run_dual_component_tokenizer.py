@@ -35,6 +35,11 @@ if str(SOURCE) not in sys.path:
 import numpy as np
 import yaml
 
+from src.data.dual_component_tokenizer import (
+    base_tokenizer_training_data as _base_training_data,
+    base_tokenizer_examples as _base_training_examples,
+)
+
 DEFAULT_CONFIG = SOURCE / 'experiments/configs/physiology_semantic_tokenizer/dual_component_tokenizer_v1.yaml'
 STAGES = ('check', 'plan', 'synthetic', 'prepare', 'teacher', 'pack', 'benchmark',
           'base-plan', 'base-prepare', 'base-verify',
@@ -5000,35 +5005,6 @@ def run_voltage_power_cap_posterior(cfg,out,root,workers,stage):
     return dict(status='completed',counts=summary['counts'],summary=str(out/'summary.json'))
 
 
-def _base_training_data(cfg, root):
-    """G0 is the sole input owner; reject scope/path drift before opening mmap arrays."""
-    spec=cfg['data'];root=Path(root)
-    if (spec['allowed_splits']!=['train','validation'] or spec['test_access']!='forbidden'
-            or spec['protected_data']!='forbidden' or spec['raw_reads'] or spec['teacher_refits']):
-        raise ValueError('G1 development boundary before arrays')
-    parent=(root/spec['run']).resolve()
-    contract=yaml.safe_load((root/spec['contract']).read_text())
-    summary=read_json(parent/'summary.json');verification=read_json(parent/'verification.json')
-    manifest=read_json(parent/'cache/manifest.json');scales=read_json(parent/'scales.json')
-    if (summary['status']!='completed' or verification['status']!='passed' or verification['issues']
-            or manifest['schema']!='dual_component_base_cache_v1' or manifest['status']!='completed'
-            or manifest['allowed_splits']!=spec['allowed_splits']
-            or read_json(parent/'resolved_config.json')['config']!=serial(contract)
-            or manifest['cfg_identity']!=identity(contract) or manifest['scales_identity']!=identity(scales)):
-        raise ValueError('completed exact G0 input contract required')
-    subjects={}
-    for row in manifest['rows']:
-        key=row['dataset'],row['subject']
-        if row['split'] not in spec['allowed_splits'] or (key in subjects and subjects[key]!=row['split']):
-            raise ValueError('G0 subject/split boundary before arrays')
-        subjects[key]=row['split']
-        expected=parent/'cache'/identity(row['parent'])/row['modality']
-        if Path(row['folder']).resolve()!=expected or not expected.is_relative_to(parent/'cache'):
-            raise ValueError('G0 prepared folder identity before arrays')
-        if row['rate']!=(200 if row['modality']=='eeg' else 10):raise ValueError('G0 sampling grid changed')
-    return manifest,scales,read_json(parent/'sampling_audit.json'),summary
-
-
 def _base_training_model(cfg, task):
     from src.tokenizers.dual_component_tokenizer import GlobalLatentComponentTokenizer
     setting=dict(cfg['model'],**cfg['architectures'][task['architecture']])
@@ -5148,13 +5124,6 @@ def _base_g3_sources(cfg, root, input_identity):
                 continuous_reference=str(baselines['eeg__waveform__continuous']['path']),
                 warmup=str(warm/'checkpoint.pt'),codebook_initialization_records=len(g0_init),
                 completion_review=cfg['completion_review'])
-
-
-def _base_training_examples(rows, modality, role):
-    split='validation' if role=='validation' else 'train'
-    field='regression' if role=='regression' else 'score'
-    return [(i,item['start_s'],p) for i,r in enumerate(rows) if r['modality']==modality and r['split']==split
-            for item in r['inputs'][field] for p in item['positions']]
 
 
 def _base_initialize(model, rows, examples, scales, device, cache, cfg):

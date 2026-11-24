@@ -103,6 +103,201 @@ def base_training_aggregate(metrics, examples, rows):
                 correlation_aggregation='finite_only_with_nonfinite_count_reported')
 
 
+def eeg_complete_patch_band_energy(wave, mask):
+    """Mean Hann energy across fully scored 2-s patches on the 200-Hz grid."""
+    wave, mask = np.asarray(wave,float), np.asarray(mask,bool)
+    if wave.shape != mask.shape or wave.ndim != 4 or wave.shape[2:] != (400,1):
+        raise ValueError('expected [item,patch,400,1] waveform and mask')
+    full = mask.all(2)
+    window = np.hanning(400)[None,None,:,None]
+    centered = wave - wave.mean(2,keepdims=True)
+    power = abs(np.fft.rfft(centered*window,axis=2))**2 * (2. / (400*np.sum(window**2)))
+    frequencies = np.fft.rfftfreq(400,1/200)
+    result = {}
+    for lo,hi in ((1,4),(4,8),(8,13),(13,30),(30,45)):
+        band = (frequencies >= lo) & ((frequencies <= hi) if hi == 45 else (frequencies < hi))
+        energy = power[:,:,band].sum(2)
+        result[lo,hi] = np.divide(np.where(full,energy,0.).sum(1),full.sum(1),
+            out=np.full((len(wave),1),np.nan),where=full.sum(1)>0)
+    return result
+
+
+def joint_reconstruction_metrics(predictions, batch, channels, input_scales):
+    """Audit 30-s G0 outputs with native units and explicitly retained failures.
+
+    NMSE uses each target's frozen training variance. Dynamics use complete
+    2-s patches or 0.25-s blocks, avoiding interpolation across masked samples.
+    """
+    if channels not in (1, 2):
+        raise ValueError('expected EEG or paired Hb channels')
+    x = np.asarray(batch['x'])
+    samples = 6000 if channels == 1 else 300
+    shape = (len(x), samples, channels)
+    if x.shape != (len(x), 15, samples * channels // 15):
+        raise ValueError('expected 30-s G0 patch layout')
+    mask = np.asarray(batch['mask'], bool).reshape(shape)
+    scale = np.asarray(input_scales, float)
+    if scale.shape != (len(x),) or not np.isfinite(scale).all() or np.any(scale <= 0):
+        raise ValueError('one positive frozen input scale per item required')
+    scale = scale[:, None]
+    targets = {key: np.asarray(batch[key], float).reshape(shape) for key in ('x', 's', 'o')}
+    if any(np.any(mask & ~np.isfinite(y)) for y in targets.values()):
+        raise ValueError('nonfinite target on declared scoring support')
+    predicted = {key: np.asarray(predictions[key], float).reshape(shape) for key in ('sum', 'S', 'O')}
+    safe_batch = dict(batch, **{key: np.where(mask, y, 0.).reshape(x.shape) for key, y in targets.items()})
+    safe_predictions = {key: np.where(mask & np.isfinite(y), y, 0.).reshape(x.shape)
+                        for key, y in predicted.items()}
+    metrics = base_training_metrics(safe_predictions, safe_batch, channels)
+    metrics['legacy_rms_gain'] = metrics['rms_gain'].copy()
+    metrics['rmse_native'] = metrics['rmse'] * scale[:, None]
+    metrics['bias_native'] = metrics['bias'] * scale[:, None]
+    metrics['boundary_jump_rmse_native'] = np.empty((len(x), 3, channels))
+    metrics['boundary_jump_rmse_input_sd'] = np.empty((len(x), 3, channels))
+    support = dict(valid_points=np.repeat(mask.sum(1)[:, None], 3, axis=1),
+        nonfinite_prediction_points=np.zeros((len(x), 3, channels), np.int64),
+        full_patches=np.repeat(mask.reshape(len(x), 15, -1, channels).all(2).sum(1)[:, None], 3, axis=1),
+        target_variance_native=np.empty((len(x), 3, channels)))
+
+    def mean(a, valid, axis):
+        count = valid.sum(axis)
+        return np.divide(np.where(valid, a, 0.).sum(axis), count,
+                         out=np.full(count.shape, np.nan), where=count > 0)
+
+    def correlation(a, b, valid):
+        am, bm = mean(a, valid, 1), mean(b, valid, 1)
+        ac, bc = a - am[:, None], b - bm[:, None]
+        cov = mean(ac * bc, valid, 1)
+        variance = mean(ac * ac, valid, 1) * mean(bc * bc, valid, 1)
+        return np.divide(cov, np.sqrt(variance), out=np.full(cov.shape, np.nan), where=variance > 1e-20)
+
+    def add(name, value, component):
+        if name not in metrics:
+            metrics[name] = np.full((len(x), 3, channels), np.nan)
+        metrics[name][:, component] = value
+
+    for component, (output, key) in enumerate((('sum', 'x'), ('S', 's'), ('O', 'o'))):
+        y, p = targets[key], predicted[output]
+        variance = np.asarray(batch['v' + key])[:, 0, :channels]
+        support['target_variance_native'][:, component] = variance * scale**2
+        bad = mask & ~np.isfinite(p)
+        support['nonfinite_prediction_points'][:, component] = bad.sum(1)
+        p = np.where(np.isfinite(p), p, 0.)
+        target_energy, prediction_energy = [mean(a*a, mask, 1) for a in (y,p)]
+        metrics['rms_gain'][:, component] = np.sqrt(np.divide(prediction_energy,target_energy,
+            out=np.full(target_energy.shape,np.nan),where=target_energy > 0))
+        add('target_rms_native',np.sqrt(target_energy)*scale,component)
+        add('prediction_rms_native',np.sqrt(prediction_energy)*scale,component)
+        patch_y, patch_p, patch_mask = [a.reshape(len(x), 15, -1, channels) for a in (y, p, mask)]
+        full = patch_mask.all(2)
+        bounds = np.arange(1, 15) * (samples // 15)
+        edges = mask[:, bounds] & mask[:, bounds - 1]
+        error = (p - y)[:, bounds] - (p - y)[:, bounds - 1]
+        boundary_rmse = np.sqrt(mean(error**2, edges, 1))
+        metrics['boundary_jump_rmse_input_sd'][:, component] = boundary_rmse
+        metrics['boundary_jump_rmse_native'][:, component] = boundary_rmse * scale
+        difference_variance = np.asarray(batch['dv' + key])[:, 0, :channels]
+        add('boundary_jump_difference_nmse', boundary_rmse**2 / difference_variance, component)
+        if channels == 1:
+            target_power = eeg_complete_patch_band_energy(patch_y,patch_mask)
+            predicted_power = eeg_complete_patch_band_energy(patch_p,patch_mask)
+            for lo, hi in ((1, 4), (4, 8), (8, 13), (13, 30), (30, 45)):
+                ey, ep = target_power[lo,hi], predicted_power[lo,hi]
+                add(f'band_{lo}_{hi}_target_energy_native', ey * scale**2, component)
+                add(f'band_{lo}_{hi}_prediction_energy_native', ep * scale**2, component)
+                ratio = np.divide(ep, ey, out=np.full(ey.shape, np.nan), where=ey > 1e-20)
+                add(f'band_{lo}_{hi}_db', 10 * np.log10(np.maximum(ratio, 1e-20)), component)
+                add(f'band_{lo}_{hi}_abs_db', abs(10 * np.log10(np.maximum(ratio, 1e-20))), component)
+            block_y, block_p, block_mask = [a.reshape(len(x), -1, 50, 1) for a in (y, p, mask)]
+            block_valid = block_mask.all(2)
+            ey, ep = [np.sqrt(np.mean(a * a, 2)) for a in (block_y, block_p)]
+            env_mse = mean((ep - ey)**2, block_valid, 1)
+            env_energy = mean(ey**2, block_valid, 1)
+            add('local_rms_rmse_native', np.sqrt(env_mse) * scale, component)
+            add('local_rms_nrmse', np.sqrt(np.divide(env_mse, env_energy, out=np.full(env_mse.shape, np.nan),
+                                                    where=env_energy > 1e-20)), component)
+            add('local_rms_correlation', correlation(ey, ep, block_valid), component)
+        else:
+            t = (np.arange(20) - 9.5) / 10
+            quadratic = t**2 - np.mean(t**2)
+            for name, basis, unit in (('slope', t / (t @ t), 'per_s'),
+                                      ('curvature', 2 * quadratic / (quadratic @ quadratic), 'per_s2')):
+                ay, ap = [np.einsum('nptc,t->npc', a, basis) for a in (patch_y, patch_p)]
+                error_mse = mean((ap - ay)**2, full, 1)
+                target_energy = mean(ay**2, full, 1)
+                add(name + '_rmse_native_' + unit, np.sqrt(error_mse) * scale, component)
+                add(name + '_target_rms_native_' + unit, np.sqrt(target_energy) * scale, component)
+                add(name + '_nrmse', np.sqrt(np.divide(error_mse, target_energy, out=np.full(error_mse.shape, np.nan),
+                                                     where=target_energy > 1e-20)), component)
+                add(name + '_correlation', correlation(ay, ap, full), component)
+            complete = mask.all(1)
+            target_dynamic = np.ptp(y, axis=1) > 1e-10
+            for name, operation in (('peak', np.argmax), ('trough', np.argmin)):
+                timing_error = abs(operation(y, axis=1) - operation(p, axis=1)) / 10.
+                add(name + '_timing_error_s', np.where(complete & target_dynamic, timing_error, np.nan), component)
+        failed = (mask.sum(1) == 0) | (bad.sum(1) > 0)
+        for values in metrics.values():
+            values[:, component] = np.where(failed, np.nan, values[:, component])
+    return dict(metrics=metrics, support=support)
+
+
+def joint_reconstruction_summary(metrics, support, examples, rows):
+    """G0 hierarchy, untrimmed item/color tails, and explicit failed denominators."""
+    result = base_training_aggregate(metrics, examples, rows)
+    result['units'] = 'G0_normalized_except_native_and_timing_fields'
+    units = defaultdict(set)
+    for i,_,_ in examples:
+        units[rows[i]['dataset']].add(rows[i].get('source_unit','unspecified'))
+    result['native_units_by_dataset'] = {dataset: sorted(values) for dataset,values in sorted(units.items())}
+    for name, value in result['metrics'].items():
+        if 'native' in name:
+            suffix = '^2' if 'energy_native' in name else ''
+            if name.endswith('_per_s'):
+                suffix = '/s'
+            if name.endswith('_per_s2'):
+                suffix = '/s^2'
+            value['units_by_dataset'] = {dataset: [unit+suffix for unit in values]
+                                         for dataset,values in result['native_units_by_dataset'].items()}
+            labels = {unit for values in value['units_by_dataset'].values() for unit in values}
+            value['cross_unit_macro_interpretable'] = len(labels) == 1
+            value['macro_unit'] = next(iter(labels)) if len(labels) == 1 else None
+            value['interpretation'] = 'dataset_and_subject_native_coordinates' if len(labels) > 1 else 'common_source_coordinate'
+    result['normalization'] = dict(nmse='MSE / frozen target-specific training variance in G0 coordinates',
+        nrmse='sqrt(NMSE)', native='G0 value multiplied by frozen training position input scale',
+        rms_gain='predicted uncentered RMS / target uncentered RMS',
+        local_rms_nrmse='RMS of 0.25-s RMS-envelope error / RMS of target RMS envelope',
+        derivative_nrmse='RMS error of complete 2-s polynomial coefficient / target coefficient RMS',
+        band_energy='Hann-windowed complete 2-s patches, then mean energy across complete patches',
+        peak_timing='absolute difference of first global extremum on a complete 30-s Hb window')
+    result['support'] = dict(planned_item_color_cells=int(np.prod(support['valid_points'].shape)),
+        unscored_item_color_cells=int((support['valid_points'] == 0).sum()),
+        nonfinite_prediction_item_color_cells=int((support['nonfinite_prediction_points'] > 0).sum()),
+        valid_points=int(support['valid_points'].sum()), complete_patches=int(support['full_patches'].sum()),
+        zero_target_rms_item_color_cells=int((metrics['target_rms_native'] == 0).sum()),
+        undefined_rms_gain_item_color_cells=int((~np.isfinite(metrics['rms_gain'])).sum()),
+        failed_items=[dict(example=list(examples[i]),component=['X', 'S', 'O'][j],color=int(c),
+                           valid_points=int(support['valid_points'][i,j,c]),
+                           nonfinite_prediction_points=int(support['nonfinite_prediction_points'][i,j,c]))
+                      for i,j,c in np.argwhere((support['valid_points'] == 0) |
+                                                (support['nonfinite_prediction_points'] > 0))])
+    result['all_scored_outputs_finite'] = not bool((support['nonfinite_prediction_points'] > 0).any())
+    tails = {}
+    for name, values in metrics.items():
+        cells = []
+        for component in range(values.shape[1]):
+            for color in range(values.shape[2]):
+                v = values[:,component,color]
+                finite = np.isfinite(v)
+                order = np.flatnonzero(finite)[np.argsort(v[finite], kind='stable')]
+                cells.append(dict(component=['X', 'S', 'O'][component],color=color,finite=int(finite.sum()),
+                    nonfinite=int((~finite).sum()),
+                    quantiles=np.quantile(v[finite],[0.,.1,.5,.9,.95,1.]).tolist() if finite.any() else [None]*6,
+                    largest_examples=[dict(example=list(examples[i]),value=float(v[i])) for i in order[-5:][::-1]]))
+        tails[name] = cells
+    result['input_distributions'] = dict(unit='input-position/color cells, dependent within subject',
+        quantile_order=[0.,.1,.5,.9,.95,1.], metrics=tails)
+    return result
+
+
 def base_training_budget(models, steps, macro_tolerance, component_tolerance):
     """A fixed bounded rule over all five model trajectories; failures never disappear."""
     if len(models)!=5 or any(m.get('status')!='completed' for m in models):

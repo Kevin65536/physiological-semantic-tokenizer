@@ -331,11 +331,12 @@ def test_reconstruction_synthetic_curve_and_bitmap_atlas(tmp_path, modality, rat
 
 
 @pytest.mark.parametrize('modality', ['eeg', 'hb'])
-def test_waveform_refinement_integer_replay_branch_isolation_and_gradients(modality):
+@pytest.mark.parametrize('architecture', ['waveform', 'dense_long'])
+def test_refinement_integer_replay_branch_isolation_and_gradients(modality, architecture):
     torch.set_num_threads(2);torch.manual_seed(17)
     cfg=runner.read_config(REFINEMENT)
-    cfg['architectures']['waveform'].update(width=16,latent_dim=8,local_width=4)
-    model=runner._state_refinement_model(cfg,'waveform',modality,'vq128')
+    cfg['architectures'][architecture].update(width=16,latent_dim=8,local_width=4)
+    model=runner._state_refinement_model(cfg,architecture,modality,'vq128')
     x=torch.randn(10,15,400 if modality=='eeg' else 40)
     model.initialize_codebooks(x);model.eval()
     before={k:v.clone() for k,v in model.state_dict().items()}

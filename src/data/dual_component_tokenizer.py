@@ -199,6 +199,69 @@ def masked_state_geometry(project_root, spec, meta, modality, names):
     return values, sources
 
 
+def base_tokenizer_training_data(cfg, root):
+    """Validate the completed G0 development boundary before opening signal arrays."""
+    import yaml
+    from .observation_tokenizer_panel import _identity
+
+    def serial(value):
+        if isinstance(value, dict):
+            return {str(key): serial(item) for key, item in value.items()}
+        if isinstance(value, np.ndarray):
+            return serial(value.tolist())
+        if isinstance(value, (tuple, list)):
+            return [serial(item) for item in value]
+        if isinstance(value, np.generic):
+            return serial(value.item())
+        if isinstance(value, Path):
+            return str(value)
+        if isinstance(value, float) and not np.isfinite(value):
+            return None
+        return value
+
+    spec = cfg['data']
+    root = Path(root)
+    if (spec['allowed_splits'] != ['train', 'validation'] or spec['test_access'] != 'forbidden'
+            or spec['protected_data'] != 'forbidden' or spec['raw_reads'] or spec['teacher_refits']):
+        raise ValueError('G1 development boundary before arrays')
+    parent = (root / spec['run']).resolve()
+    contract = yaml.safe_load((root / spec['contract']).read_text())
+    summary = json.loads((parent / 'summary.json').read_text())
+    verification = json.loads((parent / 'verification.json').read_text())
+    manifest = json.loads((parent / 'cache/manifest.json').read_text())
+    scales = json.loads((parent / 'scales.json').read_text())
+    resolved = json.loads((parent / 'resolved_config.json').read_text())
+    if (summary['status'] != 'completed' or verification['status'] != 'passed' or verification['issues']
+            or manifest['schema'] != 'dual_component_base_cache_v1' or manifest['status'] != 'completed'
+            or manifest['allowed_splits'] != spec['allowed_splits']
+            or resolved['config'] != serial(contract)
+            or manifest['cfg_identity'] != _identity(serial(contract))
+            or manifest['scales_identity'] != _identity(serial(scales))):
+        raise ValueError('completed exact G0 input contract required')
+    subjects = {}
+    for row in manifest['rows']:
+        key = row['dataset'], row['subject']
+        if (row['split'] not in spec['allowed_splits']
+                or (key in subjects and subjects[key] != row['split'])):
+            raise ValueError('G0 subject/split boundary before arrays')
+        subjects[key] = row['split']
+        expected = parent / 'cache' / _identity(serial(row['parent'])) / row['modality']
+        if Path(row['folder']).resolve() != expected or not expected.is_relative_to(parent / 'cache'):
+            raise ValueError('G0 prepared folder identity before arrays')
+        if row['rate'] != (200 if row['modality'] == 'eeg' else 10):
+            raise ValueError('G0 sampling grid changed')
+    return manifest, scales, json.loads((parent / 'sampling_audit.json').read_text()), summary
+
+
+def base_tokenizer_examples(rows, modality, role):
+    """Enumerate the original G0 scoring or regression triples in manifest order."""
+    split = 'validation' if role == 'validation' else 'train'
+    field = 'regression' if role == 'regression' else 'score'
+    return [(index, item['start_s'], position)
+            for index, row in enumerate(rows) if row['modality'] == modality and row['split'] == split
+            for item in row['inputs'][field] for position in item['positions']]
+
+
 def base_tokenizer_plan(cache_root, spec, source_ssm, regression_rows):
     """Freeze G0 population and physical support without reading signal arrays."""
     from .so_supervision_cache import SOSupervisionDataset
@@ -497,6 +560,127 @@ def base_tokenizer_batch(rows, examples, scales, *, array_cache=None, cache_limi
             result['v'+key].append(np.tile(ref['target_variance'][key], (15,2*rate)))
             result['dv'+key].append(np.tile(ref['difference_variance'][key], (15,2*rate)))
     return {k: np.stack(v) for k,v in result.items()}
+
+
+def _base_joint_eeg_observations(row, start, scales, names):
+    """Point-valid X in the original training coordinates; no teacher mask reads."""
+    lookup = {name.upper(): position for position, name in enumerate(names)}
+    if len(lookup) != len(names) or not {name.upper() for name in row['positions']}.issubset(lookup):
+        raise ValueError('unique canonical native EEG names required before arrays')
+    interval = slice(start * 200, (start + 30) * 200)
+    folder = Path(row['folder'])
+    raw = np.asarray(np.load(folder / 'x.npy', mmap_mode='r')[interval, :, 0])
+    observed = np.asarray(np.load(folder / 'observation_valid.npy', mmap_mode='r')[interval, :, 0], bool)
+    if raw.shape != (6000, len(row['positions'])) or observed.shape != raw.shape:
+        raise ValueError('declared real 30s EEG observation interval required')
+    values = np.zeros((6000, len(names)), np.float64)
+    valid = np.zeros(values.shape, bool)
+    references = scales['positions']['eeg'][row['dataset']]
+    for position, name in enumerate(row['positions']):
+        reference = references.get(name)
+        if reference is None:
+            continue
+        native = lookup[name.upper()]
+        valid[:, native] = observed[:, position] & np.isfinite(raw[:, position])
+        # Keep the historical array-dtype division before assignment to float64.
+        normalized = raw[:, position] / reference['scale']
+        values[:, native] = np.where(valid[:, native], normalized, 0.)
+    return values, valid
+
+
+def base_tokenizer_joint_eeg_context(rows, crop, scales, names, direction=0, *, allowed_splits=('validation',)):
+    """A native observation context shifted by exactly 2s inside two admitted crops.
+
+    Adjacent 30s target eligibility grants the physical interval. Only the actual
+    added 2s observation mask affects availability; the rest of its parent crop
+    cannot make that added piece unavailable.
+    """
+    if direction not in (-1, 0, 1) or not allowed_splits or not set(allowed_splits).issubset({'train', 'validation'}):
+        raise ValueError('fixed natural direction and explicit public split required before arrays')
+    row = rows[crop['row']]
+    if row['split'] not in allowed_splits or row['modality'] != 'eeg':
+        raise ValueError('declared public EEG context scope required before arrays')
+    support = {int(item['start_s']): set(item['positions']) for item in row['inputs']['score']}
+    start, selected = int(crop['start_s']), set(crop['positions'])
+    if not selected or start not in support or not selected.issubset(support[start]):
+        raise ValueError('original natural context outside admitted G0 score support')
+    if direction and (start + 30 * direction not in support or not selected.issubset(support[start + 30 * direction])):
+        raise ValueError('same-row adjacent natural context support required before arrays')
+    shifted_start = start + 2 * direction
+    values, point_valid = _base_joint_eeg_observations(row, shifted_start, scales, names)
+    observed = point_valid.all(axis=0)
+    return np.where(observed[None], values, 0.), observed, dict(
+        raw_normalized_x=values, observation_valid=point_valid,
+        start_s=shifted_start, physical_center_start_s=start + 14,
+        center_patch=7 - direction,
+    )
+
+
+def base_tokenizer_joint_eeg(rows, crop, scales, names, array_cache=None, *, allowed_splits=('train',)):
+    """Read one G0 crop across native EEG positions with observation-only auxiliary support.
+
+    Targets retain the G0 crop's scoring positions. Auxiliary X can also use a
+    position whose teacher failed, provided its observation and training scale
+    are available. Missing observations contribute zeros deterministically.
+    """
+    if not allowed_splits or not set(allowed_splits).issubset({'train', 'validation'}):
+        raise ValueError('joint EEG scope must be a nonempty train/validation subset before arrays')
+    index, start, positions = crop['row'], crop['start_s'], crop['positions']
+    row = rows[index]
+    if row['split'] not in allowed_splits or row['modality'] != 'eeg':
+        raise ValueError('declared public EEG split required before arrays')
+    if not any(item['start_s'] == start and set(positions).issubset(item['positions'])
+               for group in row['inputs'].values() for item in group):
+        raise ValueError('joint EEG crop outside frozen G0 support')
+    lookup = {name.upper(): position for position, name in enumerate(names)}
+    if len(lookup) != len(names) or not {name.upper() for name in row['positions']}.issubset(lookup):
+        raise ValueError('unique canonical names covering every native EEG position required before arrays')
+    examples = [(index, start, position) for position in positions]
+    batch = base_tokenizer_batch(rows, examples, scales, array_cache=array_cache, cache_limit=8) if examples else None
+    observed_x, point_valid = _base_joint_eeg_observations(row, start, scales, names)
+    target_complete = batch['mask'].all(axis=(1, 2)) if examples else np.zeros(0, dtype=bool)
+    fields = {key: np.zeros((6000, len(names)), dtype=np.float64) for key in ('x', 's', 'o')}
+    input_valid = np.zeros(len(names), dtype=bool)
+    target_valid = np.zeros(len(names), dtype=bool)
+    for position, name in enumerate(row['positions']):
+        target = lookup[name.upper()]
+        input_valid[target] = point_valid[:, target].all()
+        if input_valid[target]:
+            fields['x'][:, target] = observed_x[:, target]
+    for source, position in enumerate(positions):
+        target = lookup[row['positions'][position].upper()]
+        target_valid[target] = target_complete[source] and input_valid[target]
+        if target_valid[target]:
+            for key in ('s', 'o'):
+                fields[key][:, target] = batch[key][source].reshape(-1)
+    return fields, input_valid, target_valid
+
+
+def base_tokenizer_joint_hb(rows, crop, scales, *, allowed_splits=('train',)):
+    """Read the admitted 30-s paired-Hb observations, independent of teacher support."""
+    row = rows[crop['row']]
+    start = crop['start_s']
+    if row['split'] not in allowed_splits or row['modality'] != 'hb':
+        raise ValueError('declared public Hb split required before arrays')
+    if not any(item['start_s'] == start for group in row['inputs'].values() for item in group):
+        raise ValueError('joint Hb crop outside frozen G0 support')
+    folder = Path(row['folder'])
+    interval = slice(start * 10, (start + 30) * 10)
+    values = np.asarray(np.load(folder / 'x.npy', mmap_mode='r')[interval], float)
+    observed = np.asarray(np.load(folder / 'observation_valid.npy', mmap_mode='r')[interval], bool)
+    expected = (300, len(row['positions']), 2)
+    if values.shape != expected or observed.shape != expected:
+        raise ValueError('declared paired 10-Hz 30-s observation grid required')
+    values = values.copy()
+    observed = observed & np.isfinite(values)
+    references = scales['positions']['hb'][row['dataset']]
+    for position, name in enumerate(row['positions']):
+        reference = references.get(name)
+        if reference is None:
+            observed[:, position] = False
+        else:
+            values[:, position] /= reference['scale']
+    return np.where(observed, values, 0.), observed
 
 
 def state_pilot_plan(cache_root, spec, source_ssm, *, excluded_subjects=(), include_short_refed=True):
