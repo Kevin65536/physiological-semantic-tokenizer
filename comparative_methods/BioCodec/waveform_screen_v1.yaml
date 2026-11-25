@@ -1,0 +1,19 @@
+experiment_id: BIOCODEC-PAIRED-WAVEFORM-v1
+output: runs/20261125_waveform_v1
+upstream: https://github.com/klean2050/BioCodec-release
+revision: 575bf6ea7ae14a34754b217d9b940597a16951bd
+checkpoint_sha256: b8b5c864bd92242a2aa70c414ab1abe23231772dc2f2e39a8f509fdded728af1
+panel: experiments/runs/physiology_semantic_tokenizer/labram_waveform_screen/20261125_v1
+g0_recorded_root: /SSD_2/pid-mcm-implementation
+dataset: simultaneous_eeg_nirs
+sites: {eeg: Fp1, hb: AF7}
+population: {planned_validation_windows: 20, common_complete_windows: 14, independent_subjects: 4}
+scope: previously scored ordinary validation triples only; frozen public G0 coordinates; no raw, test, confirmation or protected access
+model: official EEG epoch 2, frozen, deterministic CPU inference, no training or seed selection
+adapter: G0 training input SD; resample each complete window to 250 Hz with Kaiser-5 polyphase and line extension; clip encoder input to +/-10; six independent five-second chunks; no side-channel scale; trim each decoded chunk to 1250; return to each scoring grid
+primary: Fp1 EEG X MSE divided by frozen training variance; equal windows within record, records within subject, subjects within dataset
+secondary: window Pearson correlation, same aggregation
+diagnostic: apply EEG weights separately to AF7 HbO and HbR at 10 Hz using the same clock-preserving resampling
+baseline: retained S/O sum at the identical window, position, color and scoring support
+null: retained zero predictor; recompute its per-window NMSE to validate denominators and identity
+stopping: one frozen pass, no model selection or lag correction

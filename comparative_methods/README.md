@@ -20,6 +20,7 @@ directory, or signed campaign artifact.
 
 | Reading task | Owning entry |
 | --- | --- |
+| Compare a frozen waveform tokenizer with S/O on the paired development screen | [BioCodec inference](BioCodec/run_waveform_screen.py) · [panel, release revision and scoring contract](BioCodec/waveform_screen_v1.yaml). Place the pinned official checkout in `BioCodec/upstream/` and run the entry with `--synthetic` for integer replay checks, or `--output <fresh-directory>` for the measured screen. |
 | Design the next downstream benchmark | [`DOWNSTREAM-REBENCH-v2`](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v2): complete metrics, subject folds and Visual/REFED repair; [v1 design](../docs/EXPERIMENT_PLAN.md#downstream-rebench-v1) retains its execution identity |
 | Run the versioned downstream benchmark | [Execution entry](#downstream-rebenchmark-v1), [reviewed contract](downstream_rebench_v1.yaml) |
 | Find implementation and local tests | [Directory map](#directory-map), then the selected method's README and source manifest |

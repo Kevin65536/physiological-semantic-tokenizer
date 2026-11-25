@@ -1,0 +1,19 @@
+experiment_id: TK-LABRAM-WAVEFORM-SCREEN-v1
+output: experiments/runs/physiology_semantic_tokenizer/labram_waveform_screen/20261125_v1
+parent: experiments/configs/physiology_semantic_tokenizer/joint_tokenizer_full_qc_retrain_v1.yaml
+recorded_root: /SSD_2/pid-mcm-implementation
+dataset: simultaneous_eeg_nirs
+positions: {eeg: Fp1, hb: AF7}
+scope: QC-filtered G0 train and ordinary validation only, no confirmation, test, raw files or teacher refits
+selection: intersect both modalities by parent and start, take disjoint synchronized windows in start-sample order per record, equally spaced ranks including endpoints; drop and count incomplete pairs
+per_subject_record: {train: 4, validation: 2}
+seconds: 30
+local_model: {codebook_size: 128, codebook_dim: 32, encoder_embed_dim: 64, decoder_embed_dim: 64, encoder_depth: 2, decoder_depth: 1, encoder_num_heads: 4, decoder_num_heads: 4, drop_path: 0.0}
+patch: {eeg: 200, hb: 20}
+training: {seed: 17, steps: 300, batch: 16, lr: 0.001}
+official: {revision: c431221e6cfd23dbfa9950e0180682fb322b0548, checkpoint_git_blob: 4ba4be5cc403143f8370bf9c57b6b10b4c2b3727, name: vqnsp.pth, channel_indices: [0, 1], chunk_seconds: 6}
+primary: X MSE divided by frozen per-position per-color training X variance, equal windows then records then subjects
+secondary: same-window Pearson correlation, finite counts
+null: zero in frozen G0 coordinates
+baseline: QC-retrained S/O integer decoding, compared with its retained validation metrics on the exact same triples
+stopping: one fixed training budget per local modality; no selection on validation
