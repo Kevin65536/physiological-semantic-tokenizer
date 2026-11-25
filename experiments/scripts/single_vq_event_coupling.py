@@ -3,6 +3,7 @@ from collections import defaultdict
 from dataclasses import replace
 from itertools import product
 from pathlib import Path
+from functools import partial
 import json
 import numpy as np
 import pandas as pd
@@ -25,7 +26,9 @@ LAGS=(2,4,6)
 SUPPORTED={}
 
 
-def record_tasks():
+def record_tasks(folder=None):
+    output = suite.OUT if folder is None else folder
+    SUPPORTED.clear()
     rows,_=suite.maps()
     for role in ('train','validation'):
         ex=suite.parent.capacity.PANEL['examples']['eeg',role,DATASET]
@@ -71,7 +74,7 @@ def record_tasks():
         for row in reader.plan['exclusions']:
             if row['split']==role and row['task']==TASK and row['subject'] in admitted:
                 exclusion.append(dict(split=role,subject=row['subject'],record=row['record'],event=row['event_index'],reason=row['reason']))
-    pd.DataFrame(exclusion,columns=['split','subject','record','event','reason']).to_csv(suite.OUT/'upstream_event_exclusions.csv',index=False)
+    pd.DataFrame(exclusion,columns=['split','subject','record','event','reason']).to_csv(output/'upstream_event_exclusions.csv',index=False)
     return tasks
 
 
@@ -142,15 +145,17 @@ def token_history(x,ids,maps):
 
 
 @torch.inference_mode()
-def record_worker(task):
+def record_worker(task, *, out=None, network=None, seed=17, families=None):
+    out = suite.OUT if out is None else out
+    families = out if families is None else families
     key,events,record,markers=task
     role,subject,rec=key
-    folder=suite.OUT/'events_by_record';folder.mkdir(exist_ok=True)
+    folder=out/'events_by_record';folder.mkdir(exist_ok=True)
     dest=folder/f'{role}_{subject}_{rec}.npz'
     if dest.exists():
         return
-    model=suite.parent.network('eeg',8192,17)
-    maps={b:np.array(read_json(suite.OUT/f'eeg_17/{b}_family.json')['mapping']) for b in 'SO'}
+    model=(network or suite.parent.network)('eeg',8192,seed)
+    maps={b:np.array(read_json(families/f'eeg_{seed}/{b}_family.json')['mapping']) for b in 'SO'}
     track=eeg_track(SUPPORTED[key])
     hb=measured_hb(record)
     data=defaultdict(list); logs=[]
@@ -223,8 +228,8 @@ def donor_indices(meta):
     return donor
 
 
-def aggregate_b(frame):
-    folder=suite.OUT
+def aggregate_b(frame, folder=None):
+    folder=suite.OUT if folder is None else folder
     frame.to_csv(folder/'event_trials.csv.gz',index=False,compression='gzip')
     cols=['occupancy','enter','leave','alpha','HbO','HbR']
     profile=frame.groupby(['split','subject','record','condition','area','phase'])[cols].mean().groupby(
@@ -262,8 +267,8 @@ def aggregate_b(frame):
     pd.DataFrame(correlations).to_csv(folder/'event_associations.csv',index=False)
 
 
-def coupling(meta, arrays):
-    folder=suite.OUT
+def coupling(meta, arrays, folder=None):
+    folder=suite.OUT if folder is None else folder
     donors=donor_indices(meta)
     meta['donor_event']=[meta.iloc[d].event if d>=0 else -1 for d in donors]
     meta['donor_eeg_marker_s']=[meta.iloc[d].eeg_marker if d>=0 else np.nan for d in donors]
@@ -335,23 +340,26 @@ def coupling(meta, arrays):
                 scored_people=scores.subject.nunique(),normalization=var)
 
 
-def evaluate_events(workers):
-    tasks=record_tasks()
+def evaluate_events(workers, *, out=None, network=None, seed=17, families=None):
+    out = suite.OUT if out is None else out
+    out.mkdir(exist_ok=True)
+    tasks=record_tasks(out)
     if not tasks:
         raise ValueError('no admitted record tasks')
-    suite.run_jobs(record_worker,tasks,workers)
+    worker = partial(record_worker, out=out, network=network, seed=seed, families=families)
+    suite.run_jobs(worker,tasks,workers)
     batches=defaultdict(list);rows=defaultdict(list)
     for key,*_ in tasks:
-        with np.load(suite.OUT/'events_by_record'/('_'.join(key)+'.npz')) as z:
+        with np.load(out/'events_by_record'/('_'.join(key)+'.npz')) as z:
             for name in ('log','B','D'):
                 rows[name].extend(json.loads(s) for s in z[name])
             for name in set(z.files)-{'log','B','D'}:
                 batches[name].append(z[name])
-    logs=pd.DataFrame(rows['log']);logs.to_csv(suite.OUT/'event_support.csv',index=False)
+    logs=pd.DataFrame(rows['log']);logs.to_csv(out/'event_support.csv',index=False)
     if rows['B']:
-        aggregate_b(pd.DataFrame(rows['B']))
-    result=coupling(pd.DataFrame(rows['D']),{k:np.concatenate(v) for k,v in batches.items()}) if rows['D'] else dict(status='insufficient support')
-    write_json(suite.OUT/'events_summary.json',dict(records=len(tasks),planned_after_upstream_QC=len(logs),B_used=len(rows['B'])//10,
+        aggregate_b(pd.DataFrame(rows['B']), out)
+    result=coupling(pd.DataFrame(rows['D']),{k:np.concatenate(v) for k,v in batches.items()}, out) if rows['D'] else dict(status='insufficient support')
+    write_json(out/'events_summary.json',dict(records=len(tasks),planned_after_upstream_QC=len(logs),B_used=len(rows['B'])//10,
         B_by_split=logs[logs.B=='used'].groupby('split').size().to_dict(),D_before_pairing=len(rows['D']),D=result))
 
 

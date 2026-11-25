@@ -32,6 +32,10 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## Frozen final-C interpretability audit — 2026-11-25
+
+The [Chinese visual report](runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/report_v3/REPORT.pdf), [full-resolution figure collection](runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/report_v3/index.html), and [verified endpoint summary](runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/summary.json) cover both frozen EEG C seeds, unchanged Hb references, actual waveform/token examples, context replacements, and the matched event and measured-Hb screens.
+
 ## Fixed-capacity EEG continuous and hard objective comparison — 2026-11-25
 
 The [four terminal models](runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1/factorial.csv) compare the original waveform objective with a decoded EEG-S spectral constraint. The [paired contrasts](runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1/contrasts.csv) include the difference in objective effects between representations. The [hard-ID gain](runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1/hard_id_gain.csv) measures the additional information in individual emitted integers. The [run summary](runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1/summary.json) records matched supports and waveform guardrails.

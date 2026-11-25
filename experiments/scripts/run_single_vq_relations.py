@@ -20,6 +20,9 @@ PLAN = yaml.safe_load(CONTRACT.read_text())
 OUT = parent.capacity.ROOT/PLAN['run']
 
 
+network = parent.network
+
+
 def maps():
     return parent.capacity.PANEL['rows'], parent.capacity.PANEL['scales']
 
@@ -76,7 +79,7 @@ def run_jobs(func,jobs,workers):
         for n,f in enumerate(as_completed(futures),1):
             f.result()
             if n%16==0 or n==len(jobs):
-                print(func.__name__,n,'/',len(jobs),flush=True)
+                print(getattr(func, '__name__', type(func).__name__),n,'/',len(jobs),flush=True)
 
 
 def main():

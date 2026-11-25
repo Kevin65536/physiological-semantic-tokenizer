@@ -232,17 +232,17 @@ def sequences(tr,te,fams,folder):
     pd.DataFrame(summary).to_csv(folder/'sequence.csv',index=False)
 
 
-def analyze(job):
+def analyze(job, *, source=suite):
     mod,seed=job
-    folder=suite.OUT/f'{mod}_{seed}';folder.mkdir(exist_ok=True)
+    folder=source.OUT/f'{mod}_{seed}';folder.mkdir(exist_ok=True)
     if (folder/'completion.json').exists():
         return
-    tr,te=[suite.collect(mod,seed,s) for s in ('train','validation')]
+    tr,te=[source.collect(mod,seed,s) for s in ('train','validation')]
     for a in (tr,te):
         indices(a)
-    k=suite.PLAN['models'][mod]['K']
+    k=source.PLAN['models'][mod]['K']
     fams={};books={};coverage=[]
-    model=suite.parent.network(mod,k,seed)
+    model=source.network(mod,k,seed)
     for j,b in enumerate('SO'):
         fams[b],_,means,bounds=profile(tr['ids'][:,j],tr['y'][:,j+1],k)
         stats,per=word_stats(tr,te,b,k)
@@ -268,15 +268,15 @@ def analyze(job):
                                            dev_people=len(set(te['person'])),valid_dev_patches=len(te['person'])))
 
 
-def supplementary(job):
+def supplementary(job, *, source=suite):
     """Matched family main effects, same-support observed history, and across-seed correspondence."""
     from scipy.stats import spearmanr
     from sklearn.metrics import adjusted_rand_score
     mod,seed=job
-    out=suite.OUT/f'{mod}_{seed}'
-    tr,te=[suite.collect(mod,seed,s) for s in ('train','validation')]
-    size=suite.PLAN['models'][mod]['K']
-    model=suite.parent.network(mod,size,seed)
+    out=source.OUT/f'{mod}_{seed}'
+    tr,te=[source.collect(mod,seed,s) for s in ('train','validation')]
+    size=source.PLAN['models'][mod]['K']
+    model=source.network(mod,size,seed)
     fams=[pd.read_csv(out/f'{b}_words.csv').family.values for b in 'SO']
     books=[model.branches[b]['quantizer'].codebook.detach().numpy() for b in 'SO']
     a=tr['ids']; f0=fams[0][a[:,0]]; f1=fams[1][a[:,1]]
@@ -321,12 +321,12 @@ def supplementary(job):
         h=hierarchy(ex,preds);results.append(h.assign(adjacent=adjacent))
     pd.concat(results).to_csv(out/'observed_sequence_reference.csv',index=False)
     if mod=='hb' and seed==17:
-        other=suite.collect(mod,43,'validation')
+        other=source.collect(mod,43,'validation')
         for key in ('valid','examples','person'):
             np.testing.assert_array_equal(te[key],other[key])
         output=[]
         for j,b in enumerate('SO'):
-            profiles=[pd.read_csv(suite.OUT/f'hb_{s}'/f'{b}_words.csv') for s in (17,43)]
+            profiles=[pd.read_csv(source.OUT/f'hb_{s}'/f'{b}_words.csv') for s in (17,43)]
             ids0,ids1=te['ids'][:,j],other['ids'][:,j]
             g0,g1=profiles[0].family.values[ids0],profiles[1].family.values[ids1]
             v0,v1=profiles[0].family_score.values[ids0],profiles[1].family_score.values[ids1]
@@ -336,4 +336,4 @@ def supplementary(job):
                     output.append(dict(branch=b,dataset=ds,subject=sub,patches=int(hit.sum()),
                                        attribute_rank_r=float(spearmanr(v0[hit],v1[hit]).statistic),
                                        family_agreement=np.mean(g0[hit]==g1[hit]),family_ari=adjusted_rand_score(g0[hit],g1[hit])))
-        pd.DataFrame(output).to_csv(suite.OUT/'hb_seed_correspondence.csv',index=False)
+        pd.DataFrame(output).to_csv(source.OUT/'hb_seed_correspondence.csv',index=False)

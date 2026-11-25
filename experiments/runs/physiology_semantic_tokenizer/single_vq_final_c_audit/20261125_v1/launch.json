@@ -1,0 +1,38 @@
+{
+  "cwd": "/home/uais7/pid-mcm-implementation",
+  "python": ".venv/bin/python",
+  "supervisor": "user systemd; loginctl Linger=yes",
+  "units": [
+    "final-c-audit-extract-1125",
+    "final-c-audit-extract-replay-1125",
+    "final-c-audit-analysis-1125",
+    "final-c-audit-examples-1125",
+    "final-c-audit-verify-1125",
+    "final-c-audit-report-v3-1125"
+  ],
+  "commands": [
+    "bash supervise_extract.sh",
+    "bash supervise_analysis.sh",
+    "PYTHONPATH=.:experiments/scripts .venv/bin/python -c 'import run_single_vq_final_c_audit as a; from single_vq_final_c_examples import export; export(a.OUT/\"examples\")'",
+    ".venv/bin/python experiments/scripts/run_single_vq_final_c_audit.py verify",
+    ".venv/bin/python experiments/scripts/render_single_vq_final_c_audit.py --output experiments/runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/report_v3"
+  ],
+  "hardware": {
+    "cpu_affinity": "0-63, 2 sockets x 32 physical cores",
+    "user_cpu_quota": 48,
+    "available_memory_gib": 219,
+    "disk": "ST8000NM000A rotational, 822 GiB free at launch",
+    "gpu": "4B:00.0 / GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7; 18 MiB occupied at preflight",
+    "competition": "CA:00.0 99% GPU utilization; busiest existing CPU process ~25.6 cores"
+  },
+  "sizing": {
+    "extract": "Both seeds share one data batch and idle allowed GPU. 64 positions/batch; serial shards limit seeks. The other permitted card was occupied.",
+    "num_shards": 72,
+    "median_shard_seconds": 1.1471525129745714,
+    "analysis": "4 concurrent readout fits plus 2 seed analyses; events 6 record workers, context runs alongside; numerical libraries one thread. 90 GiB service ceiling.",
+    "pilot": "pilot.json",
+    "gpu_policy": "CPU stages hide all GPUs; GPU pilot and replay resolve UUID from PCI before initialization"
+  },
+  "recovery": "First extraction controller rejected JSON round trip of the YAML null hypothesis key before scoring. Quoted the key and restarted under the replay unit. Report v2 failed on a plotting tuple; v3 is the complete export.",
+  "logs": "stage-named .log and _status.json; supervised scripts and example/render logs retained"
+}

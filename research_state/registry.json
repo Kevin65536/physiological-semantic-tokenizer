@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-24T17:03:23.394956+00:00",
+  "updated_at": "2026-11-25T10:15:24.444688+00:00",
   "tracks": [
     {
       "id": "main",
@@ -8439,6 +8439,24 @@
       "label": "频谱约束位置的配对筛查与复现决定",
       "path": "experiments/runs/physiology_semantic_tokenizer/single_vq_spectral_location/20261125_v1/summary.json",
       "role": "result_summary"
+    },
+    {
+      "id": "e.tk_single_vq_final_c_config",
+      "label": "最终 C 冻结审计合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/single_vq_final_c_audit_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_single_vq_final_c_summary",
+      "label": "两个种子的终点与同支持复核",
+      "path": "experiments/runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_single_vq_final_c_report",
+      "label": "30 页中文波形、词序列与事件图谱",
+      "path": "experiments/runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/report_v3/REPORT.pdf",
+      "role": "diagnostic"
     }
   ],
   "records": [
@@ -20522,6 +20540,31 @@
       "headline": false,
       "updated_at": "2026-11-24T17:03:23.394956+00:00",
       "next_step": "复核逐人配对、覆盖率与固定困难波形，再解释单 ID 属性和重建的取舍。"
+    },
+    {
+      "state_id": "main.tk_single_vq_final_c_audit_v1@2026-11-25.development",
+      "entity": "main.tk_single_vq_final_c_audit_v1",
+      "label": "最终 C 冻结解释性审计",
+      "track": "main",
+      "order": 265,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "两种子在四库 16 名开发人上，EEG-S 码向量对 250 ms 包络的条件误差降幅为 37.5% / 38.0%。固定中心并替换上下文，S 编号一致率为 43.3% / 56.0%。同窗与相邻窗的 S 顺序模型未优于词袋。3 人 122 个事件试次中，后顶区高 α 词族主效应随种子变号，两次 p=0.75。在 107 个实测 Hb 配对试次中，加入对齐 C 将历史基线 NMSE 从 0.18861 提高到 0.26641 / 0.23512。",
+      "evidence_ids": [
+        "e.tk_single_vq_final_c_config",
+        "e.tk_single_vq_final_c_summary",
+        "e.tk_single_vq_final_c_report"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.tk_single_vq_relations_v1",
+        "main.tk_single_vq_spectral_location_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-25T10:15:24.444688+00:00",
+      "next_step": "将两个种子的波形、词族、顺序与实测血流结果保留为冻结开发参照。"
     }
   ]
 }

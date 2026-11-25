@@ -1,0 +1,57 @@
+{
+  "schema": "single_vq_final_c_audit_v1",
+  "experiment_id": "TK-SINGLE-VQ-FINAL-C-AUDIT-v1",
+  "run": "experiments/runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1",
+  "parents": [
+    "single_vq_spectral_location_v1.yaml",
+    "single_vq_readout_v1.yaml",
+    "single_vq_relations_v1.yaml"
+  ],
+  "models": {
+    "eeg": {
+      "d": 64,
+      "K": 8192,
+      "seeds": [
+        17,
+        43
+      ],
+      "arm": "C"
+    },
+    "hb": {
+      "d": 128,
+      "K": 1024,
+      "seeds": [
+        17,
+        43
+      ],
+      "source": "unchanged reference"
+    }
+  },
+  "scope": {
+    "train_people": 60,
+    "development_people": 16,
+    "confirmation": "forbidden",
+    "test": "forbidden",
+    "tokenizer_refit": false
+  },
+  "inputs": "registered train and ordinary development positions; complete patches as in relations v1; observed X in frozen training coordinates, paired estimated S/O used for scoring",
+  "shape": {
+    "eeg": [
+      15,
+      400
+    ],
+    "hb": [
+      15,
+      40
+    ],
+    "token_seconds": 2
+  },
+  "primary": "repeat the relations posterior event occupancy contrast and Hb-history comparison with C seed 17; seed 43 is a same-population sensitivity",
+  "readout": "inherited grouped training CV for conditional shrunk, person-balanced shrunk and background-residual codebook ridge for EEG band power, envelope and patch RMS",
+  "members_and_sequence": "inherit relations A/C including failures, exact transition and dwell nulls, adjacent-crop sensitivity, matched nonlinear family main effects and continuous observation reference",
+  "events_and_hb": "inherit relations B/D, masks, clocks, grouped lag selection and nulls; compare support and baseline to retained control",
+  "context": "per development person choose up to 32 complete windows by fixed RNG 1125; donor is a disjoint complete window of same record and position. Replace all but central 2s; compare center ID and training-derived quartile family, and identity replay. Smoothness at artificial joins is uncontrolled.",
+  "visuals": "full observed and integer-decoded 30s X/S/O, exact IDs and training-derived families with two-second zoom; locked median/difficult EEG and retained Hb examples. All other endpoints receive figures.",
+  "null": "no improvement over matched background, bag or Hb history as appropriate; unchanged central patch has identical assignment under context replacement",
+  "stopping": "fixed panel and checkpoints, once per seed; preserve missing support and failures; no pretraining"
+}

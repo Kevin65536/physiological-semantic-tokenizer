@@ -1,0 +1,538 @@
+{
+  "status": "completed",
+  "experiment_id": "TK-SINGLE-VQ-FINAL-C-AUDIT-v1",
+  "complete_patches": {
+    "train": 222885,
+    "validation": 780210
+  },
+  "S_replay_disagreements": {
+    "17": 0,
+    "43": 0
+  },
+  "population": {
+    "train": 60,
+    "ordinary_development": 16,
+    "eeg_development_positions": 53476
+  },
+  "event_support_replayed": true,
+  "continuous_comparators_replayed": true,
+  "models": [
+    {
+      "seed": 17,
+      "readout_gain": {
+        "S": {
+          "background": {
+            "power_4_8": 0.0,
+            "power_8_13": 0.0,
+            "rms_envelope": 0.0,
+            "patch_rms": 0.0
+          },
+          "balanced_background": {
+            "power_4_8": 0.0,
+            "power_8_13": 0.0,
+            "rms_envelope": 0.0,
+            "patch_rms": 0.0
+          },
+          "balanced_shrunk": {
+            "power_4_8": 0.0281868079535692,
+            "power_8_13": 0.0002982749562093,
+            "rms_envelope": 0.1146032890190703,
+            "patch_rms": 0.015669864487294
+          },
+          "decoded": {
+            "power_4_8": -0.7592352534871623,
+            "power_8_13": -3.732096583676156,
+            "rms_envelope": -1.7190210259631438,
+            "patch_rms": -5.734112964957154
+          },
+          "embedding": {
+            "power_4_8": 0.1966770548396635,
+            "power_8_13": 0.0135767070625031,
+            "rms_envelope": 0.3747936441688164,
+            "patch_rms": 0.1110999049826808
+          },
+          "shrunk": {
+            "power_4_8": 0.0259957806050741,
+            "power_8_13": 0.0002322996627487,
+            "rms_envelope": 0.1157554933189959,
+            "patch_rms": 0.0193982154340973
+          }
+        },
+        "O": {
+          "background": {
+            "power_4_8": 0.0,
+            "power_8_13": 0.0,
+            "rms_envelope": 0.0,
+            "patch_rms": 0.0
+          },
+          "balanced_background": {
+            "power_4_8": 0.0,
+            "power_8_13": 0.0,
+            "rms_envelope": 0.0,
+            "patch_rms": 0.0
+          },
+          "balanced_shrunk": {
+            "power_4_8": 0.0002835769340716,
+            "power_8_13": 0.0009236778144593,
+            "rms_envelope": 0.0549205441525998,
+            "patch_rms": 0.017480891590079
+          },
+          "decoded": {
+            "power_4_8": 0.1565362523569611,
+            "power_8_13": -0.3782787659229061,
+            "rms_envelope": -0.3175335884630483,
+            "patch_rms": -1.2202752651164364
+          },
+          "embedding": {
+            "power_4_8": 0.1006097099485608,
+            "power_8_13": -0.0009307379992178,
+            "rms_envelope": 0.2618624678333708,
+            "patch_rms": 0.1854516668155705
+          },
+          "shrunk": {
+            "power_4_8": 0.0002811022784903,
+            "power_8_13": 0.0001468104370415,
+            "rms_envelope": 0.053688616780936,
+            "patch_rms": 0.0156555268852776
+          }
+        }
+      },
+      "context": {
+        "O": {
+          "id_same": 0.726953125,
+          "family_same": 0.86328125,
+          "family_donor_same": 0.374609375,
+          "absolute_profile_drift": 0.008389183601046395
+        },
+        "S": {
+          "id_same": 0.4328125,
+          "family_same": 0.70078125,
+          "family_donor_same": 0.319921875,
+          "absolute_profile_drift": 0.009584500049027035
+        }
+      },
+      "measured_X_O_added": {
+        "target": "X",
+        "reference": "S",
+        "candidate": "SO",
+        "reference_mse": 0.0194929496705288,
+        "candidate_mse": 0.0192295786406764,
+        "gain": 0.0135110916666756,
+        "difference": 0.0002633710298524,
+        "ci_low": 8.22421664982196e-05,
+        "ci_high": 0.0004333008124617,
+        "people": 16,
+        "people_improved": 13
+      },
+      "adjacent_S_order": [
+        {
+          "branch": "S",
+          "adjacent": true,
+          "train_windows": 629,
+          "dev_windows": 28106,
+          "bag_changed_fraction": 0.9994983277591972,
+          "transition_changed_fraction": 0.9908204653810574,
+          "dwell_changed_fraction": 0.849309755924002,
+          "status": "scored",
+          "reference": "bag",
+          "candidate": "bigram_dwell",
+          "gain": -0.0470841352501352,
+          "difference": -0.0010597241494669,
+          "ci_low": -0.0014432863823336,
+          "ci_high": -0.000695416095412,
+          "people": 16,
+          "datasets": 4
+        },
+        {
+          "branch": "S",
+          "adjacent": true,
+          "train_windows": 629,
+          "dev_windows": 28106,
+          "bag_changed_fraction": 0.9994983277591972,
+          "transition_changed_fraction": 0.9908204653810574,
+          "dwell_changed_fraction": 0.849309755924002,
+          "status": "scored",
+          "reference": "bigram_dwell",
+          "candidate": "motif",
+          "gain": -0.0824349204041101,
+          "difference": -0.0019427236860976,
+          "ci_low": -0.0021918495082217,
+          "ci_high": -0.0017258437871279,
+          "people": 16,
+          "datasets": 4
+        }
+      ],
+      "primary_event": {
+        "area": "posterior",
+        "phase": "active",
+        "measure": "occupancy",
+        "people": 3,
+        "ma_minus_bl_change": 0.0285108024691358,
+        "ci_low": -0.0708333333333333,
+        "ci_high": 0.1355324074074074,
+        "primary": true,
+        "primary_exact_p": 0.75
+      },
+      "two_color": [
+        {
+          "color": "two_color",
+          "reference": "base",
+          "reference_nmse": 0.1886103623835211,
+          "aligned_nmse": 0.2664075731132616,
+          "difference": -0.0777972107297404,
+          "ci_low": -0.1398408043114564,
+          "ci_high": -0.0141878416870481,
+          "people": 3,
+          "improved": 0
+        },
+        {
+          "color": "two_color",
+          "reference": "mismatch",
+          "reference_nmse": 0.2229885660259334,
+          "aligned_nmse": 0.2664075731132616,
+          "difference": -0.0434190070873281,
+          "ci_low": -0.1422262978725265,
+          "ci_high": 0.0362132883262649,
+          "people": 3,
+          "improved": 1
+        },
+        {
+          "color": "two_color",
+          "reference": "shift",
+          "reference_nmse": 0.2626469268306033,
+          "aligned_nmse": 0.2664075731132616,
+          "difference": -0.0037606462826581,
+          "ci_low": -0.0544121123246198,
+          "ci_high": 0.0396145706927166,
+          "people": 3,
+          "improved": 2
+        },
+        {
+          "color": "two_color",
+          "reference": "continuous",
+          "reference_nmse": 0.1896311892865226,
+          "aligned_nmse": 0.2664075731132616,
+          "difference": -0.0767763838267389,
+          "ci_low": -0.1431009996114007,
+          "ci_high": -0.0058179624177611,
+          "people": 3,
+          "improved": 0
+        },
+        {
+          "color": "two_color",
+          "reference": "frozen_mismatch",
+          "reference_nmse": 0.2371466040884811,
+          "aligned_nmse": 0.2664075731132616,
+          "difference": -0.0292609690247804,
+          "ci_low": -0.0839458547591304,
+          "ci_high": 0.005893044384894,
+          "people": 3,
+          "improved": 1
+        },
+        {
+          "color": "two_color",
+          "reference": "frozen_shift",
+          "reference_nmse": 0.2284381874079105,
+          "aligned_nmse": 0.2664075731132616,
+          "difference": -0.037969385705351,
+          "ci_low": -0.1327243012816756,
+          "ci_high": 0.0556146259198491,
+          "people": 3,
+          "improved": 1
+        }
+      ],
+      "event_population": {
+        "records": 47,
+        "planned_after_upstream_QC": 856,
+        "B_used": 799,
+        "B_by_split": {
+          "train": 675,
+          "validation": 124
+        },
+        "D_before_pairing": 724,
+        "D": {
+          "status": "scored",
+          "lag_grid": [
+            2,
+            4,
+            6
+          ],
+          "baseline_training_cv": [
+            0.561240666022386,
+            0.5343641878599394,
+            0.5176666686703385
+          ],
+          "selected_lag_s": 6,
+          "training_trials": 614,
+          "development_trials": 107,
+          "training_people": 14,
+          "development_people": 3,
+          "scored_people": 3,
+          "normalization": [
+            4.360899308742224e-05,
+            2.630632796768541e-06
+          ]
+        }
+      }
+    },
+    {
+      "seed": 43,
+      "readout_gain": {
+        "S": {
+          "background": {
+            "power_4_8": 0.0,
+            "power_8_13": 0.0,
+            "rms_envelope": 0.0,
+            "patch_rms": 0.0
+          },
+          "balanced_background": {
+            "power_4_8": 0.0,
+            "power_8_13": 0.0,
+            "rms_envelope": 0.0,
+            "patch_rms": 0.0
+          },
+          "balanced_shrunk": {
+            "power_4_8": 0.028757387885497,
+            "power_8_13": 0.0003819526921151,
+            "rms_envelope": 0.1202967187803903,
+            "patch_rms": 0.015023813111075
+          },
+          "decoded": {
+            "power_4_8": -0.7904908959532542,
+            "power_8_13": -3.734138576465627,
+            "rms_envelope": -1.7932481256266364,
+            "patch_rms": -6.024981138028147
+          },
+          "embedding": {
+            "power_4_8": 0.2027051969868649,
+            "power_8_13": 0.0137067487384254,
+            "rms_envelope": 0.3798899503281262,
+            "patch_rms": 0.1141858969924982
+          },
+          "shrunk": {
+            "power_4_8": 0.0277584483897602,
+            "power_8_13": 0.0002720143164605,
+            "rms_envelope": 0.121542235576168,
+            "patch_rms": 0.019003950796418
+          }
+        },
+        "O": {
+          "background": {
+            "power_4_8": 0.0,
+            "power_8_13": 0.0,
+            "rms_envelope": 0.0,
+            "patch_rms": 0.0
+          },
+          "balanced_background": {
+            "power_4_8": 0.0,
+            "power_8_13": 0.0,
+            "rms_envelope": 0.0,
+            "patch_rms": 0.0
+          },
+          "balanced_shrunk": {
+            "power_4_8": 0.0002203861327798,
+            "power_8_13": 0.0008997665402585,
+            "rms_envelope": 0.0524472566904604,
+            "patch_rms": 0.0162468813806466
+          },
+          "decoded": {
+            "power_4_8": 0.1392034121698293,
+            "power_8_13": -0.3791737750552417,
+            "rms_envelope": -0.3158824400105402,
+            "patch_rms": -1.2322386803777765
+          },
+          "embedding": {
+            "power_4_8": 0.0944082845113392,
+            "power_8_13": 0.0148959968534312,
+            "rms_envelope": 0.244287207266563,
+            "patch_rms": 0.177798369673529
+          },
+          "shrunk": {
+            "power_4_8": 0.0002090236203456,
+            "power_8_13": 0.0002009702594786,
+            "rms_envelope": 0.0513519472117989,
+            "patch_rms": 0.0145994543702314
+          }
+        }
+      },
+      "context": {
+        "O": {
+          "id_same": 0.695703125,
+          "family_same": 0.88515625,
+          "family_donor_same": 0.38046875,
+          "absolute_profile_drift": 0.009630761544703517
+        },
+        "S": {
+          "id_same": 0.56015625,
+          "family_same": 0.780859375,
+          "family_donor_same": 0.32421875,
+          "absolute_profile_drift": 0.007622348046038441
+        }
+      },
+      "measured_X_O_added": {
+        "target": "X",
+        "reference": "S",
+        "candidate": "SO",
+        "reference_mse": 0.0194406096774085,
+        "candidate_mse": 0.019224643139994,
+        "gain": 0.0111090413828659,
+        "difference": 0.0002159665374144,
+        "ci_low": 7.325523573366274e-05,
+        "ci_high": 0.0003482867058343,
+        "people": 16,
+        "people_improved": 12
+      },
+      "adjacent_S_order": [
+        {
+          "branch": "S",
+          "adjacent": true,
+          "train_windows": 629,
+          "dev_windows": 28106,
+          "bag_changed_fraction": 0.9989681918451576,
+          "transition_changed_fraction": 0.98983846865438,
+          "dwell_changed_fraction": 0.8499964420408453,
+          "status": "scored",
+          "reference": "bag",
+          "candidate": "bigram_dwell",
+          "gain": -0.0317191767834212,
+          "difference": -0.000718880016684,
+          "ci_low": -0.0009138716815136,
+          "ci_high": -0.0005127623333253,
+          "people": 16,
+          "datasets": 4
+        },
+        {
+          "branch": "S",
+          "adjacent": true,
+          "train_windows": 629,
+          "dev_windows": 28106,
+          "bag_changed_fraction": 0.9989681918451576,
+          "transition_changed_fraction": 0.98983846865438,
+          "dwell_changed_fraction": 0.8499964420408453,
+          "status": "scored",
+          "reference": "bigram_dwell",
+          "candidate": "motif",
+          "gain": -0.090819786139014,
+          "difference": -0.0021236184104006,
+          "ci_low": -0.0026447524077282,
+          "ci_high": -0.0016108665824271,
+          "people": 16,
+          "datasets": 4
+        }
+      ],
+      "primary_event": {
+        "area": "posterior",
+        "phase": "active",
+        "measure": "occupancy",
+        "people": 3,
+        "ma_minus_bl_change": -0.0753858024691358,
+        "ci_low": -0.2916666666666667,
+        "ci_high": 0.1576388888888888,
+        "primary": true,
+        "primary_exact_p": 0.75
+      },
+      "two_color": [
+        {
+          "color": "two_color",
+          "reference": "base",
+          "reference_nmse": 0.1886103623835211,
+          "aligned_nmse": 0.2351215961359646,
+          "difference": -0.0465112337524435,
+          "ci_low": -0.0664911368878616,
+          "ci_high": -0.0165458167393535,
+          "people": 3,
+          "improved": 0
+        },
+        {
+          "color": "two_color",
+          "reference": "mismatch",
+          "reference_nmse": 0.2470788576685,
+          "aligned_nmse": 0.2351215961359646,
+          "difference": 0.0119572615325354,
+          "ci_low": -0.0405578250597923,
+          "ci_high": 0.0453327530791137,
+          "people": 3,
+          "improved": 2
+        },
+        {
+          "color": "two_color",
+          "reference": "shift",
+          "reference_nmse": 0.3439525727079924,
+          "aligned_nmse": 0.2351215961359646,
+          "difference": 0.1088309765720278,
+          "ci_low": 0.0054654761911056,
+          "ci_high": 0.276889051685546,
+          "people": 3,
+          "improved": 3
+        },
+        {
+          "color": "two_color",
+          "reference": "continuous",
+          "reference_nmse": 0.1896311892865226,
+          "aligned_nmse": 0.2351215961359646,
+          "difference": -0.0454904068494419,
+          "ci_low": -0.0697513321878059,
+          "ci_high": -0.0081759374700665,
+          "people": 3,
+          "improved": 0
+        },
+        {
+          "color": "two_color",
+          "reference": "frozen_mismatch",
+          "reference_nmse": 0.2897567415294075,
+          "aligned_nmse": 0.2351215961359646,
+          "difference": 0.0546351453934429,
+          "ci_low": -0.0091529708529896,
+          "ci_high": 0.119480662300257,
+          "people": 3,
+          "improved": 2
+        },
+        {
+          "color": "two_color",
+          "reference": "frozen_shift",
+          "reference_nmse": 0.2479198222743704,
+          "aligned_nmse": 0.2351215961359646,
+          "difference": 0.0127982261384058,
+          "ci_low": -0.0105204312137104,
+          "ci_high": 0.0493882623808462,
+          "people": 3,
+          "improved": 1
+        }
+      ],
+      "event_population": {
+        "records": 47,
+        "planned_after_upstream_QC": 856,
+        "B_used": 799,
+        "B_by_split": {
+          "train": 675,
+          "validation": 124
+        },
+        "D_before_pairing": 724,
+        "D": {
+          "status": "scored",
+          "lag_grid": [
+            2,
+            4,
+            6
+          ],
+          "baseline_training_cv": [
+            0.561240666022386,
+            0.5343641878599394,
+            0.5176666686703385
+          ],
+          "selected_lag_s": 6,
+          "training_trials": 614,
+          "development_trials": 107,
+          "training_people": 14,
+          "development_people": 3,
+          "scored_people": 3,
+          "normalization": [
+            4.360899308742224e-05,
+            2.630632796768541e-06
+          ]
+        }
+      }
+    }
+  ],
+  "interpretation": "Development only. Envelope readout and within-modality complement replicated. Event direction differs between seeds; aligned EEG increases Hb history prediction error."
+}
