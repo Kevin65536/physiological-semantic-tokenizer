@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-25T10:15:24.444688+00:00",
+  "updated_at": "2026-11-25T10:46:46.912166+00:00",
   "tracks": [
     {
       "id": "main",
@@ -8456,6 +8456,30 @@
       "id": "e.tk_single_vq_final_c_report",
       "label": "30 页中文波形、词序列与事件图谱",
       "path": "experiments/runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/report_v3/REPORT.pdf",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.soft_power_so_pilot_config",
+      "label": "三种 EEG 目标的固定配对合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/soft_power_so_pilot_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.soft_power_so_pilot_summary",
+      "label": "目标覆盖、收敛与抗眼电主指标",
+      "path": "experiments/runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.soft_power_so_pilot_pairs",
+      "label": "逐人配对方向及差值中位数",
+      "path": "experiments/runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/paired_contrasts.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.soft_power_so_pilot_report",
+      "label": "八人 S/O 波形与生理属性对照",
+      "path": "experiments/runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/review_v1/EEG_SO_目标配对比较.pdf",
       "role": "diagnostic"
     }
   ],
@@ -20565,6 +20589,32 @@
       "headline": false,
       "updated_at": "2026-11-25T10:15:24.444688+00:00",
       "next_step": "将两个种子的波形、词族、顺序与实测血流结果保留为冻结开发参照。"
+    },
+    {
+      "state_id": "main.soft_power_so_pilot_v1@2026-11-25.completed",
+      "entity": "main.soft_power_so_pilot_v1",
+      "label": "最终电压软功率约束的 EEG S/O 配对先导",
+      "track": "main",
+      "order": 266,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "exploratory",
+      "summary": "8 名固定验证被试、305 个有效电极位次。软 SSM 的 S/X 波形相关中位数从 0.873 升至 0.972，1 倍眼电的 S 泄漏从 0.133 升至 0.814，8/8 人泄漏上升。固定参考同样提高波形相关，泄漏中位数为 0.753。4/4 人的自然眼电投影也高于 v3。",
+      "evidence_ids": [
+        "e.soft_power_so_pilot_config",
+        "e.soft_power_so_pilot_summary",
+        "e.soft_power_so_pilot_pairs",
+        "e.soft_power_so_pilot_report"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.long_so_cache_v3",
+        "main.unified_eeg_so_pilot_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-25T10:46:46.912166+00:00",
+      "next_step": "保留 v3 为当前监督目标；当前软参考配置仅作为形态保留与抗眼电取舍的工程证据。"
     }
   ]
 }

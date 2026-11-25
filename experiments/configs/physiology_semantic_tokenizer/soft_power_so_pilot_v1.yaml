@@ -1,0 +1,21 @@
+schema: soft_power_so_pilot_v1
+experiment_id: EEG-SO-SOFT-POWER-PILOT-v1
+parent: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261121_unified_eeg_so_pilot_v1
+production: data/cache/physiology_so_supervision_v3
+output: experiments/runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1
+boundary: eight fixed public validation subjects in parent plan order, no replacement or test; original 348 training reference windows
+variants: [baseline, ocular1, neural10, neural35]
+arms: [v3, soft_ssm, soft_fixed]
+shape: 18000 x original EEG channels at 200 Hz; 900 x 3 retained conditional proxy
+seed: 20261121
+references: same pre-existing dataset training statistics in every condition; reuse independently refit SSM proxy for each injection
+gain_knot_seconds: 5
+lambda_power: 1.0
+delta: half the within-dataset median training log-power SD across electrode x five bands, from frozen covariance diagonal
+objective: equal channel weight, waveform MSE in training-RMS units plus mean squared positive log-power excess over six carriers; even-reflected forward-backward Butterworth frequency response on final voltage; 1 s frames every 0.1 s with full time support
+solver: bounded L-BFGS-B, deterministic initialization at gain 0.7; 100 iterations max, check finite descent and record convergence
+primary: RMS(delta S)/RMS(injected EEG) and RMS(delta S)/RMS(baseline S) at 1x ocular perturbation over 30-50 s
+secondary: O delta correlation and signed allocation; baseline morphology, S/O band allocation and cross term; natural frontal EOG projection in both EOG-equipped datasets; 10 and 35 Hz injected response with Hb fixed
+null_hypothesis: no paired improvement of the candidate over v3 or over the fixed-reference control
+aggregation: within window then equal-subject median; sign counts on subject-matched differences; descriptive screen
+stopping: complete all planned subjects and variants once; no hyperparameter search or tokenizer fitting

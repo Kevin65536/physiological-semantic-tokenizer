@@ -447,6 +447,19 @@ It compares the retained native production baseline to 1–45 Hz/200 Hz EEG
 with the same Hb, individual PC, scales, three proxy sites, and known additions.
 [Paired clock and metric checks](../tests/test_unified_eeg_so_pilot.py) use synthetic voltage.
 
+The [soft-power EEG target pilot](scripts/evaluate_soft_power_so.py) replays the
+same eight unified-grid validation windows and their condition-specific SSM fits.
+The [three-arm contract](configs/physiology_semantic_tokenizer/soft_power_so_pilot_v1.yaml)
+fixes the carrier gains, training tolerance and injection conditions. Run the
+[synthetic gradient and shape checks](../tests/test_soft_power_so.py) before the
+supervised target generation, then run the [paired scorer](scripts/score_soft_power_so.py)
+and [report renderer](scripts/render_soft_power_so.py) with a fresh `--output`.
+Under the run's `targets/<case index>/baseline.npz`, `x`, `v3`, `soft_ssm` and
+`soft_fixed` are time-by-electrode voltage arrays. The three arm names hold S,
+the corresponding `*_o` arrays hold O. Intervention files store X, S and the
+known input delta; O is X minus S. `original_channel_index` maps columns to
+the channel names and full record coordinates in `plan.json`.
+
 The read-only [S/O synthesis audit](scripts/audit_so_supervision_synthesis.py)
 uses [its population/mechanism contract](configs/physiology_semantic_tokenizer/so_supervision_synthesis_audit_v1.yaml)
 with `--stage <plan|pilot|population|mechanism|summarize|render>` and the

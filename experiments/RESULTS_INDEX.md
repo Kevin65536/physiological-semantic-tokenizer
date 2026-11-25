@@ -32,6 +32,10 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## EEG soft-power target pilot — 2026-11-25
+
+The [paired target report](runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/review_v1/EEG_SO_目标配对比较.pdf) includes eight subject-level voltage examples, natural EOG, controlled injections and frequency-band allocation. The [run summary](runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/summary.json) and [subject-paired contrasts](runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/paired_contrasts.csv) retain the three-method comparison.
+
 ## Frozen final-C interpretability audit — 2026-11-25
 
 The [Chinese visual report](runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/report_v3/REPORT.pdf), [full-resolution figure collection](runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/report_v3/index.html), and [verified endpoint summary](runs/physiology_semantic_tokenizer/single_vq_final_c_audit/20261125_v1/summary.json) cover both frozen EEG C seeds, unchanged Hb references, actual waveform/token examples, context replacements, and the matched event and measured-Hb screens.
