@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-25T13:05:56.526524+00:00",
+  "updated_at": "2026-11-25T14:05:03.520233+00:00",
   "tracks": [
     {
       "id": "main",
@@ -8558,6 +8558,42 @@
       "id": "e.projected_so_members_report",
       "label": "实测 S/O 成员与双码组合图谱",
       "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/token_members_v1/review_v2/S_O_token_真实波形与频谱.pdf",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.continuous_so_v2_contract",
+      "label": "连续时段投影与迁移条件",
+      "path": "experiments/configs/physiology_semantic_tokenizer/continuous_projection_so_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.continuous_so_v2_target",
+      "label": "合成频率、教师保留、边界、眼电与 cap 门槛",
+      "path": "experiments/runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/target_gate.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.continuous_so_v2_run",
+      "label": "正式双种子迁移判定",
+      "path": "experiments/runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.continuous_so_v2_metrics",
+      "label": "完整开发集的逐人整数解码指标",
+      "path": "experiments/runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/people.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.continuous_so_v2_members",
+      "label": "短训三臂与正式双种子成员匹配",
+      "path": "experiments/runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/member_comparison.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.continuous_so_v2_figures",
+      "label": "连续投影修正与双种子迁移报告",
+      "path": "experiments/runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/review_v2/连续投影修正与双种子迁移测试.pdf",
       "role": "diagnostic"
     }
   ],
@@ -20769,6 +20805,34 @@
       "headline": false,
       "updated_at": "2026-11-25T13:05:56.526524+00:00",
       "next_step": "按候选节律和波形证据解释，生理事件命名仍需独立标签。"
+    },
+    {
+      "state_id": "main.continuous_so_v2@2026-11-25.completed",
+      "entity": "main.continuous_so_v2",
+      "label": "连续时段投影修正与正式两种子迁移测试",
+      "track": "main",
+      "order": 270,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "rejected",
+      "analysis_intent": "exploratory",
+      "summary": "原两秒边界比中位数从 4.930 降至 1.013，修复 11/11.5 Hz 缺口。16 人正式面板的共同 X NMSE（v3 → 连续投影），种子 17 为 0.4087 → 0.4070；43 为 0.4090 → 0.4071。未达到两种子迁移条件，保留 v3。",
+      "evidence_ids": [
+        "e.continuous_so_v2_contract",
+        "e.continuous_so_v2_target",
+        "e.continuous_so_v2_run",
+        "e.continuous_so_v2_metrics",
+        "e.continuous_so_v2_members",
+        "e.continuous_so_v2_figures"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.temporal_projection_vq_v1",
+        "main.projected_so_members_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-25T14:05:03.520233+00:00",
+      "next_step": "保留本次连续投影和同协议检索证据；生产目标尚为 v3。"
     }
   ]
 }

@@ -10,7 +10,7 @@ from experiments.scripts.audit_projected_so_members import attributes, CFG, OUT,
 from src.data.so_supervision_cache import write_json
 
 
-def run():
+def run(output=OUT, config=CFG):
     meta = pd.read_csv(SOURCE/'examples.csv',dtype={'subject':str})
     ex, block = np.where(np.load(SOURCE/'mask.npy') & (meta.role!='shift').to_numpy()[:,None])
     m = meta.iloc[ex].reset_index(drop=True)
@@ -30,17 +30,17 @@ def run():
         assert len(train) >= 5
         beta = np.linalg.lstsq(design[train],target[train],rcond=1e-10)[0]
         residual[g.index] = target[g.index] - design[g.index] @ beta
-    val = pd.read_csv(OUT/'validation_members.csv.gz',index_col='row')
+    val = pd.read_csv(output/'validation_members.csv.gz',index_col='row')
     np.testing.assert_array_equal(np.c_[ex[val.index],block[val.index]],val[['example','block']].values)
     np.testing.assert_allclose(target[val.index],val.alpha,atol=1e-10)
-    matches = pd.read_csv(OUT/'matches.csv').query("endpoint=='alpha'").copy()
+    matches = pd.read_csv(output/'matches.csv').query("endpoint=='alpha'").copy()
     a, b = matches.member_row, matches.control_row
     matches['person'] = val.loc[a,'person'].to_numpy()
     matches['raw'] = target[a]-target[b]
     matches['residual'] = residual[a]-residual[b]
     grouped = matches.groupby(['branch','token','person']).agg(n=('raw','size'),raw=('raw','mean'),residual=('residual','mean'))
-    grouped.to_csv(OUT/'alpha_specificity.csv')
-    write_json(OUT/'resolved_config.json',CFG)
+    grouped.to_csv(output/'alpha_specificity.csv')
+    write_json(output/'resolved_config.json',config)
 
 
 if __name__=='__main__':

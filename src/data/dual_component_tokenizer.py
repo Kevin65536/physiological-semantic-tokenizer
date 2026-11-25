@@ -481,7 +481,7 @@ def base_tokenizer_coordinates(meta, arrays, modality, selected):
     return info, packed
 
 
-def base_tokenizer_scales(rows, spec):
+def base_tokenizer_scales(rows, spec, *, input_scales=None):
     """Pool sufficient statistics within record, then weight records/subjects equally."""
     records = {}
     for row in rows:
@@ -515,6 +515,8 @@ def base_tokenizer_scales(rows, spec):
         variance = {k: np.maximum(v[1] - v[0]**2, 0.) for k,v in moments.items()}
         floor = max(float(np.mean(moments['x'][1])) * 1e-12, 1e-24)
         scale2 = max(float(np.mean(variance['x'])), floor)
+        if input_scales is not None:
+            scale2 = input_scales['positions'][modality][dataset][name]['scale'] ** 2
         target = {k: np.maximum(variance[k]/scale2, spec['target_variance_floor']).tolist() for k in ('x','s','o')}
         diff = {k: np.maximum(variance['d'+k]/scale2, np.asarray(target[k]) * spec['difference_variance_floor_fraction']).tolist() for k in target}
         entry = dict(scale=float(np.sqrt(scale2)), target_variance=target, difference_variance=diff,

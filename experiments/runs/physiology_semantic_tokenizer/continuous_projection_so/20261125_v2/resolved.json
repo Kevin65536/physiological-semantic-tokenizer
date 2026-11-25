@@ -1,0 +1,14 @@
+{
+  "experiment_id": "EEG-SO-CONTINUOUS-PROJECTION-v2",
+  "output": "experiments/runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2",
+  "parent": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1",
+  "basis": "orthonormal DCT-II on each contiguous eligible span of a fixed G0 parent, reflecting boundary condition; zero DC, at most floor(64*N/400) retained real coefficients per N samples. Prioritize contiguous 3.75–13.25 Hz, then fill balls of half-width 0.25 Hz in the previous train-only frequency ranking. Frequency in Hz is 100*k/N.",
+  "target": "transform v3 S before cropping, O=X-S on identical valid samples; no protected/test reads, no Hb changes; input X alone, 15 x 400 samples",
+  "selection": "one fixed revision; retain 32 ranking people and verify the same 28 training-selection people and eight development records; reuse old train-only frequency order without re-ranking",
+  "gate": "retain previous training/validation theta-alpha, ocular injection, four-person EOG and relative cap P90 gates on common time support; also median boundary ratio <=1.5 and lower than block projection, synthetic 10/11/11.25/11.5/12.5 Hz retains >=0.95 energy for each phase in 90s",
+  "controls": "old three 500-step arms; identical member code, split, original patch mask, match, train-ID selection, projection-adjusted sensitivity and natural shift",
+  "formal": "use full formal C training panel and ordinary 16-person development, seeds 17 and 43; inherited optimizer, 1000 warmup plus 9000 hard steps, no tuning; reuse verified terminal v3 C. Jointly compare 8-person member and shift panel as secondary using the identical examples across formal arms.",
+  "decision": "require lower equal-dataset X NMSE for both seeds, no branch correlation loss >0.01 or own NMSE inflation >5%, nondecreasing S shift agreement and S-alpha matched effect and person coverage on both seeds. Report O absolute costs separately. Exploratory eligibility only.",
+  "null_hypothesis": "the correction fails to preserve usable waveforms or provides no reproducible gain over v3 under the formal budget",
+  "stopping": "score target and all historical controls; run formal pair only when target gate passes. Report failed endpoints and retain v3 pending both seeds."
+}

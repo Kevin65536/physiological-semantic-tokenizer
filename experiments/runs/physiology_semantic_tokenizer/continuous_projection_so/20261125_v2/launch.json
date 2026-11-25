@@ -1,0 +1,17 @@
+{
+  "cwd": "/home/uais7/pid-mcm-implementation",
+  "supervisor": "lingering user systemd",
+  "units": {
+    "continuous-so-target-v2": "cpu.sh",
+    "continuous-so-formal-v2": "formal.sh",
+    "continuous-so-score-17": "score_when_ready.sh 17 4B",
+    "continuous-so-score-43": "score_when_ready.sh 43 CA",
+    "continuous-so-cache-audit-v2": "check_continuous_so_cache.py",
+    "continuous-so-report-v2": "finish_when_ready.sh"
+  },
+  "other_jobs": "short v3, projected_x, projected_v3 via gpu.sh and compare_continuous_so_members.py; both terminal v3 controls via gpu.sh and score_continuous_so_formal.py v3 <seed>",
+  "resources": "64 physical cores, user CPU quota 48 cores, approximately 199 GiB available memory and 811 GiB disk at preflight. Target diagnostics parallel over the eight independent people. Parent cache 12 workers, one BLAS thread each, bounded by shared filesystem throughput (initial 16 parents/s); x and mask hardlinks. Two formal fits run concurrently, one per admitted UUID resolved from PCI 4B/CA. Historical throughput 12–13 hard updates/s/GPU, checkpoint every 250 steps, per-process allocator limit 15 GiB. No protected population.",
+  "logs": "target.log, formal.log, seed17.log, seed43.log, base17.log, base43.log, score17.log, score43.log, v3.log, short_block.log, projected_x.log",
+  "measured_hard_training": "parallel seeds, approximately 6.8–7.1 updates per second per GPU",
+  "report_versions": "First aggregation stopped on a validation O candidate with zero hits. Retry retained missing effects as undefined and rendered review_v1. Final review_v2 renders zero support explicitly and retains the same numbers."
+}

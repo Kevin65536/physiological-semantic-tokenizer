@@ -67,7 +67,7 @@ def select(meta, unit, branch):
             for m in ['shape', 'alpha', 'slow']]
 
 
-def prepare(device):
+def prepare(device, arm=None, network=None):
     meta = pd.read_csv(SOURCE / 'examples.csv', dtype={'subject': str})
     valid = np.load(SOURCE / 'mask.npy')
     x = np.load(SOURCE / 'x.npy', mmap_mode='r').reshape(-1, 15, 400)
@@ -81,10 +81,12 @@ def prepare(device):
     assert not m.duplicated(['parent','site','start','block']).any()
     assert read(SOURCE/'summary.json')['status'] == 'completed'
     assert read(SOURCE.parent/'frozen.json')['pairs'] == 32
-    state = torch.load(SOURCE / CFG['checkpoint']['arm'] / 'resume.pt', map_location='cpu', weights_only=False)
-    assert state['step'] == CFG['checkpoint']['step']
-    net = model(True, device).eval()
-    net.load_state_dict(state['net'])
+    if network is None:
+        state = torch.load(SOURCE / (arm or CFG['checkpoint']['arm']) / 'resume.pt', map_location='cpu', weights_only=False)
+        assert state['step'] == CFG['checkpoint']['step']
+        network = model(True, device)
+        network.load_state_dict(state['net'])
+    net = network.eval()
     codes = {b: np.full(valid.shape, -1, dtype=int) for b in BRANCHES}
     with torch.inference_mode():
         for batches in np.array_split(np.unique(ex), 120):
@@ -138,10 +140,10 @@ def summarize(m, metric, left, right, pairs, label, rows, persons, records):
     records.extend(dict(**label, member_row=int(j), control_row=int(k)) for j,k in pairs)
 
 
-def run(device):
-    OUT.mkdir(exist_ok=True)
-    write_json(OUT/'resolved_config.json', CFG)
-    m, unit = prepare(device)
+def run(device, *, output=OUT, arm=None, network=None, config=CFG):
+    output.mkdir(exist_ok=True, parents=True)
+    write_json(output/'resolved_config.json', config)
+    m, unit = prepare(device, arm, network)
     valid = (m.role == 'validation').to_numpy()
     eog = eog_marks(m)
     assert m[np.isfinite(eog)].person.nunique() == 4
@@ -178,10 +180,10 @@ def run(device):
         summarize(m,m.alpha.to_numpy(),left,right,match(m,left,right),label,rows,persons,records)
     for fname, data in [('selection',selection),('pair_selection',pairs_selection),('contrasts',rows),
                         ('people',persons),('matches',records)]:
-        pd.DataFrame(data).to_csv(OUT/(fname+'.csv'),index=False)
-    m[valid].to_csv(OUT/'validation_members.csv.gz',index_label='row')
-    np.savez(OUT/'templates.npz',**templates)
-    write_json(OUT/'summary.json',dict(status='completed',experiment_id=CFG['experiment_id'],training=int((~valid).sum()),
+        pd.DataFrame(data).to_csv(output/(fname+'.csv'),index=False)
+    m[valid].to_csv(output/'validation_members.csv.gz',index_label='row')
+    np.savez(output/'templates.npz',**templates)
+    write_json(output/'summary.json',dict(status='completed',experiment_id=config['experiment_id'],training=int((~valid).sum()),
                                       validation=int(valid.sum()),training_people=60,validation_people=8,eog_people=4))
 
 

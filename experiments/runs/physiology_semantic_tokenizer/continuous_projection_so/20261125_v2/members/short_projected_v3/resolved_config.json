@@ -1,0 +1,26 @@
+{
+  "experiment_id": "EEG-SO-CONTINUOUS-PROJECTION-v2",
+  "parent": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/vq_screen",
+  "output": "experiments/runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/members/short_projected_v3",
+  "checkpoint": {
+    "arm": "projected_v3",
+    "step": 500,
+    "seed": 17
+  },
+  "boundary": "only valid nonoverlapping patches from the parent's 60 training and 8 development people; reuse the admitted independent EOG reader for the four equipped development records; exclude shift, test and protected participants",
+  "tensor": "input X [batch,15,400] at 200 Hz; score original X with frozen integer indices at the same position; S=P(S0), O=X-S",
+  "eligibility": {
+    "patches": 80,
+    "people": 8,
+    "datasets": 2
+  },
+  "selection": "for each branch independently choose the eligible training ID with highest mean signed unit-waveform template norm, mean alpha power fraction, and mean slow power fraction respectively; smallest ID breaks ties",
+  "attributes": "mean-subtracted X, 400-point Hann periodogram, alpha [8,13) and slow [1,4) as fractions of [1,45] Hz",
+  "primary": "validation member minus matched other ID in signed unshifted correlation to frozen training X template or selected band fraction; average paired differences within person, then equally across contributing people",
+  "null": "zero mean matched difference; descriptive, no multiplicity-adjusted inference",
+  "matching": "same dataset/person/site, nearest log X RMS, factor <=1.4; controls may repeat; no validation reselection",
+  "secondary": "for each slow ID use frontal FP/AF sites and concurrent independent HEOG/VEOG; top quartile of whitened joint EOG mean-square across valid unique two-second epochs in each record; compare matched rates",
+  "pairs": "for each orientation select most frequent anchor having two partners each with >=3 train people; use its two most frequent such partners; compare matched validation X alpha fractions within anchor; report support and examples even for sparse pairs",
+  "stopping": "single frozen checkpoint, one census, report all six candidates and both orientations even if unsupported; exploratory reuse of the development partition",
+  "follow_up": "post hoc specificity for both frozen alpha candidates on their original matched pairs. Training-only OLS per dataset/electrode for observed X alpha fraction using intercept, P(X) alpha fraction, P(X)/X mean square ratio, their product and log X RMS. Compare residual differences on development, no candidate reselection."
+}

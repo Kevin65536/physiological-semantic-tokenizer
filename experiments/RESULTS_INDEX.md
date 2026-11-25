@@ -32,6 +32,10 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## Continuous-span EEG S projection and formal two-seed migration test — 2026-11-25
+
+The [paired waveform report](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/review_v2/连续投影修正与双种子迁移测试.pdf) compares the repaired continuous target, the original block projection and the v3 teacher, and reviews the two seed-matched 10,000-step evaluations. The [replacement checks](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/migration_checks.csv), [per-person scores](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/people.csv), [matched token members](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/member_comparison.csv), [shift agreement](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/natural_shift_people.csv) and [rank census](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/rank_census.csv) retain the primary denominators.
+
 ## Temporal projection of EEG S targets and fixed-budget VQ — 2026-11-25
 
 The [Chinese paired waveform report](runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/review_v1/低维时间投影_S目标与单级VQ配对实验.pdf)

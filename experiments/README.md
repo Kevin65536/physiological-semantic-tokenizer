@@ -480,6 +480,19 @@ training-selected IDs and matches held-out observations under its
 signals. After the audit, run the [alpha specificity analysis](scripts/projected_so_alpha_specificity.py)
 and the [waveform atlas renderer](scripts/render_projected_so_members.py) with a fresh `--output`.
 
+The [continuous projection migration contract](configs/physiology_semantic_tokenizer/continuous_projection_so_v2.yaml)
+keeps the original formal C sampling and two seed budgets. Start with the
+[synthetic projection tests](../tests/test_continuous_projection_so.py) and
+[teacher gates](scripts/check_continuous_so_targets.py); the [edge sensitivity
+diagnostic](scripts/check_continuous_so_edges.py) compares identical parent voltages on different time supports.
+Run [formal preparation and training](scripts/train_continuous_so_formal.py) with
+`prepare` and then `train --seed 17|43` after the gates pass. Use the admitted
+PCI UUIDs and the retained run launch commands. The [member replay](scripts/compare_continuous_so_members.py)
+accepts each old short-run arm; the [formal scorer](scripts/score_continuous_so_formal.py)
+accepts `v3|continuous` and a seed. The [paired summary](scripts/summarize_continuous_so.py)
+joins terminal results and the [report renderer](scripts/render_continuous_so_review.py)
+accepts a fresh `--output` directory.
+
 The read-only [S/O synthesis audit](scripts/audit_so_supervision_synthesis.py)
 uses [its population/mechanism contract](configs/physiology_semantic_tokenizer/so_supervision_synthesis_audit_v1.yaml)
 with `--stage <plan|pilot|population|mechanism|summarize|render>` and the
