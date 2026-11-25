@@ -460,6 +460,26 @@ the corresponding `*_o` arrays hold O. Intervention files store X, S and the
 known input delta; O is X minus S. `original_channel_index` maps columns to
 the channel names and full record coordinates in `plan.json`.
 
+The [temporal projection target screen](scripts/evaluate_temporal_projection_so.py)
+uses the [fixed train-only frequency and dimension contract](configs/physiology_semantic_tokenizer/temporal_projection_so_v1.yaml).
+The original record clock defines complete 400-sample blocks. The
+[synthetic checks](../tests/test_temporal_projection_so.py) cover phase, rank,
+masking, recropping, and final spatial second moments. After the target gate,
+the [three-arm trainer](scripts/train_temporal_projection_vq.py) accepts
+`controller` for the [single-seed fixed-budget comparison](configs/physiology_semantic_tokenizer/temporal_projection_vq_screen_v1.yaml).
+Run the [frozen word audit](scripts/audit_temporal_projection_words.py) after all
+three models finish, then the [paired PDF renderer](scripts/render_temporal_projection_so.py)
+with a fresh `--output`. The target plan identifies each case; the baseline
+NPZ stores the valid original channel indices, common time interval, X, v3,
+and both projected S/O pairs in native voltage units.
+
+The [frozen S/O member audit](scripts/audit_projected_so_members.py) retrieves
+training-selected IDs and matches held-out observations under its
+[member contract](configs/physiology_semantic_tokenizer/projected_so_token_members_v1.yaml).
+[Shape and matching checks](../tests/test_projected_so_members.py) use synthetic
+signals. After the audit, run the [alpha specificity analysis](scripts/projected_so_alpha_specificity.py)
+and the [waveform atlas renderer](scripts/render_projected_so_members.py) with a fresh `--output`.
+
 The read-only [S/O synthesis audit](scripts/audit_so_supervision_synthesis.py)
 uses [its population/mechanism contract](configs/physiology_semantic_tokenizer/so_supervision_synthesis_audit_v1.yaml)
 with `--stage <plan|pilot|population|mechanism|summarize|render>` and the

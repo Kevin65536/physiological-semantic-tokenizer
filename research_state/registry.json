@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-25T10:46:46.912166+00:00",
+  "updated_at": "2026-11-25T13:05:56.526524+00:00",
   "tracks": [
     {
       "id": "main",
@@ -8480,6 +8480,84 @@
       "id": "e.soft_power_so_pilot_report",
       "label": "八人 S/O 波形与生理属性对照",
       "path": "experiments/runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/review_v1/EEG_SO_目标配对比较.pdf",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.temporal_projection_target_contract",
+      "label": "固定频点和独立选维合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/temporal_projection_so_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.temporal_projection_target",
+      "label": "96 个配对目标和准入条件",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.temporal_projection_gate",
+      "label": "逐人配对阈值和分母",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/paired_gates.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.temporal_projection_vq_contract",
+      "label": "最终 C 短训合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/temporal_projection_vq_screen_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.temporal_projection_vq",
+      "label": "三臂等预算整数解码误差",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/vq_screen/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.temporal_projection_subjects",
+      "label": "原单位与归一化逐人误差",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/vq_screen/subject_scores.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.temporal_projection_words",
+      "label": "已知投影之外的真实属性读出",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/vq_screen/word_attribute_gain.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.temporal_projection_report",
+      "label": "目标、实测片段和整数解码波形图谱",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/review_v1/低维时间投影_S目标与单级VQ配对实验.pdf",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.projected_so_members_contract",
+      "label": "词元真实成员检索合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/projected_so_token_members_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.projected_so_members_run",
+      "label": "两分支留出检索分母",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/token_members_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.projected_so_members_matched",
+      "label": "逐词匹配波形、频谱和眼电对照",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/token_members_v1/contrasts.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.projected_so_members_specificity",
+      "label": "相同配对的投影背景敏感性",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/token_members_v1/alpha_specificity.csv",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.projected_so_members_report",
+      "label": "实测 S/O 成员与双码组合图谱",
+      "path": "experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/token_members_v1/review_v2/S_O_token_真实波形与频谱.pdf",
       "role": "diagnostic"
     }
   ],
@@ -20615,6 +20693,82 @@
       "headline": false,
       "updated_at": "2026-11-25T10:46:46.912166+00:00",
       "next_step": "保留 v3 为当前监督目标；当前软参考配置仅作为形态保留与抗眼电取舍的工程证据。"
+    },
+    {
+      "state_id": "main.temporal_projection_so_v1@2026-11-25.completed",
+      "entity": "main.temporal_projection_so_v1",
+      "label": "EEG 低维时间投影目标筛查",
+      "track": "main",
+      "order": 267,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "qualified",
+      "analysis_intent": "exploratory",
+      "summary": "32 名训练被试定频点，另 28 人选出每 2 秒 32 对正余弦。四库八名验证被试中，候选保留旧 S 能量中位数 0.663，θ/α 包络相关 0.992/0.859，眼电泄漏 0.118（v3 为 0.133，投影原 EEG 为 0.933）。最终空间二阶矩的 P90 满足配对工程门槛，仍有超限帧。",
+      "evidence_ids": [
+        "e.temporal_projection_target_contract",
+        "e.temporal_projection_target",
+        "e.temporal_projection_gate"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.soft_power_so_pilot_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-25T11:48:31.609507+00:00",
+      "next_step": "保留冻结的时间基和原波形配对，作为固定预算整数比较的教师目标。"
+    },
+    {
+      "state_id": "main.temporal_projection_vq_v1@2026-11-25.completed",
+      "entity": "main.temporal_projection_vq_v1",
+      "label": "时间投影目标的三臂单级 VQ 短训",
+      "track": "main",
+      "order": 268,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "60 人训练、8 人开发、种子 17、每臂 500 步。P(S0) 的 X NMSE 为 0.877（v3 为 0.889），8/8 人的 X 误差下降；O 原单位 RMSE 在 8/8 人上升。P(X) 的 X NMSE 为 0.838。投影教师的单 ID 未显示背景外 θ/α 误差中位数改善。",
+      "evidence_ids": [
+        "e.temporal_projection_vq_contract",
+        "e.temporal_projection_vq",
+        "e.temporal_projection_subjects",
+        "e.temporal_projection_words",
+        "e.temporal_projection_report"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.temporal_projection_so_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-25T11:48:31.609507+00:00",
+      "next_step": "保留本轮容量与误差取舍证据，尚不据此替换生产 v3。"
+    },
+    {
+      "state_id": "main.projected_so_members_v1@2026-11-25.completed",
+      "entity": "main.projected_so_members_v1",
+      "label": "投影 S/O 真实成员与生理标记检索",
+      "track": "main",
+      "order": 269,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "8 名清醒开发被试。S 2109 的实测 α 占比高于匹配对照 5.33 个百分点，7/8 人同向；扣除线性投影背景后为 +1.41 个百分点，4/8 人同向。O 7822 波形相关为 0.511，对照 0.069，32 个电极片段来自 3 人的 11 个时段。独立额区眼电支持稀少。",
+      "evidence_ids": [
+        "e.projected_so_members_contract",
+        "e.projected_so_members_run",
+        "e.projected_so_members_matched",
+        "e.projected_so_members_specificity",
+        "e.projected_so_members_report"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.temporal_projection_vq_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-25T13:05:56.526524+00:00",
+      "next_step": "按候选节律和波形证据解释，生理事件命名仍需独立标签。"
     }
   ]
 }

@@ -1,0 +1,22 @@
+schema: temporal_projection_so_v1
+experiment_id: EEG-SO-TEMPORAL-PROJECTION-v1
+output: experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1
+parent: experiments/runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1
+ssm: experiments/runs/physiology_semantic_tokenizer/shared_driver_reconstruction/20261121_unified_eeg_so_pilot_v1
+training_reader: experiments/configs/physiology_semantic_tokenizer/dual_component_base_g1_v2.yaml
+recorded_root: /SSD_2/pid-mcm-implementation
+scope: only public G0 training rows and exact eight previous validation identities; no test, no protected evaluation, no Hb target modification
+selection: first complete eligible 30-s score crop per training person in sorted parent/start order, all eligible positions; within each dataset alternate sorted subjects between frequency ranking and dimension selection
+basis: original record grid, 400 samples per disjoint block, 200 Hz, complete blocks only; crop scoring uses precomputed parent labels; drop unsupported edge blocks, no padding, DC, Nyquist or gain correction
+frequency_ranking: normalized S0 periodogram per electrode, equal electrode then person then dataset, descend within each band; interleave bands with fixed cycle delta theta alpha beta theta alpha beta gamma; skip exhausted bands
+pair_counts: [8, 16, 32, 64]
+candidate_max_pairs: 32
+selection_rule: smallest candidate meeting semantics in every training-selection dataset median; if none show largest candidate diagnostically; 64 pairs for context only
+semantics: {s_energy_min: 0.50, theta_power_min: 0.70, alpha_power_min: 0.70, theta_env_r_min: 0.80, alpha_env_r_min: 0.80}
+arms: [v3, projected_v3, projected_x]
+variants: [baseline, ocular1, neural10, neural35]
+seed: 17
+primary: compare candidate vs unprojected v3 for S0 energy, theta and alpha band energy and 1-s envelope correlation; paired ocular leakage and final spatial second-moment cap on matched valid electrodes
+validation_gate: {median_leak_increase_max: 0.03, median_relative_s_change_increase_max: 0.15, median_natural_eog_increase_max: 0.05, median_baseline_cap_p90_ratio_max: 1.25, median_ocular_cap_p90_ratio_max: 1.25}
+null_hypothesis: reducing temporal dimensions loses physiological dynamics or fails to preserve model compatibility and artifact selectivity
+stopping: enter fixed-budget VQ comparison only after training selection passes and validation passes the same semantics by dataset plus paired median guards and lower leakage than projected X; retain all planned results and numerical failures

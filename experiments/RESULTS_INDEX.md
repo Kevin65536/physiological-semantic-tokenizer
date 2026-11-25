@@ -32,6 +32,15 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## Temporal projection of EEG S targets and fixed-budget VQ — 2026-11-25
+
+The [Chinese paired waveform report](runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/review_v1/低维时间投影_S目标与单级VQ配对实验.pdf)
+covers the [target gate](runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/summary.json),
+[per-subject reconstruction errors](runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/vq_screen/subject_scores.csv)
+and [frozen-ID attribute audit](runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/vq_screen/word_attribute_gain.csv).
+
+The [S and O real-member atlas](runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/token_members_v1/review_v2/S_O_token_真实波形与频谱.pdf) traces frozen IDs back to held-out voltage, matched spectra, code pairs and independent EOG. [Within-person comparisons](runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/token_members_v1/people.csv) and [projection-adjusted alpha contrasts](runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/token_members_v1/alpha_specificity.csv) retain the denominators and direction for each person.
+
 ## EEG soft-power target pilot — 2026-11-25
 
 The [paired target report](runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/review_v1/EEG_SO_目标配对比较.pdf) includes eight subject-level voltage examples, natural EOG, controlled injections and frequency-band allocation. The [run summary](runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/summary.json) and [subject-paired contrasts](runs/physiology_semantic_tokenizer/soft_power_so_pilot/20261125_v1/paired_contrasts.csv) retain the three-method comparison.

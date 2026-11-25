@@ -1,0 +1,15 @@
+schema: temporal_projection_vq_screen_v1
+experiment_id: EEG-SO-TEMPORAL-PROJECTION-VQ-v1
+parent: experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1
+output: experiments/runs/physiology_semantic_tokenizer/temporal_projection_so/20261125_v1/vq_screen
+arms: [v3, projected_v3, projected_x]
+architecture: final C waveform encoder and independent integer-sequence decoders, 200 Hz, 30 s context, 15 x 400 samples, 8192 x 64 each EEG branch, width 256
+training: {seed: 17, batch: 64, warm: 100, hard: 400, learning_rate: 0.0003, weight_decay: 0.0001, clip: 5, spectral_weight: 0.01}
+sampling: two distinct G0 parents per training person in sorted key order; first eligible 30s score crop each, every admitted electrode; dataset then subject then example balanced, identical draws, arm-specific continuous warmup then frozen-budget hard training
+evaluation: same eight development subjects, three original consecutive 30s crops plus a 2s shifted context for diagnostic ID comparison; only jointly supported patches score; subject then dataset equal
+scales: same frozen per-electrode G0 input RMS; branch variance and adjacent-difference variance fitted within dataset and electrode over the selected training support separately for each arm; C spectral attributes standardized within training dataset
+primary: paired X NMSE plus both S and O own-scale NMSE; native RMSE within dataset; median across channels and crops is not used
+decision: better joint result requires lower dataset-balanced X NMSE and neither S nor O own-scale NMSE worse than v3; report raw error and PX specificity separately
+null_hypothesis: a lower-dimensional S shifts reconstruction error to O or fails to improve joint X; no pilot claim of stable token meaning
+boundary: train signals only for calibration, optimization and dictionary initialization; same eight validation subjects score only; no test, no protected data, Hb fixed
+stopping: one seed; exactly 100 continuous and 400 hard updates per arm, no tuning or selection by validation
