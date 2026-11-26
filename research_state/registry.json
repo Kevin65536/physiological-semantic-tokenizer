@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-26T18:40:08.623739+08:00",
+  "updated_at": "2026-11-26T20:24:25.655302+08:00",
   "tracks": [
     {
       "id": "main",
@@ -8786,6 +8786,30 @@
       "id": "e.stage2_cached_nback_replay",
       "label": "阶段二 n-back 登记带通缓存训练 重放",
       "path": "experiments/runs/physiology_semantic_tokenizer/four_stream_stage2/20261126_cached_v1/verification.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.four_stream_conditional_v2_protocol",
+      "label": "条件路径和分组验证合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/four_stream_conditional_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.four_stream_conditional_v2_common",
+      "label": "发布坐标严格截止合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/four_stream_cutoff_coordinate_v2.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.four_stream_conditional_v2_summary",
+      "label": "折外、原单位与转移复核",
+      "path": "experiments/runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.four_stream_conditional_v2_spatial",
+      "label": "条件匹配后的人内空间差",
+      "path": "experiments/runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2/transfer/spatial_contrasts.csv",
       "role": "result_summary"
     }
   ],
@@ -21336,6 +21360,33 @@
       "headline": false,
       "updated_at": "2026-11-26T18:40:08.623739+08:00",
       "next_step": "本次固定预算开发比较结束，保留逐人、逐位置及时段结果。"
+    },
+    {
+      "state_id": "main.four_stream_conditional_v2@2026-11-26.completed",
+      "entity": "main.four_stream_conditional_v2",
+      "label": "四流条件增量、信息桥接与跨任务迁移",
+      "track": "main",
+      "order": 281,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "三种 n-back 坐标下 A 相对同预算 Hb 扩容的平均配对差均为负。冻结转入词生成 5 人 237 事件，A 差 +0.0045，区间跨零。两坐标中精确输入与 ID 解码的 Hb 预测误差接近。空间 Q4 的原始后部偏好在条件匹配后减弱。",
+      "evidence_ids": [
+        "e.four_stream_conditional_v2_protocol",
+        "e.four_stream_conditional_v2_common",
+        "e.four_stream_conditional_v2_summary",
+        "e.four_stream_conditional_v2_spatial"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.stage2_native_nback",
+        "main.stage2_cached_nback",
+        "main.four_stream_atlas_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-26T20:24:25.655302+08:00",
+      "next_step": "本序列完成，未触发定向 tokenizer 重训或保护评价。"
     }
   ]
 }

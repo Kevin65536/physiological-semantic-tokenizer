@@ -13,7 +13,7 @@ def sample_limits(marker_ms, rate):
     return stop - 30 * rate, stop, starts
 
 
-def event_observations(eeg, hb, eeg_marker_ms, hb_marker_ms):
+def event_observations(eeg, hb, eeg_marker_ms, hb_marker_ms, *, cached_hb=False):
     """EEG [time,4] uV, Hb [time,4,2] uM. Models never see target arrays."""
     e0, e1, es = sample_limits(eeg_marker_ms, 200)
     h0, h1, hs = sample_limits(hb_marker_ms, 10)
@@ -30,9 +30,12 @@ def event_observations(eeg, hb, eeg_marker_ms, hb_marker_ms):
     freq[1:-1] *= 2
     if (freq[49 * 30 : 51 * 30 + 1].sum(0) > 0.5 * freq.sum(0)).any():
         raise ValueError("line50 history")
-    filt, status = bandpass_fnirs(h, sample_rate_hz=10)
-    if status["status"] != "applied":
-        raise ValueError("Hb filter failed")
+    if cached_hb:
+        filt = h.copy()
+    else:
+        filt, status = bandpass_fnirs(h, sample_rate_hz=10)
+        if status["status"] != "applied":
+            raise ValueError("Hb filter failed")
     filt -= filt[:50].mean(0)
     voltage = e.T.reshape(4, 15, 400)
     alpha = wave_attribute(voltage, "eeg")
@@ -44,7 +47,9 @@ def event_observations(eeg, hb, eeg_marker_ms, hb_marker_ms):
         eeg_target=(wave_attribute(ef, "eeg") - alpha[:, -1:]).astype("float32"),
         hb_target=(hf - h[-20:].mean(0)[:, None]).astype("float32"),
         encoder_start=np.array([e0 / 200 - eeg_marker_ms / 1000, h0 / 10 - hb_marker_ms / 1000]),
-        raw_stop=np.array([e1 / 200 - eeg_marker_ms / 1000, h1 / 10 - hb_marker_ms / 1000]),
+        raw_stop=np.array(
+            [e1 / 200 - eeg_marker_ms / 1000, (len(hb) if cached_hb else h1) / 10 - hb_marker_ms / 1000]
+        ),
         eeg_target_start=es / 200 - eeg_marker_ms / 1000,
         hb_target_start=hs / 10 - hb_marker_ms / 1000,
     )

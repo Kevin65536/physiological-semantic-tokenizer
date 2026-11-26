@@ -1,0 +1,15 @@
+experiment_id: TK-FOUR-STREAM-CONDITIONAL-v2
+run: experiments/runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2
+parents: {native: 20261126_v1, cached: 20261126_cached_v1}
+scope: {train_people: 15, development_people: 4, train_events: 309, development_events: 91, test: forbidden, protected: forbidden, tokenizer: frozen}
+shape: {sites: 4, streams_per_modality: 2, slots: 15, code_dim: 128, target_lags_s: [2, 4, 6]}
+training: {seeds: [17, 43], folds: 3, width: 16, rank: 8, batch: 24, anchor_step_grid: [60, 150], residual_steps: 150, lr: 0.001, residual_l2: 0.1}
+ridge_grid: [0.001, 0.01, 0.1, 1, 10]
+P0: frozen additive and interaction same-donor replay; separately fill missing wrong-trained additive; paired 2x2, curves, zero and training mean references, physical calibration
+bridge: all four Hb sites simultaneously, common standardized dual ridge and leave-group-out regularization selection on the original train people; uncentered history, exact tokenizer waveform, ID-only decoded sum, pre-VQ sequence and frozen code embeddings; historical A_H scored separately
+P1: OOF anchor over all Hb slots and sites; zero-initialized budget-matched Hb or EEG residual, future-specific relative slot timing; B frozen nonlinear additive anchor and local low-rank residual at offsets [-1,0,1]
+primary: A Hb capacity control minus EEG residual, B additive minus local interaction; separately compare true and same-condition wrong-donor training
+secondary: native release-cutoff and offline canonical coordinates scored separately. Seed-average within person before group mean and subject bootstrap.
+P2: frozen cached n-back readers on ordinary development word generation; exploratory Q4 occupancy, observed alpha and S/O joint occupancy/transition nulls on retained public panels
+null_hypothesis: no paired gain over full Hb information or frozen nonlinear main effects; no advantage of true pairing
+stopping: no development selection; no protected evaluation. Only consider tokenizer refit when a loss localizes to quantization across coordinates and generalizes to independent data.

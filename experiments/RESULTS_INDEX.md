@@ -32,7 +32,9 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
-## Full nonoverlapping 30-second masked search — 2026-11-26
+## Four-stream conditional increments and word-generation transfer — 2026-11-26
+
+The [registered summary](runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2/summary.json) and [visual report](runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2/analysis_v1/REPORT.pdf) cover same-donor sensitivity, the [Hb information bridge](runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2/bridge_contrasts.csv), nested readers, strict common-coordinate and cross-task scoring. The [spatial contrasts](runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2/transfer/spatial_contrasts.csv), [Hb vocabulary census](runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2/transfer/hb_dictionary_replication.csv) and [whole-window sequence null](runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2/transfer/joint_family_null.csv.gz) retain separate supports.
 
 ## Stage-2 four-stream future attributes on n-back — 2026-11-26
 
@@ -43,6 +45,8 @@ The [canonical cached-Hb contrasts](runs/physiology_semantic_tokenizer/four_stre
 ## Four-stream sensor atlas — 2026-11-26
 
 The [sensor nodes](runs/physiology_semantic_tokenizer/four_stream_atlas/20261126_v1/atlas_nodes.csv) retain train and development family occupancy, opportunities and subject support. The [family occupancy map](runs/physiology_semantic_tokenizer/four_stream_atlas/20261126_v1/sensor_occupancy.png), [measured Hb member trends](runs/physiology_semantic_tokenizer/four_stream_atlas/20261126_v1/hb_member_trends.png) and [paired S/O readouts](runs/physiology_semantic_tokenizer/four_stream_atlas/20261126_v1/so_readout.png) have separate denominators. The [completion record](runs/physiology_semantic_tokenizer/four_stream_atlas/20261126_v1/summary.json) identifies the source audit and observation support.
+
+## Full nonoverlapping 30-second masked search — 2026-11-26
 
 The [Chinese visual analysis](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/visual_analysis_v1/REPORT.pdf) and [evidence workbook](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/visual_analysis_v1/evidence.xlsx) compare physiological readouts, both cross-modal prediction directions, local masked-ID scores and training coverage. The [selection](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/A_selection.json) and [training summary](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/training_summary.json) own the registered gates and stage outcomes.
 

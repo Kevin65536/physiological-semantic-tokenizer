@@ -73,13 +73,13 @@ measured result exists.
 
 | Reading task | Sections |
 | --- | --- |
+| 四流传感器图谱及 A/B 独立未来端点 | [TK-FOUR-STREAM-ATLAS-v1](#tk-four-stream-atlas-v1) |
 | Search frozen EEG/fNIRS representations for reproducible physiological patterns | [TK-ALIGNED-MASKED-SEARCH-v2](#tk-aligned-masked-search-v2) |
 | Finalize the base tokenizer through coverage, quantization, decoding and seed controls | [TK-BASE-v1：基础 tokenizer 定版实验组](#tk-base-v1) |
 | Arrange tokenizer training and check physiological-state acceptance item by item | [TK-STATE-v1：训练与验收安排](#tk-state-v1) |
 | Test the added value of physical structure beyond task accuracy | [Physical-model contribution and competing explanations](#物理模型独特贡献与非任务证据设计2026-11-04) |
 | Design EEG voltage separation and falsifiable source-token evidence | [Voltage separation with independent intervention anchors](#eeg-电压域分解与独立干预验证设计2026-11-03) |
 | Explain reconstruction versus physiological recovery | [Four independent diagnostics](#拟合观测信息与生理恢复的四套独立诊断2026-10-21) |
-| 四流传感器图谱及 A/B 独立未来端点 | [TK-FOUR-STREAM-ATLAS-v1](#tk-four-stream-atlas-v1) |
 | Reacquire complete downstream metrics and repair Visual/REFED | [DOWNSTREAM-REBENCH-v2](#downstream-rebench-v2); [retained v1 design](#downstream-rebench-v1) and historical comparison contracts remain separate |
 | Local spatial structure and independent dynamics | [Spatial observation design](#局部多通道观测与空间动态维数2026-10-16) |
 | Dataset extensions and conditional tokenizer probes | [REFED extension](#refed-公开实验补齐与四数据集比较2026-10-13), [TK-FUNCTIONAL](#条件功能监督与-hard-token-开发矩阵2026-10-10) |
@@ -95,12 +95,6 @@ measured result exists.
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
 
-<a id="tk-aligned-masked-search-full-v3"></a>
-## TK-ALIGNED-MASKED-SEARCH-FULL-v3　全量非重叠 30 秒窗（2026-11-26）
-
-本版本沿用下一节的 24 个配置、两折、阶段步数和晋级规则。完整面板改为 G0 在每条原生记录的统一 200 Hz 坐标上贪心选出的所有互不重叠 30 秒窗，再筛选单来源时钟和两模态各四个固定原生位置全程有效的窗口。取消旧审计的背景窗抽样上限。训练共 2,827 窗／51 人，普通开发共 770 窗／14 人，三个库的训练窗分别为 1,061、646、1,120。严格错配组仍需唯一事件与分层内合法供体，使用 156 个训练窗、54 个开发窗。普通开发集在候选锁定后评分。
-
-各正式拟合先以加权无放回顺序覆盖所在训练折的全部局部窗，再按库和被试均衡地重复抽窗；严格配对批按原规则独立采样。逐窗保留实际曝光次数，并对每折覆盖作断言。每个配置均从冻结码本和新的读出模型初始化。[运行合同](../experiments/configs/physiology_semantic_tokenizer/aligned_masked_search_full_v3.yaml) · [逐库分母](../experiments/runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_v2/window_census/window_counts.csv)
 <a id="tk-four-stream-atlas-v1"></a>
 ## TK-FOUR-STREAM-ATLAS-v1　四流传感器表型与两条关系分支
 
@@ -122,6 +116,22 @@ A 的 Hb 基线先独立拟合后冻结，匹配参数量的残差模型各自�
 
 神经读取器每个种子固定 300 次更新，批量 24，按被试等概率抽样；训练目标按训练人群的各位置、时段和色团均值及 SD 标准化。每个端点的 NMSE 分母为对应训练方差。先按开发被试汇总事件及位置、时段和色团，再在人内平均两个种子，最后对人等权。配对差为对照减候选，描述性 95% 百分位区间以被试为单位重抽 2,000 次，保留逐位置及时段分数。训练终点固定，开发集没有参与超参数选择。
 
+### TK-FOUR-STREAM-CONDITIONAL-v2　条件增量与表型复核
+
+[序列合同](../experiments/configs/physiology_semantic_tokenizer/four_stream_conditional_v2.yaml)沿用 stage-2 的 n-back 面板。P0 对同一 O 供体重放加性与交互模型，补齐缺失的错配训练加性臂，保存真实/错配训练与推理四格、训练曲线、零变化和训练均值误差。每个被试、站点、预测区间和目标属性报告原单位偏差、RMSE、实测对预测的回归斜率及训练方差归一化的 MSE；预测常数的斜率留空。桥接用全位置的未中心化历史、精确 tokenizer 输入、整数解码总和、量化前和查表后的时序向量预测相同目标。各自按相同训练被试折选择岭系数，另列旧神经读出。所有重建由原码本和 decoder 生成；复核原整数要求重放父运行的数值精度和批形状。
+
+P1 让每个未来时间段的查询先读全部 Hb 位置、两个分支和 15 槽，再将同形状 Hb 或 EEG 来源的残差加入同一冻结 Hb 预测。位置与相对时间差进入注意力，残差输出零初始化并惩罚非零输出。B 使用冻结的非线性加性起点，残差先在同槽或相邻一槽内计算低秩乘积，再汇聚时间；越过边界的配对剔除。训练内部三折按人分组，基线步数按训练人折外平均误差选择，残差监督来自未用该人拟合的基线权重。用于仿射校准的整个读出预测再做外层留人，内层在其余人重新交叉拟合；未校准为主要终点。原 tokenizer 与原面板输入尺度保持冻结，折内留人针对关系读取器。逐种子先在人内汇总，主结果在人内平均两种子后人等权，配对差为对照减候选，区间固定训练后按被试重抽 2,000 次，未作多重比较校正。
+
+严格截止的原生敏感性与登记缓存离线属性分别评分。[同坐标严格截止对照](../experiments/configs/physiology_semantic_tokenizer/four_stream_cutoff_coordinate_v2.yaml)另外利用已保留的发布 Hb 历史与目标，仅做历史内参考减除、训练增益和冻结位置缩放，使两者共享发布测量的时间处理；新输入坐标需重新赋码。P2 用原训练权重与尺度对公开开发词生成任务作零微调迁移，仅用登记缓存 Hb 坐标。每名开发人均保持原划分，单列与 n-back 重叠的人数。对 n-back 分段替换真实 EEG 后整窗重编码，用注册供体评估未替换槽的 ID 迁移及预测变化；时槽索引不直接定义生理时延。
+
+传感器表型沿用冻结图谱的位置及训练词族，重放各位置每十秒的词族占用。比较实测 α 与 EEG-S 高分组前后差，同人内按记录、条件、RMS 三分位和 49–51 Hz 功率占比二分位匹配，并保留支持数。联合词族的零模型在同人、记录、位置、条件内轮换相隔至少 30 秒的完整 O 窗，保留两支边际及窗内序列，枚举合法的循环偏移。Hb 全词典使用实测 X 成员斜率：每人每词至少三片、训练和开发各至少三人；训练多数方向固定后检查开发方向，同时报告不支持词数。例词的匹配非成员另在有标记的配对空间面板按位置、记录、条件、十秒阶段和幅值档比较。只有出现跨坐标、跨独立数据的量化损失证据才转入定向 tokenizer 训练。
+
+<a id="tk-aligned-masked-search-full-v3"></a>
+## TK-ALIGNED-MASKED-SEARCH-FULL-v3　全量非重叠 30 秒窗（2026-11-26）
+
+本版本沿用下一节的 24 个配置、两折、阶段步数和晋级规则。完整面板改为 G0 在每条原生记录的统一 200 Hz 坐标上贪心选出的所有互不重叠 30 秒窗，再筛选单来源时钟和两模态各四个固定原生位置全程有效的窗口。取消旧审计的背景窗抽样上限。训练共 2,827 窗／51 人，普通开发共 770 窗／14 人，三个库的训练窗分别为 1,061、646、1,120。严格错配组仍需唯一事件与分层内合法供体，使用 156 个训练窗、54 个开发窗。普通开发集在候选锁定后评分。
+
+各正式拟合先以加权无放回顺序覆盖所在训练折的全部局部窗，再按库和被试均衡地重复抽窗；严格配对批按原规则独立采样。逐窗保留实际曝光次数，并对每折覆盖作断言。每个配置均从冻结码本和新的读出模型初始化。[运行合同](../experiments/configs/physiology_semantic_tokenizer/aligned_masked_search_full_v3.yaml) · [逐库分母](../experiments/runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_v2/window_census/window_counts.csv)
 
 <a id="tk-aligned-masked-search-v2"></a>
 ## TK-ALIGNED-MASKED-SEARCH-v2　用较大规模的掩码搜索发现可复现的生理模式（2026-11-26）
