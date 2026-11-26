@@ -1,0 +1,34 @@
+experiment_id: TK-FOUR-STREAM-EVIDENCE-v3
+run: experiments/runs/physiology_semantic_tokenizer/four_stream_evidence/20261126_v3
+parent: experiments/runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2
+scope: {nback_train: 15, nback_dev: 4, test: forbidden, protected: forbidden, tokenizer: frozen}
+shape: {streams: 4, sites: 4, slots: 15, dim: 128, horizon_starts_s: [2, 4, 6], chromophores: [HbO, HbR]}
+A:
+  coordinate: strict_common
+  conditions: [0-back session, 2-back session, 3-back session]
+  bands_hz: [[1,4],[4,8],[8,13],[13,30],[30,45]]
+  eta: [0, 0.01, 0.1, 1, 10]
+  ridge: [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000]
+  condition_weight: 1
+  folds: 3
+  endpoint: paired subject mean future measured Hb-change NMSE, 309 train and 91 development events; Hb-only and separately selected wrong-donor fits
+  decision: trigger EEG pre-VQ follow-up only for a continuous gain over both controls with majority improvement and positive subject-bootstrap lower bounds, without a corresponding discrete gain
+B:
+  coordinates: [native, cached, strict_common]
+  seeds: [17,43]
+  endpoint: product versus equal-parameter nonlinear additive and wrong-product residuals on identical true-anchor OOF targets, frozen anchor on every test variant
+semantics:
+  quadrants: [down_down, down_up, up_down, up_up]
+  uncertainty_quantiles: [0, 0.10]
+  permutation_repeats: 99
+  permutation_seed: 1126
+  null: shuffle paired Hb slopes within split, dataset, subject, native site and retained RMS bin, preserve both word streams and all counts
+  match: coarsen train and development support counts and log2 emissions; common weights are the smaller branch count per stratum
+  q1_repeats: 999
+  q1_panel: reproduce the discovery atlas; separately evaluate public WG records absent from discovery, with new-person status explicit
+  transition: normalize every observed and surrogate row by its own outgoing count, retain unsupported rows
+primary: strict continuous/discrete EEG increments, frozen Hb vocabulary composition, prespecified EEG double Q1, and B product residual versus both controls
+secondary: matched-support spatial ladder and start-conditioned transitions
+diagnostic: train-only near-zero sensitivity, background and support/frequency matching, reference-level side information, and input substitution
+null_hypothesis: no EEG increment beyond Hb and condition; no product advantage over additive expansion; no excess vocabulary organization over conditional surrogates
+stopping: one frozen pass on public panels; no development-driven extension or protected reads

@@ -226,7 +226,7 @@ def export(folder):
     axes[0, 1].set_ylabel("其他槽 ID 改变比例（%）")
     page(
         "perturb",
-        "替换一个真实 EEG 时间段也会改变邻近槽的离散词",
+        "替换一个真实 EEG 时间段也会改变其他槽的离散词",
         "每次仅将四个 EEG 通道同一两秒段换成相同条件供体的对应片段，整窗重新编码。基线词逐项复现后，共评估 91 事件 × 15 替换位置。保持 Hb 历史、事件目标与训练模型固定。左图上升表示替换损害预测。",
         fig,
         "未直接替换处的 ID 也发生变化，反映 tokenizer 的整窗上下文。横轴是人为指定的输入支持；曲线按被试和种子等权。三个输出时段均相对于截止点，预测变化和 ID 迁移不足以定位生理传播时延。",
@@ -327,7 +327,7 @@ def export(folder):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--output", type=Path, default=OUT / "analysis_v1")
+    ap.add_argument("--output", type=Path, default=OUT / "analysis_v2")
     dest = ap.parse_args().output.resolve()
     if dest.exists():
         ap.error("fresh output required")

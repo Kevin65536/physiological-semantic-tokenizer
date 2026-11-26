@@ -76,8 +76,9 @@ class AdditiveSlots(nn.Module):
 
 
 class LocalInteraction(nn.Module):
-    def __init__(self, rank, colors):
+    def __init__(self, rank, colors, *, additive=False):
         super().__init__()
+        self.additive = additive
         self.left = nn.Linear(128, rank)
         self.right = nn.Linear(128, rank)
         self.time = nn.Parameter(torch.zeros(3, 3, 15))
@@ -89,7 +90,16 @@ class LocalInteraction(nn.Module):
         left = self.left(x[:, :, 0])
         right = self.right(x[:, :, 1])
         # Crop invalid boundary pairs, never wrap from the last slot to the first.
-        pairs = [left[:, :, 1:] * right[:, :, :-1], left * right, left[:, :, :-1] * right[:, :, 1:]]
+        if self.additive:
+            left, right = left.tanh(), right.tanh()
+            combine = torch.add
+        else:
+            combine = torch.mul
+        pairs = [
+            combine(left[:, :, 1:], right[:, :, :-1]),
+            combine(left, right),
+            combine(left[:, :, :-1], right[:, :, 1:]),
+        ]
         weight = [self.time[0, :, 1:], self.time[1], self.time[2, :, :-1]]
         z = torch.einsum("ht,bstr->bshr", torch.cat(weight, -1).softmax(-1), torch.cat(pairs, 2))
         return self.output(z)

@@ -216,7 +216,8 @@ def wave_input(coord, path, meta, data):
     return (wave * np.float64(gain) / np.asarray(scale)[None, :, None, None]).astype("float32")
 
 
-def bridge(coord):
+def bridge(coord, *, output=None, ridge_grid=None):
+    grid = CFG["ridge_grid"] if ridge_grid is None else ridge_grid
     path, meta, data = load_parent(coord)
     x = wave_input(coord, path, meta, data)
     net = audit.network("hb", 1024, 17, "cpu")
@@ -250,18 +251,17 @@ def bridge(coord):
         ("pre_VQ", np.concatenate(pre)),
         ("ID_embeddings", vectors),
     ]:
-        p, alpha, loss = select_ridge(features, y, meta.subject.to_numpy(), tr, dev, CFG["ridge_grid"])
+        p, alpha, loss = select_ridge(features, y, meta.subject.to_numpy(), tr, dev, grid)
         rows.extend(cell_scores(meta.iloc[dev], y[dev], p, sd, "hb", label, 0))
         sel.extend(
-            dict(input=label, ridge=a, group_cv_nmse=v, selected=a == alpha)
-            for a, v in zip(CFG["ridge_grid"], loss)
+            dict(input=label, ridge=a, group_cv_nmse=v, selected=a == alpha) for a, v in zip(grid, loss)
         )
     for seed in TR["seeds"]:
         with np.load(path / "fits" / f"A_H_{seed}" / "dev_predictions.npz") as z:
             pred = z["aligned"].reshape(y[dev].shape) * sd + y[tr].mean(0)
         rows.extend(cell_scores(meta.iloc[dev], y[dev], pred, sd, "hb", "historical_A_H", seed))
-    folder = OUT / coord
-    folder.mkdir(exist_ok=True)
+    folder = OUT / coord if output is None else output
+    folder.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(folder / "bridge_cells.csv.gz", index=False)
     pd.DataFrame(sel).to_csv(folder / "ridge_selection.csv", index=False)
 

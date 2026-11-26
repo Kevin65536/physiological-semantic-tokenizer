@@ -138,8 +138,8 @@ def wg_panel(output=OUT):
 
 
 @torch.inference_mode()
-def transfer():
-    meta, raw = wg_panel()
+def wg_inputs(output=OUT):
+    meta, raw = wg_panel(output)
     path, source, books = suite.load_parent("cached")
     scales = suite.read(G0 / "scales.json")["positions"]
     gain = suite.read(path / "input_coordinates.json")["training_hb_gain"]
@@ -162,6 +162,13 @@ def transfer():
             np.testing.assert_array_equal(
                 net.branches[b]["quantizer"].codebook.numpy(), data[mod + b + "_book"]
             )
+    return meta, data
+
+
+@torch.inference_mode()
+def transfer():
+    meta, data = wg_inputs()
+    source = pd.read_csv(suite.PARENT / suite.CFG["parents"]["cached"] / "panel.csv")
     rows = []
     for task in ["A", "B_eeg", "B_hb"]:
         t = setup(data, meta, task)
@@ -462,45 +469,58 @@ def spatial_temporal():
     )
 
 
+def hb_patch_blocks(role, rows, scales):
+    cache = OrderedDict()
+    for task in audit.tasks(role):
+        mod, ds, _, lo, hi = task
+        if mod != "hb":
+            continue
+        with np.load(audit.inputs(task)) as z:
+            ex = z["examples"]
+            valid = z["valid"]
+            ids = [z[b + "_17_id"] for b in "SO"]
+            original = z["y"][:, 0]
+            rms_bin = z["bg"] % 4
+        expected = audit.readout.capacity.PANEL["examples"][mod, role, ds][lo:hi]
+        np.testing.assert_array_equal(ex, expected)
+        sub = []
+        scores = []
+        positions = []
+        for i in range(0, len(ex), 96):
+            block = ex[i : i + 96]
+            mask = valid[i : i + len(block)]
+            if any(rows[k]["dataset"] != ds or rows[k]["split"] != role for k in block[:, 0]):
+                raise ValueError("shard scope drift")
+            x = base_tokenizer_batch(rows, block, scales, array_cache=cache)
+            np.testing.assert_array_equal(mask, x["mask"].all(-1))
+            v = x["x"][mask]
+            oxy = wave_attribute(v, "hb")
+            deoxy = wave_attribute(v.reshape(-1, 20, 2)[:, :, ::-1].reshape(-1, 40), "hb")
+            scores.append(np.stack([oxy, deoxy], 1))
+            sub.extend(np.repeat([rows[k]["subject"] for k in block[:, 0]], mask.sum(1)))
+            positions.extend(np.repeat([rows[k]["positions"][pos] for k, _, pos in block], mask.sum(1)))
+        vals = np.concatenate(scores)
+        np.testing.assert_allclose(vals[:, 0], original, atol=2e-5, rtol=1e-5)
+        yield pd.DataFrame(
+            dict(
+                dataset=ds,
+                subject=sub,
+                position=positions,
+                rms_bin=rms_bin,
+                S=ids[0],
+                O=ids[1],
+                oxy=vals[:, 0],
+                deoxy=vals[:, 1],
+            )
+        )
+
+
 def vocabulary():
     """Inventory both entire Hb dictionaries; naming direction is determined on train only."""
     rows, scales = atlas_inputs()
     people = []
-    cache = OrderedDict()
     for role in ["train", "validation"]:
-        parts = []
-        for task in audit.tasks(role):
-            mod, ds, _, lo, hi = task
-            if mod != "hb":
-                continue
-            with np.load(audit.inputs(task)) as z:
-                ex = z["examples"]
-                valid = z["valid"]
-                ids = [z[b + "_17_id"] for b in "SO"]
-                original = z["y"][:, 0]
-            expected = audit.readout.capacity.PANEL["examples"][mod, role, ds][lo:hi]
-            np.testing.assert_array_equal(ex, expected)
-            sub = []
-            scores = []
-            for i in range(0, len(ex), 96):
-                block = ex[i : i + 96]
-                mask = valid[i : i + len(block)]
-                if any(rows[k]["dataset"] != ds or rows[k]["split"] != role for k in block[:, 0]):
-                    raise ValueError("shard scope drift")
-                x = base_tokenizer_batch(rows, block, scales, array_cache=cache)
-                np.testing.assert_array_equal(mask, x["mask"].all(-1))
-                v = x["x"][mask]
-                oxy = wave_attribute(v, "hb")
-                deoxy = wave_attribute(v.reshape(-1, 20, 2)[:, :, ::-1].reshape(-1, 40), "hb")
-                scores.append(np.stack([oxy, deoxy], 1))
-                sub.extend(np.repeat([rows[k]["subject"] for k in block[:, 0]], mask.sum(1)))
-            vals = np.concatenate(scores)
-            np.testing.assert_allclose(vals[:, 0], original, atol=2e-5, rtol=1e-5)
-            parts.append(
-                pd.DataFrame(
-                    dict(dataset=ds, subject=sub, S=ids[0], O=ids[1], oxy=vals[:, 0], deoxy=vals[:, 1])
-                )
-            )
+        parts = list(hb_patch_blocks(role, rows, scales))
         d = pd.concat(parts, ignore_index=True)
         for b in "SO":
             g = (

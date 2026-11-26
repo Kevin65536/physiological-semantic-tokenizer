@@ -48,7 +48,11 @@ def new_model(kind, arm, cfg, seed, colors):
     torch.manual_seed(seed)
     if kind == "A":
         return AllHb(cfg["width"]) if arm == "anchor" else HbIncrement(cfg["width"])
-    return AdditiveSlots(cfg["width"], colors) if arm == "anchor" else LocalInteraction(cfg["rank"], colors)
+    return (
+        AdditiveSlots(cfg["width"], colors)
+        if arm == "anchor"
+        else LocalInteraction(cfg["rank"], colors, additive=arm == "additive_residual")
+    )
 
 
 def fit(t, arm, seed, indices, target, steps, cfg, *, check=(), score=None, name=""):
