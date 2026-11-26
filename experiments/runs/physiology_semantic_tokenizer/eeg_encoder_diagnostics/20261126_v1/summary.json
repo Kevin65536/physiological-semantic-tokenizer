@@ -1,0 +1,753 @@
+{
+  "status": "completed",
+  "finished": "2026-11-26T12:05:58.064525+00:00",
+  "contract": {
+    "schema": "eeg_encoder_diagnostics_v1",
+    "experiment_id": "TK-EEG-ENCODER-DIAGNOSTICS-v1",
+    "run": "experiments/runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1",
+    "parent_contract": "single_vq_aligned_v1.yaml",
+    "scope": {
+      "train_people": 60,
+      "development_people": 16,
+      "eeg_positions": 53476,
+      "test": "forbidden",
+      "confirmation": "forbidden",
+      "raw_reads": false,
+      "teacher_refits": false
+    },
+    "interface": {
+      "rate_hz": 200,
+      "patches": 15,
+      "patch_samples": 400,
+      "width": 256,
+      "dimension": 128,
+      "hard_size": 8192,
+      "decoder_layers": 2,
+      "decoder_local_width": 32
+    },
+    "budget": {
+      "seed": 17,
+      "warmup_steps": 1000,
+      "total_steps": 10000,
+      "batch_size": 64,
+      "checkpoint_every": 250
+    },
+    "architectures": {
+      "observed": {
+        "source": "X",
+        "input_width": 32,
+        "encoder_layers": 2,
+        "fits": [
+          "continuous",
+          "hard"
+        ]
+      },
+      "privileged": {
+        "source": "SO",
+        "input_width": 32,
+        "encoder_layers": 2,
+        "fits": [
+          "continuous"
+        ]
+      },
+      "wide": {
+        "source": "X",
+        "input_width": 64,
+        "encoder_layers": 2,
+        "fits": [
+          "continuous",
+          "hard"
+        ]
+      },
+      "deep": {
+        "source": "X",
+        "input_width": 32,
+        "encoder_layers": 4,
+        "fits": [
+          "continuous",
+          "hard"
+        ]
+      }
+    },
+    "initialization": "seed-matched unchanged network weights at initialization; shared continuous warmup within each architecture; identical training samples, learning rate schedule and EMA initialization examples",
+    "objective": "inherited masked X/S/O waveform and adjacent differences; hard arms add the aligned C single-ID spectral head and commitment; target inputs in privileged arms are zero on invalid support",
+    "primary": "terminal equal-dataset macro X/S/O NMSE on matching crop-position identities, candidate minus observed within representation; lower is better",
+    "secondary": "X/S/O NMSE and correlation, decoded EEG-S four standardized spectral attribute MSEs; hard arms also retain actual integer replay and single-ID incremental gains",
+    "diagnostic": "per-subject contrasts, inherited median and difficult waveforms, training monitor and fixed 256 development examples. Monitoring uses arithmetic means across examples and never selects a checkpoint.",
+    "baseline": "rerun observed continuous and hard arms with matched monitors; compare with retained capacity continuous and aligned C endpoints",
+    "null": "privileged input or changed encoder does not reduce matched terminal macro NMSE; assess front end and depth separately in continuous and hard models",
+    "stopping": "seven terminal fits, one seed; fixed step 10000 with no metric-dependent extension. Record failed runs. Teacher inputs are privileged diagnostics only."
+  },
+  "planned": 7,
+  "completed": [
+    {
+      "arch": "observed",
+      "fit": "continuous",
+      "step": 10000,
+      "inputs": 53476,
+      "subjects": 16
+    },
+    {
+      "arch": "observed",
+      "fit": "hard",
+      "step": 10000,
+      "inputs": 53476,
+      "subjects": 16
+    },
+    {
+      "arch": "privileged",
+      "fit": "continuous",
+      "step": 10000,
+      "inputs": 53476,
+      "subjects": 16
+    },
+    {
+      "arch": "wide",
+      "fit": "continuous",
+      "step": 10000,
+      "inputs": 53476,
+      "subjects": 16
+    },
+    {
+      "arch": "wide",
+      "fit": "hard",
+      "step": 10000,
+      "inputs": 53476,
+      "subjects": 16
+    },
+    {
+      "arch": "deep",
+      "fit": "continuous",
+      "step": 10000,
+      "inputs": 53476,
+      "subjects": 16
+    },
+    {
+      "arch": "deep",
+      "fit": "hard",
+      "step": 10000,
+      "inputs": 53476,
+      "subjects": 16
+    }
+  ],
+  "paired_signatures": {
+    "input": "1ab7ff8f60d96ead66a7cd65",
+    "scales": "e2a98b191bf36def2ba3ec66",
+    "development_probe": "1376e58effffcc10067d4d3a",
+    "terminal_training_sampler": "28fe92292fbedba059c3abd6"
+  },
+  "hard_initialization_examples": 884,
+  "metrics": [
+    {
+      "architecture": "observed",
+      "fit": "continuous",
+      "macro_nmse": 0.35123629020445685,
+      "parameters": 4613314,
+      "X_nmse": 0.26306646069930084,
+      "S_nmse": 0.45369811554811534,
+      "O_nmse": 0.3369442943659543,
+      "X_corr": 0.8186041352321041,
+      "S_corr": 0.7297345081843036,
+      "O_corr": 0.7503209961180919,
+      "S_logtheta_mse": 0.24407736331113816,
+      "S_logalpha_mse": 2.0298702877655077,
+      "S_theta_fraction_mse": 8.204617763679144,
+      "S_alpha_fraction_mse": 2.554377865244593,
+      "S_single_id_mean_gain": null
+    },
+    {
+      "architecture": "observed",
+      "fit": "hard",
+      "macro_nmse": 0.5063967679766744,
+      "parameters": 4613830,
+      "X_nmse": 0.4089571190357601,
+      "S_nmse": 0.6736747212685523,
+      "O_nmse": 0.43655846362571077,
+      "X_corr": 0.6558175273348122,
+      "S_corr": 0.5279748074326507,
+      "O_corr": 0.6187752345679771,
+      "S_logtheta_mse": 4.444901026373978,
+      "S_logalpha_mse": 97.7850440977504,
+      "S_theta_fraction_mse": 3.7146553858012483,
+      "S_alpha_fraction_mse": 4.750920723816596,
+      "S_single_id_mean_gain": 0.019033725330631968
+    },
+    {
+      "architecture": "privileged",
+      "fit": "continuous",
+      "macro_nmse": 0.27681182577100366,
+      "parameters": 4613314,
+      "X_nmse": 0.2374249541450674,
+      "S_nmse": 0.26956299624685637,
+      "O_nmse": 0.3234475269210872,
+      "X_corr": 0.8463598091545477,
+      "S_corr": 0.8396039240627112,
+      "O_corr": 0.7703288959982837,
+      "S_logtheta_mse": 0.015610765398311995,
+      "S_logalpha_mse": 0.11114660526856454,
+      "S_theta_fraction_mse": 2.8915544061880594,
+      "S_alpha_fraction_mse": 4.165406669642607,
+      "S_single_id_mean_gain": null
+    },
+    {
+      "architecture": "wide",
+      "fit": "continuous",
+      "macro_nmse": 0.346046764191956,
+      "parameters": 4802626,
+      "X_nmse": 0.25824945921439624,
+      "S_nmse": 0.4449811446268612,
+      "O_nmse": 0.33490968873461063,
+      "X_corr": 0.8232969448801024,
+      "S_corr": 0.7359656164977484,
+      "O_corr": 0.752932015718716,
+      "S_logtheta_mse": 0.30543365046014714,
+      "S_logalpha_mse": 1.2059610614111715,
+      "S_theta_fraction_mse": 3.7197349063027576,
+      "S_alpha_fraction_mse": 2.876060938069695,
+      "S_single_id_mean_gain": null
+    },
+    {
+      "architecture": "wide",
+      "fit": "hard",
+      "macro_nmse": 0.5061956437389913,
+      "parameters": 4803142,
+      "X_nmse": 0.40830118644394564,
+      "S_nmse": 0.6742702504177694,
+      "O_nmse": 0.4360154943552588,
+      "X_corr": 0.6555018327663047,
+      "S_corr": 0.5280082161461108,
+      "O_corr": 0.6183441962283466,
+      "S_logtheta_mse": 4.449289216185639,
+      "S_logalpha_mse": 100.10529977698567,
+      "S_theta_fraction_mse": 3.7445353026307004,
+      "S_alpha_fraction_mse": 4.745153862893654,
+      "S_single_id_mean_gain": 0.02001183683137603
+    },
+    {
+      "architecture": "deep",
+      "fit": "continuous",
+      "macro_nmse": 0.36463634645312304,
+      "parameters": 6721730,
+      "X_nmse": 0.2804806246207125,
+      "S_nmse": 0.46766955356035667,
+      "O_nmse": 0.3457588611782999,
+      "X_corr": 0.8024433154598768,
+      "S_corr": 0.717156998412145,
+      "O_corr": 0.7399139390239406,
+      "S_logtheta_mse": 0.26623576452593684,
+      "S_logalpha_mse": 3.2115267946936457,
+      "S_theta_fraction_mse": 9.194116436879867,
+      "S_alpha_fraction_mse": 1.5914370872909473,
+      "S_single_id_mean_gain": null
+    },
+    {
+      "architecture": "deep",
+      "fit": "hard",
+      "macro_nmse": 0.5061884483127039,
+      "parameters": 6722246,
+      "X_nmse": 0.40882580085523057,
+      "S_nmse": 0.6734457944067488,
+      "O_nmse": 0.4362937496761326,
+      "X_corr": 0.6558820434702852,
+      "S_corr": 0.5277019588647165,
+      "O_corr": 0.6186937329494019,
+      "S_logtheta_mse": 4.327620499489662,
+      "S_logalpha_mse": 96.57019049535887,
+      "S_theta_fraction_mse": 3.7990763931205684,
+      "S_alpha_fraction_mse": 4.751702661226459,
+      "S_single_id_mean_gain": 0.018518309492298546
+    }
+  ],
+  "contrasts": {
+    "privileged_continuous": {
+      "delta_nmse": -0.07442446443345319,
+      "relative_percent": -21.189286673689168,
+      "lower_error_people": 16,
+      "bootstrap95": [
+        -0.07894071524761749,
+        -0.0700736530030323
+      ],
+      "by_dataset": {
+        "eeg_fnirs_single_trial": -0.06941187043609681,
+        "refed": -0.08762584805058968,
+        "simultaneous_eeg_nirs": -0.08337872656771378,
+        "visual_cognitive_motivation": -0.057281412679412474
+      },
+      "people": [
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_01",
+          "delta_nmse": -0.05770165553701518
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_03",
+          "delta_nmse": -0.06200484165058785
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_06",
+          "delta_nmse": -0.07310429801003611
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_14",
+          "delta_nmse": -0.08342087023029196
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_25",
+          "delta_nmse": -0.07082768675255297
+        },
+        {
+          "dataset": "refed",
+          "subject": "17",
+          "delta_nmse": -0.1076105149686144
+        },
+        {
+          "dataset": "refed",
+          "subject": "18",
+          "delta_nmse": -0.09790625872671094
+        },
+        {
+          "dataset": "refed",
+          "subject": "31",
+          "delta_nmse": -0.08383255859960131
+        },
+        {
+          "dataset": "refed",
+          "subject": "8",
+          "delta_nmse": -0.08042357722136195
+        },
+        {
+          "dataset": "refed",
+          "subject": "9",
+          "delta_nmse": -0.06835633073665975
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP002",
+          "delta_nmse": -0.0797462576425556
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP005",
+          "delta_nmse": -0.08668094971184354
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP014",
+          "delta_nmse": -0.0840396519134291
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP019",
+          "delta_nmse": -0.08304804700302684
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S08",
+          "delta_nmse": -0.05008761901939007
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S14",
+          "delta_nmse": -0.06447520633943488
+        }
+      ]
+    },
+    "wide_continuous": {
+      "delta_nmse": -0.005189526012500821,
+      "relative_percent": -1.4775027971853267,
+      "lower_error_people": 15,
+      "bootstrap95": [
+        -0.006127341266207974,
+        -0.004328683643981632
+      ],
+      "by_dataset": {
+        "eeg_fnirs_single_trial": -0.002708152227208158,
+        "refed": -0.011362992215378388,
+        "simultaneous_eeg_nirs": -0.0074754322574246065,
+        "visual_cognitive_motivation": 0.0007884726500078654
+      },
+      "people": [
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_01",
+          "delta_nmse": -0.0032729981761707855
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_03",
+          "delta_nmse": -0.0032092415023811938
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_06",
+          "delta_nmse": -0.0004540458097766209
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_14",
+          "delta_nmse": -0.004038131489073393
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_25",
+          "delta_nmse": -0.0025663441586387947
+        },
+        {
+          "dataset": "refed",
+          "subject": "17",
+          "delta_nmse": -0.016687676396233253
+        },
+        {
+          "dataset": "refed",
+          "subject": "18",
+          "delta_nmse": -0.013393846845637991
+        },
+        {
+          "dataset": "refed",
+          "subject": "31",
+          "delta_nmse": -0.008044750744046869
+        },
+        {
+          "dataset": "refed",
+          "subject": "8",
+          "delta_nmse": -0.009076220598258855
+        },
+        {
+          "dataset": "refed",
+          "subject": "9",
+          "delta_nmse": -0.009612466492714966
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP002",
+          "delta_nmse": -0.006786441255842934
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP005",
+          "delta_nmse": -0.00996778462434178
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP014",
+          "delta_nmse": -0.006838697372835906
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP019",
+          "delta_nmse": -0.006308805776677806
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S08",
+          "delta_nmse": 0.0017592109845082637
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S14",
+          "delta_nmse": -0.000182265684492533
+        }
+      ]
+    },
+    "wide_hard": {
+      "delta_nmse": -0.00020112423768308476,
+      "relative_percent": -0.03971673012185357,
+      "lower_error_people": 8,
+      "bootstrap95": [
+        -0.0007336380654271956,
+        0.00021866490631295633
+      ],
+      "by_dataset": {
+        "eeg_fnirs_single_trial": 0.00021398703727797951,
+        "refed": -0.0004599967425914286,
+        "simultaneous_eeg_nirs": -0.0010665156435346185,
+        "visual_cognitive_motivation": 0.0005080283981157285
+      },
+      "people": [
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_01",
+          "delta_nmse": 0.0002751789944989147
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_03",
+          "delta_nmse": -0.0003032006934026721
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_06",
+          "delta_nmse": 0.00032220009430949936
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_14",
+          "delta_nmse": -6.459013129822555e-05
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_25",
+          "delta_nmse": 0.0008403469222823812
+        },
+        {
+          "dataset": "refed",
+          "subject": "17",
+          "delta_nmse": -0.0003265083010337566
+        },
+        {
+          "dataset": "refed",
+          "subject": "18",
+          "delta_nmse": -0.0001694119840841557
+        },
+        {
+          "dataset": "refed",
+          "subject": "31",
+          "delta_nmse": -0.0015238547841300853
+        },
+        {
+          "dataset": "refed",
+          "subject": "8",
+          "delta_nmse": 0.0006401251827368171
+        },
+        {
+          "dataset": "refed",
+          "subject": "9",
+          "delta_nmse": -0.0009203338264459626
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP002",
+          "delta_nmse": 0.000138702066667995
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP005",
+          "delta_nmse": -0.004104443505807742
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP014",
+          "delta_nmse": -0.0004179777910723881
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP019",
+          "delta_nmse": 0.00011765665607366138
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S08",
+          "delta_nmse": 0.0008818186279233586
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S14",
+          "delta_nmse": 0.00013423816830809843
+        }
+      ]
+    },
+    "deep_continuous": {
+      "delta_nmse": 0.013400056248666189,
+      "relative_percent": 3.8151115423938484,
+      "lower_error_people": 0,
+      "bootstrap95": [
+        0.01116666508212118,
+        0.015824913379789453
+      ],
+      "by_dataset": {
+        "eeg_fnirs_single_trial": 0.005691595778079384,
+        "refed": 0.02013919456060729,
+        "simultaneous_eeg_nirs": 0.016584151955808514,
+        "visual_cognitive_motivation": 0.011185282700169566
+      },
+      "people": [
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_01",
+          "delta_nmse": 0.00422747378374258
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_03",
+          "delta_nmse": 0.007827525806274382
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_06",
+          "delta_nmse": 0.008172143218798417
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_14",
+          "delta_nmse": 0.00400434293649829
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_25",
+          "delta_nmse": 0.004226493145083249
+        },
+        {
+          "dataset": "refed",
+          "subject": "17",
+          "delta_nmse": 0.026394518953533508
+        },
+        {
+          "dataset": "refed",
+          "subject": "18",
+          "delta_nmse": 0.026305552969743462
+        },
+        {
+          "dataset": "refed",
+          "subject": "31",
+          "delta_nmse": 0.01669354824802427
+        },
+        {
+          "dataset": "refed",
+          "subject": "8",
+          "delta_nmse": 0.014516565237345569
+        },
+        {
+          "dataset": "refed",
+          "subject": "9",
+          "delta_nmse": 0.01678578739438963
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP002",
+          "delta_nmse": 0.028771259042413067
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP005",
+          "delta_nmse": 0.016845217371096455
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP014",
+          "delta_nmse": 0.009302336632417113
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP019",
+          "delta_nmse": 0.011417794777307422
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S08",
+          "delta_nmse": 0.008684151508698196
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S14",
+          "delta_nmse": 0.013686413891640936
+        }
+      ]
+    },
+    "deep_hard": {
+      "delta_nmse": -0.0002083196639703744,
+      "relative_percent": -0.04113763695663436,
+      "lower_error_people": 11,
+      "bootstrap95": [
+        -0.0005532794928024452,
+        0.0001428575126711827
+      ],
+      "by_dataset": {
+        "eeg_fnirs_single_trial": -0.0003733100582361426,
+        "refed": -0.00023295758805341737,
+        "simultaneous_eeg_nirs": 2.638677023575342e-05,
+        "visual_cognitive_motivation": -0.00025339777982769096
+      },
+      "people": [
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_01",
+          "delta_nmse": -0.0007781312936935847
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_03",
+          "delta_nmse": -0.0007065103180688981
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_06",
+          "delta_nmse": 0.0011866489608887143
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_14",
+          "delta_nmse": -0.0011447641802371233
+        },
+        {
+          "dataset": "eeg_fnirs_single_trial",
+          "subject": "subject_25",
+          "delta_nmse": -0.0004237934600698212
+        },
+        {
+          "dataset": "refed",
+          "subject": "17",
+          "delta_nmse": -1.1771220892242695e-05
+        },
+        {
+          "dataset": "refed",
+          "subject": "18",
+          "delta_nmse": 0.0005681635748330249
+        },
+        {
+          "dataset": "refed",
+          "subject": "31",
+          "delta_nmse": -0.0018650549017191764
+        },
+        {
+          "dataset": "refed",
+          "subject": "8",
+          "delta_nmse": 0.0007732467626073714
+        },
+        {
+          "dataset": "refed",
+          "subject": "9",
+          "delta_nmse": -0.000629372155096064
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP002",
+          "delta_nmse": 0.0007100364980660023
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP005",
+          "delta_nmse": -0.0010603565432679707
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP014",
+          "delta_nmse": -0.0006273384111358249
+        },
+        {
+          "dataset": "simultaneous_eeg_nirs",
+          "subject": "VP019",
+          "delta_nmse": 0.001083205537280807
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S08",
+          "delta_nmse": -0.0001551987385072784
+        },
+        {
+          "dataset": "visual_cognitive_motivation",
+          "subject": "S14",
+          "delta_nmse": -0.00035159682114810353
+        }
+      ]
+    }
+  },
+  "baseline_replay_delta": {
+    "continuous": -0.002140060643532782,
+    "hard": 0.00015282552205531097
+  },
+  "interval": "Descriptive paired 95% bootstrap percentile interval, 10000 draws of subjects within each dataset, frozen fits and seed; no multiplicity adjustment."
+}

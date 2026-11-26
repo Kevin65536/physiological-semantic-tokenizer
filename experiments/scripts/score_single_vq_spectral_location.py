@@ -34,23 +34,30 @@ def extract(model, examples, ds, role, rows, scales, calibration, sites, cases, 
         def attributes(wave):
             return ((eeg_spectral_attributes(wave, scale) - mean) / sd).cpu().numpy()
         x = torch.as_tensor(raw['x'], device=device, dtype=torch.float32)
-        result = model(x)
-        ids = result['ids']['S'].cpu().numpy()
-        if ids.shape != valid.shape or ids.min() < 0 or ids.max() >= suite.K:
-            raise ValueError('invalid emitted S integers')
+        if model.target_input:
+            targets = [torch.as_tensor(np.where(raw['mask'], raw[k], 0.), device=device, dtype=x.dtype)
+                       for k in ('s','o')]
+            result = model.forward_components(*targets)
+        else:
+            result = model(x)
+        if model.hard:
+            ids = result['ids']['S'].cpu().numpy()
+            if ids.shape != valid.shape or ids.min() < 0 or ids.max() >= suite.K:
+                raise ValueError('invalid emitted S integers')
+            parts['id'].append(ids[valid].astype(np.uint16))
         values = attributes(torch.as_tensor(raw['s'], device=device, dtype=torch.float32))
         if not np.isfinite(values[valid]).all():
             raise ValueError('nonfinite complete target attributes')
         location = np.array([sites[ds, rows[r]['positions'][p]] for r, _, p in ex])
         bg = location[:, None]*4 + np.digitize(np.sqrt((raw['x']**2).mean(-1)), [.5, 1, 2])
-        parts['id'].append(ids[valid].astype(np.uint16))
         parts['bg'].append(bg[valid].astype(np.int32))
         parts['target'].append(values[valid])
         parts['valid'].append(valid)
         if role == 'validation':
-            pred = model.decode_ids(result['ids'])
-            for b in ('S', 'O', 'sum'):
-                torch.testing.assert_close(pred[b], result[b], rtol=0, atol=0)
+            pred = model.decode_ids(result['ids']) if model.hard else result
+            if model.hard:
+                for b in ('S', 'O', 'sum'):
+                    torch.testing.assert_close(pred[b], result[b], rtol=0, atol=0)
             decoded = attributes(pred['S'])
             arrays = {b: pred[b].cpu().numpy() for b in ('S','O','sum')}
             if any(not np.isfinite(a).all() for a in arrays.values()):

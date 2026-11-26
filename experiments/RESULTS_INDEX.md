@@ -22,6 +22,10 @@ The [frozen science screen](runs/physiology_semantic_tokenizer/frozen_science_sc
 
 The [frozen-screen cell records](runs/physiology_semantic_tokenizer/frozen_science_screen/20261126_v1/retained_cell_records.jsonl) and [ablation cell records](runs/physiology_semantic_tokenizer/science_ablations/20261126_v1/retained_cell_records.jsonl) preserve each run-relative path and its recorded contents. Replaying model inference requires the local input arrays and checkpoints.
 
+The [EEG input and encoder diagnostics](runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1/) retain terminal component and spectral scores, fixed-window waveforms, paired subject contrasts and checkpoint monitor curves under the [matched architecture contract](configs/physiology_semantic_tokenizer/eeg_encoder_diagnostics_v1.yaml).
+
+The [EEG frozen-decoder run](runs/physiology_semantic_tokenizer/eeg_frozen_decoder/20261126_v1/) keeps the launch record, per-arm training and development monitor histories, integer reconstruction scores and fixed-window waveforms under the [decoder comparison contract](configs/physiology_semantic_tokenizer/eeg_frozen_decoder_v1.yaml).
+
 ## Git reading package and local archive
 
 Git keeps the linked conclusions, endpoint/comparison tables, compact run and

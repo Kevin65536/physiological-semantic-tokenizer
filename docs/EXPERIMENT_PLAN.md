@@ -19,6 +19,12 @@ E4 对相同的两秒信号分别取 30 秒双向或历史视图，同一事件�
 
 [Hb 独立复核](../experiments/configs/physiology_semantic_tokenizer/science_hb_replication_v1.yaml)在相同的片段、种子和曝光量上只重训 Hb，EEG 使用原始冻结词表。每分支 10/11 bit 时分别比较单级与双级；共享、近参数量独立、几何最近邻、度数相同的打乱邻接分别拟合。教师对照比较 v3、通用匹配低通和错配目标。原 Hb 基线没有显式斜率监督，补充 0.01 与 0.005 两档双颜色斜率属性损失。每一格保留完整未减参考的实测 Hb 历史锚点。相同种子的候选 Hb 表示同时进入真实与错配 EEG 以及 Hb 扩容读出；WG 使用两任务一致的原有离线坐标。
 
+## EEG 离散重建的架构诊断（2026-11-26）
+
+首项[冻结解码对照](../experiments/configs/physiology_semantic_tokenizer/eeg_frozen_decoder_v1.yaml)沿用对齐版 EEG 两支每 2 秒一个 K8192/d128 整数、30 秒上下文和 v3 训练尺度。两臂从第 10,000 步解码权重出发；四层臂在原两层之后加入初始残差输出为零的两层。两臂使用相同训练批次续训 2,000 步，只更新从码向量到波形的参数。在同一开发面板上，以四层减两层的 X/S/O 宏 NMSE 判断解码深度的增量，并与原模型及已有 d128 连续模型配对。监测曲线、解码出的 EEG-S 属性及原有困难窗口共同用于解释。单码属性读出沿用冻结词表的既有结果。
+
+[后三项架构对照合同](../experiments/configs/physiology_semantic_tokenizer/eeg_encoder_diagnostics_v1.yaml)规定七项拟合沿用同一种子、每批 64 个位置和 10,000 步预算，其中前 1,000 步是共享于同一结构内的连续预热。第二项比较观察 X 与特权 S/O 输入的连续模型，定位分解可预测性。随后分别比较 EEG 局部前端宽度 32 与 64、编码器深度 2 与 4 层，连续和硬量化各设对照；解码端、词表预算及其余条件在相应对照内固定。Hb 沿用现有对齐结果作为参照。各项仅使用公开训练和开发分区。
+
 后续血流动力学研究从
 [Tak 基线](ARCHITECTURE.md#tak-hemodynamic-baseline)出发；选择依据由
 [方法说明](METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27)持有。

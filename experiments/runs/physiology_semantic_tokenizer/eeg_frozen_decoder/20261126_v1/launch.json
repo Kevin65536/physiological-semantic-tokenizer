@@ -1,0 +1,39 @@
+{
+  "unit": "eeg-frozen-decoder-20261126-v1.service",
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "command": [
+    "/bin/bash",
+    "/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/eeg_frozen_decoder/20261126_v1/supervise.sh",
+    "train"
+  ],
+  "environment": "supervise.sh",
+  "linger": true,
+  "resource_survey": "resources.log",
+  "concurrency": "Two independent decoder fits; one process per permitted idle RTX 4090, one numerical library thread per process. Shared-disk mmap cache bounded at 4096 parents per worker.",
+  "pilots": {
+    "continued": {
+      "status": "passed",
+      "arm": "continued",
+      "steps_per_second": 38.75699495635683,
+      "batch_size": 64,
+      "peak_reserved_bytes": 799014912,
+      "gpu": "GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7"
+    },
+    "expanded": {
+      "status": "passed",
+      "arm": "expanded",
+      "steps_per_second": 35.35122120118512,
+      "batch_size": 64,
+      "peak_reserved_bytes": 824180736,
+      "gpu": "GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735"
+    }
+  },
+  "logs": [
+    "continued.train.log",
+    "expanded.train.log",
+    "summary.log"
+  ],
+  "progress": "<arm>/progress.json",
+  "resume": "Restart the recorded unit command with the same working directory and version; each arm recovers its sampler, decoder weights, AdamW state and monitor history.",
+  "created": "2026-11-26T18:38:24.486759+08:00"
+}

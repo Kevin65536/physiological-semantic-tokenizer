@@ -1,0 +1,20 @@
+schema: eeg_encoder_diagnostics_v1
+experiment_id: TK-EEG-ENCODER-DIAGNOSTICS-v1
+run: experiments/runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1
+parent_contract: single_vq_aligned_v1.yaml
+scope: {train_people: 60, development_people: 16, eeg_positions: 53476, test: forbidden, confirmation: forbidden, raw_reads: false, teacher_refits: false}
+interface: {rate_hz: 200, patches: 15, patch_samples: 400, width: 256, dimension: 128, hard_size: 8192, decoder_layers: 2, decoder_local_width: 32}
+budget: {seed: 17, warmup_steps: 1000, total_steps: 10000, batch_size: 64, checkpoint_every: 250}
+architectures:
+  observed: {source: X, input_width: 32, encoder_layers: 2, fits: [continuous, hard]}
+  privileged: {source: SO, input_width: 32, encoder_layers: 2, fits: [continuous]}
+  wide: {source: X, input_width: 64, encoder_layers: 2, fits: [continuous, hard]}
+  deep: {source: X, input_width: 32, encoder_layers: 4, fits: [continuous, hard]}
+initialization: seed-matched unchanged network weights at initialization; shared continuous warmup within each architecture; identical training samples, learning rate schedule and EMA initialization examples
+objective: inherited masked X/S/O waveform and adjacent differences; hard arms add the aligned C single-ID spectral head and commitment; target inputs in privileged arms are zero on invalid support
+primary: terminal equal-dataset macro X/S/O NMSE on matching crop-position identities, candidate minus observed within representation; lower is better
+secondary: X/S/O NMSE and correlation, decoded EEG-S four standardized spectral attribute MSEs; hard arms also retain actual integer replay and single-ID incremental gains
+diagnostic: per-subject contrasts, inherited median and difficult waveforms, training monitor and fixed 256 development examples. Monitoring uses arithmetic means across examples and never selects a checkpoint.
+baseline: rerun observed continuous and hard arms with matched monitors; compare with retained capacity continuous and aligned C endpoints
+'null': privileged input or changed encoder does not reduce matched terminal macro NMSE; assess front end and depth separately in continuous and hard models
+stopping: seven terminal fits, one seed; fixed step 10000 with no metric-dependent extension. Record failed runs. Teacher inputs are privileged diagnostics only.

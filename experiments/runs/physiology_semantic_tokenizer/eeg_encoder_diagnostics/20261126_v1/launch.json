@@ -1,0 +1,116 @@
+{
+  "unit": "eeg-encoder-diagnostics-20261126-v1.service",
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "command": [
+    "/home/uais7/pid-mcm-implementation/.venv/bin/python",
+    "/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1/supervise.py",
+    "formal"
+  ],
+  "environment": "supervise.py",
+  "linger": true,
+  "created": "2026-11-26T19:41:50.809112+08:00",
+  "resource_survey": "resources.log",
+  "pilots": [
+    {
+      "status": "passed",
+      "contract": "9bffba76e3763b0d14b70a55",
+      "arch": "deep",
+      "fit": "continuous",
+      "steps_per_second": 21.30123840046892,
+      "batch_size": 64,
+      "peak_reserved_bytes": 1006632960,
+      "gpu": "GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7"
+    },
+    {
+      "status": "passed",
+      "contract": "9bffba76e3763b0d14b70a55",
+      "arch": "deep",
+      "fit": "hard",
+      "steps_per_second": 23.68997113052085,
+      "batch_size": 64,
+      "peak_reserved_bytes": 1189085184,
+      "gpu": "GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735"
+    },
+    {
+      "status": "passed",
+      "contract": "9bffba76e3763b0d14b70a55",
+      "arch": "observed",
+      "fit": "continuous",
+      "steps_per_second": 31.63202460586951,
+      "batch_size": 64,
+      "peak_reserved_bytes": 933232640,
+      "gpu": "GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735"
+    },
+    {
+      "status": "passed",
+      "contract": "9bffba76e3763b0d14b70a55",
+      "arch": "observed",
+      "fit": "hard",
+      "steps_per_second": 26.217403596106905,
+      "batch_size": 64,
+      "peak_reserved_bytes": 1046478848,
+      "gpu": "GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735"
+    },
+    {
+      "status": "passed",
+      "contract": "9bffba76e3763b0d14b70a55",
+      "arch": "privileged",
+      "fit": "continuous",
+      "steps_per_second": 27.24762082181232,
+      "batch_size": 64,
+      "peak_reserved_bytes": 933232640,
+      "gpu": "GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7"
+    },
+    {
+      "status": "passed",
+      "contract": "9bffba76e3763b0d14b70a55",
+      "arch": "wide",
+      "fit": "continuous",
+      "steps_per_second": 25.978210117999826,
+      "batch_size": 64,
+      "peak_reserved_bytes": 970981376,
+      "gpu": "GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735"
+    },
+    {
+      "status": "passed",
+      "contract": "9bffba76e3763b0d14b70a55",
+      "arch": "wide",
+      "fit": "hard",
+      "steps_per_second": 20.36495327977964,
+      "batch_size": 64,
+      "peak_reserved_bytes": 1103101952,
+      "gpu": "GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7"
+    }
+  ],
+  "concurrency": "Two independent model fits or scoring jobs, one per permitted idle 4090. One numerical thread per worker; 4096 mmap parents maximum. Benchmark on two GPUs used 0.87–1.11 GiB peak reserved per process at batch 64. Training is also bounded by random disk reads.",
+  "logs": "<architecture>_<fit>_formal.log",
+  "progress": "<architecture>/models/<task>/progress.json",
+  "resume": "Re-run recorded command. Existing matched training checkpoints restore optimizer, model and sampler; completed score shards are reused.",
+  "resource_adjustment": {
+    "unit": "eeg-encoder-hard-workers-20261126-v1.service",
+    "command": [
+      "/bin/bash",
+      "/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1/hard_workers.sh"
+    ],
+    "survey": "paired_resource_sample.log",
+    "reason": "Real training at two workers was CPU-limited: around 11 steps/s/worker, 12–22% sampled GPU compute and under 7% HDD busy. Two independent hard candidates start on one additional worker per permitted GPU. Per-cell locks serialize duplicate requests and completed fits/scores are reused. The main unit still owns all seven terminal results.",
+    "logs": [
+      "wide_hard_worker.log",
+      "deep_hard_worker.log"
+    ]
+  },
+  "full_concurrency": {
+    "unit": "eeg-encoder-remaining-workers-20261126-v1.service",
+    "command": [
+      "/bin/bash",
+      "/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1/remaining_workers.sh"
+    ],
+    "survey": "four_worker_sample.log",
+    "reason": "Four matched workers sustained 13–14 training steps/s each versus 11–13 at two workers. GPUs were only about 40% busy with less than 3 GiB used per card, and more than 210 GiB host memory remained available. All seven independent cells may overlap after warmup, capped at four on 4B and three on CA. Each trainer and scorer owns its cell lock; a second request waits and reuses the terminal result.",
+    "logs": [
+      "observed_hard_worker.log",
+      "wide_continuous_worker.log",
+      "deep_continuous_worker.log"
+    ]
+  }
+}

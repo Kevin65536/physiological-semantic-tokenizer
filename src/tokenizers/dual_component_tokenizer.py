@@ -9,6 +9,7 @@ The component-compression reference has a separate explicit input method.
 
 from __future__ import annotations
 
+import copy
 import math
 from collections.abc import Mapping
 
@@ -771,7 +772,7 @@ class GlobalLatentComponentTokenizer(nn.Module):
                 return nn.TransformerEncoder(layer, int(count), norm=nn.LayerNorm(width), enable_nested_tensor=False)
             self.branches[component] = nn.ModuleDict(dict(
                 input=nn.Sequential(nn.Linear(self.input_dim, width), nn.GELU()),
-                encoder=blocks(cfg['encoder_layers']), to_latent=nn.Linear(width, latent),
+                encoder=blocks(cfg.get('initial_encoder_layers', cfg['encoder_layers'])), to_latent=nn.Linear(width, latent),
                 from_latent=nn.Linear(latent, width), decoder=blocks(cfg['decoder_layers']),
                 output=nn.Linear(width, self.input_dim),
                 quantizer=EMAVectorQuantizer(codebook_size=int(branch_sizes[component]), embedding_dim=latent,
@@ -795,6 +796,20 @@ class GlobalLatentComponentTokenizer(nn.Module):
             for branch in self.branches.values():
                 branch['input']=WaveformPatchInput(channels,strides,width,int(cfg['local_width']),self.patches,steps,kernels)
                 branch['output']=WaveformPatchOutput(channels,strides,width,int(cfg['local_width']),self.patches,self.input_dim,steps,kernels)
+            if 'input_local_width' in cfg:
+                # Construct the matched base first so the decoder and shared weights keep their seed.
+                with torch.random.fork_rng(devices=[]):
+                    for branch in self.branches.values():
+                        branch['input'] = WaveformPatchInput(channels, strides, width, int(cfg['input_local_width']),
+                                                            self.patches, steps, kernels)
+        if 'initial_encoder_layers' in cfg:
+            for branch in self.branches.values():
+                encoder = branch['encoder']
+                if not 0 < len(encoder.layers) <= cfg['encoder_layers']:
+                    raise ValueError('invalid starting depth for the matched encoder')
+                for _ in range(cfg['encoder_layers'] - len(encoder.layers)):
+                    encoder.layers.append(copy.deepcopy(encoder.layers[0]))
+                encoder.num_layers = len(encoder.layers)
         self.hb_local_shape = bool(cfg.get('hb_local_shape', False))
         if self.hb_local_shape:
             if self.input_dim != 40 or int(cfg['channels']) != 2 or not self.waveform_io:
@@ -867,6 +882,29 @@ class GlobalLatentComponentTokenizer(nn.Module):
             ids = {c: self.branches[c]['quantizer'](z).hard_ids
                    for c, z in self.encode_continuous(values).items()}
         return dict(self.decode_ids(ids), ids=ids, commitment=values.new_zeros(()))
+
+    def prepare_decoder_refit(self, layers: int) -> None:
+        """Continue a trained waveform decoder, optionally adding identity residual blocks."""
+        if not self.waveform_io or self.hb_local_shape or not self.hard:
+            raise ValueError('a single-level waveform decoder is required')
+        for branch in self.branches.values():
+            stack = branch['decoder'].layers
+            if not branch['quantizer'].initialized or layers < len(stack) or not stack[-1].norm_first:
+                raise ValueError('initialized IDs and a non-shrinking pre-norm decoder required')
+        self.requires_grad_(False)
+        for branch in self.branches.values():
+            stack = branch['decoder'].layers
+            for _ in range(layers - len(stack)):
+                layer = copy.deepcopy(stack[0])
+                for projection in (layer.self_attn.out_proj, layer.linear2):
+                    nn.init.zeros_(projection.weight)
+                    nn.init.zeros_(projection.bias)
+                stack.append(layer)
+            # TransformerEncoder.forward iterates over layers; keep its metadata in sync.
+            branch['decoder'].num_layers = len(stack)
+            for name in ('from_latent', 'decoder', 'output'):
+                branch[name].requires_grad_(True)
+        self.eval()
 
     def _decode_component(self, component: str, latent: torch.Tensor) -> torch.Tensor:
         return self._decode_component_parts(component, latent)['full']

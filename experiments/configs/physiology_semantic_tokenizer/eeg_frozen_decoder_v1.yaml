@@ -1,0 +1,18 @@
+schema: eeg_frozen_decoder_v1
+experiment_id: TK-EEG-FROZEN-DECODER-v1
+run: experiments/runs/physiology_semantic_tokenizer/eeg_frozen_decoder/20261126_v1
+parent_contract: single_vq_aligned_v1.yaml
+scope: {train_people: 60, development_people: 16, development_positions: 53476, test: forbidden, confirmation: forbidden, raw_reads: false, teacher_refits: false}
+interface: {modality: eeg, patch_samples: 400, patches: 15, codebook_size: 8192, dimension: 128, width: 256, parent_step: 10000, parent_seed: 17}
+arms: {continued: 2, expanded: 4}
+initialization: copy the aligned terminal decoder in both arms; append two identity-initialized pre-norm residual blocks before final norm in expanded
+frozen: observed-X encoders, position encoding, both EMA codebooks and single-ID spectral head; both decoders receive only integer sequences
+training: {seed: 10017, batch_size: 64, steps: 2000, checkpoint_every: 250, learning_rate: 0.00003, weight_decay: 0.0001, gradient_clip: 5}
+objective: inherited masked variance-normalized X/S/O waveform and adjacent-difference loss; single-ID and commitment terms are constant under fixed assignments
+monitor: fixed 256 training draws and up to 16 development examples per subject (seed 8017); monitoring only
+primary: terminal equal-dataset macro X/S/O NMSE on the exact aligned development panel; paired expanded minus continued, negative favors expanded
+secondary: each component NMSE and correlation, decoded EEG-S standardized theta/alpha log-power and fractions; paired subject differences
+diagnostic: unchanged single-ID readout, retained median and difficult waveforms, same-panel d128 continuous waveform reference
+baseline: original aligned step-10000 integer decoder and its matched two-layer continuation
+'null': expanding the decoder gives no reduction in terminal paired macro NMSE relative to matched continuation
+stopping: fixed 2000 additional decoder steps per arm, seed 10017; retain failures; exploratory, no checkpoint selection

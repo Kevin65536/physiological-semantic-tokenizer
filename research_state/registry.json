@@ -8753,6 +8753,18 @@
       "role": "result_summary"
     },
     {
+      "id": "e.tk_eeg_frozen_decoder_v1_contract",
+      "label": "EEG 冻结解码器配对合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/eeg_frozen_decoder_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_eeg_frozen_decoder_v1_launch",
+      "label": "EEG 两层与四层解码续训启动记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/eeg_frozen_decoder/20261126_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
       "id": "e.stage2_native_nback_protocol",
       "label": "阶段二 n-back 原生时间窗敏感性训练 合同",
       "path": "experiments/configs/physiology_semantic_tokenizer/four_stream_stage2_v1.yaml",
@@ -8786,6 +8798,54 @@
       "id": "e.stage2_cached_nback_replay",
       "label": "阶段二 n-back 登记带通缓存训练 重放",
       "path": "experiments/runs/physiology_semantic_tokenizer/four_stream_stage2/20261126_cached_v1/verification.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_eeg_frozen_decoder_v1_summary",
+      "label": "EEG 冻结解码深度的终点及被试配对差",
+      "path": "experiments/runs/physiology_semantic_tokenizer/eeg_frozen_decoder/20261126_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_eeg_frozen_decoder_v1_continued",
+      "label": "两层续训开发面板终点评分",
+      "path": "experiments/runs/physiology_semantic_tokenizer/eeg_frozen_decoder/20261126_v1/continued/evaluation/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_eeg_frozen_decoder_v1_expanded",
+      "label": "四层扩展开发面板终点评分",
+      "path": "experiments/runs/physiology_semantic_tokenizer/eeg_frozen_decoder/20261126_v1/expanded/evaluation/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_eeg_encoder_diagnostics_v1_contract",
+      "label": "EEG 输入、前端宽度与编码深度对照合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/eeg_encoder_diagnostics_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.tk_eeg_encoder_diagnostics_v1_launch",
+      "label": "七项匹配拟合的启动与资源记录",
+      "path": "experiments/runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1/launch.json",
+      "role": "run_manifest"
+    },
+    {
+      "id": "e.tk_eeg_encoder_diagnostics_v1_summary",
+      "label": "七项终点和面板一致性核验",
+      "path": "experiments/runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_eeg_encoder_diagnostics_v1_contrasts",
+      "label": "五项逐被试配对的宏 NMSE 对照",
+      "path": "experiments/runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1/contrasts.csv",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.tk_eeg_encoder_diagnostics_v1_endpoints",
+      "label": "X/S/O 重建、频谱及单码属性终点",
+      "path": "experiments/runs/physiology_semantic_tokenizer/eeg_encoder_diagnostics/20261126_v1/endpoints.csv",
       "role": "result_summary"
     },
     {
@@ -21446,6 +21506,29 @@
       "next_step": "核验历史截止前的双时钟、预处理及独立未来目标，分别比较 A 和 B。"
     },
     {
+      "state_id": "main.tk_eeg_frozen_decoder_v1@2026-11-26.running",
+      "entity": "main.tk_eeg_frozen_decoder_v1",
+      "label": "冻结 EEG 实际整数 ID 的解码深度对照",
+      "track": "main",
+      "order": 279,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "对齐版 EEG 编码器和码本冻结，两层与四层解码器从相同波形起点分别续训 2,000 步。终点在 16 名开发被试的原面板配对评价。",
+      "evidence_ids": [
+        "e.tk_eeg_frozen_decoder_v1_contract",
+        "e.tk_eeg_frozen_decoder_v1_launch"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.tk_single_vq_aligned_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-26T18:39:07.424631+08:00",
+      "next_step": "核验完整开发面板的整数重建、分量和频谱属性，以及固定困难窗口。"
+    },
+    {
       "state_id": "main.stage2_native_nback@2026-11-26.completed",
       "entity": "main.stage2_native_nback",
       "label": "阶段二 n-back 原生时间窗敏感性训练",
@@ -21492,6 +21575,85 @@
       "headline": false,
       "updated_at": "2026-11-26T18:40:08.623739+08:00",
       "next_step": "本次固定预算开发比较结束，保留逐人、逐位置及时段结果。"
+    },
+    {
+      "state_id": "main.tk_eeg_frozen_decoder_v1@2026-11-26.completed",
+      "entity": "main.tk_eeg_frozen_decoder_v1",
+      "label": "冻结 EEG 实际整数 ID 的解码深度对照",
+      "track": "main",
+      "order": 279,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "两臂各完成 2,000 步。16 名开发被试、53,476 个窗口–电极样本上，两层与四层宏 NMSE 分别为 0.506065 和 0.506077，四层减两层为 +0.000012。四层仅在 5/16 人误差较低。此单种子固定预算下未观察到加深解码器的宏重建收益。",
+      "evidence_ids": [
+        "e.tk_eeg_frozen_decoder_v1_contract",
+        "e.tk_eeg_frozen_decoder_v1_launch",
+        "e.tk_eeg_frozen_decoder_v1_summary",
+        "e.tk_eeg_frozen_decoder_v1_continued",
+        "e.tk_eeg_frozen_decoder_v1_expanded"
+      ],
+      "supersedes": [
+        "main.tk_eeg_frozen_decoder_v1@2026-11-26.running"
+      ],
+      "depends_on": [
+        "main.tk_single_vq_aligned_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-26T19:15:59.914452+08:00",
+      "next_step": "按计划比较观察 X 与特权 S/O 输入下的配对连续模型，定位分解目标的可预测性。"
+    },
+    {
+      "state_id": "main.tk_eeg_encoder_diagnostics_v1@2026-11-26.running",
+      "entity": "main.tk_eeg_encoder_diagnostics_v1",
+      "label": "EEG 分量输入、局部前端与编码深度配对诊断",
+      "track": "main",
+      "order": 280,
+      "entity_kind": "experiment",
+      "execution": "running",
+      "scientific_verdict": "unreviewed",
+      "analysis_intent": "exploratory",
+      "summary": "四种 EEG 架构、七个终点模型，以相同训练抽样独立比较特权分量输入、64 通道前端与四层编码器。",
+      "evidence_ids": [
+        "e.tk_eeg_encoder_diagnostics_v1_contract",
+        "e.tk_eeg_encoder_diagnostics_v1_launch"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.tk_eeg_frozen_decoder_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-26T19:44:08.730089+08:00",
+      "next_step": "核对七个终点、整数重建和五项连续／硬量化配对差。"
+    },
+    {
+      "state_id": "main.tk_eeg_encoder_diagnostics_v1@2026-11-26.completed",
+      "entity": "main.tk_eeg_encoder_diagnostics_v1",
+      "label": "EEG 分量输入、局部前端与编码深度配对诊断",
+      "track": "main",
+      "order": 280,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "7/7 模型各到 10,000 步，16 名开发被试、53,476 个窗口–电极配对。特权输入使连续宏 NMSE 降低 21.19%；加宽前端使连续误差降低 1.48%，编码器加深使其升高 3.82%。两个硬量化改动的宏误差降幅均约 0.04%，各自的被试配对区间均跨零。",
+      "evidence_ids": [
+        "e.tk_eeg_encoder_diagnostics_v1_contract",
+        "e.tk_eeg_encoder_diagnostics_v1_launch",
+        "e.tk_eeg_encoder_diagnostics_v1_summary",
+        "e.tk_eeg_encoder_diagnostics_v1_contrasts",
+        "e.tk_eeg_encoder_diagnostics_v1_endpoints"
+      ],
+      "supersedes": [
+        "main.tk_eeg_encoder_diagnostics_v1@2026-11-26.running"
+      ],
+      "depends_on": [
+        "main.tk_eeg_frozen_decoder_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-26T20:07:36.327904+08:00",
+      "next_step": "原四项架构诊断已完成。"
     },
     {
       "state_id": "main.four_stream_conditional_v2@2026-11-26.completed",

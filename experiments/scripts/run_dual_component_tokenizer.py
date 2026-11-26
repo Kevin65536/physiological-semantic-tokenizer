@@ -5309,7 +5309,7 @@ def _base_migrate_resume(cfg, root, task_id, task, signature, job):
 
 
 def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, destination=None, band_scales=None,
-                         recorded_root=None, spectral_objective=None, target_view=None):
+                         recorded_root=None, spectral_objective=None, target_view=None, development_probe=None):
     from src.data.dual_component_tokenizer import base_tokenizer_sampling_index,base_tokenizer_sample
     import torch
     task_id='__'.join(task[k] for k in ('modality','architecture','candidate'))
@@ -5319,6 +5319,11 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
         if target_view is not None:
             manifest,scales=target_view(manifest,scales)
         signature=dict(config=identity(cfg),input=identity(manifest),scales=identity(scales),task=task,benchmark=benchmark)
+        if development_probe is not None:
+            allowed = set(map(tuple, _base_training_examples(manifest['rows'], task['modality'], 'validation')))
+            if not len(development_probe) or any(tuple(ex) not in allowed for ex in development_probe):
+                raise ValueError('monitor must use admitted development examples')
+            signature['development_probe'] = identity(development_probe)
         calibration = None
         if spectral_objective is not None:
             signature['spectral_objective'] = identity(spectral_objective)
@@ -5453,6 +5458,16 @@ def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, desti
                     history.append(dict(step=step+1,loss=float(loss.detach()),gradient_norm=float(norm),
                         learning_rate=optimizer.param_groups[0]['lr'],monitor={k:float(np.mean([v[k] for v in monitor])) for k in monitor[0]},
                         elapsed_seconds=time.monotonic()-began,revivals={b:int(model.branches[b]['quantizer'].revival_count) for b in ('S','O')}))
+                    if development_probe is not None:
+                        totals = np.zeros(3)
+                        with torch.no_grad():
+                            for offset in range(0, len(development_probe), t['batch_size']):
+                                ex = development_probe[offset:offset+t['batch_size']]
+                                batch_dev = _base_training_batch(rows, ex, scales, device, cache, cfg)
+                                _, terms_dev = _state_refinement_loss(_base_forward(model, batch_dev), batch_dev,
+                                                                      cfg['architectures'][task['architecture']])
+                                totals += len(ex) * np.array([float(terms_dev[k]) for k in ('x','s','o')])
+                        history[-1]['development_nmse_xso'] = (totals / len(development_probe)).tolist()
                     if transition and model.hard:
                         continuous_terms={k:float(np.mean([v[k] for v in continuous_monitor])) for k in continuous_monitor[0]}
                         history[-1].update(decoder_quantization_blend=model.decoder_quantization_blend,
