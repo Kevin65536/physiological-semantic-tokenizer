@@ -1,0 +1,15 @@
+schema: single_vq_aligned_v1
+experiment_id: TK-SINGLE-VQ-ALIGNED-v1
+run: experiments/runs/physiology_semantic_tokenizer/single_vq_aligned/20261126_v1
+seed: 17
+dimension: 128
+eeg: {arm: C, size: 8192, selection: single_vq_spectral_location_v1}
+hb: {arm: waveform, size: 1024, selection: single_vq_capacity_v1}
+source: physiology_so_supervision_v3
+scope: {train_people: 60, development_people: 16, eeg_positions: 53476, hb_positions: 57532, test: forbidden, confirmation: forbidden}
+budget: {warmup_steps: 1000, total_steps: 10000, batch_size: 64}
+primary: equal-dataset development X/S/O macro NMSE on the matched QC panel, versus each selected seed-17 parent
+secondary: EEG S four-feature single-ID gain and per-component reconstruction
+diagnostic: actual S/O codebook shapes and integer-only waveform replay
+'null': aligned width gives no development reconstruction improvement over the selected parent of each modality
+stopping: one fresh initialization per modality; score the terminal model only; retain failures

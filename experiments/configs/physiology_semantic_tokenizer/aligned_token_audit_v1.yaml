@@ -1,0 +1,11 @@
+experiment_id: TK-ALIGNED-TOKEN-AUDIT-v1
+run: experiments/runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1
+parent: experiments/runs/physiology_semantic_tokenizer/single_vq_aligned/20261126_v1
+models: {eeg: {K: 8192, d: 128, seeds: [17]}, hb: {K: 1024, d: 128, seeds: [17]}}
+scope: {train: 60, development: 16, test: forbidden, confirmation: forbidden, tokenizer_refit: false, raw_reads: false}
+shape: {eeg: [15, 400], hb: [15, 40], branch_ids_per_patch: 1}
+primary: replay the registered Single-Trial event occupancy and Hb-history contrasts; no post hoc replacement
+secondary: readout ladder, member coverage, same-center replacement, S/O main effects, temporal order and adjacent-window prediction on the frozen development panel
+diagnostic: train-defined attributes, waveform perturbation and token edits, geometry, cross-subject retrieval, cross-modal matched controls, spatial and historical stability; record support at each endpoint
+null_hypothesis: no development gain above the matched background, history, marginal or order control
+stopping: one frozen pass per checkpoint and planned panel; report all failed or unsupported contrasts; no model selection on development

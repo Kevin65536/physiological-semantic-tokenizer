@@ -1,0 +1,48 @@
+{
+  "experiment": "TK-ALIGNED-MASKED-v1",
+  "supervisor": "v3-masked-1126-m0-m4.service",
+  "lingering": true,
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "command": "/bin/bash experiments/runs/physiology_semantic_tokenizer/aligned_masked_pretraining/20261126_v1/supervise.sh",
+  "worker": "worker.sh",
+  "lanes": {
+    "4B": [
+      "M3",
+      "M2"
+    ],
+    "CA": [
+      "M4",
+      "M0_EEG",
+      "M0_Hb"
+    ]
+  },
+  "environment": "CUDA_VISIBLE_DEVICES resolved from permitted PCI addresses to UUIDs; .venv/bin/python; OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 OMP_NUM_THREADS=2",
+  "pilots": {
+    "M3": {
+      "steps": 16,
+      "timed_steps": 12,
+      "steps_per_second": 79.64537632655009,
+      "peak_mib": 164.0,
+      "gpu": "NVIDIA GeForce RTX 4090",
+      "finite": true
+    },
+    "M0_EEG": {
+      "steps": 16,
+      "timed_steps": 12,
+      "steps_per_second": 69.8178552374865,
+      "peak_mib": 116.0,
+      "gpu": "NVIDIA GeForce RTX 4090",
+      "finite": true
+    }
+  },
+  "resources": "resources.log",
+  "reason": "Two idle permitted GPUs; one fit on each card concurrently. Pilots at production batch size showed roughly 70–80 steps/s. One input panel, small 8-window batch and only 5 fits; balance larger joint versus single-modality workloads across the two lanes.",
+  "logs": [
+    "lane_4B.log",
+    "lane_CA.log",
+    "evaluation.log"
+  ],
+  "resume": "64-step atomic checkpoints include optimizer and device RNG; reused on supervisor restart",
+  "preflight": "Recovered the exact FP32 and four-native-site tokenizer forward used in the audit; failed initial check is retained in prepare.log.",
+  "recorded": "2026-11-26T01:40:08.995225+08:00"
+}

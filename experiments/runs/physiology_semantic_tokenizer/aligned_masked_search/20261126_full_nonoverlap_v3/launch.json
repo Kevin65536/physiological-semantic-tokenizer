@@ -1,0 +1,53 @@
+{
+  "experiment": "TK-ALIGNED-MASKED-SEARCH-FULL-v3",
+  "unit": "masked-search-full-v3-1126.service",
+  "command": [
+    "/bin/bash",
+    "/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/supervise.sh"
+  ],
+  "cwd": "/home/uais7/pid-mcm-implementation",
+  "recorded": "2026-11-26T02:33:11.079907+08:00",
+  "resources": "resources.log",
+  "linger": true,
+  "capacity_pilots": [
+    {
+      "candidate": "span-25-128-prior",
+      "steps": 32,
+      "train_seconds": 1.0249161899555475,
+      "scoring_seconds": 0.9999696880113333,
+      "peak_gpu_mib": 180.0
+    },
+    {
+      "candidate": "span-25-256-prior",
+      "steps": 32,
+      "train_seconds": 1.1864644889719784,
+      "scoring_seconds": 1.1372711160220206,
+      "peak_gpu_mib": 280.0
+    }
+  ],
+  "workers": 2,
+  "allowed_pci": [
+    "4B",
+    "CA"
+  ],
+  "reason": "Concurrent per-capacity pilots on the two idle permitted GPUs. One independently seeded fold per worker, batch 8; two Torch threads per worker, one BLAS thread.",
+  "input_contract": "ALIGNED_SEARCH_PANEL=full inherited by controller and all children",
+  "current_panel": "train/ready.json",
+  "ordinary_validation_windows": 770,
+  "overlap_replayed": {
+    "windows": 619,
+    "ids": "exact",
+    "coordinates": "exact",
+    "codebooks": "exact",
+    "attributes": "rtol 1e-7, atol 1e-12"
+  },
+  "minimum_full_window_exposures_per_formal_fit": 1,
+  "selection": "A and B inside training people; validation tokenization and scoring after C lock",
+  "previous": "20261126_v2/status.json",
+  "state": "status.json",
+  "logs": [
+    "controller.log",
+    "A_lane0.log",
+    "A_lane1.log"
+  ]
+}

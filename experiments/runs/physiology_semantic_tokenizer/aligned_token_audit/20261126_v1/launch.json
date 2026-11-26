@@ -1,0 +1,52 @@
+{
+  "experiment_id": "TK-ALIGNED-TOKEN-AUDIT-v1",
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "runtime": ".venv/bin/python",
+  "supervisor": "systemd --user; lingering enabled",
+  "units_log": "supervisor.log",
+  "resource_survey": "resources.log",
+  "command_files": [
+    "extract.sh",
+    "diagnostics.sh"
+  ],
+  "extraction_units": [
+    "aligned-audit-1126-eeg.service",
+    "aligned-audit-1126-hb.service"
+  ],
+  "modality_buses": {
+    "eeg": "00000000:4B:00.0",
+    "hb": "00000000:CA:00.0"
+  },
+  "resource_choice": "One GPU per modality; batched frozen extraction; three independent CPU jobs for branch scores and members. Six record workers for events; BLAS/OMP limited to one thread per worker. Resource pilot used 64 examples for each modality.",
+  "pilot": {
+    "eeg": {
+      "task": [
+        "eeg",
+        "eeg_fnirs_single_trial",
+        "train",
+        0,
+        1024
+      ],
+      "examples": 64,
+      "seconds": 0.5361484480090439,
+      "peak_bytes": 358612992,
+      "exact_replay": true
+    },
+    "hb": {
+      "task": [
+        "hb",
+        "eeg_fnirs_single_trial",
+        "train",
+        0,
+        1024
+      ],
+      "examples": 64,
+      "seconds": 0.6238696840591729,
+      "peak_bytes": 73400320,
+      "exact_replay": true
+    }
+  },
+  "stages": "audit_aligned_tokenizer.py STAGE MODALITY; recorded stage statuses and commands plus table summarizer, paired example extraction, versioned renderer and final verifier",
+  "notes": "Recovered the double-precision FFT check, historical input root and standalone example import; completed stages verified in summary.json.",
+  "verified": "2026-11-26T01:31:53.502635+08:00"
+}

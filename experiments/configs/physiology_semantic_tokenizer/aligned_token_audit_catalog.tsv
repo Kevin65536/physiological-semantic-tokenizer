@@ -1,0 +1,65 @@
+ID	状态	报告节	本轮证据与解释边界	证据文件
+A01	已计算	design	在全部入选窗口以整数重新解码，两支逐元素完全相同；单支干预同时验证另一支完全不变。	eeg_extract_status.json|hb_extract_status.json|eeg_decode_controls.csv
+A02	已计算	members	四个词表各留低、中、高训练支持词及开发失败词，保留 X/S/O 实测与教师分量、同人同位置同 RMS 档对照和成员索引。	eeg_17/S_members.csv|eeg_17/O_members.csv|hb_17/S_members.csv|hb_17/O_members.csv
+A03	已计算	edits	固定中心 ID 改周围 14 个 ID，或固定邻居改中心，分别量化中心及周边的变化。	{m}_decode_controls.csv|{m}_17/S_wave_template.csv
+A04	已计算	features	同背景、同训练样本比较量化前表示及码向量，评分斜率、曲率、峰谷、过零与双色中心化形态。	{m}_attribute_probes.csv|{m}_random_readout.csv
+A05	已计算	reconstruction	同窗等支持比较 X/S/O 波形、导数及分带误差；提供训练 SD 坐标及恢复原输入尺度的误差与能量。	{m}_native_errors.csv|{m}_wave_errors.csv|{m}_local_panel.csv
+A06	已计算	spectrum	全 EEG-S 计算两种绝对 log 功率及相对功率的训练分位误差与触地板次数，补充量化前和包络读出。	spectral_strata.csv|readout_eeg_17_S/scores.csv
+A07	已计算	features	计算 0.5 Hz 分辨率的峰宽/峰频、非周期斜率、截距与拟合 R²，控制训练背景与 RMS；保留逐片段拟合质量。	eeg_attribute_probes.csv|spectral_fit.csv|eeg_envelope_probes.csv
+A08	已计算	readouts	比较完整支持的收缩/线性/解码读出；小面板八个子窗包络与 RMS 对同容量随机几何和量化前 z 再评分。	readout_eeg_17_S/scores.csv|eeg_envelope_probes.csv
+A09	有限支持	detection	训练确定信号检测阈值，8 位开发被试评价实际 alpha burst 的 precision、recall、同幅度/位置对照。尖波和慢波缺少独立专家真值。	detector.csv|eye_contrasts.csv
+A10	已计算	hbshape	同一空间位置的联合双色 ID 读出水平、斜率与颜色联合符号，并显示双色真实成员。	hb_signs.csv|hb_attribute_probes.csv|hb_17/O_members.csv
+A11	有限支持	hbshape	前部双位置 30 秒实测和解码 Hb 比较峰时、恢复、初段斜率，两色均保留；全局 Hb 代理进入独立历史分析。	hb_response.csv|systemic_controls.csv
+A12	有限支持	spatial	四库全部原生有效位置列分母、Q4 和观测属性，保留缺坐标位置；共同四区用于配对。独立参考与头部 SNR 仍待标定。	{m}_montage.csv|positions.csv|paired_panel.csv
+A13	有限支持	transfer	固定四个区域，将读出留一区域拟合，并测数据集身份、留一数据集和空间重排。未见设备的 tokenizer 迁移需外部样本。	{m}_position_transfer.csv|{m}_dataset_identity.csv|direction_transfer.csv
+A14	有限支持	sync	四个位置计算原始/解码 EEG 包络相关、alpha 锁相和双色 Hb 相关；时移、共同均值与距离控制分表保留。共同参考与体积传导仍可能影响。	{m}_synchrony.csv|spatial.csv
+A15	已计算	readouts	训练被试三折选收缩强度和正则；以相应背景比较人均衡和普通查表，列未见背景×词的样本。	readout_eeg_17_S/support.json|readout_hb_17_S/selection.json|readout_eeg_17_O/scores.csv
+A16	已计算	readouts	同一硬量化模型输出的量化前 z、实际码向量、收缩 ID 和整数解码波形在相同支持评分；z 与码向量同宽。	{m}_attribute_probes.csv|readout_eeg_17_S/scores.csv|readout_hb_17_S/scores.csv
+A17	已计算	coverage	四词表训练及开发占用、熵、有效词数、支持人数、词频和码向量距离均可查，列未见背景组合。	occupancy.csv|{m}_geometry.csv|{m}_17/coverage.csv
+A18	已计算	coverage	中心面板按训练词频分层，逐人计算相对训练背景残差的词内/词间方差。稀有词与单例会降低经验词内方差。	{m}_variance.csv|{m}_17/S_words.csv
+A19	已计算	coverage	固定训练词族与读出；按独立开发人统计。readable 的开发筛选仅用于描述覆盖。	{m}_17/S_words.csv|readout_eeg_17_S/scores.csv
+A20	有限支持	transfer	留库重拟简单头，同时保留库内拟合及各库数据；冻结 tokenizer 训练曾见这些库。	direction_transfer.csv|paired_panel.csv
+A21	有限支持	geometry	相同片段配对、训练定义 Q1–Q4 的一致率、ARI 与分数秩相关。EEG 的历史 seed17/43 为 64 维 C，同代 128 维仅一个种子。	{m}_family_stability.csv|{m}_historical.csv
+A22	已计算	context	逐元素核验相同 2 秒；跨相邻完整 30 秒窗取 2 秒起点平移，报告内外侧和词族；另做同人同位置真实背景更换。	{m}_window_shift.csv|boundary_shift.csv|{m}_perturb.csv
+A23	有限支持	detection	独立眼电标记受额区真实支持限制。另做等 RMS 工频、肌电样频带、运动样台阶与白噪声，人工扰动不能替代真实事件。	eye_contrasts.csv|{m}_artifact_controls.csv|eeg_perturb.csv
+A24	有限支持	events	分别评分教师 S/O、原始 X、独立提示与实测 Hb，还比较视频连续主观评定；替换 SSM 教师将改变训练目标。	{m}_17/conditional.csv|refed_state.csv|events_17/event_contrasts.csv|events_17/coupling_predictions.csv
+A25	已计算	events	预定后部高 alpha 词族及活动期 MA−BL 为唯一事件主检验。独立被试精确符号检验，保留所有次要区域/阶段。	events_17/event_contrasts.csv|events_17/event_profile.csv
+A26	已计算	events	在可用时钟支持内前后各移 13 秒，剔除贴近其他提示的伪锚，共同试次比较并在记录内置换条件。	pseudo_cues.csv|pseudo_contrasts.csv|cue_permutation.json
+A27	需独立标注	dose	无任务自然觉醒转换缺独立标签；REFED 有视频任务内连续效价与唤醒评定，可检验记录内波动。	refed_state.csv|refed_annotations.csv
+A28	有限支持	dose	N-back 0/2/3 负荷按开发被试分开；0-back 仅 2 人有数据。任务顺序、练习及疲劳难分离。	nback_dose.csv|dose_people.csv
+A29	已计算	budget	比较词袋、二元加驻留，另以训练 SVD 将丰富描述符压到与词袋相同的四维。	{m}_17/sequence.csv|{m}_order_budget.csv
+A30	有限支持	dynamics	计算驻留、再访与转移概率，与实测属性四分位及词袋乱序并列；保转移和保驻留替代用于顺序读出。	{m}_dynamics.csv|{m}_17/sequence.csv
+A31	已计算	order	三元 motif 相对二元与驻留读出，并比较精确保留词袋、转移/端点或驻留结构的替代序列。	{m}_17/sequence.csv
+A32	已计算	order	仅用前一独立 30 秒词窗预测下一窗首个 2 秒实测属性，按绝对时间/记录/位置连接，并用实测历史评分；预处理为离线。	{m}_17/sequence.csv|{m}_17/observed_sequence_reference.csv
+A33	已计算	complement	在相同数据集、位置、幅度背景上比较 B、S、O、S+O 对实测 X 及教师分量的误差与被试配对差。	{m}_17/conditional.csv|{m}_17/conditional_subject.csv
+A34	已计算	budget	词族交互先对主效应做增量，再用等维非线性单支特征替换相同数量的交互特征，读出、样本与正则相同。	{m}_17/interaction_vs_family_main.csv|{m}_interaction_budget.csv
+A35	已计算	directed	固定上下文，只换中心整数。供体来自同人、记录与位置，匹配训练频率后对比最高/最低属性分与随机选择的解码变化。	{m}_directed_edit.csv|{m}_decode_controls.csv|{m}_edit.csv
+A36	已计算	edits	固定整数解码器比较反转、打乱、邻域替换；独立序列读出另测词袋/转移/驻留保持替代。	{m}_decode_controls.csv|{m}_17/sequence.csv
+A37	有限支持	lags	去全局的区域相关扫 0/2/4/6 秒；配对词族另按人/会话/条件计算 0/10 秒经验互信息与分离试次错配。系统混杂仍可能存在。	regional_lags.csv|conditional_MI.csv|events_17/coupling_contrasts.csv
+A38	已计算	history	独立 EEG 历史及实测 Hb 历史，训练人折选时延；共同试次比较双颜色误差，仅作离线预测。	events_17/coupling_subject.csv|events_17/coupling_predictions.csv
+A39	已计算	history	相同样本与真实结束时间，比较 theta/alpha/RMS、固定 HRF 摘要、真实词元与 Hb 历史；设计维数按表头不同。	systemic_controls.csv|events_17/coupling_contrasts.csv
+A40	已计算	history	同人、会话、条件及足够分离的试次错配和时移；同一头替换输入与重新拟合两类结果均保留。	events_17/coupling_pairs.csv|events_17/coupling_contrasts.csv
+A41	已计算	ranking	训练拟合跨模态投影，同人/记录/条件、双时钟相距至少 60 秒的候选排名，两方向的 R@1 和 MRR 与对应机会值。	paired_retrieval.csv|ranking_people.csv
+A42	有限支持	systemic	训练折选 2/4/6 秒时延；固定双 gamma HRF 加权连续 EEG 摘要与 HbO/HbR 历史比较。三位开发人限制个体化时延推断。	systemic_controls.csv|events_17/events_summary.json
+A43	有限支持	systemic	仅用目标外有效光学位置的全局双色历史作系统代理，保持相同 614/107 试次。当前准入缓存无逐试次短程、呼吸、ECG 或血压协变量。	systemic_controls.csv
+A44	已计算	fusion	相同 MA/BL 样本上比较冻结 EEG、Hb、后期融合、简单联合读出及交互。仅评固定词基线。	fusion.csv|fusion_contrasts.csv
+A45	已计算	robust	整模态 S/O 及所有位置置为训练均值；保留强单模态、平衡准确率和概率 Brier 误差。	fusion.csv|fusion_contrasts.csv
+A46	有限支持	robust	比较输入噪声、技术伪迹注入、区域特征丢弃、10 秒时间特征偏移及同面板连续特征；真实运动标签不足。	fusion.csv|fusion_pair_controls.csv|{m}_artifact_controls.csv
+A47	需外部数据	transfer	未见外部队列需新数据和锁定评估条件，现有留库读出仅提供开发基线。	direction_transfer.csv
+A48	需联合模型	scope	需冻结词表后的四流遮挡模型及四头训练输出。现有数据是其冻结输入基线。	occupancy.csv
+A49	需联合模型	scope	需同预算训练真配对、错配及局部掩码模型。当前错配仅评冻结词读出。	events_17/coupling_contrasts.csv
+A50	有限支持	visibility	直接比较先编码再遮中心 ID 与先更换原始中心再编码，对每个距离的可见邻居作配对核验；联合模型掩码路径待训练后检验。	{m}_visibility.csv|{m}_window_shift.csv|{m}_perturb.csv
+A51	需联合模型	scope	已有冻结输入消融；联合模型归因需要其权重与明确可见输入。	fusion.csv
+A52	需联合模型	scope	需要无预训练、单模态及联合预训练等配对模型和少标签训练曲线。	fusion.csv
+A53	需联合模型	scope	已有冻结词及量化前读出基线；随机 backbone 与预训练隐藏层的同输入比较需相应模型。	readout_eeg_17_S/scores.csv
+A54	有限支持	transfer	由同预算分类头预测数据集身份，给出留人及留库结果；数据集同时编码设备/任务，不能分辨各自贡献。	{m}_dataset_identity.csv|direction_transfer.csv
+A55	需外部数据	scope	普通开发面板已反复使用；锁定后的独立确认集不在本次授权范围。	paired_panel.csv
+A56	需外部数据	scope	前瞻随机生理操控需要独立实验、干预设计及监测。既有 n-back 仅作观察性负荷比较。	dose_people.csv
+A57	需外部数据	scope	独立脑血流/氧代谢测量缺失。现有双颜色 Hb 及全局代理支持相关性分析。	systemic_controls.csv
+A58	已计算	design	按人/库汇总、披露排除和各面板成功人数。主事件做被试精确检验；其余多项探索性比较保留方向与效应。	events_17/event_support.csv|events_17/upstream_event_exclusions.csv|paired_panel.csv
+A59	有限支持	ranking	留人查询训练图库；同库、同位置并限制 RMS 比例，比较真实 embedding、幅度与机会值。该通用面板无统一任务条件。	{m}_matched_retrieval.csv|{m}_retrieval.csv
+A60	有限支持	geometry	余弦几何与开发成员均值距离作秩相关；真实最近邻对置乱属性误差。训练支持设门槛，共享词对不作独立检验。	{m}_geometry.csv
+A61	已计算	context	比较等能量 10 Hz burst 与宽带噪声，另做保等幅频谱的相位扰动与幅度剂量；输出 ID 与词族稳定性。	eeg_perturb.csv|hb_perturb.csv
+A62	需专家评分	detection	训练分层词、开发困难词与匹配背景随机匿名，盲评波形、评分表和分离的解盲键已备齐；专家一致性待独立评分。	blind/blinded_waveforms.pdf|blind/ratings.csv
+A63	需联合模型	scope	真实序列驻留和转移已计量；补全序列的保真性需联合生成输出。	{m}_dynamics.csv
+A64	已计算	pair_null	在相同预算比较单模态非线性主效应与跨模态积，并在有同人/同条件供体的试次上做冻结与重拟错配。	fusion.csv|fusion_contrasts.csv|fusion_pair_controls.csv

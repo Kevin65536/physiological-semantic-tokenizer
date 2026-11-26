@@ -93,24 +93,28 @@ def train(seed, arm):
                                 recorded_root=PLAN['recorded_root'], spectral_objective=objective)
 
 
-def synthetic(arm, device, steps, batch_size):
+def synthetic(arm, device, steps, batch_size, *, modality="eeg", dimension=DIM, size=K):
     # Exact candidate graph and K; random inputs, dictionary and teacher, including a partial patch.
     cfg = yaml.safe_load((capacity.CONTRACT.parent/'dual_component_base_g1_v2.yaml').read_text())
-    cfg['architectures']['waveform'].update(width=256, latent_dim=DIM)
+    cfg['architectures']['waveform'].update(width=256, latent_dim=dimension)
     cfg['model']['geometry_each_forward'] = False
-    cfg['capacity'] = dict(sizes=[K], uniform_count_fraction=.1)
+    cfg['capacity'] = dict(sizes=[size], uniform_count_fraction=.1)
     torch.manual_seed(17)
-    model = _base_training_model(cfg, TASK, single_id_spectrum=arm == 'C').to(device)
+    model = _base_training_model(cfg, capacity.model_task(modality, size), single_id_spectrum=arm == 'C').to(device)
     for branch in model.branches.values():
-        branch['quantizer'].initialized.fill_(True)
-    x = torch.randn(batch_size, 15, 400, device=device)
+        quantizer = branch['quantizer']
+        if quantizer.codebook.shape != (size, dimension):
+            raise ValueError('unexpected S/O codebook shape')
+        quantizer.initialized.fill_(True)
+    channels = 1 if modality == 'eeg' else 2
+    x = torch.randn(batch_size, 15, 400 if modality == 'eeg' else 40, device=device)
     batch = dict(x=x, s=x*.4, o=x*.6, mask=torch.ones_like(x, dtype=torch.bool),
                  input_scale=x.new_ones(batch_size), feature_mean=x.new_zeros(batch_size, 1, 4),
                  feature_sd=x.new_ones(batch_size, 1, 4))
     batch['mask'][0, 0, -1] = False
     for key in 'xso':
         batch['v'+key] = torch.ones_like(x)
-        batch['dv'+key] = x.new_ones(batch_size, 1)
+        batch['dv'+key] = x.new_ones(batch_size, channels)
     spec = dict(cfg['architectures']['waveform'])
     if arm != 'A':
         spec['spectral_objective'] = dict(location=PLAN['arms'][arm], weight=PLAN['weight'])

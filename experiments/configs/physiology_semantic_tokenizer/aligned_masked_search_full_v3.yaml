@@ -1,0 +1,25 @@
+experiment_id: TK-ALIGNED-MASKED-SEARCH-FULL-v3
+run: experiments/runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3
+parent: experiments/runs/physiology_semantic_tokenizer/aligned_masked_pretraining/20261126_v1
+scope: {splits: [train, validation], protected: forbidden, test: forbidden, evaluate_validation: after_C_lock}
+tensor: {streams: [eegS, eegO, hbS, hbO], vocab: [8192,8192,1024,1024], dimension: 128, sites: 4, patches: 15, seconds: 30}
+full:
+  source: all_G0_nonoverlapping_score_windows
+  train: 2827
+  validation: 770
+  by_dataset:
+    train: {eeg_fnirs_single_trial: 1061, refed: 646, simultaneous_eeg_nirs: 1120}
+    validation: {eeg_fnirs_single_trial: 316, refed: 170, simultaneous_eeg_nirs: 284}
+  sampling: cover_every_fitting_window_once_then_dataset_subject_balanced_repeats
+paired: {train: 156, validation: 54, fitting_folds: [77,79], minimum_separation_seconds: 60}
+grid: {mask: [span, scatter, site], whole_percent: [25,50], width: [128,256], head: [linear, prior]}
+training: {lr: 0.0003, warmup: 32, weight_decay: 0.01, clip: 1.0, batch: 8, dropout: 0.1, checkpoint_every: 256}
+stages:
+  A: {steps: 1024, seeds: [17], arms: [true_pair], folds: [0,1], per_route: 2}
+  B: {steps: 2048, seeds: [29], arms: [true_pair,wrong_pair], folds: [0,1], per_route: 1}
+  C: {steps: 4096, seeds: [17,29,43], arms: [true_pair,wrong_pair,local_joint,eeg,hb], folds: [2]}
+primary: two-fold minimum gain over both fixed and random for each local attribute, or unigram and wrong input for each cross direction; B also requires wrong training contrast for cross
+secondary: three-seed locked development replication; short patterns and independent measured Hb subject contrasts
+diagnostic: fixed common masks, per-stream proper scores, same-subject controls, sampling exposure
+null: no held-person local physiological readout gain or matched-pair contribution
+stopping: fixed terminal steps per fit; end each route on failure; at most 94 fits

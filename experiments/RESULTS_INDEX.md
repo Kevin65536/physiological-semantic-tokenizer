@@ -32,9 +32,35 @@ scope, preserved evidence and pre-archive Git revision. The directory-level rule
 in `.gitignore` cover generated runs and both existing report roots; new selected
 reading artifacts are admitted with explicit `git add -f -- <file>`.
 
+## Full nonoverlapping 30-second masked search — 2026-11-26
+
+The [Chinese visual analysis](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/visual_analysis_v1/REPORT.pdf) and [evidence workbook](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/visual_analysis_v1/evidence.xlsx) compare physiological readouts, both cross-modal prediction directions, local masked-ID scores and training coverage. The [selection](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/A_selection.json) and [training summary](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/training_summary.json) own the registered gates and stage outcomes.
+
+## Aligned-tokenizer reconstruction and real word members — 2026-11-26
+
+The [visual reference](runs/physiology_semantic_tokenizer/aligned_tokenizer_optimization/20261126_v1/reference_review/index.html) compares the frozen parent with measured X and v3 S/O, shows three independent people's actual same-ID members against matched other IDs, and retains the high-frequency and failed attribute examples for each branch. The [new inner-subject launch](runs/physiology_semantic_tokenizer/aligned_tokenizer_optimization/20261126_v1/launch.json) owns the fresh fits, early numerical/visual inspections and matched continuation comparisons.
+
+## Frozen-code M0–M4 masked pretraining — 2026-11-26
+
+The [development summary](runs/physiology_semantic_tokenizer/aligned_masked_pretraining/20261126_v1/summary.json) links fixed-budget fits, whole-modality and span scores, late fusion and measured Hb. The [paired subject contrasts](runs/physiology_semantic_tokenizer/aligned_masked_pretraining/20261126_v1/paired_differences.csv) compare true-pair and wrong-trial training. The [prior comparisons](runs/physiology_semantic_tokenizer/aligned_masked_pretraining/20261126_v1/baseline_gains.csv) give bits per hidden ID on the same development support.
+
+## Frozen analysis of the aligned S/O tokenizers — 2026-11-26
+
+The [Chinese visual report](runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1/report_v2/REPORT.pdf), [64-item evidence catalogue](runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1/report_v2/evidence.csv) and [portable report with tables](runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1/report_v2/report_bundle.zip) cover member waveforms, readouts, sequence controls, native positions, event modulation and measured Hb prediction. The [verified run summary](runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1/summary.json) identifies the checkpoints’ width, panel denominators and report checks.
+
+## Aligned 128-dimensional single-VQ refit — 2026-11-26
+
+The [terminal summary and checkpoint paths](runs/physiology_semantic_tokenizer/single_vq_aligned/20261126_v1/summary.json) cover the v3 EEG C and paired Hb refit. The [pairing checks](runs/physiology_semantic_tokenizer/single_vq_aligned/20261126_v1/pairing.json) identify the seed-matched comparisons and per-dataset NMSE differences.
+
 ## Continuous-span EEG S projection and formal two-seed migration test — 2026-11-25
 
 The [paired waveform report](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/review_v2/连续投影修正与双种子迁移测试.pdf) compares the repaired continuous target, the original block projection and the v3 teacher, and reviews the two seed-matched 10,000-step evaluations. The [replacement checks](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/migration_checks.csv), [per-person scores](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/people.csv), [matched token members](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/member_comparison.csv), [shift agreement](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/natural_shift_people.csv) and [rank census](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/rank_census.csv) retain the primary denominators.
+
+The [four-dataset X/S/O phase atlas](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/phase_atlas_v2/XSO_时域频域与相位对比.pdf) links representative teacher-target waveforms to their spectra, cross-phase and alpha phase on the same development windows. The [per-component measurements](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/phase_atlas_v2/metrics.csv) and [selection ledger](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/phase_atlas_v2/selection.csv) preserve the figures’ denominators.
+
+The [Visual S14 alpha audit](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/alpha_peak_audit_v1/case.png) shows the cap ablation, time segments and electrode distribution. The [CP4 member and matched control](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/alpha_peak_audit_v1/cp4_member.png) link the example to the [frozen v3 token spectra](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/alpha_peak_audit_v1/tokens.png) and [subject-weighted contrasts](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/alpha_peak_audit_v1/token_contrasts.csv).
+
+The [non-alpha X/S/O atlas](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/nonalpha_peak_audit_v1/nonalpha_XSO.pdf) compares delta, theta, beta and low-gamma candidates from the same retained validation panel. The [full screening ledger](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/nonalpha_peak_audit_v1/screen.csv) and [paired time- and frequency-domain measurements](runs/physiology_semantic_tokenizer/continuous_projection_so/20261125_v2/nonalpha_peak_audit_v1/examples.csv) document selection and spectral confounds.
 
 ## Temporal projection of EEG S targets and fixed-budget VQ — 2026-11-25
 

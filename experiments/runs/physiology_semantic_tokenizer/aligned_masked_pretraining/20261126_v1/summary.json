@@ -1,0 +1,92 @@
+{
+  "status": "completed",
+  "finished": "2026-11-25T17:40:42.266386+00:00",
+  "contract": "a6bc03c2ef4fdea570ec793e",
+  "seed": 17,
+  "arm_steps": {
+    "M0_EEG": 512,
+    "M0_Hb": 512,
+    "M2": 512,
+    "M3": 512,
+    "M4": 512
+  },
+  "late_fusion": "average_probabilities_from_independently_fitted_M0_readouts",
+  "train_validation_windows": [
+    156,
+    54
+  ],
+  "train_validation_people": [
+    32,
+    9
+  ],
+  "primary": "paired_differences.csv",
+  "accuracy": "masked_macro.csv",
+  "baselines": "baseline_gains.csv",
+  "physiology": "physiology_readouts.csv",
+  "downstream": "ma_readouts.csv",
+  "measured_Hb": "hb_history_readouts.csv",
+  "whole_modality_M4_minus_M3_bits": [
+    {
+      "stream": "eegO",
+      "task": "eeg_hidden",
+      "people": 9,
+      "M4_minus_M3_bits": 0.0106880108894998,
+      "ci_low": -0.0048187651739897,
+      "ci_high": 0.028128814556933
+    },
+    {
+      "stream": "eegS",
+      "task": "eeg_hidden",
+      "people": 9,
+      "M4_minus_M3_bits": 0.0411550833660666,
+      "ci_low": 0.0288009052238292,
+      "ci_high": 0.0546497406665671
+    },
+    {
+      "stream": "hbO",
+      "task": "hb_hidden",
+      "people": 9,
+      "M4_minus_M3_bits": 0.0093503097664466,
+      "ci_low": -0.0033584093206746,
+      "ci_high": 0.0210098442013209
+    },
+    {
+      "stream": "hbS",
+      "task": "hb_hidden",
+      "people": 9,
+      "M4_minus_M3_bits": 0.0095194752459422,
+      "ci_low": -0.0037438392095668,
+      "ci_high": 0.0286283660179986
+    }
+  ],
+  "whole_modality_M3_unigram_minus_model_bits": {
+    "eegO": -0.28252658095536987,
+    "eegS": -0.5443418480632509,
+    "hbO": -0.09742450809767256,
+    "hbS": -0.10324048055845658
+  },
+  "MA_vs_BL": {
+    "windows": 42,
+    "people": 5,
+    "mean_balanced_accuracy": {
+      "M0_EEG": 0.4716666666666667,
+      "M0_Hb": 0.6178571428571429,
+      "M1": 0.5557142857142857,
+      "M2": 0.5592857142857144,
+      "M3": 0.5345238095238095,
+      "M4": 0.6292857142857142,
+      "fixed": 0.4492857142857143,
+      "random": 0.5002380952380953
+    }
+  },
+  "measured_Hb_mean_nmse": {
+    "M0_EEG": 0.2804408172514568,
+    "M2": 0.26602746528351284,
+    "M3": 0.2713580339723211,
+    "M4": 0.25769119037638377,
+    "continuous": 0.18963118928652264,
+    "fixed": 0.3062861568031435,
+    "history": 0.1886103623835211,
+    "random": 0.333674464282723
+  }
+}

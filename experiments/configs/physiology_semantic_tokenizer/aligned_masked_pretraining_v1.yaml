@@ -1,0 +1,18 @@
+experiment_id: TK-ALIGNED-MASKED-v1
+run: experiments/runs/physiology_semantic_tokenizer/aligned_masked_pretraining/20261126_v1
+audit: experiments/runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1
+scope: {splits: [train, validation], test: forbidden, confirmation: forbidden, raw_reads: false, refit_tokenizer: false}
+streams: [eegS, eegO, hbS, hbO]
+vocab: [8192, 8192, 1024, 1024]
+tokenizer: {dimension: 128, seed: 17, patches: 15, patch_seconds: 2, regions_per_modality: 4}
+panel: {source: audited_four_native_sites_dual_clock_30s, min_donor_separation_seconds: 60, match_seed: 17, expected_train: 156, expected_validation: 54, expected_people: [32, 9]}
+arms: [M0_EEG, M0_Hb, M2, M3, M4]
+M1: average_probabilities_from_independently_fitted_M0_readouts
+model: {width: 128, layers: 2, heads: 4, feedforward: 256, dropout: 0.1}
+training: {seed: 17, steps: 512, batch: 8, lr: 0.0003, warmup: 32, weight_decay: 0.01, clip: 1.0, checkpoint_every: 64, precision: bf16_autocast, sample: shuffled_epochs}
+mask: {span_lengths: [7, 8], mixed_cycle: [span, hb_hidden, span, eeg_hidden], shared_SO: true, stage: after_full_30s_encoding}
+evaluation: {seed: 1126, span_repeats: 4, primary: true_pair_development_bits_per_masked_ID_by_direction_and_stream_M3_vs_M4, unit: trial_then_record_subject_dataset_equal, labels: held_out_from_backbone}
+secondary: matched ordered fixed codes vs random vs trained representations; measured two-color Hb change beyond independent Hb history; sequence order and matched-pair ablation; Single-Trial MA vs BL balanced accuracy and Brier including M1
+diagnostics: unigram, native_position_time_prior, adjacent_visible_Markov, family_accuracy, calibration, entropy, hard_ID_decode_against_true_ID_decode
+null_hypothesis: correctly paired mixed-mask training gives no held-person improvement over condition-matched wrong-trial training
+stopping: all five independent fits at fixed terminal step; one exploratory seed, no dev tuning

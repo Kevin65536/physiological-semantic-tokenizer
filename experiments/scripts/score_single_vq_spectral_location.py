@@ -94,20 +94,20 @@ def patch_means(values, valid):
 
 
 @torch.inference_mode()
-def score(seed, arm):
-    dest = suite.folder(seed, arm)/'evaluation'
+def score(seed, arm, *, job=None, cfg=None, calibration_path=None):
+    dest = (job if job is not None else suite.folder(seed, arm))/'evaluation'
     dest.mkdir(exist_ok=True)
     suite.capacity.prepare_panel(recorded_root=suite.PLAN['recorded_root'])
     panel = suite.capacity.PANEL
     rows, scales = panel['rows'], panel['scales']
-    cfg = suite.training_cfg(seed)
+    cfg = suite.training_cfg(seed) if cfg is None else cfg
     state = torch.load(dest.parent/'checkpoint.pt', map_location='cpu', weights_only=False)
     training = read_json(dest.parent/'summary.json')
     if (training['status'] != 'completed' or state['signature'] != training['signature']
             or state['step'] != suite.PLAN['training']['total_steps'] or state['signature']['task'] != suite.TASK
             or state['signature']['config'] != identity(cfg)):
         raise ValueError('terminal matched checkpoint required')
-    calibration = read_json(suite.OUT/'calibration.json')
+    calibration = read_json(calibration_path or suite.OUT/'calibration.json')
     if arm != 'A' and state['signature'].get('spectral_objective') != identity(dict(
             calibration=calibration, location=suite.PLAN['arms'][arm], weight=suite.PLAN['weight'])):
         raise ValueError('spectral objective mismatch')

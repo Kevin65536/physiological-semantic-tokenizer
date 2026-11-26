@@ -14,18 +14,19 @@ from src.utils.io import save_npz_atomic
 from run_dual_component_tokenizer import write_json
 
 
-def readout_job(job):
+def readout_job(job, *, source=audit, mod="eeg", include_latent=False):
     seed,b = job
-    path = audit.OUT/f'readout_{seed}_{b}'
+    path = source.OUT/(f'readout_{mod}_{seed}_{b}' if include_latent else f'readout_{seed}_{b}')
     path.mkdir(exist_ok=True)
     if (path/'scores.csv').exists():
         return
-    book = audit.network('eeg',8192,seed).branches[b]['quantizer'].codebook.detach().numpy()
+    size = source.PLAN['models'][mod]['K']
+    book = source.network(mod,size,seed).branches[b]['quantizer'].codebook.detach().numpy()
     rows,_ = audit.relations.maps()
-    fields = audit.readout.attributes(np.zeros((1,400)), 'eeg')[1]
+    fields = audit.readout.attributes(np.zeros((1,400 if mod=='eeg' else 40)), mod)[1]
 
     def load(task):
-        with np.load(audit.inputs(task)) as z, np.load(audit.readout.destination(task)) as parent:
+        with np.load(source.inputs(task)) as z, np.load(audit.readout.destination(task)) as parent:
             ex,valid = z['examples'],z['valid']
             for name in ('examples','valid','bg'):
                 np.testing.assert_array_equal(z[name],parent[name])
@@ -33,28 +34,32 @@ def readout_job(job):
             people = [audit.readout.PEOPLE[rows[r]['dataset'],rows[r]['subject']] for r in ex[:,0]]
             part = dict(bg=z['bg'].astype(np.int64),id=ids,embedding=book[ids],
                         person=np.repeat(people,valid.sum(1)),y=parent[b+'_target'])
+            if include_latent:
+                part['hard_z']=z[f'{b}_{seed}_z']
             if task[2]=='validation':
                 part['decoded']=z[f'{b}_{seed}_wave']
         return part,ex,valid
 
     parts = defaultdict(list)
-    for t in audit.tasks('train'):
+    for t in (t for t in source.tasks('train') if t[0]==mod):
         for name,v in load(t)[0].items():
             parts[name].append(v)
     train = {k:np.concatenate(v) for k,v in parts.items()}
     del parts
     ds_of = {p:ds for (ds,subject),p in audit.readout.PEOPLE.items()}
-    raw,bal,ridge,coeff,params,selection = scoring.fit(train,8192,['embedding'],fields,ds_of)
+    raw,bal,ridge,coeff,params,selection = scoring.fit(train,size,['embedding','hard_z'] if include_latent else ['embedding'],fields,ds_of)
     write_json(path/'selection.json',dict(selected=selection['selected'],cv_loss=selection['cv_loss'],
                folds=[dict(dataset=ds_of[p],person=int(p),fold=v) for p,v in selection['folds'].items()]))
     errors=[]; examples=[]; unseen=0; patches=0
-    for t in audit.tasks('validation'):
+    for t in (t for t in source.tasks('validation') if t[0]==mod):
         a,ex,valid=load(t)
         pooled=raw.read(a['bg'],a['id'])
         balanced=bal.read(a['bg'],a['id'])
         methods=dict(background=pooled[0],shrunk=raw.shrink(*pooled,params['shrunk']),
                      balanced_background=balanced[0],balanced_shrunk=bal.shrink(*balanced,params['balanced_shrunk']),
                      embedding=ridge['embedding'].predict(a['bg'],a['embedding'],coeff['embedding']),decoded=a['decoded'])
+        if include_latent:
+            methods['hard_z']=ridge['hard_z'].predict(a['bg'],a['hard_z'],coeff['hard_z'])
         err=np.stack([feature_means((v-a['y'])**2,fields) for v in methods.values()],axis=1)
         if not np.isfinite(err).all():
             raise ValueError('invalid complete patch readout')
@@ -65,7 +70,7 @@ def readout_job(job):
         examples.append(ex)
         unseen+=int((pooled[2]==0).sum()); patches+=len(err)
     agg=base_training_aggregate(dict(nmse=np.concatenate(errors)),np.concatenate(examples),rows)
-    if agg['inputs']!=53476 or agg['subjects']!=16 or len(set(train['person']))!=60:
+    if agg['inputs']!=audit.readout.capacity.PLAN['support'][mod+'_positions'] or agg['subjects']!=16 or len(set(train['person']))!=60:
         raise ValueError('readout denominator changed')
     stat=agg['metrics']['nmse']
     records=[]

@@ -320,7 +320,7 @@ def supplementary(job, *, source=suite):
             preds[name]=(fit_ridge(x,y)(v)-z)**2
         h=hierarchy(ex,preds);results.append(h.assign(adjacent=adjacent))
     pd.concat(results).to_csv(out/'observed_sequence_reference.csv',index=False)
-    if mod=='hb' and seed==17:
+    if mod=='hb' and seed==17 and 43 in source.PLAN['models'][mod]['seeds']:
         other=source.collect(mod,43,'validation')
         for key in ('valid','examples','person'):
             np.testing.assert_array_equal(te[key],other[key])

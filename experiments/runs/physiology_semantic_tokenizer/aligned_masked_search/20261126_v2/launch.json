@@ -1,0 +1,42 @@
+{
+  "experiment": "TK-ALIGNED-MASKED-SEARCH-v2",
+  "unit": "masked-search-v2-1126.service",
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "command": "/bin/bash /home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_v2/supervise.sh",
+  "recorded": "2026-11-26T02:24:21.471304+08:00",
+  "resources": "resources.log",
+  "linger": true,
+  "pilots": [
+    {
+      "candidate": "span-25-128-prior",
+      "steps": 32,
+      "train_seconds": 1.0505494979443029,
+      "scoring_seconds": 0.435943596996367,
+      "peak_gpu_mib": 184.0
+    },
+    {
+      "candidate": "span-25-256-prior",
+      "steps": 32,
+      "train_seconds": 1.2082623520400375,
+      "scoring_seconds": 0.5313695590011775,
+      "peak_gpu_mib": 280.0
+    }
+  ],
+  "gpu_pci": [
+    "00000000:4B:00.0",
+    "00000000:CA:00.0"
+  ],
+  "workers": 2,
+  "numerical_threads_per_worker": 2,
+  "reason": "Both permitted cards idle. One independent fold per GPU, mixed sizes, BV=8, GPU-resident token panel, bounded CPU threads. One small and one large pilot ran concurrently.",
+  "checkpoint_period": 256,
+  "scope": "train-only inner folds in A and B; ordinary validation enabled only after B lock in C",
+  "supervision": "user systemd, Restart=on-failure, 15 s restart, max 3 starts / 600 s",
+  "logs": [
+    "controller.log",
+    "A_lane0.log",
+    "A_lane1.log",
+    "status.json"
+  ],
+  "result": "training_summary.json"
+}

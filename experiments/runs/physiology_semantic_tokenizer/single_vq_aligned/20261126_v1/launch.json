@@ -1,0 +1,52 @@
+{
+  "unit": "single-vq-aligned-20261126-v1.service",
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "command": [
+    "/bin/bash",
+    "/home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/single_vq_aligned/20261126_v1/supervise.sh"
+  ],
+  "linger": true,
+  "supervisor_properties": "supervisor.txt",
+  "resource_survey": "resources.log",
+  "environment_script": "supervise.sh",
+  "logs": [
+    "eeg.log",
+    "hb.log",
+    "controller.log"
+  ],
+  "concurrency": "Two independent modality fits; one process per available permitted 4090 and one numerical thread per process. The per-modality dictionary heads and optimizer are trained jointly on that device.",
+  "gpu_pilots": {
+    "eeg": {
+      "status": "passed",
+      "arm": "C",
+      "steps_per_second": 26.96020585447737,
+      "batch_size": 64,
+      "gpu": "GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7",
+      "peak_reserved_bytes": 1029701632,
+      "task": {
+        "modality": "eeg",
+        "architecture": "waveform",
+        "candidate": "vq8192"
+      },
+      "dimension": 128
+    },
+    "hb": {
+      "status": "passed",
+      "arm": "A",
+      "steps_per_second": 30.932513235783503,
+      "batch_size": 64,
+      "gpu": "GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735",
+      "peak_reserved_bytes": 260046848,
+      "task": {
+        "modality": "hb",
+        "architecture": "waveform",
+        "candidate": "vq1024"
+      },
+      "dimension": 128
+    }
+  },
+  "progress": "Each modality writes models/<task>/progress.json and atomic checkpoint.pt; supervise.sh resumes the same run.",
+  "synthetic": "synthetic.log",
+  "tests": "targeted.log",
+  "checked": "2026-11-25T16:09:55.721549+00:00"
+}
