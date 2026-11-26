@@ -1,0 +1,48 @@
+{
+  "units": [
+    "MainPID=1851365\nExecStart={ path=/home/uais7/pid-mcm-implementation/.venv/bin/python ; argv[]=/home/uais7/pid-mcm-implementation/.venv/bin/python -u experiments/scripts/run_science_ablations.py train --seeds 17 --arms B0 s_off o_off both_off single14 dual13 dual14 dual13_first shared independent_size neighbor shuffled_neighbor cross_true cross_wrong cross_eeg_only cross_hb_only generic sham_teacher attr_half attr_off eog_true eog_wrong ; ignore_errors=no ; start_time=[Thu 2026-11-26 21:21:59 CST] ; stop_time=[n/a] ; pid=1851365 ; code=(null) ; status=0/0 }\nEnvironment=CUDA_VISIBLE_DEVICES=GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/uais7/pid-mcm-implementation\nActiveState=active\n",
+    "MainPID=1851373\nExecStart={ path=/home/uais7/pid-mcm-implementation/.venv/bin/python ; argv[]=/home/uais7/pid-mcm-implementation/.venv/bin/python -u experiments/scripts/run_science_ablations.py train --seeds 43 --arms B0 s_off o_off both_off single14 dual13 dual14 dual13_first shared independent_size neighbor shuffled_neighbor cross_true cross_wrong cross_eeg_only cross_hb_only generic sham_teacher attr_half attr_off eog_true eog_wrong ; ignore_errors=no ; start_time=[Thu 2026-11-26 21:21:59 CST] ; stop_time=[n/a] ; pid=1851373 ; code=(null) ; status=0/0 }\nEnvironment=CUDA_VISIBLE_DEVICES=GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/uais7/pid-mcm-implementation\nActiveState=active\n"
+  ],
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "contract": "resolved.yaml",
+  "runtime": "one thread per BLAS/PyTorch CPU pool",
+  "pilot": [
+    {
+      "status": "completed",
+      "arm": "B0",
+      "seed": 17,
+      "experimental_steps": 8,
+      "parameters": 4613830,
+      "seconds": 2.215673647937365,
+      "peak_gpu_mib": 921.2509765625,
+      "device": "GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7"
+    },
+    {
+      "status": "completed",
+      "arm": "dual13",
+      "seed": 17,
+      "experimental_steps": 8,
+      "parameters": 4613830,
+      "seconds": 1.1456310910871252,
+      "peak_gpu_mib": 941.4697265625,
+      "device": "GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735"
+    },
+    {
+      "status": "completed",
+      "arm": "single14",
+      "seed": 17,
+      "experimental_steps": 8,
+      "parameters": 4613830,
+      "seconds": 2.1691767110023648,
+      "peak_gpu_mib": 941.4697265625,
+      "device": "GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735"
+    }
+  ],
+  "worker_selection": "two independent concurrent GPU workers, one per permitted RTX 4090, seeds 17/43; six CPU I/O workers with single-thread numerical libraries for the shared record preparation. Independent CPU scoring follows terminal cells.",
+  "status": "models/<arm>_<seed>/progress.json and done.json; checkpoint retained for resume",
+  "continued_units": [
+    "MainPID=1857828\nExecStart={ path=/home/uais7/pid-mcm-implementation/.venv/bin/python ; argv[]=/home/uais7/pid-mcm-implementation/.venv/bin/python -u experiments/scripts/run_science_ablations.py train --seeds 17 --arms B0 s_off o_off both_off single14 dual13 dual14 dual13_first shared independent_size neighbor shuffled_neighbor cross_true cross_wrong cross_eeg_only cross_hb_only generic sham_teacher attr_half attr_off eog_true eog_wrong ; ignore_errors=no ; start_time=[Thu 2026-11-26 21:29:32 CST] ; stop_time=[n/a] ; pid=1857828 ; code=(null) ; status=0/0 }\nEnvironment=CUDA_VISIBLE_DEVICES=GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/uais7/pid-mcm-implementation\nActiveState=active\n",
+    "MainPID=1857837\nExecStart={ path=/home/uais7/pid-mcm-implementation/.venv/bin/python ; argv[]=/home/uais7/pid-mcm-implementation/.venv/bin/python -u experiments/scripts/run_science_ablations.py train --seeds 43 --arms B0 s_off o_off both_off single14 dual13 dual14 dual13_first shared independent_size neighbor shuffled_neighbor cross_true cross_wrong cross_eeg_only cross_hb_only generic sham_teacher attr_half attr_off eog_true eog_wrong ; ignore_errors=no ; start_time=[Thu 2026-11-26 21:29:32 CST] ; stop_time=[n/a] ; pid=1857837 ; code=(null) ; status=0/0 }\nEnvironment=CUDA_VISIBLE_DEVICES=GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/uais7/pid-mcm-implementation\nActiveState=active\n"
+  ],
+  "geometry_preflight": "Before either spatial arm was trained, confirmed nearest neighbors from the retained four-position coordinates (F1\u2013F2, P3\u2013P4). Shuffled pairs F1\u2013P4, F2\u2013P3 preserve degree. Restarted workers from owned checkpoints at identical seeds and next batches."
+}

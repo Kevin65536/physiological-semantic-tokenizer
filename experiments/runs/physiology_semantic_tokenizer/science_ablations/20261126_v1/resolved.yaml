@@ -1,0 +1,21 @@
+experiment_id: TK-SCIENCE-ABLATIONS-v1
+run: experiments/runs/physiology_semantic_tokenizer/science_ablations/20261126_v1
+parent: experiments/runs/physiology_semantic_tokenizer/frozen_science_screen/20261126_v1
+scope: {dataset: simultaneous_eeg_nirs, record: cnt_nback, splits: [train, validation], test: forbidden, protected: forbidden}
+sites: {eeg: [F1, F2, P3, P4], hb: [AFF3h, AFF4h, P3h, P4h]}
+training: {seeds: [17, 43], warmup: 256, hard: 1024, positions_per_batch: 64, lr: 0.0003, grad_clip: 1.0, check_every: 128}
+population: jointly supported G0 30s nonoverlapping scoring-grid crops inside the public parent subject roster, four EEG and four Hb sites, real HEOG/VEOG, validated v3 S/O masks. Tokenizer optimization only on training subjects. Subject-uniform sampling; confirm all arms use same batches for each seed.
+budget: from random initialization; equal short screening exposure of 81920 position crops per model including continuous warmup. Compare every cell with seed-matched B0 on this common population; original 10000-step B0 retained as external reference.
+primary: future measured Hb change at parent positions/colors/lags, same full unreferenced Hb anchor, capacity and crossed donor controls. Contrast between arms after averaging reader seeds and tokenizer seeds within person.
+secondary: observed n-back task Brier, independent observed EEG alpha readout, S-only/O-only/additive versus joint prediction; train-defined alpha families with spatial/event/transition subject support.
+diagnostic: S/O reconstruction, cancellation, branch energies, actual code entropy and occupancy, parameters, time; one versus two level partial decodes. Only label a first-stage specialization when supported on independent targets.
+E2: {B0: [1,1], s_off: [0,1], o_off: [1,0], both_off: [0,0]}
+E3A: {K: 4096, dimensions: [64,128,256], seed: 17}
+E3: {B0: [8192], single14: [16384], dual13: [256,32], dual14: [256,64], dual13_first: [256,32]}
+E5: [shared, independent_size, neighbor, shuffled_neighbor, cross_true, cross_wrong, cross_eeg_only, cross_hb_only]
+E6: [generic, sham_teacher, attr_half, attr_off, eog_true, eog_wrong]
+E4: {local_slot_bidir: 7, local_slot_history: 14, offset_s: -14, history_s: 30, synthetic_lag_slots: 2, null_and_positive_seeds: 20}
+teacher: retain total waveform and its difference loss; drop a disabled branch's pointwise AND difference losses. Fixed original train-calibrated spectral target, weight 0.01 after quantization. Generic offline lowpass matched to train teacher RMS and derivative; sham from same person, condition, near phase, disjoint time. EOG regress train S on actual demeaned EOG and move fitted component to O, preserving original X.
+cross: frozen Hb outputs; EEG encoder receives a learned projection of the same site's standardized Hb slot history. Unimodal masks applied before encoding, independent wrong-training model; exchange-stage donor swaps evaluated separately.
+null_hypothesis: no paired improvement beyond equal budget Hb expansion or wrong pairing, and no increased independent physiological support.
+stopping: complete all registered two-seed cells regardless of development results. Combine only independently supported changes. Public screen only.

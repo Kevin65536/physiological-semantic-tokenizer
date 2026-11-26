@@ -16,6 +16,12 @@ scientific verdicts. Its owning record is
 and access boundaries remain in the [experiment plan](../docs/EXPERIMENT_PLAN.md)
 and [data contract](../docs/DATA_CONTRACT.md).
 
+The [two-seed science ablation run](runs/physiology_semantic_tokenizer/science_ablations/20261126_v1/) retains the independent EEG matrix, Hb-side replication, measured and synthetic time views, dimension replay and frozen WG transfer. Its [contract](configs/physiology_semantic_tokenizer/science_ablations_v1.yaml) distinguishes the common short refits from the historical full-budget models.
+
+The [frozen science screen](runs/physiology_semantic_tokenizer/frozen_science_screen/20261126_v1/summary.json) retains paired EEG bridge and sequence contrasts, the Hb reference comparison, per-slot perturbation effects and a historical selection replay under the [first-batch contract](configs/physiology_semantic_tokenizer/frozen_science_screen_v1.yaml).
+
+The [frozen-screen cell records](runs/physiology_semantic_tokenizer/frozen_science_screen/20261126_v1/retained_cell_records.jsonl) and [ablation cell records](runs/physiology_semantic_tokenizer/science_ablations/20261126_v1/retained_cell_records.jsonl) preserve each run-relative path and its recorded contents. Replaying model inference requires the local input arrays and checkpoints.
+
 ## Git reading package and local archive
 
 Git keeps the linked conclusions, endpoint/comparison tables, compact run and

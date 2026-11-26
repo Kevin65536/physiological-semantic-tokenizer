@@ -1,0 +1,16 @@
+{
+  "units": [
+    "MainPID=1866654\nExecStart={ path=/home/uais7/pid-mcm-implementation/.venv/bin/python ; argv[]=/home/uais7/pid-mcm-implementation/.venv/bin/python -u experiments/scripts/run_science_hb_replication.py train --seed 17 ; ignore_errors=no ; start_time=[Thu 2026-11-26 21:39:25 CST] ; stop_time=[n/a] ; pid=1866654 ; code=(null) ; status=0/0 }\nEnvironment=CUDA_VISIBLE_DEVICES=GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/uais7/pid-mcm-implementation\nActiveState=active\n",
+    "MainPID=1866662\nExecStart={ path=/home/uais7/pid-mcm-implementation/.venv/bin/python ; argv[]=/home/uais7/pid-mcm-implementation/.venv/bin/python -u experiments/scripts/run_science_hb_replication.py train --seed 43 ; ignore_errors=no ; start_time=[Thu 2026-11-26 21:39:25 CST] ; stop_time=[n/a] ; pid=1866662 ; code=(null) ; status=0/0 }\nEnvironment=CUDA_VISIBLE_DEVICES=GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=/home/uais7/pid-mcm-implementation\nActiveState=active\n"
+  ],
+  "pilot": {
+    "status": "completed",
+    "seed": 17,
+    "arm": "B0",
+    "steps": 8,
+    "seconds": 2.0573475330602378,
+    "parameters": 4516038,
+    "peak_gpu_mib": 241.36865234375
+  },
+  "resource_reason": "Concurrent Hb + EEG on each allowed card after pilot; EEG sampled approximately 25% utilization, Hb pilot < 0.25 GiB peak allocation. Same single-thread CPU environment. At most two trainers per GPU."
+}

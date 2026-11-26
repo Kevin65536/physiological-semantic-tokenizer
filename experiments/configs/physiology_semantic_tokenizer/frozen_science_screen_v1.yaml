@@ -1,0 +1,29 @@
+experiment_id: TK-FROZEN-SCIENCE-SCREEN-v1
+run: experiments/runs/physiology_semantic_tokenizer/frozen_science_screen/20261126_v1
+parent: experiments/runs/physiology_semantic_tokenizer/four_stream_conditional/20261126_v2
+scope: {coordinate: strict_common, train_people: 15, development_people: 4, train_events: 309, development_events: 91, tokenizer: frozen, test: forbidden, protected: forbidden}
+shape: {sites: 4, slots: 15, eeg_samples_per_slot: 400, hb_samples_per_slot: 20, chromophores: 2, horizons_seconds: [2, 4, 6]}
+bands_hz: [[1,4], [4,8], [8,13], [13,30], [30,45]]
+ridge_grid: [0.001, 0.01, 0.1, 1, 10]
+residual_ridge: 1.0
+seeds: [17, 43]
+primary: capacity-control minus paired future Hb-change NMSE; equal weights for sites, colors and horizons, then seeds within subject and subjects. Training population SD per target.
+secondary: n-back three-condition Brier score for H, E and HE using the same training and development subjects. Labels only enter the readout.
+diagnostic: strict unfiltered Hb history with versus without first-five-second subtraction; no other input change
+null: no EEG gain above Hb expansion or same-condition donor. Real and mismatched EEG are fitted and evaluated separately.
+E0: [raw_bands, input_bands, pre_vq, embedding, decoded_bands, family64]
+readers: full unreferenced history grouped-OOF ridge anchor. Fixed linear residual on equal-width inputs (Hb squared expansion); P1 zero-initialized conditional slot residual with Hb source as capacity control. Features standardized on training events, padded to 128 with no trainable adapter.
+E1:
+  family_sizes: [64, 32]
+  family: train ID mean observed alpha log power, train-token frequency quantiles per branch, unknown reserved. Frozen train distributions.
+  controls: permute family assignments within exact training ID count; sequence Euler trail preserves each window/site/branch's directed bigram counts and endpoints
+  features: site and branch specific unigram bags versus bags plus ordered bigram and trigram counts; exact sparse count kernels, same residual regularization
+E4: replay dev two-second replacements at 15 slots; verify retained per-person off-slot change proportions; record full input/output influence by ID, family and decoded log alpha. These are model sensitivities.
+E7:
+  candidates: [A, B, C]
+  parent: single_vq_spectral_location/20261125_v1/seed_17
+  selection: ordered training subjects, final third for selection and remaining for fitting. Both policies score identical public selection events.
+  R: lowest observed-X recon NMSE; break ties by active-code coverage then measured alpha readout
+  M: require reconstruction within 5 percent of best; rank by paired future-Hb improvement, break ties by measured alpha readout
+  evaluation: fix both choices before scoring ordinary development subjects. Historical project development exposure disclosed. No independent confirmation or speed claim.
+stopping: one development screen. No tokenizer retraining or combinations are triggered automatically. Four development subjects provide exploratory support only.

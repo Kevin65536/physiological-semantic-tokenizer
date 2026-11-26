@@ -3,6 +3,22 @@
 _Design owner for independently versioned experiment protocols. Registered
 execution and scientific verdicts live in `research_state/registry.json`._
 
+## 冻结表示的统一科学终点筛查（2026-11-26）
+
+[首批合同](../experiments/configs/physiology_semantic_tokenizer/frozen_science_screen_v1.yaml)在同一严格截止的 n-back 面板上固定完整 Hb 历史。E0 分别加入原始 EEG 频带、适配输入频带、量化前表示、完整整数嵌入、整数解码频带和训练集定义的家族。未来 Hb 变化沿用 P1 的 4 个位置、两种色基和 3 个时滞；以同预算 Hb 扩容减真配对误差为主差值，同时核对真实／错配训练和评价四格。E1 比较精确 ID 和家族的词袋与连续二、三元组，使用相同训练占用的随机家族和保持一阶转移的序列对照。E4 复用 P2 真实片段替换，检查远处输出对同窗输入的敏感性。E7 在同一历史候选池上先冻结两套选择，再评价普通开发被试。行为次终点是三类 n-back 条件的概率读出。四人结果用于筛查。
+
+后续训练分别与相同种子、相同曝光的原始基线比较。根据定位结果安排 EEG 分量锚定（E2）、码率与层级（E3）、历史时间视图（E4）、网络共享（E5）或教师依赖（E6）。两项独立干预各自有收益后才安排组合。后续关系学习统一预算，最终确认需要独立样本及其数据合同。
+
+### 两种子独立训练矩阵与严格时间视图
+
+[独立消融合同](../experiments/configs/physiology_semantic_tokenizer/science_ablations_v1.yaml)在公开 n-back 名册内取四个 EEG 和四个 Hb 位置均通过 G0 质量检查、S/O 目标完整、HEOG 和 VEOG 可用的同一片段集合。每种子按被试等概率抽样，所有训练格从随机初始化执行 256 次连续预热和 1,024 次硬量化更新，每批 16 个片段、64 个位置。B0 同步重训，原始全库 10,000 步结果单列。Hb 输出保持冻结。独立科学终点沿用严格截止的未来实测 Hb 变化、同预算 Hb 和错配对照；各项基线差按人配对，先平均两层随机种子。行为 Brier、实测 α 读出、S/O 加性互补及非加性交互分别计量。
+
+E2 同时核对逐点与一阶差分锚定。E3-A 复演固定 K4096 的已有维度矩阵；E3-B 在 13、14 bit 下各比较单级与双级，E3-C 在 13 bit 下比较属性监督落在联合码或第一级。E5 比较共享与近参数量独立网络、真实与打乱邻接、进入 EEG 编码器的配对与错配 Hb，另设编码前去模态训练。跨模态时产生的 EEG 码标记为联合来源。E6 的通用低通和错配教师均保持 S+O 闭合；属性权重取 0.01、0.005、0。眼电修正把历史训练片段中 S 可由双通道 EOG 线性预测的部分转移给 O，比较真实与错配参考。眼电修正对独立实测响应的价值由科学终点判断。
+
+E4 对相同的两秒信号分别取 30 秒双向或历史视图，同一事件只给未来 Hb 读出一个位置，两视图的每个 EEG 输入都在全任务截止之前。另以 4 秒生成延迟及独立噪声检验时滞估计。转移对照每侧取两个平移两秒的窗口，原始支持同为 32 秒。任务内结果和[同坐标词生成迁移](../experiments/configs/physiology_semantic_tokenizer/science_ablation_transfer_v1.yaml)分开；后者用既有离线 Hb 坐标在 n-back 训练、冻结后在 WG 评价。
+
+[Hb 独立复核](../experiments/configs/physiology_semantic_tokenizer/science_hb_replication_v1.yaml)在相同的片段、种子和曝光量上只重训 Hb，EEG 使用原始冻结词表。每分支 10/11 bit 时分别比较单级与双级；共享、近参数量独立、几何最近邻、度数相同的打乱邻接分别拟合。教师对照比较 v3、通用匹配低通和错配目标。原 Hb 基线没有显式斜率监督，补充 0.01 与 0.005 两档双颜色斜率属性损失。每一格保留完整未减参考的实测 Hb 历史锚点。相同种子的候选 Hb 表示同时进入真实与错配 EEG 以及 Hb 扩容读出；WG 使用两任务一致的原有离线坐标。
+
 后续血流动力学研究从
 [Tak 基线](ARCHITECTURE.md#tak-hemodynamic-baseline)出发；选择依据由
 [方法说明](METHOD_RATIONALE.md#tak-baseline-for-subsequent-research--2026-10-27)持有。

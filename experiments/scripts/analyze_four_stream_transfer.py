@@ -31,7 +31,7 @@ SITES = {"eeg": ["F1", "F2", "P3", "P4"], "hb": ["AFF3h", "AFF4h", "P3h", "P4h"]
 G0 = suite.OUT.parents[1] / "dual_component_tokenizer/20261122_unified_base_g0_v1"
 
 
-def wg_panel():
+def wg_panel(output=OUT):
     r = DownstreamInputDataset(suite.DATA, split="validation", task="wg")
     roster = r.plan["subject_partitions"][DS]["validation"]
     if set(roster) & set(
@@ -128,12 +128,12 @@ def wg_panel():
     donor = condition_permutation(m, 40, 1126)
     keep = np.flatnonzero(donor >= 0)
     full.loc[full.id.isin(m.loc[donor < 0, "id"]), "status"] = "unmatched donor"
-    full.to_csv(OUT / "wg_support.csv", index=False)
+    full.to_csv(output / "wg_support.csv", index=False)
     m = m.iloc[keep].reset_index(drop=True)
     m["donor"] = np.searchsorted(keep, donor[keep])
     if m.id.duplicated().any() or len(m) == 0:
         raise ValueError("invalid WG panel")
-    m.to_csv(OUT / "wg_panel.csv", index=False)
+    m.to_csv(output / "wg_panel.csv", index=False)
     return m, {k: np.stack([waves[i][k] for i in keep]) for k in waves[0]}
 
 

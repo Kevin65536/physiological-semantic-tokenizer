@@ -1,0 +1,26 @@
+{
+  "supervisor": "systemd --user",
+  "unit": "frozen-science-v1-run.service",
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "command": ".venv/bin/python -u experiments/scripts/run_frozen_science_screen.py run --workers 18",
+  "environment": {
+    "CUDA_VISIBLE_DEVICES": "",
+    "OMP_NUM_THREADS": 1,
+    "MKL_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "PYTHONPATH": "/home/uais7/pid-mcm-implementation"
+  },
+  "linger": true,
+  "pilot": {
+    "stage": "E0",
+    "name": "raw_bands",
+    "seconds": 7.119405778008513,
+    "peak_mib": 931.94921875,
+    "result": null
+  },
+  "resources": "64 physical cores, quota 48. 18 one-thread workers for 39 heterogeneous cells; reserve remaining CPU for concurrent jobs. Read-only memory maps, approximately 1 GiB per pilot worker. CPU only.",
+  "progress": "progress.json",
+  "completion": "summary.json",
+  "resume": "completed cells are skipped; rerun the same command via launch.sh after correcting any failed cell",
+  "log": "run.log"
+}

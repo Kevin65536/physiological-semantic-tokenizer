@@ -1,0 +1,125 @@
+{
+  "status": "completed",
+  "experiment_id": "TK-SCIENCE-ABLATIONS-v1",
+  "planned_fits": 68,
+  "completed_fits": 68,
+  "EEG_fits": 44,
+  "Hb_fits": 24,
+  "Hb_replication": {
+    "status": "completed",
+    "planned_fits": 24,
+    "completed_fits": 24,
+    "scope": {
+      "dataset": "simultaneous_eeg_nirs",
+      "record": "cnt_nback",
+      "test": "forbidden",
+      "protected": "forbidden",
+      "EEG_tokenizer": "frozen"
+    },
+    "nback_train": 309,
+    "nback_development": 91,
+    "WG_validation": 237,
+    "primary": "future observed Hb change; full unreferenced Hb ridge anchor frozen, current candidate Hb codes in both equal-size residual contexts, original pure EEG codes as additional source versus Hb-capacity and wrong donor.",
+    "endpoint_table": "paired.csv",
+    "additional_attribute": "Hb B0 has no explicit slope head loss. attr_full and attr_half use 0.01 and 0.005.",
+    "frozen_EEG": "original aligned EEG tokenizer",
+    "scientific_scope": "exploratory, four n-back and five WG subjects"
+  },
+  "decision_counts": {
+    "\u5171\u540c\u79d1\u5b66\u7ec8\u70b9\u672a\u5b9a": 18,
+    "\u5b9e\u6d4b\u5c5e\u6027\u8bfb\u51fa\u6539\u5584\uff1b\u6761\u4ef6\u589e\u91cf\u672a\u786e\u7acb": 8,
+    "\u91cd\u5efa\u8bef\u5dee\u4e0b\u964d\uff1b\u6761\u4ef6\u589e\u91cf\u672a\u786e\u7acb": 8,
+    "\u4e25\u683c\u5386\u53f2\u89c6\u56fe\u7684\u6761\u4ef6\u589e\u91cf\u5dee\u533a\u95f4\u8de8\u96f6\uff0c\u5408\u6210\u5ef6\u8fdf\u672a\u6539\u5584": 1
+  },
+  "seeds": [
+    17,
+    43
+  ],
+  "training_steps_per_fit": 1280,
+  "position_exposures_per_fit": 81920,
+  "historical_dimension_models": 3,
+  "endpoint": "future measured Hb change at parent positions/colors/lags, same full unreferenced Hb anchor, capacity and crossed donor controls. Contrast between arms after averaging reader seeds and tokenizer seeds within person.",
+  "reference": "two matched short refits; original full-budget tokenizer separate",
+  "training_subjects": 15,
+  "development_subjects": 4,
+  "train_events": 309,
+  "dev_events": 91,
+  "train_crops": 463,
+  "dev_crops": 124,
+  "cross_task": {
+    "status": "completed",
+    "models": 44,
+    "subjects": 5,
+    "events": 237,
+    "coordinate": "offline canonical Hb on both tasks; all reader fitting on n-back train",
+    "new_subjects": [
+      "VP017"
+    ]
+  },
+  "time_views": {
+    "status": "completed",
+    "measured": {
+      "planned": 400,
+      "history_available": 379,
+      "closed_donor_panel": 294,
+      "train": 228,
+      "development": 66,
+      "prediction_support": {
+        "bidir": [
+          -30,
+          0
+        ],
+        "history": [
+          -44,
+          -14
+        ],
+        "same_patch": [
+          -16,
+          -14
+        ]
+      },
+      "transition_seconds_per_view": 32
+    },
+    "synthetic": {
+      "bidir": {
+        "seeds": 20,
+        "mean_lag_absolute_error_s": 0.9,
+        "null_false_peaks": 0
+      },
+      "history": {
+        "seeds": 20,
+        "mean_lag_absolute_error_s": 1.3,
+        "null_false_peaks": 2
+      }
+    },
+    "endpoint": "paired single-patch views, same windows per quantity; synthetic results qualify only the lag estimator"
+  },
+  "scientific_verdict": "exploratory",
+  "independent_confirmation": "not evaluated",
+  "descriptive_screen_and_WG_conjunction": [],
+  "selection_note": "Descriptive 95% paired bootstrap intervals; no multiplicity correction. WG contains only one additional person. Positive point estimates alone do not establish improvements.",
+  "files": [
+    "decision_table.csv",
+    "unified_endpoints.csv",
+    "endpoint_intervals.csv",
+    "paired_ablation.csv",
+    "factorial.csv",
+    "increments.csv",
+    "guardrails.csv",
+    "E2_stability.csv",
+    "teacher_donor_matching.csv",
+    "rates_and_cost.csv",
+    "so_controlled.csv",
+    "so_contrasts.csv",
+    "full_chain.csv",
+    "exchange.csv",
+    "task.csv",
+    "attributes.csv",
+    "atlas_effects.csv",
+    "wg/contrasts.csv",
+    "hb_replication/paired.csv",
+    "hb_replication/so_contrasts.csv",
+    "time_views/person_scores.csv",
+    "time_views/synthetic_lag.csv"
+  ]
+}

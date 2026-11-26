@@ -5006,27 +5006,9 @@ def run_voltage_power_cap_posterior(cfg,out,root,workers,stage):
 
 
 def _base_training_model(cfg, task, *, single_id_spectrum=False):
-    from src.tokenizers.dual_component_tokenizer import GlobalLatentComponentTokenizer
-    setting=dict(cfg['model'],**cfg['architectures'][task['architecture']])
-    setting.update(input_dim=400 if task['modality']=='eeg' else 40,
-                   channels=1 if task['modality']=='eeg' else 2)
-    setting.setdefault('sample_strides',[5,4,5] if task['modality']=='eeg' else [5])
-    setting['single_id_spectrum'] = single_id_spectrum
-    candidate = task['candidate']
-    hard = candidate.startswith('vq') and candidate[2:].isdigit()
-    if not hard and candidate not in ('warmup','continuous'):
-        raise ValueError('unknown base candidate')
-    if hard and 'capacity' in cfg:
-        size = int(candidate[2:])
-        if size not in cfg['capacity']['sizes']:
-            raise ValueError('capacity outside declared grid')
-        setting['codebook_size'] = size
-        setting['dead_code_threshold'] = (cfg['capacity']['uniform_count_fraction']
-                                          * cfg['training']['batch_size'] * setting['patches'] / size)
-    model = GlobalLatentComponentTokenizer(setting,codebook_size=setting['codebook_size'],hard=hard)
-    model.target_input = setting.get('target_input', False)
-    model.frozen_source = setting.get('frozen_source')
-    return model
+    from src.tokenizers.dual_component_tokenizer import build_base_tokenizer
+
+    return build_base_tokenizer(cfg, task, single_id_spectrum=single_id_spectrum)
 
 
 def _base_latents(model, batch):

@@ -1,0 +1,10 @@
+experiment_id: TK-SCIENCE-ABLATION-WG-v1
+parent: science_ablations_v1.yaml
+output_child: wg
+scope: {fit: retained cached n-back training panel, evaluate: retained public WG validation panel, test: forbidden, protected: forbidden}
+coordinate: use the P2 matched offline canonical Hb input/target on BOTH tasks. Frozen tokenizer weights; train all readout parameters and scales only on n-back. Hold n-back readout fixed for WG scoring.
+models: all 22 two-seed independent cells
+primary: subject-average Hb capacity minus EEG residual NMSE with 2x2 real/wrong donor train and evaluation; also compare to full Hb anchor
+diagnostic: reproducible per-person signed contrasts. Separate VP017, the sole person new to the n-back development panel.
+null_hypothesis: no transferable EEG pairing gain over both controls
+stopping: reuse the complete P2 panel, no new task-specific optimization or protected sample access

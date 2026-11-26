@@ -44,6 +44,17 @@ in the closest `src/` owner, with data and replay roots passed explicitly.
 
 ## Entrypoint, config and test map
 
+The [two-seed ablation contract](configs/physiology_semantic_tokenizer/science_ablations_v1.yaml) links
+the [common G0 and eye-channel preparation](scripts/prepare_science_ablations.py), [training](scripts/run_science_ablations.py),
+[readouts and dimension replay](scripts/score_science_ablations.py), [time views](scripts/run_science_time_views.py)
+and [frozen WG transfer](scripts/transfer_science_ablations.py). The [independent Hb replication](scripts/run_science_hb_replication.py) uses its [own contract](configs/physiology_semantic_tokenizer/science_hb_replication_v1.yaml). The [completion audit](scripts/summarize_science_ablations.py) verifies every terminal EEG fit and transfer before computing seed-averaged paired results. Its [tests](../tests/test_science_ablations.py)
+exercise integer replay, causal input removal and differentiable partial-anchor losses.
+
+The [frozen scientific-endpoint runner](scripts/run_frozen_science_screen.py) uses the
+[public n-back contract](configs/physiology_semantic_tokenizer/frozen_science_screen_v1.yaml).
+Run `check`, `prepare`, `pilot` and `run --workers N` in sequence. The [tests](../tests/test_frozen_science_screen.py)
+exercise fold isolation, donor routing, family occupancy and sequence controls. Completed cells resume independently.
+
 The single-level VQ capacity [controller](scripts/run_single_vq_capacity.py) uses the [matched development contract](configs/physiology_semantic_tokenizer/single_vq_capacity_v1.yaml). It scores the frozen single VQ and montage baselines, trains width-256 continuous and hard arms, and schedules the codebook-size comparison and conditional seed repetitions. [Shape and replay tests](../tests/test_single_vq_capacity.py) cover both signal grids.
 
 The [frozen single-VQ readout](scripts/run_single_vq_readout.py) uses the same ordinary development panel. Run `pilot` for integer replay and `run --workers N` for extraction and training-person-selected probes. The [contract](configs/physiology_semantic_tokenizer/single_vq_readout_v1.yaml) defines support, readouts and aggregation. [Tests](../tests/test_single_vq_readout.py) cover both signal grids, sparse cells and subject folds.

@@ -1,0 +1,14 @@
+experiment_id: TK-SCIENCE-HB-REPLICATION-v1
+parent: science_ablations_v1.yaml
+output_child: hb_replication
+scope: {dataset: simultaneous_eeg_nirs, record: cnt_nback, test: forbidden, protected: forbidden, EEG_tokenizer: frozen}
+training: same original scale, 463 common G0 training crops, subject-uniform batch orders, initializations and two-seed screening exposure as the EEG matrix. Fit ONLY Hb, score 124 common development crops plus the same strict n-back events.
+sizes: {B0: [1024], single11: [2048], dual10: [64,16], dual11: [64,32]}
+network: [shared, independent_size, neighbor, shuffled_neighbor]
+teacher: [generic, sham_teacher, attr_full, attr_half]
+attribute: original Hb B0 has zero explicit attribute loss. Compare 0.01 and 0.005 projections of decoded-quantized S vectors onto two measured-in-cache teacher S slopes per slot standardized on train. All three retain the teacher point targets.
+primary: future observed Hb change; full unreferenced Hb ridge anchor frozen, current candidate Hb codes in both equal-size residual contexts, original pure EEG codes as additional source versus Hb-capacity and wrong donor.
+secondary: S/O complement and nonadditive relations on the same future Hb and held-person observed slope. Task condition Brier in both directions.
+diagnostic: integer-only replay, actual use and joint entropy, reconstruction of both colors, partial versus complete two-stage codes, elapsed and parameter cost
+null_hypothesis: no paired improvement against the matched Hb B0
+stopping: complete all 12 models for both seeds; no simultaneous EEG changes, no independently acquired optical artifact-reference claim
