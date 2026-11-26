@@ -1,0 +1,15 @@
+experiment_id: TK-TASK-PATTERN-PAIRING-v1
+parent: task_pattern_expansion_v1.yaml
+output_child: event_pairs
+scope: same scored public train/development trials only; fixed candidates before viewing primary development scores
+endpoint: Within person, native record and condition, difference in probability of a delayed Hb event between trials with/without an early EEG event. Compare to disjoint within-condition rotated Hb trials. Average supported conditions in record, then records in person, then people equally.
+candidates:
+  - [theta_HbO, frontal_theta, 1, frontal_HbO, 1]
+  - [alpha_HbO, posterior_alpha, -1, frontal_HbO, 1]
+  - [theta_HbR, frontal_theta, 1, frontal_HbR, -1]
+  - [motor_beta_HbO, motor_beta_lr, 1, motor_HbO_lr, 1]
+  - [word_alpha_HbO, S_posterior_Q4, -1, frontal_HbO, 1]
+thresholds: Above pooled training median in each signed attribute, strict greater-than. EEG changes use +1..9 versus -5..-1 s; Hb response for this pairing is +9..17 minus +1..9 s; word family comes from a full-context offline encoder.
+support: At least two early-event and two no-event trials in the same subject/record/condition, actual binary Hb outcome may be constant. Both aligned and mismatched comparisons use exactly these rows.
+gate: Descriptive candidate only if training signed probability contrast has magnitude >=0.10 and >=2/3 people in the training direction; development signed effect >=0.10, true-minus-mismatched >=0.05, at least three people with both >=75% same-direction fractions. Report support and all candidates regardless of outcome.
+stopping: One fixed pass. No claim of future prediction, cortical causation, or ground-truth physiological delay.

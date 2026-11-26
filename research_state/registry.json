@@ -1,6 +1,6 @@
 {
   "schema": "research_state_registry_v1",
-  "updated_at": "2026-11-26T21:56:23.015900+08:00",
+  "updated_at": "2026-11-27T05:02:37.798303+08:00",
   "tracks": [
     {
       "id": "main",
@@ -9003,6 +9003,84 @@
       "label": "Hb 独立复核的配对结果",
       "path": "experiments/runs/physiology_semantic_tokenizer/science_ablations/20261126_v1/hb_replication/paired.csv",
       "role": "diagnostic"
+    },
+    {
+      "id": "e.nback_function_screen_v1_protocol",
+      "label": "负荷、顺序与干扰筛选合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/nback_function_screen_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.nback_function_screen_v1_summary",
+      "label": "四项预设筛选结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/nback_function_screen/20261127_v1/summary.json",
+      "role": "result_summary"
+    },
+    {
+      "id": "e.nback_function_screen_v1_order_protocol",
+      "label": "块序与量化追加诊断合同",
+      "path": "experiments/configs/physiology_semantic_tokenizer/nback_order_check_v1.yaml",
+      "role": "protocol"
+    },
+    {
+      "id": "e.nback_function_screen_v1_order",
+      "label": "块序与量化桥接开发结果",
+      "path": "experiments/runs/physiology_semantic_tokenizer/nback_function_screen/20261127_v1/order_check_v1/summary.json",
+      "role": "diagnostic"
+    },
+    {
+      "id": "e.nback_function_screen_v1_report",
+      "label": "逐块可视化与筛选决策",
+      "path": "experiments/runs/physiology_semantic_tokenizer/nback_function_screen/20261127_v1/report_v2/REPORT.pdf",
+      "role": "decision"
+    },
+    {
+      "id": "e.task_pattern_expansion_v1_protocol",
+      "label": "三任务候选库与双模态合同",
+      "role": "protocol",
+      "path": "experiments/configs/physiology_semantic_tokenizer/task_pattern_expansion_v1.yaml"
+    },
+    {
+      "id": "e.task_pattern_expansion_v1_pairs_protocol",
+      "label": "条件内配对机会与错配合同",
+      "role": "protocol",
+      "path": "experiments/configs/physiology_semantic_tokenizer/task_pattern_pairing_v1.yaml"
+    },
+    {
+      "id": "e.task_pattern_expansion_v1_local_protocol",
+      "label": "时段差拆解与连续斜率对照合同",
+      "role": "protocol",
+      "path": "experiments/configs/physiology_semantic_tokenizer/task_pattern_localization_v1.yaml"
+    },
+    {
+      "id": "e.task_pattern_expansion_v1_outcomes",
+      "label": "任务内开发筛选与读出",
+      "role": "result_summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/task_pattern_expansion/20261127_v1/summary.json"
+    },
+    {
+      "id": "e.task_pattern_expansion_v1_transfer",
+      "label": "冻结排序方向的跨数据集结果",
+      "role": "result_summary",
+      "path": "experiments/runs/physiology_semantic_tokenizer/task_pattern_expansion/20261127_v1/transfer.csv"
+    },
+    {
+      "id": "e.task_pattern_expansion_v1_pairs",
+      "label": "早期事件与晚段血流配对结果",
+      "role": "diagnostic",
+      "path": "experiments/runs/physiology_semantic_tokenizer/task_pattern_expansion/20261127_v1/event_pairs/contrasts.csv"
+    },
+    {
+      "id": "e.task_pattern_expansion_v1_local",
+      "label": "左右侧、前一条件与实测斜率对照",
+      "role": "diagnostic",
+      "path": "experiments/runs/physiology_semantic_tokenizer/task_pattern_expansion/20261127_v1/localization/people.csv"
+    },
+    {
+      "id": "e.task_pattern_expansion_v1_report",
+      "label": "跨任务模式图册与决策",
+      "role": "decision",
+      "path": "experiments/runs/physiology_semantic_tokenizer/task_pattern_expansion/20261127_v1/report_v1/REPORT.pdf"
     }
   ],
   "records": [
@@ -21818,6 +21896,61 @@
       "headline": false,
       "updated_at": "2026-11-26T21:56:23.015900+08:00",
       "next_step": "保留独立结果、分量稳定性与迁移限制。组合和保护确认没有入选候选。"
+    },
+    {
+      "state_id": "main.nback_function_screen_v1@2026-11-27.completed",
+      "entity": "main.nback_function_screen_v1",
+      "label": "冻结四路词元的负荷、区域顺序与扰动筛选",
+      "track": "main",
+      "order": 285,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "公开训练 15 人 309 块、开发 4 人 91 块。连续 EEG 与联合词元三分类平衡准确率为 51.5% 与 33.7%；状态族顺序未降低 Hb 误差。S 传入 20.7% 的已知脉冲，顶部 α 功率只保留 0.068%。固定块序可完全查出标签；同时留出被试和块序区间时，额 θ 与顶 α 两项读出为 48.5%。",
+      "evidence_ids": [
+        "e.nback_function_screen_v1_protocol",
+        "e.nback_function_screen_v1_summary",
+        "e.nback_function_screen_v1_order_protocol",
+        "e.nback_function_screen_v1_order",
+        "e.nback_function_screen_v1_report"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.four_stream_conditional_v2"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-27T04:36:44.555497+08:00",
+      "next_step": "优先在任务顺序平衡的记录上复核额顶功率与负荷的关联，保留连续 EEG 基线；暂缓扩大四路词元、事件顺序血流解释及仅 S 去噪。"
+    },
+    {
+      "state_id": "main.task_pattern_expansion_v1@2026-11-27.completed",
+      "entity": "main.task_pattern_expansion_v1",
+      "label": "三任务跨数据集生理与词族模式筛选",
+      "track": "main",
+      "order": 286,
+      "entity_kind": "experiment",
+      "execution": "completed",
+      "scientific_verdict": "inconclusive",
+      "analysis_intent": "exploratory",
+      "summary": "2,777 个公开有效事件，615 个开发事件。81 项任务内比较有 4 项达到探索门槛；词生成训练所选 β 左右时段差在词生成与心算开发集 AUC 为 0.623、0.686。心算额部 Hb-S 词族时段差 AUC 0.629。四路词族增益与 15 项条件内 EEG–Hb 配对未过门槛。",
+      "evidence_ids": [
+        "e.task_pattern_expansion_v1_protocol",
+        "e.task_pattern_expansion_v1_pairs_protocol",
+        "e.task_pattern_expansion_v1_local_protocol",
+        "e.task_pattern_expansion_v1_outcomes",
+        "e.task_pattern_expansion_v1_transfer",
+        "e.task_pattern_expansion_v1_pairs",
+        "e.task_pattern_expansion_v1_local",
+        "e.task_pattern_expansion_v1_report"
+      ],
+      "supersedes": [],
+      "depends_on": [
+        "main.nback_function_screen_v1"
+      ],
+      "headline": false,
+      "updated_at": "2026-11-27T05:02:37.798303+08:00",
+      "next_step": "优先在独立、顺序平衡且记录动作的样本复核 β 左右时段差；保留单个额部 Hb 词族与实测斜率的同维度对照。"
     }
   ]
 }

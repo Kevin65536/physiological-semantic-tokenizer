@@ -1,0 +1,24 @@
+experiment_id: TK-NBACK-FUNCTION-SCREEN-v1
+run: experiments/runs/physiology_semantic_tokenizer/nback_function_screen/20261127_v1
+panel: experiments/runs/physiology_semantic_tokenizer/four_stream_stage2/20261126_v1
+hb_coordinates: experiments/runs/physiology_semantic_tokenizer/four_stream_stage2/20261126_cached_v1/input_coordinates.json
+scales: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1/scales.json
+families: experiments/runs/physiology_semantic_tokenizer/four_stream_atlas/20261126_v1/family_dictionary.csv.gz
+cache: data/cache/physiology_downstream_v2
+dataset: simultaneous_eeg_nirs
+record: cnt_nback
+scope: {splits: [train, validation], prior_events: [309, 91], people: [15, 4], test: forbidden, protected: forbidden}
+timing: {start_s: -5, stop_s: 25, eeg_hz: 200, hb_hz: 10, slots: 15}
+classes: [0-back session, 2-back session, 3-back session]
+sites: {eeg: [F1, F2, P3, P4], hb: [AFF3h, AFF4h, P3h, P4h]}
+model: {version: aligned_single_vq_20261126, eeg: 8192, hb: 1024, seed: 17, dim: 128}
+bands: [[1,4],[4,8],[8,13],[13,30],[30,45]]
+ridge: [0.01, 0.1, 1, 10]
+folds: 3
+seed: 1127
+primary: Three-class balanced accuracy averaged within development person then over people. Frozen code-vector and conventional continuous EEG/Hb/fusion. Train-person CV selects ridge; no evaluation fitting.
+secondary: Response in each sensor region, mean measured HbO/HbR 9..19 s minus 1..9 s. Add EEG-S family directed transitions (1..9 s) to condition, early Hb, five EEG bands, family occupancy and run lengths. Shuffle EEG order within runs by reversing or preserving whole sequence at random per person/event/site, retaining occupancy and run lengths. Offline association.
+diagnostic: EEG-only readout, decoded S, O and sum, clean versus fixed added 60-uV Gaussian pulse at +6 s (bilateral frontal weight 1, parietal 0.2, sigma 0.15 s); 2-Hz highpass comparator. Injection transfer RMS and posterior clean alpha-band power recovery.
+null_hypothesis: No fusion gain, no sequence gain beyond continuous and occupancy controls, or attenuation with loss of measured rhythm/function.
+gates: Primary priority if fusion exceeds each unimodal and continuous fusion by at least 0.02 BA and improves for at least 3/4 people in each comparison. For modality complementarity alone compare continuous fusion with both continuous unimodals by same rule. Sequence priority if mean normalized MSE improves over both baseline and randomized order by at least 0.02 with 3/4 positive people each. Denoising priority if S passes all three thresholds on average and for 3/4 people (pulse RMS transfer below 0.5, posterior alpha power ratio 0.8..1.25, perturbed BA within 0.02 of clean conventional EEG).
+stopping: One pass on common support. Keep failed cases and person-level directions. No new full training, protected evaluation, or tuning to development.

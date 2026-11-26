@@ -16,6 +16,13 @@ scientific verdicts. Its owning record is
 and access boundaries remain in the [experiment plan](../docs/EXPERIMENT_PLAN.md)
 and [data contract](../docs/DATA_CONTRACT.md).
 
+The [three-task pattern screen](runs/physiology_semantic_tokenizer/task_pattern_expansion/20261127_v1/summary.json)
+retains the [illustrated report](runs/physiology_semantic_tokenizer/task_pattern_expansion/20261127_v1/report_v1/REPORT.pdf),
+[complete pattern catalog](runs/physiology_semantic_tokenizer/task_pattern_expansion/20261127_v1/report_v1/pattern_catalog.csv),
+cross-dataset transfer, conditional event pairs and matched Hb slope controls.
+
+The [n-back function screen](runs/physiology_semantic_tokenizer/nback_function_screen/20261127_v1/summary.json) retains subject-level load, response-order and perturbation contrasts. Its [illustrated report](runs/physiology_semantic_tokenizer/nback_function_screen/20261127_v1/report_v2/REPORT.pdf) includes the [block-order and quantization check](runs/physiology_semantic_tokenizer/nback_function_screen/20261127_v1/order_check_v1/summary.json).
+
 The [two-seed science ablation run](runs/physiology_semantic_tokenizer/science_ablations/20261126_v1/) retains the independent EEG matrix, Hb-side replication, measured and synthetic time views, dimension replay and frozen WG transfer. Its [contract](configs/physiology_semantic_tokenizer/science_ablations_v1.yaml) distinguishes the common short refits from the historical full-budget models.
 
 The [frozen science screen](runs/physiology_semantic_tokenizer/frozen_science_screen/20261126_v1/summary.json) retains paired EEG bridge and sequence contrasts, the Hb reference comparison, per-slot perturbation effects and a historical selection replay under the [first-batch contract](configs/physiology_semantic_tokenizer/frozen_science_screen_v1.yaml).

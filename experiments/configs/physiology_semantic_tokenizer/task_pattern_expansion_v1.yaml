@@ -1,0 +1,24 @@
+experiment_id: TK-TASK-PATTERN-EXPANSION-v1
+run: experiments/runs/physiology_semantic_tokenizer/task_pattern_expansion/20261127_v1
+cache: data/cache/physiology_downstream_v2
+scope: {splits: [train, validation], test: forbidden, protected: forbidden, preprocessing: offline_complete_record}
+tasks:
+  mental_arithmetic: {dataset: eeg_fnirs_single_trial, classes: [BL, MA], records: [session_01, session_03, session_05]}
+  motor_imagery: {dataset: eeg_fnirs_single_trial, classes: [LMI, RMI], records: [session_00, session_02, session_04]}
+  wg: {dataset: simultaneous_eeg_nirs, classes: [BL, WG], records: [cnt_wg]}
+sites:
+  eeg_fnirs_single_trial: {eeg: [F3,F4,P3,P4,FCC3h,FCC4h], hb: [AF3Fp1,AF4Fp2,FC3C3,FC4C4], hb_unit: relative_Hb_repo_approximation}
+  simultaneous_eeg_nirs: {eeg: [F1,F2,P3,P4,C3,C4], hb: [AFF3h,AFF4h,C3h,C4h], hb_unit: uM}
+seed: 1127
+encoder: {seed: 17, eeg: 8192, hb: 1024, slots: 15, slot_s: 2, version: aligned_single_vq_20261126}
+scales: experiments/runs/physiology_semantic_tokenizer/dual_component_tokenizer/20261122_unified_base_g0_v1/scales.json
+families: experiments/runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1
+support: full paired event [-5,+25) seconds, 200 Hz EEG and 10 Hz Hb, all named channels valid. Preserve upstream exclusions and any unavailable panel cells. No duplicated session or subject across partitions within dataset.
+coordinate: EEG divided by existing per-site training scales. Hb referenced to first 5s, times one positive gain per task fitted to RMS 0.025 across training observations only, divided by existing per-site scale. Continuous comparisons retain native cache units.
+windows: {reference_slots: [0,2], active_slots: [3,7], delayed_slots: [7,11], tail_slots: [11,15]}
+primary: Within-record AUC for scalar task patterns; average records then people. Select at most two per task and family on train (oriented AUC >=0.55 and at least two-thirds people above 0.5); freeze sign before development. Prioritize if development AUC >=0.58 with >=75% people above 0.5, >=3 scored people, and within groups of 5 adjacent native event ordinals AUC >=0.55. Flag an ordinal-only BA >=0.65 as a task-order limitation. Report all candidate scores.
+secondary: Fixed multivariate readouts (EEG bands, Hb levels, continuous fusion, four-stream family occupancy, occupancy plus transitions, continuous plus occupancy); same train-person 3-fold ridge grid and blocks. Model increment requires +0.02 balanced accuracy versus full continuous fusion and >=75% positive development people. Ordinal-only lookup by record and native event index, training majority fallback.
+diagnostic: True early EEG versus within-condition rotated trial in same person/record, conditional on early Hb and known task, predicting later measured HbO/HbR. Train-only readout. Two task transfer screens with the source-selected direction and no target refit; candidate units stay dataset-specific. Fixed n-back-inspired frontal theta minus posterior alpha dB score also evaluated.
+multiplicity: One-sided person sign-flip max statistic across all train-selected candidates within each task, as descriptive familywise sensitivity; development is reused public data.
+null_hypothesis: No repeatable condition difference; no family advantage beyond continuous features; no EEG gain beyond Hb history and mismatched EEG.
+stopping: One frozen screen on three tasks. Report exceptions, missing contrasts, design confounds and nulls. No adaptive retraining or protected access.

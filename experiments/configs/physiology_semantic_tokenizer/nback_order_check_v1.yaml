@@ -1,0 +1,12 @@
+experiment_id: TK-NBACK-ORDER-CHECK-v1
+parent: nback_function_screen_v1.yaml
+output_subdirectory: order_check_v1
+intent: Exploratory follow-up after noticing identical block ordering and poor pooled-code task scores on the parent development panel. No change to original gates.
+scope: same admitted train/development events and offline 30s input; no test or protected reads
+windows: [[0,8],[9,17],[18,26]]
+primary: For each disjoint native event-index range, train on the other two ranges of the original 15 train people, predict the held range on the four development people. Concatenate predictions across ranges before per-person macro class recall.
+secondary: Compare same-phase pooled pre-VQ versus hard codebook vectors with identical frozen encoder, dimensions, input, ridge grid and participant folds. Compare continuous EEG and Hb in identical block holdouts.
+diagnostic: Lookup by event index fitted on training people only; count tied/unseen ordinals and score on development. Two interpretable EEG features (bilateral frontal theta and posterior alpha power changes, +5..25 versus -5..-1 s).
+seed: 17
+null_hypothesis: A physiological task effect independent of block ordering is unresolved. Ordinal holdout does not randomize the task.
+stopping: Single exploratory replay. No model updates. No further development-driven candidates.

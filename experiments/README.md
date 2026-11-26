@@ -44,6 +44,16 @@ in the closest `src/` owner, with data and replay roots passed explicitly.
 
 ## Entrypoint, config and test map
 
+The [three-task pattern screen](configs/physiology_semantic_tokenizer/task_pattern_expansion_v1.yaml) uses
+[plan, pilot and record extraction](scripts/run_task_pattern_expansion.py),
+[training-only selection and grouped readouts](scripts/score_task_pattern_expansion.py),
+[paired-event controls](scripts/score_task_pattern_pairing.py) and
+[component localization](scripts/localize_task_patterns.py). The [report generator](scripts/report_task_pattern_expansion.py)
+writes a fresh illustrated report and full pattern catalog. [Synthetic checks](../tests/test_task_pattern_expansion.py)
+cover region, frequency, family and AUC conventions.
+
+The [n-back function screen](configs/physiology_semantic_tokenizer/nback_function_screen_v1.yaml) uses [synthetic, pilot, extract and score stages](scripts/run_nback_function_screen.py) and [grouped probes](scripts/score_nback_function_screen.py). A [separate block-order diagnostic](configs/physiology_semantic_tokenizer/nback_order_check_v1.yaml) has its own [runner](scripts/check_nback_task_order.py). The [report generator](scripts/report_nback_function_screen.py) and [tests](../tests/test_nback_function_screen.py) cover the public sensor, classification, sequence and perturbation panels.
+
 The [two-seed ablation contract](configs/physiology_semantic_tokenizer/science_ablations_v1.yaml) links
 the [common G0 and eye-channel preparation](scripts/prepare_science_ablations.py), [training](scripts/run_science_ablations.py),
 [readouts and dimension replay](scripts/score_science_ablations.py), [time views](scripts/run_science_time_views.py)
