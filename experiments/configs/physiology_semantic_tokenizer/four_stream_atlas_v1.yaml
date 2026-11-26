@@ -1,0 +1,20 @@
+experiment_id: TK-FOUR-STREAM-ATLAS-v1
+source: experiments/runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1
+output: experiments/runs/physiology_semantic_tokenizer/four_stream_atlas/20261126_v1
+source_id: TK-ALIGNED-TOKEN-AUDIT-v1
+seed: 17
+dimension: 128
+vocabulary: {eeg: 8192, hb: 1024}
+scope: [train, validation]
+shape: {sites_per_modality: 4, bins_per_window: 3, patches_per_bin: 5, families: 4}
+support: {token_stride_s: 2, context_s: 30, preprocessing: offline_full_record, space: sensor_topview}
+primary: Native-site family occupancy on complete paired windows, with valid opportunities per person.
+secondary: Paired S versus S+O same-patch X readout on the parent development subjects.
+diagnostic: Joint HbO/HbR slopes of retained real members of train-selected Hb words.
+family_definition: Separate training-emission quartiles of shrunk word means of branch EEG alpha fraction or HbO slope.
+candidate_relations:
+  A: EEG-S/O to Hb-S/O conditional on Hb history, scored on future measured HbO and HbR.
+  B1: S or O alone versus both, within modality on future measured attributes.
+  B2: Nonlinear S and O main effects versus main effects plus their interaction, within modality.
+null_hypothesis: Paired same-patch S+O and S-only readouts have equal mean squared error.
+stopping: One descriptive replay. Future endpoints require cutoff-isolated preprocessing and independent target support.

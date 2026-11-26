@@ -1,0 +1,131 @@
+{
+  "experiment_id": "TK-FOUR-STREAM-ATLAS-v1",
+  "status": "completed",
+  "parent": "experiments/runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1",
+  "layers": [
+    "EEG-S",
+    "EEG-O",
+    "HB-S",
+    "HB-O"
+  ],
+  "sensor_nodes": 192,
+  "primary": "atlas_nodes.csv",
+  "support": {
+    "token_stride_s": 2,
+    "context_s": 30,
+    "preprocessing": "offline_full_record",
+    "space": "sensor_topview"
+  },
+  "panel": [
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "split": "train",
+      "status": "complete",
+      "windows": 272,
+      "subjects": 17
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "split": "train",
+      "status": "eeg_incomplete",
+      "windows": 266,
+      "subjects": 17
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "split": "validation",
+      "status": "complete",
+      "windows": 83,
+      "subjects": 5
+    },
+    {
+      "dataset": "eeg_fnirs_single_trial",
+      "split": "validation",
+      "status": "eeg_incomplete",
+      "windows": 79,
+      "subjects": 5
+    },
+    {
+      "dataset": "refed",
+      "split": "train",
+      "status": "complete",
+      "windows": 170,
+      "subjects": 19
+    },
+    {
+      "dataset": "refed",
+      "split": "train",
+      "status": "eeg_incomplete",
+      "windows": 58,
+      "subjects": 18
+    },
+    {
+      "dataset": "refed",
+      "split": "validation",
+      "status": "complete",
+      "windows": 41,
+      "subjects": 5
+    },
+    {
+      "dataset": "refed",
+      "split": "validation",
+      "status": "eeg_incomplete",
+      "windows": 19,
+      "subjects": 5
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "split": "train",
+      "status": "complete",
+      "windows": 177,
+      "subjects": 15
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "split": "train",
+      "status": "eeg_incomplete",
+      "windows": 148,
+      "subjects": 15
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "split": "validation",
+      "status": "complete",
+      "windows": 40,
+      "subjects": 4
+    },
+    {
+      "dataset": "simultaneous_eeg_nirs",
+      "split": "validation",
+      "status": "eeg_incomplete",
+      "windows": 45,
+      "subjects": 4
+    }
+  ],
+  "same_patch_readout": [
+    {
+      "modality": "eeg",
+      "people": 16,
+      "improved": 14,
+      "S_mse": 0.01949427949360413,
+      "SO_mse": 0.01902500188257379,
+      "relative_gain": 0.024072580429777002,
+      "difference": 0.0004692776110303404,
+      "ci_low": 0.00014256228754626457,
+      "ci_high": 0.0007814101415334984
+    },
+    {
+      "modality": "hb",
+      "people": 16,
+      "improved": 16,
+      "S_mse": 0.0412530188299198,
+      "SO_mse": 0.023316214283999694,
+      "relative_gain": 0.4347998050729559,
+      "difference": 0.01793680454592011,
+      "ci_low": 0.01583483887692848,
+      "ci_high": 0.0201049048480886
+    }
+  ],
+  "future_prediction": "unscored",
+  "cortical_mapping": "unavailable"
+}

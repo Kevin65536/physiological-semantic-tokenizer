@@ -1,0 +1,21 @@
+experiment_id: TK-FOUR-STREAM-STAGE2-CACHED-v1
+run: experiments/runs/physiology_semantic_tokenizer/four_stream_stage2/20261126_cached_v1
+paired_run: experiments/runs/physiology_semantic_tokenizer/four_stream_stage2/20261126_v1
+atlas: experiments/runs/physiology_semantic_tokenizer/four_stream_atlas/20261126_v1
+dataset: simultaneous_eeg_nirs
+task: nback
+record: cnt_nback
+scope: {splits: [train, validation], subjects: phase1_record_roster, test: forbidden, protected: forbidden}
+eeg_sites: [F1, F2, P3, P4]
+hb_sites: [AFF3h, AFF4h, P3h, P4h]
+timing: {history_seconds: 30, cutoff_from_marker_s: 4, horizon_starts_after_cutoff_s: [2, 4, 6], horizon_width_s: 2}
+observations: released 200 Hz native EEG in uV and registered whole-record v5/none 10 Hz paired Hb in uM, separate registered markers
+tokens: {seed: 17, dimension: 128, eeg_K: 8192, hb_K: 1024, patches: 15, frozen: true}
+hb_history: unchanged canonical 0.01-0.2 Hz measurement cache then first five seconds reference; one common gain fitted on training histories to 0.025 RMS; frozen site scales
+targets: three 2s future mean HbO/HbR changes (uM) and alpha-fraction changes, relative to final 2s of the same measurement coordinate history
+training: {seeds: [17, 43], steps: 300, width: 32, rank: 8, batch: 24, lr: 0.001, donor_seed: 1126, donor_separation_s: 40}
+primary: macro development subject NMSE differences for matched Hb residual versus EEG residual and within-modality additive versus interaction
+secondary: S-only and O-only versus additive; separately trained wrong-event arms and input substitutions; nested continuous history controls
+diagnostic: generic joint model; smooth plus remainder alternative with frozen books and decoding distortion reported
+null_hypothesis: EEG has no increment beyond Hb history; within-modality interaction has no increment beyond additive history
+stopping: terminal fixed-step fits only, no development selection, two seeds averaged within person, record missing trials and failed cells

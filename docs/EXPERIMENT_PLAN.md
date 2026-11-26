@@ -79,6 +79,7 @@ measured result exists.
 | Test the added value of physical structure beyond task accuracy | [Physical-model contribution and competing explanations](#物理模型独特贡献与非任务证据设计2026-11-04) |
 | Design EEG voltage separation and falsifiable source-token evidence | [Voltage separation with independent intervention anchors](#eeg-电压域分解与独立干预验证设计2026-11-03) |
 | Explain reconstruction versus physiological recovery | [Four independent diagnostics](#拟合观测信息与生理恢复的四套独立诊断2026-10-21) |
+| 四流传感器图谱及 A/B 独立未来端点 | [TK-FOUR-STREAM-ATLAS-v1](#tk-four-stream-atlas-v1) |
 | Reacquire complete downstream metrics and repair Visual/REFED | [DOWNSTREAM-REBENCH-v2](#downstream-rebench-v2); [retained v1 design](#downstream-rebench-v1) and historical comparison contracts remain separate |
 | Local spatial structure and independent dynamics | [Spatial observation design](#局部多通道观测与空间动态维数2026-10-16) |
 | Dataset extensions and conditional tokenizer probes | [REFED extension](#refed-公开实验补齐与四数据集比较2026-10-13), [TK-FUNCTIONAL](#条件功能监督与-hard-token-开发矩阵2026-10-10) |
@@ -100,6 +101,27 @@ measured result exists.
 本版本沿用下一节的 24 个配置、两折、阶段步数和晋级规则。完整面板改为 G0 在每条原生记录的统一 200 Hz 坐标上贪心选出的所有互不重叠 30 秒窗，再筛选单来源时钟和两模态各四个固定原生位置全程有效的窗口。取消旧审计的背景窗抽样上限。训练共 2,827 窗／51 人，普通开发共 770 窗／14 人，三个库的训练窗分别为 1,061、646、1,120。严格错配组仍需唯一事件与分层内合法供体，使用 156 个训练窗、54 个开发窗。普通开发集在候选锁定后评分。
 
 各正式拟合先以加权无放回顺序覆盖所在训练折的全部局部窗，再按库和被试均衡地重复抽窗；严格配对批按原规则独立采样。逐窗保留实际曝光次数，并对每折覆盖作断言。每个配置均从冻结码本和新的读出模型初始化。[运行合同](../experiments/configs/physiology_semantic_tokenizer/aligned_masked_search_full_v3.yaml) · [逐库分母](../experiments/runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_v2/window_census/window_counts.csv)
+<a id="tk-four-stream-atlas-v1"></a>
+## TK-FOUR-STREAM-ATLAS-v1　四流传感器表型与两条关系分支
+
+[首轮合同](../experiments/configs/physiology_semantic_tokenizer/four_stream_atlas_v1.yaml)只重读冻结审计的派生证据。沿用四个独立词表及各自训练期词族定义。每个码字的分数是其真实分支属性均值向训练总体均值收缩的估计，先验权重为 16 个片段；依训练期实际发出的词元分布取三个四分位点。EEG 按 α 功率占比、Hb 按 HbO 斜率命名 Q1–Q4。开发成员的 HbR 斜率由保留的双色波形计算。成员例图取训练期合格码字中按出现次数排序的第 10、50、90 百分位词，保留原成员抽样及匹配条件；成果可追溯至词表、被试、记录、传感器、窗口、片号和数组行。
+
+图谱节点由库、原生传感器、流和词族共同标识。复用父面板选择的每模态四个位置和二维头皮投影，按库分别显示；投影的来源与布局由父审计几何读取器及数据合同持有。每人每个位置以有效发词机会作分母，地区覆盖随记录变化。占用率先在人内求比例，再对有该位置的被试等权平均，95% 百分位区间按人重采样 2,000 次，仅一人时留空。保留未完成窗口及原因。S/O 补充比较沿用另一个四库开发面板，在同一人同一实测属性上计算 S 单支误差减去 S+O 误差，先在人内、再在库内汇总，最后库等权；按库分层重抽被试。相对降幅由汇总的两项误差求比。上述区间为逐项描述性区间，未作多重性校正。各记录继承其被试的原划分；已参与选择的开发人群仅作探索。
+
+A、B 分别保留独立的训练问题。A 先拟合并冻结 Hb 历史预测，再独立拟合参数及优化预算匹配的 Hb 历史残差读出、Hb 加 EEG 残差读出；逐个未来时段、逐色团比较实测误差，同时核对连续 Hb 历史的嵌套对照和同条件错配训练。B 在各模态内分别拟合 S、O、非线性加性与低秩交互读出；相对单支的改善与相对加性模型的改善分开计量。物理分解归因还需与闭合、码率、平滑度及重建质量匹配的替代分解比较。候选关系接受独立端点和同支持对照后才可加入图谱。
+
+[读取器原型](../src/foundation/four_stream_relations.py)的单流时间核读取完整 30 秒历史内的 15 个槽位，位置使用原生传感器平面坐标。A 查询两个 Hb 分支与两支来源的所有位置，输出各目标位置多个未来时段的 HbO/HbR；B 只接受本模态两个流。关系表示可供后续统一下游读出。当前实现以完整位置和已知二维坐标为输入；测量适配还需处理缺失、映射可信度和原生双时钟。预测时须将双时钟各自对齐到同一事件，按原始数据依赖核验预处理、统计量和编码器的最晚支持，目标窗也须独立。既有整记录离线处理不足以满足此条件。冻结读取器测试、开发增量、独立复现分别记账。后续依据连续与离散表示的增量定位信息损失，再安排共用下游读出的 A/B 双因素消融、外部方法比较和有配准支持的皮层分析。
+
+### 阶段二首轮训练：Simultaneous n-back
+
+[登记缓存合同](../experiments/configs/physiology_semantic_tokenizer/four_stream_stage2_cached_v1.yaml)与[原生窗口敏感性合同](../experiments/configs/physiology_semantic_tokenizer/four_stream_stage2_v1.yaml)共享阶段一记录名册、四个原生位置、同一事件和供体。事件需有两个独立标记且全段位于配准支持内。分别在各自时钟上向下取整提示后 4 秒的截止采样边界，使用此前完整 30 秒的 EEG/Hb 词元。目标为截止后 2、4、6 秒起始的三个两秒窗，相对历史末两秒的实际 HbO/HbR 均值变化或 EEG α 占比变化。未来窗起点向上取整，保留不完整、有质量排除或缺少同人同记录同条件、相隔至少 40 秒供体的事件。
+
+两个运行都从冻结模型重新取得四流整数词。EEG 沿用发布的 200 Hz 电压和训练位置尺度。默认 Hb 通过登记读取器取得已核验、字节相同的 v5/none 带通测量副本，保持 10 Hz、µM 和成对支持掩码；历史和目标均处于整记录离线带通坐标。原生/处理对照中的另一坐标使用发布的双色团，首次项目带通仅作用于各历史窗，目标取发布测量。两者各自减去历史前五秒参考，在训练历史上拟合共享正尺度使整体 RMS 为 0.025，再使用冻结 G0 的逐位置尺度；对照结果仅描述从发布样本开始的截止隔离。两套 Hb 处理同时改变输入和目标，不把差值归因于单一滤波环节。其结果不修改通用 Hb 生产入口。
+
+A 的 Hb 基线先独立拟合后冻结，匹配参数量的残差模型各自使用 Hb 或 EEG 作来源；另训错配及均匀汇聚对照。B 在 EEG、Hb 各自训练单支、加性、低秩乘积、同预算通用联合及错配读出。闭合替代分解在历史窗内采用低通投影加余量，训练历史按 S 的平均平方幅度及平均平方一阶差的对数距离选择截止频率，经相同冻结词表赋码和解码。逐模态保留能量、平滑度与开发重建误差，匹配程度决定归因边界。连续信号参照使用训练集标准化的岭回归，包含连续 Hb 历史、附加 EEG 词或 α 历史，以及 EEG 本模态 α 历史。所有比较使用完整、相同的配对面板。
+
+神经读取器每个种子固定 300 次更新，批量 24，按被试等概率抽样；训练目标按训练人群的各位置、时段和色团均值及 SD 标准化。每个端点的 NMSE 分母为对应训练方差。先按开发被试汇总事件及位置、时段和色团，再在人内平均两个种子，最后对人等权。配对差为对照减候选，描述性 95% 百分位区间以被试为单位重抽 2,000 次，保留逐位置及时段分数。训练终点固定，开发集没有参与超参数选择。
+
 
 <a id="tk-aligned-masked-search-v2"></a>
 ## TK-ALIGNED-MASKED-SEARCH-v2　用较大规模的掩码搜索发现可复现的生理模式（2026-11-26）
