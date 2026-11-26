@@ -36,10 +36,6 @@ reading artifacts are admitted with explicit `git add -f -- <file>`.
 
 The [Chinese visual analysis](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/visual_analysis_v1/REPORT.pdf) and [evidence workbook](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/visual_analysis_v1/evidence.xlsx) compare physiological readouts, both cross-modal prediction directions, local masked-ID scores and training coverage. The [selection](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/A_selection.json) and [training summary](runs/physiology_semantic_tokenizer/aligned_masked_search/20261126_full_nonoverlap_v3/training_summary.json) own the registered gates and stage outcomes.
 
-## Aligned-tokenizer reconstruction and real word members — 2026-11-26
-
-The [visual reference](runs/physiology_semantic_tokenizer/aligned_tokenizer_optimization/20261126_v1/reference_review/index.html) compares the frozen parent with measured X and v3 S/O, shows three independent people's actual same-ID members against matched other IDs, and retains the high-frequency and failed attribute examples for each branch. The [new inner-subject launch](runs/physiology_semantic_tokenizer/aligned_tokenizer_optimization/20261126_v1/launch.json) owns the fresh fits, early numerical/visual inspections and matched continuation comparisons.
-
 ## Frozen-code M0–M4 masked pretraining — 2026-11-26
 
 The [development summary](runs/physiology_semantic_tokenizer/aligned_masked_pretraining/20261126_v1/summary.json) links fixed-budget fits, whole-modality and span scores, late fusion and measured Hb. The [paired subject contrasts](runs/physiology_semantic_tokenizer/aligned_masked_pretraining/20261126_v1/paired_differences.csv) compare true-pair and wrong-trial training. The [prior comparisons](runs/physiology_semantic_tokenizer/aligned_masked_pretraining/20261126_v1/baseline_gains.csv) give bits per hidden ID on the same development support.

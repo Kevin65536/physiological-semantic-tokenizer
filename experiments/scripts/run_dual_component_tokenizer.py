@@ -5327,15 +5327,13 @@ def _base_migrate_resume(cfg, root, task_id, task, signature, job):
 
 
 def train_base_tokenizer(cfg, root, out, task, device, *, benchmark=False, destination=None, band_scales=None,
-                         recorded_root=None, spectral_objective=None, target_view=None, training_partition=None):
+                         recorded_root=None, spectral_objective=None, target_view=None):
     from src.data.dual_component_tokenizer import base_tokenizer_sampling_index,base_tokenizer_sample
     import torch
     task_id='__'.join(task[k] for k in ('modality','architecture','candidate'))
     job=Path(destination) if destination is not None else Path(out)/'models'/task_id
     with owner_lock(job):
         manifest,scales,audit,parent=_base_training_data(cfg,root,recorded_root=recorded_root)
-        if training_partition is not None:
-            manifest,scales,audit=training_partition(manifest)
         if target_view is not None:
             manifest,scales=target_view(manifest,scales)
         signature=dict(config=identity(cfg),input=identity(manifest),scales=identity(scales),task=task,benchmark=benchmark)

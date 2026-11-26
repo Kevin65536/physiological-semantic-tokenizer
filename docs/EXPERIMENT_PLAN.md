@@ -73,7 +73,6 @@ measured result exists.
 
 | Reading task | Sections |
 | --- | --- |
-| Improve waveform reconstruction and repeatability of the aligned 128-dimensional tokenizer | [128 维 tokenizer 优化序列](#aligned-tokenizer-optimization) |
 | Search frozen EEG/fNIRS representations for reproducible physiological patterns | [TK-ALIGNED-MASKED-SEARCH-v2](#tk-aligned-masked-search-v2) |
 | Finalize the base tokenizer through coverage, quantization, decoding and seed controls | [TK-BASE-v1：基础 tokenizer 定版实验组](#tk-base-v1) |
 | Arrange tokenizer training and check physiological-state acceptance item by item | [TK-STATE-v1：训练与验收安排](#tk-state-v1) |
@@ -94,49 +93,6 @@ measured result exists.
 | Qualification and tokenizer design | [P0](#p0-software-and-synthetic-qualification), [teacher selection](#t-physical-teacher-selection), [tokenizer](#bq-source-and-observation-tokenizer), [coupling prior](#c-coupling-prior-return) |
 | Implementation and remaining qualification decisions | [Code ownership](#code-ownership-for-later-implementation), [unresolved qualification decisions](#unresolved-before-measured-qualification-or-confirmation) |
 | Historical boundaries | [Side paths](#side-path-experiments-without-workflow-sprawl), [lifecycle boundary](#historical-lifecycle-boundary) |
-
-<a id="aligned-tokenizer-optimization"></a>
-## 128 维 tokenizer 的重建与模式一致性优化（2026-11-26，设计提案）
-
-这组实验考察两个可独立失败的问题：在相同整数码率上能否更准确地重建 X、S、O，以及同一词在不同窗口和不同人身上能否更可靠地指向相似的局部模式。比较单位是每个模态的 tokenizer。EEG 和 Hb 可以分别保留各自的最佳方案。
-
-### 起点与诊断依据
-
-从已对齐的 v3 单级硬量化模型出发。EEG-S/O 各 8192×128，Hb-S/O 各 1024×128，四个词表独立。输入为本模态可见 X，每个原生位置的 30 秒窗发射 15 对整数，Hb 同位置两色共用一个分支 ID。解码器接收同分支 15 个整数。保留网络宽度和层数、分支、时间支持、原生位置、QC 和 v3 条件 S/O 目标；X 是观测目标。EEG 保留 C 的单 S-ID 频谱头和 0.01 权重。既有冻结词流及其掩码模型继续引用原版本；改动赋码的候选须按模型版本导出新的词流。[基线合同](../experiments/configs/physiology_semantic_tokenizer/single_vq_aligned_v1.yaml) · [末态逐分量结果](../experiments/runs/physiology_semantic_tokenizer/single_vq_aligned/20261126_v1/summary.json)
-
-| 观察 | 对优化的含义 |
-| --- | --- |
-| EEG 的开发 X/S/O NMSE 为 0.4082/0.6743/0.4362。S 包络的同容量读出相对背景的误差降幅从量化前 50.9% 到码向量 40.7%；单 S-ID 四项频谱属性平均增益为 1.94%。 | 优先定位 S 在量化及解码两处各损失多少。训练集未见约 70.3% 的开发 EEG-S 背景与 ID 组合，查表误差也含稀疏估计代价。 |
-| Hb 的总波形 X 两色 NMSE 为 0.0312/0.0340，但 O-HbO/HbR 为 0.4888/0.3332。7k→10k 固定训练监测面板上的 Hb-O 误差仍从 0.3189 降到 0.2882，EEG-O 同期约为 0.3967→0.3966。 | Hb 优先测续训收益及 O 的形状；EEG 优先检查量化与目标。两模态均只有一个对齐种子、一个正式开发检查点。 |
-| 自然移动完整 30 秒窗起点 2 秒，同一片段的 ID 内部/边缘保持率依次为 EEG-S 92.3%/76.5%、EEG-O 97.6%/88.0%、Hb-S 69.6%/32.9%、Hb-O 44.2%/27.9%。按四库等权、库内人等权计算。 | Hb-O 有最大的赋码改进空间；同时检验词族、真实形态和对真实变化的响应，防止单纯减少换词产生表面收益。 |
-
-[冻结读出与真实成员审计，第 12–22 页](../experiments/runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1/report_v2/REPORT.pdf) · [EEG 移窗逐人记录](../experiments/runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1/eeg_window_shift.csv) · [Hb 移窗逐人记录](../experiments/runs/physiology_semantic_tokenizer/aligned_token_audit/20261126_v1/hb_window_shift.csv) · [EEG 训练监测](../experiments/runs/physiology_semantic_tokenizer/single_vq_aligned/20261126_v1/eeg/models/eeg__waveform__vq8192/summary.json) · [Hb 训练监测](../experiments/runs/physiology_semantic_tokenizer/single_vq_aligned/20261126_v1/hb/models/hb__waveform__vq1024/summary.json)
-
-### 对照、评分与选择
-
-- **选择人群。** 建议从原 60 位训练人中分库固定留出约 20% 作内部选型，按人分割后才取窗。用于选型的 tokenizer、训练尺度、频谱属性标定、码本初始化、词族阈值和读出头均限于内层拟合人重建；旧 60 人模型仅供基线复核。所有候选使用相同拟合人、抽样序列和 QC。原 16 人普通开发集仅在方案锁定后评分，保留其反复使用的探索性身份。测试和确认集在本序列范围以外。
-- **重建主指标。** 有效点平方误差除对应训练目标方差，按位置、窗、记录、人、库逐级等权，再平均 X/S/O 及有效色团。同步看各分量、相关、RMS 增益、两秒边界误差、EEG 分带功率与 Hb 斜率。检查 S 与 O 的有符号误差协方差，判断总 X 改善是否受两个分量误差抵消驱动。
-- **模式主指标。** 一个固定模型内，取同记录同位置、起点相差 2 秒的真实完整窗，只比较时间戳、掩码及中心实测样本逐点一致的重叠片段；沿用已有内部/边缘划分。各自报告相同整数率、训练定义词族一致率及其按边际词频计算的机会校正值。以同库、同位置、同 RMS 档的非重叠不同片段作置乱对照。检验跨人词义时，用训练人真实成员建立属性原型，在留出人上比较加入单个 ID 前后的 MSE；背景含库、位置、可见 X 的 RMS 档。EEG 预定 S 的四项频谱增益，Hb 预定 O-HbO 的两秒斜率增益并报告 O-HbR、S 及双色去均值形状。训练支持不足按背景回退，保留全分母。另报按发射频率和按词等权的覆盖、成员离散度，避免常用词独占收益。
-- **统计与兼容性。** 以被试为配对单元、库等权，种子分列；给出逐库结果和库内按人配对重采样的 95% 区间。两秒片段和种子均不能充当额外被试。跨种子用训练人共同片段确定词族或成员属性原型，在留出人报告调整兰德指数（ARI）和属性秩相关。旧 EEG 64 维种子只作历史参照。每次验收检查 S/O/sum 整数回放、另一支隔离及实际码率。
-
-### 分阶段实验与停止条件
-
-以下步数、权重校准比例和晋级界值是拟议工程设定，需在训练内筛选之前锁定。阶段 1–4 默认种子 17，各候选从同一个内层 10k 父检查点分叉，续训保持优化器动量、抽样时钟和原末态学习率 3×10⁻⁵；比较使用同预算的普通续训。涉及两视图时，对照也接收相同两窗、相同有效点及同样次数的码本更新。第一批只需两次内层基线训练（每模态一次）和四个 2k 步分支（每模态普通续训、仅解码各一次）。后续各臂默认新增 2k 步。
-
-| 阶段 | 实验和最小对照 | 决策 |
-| --- | --- | --- |
-| 0　冻结复核与误差分解 | 复算现有 128 维末态和真实移窗结果。比较同一模型的量化前向量、实际码向量、收缩 ID 读出和整数解码；以同容量、同训练折的读出估计属性损失。增加基于实际赋码距离的前两码字间隔、量化残差、跨窗翻码、每词独立人数及稀有词统计。连续向量绕过量化解码仅作敏感性诊断。 | 若能精确重放旧整数与指标，再开始短程比较。由小间隔翻码、表示丢失、解码丢失三类证据确定后续可选分支。 |
-| 1　纯续训与固定整数解码 | 各模态先比 10k 父模型、全参数普通续训至 12k、冻结编码器与码本（含 EMA）、仅训练波形解码器至 12k。每 1k 同时评估固定训练面板与内部留人面板。对确有持续改善的普通续训，允许一次至 16k，保留匹配预算对照。 | 固定 ID 解码已能改善波形，优先保留这一兼容改法；它不会提高赋码一致率。若只有训练误差继续降，停止加步。 |
-| 2　修正重建目标 | EEG 用基础 C 与 C 加**解码 S**四项标准化频谱误差配对，已有单 ID 头继续工作。Hb 用基础目标与仅对**解码 O-HbO**施加两秒去均值形状或斜率误差比较，先选斜率一个自由度。两项均只用完整片段；辅助权重按内层训练批使起始编码器梯度范数约为基础重建的 10%，随后固定。 | EEG 同时检查解码频谱与真实单 ID 增益；Hb 逐色核对 S/O/X。历史上仅约束解码频谱能大幅改善解码谱却削弱 ID 指标；Hb 重形状权重曾损伤 S/X。若分量越界，终止该权重。 |
-| 3　训练真实移窗一致性 | 两个输入窗各自保留原重建损失。正对仅取逐点相同的重叠片段，在原有欧氏码字距离上做对称的停止梯度软分配蒸馏；同一前向采用相同的更新前码本，两个视图共同产生一次 EMA 统计更新。温度用训练距离标定，使邻近码有可测梯度；权重沿用上述训练梯度比例。首试 Hb-O、EEG-S；系数为零的同视图对照独立保留。任意替换真实上下文仅作压力测试。 | 边缘和内部各自评分；查中心真实形态、等 RMS 异形负对、发射熵、支持覆盖。仅 ID 保持上升而属性、内容辨别或覆盖退化，停止。对 Hb-S 慢水平与 EEG 高频相位保留合法上下文依赖。 |
-| 4　仅在诊断支持时动量化器 | 若训练参考片段的码中心仍持续漂移，比较末段冻结码本和正常 EMA，编码器与解码器在两臂均可更新。若中心稳定而翻码集中于小间隔，再单独比较原承诺系数 0.25 与 0.375。预设最多一种机制进入本轮；每臂同为 2k 步，分列距离间隔、词占用、编码器漂移和翻码。 | 占用、困惑度作为诊断。以留出重建、成员属性和真实移窗共同决定取舍。此前 K128 的快速 EMA、降低承诺权重和渐进硬化未带来共同收益，排在上述定位之后。 |
-| 5　组合与复现 | 重建改动和一致性改动各自有效时，补做二者组合，与无改动、仅重建、仅一致性构成同预算 2×2；四格统一采用同一双视图采样与更新次数，已有格仅在曝光一致时复用。报告组合收益减去两个单项收益所得的相互作用。每模态最多锁定一个候选。用完整 60 人按种子 17、29、43 配对训练原版与候选，同种子共享预热和全部可比曝光，再一次性评估原 16 人开发集。 | 按下面联合标准决定是否形成新的 tokenizer 版本，给出各模态独立结论。候选换码后以新词流评价下游，沿用旧码编号的任务指标不进入选型。 |
-
-**若重建改善、词义仍弱。** 可用一项同预算损失位置对照替代阶段 4。对 Hb 用同一 O-HbO 斜率目标，比较阶段 2 的解码波形监督与仅从 O 的实际单个码向量回归斜率的训练辅助头；头在推理时丢弃。对 EEG 则保留既有 C 头，用训练背景预测四项属性，再让单码头拟合扣除背景的属性残差，检查增益是否跨人并覆盖低支持词。每模态只选择有诊断依据的一项。任何新增监督属性均另用未进入训练损失的实测形状或包络复核。
-
-**建议预先锁定的工程判据。** 重建单项晋级要求目标模态宏 NMSE 相对同预算对照降低至少 2%。一致性单项晋级要求目标分支边缘精确 ID 保持率提高至少 5 个百分点，内部保持率退化不超过 1 个百分点，同时目标单 ID 属性增益方向为正（相对对照的变化）。单项入围还要求宏 NMSE 退化不超过 2%、任何 X/S/O 色团 NMSE 退化不超过 5%、相关下降不超过 0.01；有效词数及具训练支持的发射覆盖分别保留对照的至少 90%，异形负对的误匹配率上升不超过 1 个百分点。联合版本需同时满足两项收益，以三个配对种子的中位效应达实用门槛、至少两个种子同向且所有种子通过退化护栏判定。若只达到一项，按该项报告，继续保留另一项的原基线。区间跨零时保留不确定性。阶段 1 的 12k→16k 延长以 10k→11k→12k 内部宏 NMSE 连续改善、累计至少 2% 且通过分量护栏为条件。
-
-先做合成软件测试，覆盖同窗复制的赋码与梯度、跨窗配对时间索引、掩码、EMA 更新次数、冻结码本恒定、打乱 ID 后的机会值和整数解码回放。后续可执行合同另行版本化；本节仅规划实验。[分量损失实现](../experiments/scripts/run_dual_component_tokenizer.py) · [量化器更新实现](../src/tokenizers/ema_vector_quantizer.py) · [既有频谱目标的配对对照](../experiments/runs/physiology_semantic_tokenizer/single_vq_dynamic_factorial/20261125_v1/factorial.csv) · [量化优化研究](https://proceedings.mlr.press/v202/huh23a.html)
 
 <a id="tk-aligned-masked-search-full-v3"></a>
 ## TK-ALIGNED-MASKED-SEARCH-FULL-v3　全量非重叠 30 秒窗（2026-11-26）
