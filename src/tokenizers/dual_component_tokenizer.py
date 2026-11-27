@@ -935,12 +935,13 @@ class GlobalLatentComponentTokenizer(nn.Module):
         return dict(full=(level+local+correction).flatten(-2), level=level.flatten(-2),
                     local=local.flatten(-2), context=correction.flatten(-2))
 
-    def forward(self, values: torch.Tensor, *, quantize: bool | None = None) -> dict:
+    def forward(self, values: torch.Tensor, *, quantize: bool | None = None, return_codes: bool = False) -> dict:
         use_hard = self.hard if quantize is None else bool(quantize)
-        return self._from_latents(self.encode_continuous(values), values, use_hard)
+        return self._from_latents(self.encode_continuous(values), values, use_hard, return_codes=return_codes)
 
-    def _from_latents(self, latents, values, use_hard):
+    def _from_latents(self, latents, values, use_hard, *, return_codes=False):
         result, ids, health = {}, {}, {}
+        codes = {}
         commitment = values.sum() * 0.
         for component, latent in latents.items():
             if use_hard:
@@ -953,6 +954,8 @@ class GlobalLatentComponentTokenizer(nn.Module):
                 # float32 cancellation can be amplified by the synthesis stack.
                 value = (quantizer.get_embedding(output.hard_ids)
                          if not self.training else output.quantized)
+                if return_codes:
+                    codes[component] = output.quantized
                 if component == 'S' and self.spectral_head is not None:
                     result['S_spectrum'] = self.spectral_head(value)
                 if self.training and self.decoder_quantization_blend < 1.:
@@ -969,6 +972,10 @@ class GlobalLatentComponentTokenizer(nn.Module):
             if component == 'S' and self.code_shape_head is not None and use_hard:
                 shape = self.code_shape_head(value).reshape(*value.shape[:2], 20, 2)
                 result['S_shape'] = (shape - shape.mean(dim=-2, keepdim=True)).flatten(-2)
+        if return_codes:
+            if not use_hard:
+                raise ValueError('quantized codes require hard assignments')
+            result['codes'] = codes
         return dict(result, sum=result['S'] + result['O'], ids=ids, latent=latents,
                     health=health, commitment=commitment / len(COMPONENTS))
 

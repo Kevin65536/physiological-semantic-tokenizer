@@ -1,0 +1,15 @@
+experiment_id: TK-ALL-CHANNEL-SPAN-v1
+output: experiments/runs/physiology_semantic_tokenizer/all_channel_span/20261127_v1
+parent: experiments/runs/physiology_semantic_tokenizer/typed_span_expanded/20261127_v2
+scope: {splits: [train, validation], test: forbidden, protected: forbidden, cache: data/cache/physiology_downstream_v2}
+tasks: [mental_arithmetic, motor_imagery, wg, nback]
+tensor: {sites: all_native, slots: 15, seconds_per_slot: 2, samples: [400, 40], vocab: [8192, 8192, 1024, 1024], width: 96}
+geometry: {neighbors: 4, maximum_unit_chord: 0.75, coordinate_system: dataset_mnt_pos_3d}
+training: {seeds: [17, 43], steps: 1536, batch: 4, lr: 0.0005, checkpoint_interval: 32}
+inputs: Fixed public event identities and paired clocks from parent events.csv; all native scalp electrodes and all native HbO/HbR pairs. Per-branch parent tokenizer frozen. Reuse parent train-only site scales and task Hb gain; missing positive site scale falls back to median positive training site scale within dataset/modality. Full-record offline input coordinate.
+objective: Each update sees all EEG and Hb sites simultaneously. Cycle EEG/Hb targets and time span, local site neighborhood, whole modality. Mask raw samples before tokenizer and Hb reference. Invalid slots and padding are never targets or source keys. Average masked-ID CE over valid targets per event per branch, then over branches and events.
+initialization: Both seeds use their own terminal joint tokenizer and temporal/typed-lag reader from expanded_v2. New same-modality geometry layers trained with the reader. Codebooks and tokenizer weights frozen.
+primary: Development masked bits per valid ID; average inside each event/branch then within person then across people; also separate target modality and mask family.
+baseline: Same trained reader with opposite-modality messages switched off at evaluation, on exactly the same masks.
+null: Cross-modal messages do not improve held-person masked-ID log score. No physiological coupling or classification inference.
+stopping: Fixed updates per seed; one terminal evaluation on public validation. Preserve per-event denominators, all layouts and failures. No validation-driven model selection.

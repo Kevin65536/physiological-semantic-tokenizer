@@ -1,0 +1,20 @@
+experiment_id: TK-TYPED-SPAN-EXPANDED-v2
+run: experiments/runs/physiology_semantic_tokenizer/typed_span_expanded/20261127_v2
+scope: {splits: [train, validation], test: forbidden, protected: forbidden, cache: data/cache/physiology_downstream_v2}
+panels: [task_pattern_expansion/20261127_v1, nback_function_screen/20261127_v1]
+tasks: [mental_arithmetic, motor_imagery, wg, nback]
+sites:
+  mental_arithmetic: [[F3, F4, FCC3h, FCC4h], [AF3Fp1, AF4Fp2, FC3C3, FC4C4]]
+  motor_imagery: [[F3, F4, FCC3h, FCC4h], [AF3Fp1, AF4Fp2, FC3C3, FC4C4]]
+  wg: [[F1, F2, C3, C4], [AFF3h, AFF4h, C3h, C4h]]
+  nback: [[F1, F2, P3, P4], [AFF3h, AFF4h, P3h, P4h]]
+tensor: {sites: 4, slots: 15, seconds_per_slot: 2, eeg_samples: 400, hb_samples_colors: [20, 2], vocabulary: [8192, 8192, 1024, 1024]}
+training: {arms: [joint, no_lag], seeds: [17, 43], steps: 1536, calibration: 48, batch: 12, sampler: shuffled complete epochs; shared order per seed}
+inputs: fixed admitted public paired event ledger; both native markers, [-5,+25) s. Cached offline EEG and Hb; zero masked patches before encoder and compute Hb baseline from visible reference only. Absolute EEG site scale and task-specific Hb gain fitted in training. Partial spans are offline feature completion; whole-target masking removes all target input.
+anchors: complete public G0 X/S/(X-S) windows in admitted optimization or score partition at the event sensor maps; independent batches sampled by available dataset/site map; train-only feature moments and existing train scale per site. Record all support.
+baseline: equal exposure, same tokenizer and reader initialization; no_lag opens all connections and removes explicit bias. Same four codebooks, local losses, EMA, masking schedule and LRs as typed_span_v1.
+primary: train-selected order-changing joint family bigrams per path/task versus same-person same-record same-condition disjoint donor and reversed source on development. Report all selected patterns, exposure, people, exact examples and directions. Train-only eight-family weighted code-vector clustering per stream per fit. Exact ID bigram train-to-development coverage, order-shuffled control.
+selection: scan four paired sites and Hb minus EEG lags 0,2,4,6,8 s; select one pattern per task/path using training people only, require both family transitions and >=3 people, prefer positive paired and order excess; max of minimum training improvement, fixed ties. Validate at least 3/4 people positive for both contrasts in both seeds (families re-estimated per fit). Descriptive screen.
+attention: both inference directions and four paths, actual weights on hidden queries, paired, mismatched and content-free positional kernel including abstention. Per-person profiles, opportunity counts, source-removal bits, unrestricted attention control, known-lag synthetic diagnostic. Positive lag denotes Hb later.
+null: apparent sequence recurrences are explained by marginal sequences/condition; temporal weight peaks are explained by imposed temporal support or persist on mismatched windows.
+stopping: fixed terminal fits and one public development replay; summarize all eligible subjects, no protected confirmation or causal HRF inference.

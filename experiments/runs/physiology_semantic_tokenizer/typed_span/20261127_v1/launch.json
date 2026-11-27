@@ -1,0 +1,27 @@
+{
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "units": [
+    "typed-span-fit17.service",
+    "typed-span-fit43.service"
+  ],
+  "launch": "systemd-run --user, persistent user manager with Linger=yes",
+  "commands_and_devices": "supervisor.txt",
+  "environment": "supervise.sh",
+  "pilot": [
+    "pilot/joint_17/done.json",
+    "pilot/joint_43/done.json"
+  ],
+  "resources": "resources.log",
+  "concurrency": "Two parallel independent seed queues, one worker per idle permitted RTX 4090. The six-update concurrent pilots measure memory and throughput on both cards. All arrays fit in RAM. One numerical CPU thread per process. Resume by repeating the queue; completed cells are skipped.",
+  "logs": "run_<arm>_<seed>.log",
+  "completion": "fits/<arm>_<seed>/done.json and summary.json",
+  "terminal_replay": {
+    "units": [
+      "typed-span-decode17.service",
+      "typed-span-decode43.service"
+    ],
+    "environment_and_command": "replay.sh",
+    "outputs": "fits/<arm>_<seed>/completion_wave.csv",
+    "examples": "fits/joint_<seed>/completion_examples.npz"
+  }
+}

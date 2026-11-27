@@ -1,0 +1,28 @@
+{
+  "working_directory": "/home/uais7/pid-mcm-implementation",
+  "supervisor": "systemd --user with Linger=yes",
+  "environment": "worker.sh",
+  "resources": "resources.log",
+  "prepare": "span-expanded-prepare.service, 8 CPU workers for public records then 3 anchor site groups. Pilot 4 workers extracted 114 events in 0.68 seconds. Bound concurrency for shared cache I/O.",
+  "devices": {
+    "17": "00000000:4B:00.0",
+    "43": "00000000:CA:00.0"
+  },
+  "training": "one seed queue per permitted RTX 4090, gpu resource pilots before training; one numerical CPU thread per worker",
+  "resume": "completed fits skipped; failed fits restart their fixed schedule; terminal weights may be rescored independently",
+  "logs": "<stage>_<arm>_<seed>.log",
+  "state": "fits/<arm>_<seed>/done.json and scored.json, then summary.json",
+  "pilots": [
+    "pilot/joint_17/done.json",
+    "pilot/joint_43/done.json"
+  ],
+  "training_services": [
+    "span-expanded-fit17",
+    "span-expanded-fit43"
+  ],
+  "scoring_services": [
+    "span-expanded-replay17",
+    "span-expanded-replay43"
+  ],
+  "scoring_recovery": "First scoring attempt encountered an NPZ key collision in the individual example export. Retained terminal weights were replayed after the exporter fix; initial tracebacks remain in the scoring logs."
+}

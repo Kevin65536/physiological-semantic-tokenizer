@@ -1,0 +1,96 @@
+{
+  "schema": "all_channel_span_launch_v1",
+  "launched_at": "2026-11-27T16:33:09+08:00",
+  "contract": "resolved.yaml",
+  "program": "experiments/scripts/run_all_channel_span.py",
+  "resource_snapshot": "resources.log",
+  "shell": "worker.sh",
+  "supervisor": "systemd --user, Linger=yes",
+  "environment": "repository .venv; OMP, MKL and OpenBLAS threads=1",
+  "resource_decision": "Two permitted GPUs already shared, one fit per GPU. Four-step live pilots with two versus four loader workers sustained 0.64/0.66 steps/s including startup. Two readers per GPU limit random I/O on the shared saturated home volume.",
+  "train_events": 2471,
+  "development_events": 706,
+  "train_people": 29,
+  "fit_parameters": "native layout masked reader only; frozen parent joint tokenizer per seed",
+  "public_input": "two datasets, four tasks, parent admitted offline event ledger",
+  "jobs": [
+    {
+      "seed": 17,
+      "unit": "native-span-train-17-v1.service",
+      "service_properties": "MainPID=2864422\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/all_channel_span/20261127_v1/worker.sh train 17 2 ; ignore_errors=no ; start_time=[Fri 2026-11-27 16:32:43 CST] ; stop_time=[n/a] ; pid=2864422 ; code=(null) ; status=0/0 }\nEnvironment=CUDA_VISIBLE_DEVICES=GPU-385a3df1-7c3c-55f6-14e0-2c1a1c2689d7\nWorkingDirectory=/home/uais7/pid-mcm-implementation\nActiveEnterTimestamp=Fri 2026-11-27 16:32:43 CST\n",
+      "pilot": {
+        "step": 4,
+        "steps": 4,
+        "seed": 17,
+        "loss_nats": 6.348848342895508,
+        "mode": "region",
+        "target": "hb",
+        "elapsed_s": 6.280123203992844,
+        "steps_s": 0.6369301795634896,
+        "masked_siteslots": 540,
+        "input_sites": [
+          30,
+          36
+        ],
+        "valid_sites": [
+          [
+            30,
+            28,
+            28,
+            28
+          ],
+          [
+            36,
+            36,
+            36,
+            36
+          ]
+        ],
+        "peak_mib": 397.392578125
+      },
+      "log": "train_17.log",
+      "progress": "seed_17/progress.json",
+      "checkpoint": "seed_17/checkpoint.pt",
+      "summary": "seed_17/summary.json"
+    },
+    {
+      "seed": 43,
+      "unit": "native-span-train-43-v1.service",
+      "service_properties": "MainPID=2864428\nExecStart={ path=/bin/bash ; argv[]=/bin/bash /home/uais7/pid-mcm-implementation/experiments/runs/physiology_semantic_tokenizer/all_channel_span/20261127_v1/worker.sh train 43 2 ; ignore_errors=no ; start_time=[Fri 2026-11-27 16:32:43 CST] ; stop_time=[n/a] ; pid=2864428 ; code=(null) ; status=0/0 }\nEnvironment=CUDA_VISIBLE_DEVICES=GPU-4b7ce453-8e66-9c83-1bc9-d8254df34735\nWorkingDirectory=/home/uais7/pid-mcm-implementation\nActiveEnterTimestamp=Fri 2026-11-27 16:32:43 CST\n",
+      "pilot": {
+        "step": 4,
+        "steps": 4,
+        "seed": 43,
+        "loss_nats": 6.139132022857666,
+        "mode": "region",
+        "target": "hb",
+        "elapsed_s": 6.020685479976237,
+        "steps_s": 0.6643761766502022,
+        "masked_siteslots": 540,
+        "input_sites": [
+          30,
+          36
+        ],
+        "valid_sites": [
+          [
+            30,
+            30,
+            28,
+            28
+          ],
+          [
+            36,
+            36,
+            36,
+            36
+          ]
+        ],
+        "peak_mib": 397.392578125
+      },
+      "log": "train_43.log",
+      "progress": "seed_43/progress.json",
+      "checkpoint": "seed_43/checkpoint.pt",
+      "summary": "seed_43/summary.json"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+experiment_id: TK-TYPED-SPAN-v1
+run: experiments/runs/physiology_semantic_tokenizer/typed_span/20261127_v1
+events: experiments/runs/physiology_semantic_tokenizer/frozen_science_screen/20261126_v1
+anchors: experiments/runs/physiology_semantic_tokenizer/science_ablations/20261126_v1
+checkpoint: experiments/runs/physiology_semantic_tokenizer/single_vq_aligned/20261126_v1
+scope: {dataset: simultaneous_eeg_nirs, record: cnt_nback, train: 15, validation: 4, test: forbidden, protected: forbidden}
+shape: {sites: 4, slots: 15, seconds_per_slot: 2, per_slot: [400, 40], vocab: [8192, 8192, 1024, 1024], dimension: 128}
+arms: [joint, no_lag, ss_only, no_anchor, frozen]
+paths: {order: [SS, SO, OS, OO], support_seconds: [[-2, 12], [-6, 12], [-6, 12], [-6, 12]], prior: broad engineering SS peak at +4 s; transposed for reverse inference}
+training: {seeds: [17, 43], steps: 192, calibrate_steps: 24, batch: 8, reader_width: 96, reader_lr: 0.001, tokenizer_lr: 0.00003, local_weight: 0.01, span_weight: 1.0, clip: 1.0}
+mask: {span_slots_eeg_hb: [3, 6], whole_fraction: 0.25, sources: [S, O, both], schedule: balanced 24-step cycle; shared across sites and S/O}
+inputs: true dual-clock event pairs; frozen train EEG scales; unfiltered released Hb with train gain and site scales, visible first 5s reference or all visible samples if empty. Zero after masking.
+anchors_batch: separate subject-matched draw from the same person's G0 teacher-supervised crops in every update. Full-view X/S/(X-S) and first differences with train site/color variances, commitment and four single-ID attributes. No-anchor arm removes both component and attribute supervision while retaining sum and VQ. EMA updates once on complete G0 observations only.
+baseline: existing frozen-ID general Transformer retrained on the same raw-mask schedule and source visibility; same width, one reader block. All joint arms start from the same terminal tokenizer weights.
+primary: paired development wrong-source minus true-source bits per current masked ID at fixed weights, averaged within person then equally across directions, S/O, span/whole and people; report seed means within person. Cross-arm CE alone confounds changing vocabularies.
+secondary: block-order reversal minus true-source bits; no-source minus true-source bits; frozen-parent-ID bits; development fixed teacher X/S/O NMSE and observed code occupancy.
+controls: replace source observation before encoding with another subject's same-condition event at the same marker-relative phase; reverse source token run order preserving word counts and run lengths. Teacher held fixed; raw teacher-refit control outside scope.
+stopping: two seeds, five arms, terminal fixed-budget public screening. No development tuning. No atlas or causal claim from this screen.
+null: correct paired source and its order do not reduce masked ID cost on held people.

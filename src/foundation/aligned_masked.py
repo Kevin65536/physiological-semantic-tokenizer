@@ -83,11 +83,11 @@ class FrozenCodeReader(nn.Module):
         self.norm = nn.LayerNorm(width)
         self.output = nn.ModuleList([nn.Linear(width, len(books[i])) for i in streams])
 
-    def encode(self, ids, xy, hidden, *, isolated=False):
+    def encode(self, ids, xy, hidden, *, isolated=False, stream_hidden=None):
         # Each stream contains its own actual montage coordinates, including donor coordinates for M4.
         tokens = []
         for j, stream in enumerate(self.streams):
-            mask = hidden[:, stream // 2]
+            mask = hidden[:, stream // 2] if stream_hidden is None else stream_hidden[:, stream]
             safe = ids[:, stream].masked_fill(mask, 0)
             value = self.project[j](self.books[j](safe))
             value = torch.where(mask[..., None], self.mask[j], value)
